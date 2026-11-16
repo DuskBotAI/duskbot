@@ -5,7 +5,7 @@ import { api, useStore, currentTaskBot, type Bot, type InstanceInfo, type ModelS
 import type { EffortLevel } from "../../shared/wire";
 import type { ModelVariantOption } from "../../shared/runtime-events";
 import { configuredModelInstances, isCustomOnly, modelsAwaitEngine } from "@/lib/engine-rail";
-import { isFreeModel, modelName, notConnectedRows, providerName, simpleModelMenu, variantSuffix, type NotConnectedRow } from "@/lib/simple-model-menu";
+import { isFreeModel, isFreeModelId, modelName, notConnectedRows, providerName, restToggleKey, simpleModelMenu, variantSuffix, type NotConnectedRow } from "@/lib/simple-model-menu";
 import { modelSelectionForPick, withTypedModels } from "@/lib/model-choices";
 export { modelSelectionForPick } from "@/lib/model-choices";
 import { pickerPlacement, type PickerPlacement } from "@/lib/picker-placement";
@@ -388,7 +388,7 @@ export function ModelPicker({
   const shownInstance = instances.find((instance) => instance.instanceId === answering.instanceId);
   const botModelInstance = state.instances.find((instance) => instance.instanceId === profile.modelSelection.instanceId);
   const botModelName = modelName(botModelInstance, profile.modelSelection.model, profile.modelSelection.variant);
-  const botModelTitle = !botModelInstance ? profile.modelSelection.model : isFreeModel(botModelInstance) ? t("model.free.hint")
+  const botModelTitle = !botModelInstance ? profile.modelSelection.model : isFreeModel(botModelInstance) && isFreeModelId(profile.modelSelection.model) ? t("model.free.hint")
     : `${botModelInstance.displayName} · ${modelLabel(botModelInstance, profile.modelSelection.model)}${variantSuffix(botModelInstance, profile.modelSelection.model, profile.modelSelection.variant)}`;
   const ownModelThreads = threadsOnOwnModel(profile.modelSelection, profile.tasks ?? []).length;
 
@@ -540,7 +540,7 @@ export function ModelPicker({
       : needsCli(active) ? t("model.setupRequired")
         : needsSignIn(active) && !isCustomOnly(active) && !currentOption?.custom ? t("model.signInRequired") : currentOption?.orgBlocked ? t("model.orgBlocked") : undefined;
   const summary = active
-    ? `${isFreeModel(active) ? modelName(active, selection.model) : `${active.displayName} · ${modelLabel(active, selection.model)}`}${
+    ? `${active.displayName} · ${isFreeModel(active) ? modelName(active, selection.model) : modelLabel(active, selection.model)}${
         modelProvider(active, selection.model) ? ` · ${modelProvider(active, selection.model)}` : ""
       }${selectedVariantLabel ? ` · ${selectedVariantLabel}` : selection.effort
         ? ` · ${t("model.simple.thinkingSummary", { level: effortLabel(selection.effort) })}` : ""}`
@@ -664,6 +664,15 @@ export function ModelPicker({
             return next;
           });
           if (opening) lookForLocalIn(instance);
+        }}
+        onToggleRest={(instance) => {
+          const key = restToggleKey(instance.instanceId);
+          setExpanded((current) => {
+            const next = new Set(current);
+            if (next.has(key)) next.delete(key);
+            else next.add(key);
+            return next;
+          });
         }}
         onSetUp={connectInstance}
         onCheckAgain={(instance) => refreshModels(instance.instanceId)}

@@ -437,3 +437,54 @@ describe("a model the organization turned off", () => {
   });
 
 });
+
+describe("OpenCode's free models in the menu", () => {
+  const freeModels: Option[] = [
+    { id: "opencode/beam-free", label: "Zen · Beam Free" },
+    { id: "opencode/glm-5.3-flash-free", label: "Zen · Glm 5.3 Flash Free" },
+    { id: "opencode/minimax-m3.1-flash-free", label: "Zen · Minimax M3.1 Flash Free" },
+    { id: "opencode/longcat-2.5-free", label: "Zen · Longcat 2.5 Free" },
+    { id: "opencode/claude-opus-5", label: "Zen · Claude Opus 5" },
+    { id: "opencode/gpt-6-sol", label: "Zen · GPT 6 Sol" },
+  ];
+  const openCode = (): InstanceInfo => ({
+    instanceId: "opencodeGo", driverKind: "opencodeGo", displayName: "OpenCode", access: "subscription",
+    snapshot: { state: "available", version: "2.3.0", authenticated: true, freeFallback: true },
+    models: { default: "opencode/beam-free", options: freeModels },
+  });
+  const onFree = (model = "opencode/beam-free"): Bot => ({ ...scout(), modelSelection: { instanceId: "opencodeGo", model } });
+  const group = () => document.querySelector<HTMLElement>('[data-simple-provider="opencodeGo"]')!;
+  const groupRows = () => [...group().querySelectorAll("[data-model-row]")].map((row) => row.textContent);
+  const restToggle = () => group().querySelector<HTMLButtonElement>("[data-simple-show-rest]")!;
+
+  beforeEach(() => {
+    fixture.instances = [openCode(), claude(three)];
+    render(onFree());
+    expect(chip().textContent).toContain("Beam Free");
+  });
+
+  it("says OpenCode, lists the free models by name, and picks one", async () => {
+    await openWith("click");
+    expect(group().textContent).toContain("OpenCode");
+    expect(group().textContent).toContain("Free, no account needed.");
+    expect(groupRows()).toEqual(["Glm 5.3 Flash Free", "Minimax M3.1 Flash Free", "Longcat 2.5 Free"]);
+    const row = [...group().querySelectorAll<HTMLButtonElement>("[data-model-row] [data-menu-row]")].find((one) => one.textContent === "Glm 5.3 Flash Free")!;
+    flushSync(() => row.click());
+    await settle();
+    expect(fixture.dispatch).toHaveBeenLastCalledWith(expect.objectContaining({
+      type: "setModel", selection: expect.objectContaining({ instanceId: "opencodeGo", model: "opencode/glm-5.3-flash-free" }),
+    }));
+  });
+
+  it("folds the models that need a login behind one row, and opens them in place", async () => {
+    await openWith("click");
+    expect(restToggle().textContent).toContain("Show 2 other models");
+    flushSync(() => restToggle().click());
+    await settle();
+    expect(group().textContent).toContain("These need an OpenCode login or credits.");
+    expect(groupRows()).toEqual(["Glm 5.3 Flash Free", "Minimax M3.1 Flash Free", "Longcat 2.5 Free", "Claude Opus 5", "GPT 6 Sol"]);
+    flushSync(() => restToggle().click());
+    await settle();
+    expect(groupRows()).not.toContain("Claude Opus 5");
+  });
+});

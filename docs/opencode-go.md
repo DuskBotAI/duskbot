@@ -58,6 +58,14 @@ A model OpenCode hides through a `whitelist` (or `blacklist`) under its
 provider in `opencode.json` is missing from the picker too; add its id to
 that list to see it.
 
+With no OpenCode login or key of the person's own, everything works only
+through Zen's free models: OpenCode's CLI marks those with a `-free` id
+suffix, and the picker lists them first under **OpenCode**, the rest of the
+catalog folded below them. Without a login or credits those answer with
+`Insufficient balance` (HTTP 402), so the folded list is the paid catalog.
+The free models all share one per-IP limit, so picking a different one does
+not buy more free turns.
+
 Some models take a limited number of tools per request (OpenCode Zen's free
 models refuse more than 128). When a model refuses a turn for that,
 dusk bot retries it once with each MCP server listing only its share of

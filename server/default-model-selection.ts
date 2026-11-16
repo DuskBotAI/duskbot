@@ -66,10 +66,14 @@ export function selectDefaultModelSelection(
       !preferred.model.trim() ||
       // A disallowed saved engine is unusable like an unavailable one: setup, never another provider.
       context.refusal?.(instance) !== undefined ||
-      (preferred.variant !== undefined && !instance.capabilities?.modelVariants) ||
-      !(instance.models.default === preferred.model || instance.models.options.some((model) => model.id === preferred.model))
+      (preferred.variant !== undefined && !instance.capabilities?.modelVariants)
     ) {
       return { instanceId: "", model: "" };
+    }
+    if (instance.models.default !== preferred.model && !instance.models.options.some((model) => model.id === preferred.model)) {
+      // OpenCode's free models come and go: a pick it no longer lists runs on the free model there is now, not setup.
+      const now = freeFallback(instance) ? defaultModel(instance) : "";
+      return now ? { instanceId: instance.instanceId, model: now } : { instanceId: "", model: "" };
     }
     const selection = { ...preferred };
     // A saved effort can outlive driver support: keep the model, let the provider use its default effort.

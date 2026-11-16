@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { InstanceInfo, ModelSelection } from "@/state/store";
 import { starKey, toggleStar, parseStarred } from "./starred-models";
-import { modelName, simpleModelMenu, SIMPLE_SEARCH_AFTER } from "./simple-model-menu";
+import { modelName, providerName, restToggleKey, simpleModelMenu, SIMPLE_SEARCH_AFTER } from "./simple-model-menu";
 
 vi.hoisted(() => {
   vi.stubGlobal("window", {});
@@ -266,26 +266,75 @@ describe("a model the organization turned off", () => {
   });
 });
 
-describe("dusk bot's free model", () => {
-  const free = engine("opencode", "opencodeGo", "OpenCode", "subscription",
-    [{ id: "opencode/big-pickle", label: "Zen · Big Pickle" }, { id: "opencode/other", label: "Zen · Other" }],
-    { snapshot: { state: "available", version: "1.0.0", authenticated: true, freeFallback: true } });
+describe("OpenCode's free models", () => {
+  const freeOptions: Option[] = [
+    { id: "opencode/beam-free", label: "Zen · Beam Free" },
+    { id: "opencode/glm-5.3-flash-free", label: "Zen · Glm 5.3 Flash Free" },
+    { id: "opencode/minimax-m3.1-flash-free", label: "Zen · Minimax M3.1 Flash Free" },
+    { id: "opencode/longcat-2.5-free", label: "Zen · Longcat 2.5 Free" },
+    { id: "opencode/nemotron-3.5-lightning-free", label: "Zen · Nemotron 3.5 Lightning Free" },
+    { id: "opencode/claude-opus-5", label: "Zen · Claude Opus 5" },
+    { id: "opencode/gpt-6-sol", label: "Zen · GPT 6 Sol" },
+  ];
+  const fake = { state: "available", version: "1.0.0", authenticated: true, freeFallback: true } as const;
+  const free = engine("opencode", "opencodeGo", "OpenCode", "subscription", freeOptions,
+    { models: { default: "opencode/beam-free", options: freeOptions }, snapshot: { ...fake } });
 
-  it("goes by Free model on the current row, its tooltip names OpenCode (67e390e93), never the model behind it", () => {
-    const onFree = menu([free, claude()], { selection: { instanceId: "opencode", model: "opencode/big-pickle" } });
-    expect(onFree.current).toMatchObject({ label: "Free model", title: "A free model from OpenCode, so you can start right away. Connect your own AI any time." });
-    expect(onFree.groups.map((group) => group.label)).toEqual(["Claude"]);
-    expect(modelName(free, "opencode/big-pickle")).toBe("Free model");
+  it("goes by OpenCode, and the current row names the free model it runs", () => {
+    const built = menu([free, claude()], { selection: { instanceId: "opencode", model: "opencode/beam-free" } });
+    expect(providerName(free)).toBe("OpenCode");
+    expect(built.current).toMatchObject({ label: "Beam Free", title: "A free model from OpenCode, so you can start right away. Connect your own AI any time." });
+    expect(built.groups.map((group) => group.label)).toEqual(["OpenCode", "Claude"]);
+    expect(built.groups[0]!.note).toBe("Free, no account needed.");
+    expect(modelName(free, "opencode/glm-5.3-flash-free")).toBe("Glm 5.3 Flash Free");
+    // a label the CLI gives without a provider in front keeps all of its name
+    expect(modelName({ ...free, models: { default: "opencode/plain", options: [{ id: "opencode/plain", label: "Plain" }] } }, "opencode/plain"))
+      .toBe("Plain");
   });
 
-  it("is one Free model row among the providers when another model is picked, and searchable by that name", () => {
+  it("lists its free models by name, and opens the rest of them in place", () => {
     const built = menu([claude(), free]);
-    expect(built.groups.map((group) => group.label)).toEqual(["Claude", "Free model"]);
-    expect(rows(built, 1)).toEqual(["Free model"]);
-    const shown = built.groups.flatMap((group) => [group.label, ...(group.body.kind === "models" ? group.body.rows.flatMap((row) => [row.label, row.option.label, row.route ?? ""]) : [])]);
-    expect(shown.join(" ")).not.toMatch(/Big Pickle|Zen|OpenCode/);
+    expect(built.groups.map((group) => group.label)).toEqual(["Claude", "OpenCode"]);
+    expect(rows(built, 1)).toEqual(["Beam Free", "Glm 5.3 Flash Free", "Minimax M3.1 Flash Free"]);
+    expect(body(built, 1)).toMatchObject({ kind: "models", total: 5, toggle: "more" });
+    const opened = menu([claude(), free], { expanded: new Set(["opencode"]) });
+    expect(rows(opened, 1)).toEqual(["Beam Free", "Glm 5.3 Flash Free", "Minimax M3.1 Flash Free", "Longcat 2.5 Free", "Nemotron 3.5 Lightning Free"]);
+  });
+
+  it("folds the models that need a login away behind one row", () => {
+    const folded = menu([claude(), free]);
+    expect(body(folded, 1)).toMatchObject({ rest: { rows: [], total: 2, open: false } });
+    const opened = menu([claude(), free], { expanded: new Set([restToggleKey("opencode")]) });
+    const rest = (body(opened, 1) as { rest?: { rows: { label: string }[]; total: number; open: boolean } }).rest!;
+    expect(rest).toMatchObject({ total: 2, open: true });
+    expect(rest.rows.map((row) => row.label)).toEqual(["Claude Opus 5", "GPT 6 Sol"]);
+    expect(rows(opened, 1)).not.toContain("Claude Opus 5");
+  });
+
+  it("keeps a picked model a login made paid on the current row, out of the other models", () => {
+    const selection = { instanceId: "opencode", model: "opencode/claude-opus-5" };
+    expect(menu([claude(), free], { selection }).current).toMatchObject({ label: "Claude Opus 5", title: "OpenCode · Claude Opus 5" });
+    const opened = menu([claude(), free], { selection, expanded: new Set([restToggleKey("opencode")]) });
+    const rest = (body(opened) as { rest?: { rows: { label: string }[] } }).rest!;
+    expect(rest.rows.map((row) => row.label)).toEqual(["GPT 6 Sol"]);
+  });
+
+  it("answers a search with its free models by name, and with the paid ones", () => {
     const searched = menu([claude(), free], { query: "free", searchAll: true });
-    expect(searched.groups.map((group) => group.label)).toEqual(["Free model"]);
+    expect(searched.groups.map((group) => group.label)).toEqual(["OpenCode"]);
+    expect(rows(searched)).toEqual(["Beam Free", "Glm 5.3 Flash Free", "Minimax M3.1 Flash Free", "Longcat 2.5 Free", "Nemotron 3.5 Lightning Free"]);
+    const opus = menu([claude(), free], { query: "opus", searchAll: true }).groups.find((group) => group.label === "OpenCode")!;
+    expect(opus.body.kind === "models" && opus.body.rows.map((row) => row.label)).toEqual(["Claude Opus 5"]);
+  });
+
+  it("treats every model as free when the catalog marks none, as an older CLI does", () => {
+    const plain: Option[] = [{ id: "opencode/alpha", label: "Zen · Alpha" }, { id: "opencode/beta", label: "Zen · Beta" }];
+    const unmarked = engine("opencode", "opencodeGo", "OpenCode", "subscription", plain,
+      { models: { default: "opencode/alpha", options: plain }, snapshot: { ...fake } });
+    const built = menu([unmarked]);
+    expect(rows(built)).toEqual(["Alpha", "Beta"]);
+    expect(body(built)).toMatchObject({ total: 2, toggle: null });
+    expect((body(built) as { rest?: unknown }).rest).toBeUndefined();
   });
 
   describe("starred models", () => {

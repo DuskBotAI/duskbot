@@ -50,6 +50,10 @@ export type MenuGroupBody =
     localFrom: number | null;
     signInForOwn: boolean;
     probing: boolean;
+    /** The rows are OpenCode's free models, so its own toggle says so beside the paid list below it. */
+    freeToggle?: true;
+    /** The models past the free ones, folded away: they need a login to the same account. */
+    rest?: { rows: MenuModelRow[]; total: number; open: boolean };
   };
 
 export interface MenuGroup {
@@ -105,11 +109,24 @@ export interface SimpleMenuInput {
   starred?: readonly string[];
 }
 
-/** dusk bot's own free model goes by what it is, never by the service and model behind it. */
+/** dusk bot's own free model: OpenCode ready through its free models alone, with no login of the person's own. */
 export const isFreeModel = (instance: InstanceInfo | undefined): boolean => Boolean(instance && freeFallback(instance));
 
+/** OpenCode's CLI names its free models with a `-free` suffix, which is the only price it reports over ACP (V2); the
+ * driver reads the same suffix (opencode-go.ts), so free here is the set the free backup answers on. */
+export const isFreeModelId = (id: string): boolean => /(?:^|[-_/])free$/iu.test(id);
+
+/** "Zen · Beam Free" reads as "Beam Free" under an OpenCode heading: the provider in the label repeats the group. */
+const ownModelLabel = (label: string): string => {
+  const separator = label.indexOf(" · ");
+  return separator < 0 ? label : label.slice(separator + 3).trim() || label;
+};
+
+/** The extra key an OpenCode group's other models fold under, beside its free ones. */
+export const restToggleKey = (instanceId: string): string => `${instanceId}:rest`;
+
 export function providerName(instance: InstanceInfo): string {
-  if (isFreeModel(instance)) return t("model.free.name");
+  if (isFreeModel(instance)) return instance.displayName;
   const family = signInFamily(instance);
   if (family) return SIGN_IN_FAMILY_LABEL[family];
   if (instance.access !== "api") return instance.displayName;
@@ -127,7 +144,7 @@ export function variantSuffix(instance: InstanceInfo | undefined, model: string,
 export function modelName(instance: InstanceInfo | undefined, model: string, variant?: string): string {
   const option = instance?.models.options.find((candidate) => candidate.id === model);
   if (!instance || !option) return model;
-  if (isFreeModel(instance)) return t("model.free.name");
+  if (isFreeModel(instance)) return ownModelLabel(option.label) + variantSuffix(instance, model, variant);
   return displayModelLabel(option.label, providerName(instance), option.custom) + variantSuffix(instance, model, variant);
 }
 
@@ -151,10 +168,10 @@ function localFrom(rows: readonly MenuModelRow[], mixed: boolean): number | null
   return first >= 0 && rows.slice(first).every((row) => row.option.custom) ? first : null;
 }
 
-function heading(instance: InstanceInfo, listed: readonly InstanceInfo[]): Pick<MenuGroup, "label" | "provider" | "account"> {
+function heading(instance: InstanceInfo, listed: readonly InstanceInfo[]): Pick<MenuGroup, "label" | "provider" | "account" | "note"> {
   const provider = providerName(instance);
   const family = signInFamily(instance);
-  if (isFreeModel(instance)) return { label: provider, provider };
+  if (isFreeModel(instance)) return { label: provider, provider, note: t("model.free.groupNote") };
   if (instance.access === "api") return { label: `${provider} · ${t("model.simple.apiKey")}`, provider };
   const several = family !== undefined && listed.filter((other) => signInFamily(other) === family).length > 1;
   const account = several && instance.displayName !== provider ? instance.displayName : undefined;
@@ -166,8 +183,8 @@ function currentRow(input: SimpleMenuInput): MenuCurrent {
   const active = instances.find((instance) => instance.instanceId === selection.instanceId);
   const option = active?.models.options.find((candidate) => candidate.id === selection.model);
   const name = option?.label ?? selection.model;
-  const title = isFreeModel(active) ? t("model.free.hint")
-    : active ? `${active.displayName} · ${name}${variantSuffix(active, selection.model, selection.variant)}` : name;
+  const title = isFreeModel(active) && isFreeModelId(selection.model) ? t("model.free.hint")
+    : active ? `${active.displayName} · ${isFreeModel(active) ? ownModelLabel(name) : name}${variantSuffix(active, selection.model, selection.variant)}` : name;
   const row = { instance: active, label: modelName(active, selection.model, selection.variant), title, warning: false, pending: false };
   if (!active) return loading ? { ...row, pending: true } : { ...row, meta: t("model.simple.unavailable"), warning: true };
   if (!option && input.refreshing === active.instanceId) return { ...row, pending: true };
@@ -190,7 +207,7 @@ function modelRow(instance: InstanceInfo, provider: string, all: readonly ModelC
     option,
     ...(option.nativeModel ? { model: option.nativeModel } : {}),
     ...(option.variant ? { variant: option.variant } : {}),
-    label: shortModelLabel(option.label, provider),
+    label: isFreeModel(instance) ? ownModelLabel(option.label) : shortModelLabel(option.label, provider),
     ...(repeatedModelLabels(all).has(option.label) && option.provider ? { route: option.provider } : {}),
     current: currentSelection ? choiceIsSelected(option, currentSelection) : false,
     blocked: option.orgBlocked === true,
@@ -221,12 +238,32 @@ export function simpleModelMenu(input: SimpleMenuInput): SimpleMenu {
     const row = (option: ModelChoice) => modelRow(instance, provider, all, option, selection, starred);
     const mixed = own.length > 0 && own.length < all.length;
     if (isFreeModel(instance)) {
-      if (query && !filterCustomModels([{ id: "free", label: provider }, ...all], query).length) return null;
-      const picked = all.find((option) => currentSelection && choiceIsSelected(option, currentSelection))
-        ?? all.find((option) => option.id === instance.models.default) ?? all[0]!;
-      if (!query && currentSelection && choiceIsSelected(picked, currentSelection)) return null;
-      const { provider: _route, ...named } = picked;
-      return { kind: "models", rows: [{ ...row(picked), option: { ...named, label: provider }, label: provider }], total: 1, toggle: null, localFrom: null, signInForOwn: false, probing: false };
+      if (query) {
+        const rows = filterCustomModels(all, query).map(row);
+        return rows.length === 0 ? null
+          : { kind: "models", rows, total: all.length, toggle: null, localFrom: localFrom(rows, mixed), signInForOwn: false, probing: false };
+      }
+      // The CLI marks its free models; a catalog that marks none is all free while there is no login (opencode-go.ts).
+      const free = own.filter((option) => isFreeModelId(option.id));
+      const local = all.filter((option) => option.custom);
+      const tier = free.length > 0 ? [...free, ...local] : own;
+      const aside = own.filter((option) => !tier.includes(option)
+        && (!currentSelection || !choiceIsSelected(option, currentSelection)));
+      const pool = tier.filter((option) => (!currentSelection || !choiceIsSelected(option, currentSelection))
+        && (!botSelection || !choiceIsSelected(option, botSelection)));
+      const suggested = suggestedModels(pool, instance.models.default, undefined,
+        currentSelection === undefined ? GROUP_SUGGESTIONS : CURRENT_GROUP_SUGGESTIONS);
+      const more = pool.filter((option) => !suggested.includes(option));
+      const open = expanded.has(instance.instanceId) || more.length === 1;
+      const rows = (open ? [...suggested, ...more] : suggested).map(row);
+      const restOpen = expanded.has(restToggleKey(instance.instanceId));
+      if (rows.length === 0 && aside.length === 0) return null;
+      return {
+        kind: "models", rows, total: tier.length,
+        toggle: more.length > 1 ? (open ? "less" : "more") : null,
+        localFrom: localFrom(rows, mixed), signInForOwn: false, probing: false, freeToggle: true,
+        ...(aside.length > 0 ? { rest: { rows: restOpen ? aside.map(row) : [], total: aside.length, open: restOpen } } : {}),
+      };
     }
     if (query) {
       const rows = filterCustomModels(all, query).map(row);
@@ -257,10 +294,10 @@ export function simpleModelMenu(input: SimpleMenuInput): SimpleMenu {
   const waits = (group: MenuGroup) => group.body.kind === "signIn" || group.body.kind === "setUp";
   const groups = built.filter((group) => !waits(group));
 
-  // starred models of providers that have models to pick now, in the order they were starred; the free model is no choice
+  // starred models of providers that have models to pick now, in the order they were starred
   const starredRows = query ? [] : starred.flatMap((key): MenuStarredRow[] => {
     for (const instance of ordered) {
-      if (instance.policy || needsCli(instance) || isFreeModel(instance)) continue;
+      if (instance.policy || needsCli(instance)) continue;
       const all = models.get(instance.instanceId)!.all as ModelChoice[];
       const option = all.find((one) => starKey(instance.instanceId, one.nativeModel ?? one.id, one.variant) === key);
       if (option && !option.orgBlocked) {

@@ -162,6 +162,15 @@ describe("new bot default: one ranking with the welcome, tested AIs first", () =
     expect(freeBackupOverConnected([openCodeFree, claudeReady], { instanceId: "claude", model: "claude-default" })).toBe(false);
   });
 
+  it("moves a free pick the catalog no longer lists onto the free model there is now, not to setup", () => {
+    // nothing else is ready, so a pick it no longer lists runs on the free model there is now
+expect(selectDefaultModelSelection([openCodeFree], { instanceId: "opencodeGo", model: "opencode/hy4-flash-free" }))
+      .toEqual({ instanceId: "opencodeGo", model: "opencode/big-pickle" });
+    // any other AI with a model that vanished still sends the person to setup, never to another model
+    expect(selectDefaultModelSelection([openCodeFree, claude], { instanceId: "claude", model: "claude-gone" }))
+      .toEqual({ instanceId: "", model: "" });
+  });
+
   it("keeps the free model while an added server only has a key saved, and gives way once it answers", () => {
     const saved = { instanceId: "opencodeGo", model: "opencode/big-pickle" };
     // an OpenAI-compatible server added on a cloud home with an address only the person's own computer can reach

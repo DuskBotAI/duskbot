@@ -27,6 +27,8 @@ export interface SimpleMenuActions {
   onToggleStar?: (key: string) => void;
   onFollowBot: () => void;
   onToggle: (instance: InstanceInfo) => void;
+  /** Folds or unfolds the models a free group lists past its free ones. */
+  onToggleRest?: (instance: InstanceInfo) => void;
   /** Connects a provider that needs its sign-in again. */
   onSetUp: (instance: InstanceInfo) => void;
   onCheckAgain: (instance: InstanceInfo) => void;
@@ -169,13 +171,34 @@ function GroupBody({ group, props }: { group: MenuGroup; props: SimpleModelMenuP
               <button type="button" data-menu-row data-simple-show-all tabIndex={-1} aria-expanded={body.toggle === "less"}
                 onClick={() => props.onToggle(instance)} className={cn(MENU_ROW, "text-ink-secondary hover:text-ink focus:text-ink")}>
                 <Gutter />
-                <span className="min-w-0 flex-1 truncate">{body.toggle === "less" ? t("model.showSuggested") : t("model.showAll", { count: body.total })}</span>
+                <span className="min-w-0 flex-1 truncate">{body.toggle === "less" ? t("model.showSuggested") : t(body.freeToggle ? "model.showAllFree" : "model.showAll", { count: body.total })}</span>
                 {body.toggle === "less"
                   ? <ChevronUp size={16} strokeWidth={MENU_STROKE} className={MENU_TRAILING} aria-hidden="true" />
                   : <ChevronDown size={16} strokeWidth={MENU_STROKE} className={MENU_TRAILING} aria-hidden="true" />}
               </button>
             </div>
           )}
+          {body.rest && props.onToggleRest && (body.rest.open ? (
+            <>
+              <p className={cn(MENU_NOTE, "pl-8")}>{t("model.free.logInNote")}</p>
+              {body.rest.rows.map((row) => <MenuModel key={row.option.id} instance={instance} row={row} onPick={props.onPick} onToggleStar={props.onToggleStar} />)}
+              <div className="sticky bottom-0 z-[1] -mx-1.5 bg-linear-to-b from-transparent to-menu to-[12px] px-1.5 pt-3">
+                <button type="button" data-menu-row data-simple-show-rest tabIndex={-1} aria-expanded="true"
+                  onClick={() => props.onToggleRest?.(instance)} className={cn(MENU_ROW, "text-ink-secondary hover:text-ink focus:text-ink")}>
+                  <Gutter />
+                  <span className="min-w-0 flex-1 truncate">{t("model.showFreeOnly")}</span>
+                  <ChevronUp size={16} strokeWidth={MENU_STROKE} className={MENU_TRAILING} aria-hidden="true" />
+                </button>
+              </div>
+            </>
+          ) : (
+            <button type="button" data-menu-row data-simple-show-rest tabIndex={-1} aria-expanded="false"
+              onClick={() => props.onToggleRest?.(instance)} className={cn(MENU_ROW, "text-ink-secondary hover:text-ink focus:text-ink")}>
+              <Gutter />
+              <span className="min-w-0 flex-1 truncate">{t("model.showOtherModels", { count: body.rest.total })}</span>
+              <ChevronDown size={16} strokeWidth={MENU_STROKE} className={MENU_TRAILING} aria-hidden="true" />
+            </button>
+          ))}
         </>
       );
   }

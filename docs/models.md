@@ -181,6 +181,10 @@ the bots run.
 
 How the free backup works:
 
+- **It is in the picker, by name.** Under **OpenCode**, the models the CLI
+  lists as free. Pick one and the bot stays on it; a pick the CLI stops
+  listing falls back to the free model it lists now. The rest of OpenCode's
+  models sit folded below them: those need an OpenCode login or credits.
 - **It is a backup chain.** A message goes to a free model. If that model sends
   nothing within 25 seconds, or answers with nothing, the same message goes to
   the next free model, with one line in the chat saying so. OpenCode's own

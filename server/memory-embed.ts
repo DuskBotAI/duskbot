@@ -92,6 +92,12 @@ async function download(dir: string): Promise<void> {
   }
 }
 
+/** Where ort loads its wasm glue and binary from. A file:// URL with a trailing slash, which a bare Windows path is not. */
+export function wasmPrefix(dir: string): string {
+  const url = pathToFileURL(dir).href;
+  return url.endsWith("/") ? url : `${url}/`;
+}
+
 async function load(dir: string): Promise<Loaded> {
   for (const file of FILES) {
     if (sha256(join(dir, file.name)) !== file.sha256) {
@@ -101,7 +107,7 @@ async function load(dir: string): Promise<Loaded> {
   }
   const ort = (await import(pathToFileURL(join(dir, "ort.wasm.min.mjs")).href)) as Ort;
   ort.env.wasm.numThreads = 1;
-  ort.env.wasm.wasmPaths = `${dir}/`;
+  ort.env.wasm.wasmPaths = wasmPrefix(dir);
   const session = await ort.InferenceSession.create(readFileSync(join(dir, "model_quantized.onnx")));
   const tokenizer = JSON.parse(readFileSync(join(dir, "tokenizer.json"), "utf8")) as { model: { vocab: Record<string, number> } };
   return { ort, session, vocab: new Map(Object.entries(tokenizer.model.vocab)) };

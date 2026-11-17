@@ -634,6 +634,7 @@ import { createBrowserViewerRoutes } from "./routes/browser-viewers.ts";
 import { localDesktopTarget, localVmViewerStatus } from "./desktop-viewer-targets.ts";
 import { viewerTargetId } from "../shared/desktop-viewer.ts";
 import { createComputerPreviews } from "./computer-previews.ts";
+import { createRemoteComputerBusyTracker } from "./remote-computer-busy.ts";
 import { createAntigravityLeftoverRoutes } from "./routes/antigravity-leftovers.ts";
 import { createAntigravityAccountRoutes } from "./routes/antigravity-accounts.ts";
 import { createConfigRoutes } from "./routes/config.ts";
@@ -5919,7 +5920,7 @@ function vpsThreadEnded(botId: string, threadId: string): void {
   threads.delete(threadId);
   if (!threads.size) activeVpsThreads.delete(botId);
 }
-const remoteComputerLifecycleBusyOwners = new Set<string>();
+const remoteComputerLifecycleBusyOwners = createRemoteComputerBusyTracker();
 const computerPreviews = createComputerPreviews();
 const vpsJoinRequests = new Map<string, Promise<void>>();
 type RemoteComputerProvider = "vps";

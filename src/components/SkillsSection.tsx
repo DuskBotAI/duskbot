@@ -334,7 +334,7 @@ function SkillSourceDialog({ viewing, error, working, onClose, onEnable }: {
         >
           <div className="ui-dialog flex max-h-[min(760px,90vh)] w-full max-w-2xl flex-col p-5">
             <div className="flex items-center justify-between gap-3">
-              <div id="skills-library-view-title" className="text-[15px] font-medium leading-[22px] text-ink">{viewing.review ? `review ${viewing.skill.name} before enabling` : viewing.skill.name}</div>
+              <div id="skills-library-view-title" className="text-[15px] font-medium leading-[22px] text-ink">{viewing.review ? `Review ${viewing.skill.name} before enabling` : viewing.skill.name}</div>
               <button
                 type="button"
                 disabled={working}

@@ -68,7 +68,8 @@ function scan(file: string): string[] {
   const visit = (node: ts.Node) => {
     if (ts.isJsxText(node) && node.text.trim() && opensLine(node)) report(node, node.text);
     if (ts.isJsxExpression(node) && node.expression && opensLine(node)) {
-      for (const literal of strings(node.expression)) if (!ts.isTemplateExpression(literal)) report(literal, textOf(literal));
+      // A template's opening text opens the element just like a plain string; only a `{value}`-led line is skipped.
+      for (const literal of strings(node.expression)) report(literal, textOf(literal));
     }
     if (ts.isJsxAttribute(node) && ATTRIBUTES.has(node.name.getText(sf)) && node.initializer) {
       const value = ts.isJsxExpression(node.initializer) ? node.initializer.expression : node.initializer;

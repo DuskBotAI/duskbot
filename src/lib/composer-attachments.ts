@@ -1,6 +1,8 @@
 import { noteMediaSizes, type MediaSize } from "./media-sizes.ts";
 import { randomUuid } from "./random-uuid.ts";
 import { sendUpload, type UploadProgress } from "./upload-request.ts";
+import { FILE_MAX_BYTES } from "../../shared/upload-limits.ts";
+export { FILE_MAX_BYTES };
 export { dataContextFor, type DataContext, type DataViewContext } from "../../shared/data-context.ts";
 
 export type PasteAttachment = {
@@ -102,7 +104,6 @@ export function fileAttachment(name: string, path: string, size: number): FileAt
 
 /** Must match the server's IMAGE_MAX_BYTES. */
 export const IMAGE_MAX_BYTES = 10 * 1024 * 1024;
-export const FILE_MAX_BYTES = 25 * 1024 * 1024;
 /** Must match the server's TURN_IMAGE_MAX_COUNT: a message carrying more images is refused at send. */
 export const TURN_IMAGE_MAX_COUNT = 10;
 
@@ -357,7 +358,7 @@ function uploadableFileMime(file: Pick<File, "name" | "type" | "size">): string 
     (ACCEPTED_AUDIO_MIMES.has(declared) ? declared : AUDIO_MIMES_BY_EXTENSION[extension]);
   if (!mime) return null;
   if (file.size > FILE_MAX_BYTES) {
-    throw Object.assign(new Error(`${file.name} exceeds 25 MB`), { status: 413 });
+    throw Object.assign(new Error(`${file.name} exceeds ${FILE_MAX_BYTES / (1024 * 1024)} MB`), { status: 413 });
   }
   return mime;
 }

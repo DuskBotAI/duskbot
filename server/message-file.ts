@@ -8,9 +8,10 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { fromMarkdown } from "mdast-util-from-markdown";
 
 import { windowsPathDestinations } from "../shared/markdown-windows-paths.ts";
+import { FILE_MAX_BYTES } from "../shared/upload-limits.ts";
 import { inSecretFolder, SECRET_FILE_REFUSAL } from "./secret-folder.ts";
 
-export const MESSAGE_FILE_MAX_BYTES = 25 * 1024 * 1024;
+export const MESSAGE_FILE_MAX_BYTES = FILE_MAX_BYTES;
 
 export interface OpenedMessageFile {
   handle: FileHandle;

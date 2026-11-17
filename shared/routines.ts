@@ -241,6 +241,13 @@ export interface RoutineRun {
   /** Concise, redacted question or approval reason while status is waiting,
    * or why a queued run starts later. */
   attention?: string;
+  asked?: {
+    requestId?: string;
+    approval: boolean;
+    subject: string;
+    since: number;
+    pending?: unknown[];
+  };
   cost?: number | null;
   denials?: string[];
   report?: RoutineRunReport;

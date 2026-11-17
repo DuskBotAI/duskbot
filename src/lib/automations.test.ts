@@ -114,6 +114,8 @@ describe("status: Working, Paused, Needs you", () => {
     expect(automationStatus(automation([run("failed", at(0, 9), { error: "Out of credit: quota exceeded" })]))).toMatchObject({ state: "needs-you", fix: "usage" });
     expect(automationStatus(automation([run("failed", at(0, 9), { error: "Stopped after reaching the 15-minute run limit" })]))).toMatchObject({ state: "needs-you", fix: "edit" });
     expect(automationStatus(automation([run("waiting", at(0, 9), { attention: "Approve the reply?" })]))).toMatchObject({ state: "needs-you", fix: "answer" });
+    expect(automationStatus(automation([run("waiting", at(0, 9), { attention: "Waiting for work it handed on to finish" })]))).toEqual({ state: "working" });
+    expect(automationStatus(automation([run("waiting", at(0, 9))]))).toEqual({ state: "needs-you", reason: "It's waiting for your answer." });
     expect(automationStatus(automation([run("failed", at(0, 9), { error: "Provider crashed" }), run("missed", at(-1, 9)), run("completed", at(-2, 9))])))
       .toMatchObject({ state: "needs-you", fix: "run", reason: "It didn't finish the last 2 times." });
   });
@@ -191,6 +193,8 @@ describe("order and the grey line", () => {
   it("writes recent runs as a time, a mark and one line", () => {
     expect(runLine(run("completed", at(0, 9, 2), { output: "3 emails overnight.\nMore detail." }), NOW)).toEqual({ when: "today 9:02 AM", mark: "✓", text: "3 emails overnight." });
     expect(runLine(run("failed", at(-1, 9), { error: "token expired, sign in again" }), NOW)).toMatchObject({ mark: "✗", text: "It's signed out. Sign in again so it can run." });
+    expect(runLine(run("waiting", at(0, 9), { attention: "Waiting for work it handed on to finish" }), NOW)).toEqual({ when: "today 9:00 AM", mark: "…", text: "Waiting for work it handed on to finish" });
+    expect(runLine(run("waiting", at(0, 9), { attention: "Approve the reply?" }), NOW)).toEqual({ when: "today 9:00 AM", mark: "!", text: "Approve the reply?" });
   });
 
   it("says why a stopped run stopped when it knows, and plain Stopped when nobody gave a reason", () => {

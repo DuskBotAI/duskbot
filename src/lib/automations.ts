@@ -256,7 +256,13 @@ export function automationStatus(automation: Pick<Automation, "enabled" | "runs"
   if (automation.checkTrouble) return { state: "needs-you", reason: automation.checkTrouble, fix: SIGNED_OUT.test(automation.checkTrouble) ? "reconnect" : "run" };
   const settled = automation.runs.filter((run) => run.status !== "cancelled" && run.status !== "queued" && !isLimitSkip(run));
   const latest = settled[0];
-  if (latest?.status === "waiting") return { state: "needs-you", reason: t("automations.reason.answer"), fix: "answer" };
+  if (latest?.status === "waiting") {
+    if (latest.attention?.includes("handed on") || latest.attention?.includes("teammates")) {
+      return { state: "working" };
+    }
+    const hasQuestion = Boolean(latest.asked || latest.attention);
+    return { state: "needs-you", reason: latest.attention || t("automations.reason.answer"), ...(hasQuestion ? { fix: "answer" } : {}) };
+  }
   if (latest && isProblem(latest)) {
     const owner = ownerFix(latest);
     if (owner) return { state: "needs-you", ...owner };
@@ -319,7 +325,10 @@ export function runLine(run: RoutineRun, now = Date.now()): { when: string; mark
   const short = (text: string) => (text.length > 110 ? `${text.slice(0, 109).trimEnd()}…` : text);
   const when = lastWhen(runTime(run), now);
   if (run.status === "completed") return { when, mark: "✓", text: run.report?.state === "quiet" ? t("automations.run.nothingNew") : short(firstLine(run.output)) || t("automations.run.done") };
-  if (run.status === "waiting") return { when, mark: "!", text: t("automations.reason.answer") };
+  if (run.status === "waiting") {
+    const isHandedOn = run.attention?.includes("handed on") || run.attention?.includes("teammates");
+    return { when, mark: isHandedOn ? "…" : "!", text: run.attention || t("automations.reason.answer") };
+  }
   if (isLimitSkip(run)) return { when, mark: "–", text: t("routines.strip.skipped") };
   if (run.status === "running" || run.status === "queued") return { when, mark: "…", text: t("automations.runningNow") };
   if (run.status === "cancelled") {

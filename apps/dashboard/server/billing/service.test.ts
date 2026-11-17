@@ -82,7 +82,8 @@ describe("billing service isolated fixture", () => {
     const newId = provider.sign("another_activation", deliveries[1].body); deliver([newId]);
     expect(store.state.subscriptions).toHaveLength(1); expect(clouds.activate).toHaveBeenCalledTimes(1);
     service.close(); store = createBillingStore(dataDir);
-    expect(store.state.subscriptions[0].id).toBe(sub.id); expect(statSync(join(dataDir, "billing.json")).mode & 0o777).toBe(0o600);
+    expect(store.state.subscriptions[0].id).toBe(sub.id);
+    if (process.platform !== "win32") expect(statSync(join(dataDir, "billing.json")).mode & 0o777).toBe(0o600);
     expect(readFileSync(join(dataDir, "billing.json"), "utf8")).not.toContain(provider.secret);
     expect(service.appState(owner)).toMatchObject({ entitlement: { plan: "pro", tier: "custom", status: "active" } });
   });

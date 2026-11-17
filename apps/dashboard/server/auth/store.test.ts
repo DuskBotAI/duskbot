@@ -32,7 +32,7 @@ describe("auth persistence", () => {
     await vi.advanceTimersByTimeAsync(1000);
     expect(JSON.parse(readFileSync(`${dataDir}/auth.json`, "utf8")).accounts).toHaveLength(1);
     expect(existsSync(`${dataDir}/auth.json.tmp`)).toBe(false);
-    expect(statSync(`${dataDir}/auth.json`).mode & 0o777).toBe(0o600);
+    if (process.platform !== "win32") expect(statSync(`${dataDir}/auth.json`).mode & 0o777).toBe(0o600);
     store.state.accounts[0].name = "Updated"; store.changed(); store.close();
     expect(JSON.parse(readFileSync(`${dataDir}/auth.json`, "utf8")).accounts[0].name).toBe("Updated");
   });

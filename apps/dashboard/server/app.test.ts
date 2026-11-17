@@ -1,4 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { createServer, request as httpRequest } from "node:http";
 import type { Server } from "node:http";
 import type { KeyObject } from "node:crypto";
@@ -39,8 +41,8 @@ describe("hosted dashboard service", () => {
   let keys: { publicKey: KeyObject; privateKey: KeyObject };
 
   beforeEach(async () => {
-    dataDir = mkdtempSync("/private/tmp/dusk-dashboard-test-");
-    staticDir = mkdtempSync("/private/tmp/dusk-dashboard-static-");
+    dataDir = mkdtempSync(join(tmpdir(), "dusk-dashboard-test-"));
+    staticDir = mkdtempSync(join(tmpdir(), "dusk-dashboard-static-"));
     writeFileSync(`${staticDir}/index.html`, "<!doctype html><title>dashboard fixture</title>");
     writeFileSync(`${staticDir}/.env`, "fixture-only");
     time = Date.now();
@@ -112,7 +114,7 @@ describe("hosted dashboard service", () => {
     expect(saved).not.toContain(cookie.split("=")[1]);
     expect(saved).not.toContain("omc_");
     expect(JSON.parse(saved).sessions[0].tokenHash).toMatch(/^[a-f0-9]{64}$/);
-    expect(statSync(`${dataDir}/auth.json`).mode & 0o777).toBe(0o600);
+    if (process.platform !== "win32") expect(statSync(`${dataDir}/auth.json`).mode & 0o777).toBe(0o600);
     app = createDashboardApp({ dataDir, publicUrl: origin, mailer, staticDir });
     server.removeAllListeners("request");
     server.on("request", app.handle);

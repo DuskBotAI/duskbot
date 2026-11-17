@@ -1,4 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { createServer, request, type Server } from "node:http";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { createDashboardApp } from "./app.ts";
@@ -15,8 +17,8 @@ describe("one origin: dashboard, admin and site", () => {
   const siteHits: string[] = [];
 
   beforeEach(async () => {
-    dataDir = mkdtempSync("/private/tmp/dusk-one-origin-");
-    staticDir = mkdtempSync("/private/tmp/dusk-one-origin-static-");
+    dataDir = mkdtempSync(join(tmpdir(), "dusk-one-origin-"));
+    staticDir = mkdtempSync(join(tmpdir(), "dusk-one-origin-static-"));
     writeFileSync(`${staticDir}/index.html`, "<!doctype html><title>page shell</title>");
     mkdirSync(`${staticDir}/assets/admin`, { recursive: true });
     writeFileSync(`${staticDir}/assets/main.js`, "main");
@@ -204,7 +206,7 @@ describe("one origin: the short install line", () => {
     const hits: Array<{ url: string; ip: string }> = [];
     const link = createServer((req, res) => { hits.push({ url: req.url ?? "", ip: String(req.headers["x-real-ip"] ?? "") }); res.writeHead(200, { "content-type": "text/plain" }); res.end("#!/bin/sh\n"); });
     await new Promise<void>(resolve => link.listen(0, "127.0.0.1", resolve));
-    const dataDir = mkdtempSync("/private/tmp/dusk-short-line-");
+    const dataDir = mkdtempSync(join(tmpdir(), "dusk-short-line-"));
     const app = createDashboardApp({ dataDir, staticDir: dataDir, publicUrl: "https://dusk.test", mailer: memoryMailer(), linkUpstream: `http://127.0.0.1:${(link.address() as { port: number }).port}` });
     const server = createServer(app.handle);
     await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve));

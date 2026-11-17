@@ -89,7 +89,7 @@ describe("bug reports", () => {
     expect(preflight.status).toBe(204);
     expect(preflight.headers.get("access-control-allow-origin")).toBe("*");
     expect(preflight.headers.get("access-control-allow-headers")).toContain("content-type");
-    const sent = await post("/api/bug-reports", { ...payload({ source: "feedback", diagnostics: "" }), images: [] }, { origin: appPage });
+    const sent = await post("/api/bug-reports", { ...payload({ source: "feedback" as "bot", diagnostics: "" }), images: [] }, { origin: appPage });
     expect(sent.status).toBe(201);
     expect(sent.headers.get("access-control-allow-origin")).toBe("*");
     expect(sent.headers.get("access-control-allow-credentials")).toBeNull();

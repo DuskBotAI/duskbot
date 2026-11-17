@@ -1,4 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { createServer } from "node:http";
 import type { Server } from "node:http";
 import { mkdtempSync, rmSync } from "node:fs";
@@ -10,7 +12,7 @@ const TOKEN = "t".repeat(40), origin = "http://dashboard.test";
 describe("test mail sink", () => {
   let server: Server, app: ReturnType<typeof createDashboardApp>, dataDir: string, url: string, mailer: ReturnType<typeof memoryMailer>;
   async function boot(readable: boolean) {
-    dataDir = mkdtempSync("/private/tmp/dusk-test-mail-");
+    dataDir = mkdtempSync(join(tmpdir(), "dusk-test-mail-"));
     mailer = memoryMailer();
     app = createDashboardApp({ dataDir, publicUrl: origin, mailer, staticDir: null, testMail: createTestMailbox({ readable }), admin: { emails: [], env: { DUSK_OPS_TOKEN: TOKEN } } });
     server = createServer(app.handle);

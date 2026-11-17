@@ -729,8 +729,10 @@ describe("local account service", () => {
     const saved = readFileSync(`${dataDir}/auth.json`, "utf8");
     for (const value of [grant.accessToken, browser.cookie.split("=")[1]!, browser.csrfToken, enroll.enrollToken, authorization.deviceCode, ...mailer.outbox.flatMap(item => item.text.match(/\b\d{8}\b/) ?? [])]) expect(saved).not.toContain(value);
     expect(JSON.parse(saved).sessions.every((item: { tokenHash: string }) => /^[a-f0-9]{64}$/.test(item.tokenHash))).toBe(true);
-    expect(statSync(`${dataDir}/auth.json`).mode & 0o777).toBe(0o600);
-    expect(statSync(`${dataDir}/auth-secret`).mode & 0o777).toBe(0o600);
+    if (process.platform !== "win32") {
+      expect(statSync(`${dataDir}/auth.json`).mode & 0o777).toBe(0o600);
+      expect(statSync(`${dataDir}/auth-secret`).mode & 0o777).toBe(0o600);
+    }
     const secret = readFileSync(`${dataDir}/auth-secret`, "utf8");
     restart();
     expect(readFileSync(`${dataDir}/auth-secret`, "utf8")).toBe(secret);

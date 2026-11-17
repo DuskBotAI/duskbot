@@ -629,10 +629,10 @@ export function createDashboardApp(options: DashboardAppOptions) {
     if (under(path, "/assets/admin") && !isAdminRequest(req)) fail(404, "not_found", "Page not found.");
     if (!path.startsWith("/") || path.includes("\\") || path.includes("\0") || path.split("/").some(part => part.startsWith("."))) fail(404, "not_found", "Page not found.");
     try {
-      const root = realpathSync(options.staticDir).replace(/\/$/, "");
+      const root = realpathSync(options.staticDir).replaceAll("\\", "/").replace(/\/$/, "");
       let file = `${root}${path}`;
       try { if (!statSync(file).isFile()) file = `${root}/index.html`; } catch { file = `${root}/index.html`; }
-      file = realpathSync(file);
+      file = realpathSync(file).replaceAll("\\", "/");
       if (!file.startsWith(`${root}/`) || file.slice(root.length + 1).split("/").some(part => part.startsWith("."))) fail(404, "not_found", "Page not found.");
       const ext = file.slice(file.lastIndexOf(".")).toLowerCase();
       let content = readFileSync(file);

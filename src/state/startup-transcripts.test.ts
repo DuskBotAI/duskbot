@@ -205,3 +205,17 @@ it("loads every chat in one read once the snapshot lands, so opening any of them
   await app.select("room");
   expect(app.request.mock.calls.filter(([path]) => path.startsWith("/api/threads/"))).toHaveLength(0);
 });
+
+it("reports a failing bulk read once, then retries further apart instead of every three seconds", async () => {
+  vi.useFakeTimers();
+  try {
+    const app = await fixture(() => { throw new Error("transcripts offline"); });
+    const attempts = () => app.request.mock.calls.filter(([path]) => String(path).startsWith("/api/transcripts?")).length;
+    await act(async () => { await vi.advanceTimersByTimeAsync(3_100); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(6_100); });
+    expect(attempts()).toBe(3);
+    expect(app.state().error).toBeTruthy();
+  } finally {
+    vi.useRealTimers();
+  }
+});

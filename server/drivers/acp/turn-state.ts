@@ -64,12 +64,29 @@ export interface AcpSession {
   launchModel?: string;
 }
 
+export function isAcpToolFinished(update: { status?: unknown; rawOutput?: unknown; content?: unknown }): boolean {
+  if (update.status === "completed" || update.status === "failed") return true;
+  if (update.status === "pending" || update.status === "in_progress") return false;
+  if (update.rawOutput !== undefined) return true;
+  if (Array.isArray(update.content) && update.content.length > 0) {
+    return !update.content.some((part: any) => part?.type === "diff");
+  }
+  return false;
+}
+
 /** A `tool_call` without a status is pending (ACP's default); a `tool_call_update` without one leaves the call as it was. */
-export function trackRunningTool(current: AcpTurn, update: { toolCallId?: unknown; status?: unknown }, defaultStatus?: "pending"): void {
+export function trackRunningTool(
+  current: AcpTurn,
+  update: { toolCallId?: unknown; status?: unknown; rawOutput?: unknown; content?: unknown },
+  defaultStatus?: "pending",
+): void {
   if (typeof update.toolCallId !== "string" || !update.toolCallId) return;
+  if (isAcpToolFinished(update)) {
+    current.runningTools.delete(update.toolCallId);
+    return;
+  }
   const status = update.status ?? defaultStatus;
-  if (status === "completed" || status === "failed") current.runningTools.delete(update.toolCallId);
-  else if (status === "pending" || status === "in_progress") current.runningTools.add(update.toolCallId);
+  if (status === "pending" || status === "in_progress") current.runningTools.add(update.toolCallId);
 }
 
 export interface AcpTurnEnd {

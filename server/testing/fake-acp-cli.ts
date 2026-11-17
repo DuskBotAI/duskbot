@@ -1081,6 +1081,14 @@ function handle(msg: any) {
         complete();
         return;
       }
+      if (mode === "output-without-status") {
+        const update = (u: Record<string, unknown>) => out({ jsonrpc: "2.0", method: "session/update", params: { update: u } });
+        update({ sessionUpdate: "tool_call", toolCallId: "tc-no-status", title: "view_file", rawInput: { path: "hello.ts" } });
+        update({ sessionUpdate: "tool_call_update", toolCallId: "tc-no-status", rawOutput: { output: "file contents here" } });
+        update({ sessionUpdate: "agent_message_chunk", content: { text: "done reading" } });
+        complete();
+        return;
+      }
       const promptText = String(msg.params?.prompt?.[0]?.text ?? "");
       // A hand-off result wake is synthesized: the mode's usual flow would loop on an unprompted turn.
       const runtimeReport = /\[From @[^\]\n·]* \(bot\) · report on assignment [^\]\n·]*?: ([a-z_]+)/.exec(promptText);

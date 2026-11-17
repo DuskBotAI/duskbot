@@ -406,6 +406,17 @@ describe("ACP turns (fake CLI)", () => {
     expect(recorder.events.filter((e) => e.type === "item.completed" && e.itemType === "assistant_image")).toHaveLength(1);
   });
 
+  it("completes tool calls mid-turn when tool_call_update carries rawOutput without explicit completed status", async () => {
+    await create(GrokAgentDriver, "output-without-status");
+    const { turnId } = await instance.adapter.sendTurn({ threadId: "t-output-without-status", text: "go" });
+    await recorder.until((e) => e.type === "turn.completed" && e.turnId === turnId);
+    const completed = recorder.events.find((e) => e.type === "item.completed" && e.itemType === "tool" && e.itemId === "tc-no-status");
+    expect(completed).toMatchObject({ ok: true, output: expect.stringContaining("file contents here") });
+    const toolCompletedIdx = recorder.events.indexOf(completed!);
+    const turnCompletedIdx = recorder.events.findIndex((e) => e.type === "turn.completed");
+    expect(toolCompletedIdx).toBeLessThan(turnCompletedIdx);
+  });
+
   it("normalizes a full turn into the canonical event sequence", async () => {
     await create();
     const { turnId } = await instance.adapter.sendTurn({ threadId: "t-happy", text: "hi", model: "grok-4.5" });

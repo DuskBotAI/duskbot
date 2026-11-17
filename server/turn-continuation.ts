@@ -1,7 +1,10 @@
 import { dataDirFor } from "../electron/legacy-names.mjs";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
+
+/** How many finished handoffs one conversation keeps: a resumed turn reads the newest, the rest are only history. */
+const HANDOFFS_KEPT = 5;
 
 export function handoffDir(): string {
   return join(dataDirFor(process.env.DUSK_DATA_DIR, homedir()), "handoffs");
@@ -22,11 +25,21 @@ export interface HandoffInput {
   }>;
 }
 
-export function writeTurnHandoff(input: HandoffInput): string | null {
+/** Keeps the newest handoffs of one conversation: the file name opens with its ISO stamp, so names sort in write order.
+ * Best effort — a folder that cannot be listed or cleaned leaves the files behind, never the turn. */
+function pruneHandoffs(dir: string, threadId: string, keep: number): void {
+  const prefix = `cap-${String(threadId).slice(0, 8)}-`;
+  try {
+    const names = readdirSync(dir).filter((name) => name.startsWith(prefix)).sort();
+    for (const name of names.slice(0, Math.max(0, names.length - keep))) rmSync(join(dir, name), { force: true });
+  } catch { /* the turn matters more than the cleanup */ }
+}
+
+export function writeTurnHandoff(input: HandoffInput, now = Date.now()): string | null {
   try {
     const dir = handoffDir();
     mkdirSync(dir, { recursive: true });
-    const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+    const stamp = new Date(now).toISOString().replace(/[:.]/g, "-");
     const file = join(dir, `cap-${String(input.threadId).slice(0, 8)}-${String(input.turnId).slice(0, 8)}-${stamp}.md`);
     const L: string[] = [];
     L.push("# Handoff - turn ended without a final answer", "");
@@ -36,7 +49,7 @@ export function writeTurnHandoff(input: HandoffInput): string | null {
     L.push(`- Tool calls used: ${input.toolCalls}`);
     if (input.hasUsage && input.usage) L.push(`- Tokens this turn: ${input.usage.input} in / ${input.usage.output} out`);
     L.push(`- Stop reason: ${input.failure ?? "unknown"}`);
-    L.push(`- Written at: ${new Date().toISOString()}`, "");
+    L.push(`- Written at: ${new Date(now).toISOString()}`, "");
     L.push("## Original task (first user message)", "```");
     const firstUser = input.messages.find((m) => m.role === "user");
     const firstText = firstUser && typeof firstUser.content === "string"
@@ -72,6 +85,7 @@ export function writeTurnHandoff(input: HandoffInput): string | null {
     L.push("3. Continue from the first unfinished step. Do not redo completed work.");
     L.push("4. If you get close to your own turn budget, append your progress to this file before stopping.");
     writeFileSync(file, L.join("\n"), { mode: 0o600 });
+    pruneHandoffs(dir, input.threadId, HANDOFFS_KEPT);
     return file;
   } catch {
     return null;

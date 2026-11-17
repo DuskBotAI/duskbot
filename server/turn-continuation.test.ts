@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -45,6 +45,25 @@ describe("writeTurnHandoff", () => {
     expect(text).toContain("Almost done");
     expect(text).toContain("Stop reason: Stopped after 64 steps");
     expect(text).toContain("Tokens this turn: 10 in / 20 out");
+  });
+
+  it("keeps only the newest handoffs of one conversation", () => {
+    const dir = withTempDataDir();
+    const handoffs = () => join(dir, "handoffs");
+    const start = Date.parse("2026-01-02T03:04:05.000Z");
+    const written: string[] = [];
+    for (let index = 0; index < 7; index += 1) {
+      const path = writeTurnHandoff({ threadId: "thread-keep", turnId: `turn-${index}`, toolCalls: 0, messages: [] }, start + index * 1_000);
+      expect(path).not.toBeNull();
+      written.push(path!);
+    }
+    // Another conversation keeps its own file whatever its neighbour writes.
+    const other = writeTurnHandoff({ threadId: "thread-other", turnId: "turn-other", toolCalls: 0, messages: [] }, start);
+    const names = readdirSync(handoffs()).sort();
+    expect(names).toHaveLength(6);
+    for (const path of written.slice(0, 2)) expect(existsSync(path)).toBe(false);
+    for (const path of written.slice(2)) expect(existsSync(path)).toBe(true);
+    expect(existsSync(other!)).toBe(true);
   });
 
   it("returns null when the handoff cannot be written", () => {

@@ -360,6 +360,42 @@ describe("ClaudeDriver.decodeConfig", () => {
     },
   );
 
+  it("denies an ask whose listener throws, instead of taking the process down", async () => {
+      const dir = mkdtempSync(join(tmpdir(), "dusk-broker-listener-"));
+      // Windows binds pipes, not socket files; both are connectable by the same client code.
+      const socketPath = process.platform === "win32"
+        ? `\\\\.\\pipe\\dusk-broker-listener-${process.pid}-${Date.now()}`
+        : join(dir, "broker.sock");
+      const resolved: Array<{ source?: string; behavior?: string }> = [];
+      const broker = await createPermissionBroker({
+        socketPaths: [socketPath],
+        onAsk: () => { throw new Error("listener failed"); },
+        onResolve: (ask) => resolved.push(ask),
+      });
+      try {
+        const conn = connect(socketPath);
+        await new Promise<void>((resolve, reject) => {
+          conn.on("connect", resolve);
+          conn.on("error", reject);
+        });
+        const answered = new Promise<{ behavior?: string; message?: string }>((resolve) => {
+          let buf = "";
+          conn.on("data", (c) => {
+            buf += c;
+            const nl = buf.indexOf("\n");
+            if (nl !== -1) resolve(JSON.parse(buf.slice(0, nl)));
+          });
+        });
+        conn.write(JSON.stringify({ t: "ask", id: "ask-throw", tool: "Bash", input: { command: "echo hi" } }) + "\n");
+        expect(await answered).toMatchObject({ behavior: "deny" });
+        await expect.poll(() => resolved[0]?.source).toBe("system");
+        conn.end();
+      } finally {
+        broker.close();
+        rmSync(dir, { recursive: true, force: true });
+      }
+  });
+
   it.skipIf(process.platform === "win32")(
     "keeps a large non-ASCII ask whole across socket reads",
     async () => {

@@ -333,6 +333,7 @@ type AskResolutionSource = "user" | "timeout" | "system";
 const DENY_TIMEOUT_NOTE =
   "dusk bot: nobody answered this permission request in time. Skip this action and finish what you can without it.";
 const DUPLICATE_ASK_ID_NOTE = "dusk bot: duplicate ask id, skipping this request.";
+const ASK_UNAVAILABLE_NOTE = "dusk bot: the app could not show this request, so it was denied. Ask again if it is still needed.";
 
 function systemEndedReply(kind: Ask["kind"]): { behavior: AskBehavior; message: string } {
   return kind === "question"
@@ -509,12 +510,22 @@ export async function createPermissionBroker(opts: {
               JSON.stringify({ t: "answer", id: askId, behavior, message, source, ...(always ? { always: true } : {}) }) + "\n",
             );
           } catch {}
-          opts.onResolve({ ...ask, behavior, source });
+          try {
+            opts.onResolve({ ...ask, behavior, source });
+          } catch (error) {
+            console.error(`permission broker on ${boundPath}: resolve listener failed: ${error instanceof Error ? error.message : String(error)}`);
+          }
         };
         const timer = kind === "question" ? undefined : setTimeout(() => finish("deny", DENY_TIMEOUT_NOTE, "timeout"), timeoutMs);
         timer?.unref?.();
         pending.set(askId, { ask, finish });
-        opts.onAsk(ask);
+        try {
+          opts.onAsk(ask);
+        } catch (error) {
+          // A throwing listener must not take the harness down with it: deny the call and let the turn carry on.
+          console.error(`permission broker on ${boundPath}: ask listener failed: ${error instanceof Error ? error.message : String(error)}`);
+          finish("deny", ASK_UNAVAILABLE_NOTE, "system");
+        }
       }
     });
   };

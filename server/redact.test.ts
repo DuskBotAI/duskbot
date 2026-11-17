@@ -58,6 +58,21 @@ describe("redactSecrets", () => {
     expect(out).toContain("«redacted 24 chars»");
   });
 
+  it("masks native log values whose names are credentials rather than keys", () => {
+    const out = flat(redactSecrets({
+      credential: "credential-value-1",
+      credentials: "credential-value-2",
+      cookie: "session=private-cookie-value",
+      passphrase: "private-passphrase-value",
+      privateKey: "private-key-value",
+      sessionKey: "private-session-key-value",
+    }));
+    for (const secret of ["credential-value-1", "credential-value-2", "private-cookie-value", "private-passphrase-value", "private-key-value", "private-session-key-value"]) {
+      expect(out).not.toContain(secret);
+    }
+    expect(out).toContain("credential");
+  });
+
   it("masks a Composio key in an MCP header and an env object", () => {
     const config = {
       mcpServers: {

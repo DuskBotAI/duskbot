@@ -1,6 +1,9 @@
 // Native protocol logs keep the shape of credentials, never their values: they get pasted into issues.
 
-const SECRET_KEY_PARTS = ["token", "secret", "password", "passwd", "apikey", "api_key", "authorization", "auth_token"];
+const SECRET_KEY_PARTS = [
+  "token", "secret", "password", "passwd", "apikey", "api_key", "authorization", "auth_token",
+  "credential", "cookie", "passphrase", "privatekey", "private_key", "sessionkey", "session_key",
+];
 
 export function isSecretName(name: string): boolean {
   const lower = name.toLowerCase();

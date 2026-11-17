@@ -18,12 +18,16 @@ describe("thread links", () => {
     expect(threadLinkLabel("https://github.com/o/r/pull/123/files")).toBe("#123");
     expect(threadLinkLabel("https://github.com/o/r/issues/7")).toBe("#7");
     expect(threadLinkLabel("https://gitlab.com/group/sub/repo/-/merge_requests/45")).toBe("!45");
+    expect(threadLinkLabel("https://bitbucket.org/o/r/pull-requests/12")).toBe("#12");
+    expect(threadLinkLabel("https://codeberg.org/o/r/pulls/9")).toBe("#9");
+    expect(threadLinkLabel("https://bitbucket.org/o/r/commits/abc")).toBeNull();
     expect(threadLinkLabel("https://www.linear.app/team/issue/ABC-1")).toBeNull();
   });
 
   it("finds the last pull or merge request a reply names", () => {
     expect(lastChangeRequestUrl("Opened https://github.com/o/r/pull/1 then [#2](https://github.com/o/r/pull/2/files).")).toBe("https://github.com/o/r/pull/2");
     expect(lastChangeRequestUrl("See https://gitlab.example.com/g/r/-/merge_requests/9, done")).toBe("https://gitlab.example.com/g/r/-/merge_requests/9");
+    expect(lastChangeRequestUrl("Opened https://bitbucket.org/o/r/pull-requests/7 and https://codeberg.org/o/r/pulls/8")).toBe("https://codeberg.org/o/r/pulls/8");
     expect(lastChangeRequestUrl("https://github.com/o/r/pull/1 then https://github.com/o/r/pull/12abc")).toBe("https://github.com/o/r/pull/1");
     expect(lastChangeRequestUrl("https://gitlab.example.com/g/r/-/merge_requests/9x")).toBeNull();
     expect(lastChangeRequestUrl("Issue https://github.com/o/r/issues/3 and https://example.com")).toBeNull();

@@ -2,7 +2,7 @@
 // coming from en.json: JSX text, the text attributes a person sees or hears (titles, placeholders, aria labels) and the
 // label fields of objects a screen lists. This fails when one of them starts with a lowercase letter.
 import { readdirSync, readFileSync } from "node:fs";
-import { join, relative } from "node:path";
+import { join, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import ts from "typescript";
 import { expect, it } from "vitest";
@@ -26,6 +26,9 @@ const AS_WRITTEN = /^(npm|pnpm|npx|opencode|noVNC|px|bytes|sha256|localhost)\b/;
 /** lowercase values that are ids or typed examples, not words a person reads: the host's "browser" id, and the examples in
  * an MCP server's name field and a webhook's event field */
 const ALLOWED = new Set(["src/lib/desktop.ts browser", "src/components/McpServerEditor.tsx github", "src/components/WebhookTrigger.tsx push, workflow_run"]);
+
+/** The allow list and the skip pattern are written with "/", so a path compared against them is too. */
+const relativeToRoot = (file: string) => relative(ROOT, file).split(sep).join("/");
 
 function strings(node: ts.Node): ts.Node[] {
   if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node) || ts.isTemplateExpression(node)) return [node];
@@ -60,7 +63,7 @@ function scan(file: string): string[] {
   const sf = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true, file.endsWith("x") ? ts.ScriptKind.TSX : ts.ScriptKind.TS);
   const found: string[] = [];
   const report = (node: ts.Node, text: string) => {
-    if (lowercaseUi(text) && !ALLOWED.has(`${relative(ROOT, file)} ${text.trim()}`)) found.push(`${relative(ROOT, file)}:${sf.getLineAndCharacterOfPosition(node.getStart(sf)).line + 1} "${text.trim().slice(0, 60)}"`);
+    if (lowercaseUi(text) && !ALLOWED.has(`${relativeToRoot(file)} ${text.trim()}`)) found.push(`${relativeToRoot(file)}:${sf.getLineAndCharacterOfPosition(node.getStart(sf)).line + 1} "${text.trim().slice(0, 60)}"`);
   };
   const visit = (node: ts.Node) => {
     if (ts.isJsxText(node) && node.text.trim() && opensLine(node)) report(node, node.text);
@@ -82,7 +85,7 @@ function scan(file: string): string[] {
 
 it("no UI text written into a desktop or phone component starts lowercase", () => {
   const files = DIRS.flatMap((dir) => readdirSync(join(ROOT, dir), { recursive: true, encoding: "utf8" }).map((name) => join(ROOT, dir, name)))
-    .filter((file) => /\.tsx?$/.test(file) && !SKIP.test(relative(ROOT, file)));
+    .filter((file) => /\.tsx?$/.test(file) && !SKIP.test(relativeToRoot(file)));
   expect(files.length).toBeGreaterThan(200);
   const offending = files.flatMap(scan);
   expect(offending, "start UI text with a capital (dusk bot and dusk cloud stay lowercase), or move it into src/locales/en.json").toEqual([]);

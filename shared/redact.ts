@@ -36,6 +36,9 @@ const KEY_PREFIXES: RegExp[] = [
   /\bSG\.[A-Za-z0-9_-]{22}\.[A-Za-z0-9_-]{43}(?![A-Za-z0-9_-])/g, // sendgrid api keys
   /\bbak_[A-Za-z0-9_-]{20,}/g, // Bot API keys
   /\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\b/g, // jwt
+  /\bdusk_sess_[A-Za-z0-9_-]{43}(?![A-Za-z0-9_-])/g, // this app's workspace session (server/sessions.ts)
+  /\bdusk_tick_[A-Za-z0-9_-]{32}(?![A-Za-z0-9_-])/g, // a single-use stream ticket
+  /\bomb_pair_[A-Za-z0-9_-]{43}(?![A-Za-z0-9_-])/g, // a pairing credential (apps/companion devices)
 ];
 const KEY_PREFIX_TESTS = KEY_PREFIXES.map((re) => new RegExp(re.source));
 const PRIVATE_KEY_BLOCK = /-----BEGIN [A-Z ]*PRIVATE KEY-----/;
@@ -64,6 +67,9 @@ const KEY_SUFFIX_ASSIGNMENT = /\b([A-Za-z][A-Za-z0-9_-]*[_-]key)s?(=)(["']?)([A-
 const SECRET_FLAG = /(--(?:token|password|passwd|api-key|apikey|secret|access-key|auth-token)(?:=|\s+))(["']?)(?!-)([A-Za-z0-9._~+/=-]+)\2/gi;
 /** `scheme://user:secret@host`, the password in a URL's userinfo. */
 const URL_USERINFO = /(\b[a-z][a-z0-9+.-]*:\/\/[^\s/:@'"]+:)([^\s/@'"«»]+)(@)/gi;
+/** A pairing link's `m` payload is the workspace grant in base64 and its `c` is the typed code: the address may stay. */
+const PAIR_LINK = /\b(?:duskbot:\/\/pair\?[^\s'"<>]*|https:\/\/dusk\.bot\/m\/pair#[^\s'"<>]*)/gi;
+const PAIR_LINK_VALUE = /([?&#](?:m|c)=)([A-Za-z0-9_-]{4,})/gi;
 
 // A saved website password has no shape: it is known by value. The server
 // registers a scrubber for the values it holds, and every redaction below
@@ -94,6 +100,7 @@ export function redactSecretsInText(text: string): string {
   if (held.length < 8) return held;
   let out = held;
   out = out.replace(PEM_BLOCK, (_m, open: string, body: string, close: string) => `${open}\n${mask(body.trim())}\n${close}`);
+  out = out.replace(PAIR_LINK, (link) => link.replace(PAIR_LINK_VALUE, (_m, lead: string, value: string) => `${lead}${mask(value)}`));
   for (const re of KEY_PREFIXES) out = out.replace(re, (m) => mask(m));
   out = out.replace(BEARER, (_m, lead: string, tok: string) => `${lead}${mask(tok)}`);
   out = out.replace(BASIC_AUTH, (_m, lead: string, creds: string) => `${lead}${mask(creds)}`);

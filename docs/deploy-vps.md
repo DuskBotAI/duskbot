@@ -108,7 +108,7 @@ One container for the server plus Caddy for HTTPS at `https://maus.example.com`.
    nano .env                # DOMAIN=maus.example.com ; ENGINES=@anthropic-ai/claude-code @openai/codex
    ```
 
-   `ENGINES` lists the engine CLIs baked into your image, separated by spaces. Change it later and rebuild if you add one.
+   The published image has Claude Code and Codex. `ENGINES` lists the engine CLIs baked in when you build the image yourself (`docker compose up -d --build`), separated by spaces; other engines install from Settings → Engines.
 
 4. **Start it:**
 

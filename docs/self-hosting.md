@@ -232,9 +232,11 @@ cp .env.example .env            # set DOMAIN
 docker compose pull dusk && docker compose up -d
 ```
 
-That uses the image CI publishes on every `main` push
-(`ghcr.io/milind-soni/duskbot`, tagged `latest`, `sha-…` and `v…`).
-To build from your checkout instead: `docker compose up -d --build`.
+That uses the image published for each release
+(`ghcr.io/duskbotai/duskbot`, tagged `v…` and `latest`, for amd64 and
+arm64, with Claude Code and Codex installed). Set `DUSK_IMAGE` in `.env` to
+pin a version. To build from your checkout instead, with the engines
+`ENGINES` lists: `docker compose up -d --build`.
 
 Then sign the engine CLIs in **inside the container** (their logins live on
 the `data` volume, so they survive restarts and image upgrades) and mint a
@@ -269,8 +271,8 @@ Upgrade with `docker compose pull dusk && docker compose up -d` (or
 `git pull && docker compose up -d --build`). State (chats, routines,
 engine logins, paired sessions) is on the `data` volume; back that up.
 
-The published image installs the current Chrome for Testing whenever a new
-Stable ships. A build from source keeps the Chrome (and any `ENGINES`) it
+The published image has the Chrome for Testing that was current when its
+release was built. A build from source keeps the Chrome (and any `ENGINES`) it
 installed first, because those layers sit beneath the app and stay cached
 across code changes. To pick up the current ones, rebuild with a new tag:
 

@@ -5,7 +5,8 @@
 # declared on the `dusk` service (the namespace owner).
 #
 #   cp .env.example .env   # set DOMAIN
-#   docker compose up -d --build                        # builds the image from this checkout
+#   docker compose pull dusk && docker compose up -d    # the image published for each release
+#   docker compose up -d --build                        # or build it from this checkout
 services:
   dusk:
     build:
@@ -13,9 +14,7 @@ services:
       dockerfile: deploy/docker/Dockerfile
       args:
         ENGINES: ${ENGINES:-}
-    # a local tag: no registry publishes this image, so it is always built from the checkout
-    image: duskbot-local:latest
-    pull_policy: build
+    image: ${DUSK_IMAGE:-ghcr.io/duskbotai/duskbot:latest}
     restart: unless-stopped
     # The bots' browsers (docs/browser-packaging.md, "Process hygiene"): an
     # init collects the browser processes whose parents exit, and Chrome

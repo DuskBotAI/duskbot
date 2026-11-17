@@ -255,6 +255,27 @@ describe("container images", () => {
     expect(engines?.args).toContain("${ENGINES_CACHE_TAG");
   });
 
+  it("publishes the image compose pulls: the server target, both CPUs, in the namespace the repository's token pushes to", () => {
+    const service = parse(readFileSync(new URL("../deploy/docker-compose.yml", import.meta.url), "utf8")).services.dusk;
+    expect(service.image).toBe("${DUSK_IMAGE:-ghcr.io/duskbotai/duskbot:latest}");
+    // compose builds only when asked to (--build), so `pull` gets the published image
+    expect(service.pull_policy).toBeUndefined();
+    expect(service.build.dockerfile).toBe("deploy/docker/Dockerfile");
+    const workflow = readFileSync(new URL("../.github/workflows/server-image.yml", import.meta.url), "utf8");
+    expect(workflow).toContain('image="ghcr.io/$owner/duskbot"');
+    expect(workflow).toContain("-f deploy/docker/Dockerfile --target server ");
+    expect(workflow).toContain("runner: ubuntu-24.04-arm");
+    expect(workflow).toContain('imagetools create -t "$IMAGE:$TAG" "$IMAGE:$TAG-amd64" "$IMAGE:$TAG-arm64"');
+    expect(workflow).toContain('node scripts/check-bot-desktop-published.mjs --image "$IMAGE:$TAG"');
+    // a plain `docker run` of the image wants the same init and shared memory compose gives it
+    expect(workflow).toContain("docker run -d --name server --init --shm-size=512m ");
+    for (const doc of ["../docs/self-hosting.md", "../deploy/.env.example"]) {
+      const text = readFileSync(new URL(doc, import.meta.url), "utf8");
+      expect(text, doc).toContain("ghcr.io/duskbotai/duskbot");
+      expect(text, doc).not.toMatch(/ghcr\.io\/(?!duskbotai\/)[\w-]+\/duskbot\b/);
+    }
+  });
+
   // An init collects browser processes whose parents exit, and Chrome gets the
   // shared memory dusk bot's desktop containers give it.
   it("runs the compose service of the server image with an init and Chrome's shared memory", () => {

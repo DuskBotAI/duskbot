@@ -6,6 +6,8 @@ export const SECRET_FOLDER = ".duskbot-secrets";
 export const SECRET_FILE_REFUSAL =
   "That file holds a secret the person gave for your own commands only: it cannot be opened from chat, attached, published, uploaded or read by a helper.";
 
-export function inSecretFolder(path: string): boolean {
-  return path.split(/[\\/]/).includes(SECRET_FOLDER);
+export function inSecretFolder(path: string, platform: NodeJS.Platform = process.platform): boolean {
+  // macOS and Windows volumes match names without case, so a differently cased path still reaches this folder.
+  const caseInsensitive = platform === "darwin" || platform === "win32";
+  return path.split(/[\\/]/).some((segment) => caseInsensitive ? segment.toLowerCase() === SECRET_FOLDER : segment === SECRET_FOLDER);
 }

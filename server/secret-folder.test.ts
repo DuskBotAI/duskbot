@@ -11,7 +11,7 @@ import { uploadableFiles } from "./browser-upload.ts";
 import { listBotFiles } from "./cloud-send-files.ts";
 import { listMessageFolder, openMessageFile } from "./message-file.ts";
 import { botFileSource, readPageBundle } from "./pages/bundle.ts";
-import { SECRET_FILE_REFUSAL, SECRET_FOLDER } from "./secret-folder.ts";
+import { SECRET_FILE_REFUSAL, SECRET_FOLDER, inSecretFolder } from "./secret-folder.ts";
 import { excludedWorkspaceAuthPath } from "./workspace-backup-policy.ts";
 import { omittedFromWorkspaceBackup } from "./workspace-backup.ts";
 
@@ -57,5 +57,17 @@ describe("a bot's private secret files", () => {
     await expect(botFileSource(secret, async () => ({ roots: [workspace], vmWorkspace: null }))).rejects.toMatchObject({ status: 403 });
     expect(uploadableFiles([secret], [workspace])).toEqual({ error: SECRET_FILE_REFUSAL });
     expect(uploadableFiles([join(workspace, "notes.txt")], [workspace])).toMatchObject({ files: [expect.stringContaining("notes.txt")] });
+  });
+});
+
+describe("the secret folder's name", () => {
+  it("matches whatever the case on a filesystem that ignores case, and only exactly on one that does not", () => {
+    for (const path of [`workspaces/atlas/${SECRET_FOLDER}/t/c`, "workspaces/atlas/.DUSKBOT-SECRETS/t/c", ".DuskBot-Secrets/card"]) {
+      expect(inSecretFolder(path, "darwin"), path).toBe(true);
+      expect(inSecretFolder(path, "win32"), path).toBe(true);
+    }
+    expect(inSecretFolder(`workspaces/atlas/${SECRET_FOLDER}/t/c`, "linux")).toBe(true);
+    expect(inSecretFolder("workspaces/atlas/.DUSKBOT-SECRETS/t/c", "linux")).toBe(false);
+    expect(inSecretFolder("workspaces/atlas/notes.txt", "darwin")).toBe(false);
   });
 });

@@ -183,6 +183,7 @@ export interface SendTurnInput {
     email?: { command: string; args: string[]; env: Record<string, string> };
     /** The paired phone's app tools' MCP proxy: the harness holds the jobs and the per-bot verdict. */
     device?: { command: string; args: string[]; env: Record<string, string> };
+    hostShell?: { cwd?: string };
     /** dweb daemon tools; `url` is the dweb HTTP base. */
     dweb?: { url: string };
     /** The user's MCP servers, mounted without any pre-allow; a driver skips a kind it cannot speak. */
@@ -268,6 +269,7 @@ export interface ProviderAdapter {
     steerImages?: boolean;
     /** True only when local MCP calls can reach the human approval channel; full-auto/bypass instances must leave this false. */
     localComputerMcp?: boolean;
+    hostShellMcp?: boolean;
     /** The driver mounts integrations.custom. */
     customMcp?: boolean;
     /** A resumeCursor turn runs in that exact native session, or fails, or starts a new one from recoveryText (session.started says

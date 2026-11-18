@@ -433,7 +433,7 @@ import {
 } from "./system-prompt.ts";
 import { shellTimeoutHookResult } from "./shell-timeout-hint.ts";
 import { spillToolResult } from "./tool-result-spill.ts";
-import { gatedLocalComputer } from "./local-computer.ts";
+import { gatedLocalComputer, offerHostShell } from "./local-computer.ts";
 import { desktopComputer, missingScreenPermissions, thisComputerNotReady } from "./desktop-computer.ts";
 import { dismissRetiredCards } from "./retired-cards.ts";
 import { askToUseYourComputer, cancelYourComputerAsks, claimWithYourComputerConsent, dismissStaleYourComputerCards, yourComputerCallFrom, yourComputerWaiting } from "./your-computer-consent.ts"; import { askToUseMac, cancelMacAsks, dismissStaleMacCards, MAC_ASK_ENDED_TEXT, MAC_DENIED_TEXT } from "./mac-control/cloud-ask.ts";
@@ -9466,7 +9466,7 @@ async function beginTurn(
         throw new DirectTurnSetupCancelled("Coordination access changed before dispatch");
       }
       // The tool bridge is decided here: the folder the turn is launched in is known, and the prompt is not built yet.
-      applyAgentsBridge(threadId, integrations, cfg, bot, turnEngine(instance, instanceConfigs(cfg), registry.lastSnapshot(instance.instanceId), cwd));
+      applyAgentsBridge(threadId, integrations, cfg, bot, turnEngine(instance, instanceConfigs(cfg), registry.lastSnapshot(instance.instanceId), cwd)); offerHostShell(integrations, instance.adapter.capabilities, { guestConfined, cwd });
       const confined = proactive.fence.confines(threadId), apiFenced = botApiThread(threadId); if (confined || apiFenced) for (const key of Object.keys(integrations) as Array<keyof typeof integrations>) if (!(apiFenced ? BOT_API_TOOLS : READ_AND_DRAFT_TOOLS).has(key)) delete integrations[key];
       const memoryShape = { managedWrites: Boolean(integrations.agents), fileTools: worksInWorkspace && !apiFenced, enabled: bot.memoryEnabled !== false, writesRefused: notesRefused };
       const heldTurnMemory = heldMemoryParts(bot, threadId, memoryShape);

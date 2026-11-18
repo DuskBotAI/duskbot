@@ -13,7 +13,7 @@ import { ASK_USER_TOOL, ASK_USER_TOOL_DEFINITION, askQuestionSummary, parseAskQu
 import { allowsTool, parseToolScope } from "../../shared/tool-scope.ts";
 import { redactSecretsInText } from "../redact.ts";
 import { toolDetailPreview } from "../tool-summary.ts";
-import { ChatToolSessionError, chatToolNotices, mountChatTools, type ChatToolDefinition, type ChatToolSession, type ChatToolResult } from "./chat-mcp-tools.ts";
+import { ChatToolSessionError, chatToolNotices, mountChatTools, withoutHostShell, type ChatToolDefinition, type ChatToolSession, type ChatToolResult } from "./chat-mcp-tools.ts";
 import { noteToolBudget } from "../tool-budgets.ts";
 import { assertImageTransport, chatImageBudget, chatToolImages, chatUserContent, type ChatContentPart } from "./chat-images.ts";
 import { trimBrowserContext } from "./chat-context-trim.ts";
@@ -614,7 +614,7 @@ export function createOpenAIChatRuntime<Config>(options: RuntimeOptions<Config>)
         const parsed = parseToolScope(turn.toolScope);
         if (!parsed.ok) throw new Error(parsed.error);
         const scope = parsed.scope;
-        tools = await mountChatTools(options.tools === false ? undefined : turn.integrations, abort.signal, options.computerUse, scope, turn.mcpCallTimeoutMs,
+        tools = await mountChatTools(options.tools === false ? undefined : options.localModel ? turn.integrations : withoutHostShell(turn.integrations), abort.signal, options.computerUse, scope, turn.mcpCallTimeoutMs,
           toolSchemaProfileFor({ url: options.apiUrl, model }), turn.cwd ?? turn.toolResultFolder, safeText);
         noteToolBudget(turn.botId, tools.budget);
         for (const message of chatToolNotices(tools)) emit({ ...base(turn.threadId, turnId), type: "runtime.notice", message: safeText(message) });
@@ -949,7 +949,7 @@ export function createOpenAIChatRuntime<Config>(options: RuntimeOptions<Config>)
     adapter: {
       provider: options.driverKind,
       capabilities: { ...(options.computerUse ? { computerMcp: options.tools !== false,
-        localComputerMcp: options.tools !== false,
+        localComputerMcp: options.tools !== false, hostShellMcp: options.tools !== false && options.localModel === true,
         browserMcp: options.tools !== false, nativeImageInput: true, images: true } : {}),
         sessionModelSwitch: "in-session", customMcp: options.tools !== false, agentsMcp: options.tools !== false, composioMcp: options.tools !== false,
         dataMcp: options.tools !== false,

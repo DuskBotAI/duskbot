@@ -2,6 +2,7 @@
 // registered, schema-validated calls arrive here.
 import { createHash, randomBytes } from "node:crypto";
 import { lstat, mkdir, readdir, unlink, writeFile } from "node:fs/promises";
+import { homedir } from "node:os";
 import { join } from "node:path";
 import type { ValidateFunction } from "ajv";
 import { stripControlPlaneEnv } from "../config.ts";
@@ -10,6 +11,7 @@ import { redactSecretsInText } from "../redact.ts";
 import { MESSAGE_FILE_MAX_BYTES } from "../message-file.ts";
 import { augmentedPath } from "../env-path.ts";
 import { killCliTree, spawnCli } from "../procs.ts";
+import { HOST_SHELL_SERVER, hostShellAnswer } from "../host-shell.ts";
 import { AGENTS_TOOL_ALIASES } from "../../shared/agents-tool-names.ts";
 import { bridgedCallTarget, unbridgedServer } from "./agents-bridge.ts";
 import { chatImage, type ChatImagePart } from "./chat-images.ts";
@@ -60,7 +62,7 @@ export interface ChatToolSession {
 }
 
 type Server = { command: string; args: string[]; env: Record<string, string> };
-type RegisteredTool = { client: McpPeer; server: string; launch: string; builtInBrowser: boolean; agents: boolean; computer: boolean; hostComputer: boolean; name: string; schema: ValidateFunction; searched: boolean; parallel: boolean };
+type RegisteredTool = { client: McpPeer; server: string; launch: string; builtInBrowser: boolean; agents: boolean; computer: boolean; hostComputer: boolean; hostShell: boolean; name: string; schema: ValidateFunction; searched: boolean; parallel: boolean };
 function chatToolName(server: string, tool: string): string {
   return `${server}_${tool}`.toLowerCase().replace(/[^a-z0-9_]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 64) || "mcp_tool";
 }
@@ -476,6 +478,12 @@ function checkedTools(tools: readonly unknown[]): CheckedTool[] {
   });
 }
 
+export function withoutHostShell(integrations: SendTurnInput["integrations"]): SendTurnInput["integrations"] {
+  if (!integrations?.hostShell) return integrations;
+  const { hostShell: _hostShell, ...rest } = integrations;
+  return rest;
+}
+
 function uniqueName(base: string, taken: (name: string) => boolean): string {
   let name = base;
   for (let index = 2; taken(name); index += 1) { const suffix = `_${index}`; name = base.slice(0, 64 - suffix.length) + suffix; }
@@ -507,6 +515,10 @@ export async function mountChatTools(integrations: SendTurnInput["integrations"]
   const observers = new Map<string, AppObserver>();
   const searchable = new Set<string>();
   const eligible = (server: string) => scope === undefined || canUseMcpServer(scope, server);
+  const onHostDesktop = computerUse && integrations?.localComputer?.scope === "local-computer";
+  const hostShell: Server | undefined = onHostDesktop && integrations?.hostShell && eligible(HOST_SHELL_SERVER)
+    ? { command: "dusk:host-shell", args: [integrations.hostShell.cwd ?? resultFolder ?? homedir()], env: {} } : undefined;
+  if (hostShell) servers.push([HOST_SHELL_SERVER, hostShell]);
   if (computerUse && integrations?.localComputer && eligible("computer")) servers.push(["computer", integrations.localComputer]);
   if (computerUse && integrations?.browser && eligible("browser")) servers.push(["browser", integrations.browser]);
   // Security: a selection matches the name in the call, so with one the agents server is never bridged.
@@ -590,7 +602,7 @@ export async function mountChatTools(integrations: SendTurnInput["integrations"]
     // Concurrent starts, consumed in config order so names and collision suffixes stay stable.
     const mounts = await Promise.allSettled(servers.map(async ([name, descriptor], index) => {
       if (signal.aborted || closed) throw aborted();
-      const client = openPeer(descriptor, computerUse, index < builtIns);
+      const client = descriptor === hostShell ? new InProcessMcpClient(hostShellAnswer({ cwd: hostShell.args[0]! }), FRAME_BYTES) : openPeer(descriptor, computerUse, index < builtIns);
       clients.push(client);
       started.set(name, client);
       const computer = descriptor === integrations?.localComputer;
@@ -604,7 +616,8 @@ export async function mountChatTools(integrations: SendTurnInput["integrations"]
       const launch = createHash("sha256").update(JSON.stringify(descriptor)).digest("hex");
       const origin: ToolOrigin = { client, server: name, launch, builtInBrowser: descriptor === integrations?.browser, agents: descriptor === agentsServer,
         computer: descriptor === integrations?.localComputer,
-        hostComputer: descriptor === integrations?.localComputer && integrations?.localComputer?.scope === "local-computer", searched: searchable.has(name) };
+        hostComputer: descriptor === integrations?.localComputer && integrations?.localComputer?.scope === "local-computer", hostShell: descriptor === hostShell,
+        searched: searchable.has(name) };
       return { origin, tools };
     }));
     const skip = async (server: string, error: unknown) => {
@@ -708,6 +721,7 @@ export async function mountChatTools(integrations: SendTurnInput["integrations"]
   const viewOf = (tool: RegisteredTool, args: Record<string, unknown>, title: string): ChatToolCallView => {
     const runs = target(tool, args);
     if (runs === undefined || tool.agents) return { title, input: args, ask: false };
+    if (tool.hostShell) return { title, input: args, ask: true, grant: JSON.stringify([tool.server, tool.launch, args.command, args.cwd ?? null]) };
     const grant = !tool.hostComputer ? JSON.stringify([tool.server, tool.launch, runs]) : undefined;
     if (!tool.searched || tool.name !== CALL_TOOL) return { title, input: args, ask: true, ...(grant ? { grant } : {}) };
     return { title: chatToolName(tool.server, runs), input: object(args.arguments) ? args.arguments : {}, ask: true, ...(grant ? { grant } : {}) };

@@ -175,6 +175,43 @@ These fixtures do not prove every model's vision support or a real VPS network.
 The [desktop viewer fixture](desktop-viewer.md) separately proves synthetic
 RFB watching, takeover and handback for private and shared computers.
 
+## A local model's shell on this computer
+
+A model on this machine or network (Ollama, LM Studio, oMLX, EXO, Unsloth or
+any OpenAI-compatible server at a loopback, `.local` or private address) has
+no shell of its own, so a turn of its that works on This computer also lists
+`shell_run_command`. It runs one command in Windows PowerShell on Windows and
+in the person's login shell on macOS and Linux, hidden, with stdin closed, and
+returns the exit code and the last 200 KB of output. Nothing else is offered
+it: not an API-key model, an engine with its own shell (Claude Code, Codex,
+ACP), a turn in the built-in browser, a Local VM, a VPS or a cloud desktop, a
+guest's turn, a fenced turn, or a channel.
+
+```sh
+pnpm exec vitest run server/host-shell.test.ts server/drivers/chat-mcp-host-shell.test.ts \
+  server/drivers/openai-chat-host-shell.test.ts server/host-shell.e2e.test.ts
+```
+
+`server/host-shell.e2e.test.ts` (macOS) starts a real server the way the
+desktop app starts its own, with a fixture driver record on the private parent
+port and a loopback chat-completions provider. The provider must be offered
+`shell_run_command` beside `computer_click`; the command must stop on a card
+that shows it; after Allow the provider must receive `exit code 0` and the
+command's output, and the conversation must hold a `shell_run_command` step.
+A second server, not started by the app, must offer neither tool. The command
+in that test really runs, in `/bin/sh`, in a disposable home.
+
+The driver tests swap `SHELL` for a script that records the command line and
+runs nothing, and refuse to start if that script would not be the shell used.
+They check Deny, Allow, "Always allow this session" kept to the exact command
+and folder, Full access with no card, and the safety floor refusing a
+never-list command both at Full access and under a kept allow.
+
+Not checked here: the PowerShell path on a real Windows machine (only the
+command line it would start is asserted), and a real local model choosing the
+tool. A fixture from `control-dusk launch` cannot show it either: only the
+desktop app's own server can mount This computer.
+
 ## Text-only model connections
 
 Tool support is enabled by default for these three API drivers. For a model

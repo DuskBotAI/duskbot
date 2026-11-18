@@ -1,6 +1,7 @@
 import { lstatSync, readFileSync, realpathSync, statSync } from "node:fs";
 import type { Stats } from "node:fs";
 import { dirname, isAbsolute, join } from "node:path";
+import type { ProviderAdapter, SendTurnInput } from "./contracts.ts";
 import { SPAWNED_PROXIES } from "./proxy-paths.ts";
 
 export const REQUIRED_LINUX_TOOLS = ["click", "get_window_state", "list_apps", "type_text"];
@@ -44,6 +45,16 @@ export function gatedLocalComputer(
       DUSK_CONTROL_TOKEN: control.token,
     },
   };
+}
+
+export function offerHostShell(
+  integrations: NonNullable<SendTurnInput["integrations"]>,
+  capabilities: ProviderAdapter["capabilities"],
+  turn: { guestConfined: boolean; cwd?: string },
+): void {
+  const onHostDesktop = integrations.localComputer?.scope === "local-computer";
+  if (capabilities.hostShellMcp !== true || !onHostDesktop || turn.guestConfined) return;
+  integrations.hostShell = turn.cwd ? { cwd: turn.cwd } : {};
 }
 
 type LegacyConnectionDescriptor = {

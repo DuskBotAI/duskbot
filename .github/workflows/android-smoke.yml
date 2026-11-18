@@ -4,6 +4,9 @@ name: android smoke
 # and uploads screenshots, ui dumps and logcat (never the apk)
 on:
   workflow_dispatch:
+  # temporary: lets the ci branch run it before the file reaches main
+  push:
+    branches: [ci/android-smoke]
 
 permissions:
   contents: read

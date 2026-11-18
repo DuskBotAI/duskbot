@@ -9,6 +9,7 @@ import { type MausColor } from "@/lib/mascot";
 import type { Message } from "@/state/store";
 import { isCancelledTranscriptRow } from "../../shared/client-cancel";
 import { isPureLeakedSystemHarnessMessage } from "../../shared/system-message-guard.ts";
+import { isLiveCardStep } from "./live-cards/live-step";
 
 /** Simple mode's message text: 15/20 on both sides, as Grok Bot's bubbles measure. */
 export const SIMPLE_BUBBLE_TEXT = "text-[15px] leading-5";
@@ -79,7 +80,7 @@ export function isBotTextRow(message: Message, botId: string): boolean {
 
 /** A transcript row that draws nothing: a reaction, Dusk's follow-up (drawn under its intro), a failed reply, or a
  * tool step or work summary while tool calls are hidden. */
-export function quietRow(message: Message, showToolCalls: boolean): boolean {
+export function quietRow(message: Message, showToolCalls: boolean, liveCards = false): boolean {
   if (message.reaction || message.helperFollowup) return true;
   if (message.kind === "digest") return !showToolCalls;
   if (message.kind !== "activity") return false;
@@ -87,7 +88,7 @@ export function quietRow(message: Message, showToolCalls: boolean): boolean {
   if (message.tool && failedTurnCause(message.tool.name) !== null) return !message.tool.partial;
   if (showToolCalls) return false;
   if (message.dataResult || message.comm || message.threadRef || message.relay || isStatusActivity(message)) return false;
-  return true;
+  return !(liveCards && isLiveCardStep(message));
 }
 
 export interface TranscriptSlot {
@@ -141,18 +142,21 @@ export function needsStamp(prev: Message | undefined, first: Message): boolean {
 }
 
 /** How Simple mode lays out a transcript's rows: which bubbles join, and which cards tuck under their bot's bubble. */
-export function simpleRowLayout(items: readonly TranscriptItem[], { botId, showToolCalls, unreadIds }: {
-  botId: string; showToolCalls: boolean; unreadIds: ReadonlySet<string> | null;
+export function simpleRowLayout(items: readonly TranscriptItem[], { botId, showToolCalls, unreadIds, liveCards = false }: {
+  botId: string; showToolCalls: boolean; unreadIds: ReadonlySet<string> | null; liveCards?: boolean;
 }): { joins: BubbleJoin[]; tucks: boolean[] } {
   const rowsOf = (item: TranscriptItem) => item.kind === "message" ? [item.message] : item.messages;
   const dividerAt = unreadIds ? items.findIndex((item) => rowsOf(item).some((row) => unreadIds.has(row.id))) : -1;
   const slots = items.map((item, i): TranscriptSlot => {
     const previous = items[i - 1];
     const stamped = needsStamp(previous && rowsOf(previous).at(-1), rowsOf(item)[0]!) && i > 0 || i === dividerAt;
-    if (item.kind !== "message") return { group: null, hidden: !showToolCalls, breakBefore: stamped || i === 0, breakAfter: false, stamped };
+    if (item.kind !== "message") {
+      const cards = !showToolCalls && liveCards && item.messages.some(isLiveCardStep);
+      return { group: null, hidden: !showToolCalls && !cards, breakBefore: stamped || i === 0, breakAfter: false, stamped, ...(cards ? { sender: botId } : {}) };
+    }
     const m = item.message;
     const group = isCancelledTranscriptRow(m) ? null : bubbleGroup(m, botId);
-    const hidden = !group && (quietRow(m, showToolCalls) || (m.role === "bot" && m.kind === "text" && !m.publishedPage && !peerRequest(m, botId) && isPureLeakedSystemHarnessMessage(m.text) && !m.attachments?.length));
+    const hidden = !group && (quietRow(m, showToolCalls, liveCards) || (m.role === "bot" && m.kind === "text" && !m.publishedPage && !peerRequest(m, botId) && isPureLeakedSystemHarnessMessage(m.text) && !m.attachments?.length));
     const sender = m.role === "bot" && !peerLine(m) && !peerRequest(m, botId) ? botId : null;
     return { group, hidden, breakBefore: stamped || i === 0 || Boolean(m.automation), breakAfter: Boolean(m.setupOffer), stamped, sender };
   });

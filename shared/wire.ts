@@ -531,7 +531,7 @@ export interface WireMessage extends HelperIntroField, SetupCardFields, WaitLine
     signIn?: boolean;
     /** error rows: the turn waits for its AI's usage limit to reset and carries on by itself; Stop ends the wait. */
     limitHold?: LimitHoldState;
-    input?: string; output?: string; clipped?: boolean;
+    input?: string; output?: string; clipped?: boolean; ms?: number;
     /** What the call works on, as its live status said it: the chip's and the "Now" card's specific words. `whose`: the person whose own app or MCP server the call used. */
     step?: import("./turn-progress.ts").LiveStep; whose?: { person: string; app: string };
     /** Words the harness wrote for what the call did, shown in place of `name`; `name` stays the tool's own. */

@@ -27,6 +27,7 @@ import { cacheUntilConfigChanges,
   threadEventLogMaxBytes,
   threadEventLogRetentionDays,
   showToolCallsEnabled,
+  liveCardsEnabled,
   saveConfig,
   skillAuthoringEnabled,
   builtInBrowserEnabled,
@@ -652,6 +653,13 @@ describe("configuration boundaries", () => {
       features: { showToolCalls: true },
     });
     expect(showToolCallsEnabled({ features: { showToolCalls: true } })).toBe(false);
+  });
+
+  it("shows a running command's card unless the switch is off, whatever tool-call chips are set to", () => {
+    expect(liveCardsEnabled({})).toBe(true);
+    expect(liveCardsEnabled({ features: { showToolCalls: false } })).toBe(true);
+    expect(parseConfigPatch({ features: { liveCards: false } })).toEqual({ features: { liveCards: false } });
+    expect(liveCardsEnabled({ features: { liveCards: false } })).toBe(false);
   });
 
   it.each([0, 1.5, 9, "2", null])("rejects an invalid per-bot VM limit: %j", (maxInstances) => {

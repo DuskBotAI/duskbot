@@ -57,7 +57,9 @@ import { workingMood } from "@/lib/working-mood";
 import { BrowserPartLine } from "./BrowserPartLine";
 import { browserPartFor } from "@/lib/browser-part";
 import { WorkingMascot } from "./WorkingMascot";
-import { liveCallEnabled, showToolCallsEnabled } from "@/lib/feature-flags";
+import { liveCallEnabled, liveCardsEnabled, showToolCallsEnabled } from "@/lib/feature-flags";
+import { LiveRows } from "./live-cards/LiveRows";
+import { groupLiveCardRuns, isLiveCardStep } from "./live-cards/live-step";
 import { normalizeState } from "@/lib/mascot";
 import { peerLine, peerRequest, type PeerLine } from "@/lib/peer-message";
 import { showWorkingDots } from "@/lib/turn-tail";
@@ -166,7 +168,7 @@ interface ChatRows {
   /** On a Team Cloud, the viewer's person key: another person's line carries their name. */
   speakerViewer?: string | null;
   focus: AppState["focusMessage"];
-  showToolCalls: boolean;
+  showToolCalls: boolean; liveCards: boolean;
   locale: string;
   bubbleStyle?: ReturnType<typeof userBubbleStyle>;
   dispatch: Dispatch<Action>;
@@ -811,9 +813,10 @@ const MessagesList = memo(function MessagesList({
   /** The bubble the working line hangs under: its bottom corner pinches as if another bubble followed, as grok's does. */
   seamId?: string | null;
 }) {
-  const { botId, threadId, botName, botColor, bots, hasMore, focus, showToolCalls, locale, bubbleStyle } = useChatRows(), busy = use(ChatBusyContext);
+  const { botId, threadId, botName, botColor, bots, hasMore, focus, showToolCalls, liveCards, locale, bubbleStyle } = useChatRows(), busy = use(ChatBusyContext);
+  const cardBot = bots.find((one) => one.id === botId) ?? { id: botId, name: botName, color: botColor };
   // A finished turn keeps the bot's progress lines and folds only its tool steps under "Worked for", in both modes.
-  const items = useMemo(() => groupTranscript(messages), [messages, locale]);
+  const items = useMemo((): TranscriptItem[] => liveCards && !showToolCalls ? groupLiveCardRuns(messages) : groupTranscript(messages), [messages, locale, liveCards, showToolCalls]);
   const newestMessageId = messages.at(-1)?.id;
   let newestUserMessageId: string | undefined;
   for (let i = messages.length - 1; i >= 0 && !newestUserMessageId; i--) {
@@ -824,7 +827,7 @@ const MessagesList = memo(function MessagesList({
   // the "sign in on the connection page" footnote says the same thing under every app card: only the newest one keeps it
   const lastConnectorId = useMemo(() => messages.findLast((one) => one.connector)?.id, [messages]);
   let dividerPlaced = false;
-  const layout = useMemo(() => simpleRowLayout(items, { botId, showToolCalls, unreadIds }), [items, unreadIds, showToolCalls, botId]);
+  const layout = useMemo(() => simpleRowLayout(items, { botId, showToolCalls, unreadIds, liveCards }), [items, unreadIds, showToolCalls, botId, liveCards]);
   const joins = useMemo(() => {
     if (!seamId) return layout.joins;
     const at = items.findIndex((item) => item.kind === "message" && item.message.id === seamId);
@@ -861,7 +864,10 @@ const MessagesList = memo(function MessagesList({
         const stamp = !lead && newDay && <DaySeparator at={first.at} today={today} prev={prev} next={first} />;
         const dividerRow = lead ? null : divider;
         if (item.kind === "turn" || item.kind === "run") {
-          if (!showToolCalls) return (lead || dividerRow) && <div key={item.id} className="contents">{lead}{dividerRow}</div>;
+          if (!showToolCalls) {
+            const cards = liveCards && item.messages.some(isLiveCardStep) && <LiveRows messages={item.messages} bot={cardBot} threadId={threadId} />;
+            return (lead || dividerRow || cards) && <div key={item.id} className="contents" data-tuck={cards && layout.tucks[i] && !exchanges.closedAbove(i) ? "" : undefined}>{lead}{dividerRow}{cards && stamp}{cards}</div>;
+          }
           const forceOpen = item.messages.some((step) => step.id === focusedId);
           const steps = item.messages.map((step) => <div key={step.id} className="contents" data-mid={step.id}><ActivityChip message={step} place={place} /></div>);
           return (
@@ -914,7 +920,7 @@ const MessagesList = memo(function MessagesList({
                   />
                 );
               }
-              if (!showToolCalls && !m.comm && !m.threadRef && !m.relay && !m.dataResult) return null;
+              if (!showToolCalls && !m.comm && !m.threadRef && !m.relay && !m.dataResult) return liveCards && isLiveCardStep(m) ? <LiveRows messages={[m]} bot={cardBot} threadId={threadId} /> : null;
               return <ActivityChip message={m} place={place} />;
             }
             case "digest":
@@ -1051,7 +1057,7 @@ export function ChatView({ bot: profile }: { bot: Bot }) {
   const bots = useDrawnBots(state.bots);
   const teammates = useTeammates(); const mentionPeers = useMemo(() => [...bots.filter((peer) => peer.id !== bot.id), ...teammates.peers], [bots, bot.id, teammates]);
   const focus = state.focusMessage?.threadId === bot.threadId ? state.focusMessage : null;
-  const showToolCalls = showToolCallsEnabled(state.config);
+  const showToolCalls = showToolCallsEnabled(state.config), liveCards = liveCardsEnabled(state.config);
   const tts = state.config?.tts;
   const localVoice = localSystemVoiceActive();
   const locale = activeLocale();
@@ -1071,8 +1077,8 @@ export function ChatView({ bot: profile }: { bot: Bot }) {
   const reactor = useReactor();
   const speakerViewer = state.config?.team && reactor !== "user" ? reactor : null;
   const rows = useMemo<ChatRows>(
-    () => ({ botId: bot.id, threadId: bot.threadId, botName: bot.name, botColor: bot.color, voiceId: bot.voice, tts, localVoice, hasMore, bots, mentionPeers, mentionPerson: { profileName: state.config?.profile?.name }, focus, showToolCalls, locale, dispatch, bubbleStyle, conversational: isConversational(bot.replyStyle), canReact: canWrite !== false, openedAt, speakerViewer }),
-    [bot.id, bot.threadId, bot.name, bot.color, bot.voice, tts, localVoice, hasMore, bots, mentionPeers, state.config?.profile?.name, focus, showToolCalls, locale, dispatch, bubbleStyle, bot.replyStyle, canWrite, openedAt, speakerViewer],
+    () => ({ botId: bot.id, threadId: bot.threadId, botName: bot.name, botColor: bot.color, voiceId: bot.voice, tts, localVoice, hasMore, bots, mentionPeers, mentionPerson: { profileName: state.config?.profile?.name }, focus, showToolCalls, liveCards, locale, dispatch, bubbleStyle, conversational: isConversational(bot.replyStyle), canReact: canWrite !== false, openedAt, speakerViewer }),
+    [bot.id, bot.threadId, bot.name, bot.color, bot.voice, tts, localVoice, hasMore, bots, mentionPeers, state.config?.profile?.name, focus, showToolCalls, liveCards, locale, dispatch, bubbleStyle, bot.replyStyle, canWrite, openedAt, speakerViewer],
   );
   const currentTask = bot.tasks?.find((task) => task.threadId === bot.threadId), place = effectivePlace(bot, currentTask), team = state.config?.team, privateChat = Boolean(team) && currentTask?.private === true, ownHelper = Boolean(team) && !privateChat && Boolean(bot.defaultBot?.person), sharedChat = Boolean(team) && !privateChat && !ownHelper;
 
@@ -1134,7 +1140,7 @@ export function ChatView({ bot: profile }: { bot: Bot }) {
   // the bubble the line hangs under keeps its pinched corner until the line has finished leaving, as grok's does
   const presenceLingers = useLingering(presenceVisible, turnDone ? STATUS_DONE_EXIT_MS : STATUS_EXIT_MS);
   const paintedMessages = useFirstPaintRows(transcriptKey, windowedMessages, Boolean(focus && !focus.consumed) || laterCount > 0, scrollRef, following);
-  const lastShownRow = windowedMessages.findLast((message) => !quietRow(message, showToolCalls));
+  const lastShownRow = windowedMessages.findLast((message) => !quietRow(message, showToolCalls, liveCards));
   const lastRowIsBubble = Boolean(lastShownRow && isBotTextRow(lastShownRow, bot.id));
   const presenceUnderBubble = lastRowIsBubble;
   // on the phone a landing reply takes the typing line's place in the same frame: the line fading on under it, pushed

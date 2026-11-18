@@ -34,7 +34,7 @@ const WHOLE = ["language", "talkingStyle", "defaultModelSelection", "automaticRe
  * goes before its voice, which a change of provider clears. */
 const FIELDS = [
   "profile.name", "profile.aboutMe", "profile.avatarUrl",
-  ...["skillAuthoring", "skillReview", "skillReviewSteps", "showToolCalls", "browser", "llmThreadTitles", "quickUpdates", "smartSetupChoices", "autoRecall",
+  ...["skillAuthoring", "skillReview", "skillReviewSteps", "showToolCalls", "browser", "llmThreadTitles", "quickUpdates", "liveCards", "smartSetupChoices", "autoRecall",
     "skillsLibrary", "shareLearnedSkills", "roomMemoryCapture", "parallelRoomJobs", "acpPlanLines", "agentsToolBridge"].map((name) => `features.${name}`),
   "onboarding.hintsSeen", "onboarding.reelSeen",
   "anthropic.everyClaudeBot",

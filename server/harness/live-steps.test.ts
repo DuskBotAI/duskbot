@@ -135,7 +135,7 @@ describe("LiveSteps: a long call's sign of life", () => {
     clock += TAIL_FRAME_MS;
     vi.advanceTimersByTime(TAIL_FRAME_MS);
     expect(offered).toHaveLength(sent + 1);
-    expect(last().tail).toEqual(["✓ src/b.test.ts (5)", "✓ src/c.test.ts (1)"]);
+    expect(last().tail).toEqual(["RUN  v3", "✓ src/a.test.ts (3)", "✓ src/b.test.ts (5)", "✓ src/c.test.ts (1)"]);
     clock += NOTICE;
     out("export TOKEN=ghp_abcdefghijklmnopqrstuvwxyz0123 done\n");
     expect(last().quiet).toEqual({ kind: "output", at: clock });
@@ -158,6 +158,11 @@ describe("LiveSteps: a long call's sign of life", () => {
 });
 
 describe("outputTail", () => {
+  it("keeps the last dozen lines, oldest first", () => {
+    const lines = Array.from({ length: 30 }, (_, index) => `line ${index + 1}`);
+    expect(outputTail(lines.join("\n"))).toEqual(lines.slice(-12));
+  });
+
   it("keeps the last two lines as printed: no escape codes, a progress bar at its newest state, capped", () => {
     expect(outputTail("\x1b[32mok\x1b[0m one\nfetching 10%\rfetching 55%\rfetching 90%\n\n")).toEqual(["ok one", "fetching 90%"]);
     const [line] = outputTail("x".repeat(500));

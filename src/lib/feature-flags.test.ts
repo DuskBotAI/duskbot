@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { builtInBrowserEnabled, llmThreadTitlesEnabled, parseSkillReviewSteps, phoneAppByHand, phoneAppEnabled, setPhoneAppByHand, roomMemoryCaptureEnabled, shareLearnedSkillsMode, showToolCallsEnabled, skillAuthoringEnabled, skillReviewEnabled, skillReviewSteps, skillReviewUnavailableEngines } from "./feature-flags";
+import { builtInBrowserEnabled, liveCardsEnabled, llmThreadTitlesEnabled, parseSkillReviewSteps, phoneAppByHand, phoneAppEnabled, setPhoneAppByHand, roomMemoryCaptureEnabled, shareLearnedSkillsMode, showToolCallsEnabled, skillAuthoringEnabled, skillReviewEnabled, skillReviewSteps, skillReviewUnavailableEngines } from "./feature-flags";
 
 describe("experimental feature flags", () => {
   it("keeps skill authoring on by default, before and after the config arrives", () => {
@@ -83,6 +83,12 @@ describe("experimental feature flags", () => {
 
   it("shows tool-call chips only after explicit opt-in", () => {
     expect(showToolCallsEnabled({ features: { showToolCalls: true } })).toBe(true);
+  });
+
+  it("draws command cards only when the server says so", () => {
+    expect(liveCardsEnabled(null)).toBe(false);
+    expect(liveCardsEnabled({ features: { showToolCalls: true } })).toBe(false);
+    expect(liveCardsEnabled({ features: { liveCards: true } })).toBe(true);
   });
 
   it("offers Regenerate title only while the server has generated titles on", () => {

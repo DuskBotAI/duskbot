@@ -26,7 +26,9 @@ import { ToolActivity } from "./ToolActivity";
 import { ThreadRefText } from "./ThreadRefs";
 import { handoffWorkIds, RoomWorkingLines, roomWorkingIds } from "./RoomWorkingLines";
 import { roomRetryRequest, roomRetryText } from "@/lib/room-retry";
-import { showToolCallsEnabled } from "@/lib/feature-flags";
+import { liveCardsEnabled, showToolCallsEnabled } from "@/lib/feature-flags";
+import { LiveRows } from "./live-cards/LiveRows";
+import { groupLiveCardRuns, isLiveCardStep } from "./live-cards/live-step";
 import { DigestChip } from "./DigestChip";
 import { roomActivityVisible } from "@/lib/room-activity";
 import { StatusActivityRow } from "@/components/StatusActivityRow"; import { BugReportNote } from "@/components/BugReportNote";
@@ -334,14 +336,18 @@ export const Transcript = memo(function Transcript({
   seamId?: string | null;
 }) {
   const { state, dispatch } = useStore();
-  const showToolCalls = showToolCallsEnabled(state.config);
+  const showToolCalls = showToolCallsEnabled(state.config), liveCards = liveCardsEnabled(state.config);
   const openedAt = useThreadOpenedAt(group.threadId);
   const today = localDay(Date.now());
   const canReact = useCanReact(group.threadId);
   const memberOf = (id?: string) => members.find((b) => b.id === id);
+  const commandCards = (steps: readonly Message[]) => {
+    const from = steps[0]?.from;
+    return <LiveRows room messages={steps} bot={memberOf(from?.botId) ?? { id: from?.botId, name: from?.name, color: from?.color ?? "green" }} threadId={group.threadId} liveIds={liveTools} />;
+  };
   // a turn's progress lines stay bubbles, as a 1:1 chat's do
-  const items = useMemo(() => groupActivityRuns(messages.filter(message =>
-    message.kind !== "activity" || roomActivityVisible(message, showToolCalls))), [messages, showToolCalls, locale]);
+  const items = useMemo(() => (liveCards && !showToolCalls ? groupLiveCardRuns : groupActivityRuns)(messages.filter(message =>
+    message.kind !== "activity" || roomActivityVisible(message, showToolCalls, liveCards))), [messages, showToolCalls, liveCards, locale]);
   const newestMessageId = messages.at(-1)?.id;
   const newestUserMessageId = [...messages].reverse().find((message) => message.role === "user")?.id;
   const roomBusy = roomThreadWorking(group, group.threadId);
@@ -407,8 +413,8 @@ export const Transcript = memo(function Transcript({
         />
       </div>
     ) : m.kind === "activity" && m.tool ? (
-      roomActivityVisible(m, showToolCalls) ? (
-        m.dataResult ? <DataResultChip message={m} /> : isStatusActivity(m) ? <StatusActivityRow message={m} /> : <RoomToolChip message={m} roomId={group.id} threadId={group.threadId} live={liveTools.has(m.id)} />
+      roomActivityVisible(m, showToolCalls, liveCards) ? (
+        !showToolCalls && isLiveCardStep(m) ? commandCards([m]) : m.dataResult ? <DataResultChip message={m} /> : isStatusActivity(m) ? <StatusActivityRow message={m} /> : <RoomToolChip message={m} roomId={group.id} threadId={group.threadId} live={liveTools.has(m.id)} />
       ) : null
     ) : m.kind === "screen" ? (
       showToolCalls ? <ScreenFrame threadId={group.threadId} message={m} /> : null
@@ -441,7 +447,7 @@ export const Transcript = memo(function Transcript({
     const first = item.kind === "run" ? item.messages[0]! : item.message;
     const newDay = needsStamp(prev, first);
     const divider = dividerAbove(item.kind === "run" ? item.messages : [item.message]);
-    const drawn = item.kind === "run" ? showToolCalls : messageRow(item.message, NO_JOIN) !== null;
+    const drawn = item.kind === "run" ? showToolCalls || liveCards : messageRow(item.message, NO_JOIN) !== null;
     const m = item.kind === "message" ? item.message : null;
     const bubble = m && m.kind === "text" && !m.publishedPage && !m.document;
     const slot: RoomSlot | null = drawn ? {
@@ -493,7 +499,7 @@ export const Transcript = memo(function Transcript({
             <div key={item.id} className="contents" data-tuck={place.tuck ? "" : undefined}>
               {divider}
               {stamp}
-              {labelled(
+              {labelled(!showToolCalls ? commandCards(item.messages) :
                 <ActivityRun messages={item.messages} forceOpen={item.messages.some((step) => step.id === focusedId)}>
                   {item.messages.map((step) => (
                     <div key={step.id} className="contents" data-mid={step.id}>

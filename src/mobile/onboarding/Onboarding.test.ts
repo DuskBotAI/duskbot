@@ -65,6 +65,19 @@ it("enter a code opens the code field straight away, with no intro in between", 
   expect(host.querySelector("input[autocomplete=one-time-code]")).not.toBeNull();
 });
 
+it("android back steps back through onboarding and leaves the app from the first screen", async () => {
+  let back: (() => boolean) | undefined;
+  platform = { ...platform, onBack: (listener) => { back = listener; return () => { back = undefined; }; } };
+  await mount(onboarding());
+  expect(back?.(), "the first screen hands back to android, which minimizes").toBe(false);
+  await press("[data-entry=code]");
+  expect(heading()).toBe("Enter the code");
+  let handled: boolean | undefined;
+  await act(async () => { handled = back?.(); });
+  expect(handled).toBe(true);
+  expect(entries().map((button) => button.dataset.entry)).toEqual(["scan", "signin", "code"]);
+});
+
 it("scan without a camera falls back to the code field", async () => {
   await mount(onboarding());
   await press("[data-entry=scan]");

@@ -14,7 +14,7 @@ summary="$out/summary.txt"
 note() { echo "$*" | tee -a "$summary"; }
 shot() { adb exec-out screencap -p > "$out/$1.png"; adb shell uiautomator dump /sdcard/ui.xml > /dev/null 2>&1 && adb pull /sdcard/ui.xml "$out/$1.xml" > /dev/null 2>&1; }
 alive() { if adb shell pidof "$pkg" > /dev/null 2>&1; then note "$1: running"; else note "$1: NOT RUNNING"; fi; }
-top() { adb shell dumpsys activity activities | grep -m1 -E "topResumedActivity|mResumedActivity" | sed 's/^ *//'; }
+top() { adb shell dumpsys window | grep -m1 -E "mCurrentFocus" | sed 's/^ *//'; }
 
 note "device: $(adb shell getprop ro.build.version.release) (api $(adb shell getprop ro.build.version.sdk)), $(adb shell wm size | tail -1), $(adb shell wm density | tail -1)"
 adb logcat -c
@@ -54,22 +54,34 @@ if [ -n "$target" ]; then
   sleep 3
   shot 03-after-first-back
   alive "after first back"
-  note "top: $(top)"
+  note "focus: $(top)"
 else
-  note "no labelled clickable node on the first screen (see 01-launch.xml)"
+  # the web view shows no accessibility tree to uiautomator: tap where the pairing screen draws "Enter a code"
+  read -r w h <<< "$(adb shell wm size | tail -1 | sed 's/.*: //; s/x/ /')"
+  note "no labelled clickable node; tapping the pairing screen's \"Enter a code\" at $((w / 2)),$((h * 933 / 1000))"
+  adb shell input tap "$((w / 2))" "$((h * 933 / 1000))"
+  sleep 6
+  shot 02-after-tap
+  alive "after tap"
+  adb shell input keyevent KEYCODE_BACK
+  sleep 5
+  shot 03-after-first-back
+  alive "after first back"
+  note "focus: $(top)"
 fi
 
 adb shell input keyevent KEYCODE_BACK
-sleep 3
+sleep 5
 shot 04-after-back
 alive "after back on first screen (should minimize, still running)"
-note "top: $(top)"
+note "focus: $(top)"
 
 adb shell am start -W -n "$pkg/.MainActivity" > /dev/null 2>&1
 sleep 5
 adb shell settings put system accelerometer_rotation 0
 adb shell settings put system user_rotation 1
 sleep 6
+# the manifest locks the activity to portrait, so this checks it stays upright and alive
 shot 05-landscape
 alive "after rotate to landscape"
 adb shell settings put system user_rotation 0

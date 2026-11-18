@@ -172,6 +172,23 @@ export function Onboarding({ initial = null, reason = null, startAtLink = false,
     if (text) setValue(text.trim());
   };
 
+  // android's back walks the same way the on-screen buttons do, and leaves the app from the first screen. without a
+  // listener capacitor swallows the press, so back did nothing at all before pairing
+  const onBack = useRef<() => boolean>(() => false);
+  onBack.current = () => {
+    if (busy) return true;
+    const canClose = Boolean(startAtLink && onCancel);
+    switch (step) {
+      case "welcome": if (canClose) onCancel!(); return canClose;
+      case "clouds": if (canClose) onCancel!(); else go("welcome"); return true;
+      case "signin": go("welcome"); return true;
+      case "paste": go("code"); return true;
+      case "confirm": setConfirm(null); setFailure(null); if (canClose) onCancel!(); else go(home); return true;
+      default: go(home); return true;
+    }
+  };
+  useEffect(() => platform.onBack?.(() => onBack.current()), [platform]);
+
   const back = (to: Step = home) => <BackButton onClick={() => go(to)} />;
   const close = startAtLink && onCancel ? <BackButton close onClick={onCancel} /> : null;
   const download = (

@@ -69,7 +69,7 @@ export function forgetAccount(slug: string, accountId: string, dir = DATA_DIR): 
 const entries = (choices: AccountChoices) => Object.keys(choices.defaults).length
   + Object.values(choices.bots).reduce((total, own) => total + Object.keys(own).length, 0);
 
-const CHOICE = /^\/api\/connectors\/([a-z0-9][a-z0-9_-]{0,80})\/account-choice$/;
+const CHOICE = /^\/api\/connectors\/([a-z0-9_][a-z0-9_-]{0,80})\/account-choice$/;
 const ACCOUNT = /^\/api\/connectors\/([\w-]+)\/accounts\/([A-Za-z0-9][A-Za-z0-9_-]{0,127})$/;
 const choiceBody = z.object({ accountId: z.string().regex(ACCOUNT_ID).nullable(), botId: z.string().regex(BOT_ID).nullable().optional() }).strict();
 

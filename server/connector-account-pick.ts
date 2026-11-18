@@ -5,7 +5,9 @@ import { z } from "zod";
 
 export const CONNECTOR_ACCOUNTS_ENV = "DUSK_CONNECTOR_ACCOUNTS";
 export const ACCOUNT_ID = /^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/;
-export const picks = z.record(z.string().regex(/^[a-z0-9][a-z0-9_-]{0,80}$/), z.string().regex(ACCOUNT_ID));
+// Composio puts an underscore before a slug that would start with a digit: 1Password is `_1password` and its tools are
+// `_1PASSWORD_GET_ITEM` and so on (docs.composio.dev/toolkits/_1password).
+export const picks = z.record(z.string().regex(/^[a-z0-9_][a-z0-9_-]{0,80}$/), z.string().regex(ACCOUNT_ID));
 
 /** The toolkit a Composio tool slug belongs to, among the apps with a pick: GMAIL_SEND_EMAIL is gmail's. */
 function toolkitOf(toolSlug: string, slugs: readonly string[]): string | undefined {

@@ -50,6 +50,23 @@ describe("account choices", () => {
     expect(await route(ctx("DELETE", "/api/connectors/gmail/accounts/ca_work"))).toBe(PASS);
     expect(readAccountChoices(dir).defaults).toEqual({});
   });
+
+  it("keeps a choice for an app whose slug starts with an underscore, beside the others", async () => {
+    const dir = fresh();
+    const statuses: number[] = [];
+    const put = (path: string, body: unknown) => createAccountChoiceRoutes(dir)({
+      method: "PUT", path, res: {} as never, req: {} as never, url: new URL(`http://x${path}`), auth: {} as never,
+      json: ((_res: unknown, status: number) => { statuses.push(status); }) as never,
+      readBody: (async () => body) as never,
+    });
+    await put("/api/connectors/gmail/account-choice", { accountId: "ca_work" });
+    await put("/api/connectors/_1password/account-choice", { accountId: "ca_vault" });
+    await put("/api/connectors/_1password/account-choice", { accountId: "ca_team", botId: "nova" });
+    expect(statuses).toEqual([200, 200, 200]);
+    const choices = readAccountChoices(dir);
+    expect(accountsForBot("nova", choices)).toEqual({ gmail: "ca_work", _1password: "ca_team" });
+    expect(accountsForBot("quill", choices)).toEqual({ gmail: "ca_work", _1password: "ca_vault" });
+  });
 });
 
 describe("withChosenAccounts", () => {
@@ -64,6 +81,13 @@ describe("withChosenAccounts", () => {
   it("leaves other tools and empty picks alone", () => {
     expect(withChosenAccounts("COMPOSIO_SEARCH_TOOLS", call, { gmail: "ca_work" })).toBe(call);
     expect(withChosenAccounts("COMPOSIO_MULTI_EXECUTE_TOOL", call, {})).toBe(call);
+  });
+
+  it("names the account of an app whose slug starts with an underscore", () => {
+    const chosen = parseConnectorAccountsEnv('{"gmail":"ca_work","_1password":"ca_vault"}');
+    expect(chosen).toEqual({ gmail: "ca_work", _1password: "ca_vault" });
+    expect(withChosenAccounts("COMPOSIO_MULTI_EXECUTE_TOOL", { tools: [{ tool_slug: "_1PASSWORD_GET_ITEM", arguments: {} }] }, chosen))
+      .toEqual({ tools: [{ tool_slug: "_1PASSWORD_GET_ITEM", arguments: {}, account: "ca_vault" }] });
   });
 
   it("reads only a well-formed env", () => {

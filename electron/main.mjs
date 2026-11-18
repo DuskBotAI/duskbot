@@ -2878,7 +2878,7 @@ function relaunchAfterDesktopRemoteChange() {
     // pnpm dev:app owns Vite and this process; app.relaunch would orphan the new window, so ask the runner to restart it
     const devRunnerFile = app.isPackaged ? "" : process.env.DUSK_DEV_RELAUNCH_FILE;
     if (devRunnerFile) fs.writeFileSync(devRunnerFile, JSON.stringify(args));
-    else app.relaunch({ args });
+    else { appRelaunching = true; app.relaunch({ args }); }
     app.quit();
   }, 250);
   timer.unref?.();
@@ -3387,7 +3387,7 @@ app.whenReady().then(async () => {
   startupScreen = hiddenStart ? null : createStartupScreen({
     BrowserWindow, iconPath: APP_ICON, isQuitting: () => desktopShutdownStarted,
     onQuit: () => app.quit(),
-    onRetry: () => { app.relaunch(); app.quit(); },
+    onRetry: () => { appRelaunching = true; app.relaunch(); app.quit(); },
     onHide: desktopTray ? (win) => desktopTray.hide(win) : undefined,
     isHidden: () => desktopTray?.isHidden() ?? false,
     onShow: (win) => desktopTray?.windowShown(win),
@@ -3717,7 +3717,7 @@ process.once("SIGTERM", requestSignalQuit);
 
 // the mac app installs its own updates when it is Developer ID signed, and the installed Windows app runs the release's
 // installer silently (electron/app-update.mjs); elsewhere, and on an unsigned mac build, the notice says a release is out
-let appUpdater = null, appUpdatedTo = null, appUpdateMode = app.isPackaged ? "notice" : "dev", windowsInstaller = null;
+let appUpdater = null, appUpdatedTo = null, appUpdateMode = app.isPackaged ? "notice" : "dev", windowsInstaller = null, appRelaunching = false, windowsSessionEnding = false;
 const appUpdateState = () => ({ ...(appUpdater?.state() ?? { ready: null, available: null, progress: null }), mode: appUpdateMode, updated: appUpdatedTo });
 const tellAppUpdate = () => { if (mainWindow && !mainWindow.isDestroyed() && senderIsLocal({ sender: mainWindow.webContents })) mainWindow.webContents.send("app-update:changed", appUpdateState()); };
 function startDemoUpdates() {
@@ -3769,7 +3769,7 @@ ipcMain.handle("app-update:move", localOnly("app-update:move", () => { try { ret
 ipcMain.handle("app-update:seen", localOnly("app-update:seen", () => { if (appUpdatedTo) { appUpdatedTo = null; tellAppUpdate(); } }));
 
 // powerMonitor is usable only once the app is ready.
-void app.whenReady().then(() => installSessionEndFlush({ app, windows: () => BrowserWindow.getAllWindows(), powerMonitor, flusher: browsersFlush, quit: () => app.quit(), log: slog }));
+void app.whenReady().then(() => installSessionEndFlush({ app, windows: () => BrowserWindow.getAllWindows(), powerMonitor, flusher: browsersFlush, quit: () => app.quit(), log: slog, onSessionEnd: () => { windowsSessionEnding = true; } }));
 app.on("before-quit", (e) => {
   talk.close(); ambientSurfaces.close();
   desktopShutdownStarted = true;
@@ -3825,5 +3825,5 @@ function releaseDesktopDataDirLease() {
 // before-quit is too early (this app defers it); will-quit is Electron's last boundary, and the process hook covers app.exit().
 app.on("will-quit", releaseDesktopDataDirLease);
 app.on("will-quit", () => desktopTray?.destroy());
-app.on("will-quit", () => windowsInstaller?.quitting());
+app.on("quit", (_event, exitCode) => windowsInstaller?.quitting({ exitCode, unsafe: appRelaunching || windowsSessionEnding }));
 process.once("exit", releaseDesktopDataDirLease);

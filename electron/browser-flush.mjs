@@ -64,12 +64,13 @@ export function createBrowsersFlush({ server, randomId, timeoutMs = BROWSERS_FLU
 
 /**
  * @param {{ app: { on(event: string, listener: (...args: any[]) => void): void }, windows: () => Array<{ on(event: string, listener: () => void): void }>, powerMonitor: { on(event: string, listener: (event: { preventDefault(): void }) => void): void },
- *   flusher: ReturnType<typeof createBrowsersFlush>, quit: () => void, log?: (line: string) => void }} deps
+ *   flusher: ReturnType<typeof createBrowsersFlush>, quit: () => void, log?: (line: string) => void, onSessionEnd?: () => void }} deps
+ * `onSessionEnd`: the session ends for certain (Windows "session-end", or a shutdown), never on a query another app may cancel
  */
-export function installSessionEndFlush({ app, windows, powerMonitor, flusher, quit, log }) {
+export function installSessionEndFlush({ app, windows, powerMonitor, flusher, quit, log, onSessionEnd = () => {} }) {
   const watch = (win) => {
     win.on("query-session-end", () => { void flusher.prepare(); });
-    win.on("session-end", () => { void flusher.flush(); });
+    win.on("session-end", () => { onSessionEnd(); void flusher.flush(); });
   };
   for (const win of windows()) watch(win);
   app.on("browser-window-created", (_event, win) => watch(win));
@@ -77,6 +78,7 @@ export function installSessionEndFlush({ app, windows, powerMonitor, flusher, qu
   powerMonitor.on("shutdown", (event) => {
     // Electron delays the shutdown only while the app has not quit, and expects a quit soon after.
     event.preventDefault();
+    onSessionEnd();
     if (shuttingDown) return;
     shuttingDown = true;
     void flusher.flush().then((ok) => {

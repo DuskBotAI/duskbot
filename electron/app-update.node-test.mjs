@@ -347,6 +347,13 @@ test("the NSIS installer runs silently once the app quits, and starts the app ag
   assert.equal(runs.length, 0, "it waits for the quit");
   restart.quitting();
   assert.deepEqual(runs, [{ file: "setup.exe", args: ["--updated", "/S", "--force-run"] }]);
+  for (const quit of [{ exitCode: 1 }, { unsafe: true }]) {
+    const held = nsisInstaller({ quit: () => {}, spawn: (file, args) => runs.push({ file, args }) });
+    await held.prepare("setup.exe", "1.1.0");
+    held.install();
+    assert.equal(held.quitting(quit), false, "not after a crash, at log off or while the app relaunches itself");
+  }
+  assert.equal(runs.length, 1);
   const broken = nsisInstaller({ quit: () => {}, spawn: () => { throw new Error("ENOENT"); } });
   await broken.prepare("setup.exe", "1.1.0");
   assert.equal(broken.quitting(), false);

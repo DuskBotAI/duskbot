@@ -70,6 +70,18 @@ test("a Windows query only prepares; the session end is final", () => {
   assert.deepEqual(proc.sent.map((message) => message.final), [false, true]);
 });
 
+test("the session's end is told on Windows' session-end and on a shutdown, never on a query", () => {
+  const flusher = createBrowsersFlush({ server: () => null, randomId });
+  const win = new EventEmitter(), power = new EventEmitter();
+  let ends = 0;
+  installSessionEndFlush({ app: new EventEmitter(), windows: () => [win], powerMonitor: power, flusher, quit: () => {}, onSessionEnd: () => { ends++; } });
+  win.emit("query-session-end", {});
+  assert.equal(ends, 0);
+  win.emit("session-end");
+  power.emit("shutdown", { preventDefault() {} });
+  assert.equal(ends, 2);
+});
+
 test("a shutdown is delayed until the browsers quit, then the app quits once", async () => {
   const proc = server();
   const flusher = createBrowsersFlush({ server: () => proc, randomId });

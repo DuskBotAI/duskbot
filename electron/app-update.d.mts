@@ -46,7 +46,7 @@ export declare function zipIn(sums: string, version: string, arch: string): { na
 export declare function developerIdSigned(bundle: string, run?: (file: string, args: string[]) => Promise<string>): Promise<boolean>;
 export interface AppInstaller { prepare(file: string, version: string): Promise<void>; install(): void }
 export declare function squirrelInstaller(options: { autoUpdater: unknown; timeoutMs?: number }): AppInstaller;
-export declare function nsisInstaller(options: { quit(): void; spawn?(file: string, args: string[]): void; log?(line: string): void }): AppInstaller & { quitting(): boolean };
+export declare function nsisInstaller(options: { quit(): void; spawn?(file: string, args: string[]): void; log?(line: string): void }): AppInstaller & { quitting(options?: { exitCode?: number; unsafe?: boolean }): boolean };
 export declare function quietNow(signals: { locked(): boolean; idleMs(): number; typedAt(): number; work(): Promise<string | null>; busy?(): string | null; focused?(): boolean }, now?: number): Promise<boolean>;
 export declare function justUpdated(memory: { read(): { version?: string } | null; write(value: { version: string }): void }, current: string, installedHere?: () => boolean): boolean;
 export interface AppUpdater { check(): Promise<string | null>; restart(): boolean; state(): AppUpdateState; start(): void; soon(delayMs?: number): void; stop(): void }

@@ -146,19 +146,22 @@ export function windowsUpdatePlace(exe, { productName = "Dusk Bot", exists = exi
 }
 
 /**
- * runs the verified NSIS installer (electron-builder's oneClick, per-user) over this install once the app quits.
- * electron-builder 26's installer.nsh: `/S` installs without a window, `--updated` closes the running app instead of
- * asking, and `--force-run` starts the new version when it is done. `install()` quits and starts the new version;
- * `quitting()` (main calls it on will-quit) installs a waiting update on any quit, and starts the app again only after
- * `install()`. The installer is spawned detached so it outlives this process.
+ * runs the verified NSIS installer (electron-builder's oneClick, per-user) over this install once the app quits, with
+ * electron-updater 6's arguments: `/S` installs without a window, `--updated` closes what still runs from the install
+ * folder instead of asking (after about a second, then by force), and `--force-run` starts the new version when it is
+ * done. `install()` quits and starts the new version; `quitting()` (main calls it on Electron's "quit") installs a
+ * waiting update on any quit, and starts the app again only after `install()`. It installs nothing when the app exits
+ * with an error, or when `unsafe`: Windows is ending the session (the installer could be killed half way, leaving a
+ * broken install) or the app relaunches itself (the installer would close the new copy). The installer is spawned
+ * detached so it outlives this process.
  */
 export function nsisInstaller({ quit, spawn = (file, args) => { const child = spawnChild(file, args, { detached: true, stdio: "ignore" }); child.on("error", () => {}); child.unref(); }, log = () => {} }) {
   let file = null, relaunch = false, launched = false;
   return {
     async prepare(downloaded) { file = downloaded; },
     install() { relaunch = true; quit(); },
-    quitting() {
-      if (!file || launched) return false;
+    quitting({ exitCode = 0, unsafe = false } = {}) {
+      if (!file || launched || exitCode !== 0 || unsafe) return false;
       launched = true;
       const args = ["--updated", "/S", ...(relaunch ? ["--force-run"] : [])];
       try { spawn(file, args); } catch (error) { log(`app update: the installer did not start (${error instanceof Error ? error.message : String(error)})`); return false; }

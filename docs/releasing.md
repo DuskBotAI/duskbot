@@ -93,7 +93,9 @@ download link):
 2. The sidebar shows "restart to update". When the person clicks it, or at the same quiet moment as the Mac, the app
    quits and runs the installer detached with `--updated /S --force-run`: electron-builder's one-click installer
    replaces the app without a window and starts the new version. A quit while an update waits runs it with
-   `--updated /S`, so it installs without starting the app again.
+   `--updated /S`, so it installs without starting the app again. Nothing installs when the app exits with an error,
+   when Windows is logging off or shutting down (the installer could be killed half way), or when the app relaunches
+   itself; the update waits for the next restart or quit.
 
 Windows builds are not code-signed, so the check rests on the release signing key and the sums it vouches for. The
 first version with this updater needs one manual install; every version after it updates itself.

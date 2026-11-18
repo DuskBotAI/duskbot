@@ -16,6 +16,7 @@ import { PAGES, resolveTarget, TAB_LABEL, type PanelTab, type PanelTarget, type 
 import { lazyScreen } from "../lazy-screen";
 import { linkTarget, usePanelLink, type PanelLink } from "./panel-link";
 import { PanelHero } from "./PanelHero";
+import { PanelResizeHandle } from "./PanelResizeHandle";
 import { PanelShareMenu } from "./PanelShareMenu";
 import { roundButtonCls } from "./rows";
 import { SegmentedTabs } from "../ui/SegmentedTabs";
@@ -239,7 +240,7 @@ export function BotPanel({ bot, derived, linkedSection, computerRequest = 0, onC
   return (
     <div className="relative flex min-h-0 flex-1 flex-col" onKeyDown={onKeyDown}>
       <span id="bot-settings-title" className="sr-only">{bot.name}</span>
-      <span aria-hidden="true" data-panel-edge className="pointer-events-none absolute inset-y-0 left-0 z-10 w-[0.5px] bg-edge max-md:hidden" />
+      <PanelResizeHandle />
       <div {...dragProps} className="relative flex h-[60px] shrink-0 items-center gap-2 p-3">
         {page === null && (
           <span className="ms-auto flex items-center gap-2">

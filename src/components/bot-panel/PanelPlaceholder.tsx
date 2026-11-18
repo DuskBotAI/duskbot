@@ -4,6 +4,7 @@ import { t } from "@/lib/i18n";
 import { Icon } from "../Icon";
 import { Card, roundButtonCls } from "./rows";
 import { PanelAdvancedTab, PanelDetailsTab } from "./PanelShell";
+import { PanelResizeHandle } from "./PanelResizeHandle";
 import { PANEL_TABS } from "./page-registry";
 import { sidePanelCls } from "./side-panel";
 
@@ -19,7 +20,7 @@ export function PanelPlaceholder({ onClose }: { onClose: () => void }) {
   return (
     <aside data-panel-placeholder aria-busy="true" className={sidePanelCls(false)}>
       <div className="relative flex min-h-0 flex-1 flex-col">
-        <span aria-hidden="true" className="pointer-events-none absolute inset-y-0 left-0 z-10 w-[0.5px] bg-edge max-md:hidden" />
+        <PanelResizeHandle />
         <div className="relative flex h-[60px] shrink-0 items-center gap-2 p-3">
           <span className="ms-auto" />
           <button type="button" onClick={onClose} aria-label={t("botPanel.close")} title={t("botPanel.close")} className={roundButtonCls}>

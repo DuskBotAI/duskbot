@@ -4186,6 +4186,7 @@
   "botPanel.avatar.edit": "Edit bot avatar",
   "botPanel.avatar.tip": "Edit avatar",
   "botPanel.close": "Close",
+  "botPanel.resize": "Resize panel",
   "botPanel.backTo": "Back to {place}",
   "botPanel.page.backups": "Backup AIs",
   "botPanel.page.api": "Bot API",

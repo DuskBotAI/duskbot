@@ -130,6 +130,7 @@ import { splitTranscriptAttachments } from "@/lib/composer-attachments";
 import { useComposerDockPad } from "@/lib/composer-dock";
 import { GlassBar, GlassScrollFrame } from "./GlassScrollFrame";
 import { useTranscriptViewport } from "@/hooks/use-transcript-viewport";
+import { tailWindowStart } from "@/lib/transcript-window";
 import { useUnreadDivider } from "@/hooks/use-unread-divider";
 import { NewMessagesDivider } from "./NewMessagesDivider";
 import { PeerExchangeLine } from "./PeerExchangeLine";
@@ -769,6 +770,37 @@ const transcriptRows = (item: TranscriptItem): readonly Message[] => item.kind =
 const noneTransparent = () => false;
 const hiddenSteps = (item: TranscriptItem) => item.kind !== "message";
 
+function hiddenChatRow(message: Message, botId: string, showToolCalls: boolean): boolean {
+  if (message.reaction || isCancelledTranscriptRow(message)) return true;
+  switch (richRowKind(message)) {
+    case "activity":
+      return Boolean(message.peerResume) || (!message.dataResult && !isStatusActivity(message) && quietRow(message, showToolCalls));
+    case "compaction":
+      return true;
+    case "digest":
+    case "screen":
+      return !showToolCalls;
+    case "secret":
+      return !message.secret;
+    case "signin":
+      return !message.signIn;
+    case "connector":
+      return !message.connector;
+    case "call":
+      return !message.call;
+    case "options":
+      return Boolean(message.helperFollowup || (settledCardGoes(message) && !showsSettledChange(message.card)));
+    case "widget":
+    case "app":
+    case "routine.run":
+      return false;
+    default:
+      if (message.publishedPage || message.document) return false;
+      if (message.role === "user" && !peerLine(message) && !peerRequest(message, botId)) return routineStartName(message) !== null;
+      return !message.attachments?.length && isPureLeakedBotText(message.text);
+  }
+}
+
 const MessagesList = memo(function MessagesList({
   messages,
   transcript,
@@ -878,7 +910,7 @@ const MessagesList = memo(function MessagesList({
         const m = item.message;
         const row = (() => {
           // the chat talks in bubbles: stops, finished steps and settled cards leave no technical rows behind
-          if (isCancelledTranscriptRow(m)) return null;
+          if (hiddenChatRow(m, botId, showToolCalls)) return null;
           switch (richRowKind(m)) {
             case "secret":
               return m.secret ? <SecretRequestCard botId={botId} color={botColor} threadId={threadId} message={m} /> : null;
@@ -898,12 +930,10 @@ const MessagesList = memo(function MessagesList({
             case "call":
               return m.call ? <CallRecordRow message={m} transcript={transcript} botName={botName} threadId={threadId} busy={busy} hasMore={hasMore} /> : null;
             case "activity": {
-              if (m.peerResume) return null;
               if (m.dataResult) return <DataResultChip message={m} />;
               if (isStatusActivity(m)) return <StatusActivityRow message={m} />;
               if (m.tool && failedTurnCause(m.tool.name) !== null) {
                 // a reply that never came is said once, in the card above the composer
-                if (!m.tool.partial) return null;
                 return (
                   <FailedTurnRow
                     tool={m.tool}
@@ -914,22 +944,17 @@ const MessagesList = memo(function MessagesList({
                   />
                 );
               }
-              if (!showToolCalls && !m.comm && !m.threadRef && !m.relay && !m.dataResult) return null;
               return <ActivityChip message={m} place={place} />;
             }
             case "digest":
-              return showToolCalls ? <DigestChip message={m} /> : null;
+              return <DigestChip message={m} />;
             case "compaction":
               return null;
             case "screen":
-              return showToolCalls ? <ScreenFrame threadId={threadId} message={m} /> : null;
+              return <ScreenFrame threadId={threadId} message={m} />;
             default: {
               if (m.publishedPage) return <PublishedPageCard message={m} />;
               if (m.document) return <DocumentCard message={m} />;
-              const peer = peerLine(m) ?? peerRequest(m, botId);
-              const user = m.role === "user" && !peer;
-              if (user && routineStartName(m) !== null) return null;
-              if (!user && isPureLeakedBotText(m.text) && !m.attachments?.length) return null;
               return (
                 <Bubble
                   message={m}
@@ -1018,6 +1043,9 @@ export function ChatView({ bot: profile }: { bot: Bot }) {
   const messages = stopCut ? shownMessages : hold.rows;
   const lookups = useMemo(() => transcriptLookups(allMessages, messages), [allMessages, messages]);
   const liveTools = useLiveToolIds(messages, bot);
+  const showToolCalls = showToolCallsEnabled(state.config);
+  const latestVisibleIndex = useMemo(() => messages.findLastIndex((message) => !hiddenChatRow(message, bot.id, showToolCalls)), [messages, bot.id, showToolCalls]);
+  const focus = state.focusMessage?.threadId === bot.threadId ? state.focusMessage : null;
 
   const {
     scrollRef,
@@ -1039,8 +1067,19 @@ export function ChatView({ bot: profile }: { bot: Bot }) {
     messages,
     pinOn: [bot.busy, composerDock.pad],
     hasMore: bot.hasMore,
+    latestVisibleIndex: latestVisibleIndex >= 0 ? latestVisibleIndex : undefined,
   });
   useTimestampPeek(scrollRef);
+
+  const oldestId = allMessages[0]?.id;
+  const historyKey = `${transcriptKey}:${state.transcriptGeneration[bot.threadId] ?? 0}:${oldestId}`;
+  const attemptedEarlier = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    if (!following || (focus && !focus.consumed) || transcriptPending || bot.transcriptStale || olderPending ||
+        latestVisibleIndex >= 0 || !bot.hasMore || !oldestId || attemptedEarlier.current === historyKey) return;
+    attemptedEarlier.current = historyKey;
+    dispatch({ type: "loadOlderMessages", threadId: bot.threadId });
+  }, [following, focus, transcriptPending, bot.transcriptStale, olderPending, latestVisibleIndex, bot.hasMore, oldestId, historyKey, bot.threadId, dispatch]);
 
   const lastBotTextId = useMemo(
     () => [...messages].reverse().find((m) => m.role === "bot" && m.kind === "text")?.id,
@@ -1050,8 +1089,6 @@ export function ChatView({ bot: profile }: { bot: Bot }) {
 
   const bots = useDrawnBots(state.bots);
   const teammates = useTeammates(); const mentionPeers = useMemo(() => [...bots.filter((peer) => peer.id !== bot.id), ...teammates.peers], [bots, bot.id, teammates]);
-  const focus = state.focusMessage?.threadId === bot.threadId ? state.focusMessage : null;
-  const showToolCalls = showToolCallsEnabled(state.config);
   const tts = state.config?.tts;
   const localVoice = localSystemVoiceActive();
   const locale = activeLocale();
@@ -1133,7 +1170,8 @@ export function ChatView({ bot: profile }: { bot: Bot }) {
   const turnDone = !presenceVisible && !turnBusy && !stopCut && !teammatesWorking && !importing && !trailing?.failures.length;
   // the bubble the line hangs under keeps its pinched corner until the line has finished leaving, as grok's does
   const presenceLingers = useLingering(presenceVisible, turnDone ? STATUS_DONE_EXIT_MS : STATUS_EXIT_MS);
-  const paintedMessages = useFirstPaintRows(transcriptKey, windowedMessages, Boolean(focus && !focus.consumed) || laterCount > 0, scrollRef, following);
+  const expandedTail = following && latestVisibleIndex >= 0 && latestVisibleIndex < tailWindowStart(messages.length);
+  const paintedMessages = useFirstPaintRows(transcriptKey, windowedMessages, expandedTail || Boolean(focus && !focus.consumed) || laterCount > 0, scrollRef, following);
   const lastShownRow = windowedMessages.findLast((message) => !quietRow(message, showToolCalls));
   const lastRowIsBubble = Boolean(lastShownRow && isBotTextRow(lastShownRow, bot.id));
   const presenceUnderBubble = lastRowIsBubble;

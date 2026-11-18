@@ -3,6 +3,7 @@ import { createElement } from "react";
 import { flushSync } from "react-dom";
 import { createRoot, type Root } from "react-dom/client";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { TRANSCRIPT_WINDOW_SIZE } from "@/lib/transcript-window";
 import type { AppState, Bot, InstanceInfo, Message } from "@/state/store";
 
 vi.mock("./DesktopCapabilities", async (importOriginal) => ({
@@ -38,8 +39,8 @@ const pepper = (messages: Message[]): Bot => ({
 const dispatch = vi.fn();
 let root: Root;
 const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
-async function draw(messages: Message[]) {
-  const bot = pepper(messages);
+async function draw(messages: Message[], hasMore = false) {
+  const bot = { ...pepper(messages), hasMore };
   const state: AppState = {
     ...initialState, connected: true, selectedId: "pepper", bots: [bot],
     instances: [{ instanceId: "test", driverKind: "codex", displayName: "Test", snapshot: { state: "available" } } as InstanceInfo],
@@ -121,4 +122,34 @@ describe("a routine run's opening turn", () => {
       expect(shown()).toContain("Two prices moved.");
     });
   }
+});
+
+describe("opening a chat after quiet routines", () => {
+  const quietRows: Message[] = Array.from({ length: TRANSCRIPT_WINDOW_SIZE + 53 }, (_, index) => {
+    const base = { id: `quiet-${index}`, parentId: index === 0 ? "m2" : `quiet-${index - 1}`, at: at(5) + index };
+    return index % 3 === 0
+      ? { ...base, role: "user", kind: "text", text: "Internal routine prompt", routineStart: { name: "Fixture routine" } }
+      : { ...base, role: "bot", kind: "activity", tool: { name: "Fixture tool", ok: true } };
+  });
+
+  it("opens on the latest visible reply outside the default window", async () => {
+    await draw(transcript(quietRows));
+    expect(document.querySelector('[data-mid="m2"]')?.textContent).toContain("Here is the draft.");
+    expect(document.querySelector('[data-mid^="quiet-"]')).toBeNull();
+  });
+
+  it("requests earlier history once per cursor when the loaded page is entirely hidden", async () => {
+    dispatch.mockClear();
+    const firstPage = quietRows.slice(-50);
+    const requests = () => dispatch.mock.calls.filter(([action]) => action.type === "loadOlderMessages");
+    await draw(firstPage, true);
+    expect(requests()).toEqual([[{ type: "loadOlderMessages", threadId: "main" }]]);
+    await draw([...firstPage], true);
+    expect(requests()).toHaveLength(1);
+    await draw(quietRows, true);
+    expect(requests()).toHaveLength(2);
+    await draw(transcript(quietRows));
+    expect(document.querySelector('[data-mid="m2"]')?.textContent).toContain("Here is the draft.");
+    expect(requests()).toHaveLength(2);
+  });
 });

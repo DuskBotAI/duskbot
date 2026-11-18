@@ -35,6 +35,7 @@ export function useTranscriptViewport<T extends { id: string; role?: string }>({
   pinOn,
   transcriptShown = true,
   hasMore = false,
+  latestVisibleIndex,
 }: {
   ownerId: string;
   threadId: string;
@@ -42,6 +43,7 @@ export function useTranscriptViewport<T extends { id: string; role?: string }>({
   pinOn: DependencyList;
   transcriptShown?: boolean;
   hasMore?: boolean;
+  latestVisibleIndex?: number;
 }) {
   const { state, dispatch } = useStore();
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -57,7 +59,7 @@ export function useTranscriptViewport<T extends { id: string; role?: string }>({
   const touchY = useRef(0);
 
   const transcriptKey = `${ownerId}:${threadId}`;
-  const tailStart = tailWindowStart(messages.length);
+  const tailStart = Math.min(tailWindowStart(messages.length), latestVisibleIndex ?? Infinity);
   const [transcriptWindow, setTranscriptWindow] = useState<{
     key: string;
     start: number;
@@ -71,7 +73,7 @@ export function useTranscriptViewport<T extends { id: string; role?: string }>({
   const nextStart = switched
     ? tailStart
     : follow && transcriptWindow.end === null
-      ? followWindowStart(messages, transcriptWindow.start)
+      ? Math.min(tailStart, followWindowStart(messages, transcriptWindow.start))
       : transcriptWindow.start;
   if (switched || nextStart !== transcriptWindow.start) {
     setTranscriptWindow({ key: transcriptKey, start: nextStart, end: null });

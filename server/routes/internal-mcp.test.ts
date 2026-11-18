@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { EventEmitter } from "node:events";
 import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { tmpdir } from "node:os";
+import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -48,7 +48,7 @@ interface Options {
 }
 
 function fixture(options: Options = {}) {
-  const dataDir = mkdtempSync(join(tmpdir(), "dusk-internal-mcp-"));
+  const dataDir = mkdtempSync(join(homedir(), "dusk-internal-mcp-"));
   const cfg: Pick<AppConfig, "mcpServers"> = { mcpServers: structuredClone(options.servers ?? {}) };
   const mcpOAuth = new McpOAuthManager({ file: join(dataDir, "mcp-oauth.json") });
   let busy = false;

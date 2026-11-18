@@ -1,5 +1,5 @@
 import { mkdirSync, mkdtempSync, realpathSync, statSync, symlinkSync, truncateSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { homedir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -55,7 +55,7 @@ function fakeStore(rooms: string[] = []) {
 
 function setup(rooms: string[] = [], maxBytes?: number) {
   const fake = fakeStore(rooms);
-  const docs = new AppDocs(join(mkdtempSync(join(tmpdir(), "dusk-chat-apps-")), "app-docs"), maxBytes ? { maxBytes } : {});
+  const docs = new AppDocs(join(mkdtempSync(join(homedir(), "dusk-chat-apps-")), "app-docs"), maxBytes ? { maxBytes } : {});
   const call = (input: Record<string, unknown>, thread = THREAD, authored?: (id: string) => void) =>
     createAppCard({ store: fake.store, docs, bot: SCOUT, threadId: thread, input, ...(authored ? { authored } : {}) });
   const row = (id: string, thread = THREAD) => fake.rows(thread).find((message) => message.id === id)!;
@@ -209,7 +209,7 @@ describe("a jsx page", () => {
 
 describe("a folder page", () => {
   function folders() {
-    const base = mkdtempSync(join(tmpdir(), "dusk-folder-pages-"));
+    const base = mkdtempSync(join(homedir(), "dusk-folder-pages-"));
     const mine = join(base, "scout"), theirs = join(base, "other");
     for (const [dir, files] of [[join(mine, "dash"), { "index.html": "<h1>Dash</h1><script src=\"app.js\"></script>", "app.js": "draw()", "data.parquet": "PAR1 PAR1" }],
       [join(theirs, "secret"), { "index.html": "<h1>Theirs</h1>" }]] as const) {
@@ -308,7 +308,7 @@ describe("publish_page in the chat", () => {
   const LIVE = { state: "live" as const, title: "Dash", pageId: "page000000000000000000001", url: "https://page000000000000000000001.page.dusk.bot/", usage: { pages: 1, limit: 5 } };
 
   async function folder() {
-    const base = realpathSync(mkdtempSync(join(tmpdir(), "dusk-published-")));
+    const base = realpathSync(mkdtempSync(join(homedir(), "dusk-published-")));
     mkdirSync(join(base, "dash"));
     writeFileSync(join(base, "dash", "index.html"), "<h1>Dash</h1>");
     writeFileSync(join(base, "dash", "data.csv"), "a\n1");
@@ -579,7 +579,7 @@ describe("createChatApps", () => {
     try {
       const fake = fakeStore();
       const refs = vi.fn((): string[] => []);
-      const apps = createChatApps({ store: fake.store, dataDir: mkdtempSync(join(tmpdir(), "dusk-chat-apps-")), references: refs });
+      const apps = createChatApps({ store: fake.store, dataDir: mkdtempSync(join(homedir(), "dusk-chat-apps-")), references: refs });
       opened.push(apps);
       expect(apps.createAppCard({ bot: SCOUT, threadId: THREAD, input: { tool: "show_html", html: PAGE, title: "Sales" } })).toEqual({ ok: true, messageId: "m1" });
       expect(apps.appDocument(THREAD, "m1")?.csp).toBe(BOT_HTML_CSP);

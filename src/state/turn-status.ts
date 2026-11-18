@@ -4,6 +4,7 @@
 import { useSyncExternalStore } from "react";
 
 import type { RuntimeEvent } from "../../shared/runtime-events";
+import { forgetCommandTails, noteCommandTail } from "./command-tails";
 import { progressKey, STATUS_TOOL, type TurnProgressActivity, type TurnProgressFields } from "../../shared/turn-progress";
 
 export type LiveStatus =
@@ -44,6 +45,7 @@ function put(threadId: string, next: TurnLive): void {
 /** One live runtime frame. A row in the chat supersedes the status it came from, except the row of the very tool call
  * the status describes: "Writing index.html · 14 KB" outlasts the call's own chip until the call finishes. */
 export function noteTurnEvent(event: RuntimeEvent): void {
+  noteCommandTail(event);
   const { threadId } = event;
   const current = threads.get(threadId);
   const sameTurn = current && (!event.turnId || event.turnId === current.turnId);
@@ -103,6 +105,7 @@ export function useTurnLive(threadId: string | null | undefined): TurnLive {
 /** The live stream restarted without the frames it missed: a turn's end may be among them, so no status it showed
  * stands. The next frame of a still running turn puts one back. */
 export function forgetTurnStatuses(): void {
+  forgetCommandTails();
   const shown = Array.from(threads.keys());
   threads.clear();
   for (const threadId of shown) for (const listener of Array.from(listeners.get(threadId) ?? [])) listener();

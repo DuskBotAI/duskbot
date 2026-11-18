@@ -11,7 +11,7 @@ import { t } from "@/lib/i18n";
 import type { Place } from "@/lib/place";
 import { desktopShowsOtherServer, useOtherServerName } from "@/lib/other-server";
 import { placeHasIssue } from "@/lib/place-view";
-import { useStore, type Bot } from "@/state/store";
+import { useStore, type Bot, type Group } from "@/state/store";
 import { useDesktopCapabilities } from "../DesktopCapabilities";
 import { LocalComputerAutoWarning } from "../LocalComputerAutoWarning";
 import { usePlaceViews } from "../PlaceChip";
@@ -26,6 +26,7 @@ import { CloudDesktopListRow, useCloudDesktop, type CloudDesktopRow } from "./Cl
 import { AsleepMascot, COMPUTER_FRAME_CLASS, COMPUTER_SCREEN_ASPECT, COMPUTER_WAKE_BUTTON_CLASS, ComputerWaking } from "./ComputerScreenMascot";
 import { queueComputerWake } from "./computer-wake-queue";
 import { LocalBrowserSection } from "./LocalBrowser";
+import { PanelSteps } from "./PanelSteps";
 import "./computer-tab.css";
 
 const ComputerPanel = lazy(() => import("../ComputerPanel").then((module) => ({ default: module.ComputerPanel })));
@@ -270,8 +271,8 @@ export function CloudCtaCard({ bot, group, stage, cloudDesktop }: { bot: Bot; gr
 export { hasDuskCloud } from "@/lib/cloud-move";
 
 /** One small disclosure for what a person rarely needs: the computer's own words for a problem, and its settings. */
-export function ComputerTab({ bot, derived, cloudFor }: {
-  bot: Bot; derived: Derived; onOpen: (page: SimplePageId) => void;
+export function ComputerTab({ bot, derived, cloudFor, room }: {
+  bot: Bot; derived: Derived; onOpen: (page: SimplePageId) => void; room?: Group;
   /** the bots the cloud card speaks for: this bot alone by default, a group chat's bots on one member, none on the rest */
   cloudFor?: readonly Bot[];
 }) {
@@ -302,7 +303,7 @@ export function ComputerTab({ bot, derived, cloudFor }: {
 
   return (
     <div data-panel-tabpanel="computer">
-      {!ownScreen ? <LocalBrowserSection bot={bot} askFirst={askFirst} after={cloudOffer} /> : <>
+      {!ownScreen ? <LocalBrowserSection bot={bot} askFirst={askFirst} steps={<PanelSteps bot={bot} room={room} pictures={false} />} after={cloudOffer} /> : <>
         <div ref={setScreenBox}>
           <Suspense fallback={<AsleepScreen bot={bot} off={current === "off"} />}>
             <ComputerPanel bot={bot} inline visible={onScreen} onReport={setReport} />
@@ -312,6 +313,7 @@ export function ComputerTab({ bot, derived, cloudFor }: {
           <span data-panel-screen-of="" className="min-w-0 truncate text-[12px] leading-4 tracking-normal text-ink/[0.56]">{screenOf}</span>
         </div>
         {detail && <Card><NoteRow data-sheet-row="problem-detail">{detail}</NoteRow></Card>}
+        <PanelSteps bot={bot} room={room} pictures className="mt-3" />
         {toCloud && <CloudDesktopCta bots={cloudBots} stage={stage} label={cloudLabel} />}
         {cloudOffer}
       </>}

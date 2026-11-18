@@ -7298,10 +7298,10 @@ bus.subscribe((event: RuntimeEvent) => {
         let toolName = "tool";
         if (messageId) {
           // The whole tool object is replaced, so carry `spoken` across.
-          const existing = store.messagesFor(event.threadId).find((m) => m.id === messageId)?.tool;
+          const row = store.messagesFor(event.threadId).find((m) => m.id === messageId), existing = row?.tool;
           toolName = existing?.name ?? "tool";
           store.patchMessage(event.threadId, messageId, {
-            tool: { ...existing, name: toolName, ok: event.ok, output: event.output === undefined ? undefined : scrubHeldSecrets(event.output) },
+            tool: { ...existing, name: toolName, ok: event.ok, ...(row ? { ms: Math.max(0, Date.now() - row.at) } : {}), output: event.output === undefined ? undefined : scrubHeldSecrets(event.output) },
           });
           toolMessageByItem.delete(itemKey);
         }
@@ -8424,6 +8424,12 @@ function startScreenPoller(
   screenPollers.set(threadId, entry);
 }
 
+const browserPreviewCapture = (threadId: string, { spec, session }: NonNullable<Awaited<ReturnType<typeof browserIntegration>>>): ScreenCapture => async () => {
+  const owner = turnResourceOwners.get(threadId);
+  if (!owner || !claimTurnResource(owner, `browser:${session}`)) throw new Error("another thread is using this browser");
+  return browserRuntime.previewFrame(session, () => relayFrame(spec, session), spec);
+};
+
 const browserChat = createBrowserChat({
   postScreen: (threadId, frame) => { store.appendMessage(threadId, { role: "bot", kind: "screen", ...frame }); },
   stillNeeded: (botId, threadId) => !store.bot(botId) || threadBusy(botId, threadId) || Boolean(coordinator.parkedDirect(threadId)),
@@ -9430,14 +9436,8 @@ async function beginTurn(
         browser = await browserIntegration(bot.id, selectedProfile, { threadId, generation: dispatchClaimId });
         if (browser) integrations.browser = browser.integration;
         if (browser) {
-          const spec = browser.spec;
-          const session = browser.session;
           // The preview shares the profile with tool calls: claim the same browser:<session> resource, and skip the frame while another thread holds it.
-          browserCapture = async () => {
-            const owner = turnResourceOwners.get(threadId);
-            if (!owner || !claimTurnResource(owner, `browser:${session}`)) throw new Error("another thread is using this browser");
-            return browserRuntime.previewFrame(session, () => relayFrame(spec, session), spec);
-          };
+          browserCapture = browserPreviewCapture(threadId, browser);
         }
       }
       if (autoPinAllowed()) {
@@ -11135,12 +11135,12 @@ async function runClaimedGroupMemberTurn(
   const roomSetupIsCurrent = () => !isCancelled?.() &&
     groupSpeakers.get(threadId) === roomSpeaker &&
     activeInternalGenerationByThread.get(threadId) === internalGeneration;
-  const showClaimedScreen = (capture: () => Promise<{ png: string; format: string }>) => {
-    if (roomSetupIsCurrent()) {
-      roomScreenBotId = readyBot.id;
-      startScreenPoller(readyBot.id, threadId, { computer: capture });
-    }
+  const roomScreens: { computer?: ScreenCapture; browser?: ScreenCapture } = {};
+  const showRoomScreens = (captures: typeof roomScreens) => {
+    if (!roomSetupIsCurrent()) return;
+    roomScreenBotId = readyBot.id; stopScreenPoller(readyBot.id, threadId); startScreenPoller(readyBot.id, threadId, Object.assign(roomScreens, captures));
   };
+  const showClaimedScreen = (capture: ScreenCapture) => showRoomScreens({ computer: capture });
   const failRoomClaim = (failure: string, error?: unknown) => {
     if (activeInternalGenerationByThread.get(threadId) !== internalGeneration || groupSpeakers.get(threadId) !== roomSpeaker) return;
     if (resourceOwner.computerParkedOn) {
@@ -11311,7 +11311,7 @@ async function runClaimedGroupMemberTurn(
     const selectedProfile = readyBot.browserProfile;
     await browserEngineInstalled(readyBot.id);
     const browser = await browserIntegration(readyBot.id, selectedProfile, { threadId, generation: internalGeneration });
-    if (browser) integrations.browser = browser.integration;
+    if (browser) { integrations.browser = browser.integration; showRoomScreens({ browser: browserPreviewCapture(threadId, browser) }); }
   }
   recordTurnPlace(bot.id, threadId, (roomTeamComputer ? "cloud" : roomVmTarget ? "vm" : surfaceOfComputerKind(roomComputerKind)) ?? (integrations.browser ? "browser" : null));
   const roomComputerPromptKind = resolveComputerPromptKind({

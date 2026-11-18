@@ -148,7 +148,7 @@ export function RoomPanel({ group, overlay = false, initialTab = "details" }: { 
         animate={SWAP.animate}
       >
         {tab === "details" && <RoomDetailsTab {...rowProps} />}
-        {tab === "computer" && screenViewAllowed() && <TabBoundary name={group.name}><RoomComputerTab members={members} /></TabBoundary>}
+        {tab === "computer" && screenViewAllowed() && <TabBoundary name={group.name}><RoomComputerTab members={members} room={group} /></TabBoundary>}
         {tab === "advanced" && <RoomAdvancedTab {...rowProps} />}
       </MotionDiv>
     </>

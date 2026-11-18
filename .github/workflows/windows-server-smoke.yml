@@ -1,0 +1,72 @@
+# Does the packaged app's background server come up on a fresh Windows machine? Installs a setup.exe silently (a
+# published one, or one built from this commit), opens the app, waits for server.log to show the server listening,
+# then uploads the app's logs. Runs on pushes to exp/windows-smoke* and hotfix/windows-* branches, and by hand.
+name: Windows server smoke
+
+on:
+  workflow_dispatch:
+    inputs:
+      installer_url:
+        description: published setup.exe to test as well
+        required: false
+        default: "https://dusk.bot/releases/0.2.17/DuskBot-0.2.17-setup.exe"
+  push:
+    branches: ["exp/windows-smoke*", "hotfix/windows-*"]
+
+permissions:
+  contents: read
+
+jobs:
+  published:
+    name: Published installer
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Download
+        shell: pwsh
+        run: |
+          $url = "${{ inputs.installer_url }}"
+          if (-not $url) { $url = "https://dusk.bot/releases/0.2.17/DuskBot-0.2.17-setup.exe" }
+          Invoke-WebRequest -Uri $url -OutFile "$env:RUNNER_TEMP\setup.exe"
+      - name: Install, open, wait
+        shell: pwsh
+        run: ./scripts/windows-server-smoke.ps1 -Installer "$env:RUNNER_TEMP\setup.exe" -Out "$env:RUNNER_TEMP\smoke"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: smoke-published
+          path: ${{ runner.temp }}/smoke
+          if-no-files-found: warn
+          retention-days: 7
+
+  built:
+    name: Built from this commit
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@ff378ebe6b225b0680b81c1ad4498ae0d1d3a5e3 # v6.0.10
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Clean generated output
+        shell: bash
+        run: rm -rf dist dist-server release
+      - run: pnpm package:win
+      - name: Install, open, wait
+        shell: pwsh
+        run: ./scripts/windows-server-smoke.ps1 -Installer (Get-ChildItem release/DuskBot-*-setup.exe | Select-Object -First 1).FullName -Out "$env:RUNNER_TEMP\smoke"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: smoke-built
+          path: ${{ runner.temp }}/smoke
+          if-no-files-found: warn
+          retention-days: 7

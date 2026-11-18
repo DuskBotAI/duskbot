@@ -1,0 +1,66 @@
+name: android smoke
+
+# manual: builds the sideload apk from this ref with a throwaway key and x86_64 included, runs it on emulators,
+# and uploads screenshots, ui dumps and logcat (never the apk)
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    name: emulator api ${{ matrix.api }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        api: [34, 36]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@ff378ebe6b225b0680b81c1ad4498ae0d1d3a5e3 # v6.0.10
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: pnpm
+      - uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880 # v6.3.0
+        with:
+          distribution: temurin
+          java-version: 21
+      - run: pnpm install --frozen-lockfile
+        env:
+          ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
+      - name: Build the apk with a throwaway key
+        run: |
+          # the smoke reads the web view's console from logcat, which the shipped config turns off
+          sed -i 's/loggingBehavior: "none"/loggingBehavior: "production"/' apps/mobile/capacitor.config.ts
+          export DUSK_ANDROID_KEYSTORE="$RUNNER_TEMP/smoke.keystore"
+          export DUSK_ANDROID_KEYSTORE_PASSWORD="smoke-$GITHUB_RUN_ID" DUSK_ANDROID_KEY_PASSWORD="smoke-$GITHUB_RUN_ID" DUSK_ANDROID_KEY_ALIAS=smoke
+          keytool -genkeypair -keystore "$DUSK_ANDROID_KEYSTORE" -alias smoke -keyalg RSA -keysize 2048 -validity 2 \
+            -storepass "$DUSK_ANDROID_KEYSTORE_PASSWORD" -keypass "$DUSK_ANDROID_KEY_PASSWORD" -dname "CN=dusk smoke" > /dev/null
+          DUSK_ANDROID_ABIS=arm64-v8a,armeabi-v7a,x86_64 DUSK_ANDROID_APK_OUT="$RUNNER_TEMP/apk" apps/mobile/scripts/build-android-apk.sh
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
+        with:
+          api-level: ${{ matrix.api }}
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -no-snapshot
+          script: apps/mobile/scripts/android-smoke.sh "$RUNNER_TEMP/apk/dusk-bot-1.2.apk" "smoke-out/api-${{ matrix.api }}"
+      - if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: android-smoke-api-${{ matrix.api }}
+          path: smoke-out/
+          retention-days: 7
+          if-no-files-found: warn

@@ -287,6 +287,22 @@ describe("workspace reconnect", () => {
     expect(opened).not.toHaveBeenCalled();
   });
 
+  it.each([403, 404])("accepts HTTP %s from a companion after pairing has validated the token", async (status) => {
+    const { record, token, platform } = await saved();
+    record.via = [{ kind: "companion", url: "http://mac.test:8810", net: "lan", priority: 1 }];
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(response({}, status)));
+    expect(await connectToWorkspace(record, token, platform, new AbortController().signal)).toEqual({
+      kind: "bearer", origin: "http://mac.test:8810", token,
+    });
+  });
+
+  it.each([403, 404])("does not accept HTTP %s from a regular workspace route", async (status) => {
+    const { record, token, platform } = await saved();
+    record.via = [{ kind: "https", url: "https://workspace.test" }];
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(response({}, status)));
+    await expect(connectToWorkspace(record, token, platform, new AbortController().signal)).rejects.toMatchObject({ code: "unreachable" });
+  });
+
   it("keeps a 401 authoritative even if closing its body fails", async () => {
     const { record, token, platform } = await saved();
     const body = new ReadableStream({ cancel() { throw new Error("connection lost"); } });

@@ -51,7 +51,9 @@ export async function connectToWorkspace(record: MobileConnectionRecord, token: 
       if (error instanceof RelayGoneError) gone = true;
       continue;
     }
-    if (signal.aborted || !response.ok) {
+    // A companion can validate `/api/pair` without exposing the desktop's session endpoint.
+    const companionRefused = route.kind === "companion" && [403, 404].includes(response.status);
+    if (signal.aborted || (!response.ok && !companionRefused)) {
       if (transport.kind === "relay") transport.channel.close();
       signal.throwIfAborted();
       if (response.status === 401) throw new PairError("refused");

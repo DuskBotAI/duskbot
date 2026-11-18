@@ -1,7 +1,8 @@
 # Installs a dusk bot setup.exe silently, opens it and waits for the background server; exits 1 when it never came up.
 # -Variant sets up a home PC condition first: defender (real-time scanning on, GitHub's exclusions removed), user (a
 # Windows account whose name has a space and non-ASCII letters), proxy (dead proxy in the environment), ports (the
-# app's ports reserved the way Hyper-V/WSL reserve ranges).
+# app's ports reserved the way Hyper-V/WSL reserve ranges), engines (engine CLIs installed), slowcli (an engine CLI
+# that answers after 75 s). Several can be joined with commas.
 param([Parameter(Mandatory)][string]$Installer, [Parameter(Mandatory)][string]$Out, [string]$Variant = "clean", [int]$WaitSeconds = 420)
 $ErrorActionPreference = "Stop"
 New-Item -ItemType Directory -Force -Path $Out | Out-Null
@@ -10,7 +11,7 @@ Note "variant $Variant"
 
 $cred = $null
 $appData = $env:APPDATA; $localAppData = $env:LOCALAPPDATA
-switch ($Variant) {
+switch ($Variant.Split(",")) {
   "defender" {
     foreach ($s in @(@{ DisableRealtimeMonitoring = $false }, @{ DisableBehaviorMonitoring = $false }, @{ DisableIOAVProtection = $false },
         @{ DisableScriptScanning = $false }, @{ DisableArchiveScanning = $false }, @{ DisableBlockAtFirstSeen = $false },
@@ -27,15 +28,9 @@ switch ($Variant) {
   "user" {
     $name = "Zoe " + [char]0x00C5 + "str" + [char]0x00F6 + "m"
     $pass = "Sm0ke!" + [guid]::NewGuid().ToString("N").Substring(0, 12)
-    $secure = ConvertTo-SecureString $pass -AsPlainText -Force
-    New-LocalUser -Name $name -Password $secure -PasswordNeverExpires | Out-Null
+    New-LocalUser -Name $name -Password (ConvertTo-SecureString $pass -AsPlainText -Force) -PasswordNeverExpires | Out-Null
     Add-LocalGroupMember -Group "Users" -Member $name
-    $cred = New-Object System.Management.Automation.PSCredential("$env:COMPUTERNAME\$name", $secure)
-    # creates the profile folder C:\Users\<name>
-    Start-Process -FilePath "cmd.exe" -ArgumentList "/c", "echo %USERPROFILE%> `"$Out\profile.txt`"" -Credential $cred -LoadUserProfile -Wait -WorkingDirectory "C:\"
-    $profile = (Get-Content "$Out\profile.txt" -Raw).Trim()
-    Note "user profile $profile"
-    $appData = Join-Path $profile "AppData\Roaming"; $localAppData = Join-Path $profile "AppData\Local"
+    $cred = @{ name = $name; pass = $pass }
   }
   "proxy" {
     foreach ($k in "HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "http_proxy", "https_proxy") { [Environment]::SetEnvironmentVariable($k, "http://127.0.0.1:9", "Process") }
@@ -45,14 +40,39 @@ switch ($Variant) {
     npm install -g --silent @anthropic-ai/claude-code @openai/codex @google/gemini-cli opencode-ai 2>&1 | Out-File "$Out\npm-install.txt"
     foreach ($c in "claude", "codex", "gemini", "opencode") { Note "$c -> $((Get-Command $c -ErrorAction SilentlyContinue).Source)" }
   }
+  "slowcli" {
+    # an engine CLI that takes 75 s to answer, as a cold CLI under an antivirus scan can
+    New-Item -ItemType Directory -Force -Path "C:\slowcli" | Out-Null
+    Set-Content -Path "C:\slowcli\claude.cmd" -Value "@ping -n 76 127.0.0.1 >nul`r`n@echo 2.1.0 (Claude Code)" -Encoding ascii
+    [Environment]::SetEnvironmentVariable("PATH", "C:\slowcli;$env:PATH", "Process")
+    Note "claude -> $((Get-Command claude -ErrorAction SilentlyContinue).Source)"
+  }
   "ports" {
     foreach ($port in 8799, 18799, 28799) { netsh int ipv4 add excludedportrange protocol=tcp startport=$port numberofports=2 | Out-Null }
     netsh int ipv4 show excludedportrange protocol=tcp | Out-File "$Out\excluded-ports.txt"
   }
 }
 
+# a scheduled task runs as that account with its own profile and environment, which Start-Process -Credential does not give
+function RunAs($file, $arguments, [switch]$Wait) {
+  $task = "smoke-" + [guid]::NewGuid().ToString("N").Substring(0, 8)
+  $action = if ($arguments) { New-ScheduledTaskAction -Execute $file -Argument $arguments } else { New-ScheduledTaskAction -Execute $file }
+  Register-ScheduledTask -TaskName $task -Action $action -User "$env:COMPUTERNAME\$($cred.name)" -Password $cred.pass -RunLevel Limited `
+    -Settings (New-ScheduledTaskSettingsSet -ExecutionTimeLimit (New-TimeSpan -Hours 1)) | Out-Null
+  Start-ScheduledTask -TaskName $task
+  if ($Wait) {
+    Start-Sleep -Seconds 3
+    while ((Get-ScheduledTask -TaskName $task).State -eq "Running") { Start-Sleep -Seconds 2 }
+    Note "task $file ended $((Get-ScheduledTaskInfo -TaskName $task).LastTaskResult)"
+  }
+}
 if ($cred) {
-  $p = Start-Process -FilePath $Installer -ArgumentList "/S" -PassThru -Wait -Credential $cred -LoadUserProfile -WorkingDirectory "C:\"
+  Copy-Item $Installer "C:\smoke-setup.exe"
+  RunAs "C:\smoke-setup.exe" "/S" -Wait
+  $profile = (Get-CimInstance Win32_UserProfile | Where-Object { $_.LocalPath -like "*Zoe*" } | Select-Object -First 1).LocalPath
+  Note "user profile $profile"
+  $appData = Join-Path $profile "AppData\Roaming"; $localAppData = Join-Path $profile "AppData\Local"
+  $p = [pscustomobject]@{ ExitCode = "via task" }
 } else {
   $p = Start-Process -FilePath $Installer -ArgumentList "/S" -PassThru -Wait
 }
@@ -64,7 +84,10 @@ Note "exe $($exe.FullName)"
 Get-ChildItem -Path $exe.DirectoryName -Recurse -Filter "*.node" | ForEach-Object { $_.FullName } | Out-File "$Out\native-modules.txt"
 Get-ChildItem -Path (Join-Path $exe.DirectoryName "resources") -Recurse -Depth 1 | ForEach-Object { $_.FullName } | Out-File "$Out\resources.txt"
 if ($cred) {
-  $app = Start-Process -FilePath $exe.FullName -PassThru -Credential $cred -LoadUserProfile -WorkingDirectory $exe.DirectoryName
+  RunAs $exe.FullName $null
+  Start-Sleep -Seconds 3
+  $app = Get-Process | Where-Object { $_.Path -eq $exe.FullName } | Select-Object -First 1
+  if (-not $app) { Note "app process not seen"; $app = [pscustomobject]@{ HasExited = $false } }
 } else {
   $app = Start-Process -FilePath $exe.FullName -PassThru -RedirectStandardOutput "$Out\app-stdout.txt" -RedirectStandardError "$Out\app-stderr.txt"
 }

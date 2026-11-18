@@ -49,9 +49,9 @@ switch ($Variant.Split(",")) {
     Start-Sleep -Seconds 5
     Copy-Item (Join-Path $env:APPDATA "duskbot\logs\server.log") "$Out\server-0.2.15.log" -ErrorAction SilentlyContinue
   }
-  "busy" {
-    # a slower PC: three spinning processes per core share the CPU with the app while it starts
-    $burn = 3 * [Environment]::ProcessorCount
+  { $_ -in "busy", "heavy" } {
+    # a slower PC: spinning processes (three per core, six for heavy) share the CPU with the app while it starts
+    $burn = $(if ($_ -eq "heavy") { 6 } else { 3 }) * [Environment]::ProcessorCount
     for ($i = 0; $i -lt $burn; $i++) { Start-Process -FilePath "node" -ArgumentList "-e", "for(;;){}" -WindowStyle Hidden }
     Note "busy: $burn spinning processes on $([Environment]::ProcessorCount) cores"
   }

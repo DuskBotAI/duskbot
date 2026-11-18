@@ -192,6 +192,7 @@ export async function sh(cmd: string, args: string[], timeout = 8000): Promise<{
     encoding: "utf8",
     maxBuffer: 16 * 1024 * 1024,
     env: { ...process.env, PATH: augmentedPath() },
+    windowsHide: true,
   });
   return { stdout };
 }
@@ -1116,6 +1117,7 @@ const defaultExecRunner: ContainerExecRunner = async (command, args, options) =>
       encoding: "utf8",
       maxBuffer: 64 * 1024 * 1024,
       env: { ...process.env, PATH: augmentedPath() },
+      windowsHide: true,
     });
     return { stdout, stderr, code: 0 };
   } catch (error) {

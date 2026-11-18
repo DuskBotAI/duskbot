@@ -151,6 +151,7 @@ describe("toUtterances", () => {
 describe("narrateTool", () => {
   it("turns tool names into something worth hearing", () => {
     expect(narrateTool("Bash")).toBe("running a command");
+    expect(narrateTool("PowerShell")).toBe("running a command");
     expect(narrateTool("Read")).toBe("reading a file");
     expect(narrateTool("Edit")).toBe("editing a file");
     expect(narrateTool("WebSearch")).toBe("searching the web");

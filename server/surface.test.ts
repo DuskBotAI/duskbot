@@ -210,6 +210,14 @@ describe("surfacePrompt", () => {
     expect(alone).not.toMatch(/web pages included/);
     expect(alone).toContain("use, in this order: a connected app that does it, web search and fetching pages, a cloud computer if select_computer offers one.");
     expect(alone).toContain("Use their own browser or screen only when the task needs their own signed-in session");
+    for (const text of [beside, alone]) {
+      expect(text).toContain("Your own shell and file tools, when you have them, already run on this computer");
+      expect(text).toContain("Never open Terminal, Command Prompt or PowerShell on the person's screen to type a command your own shell tool can run.");
+      expect(text).toContain("Only without a shell tool of your own do commands and files go through this computer tools.");
+    }
+    expect(beside).toContain("Desktop apps → this computer tools.");
+    expect(beside).not.toContain("files and shell → this computer tools");
+    expect(surfacePrompt({ computer: "vm", browser: true })).not.toContain("Your own shell and file tools, when you have them");
     // Other computers are the bot's own: their wording is unchanged.
     expect(surfacePrompt({ computer: "vm", browser: false })).not.toContain("the person's own");
     expect(surfacePrompt({ computer: "cloud", browser: true })).not.toContain("the person's own");

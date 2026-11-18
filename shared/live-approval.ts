@@ -33,6 +33,7 @@ export function liveDecisionRefusal(card: OptionCardData | undefined): string | 
 
 const TOOL_PHRASES: Record<string, string> = {
   Bash: "run a command",
+  PowerShell: "run a command",
   Read: "read a file",
   Write: "write a file",
   Edit: "edit a file",

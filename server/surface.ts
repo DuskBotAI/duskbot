@@ -171,10 +171,12 @@ export function surfaceLabel(surface: Surface): string {
 const WEB_WORK_ORDER = "For web work such as finding, booking or looking something up, use, in this order:";
 const YOUR_COMPUTER_LAST =
   " Use their own browser or screen only when the task needs their own signed-in session and nothing else works. Before your first action on it in a request, dusk bot asks them once whether you may, at every approval level except Full access: do not ask in chat yourself, and if they say no, finish another way. " + PLAIN_WORDS;
+const OWN_SHELL_HERE =
+  " Your own shell and file tools, when you have them, already run on this computer: run commands and edit files with them. Never open Terminal, Command Prompt or PowerShell on the person's screen to type a command your own shell tool can run. Only without a shell tool of your own do commands and files go through this computer tools.";
 const YOUR_COMPUTER_BESIDE_BROWSER =
   ` This computer is the person's own: their screen, their apps and the browsers they are signed in to. ${WEB_WORK_ORDER} a connected app that does it, your built-in browser, a cloud computer if select_computer offers one. A web app with no connected app (Slack, Gmail, LinkedIn, a booking site) goes in your browser, not in its desktop app on their screen.${YOUR_COMPUTER_LAST}`;
 const YOUR_COMPUTER_ALONE =
-  ` Everything you do on screen happens on this computer, which is the person's own: their screen, their apps and the browsers they are signed in to; there is no built-in browser of yours this turn. ${WEB_WORK_ORDER} a connected app that does it, web search and fetching pages, a cloud computer if select_computer offers one.${YOUR_COMPUTER_LAST} If you need the user to sign in, tell them it is on this computer.`;
+  ` Everything you do on screen happens on this computer, which is the person's own: their screen, their apps and the browsers they are signed in to; there is no built-in browser of yours this turn. ${WEB_WORK_ORDER} a connected app that does it, web search and fetching pages, a cloud computer if select_computer offers one.${YOUR_COMPUTER_LAST}${OWN_SHELL_HERE} If you need the user to sign in, tell them it is on this computer.`;
 
 /** A connected app does a task more cheaply and surely than any screen, and one that is refused or broken is the person's
  * to fix: worked around on a screen, it stays broken and they never hear why. */
@@ -227,7 +229,7 @@ export function surfacePrompt(
   let text = "";
   if (mounted.computer === "local" && !opts.cloudHome) {
     text = mounted.browser
-      ? ` Two surfaces are mounted this turn: the built-in browser (the browser server's agent_browser_* tools) and this computer (the computer server's tools). Web tasks → the built-in browser. Desktop apps, files and shell → this computer tools. Pick one surface for a task and stay on it.${YOUR_COMPUTER_BESIDE_BROWSER}`
+      ? ` Two surfaces are mounted this turn: the built-in browser (the browser server's agent_browser_* tools) and this computer (the computer server's tools). Web tasks → the built-in browser. Desktop apps → this computer tools. Pick one surface for a task and stay on it.${OWN_SHELL_HERE}${YOUR_COMPUTER_BESIDE_BROWSER}`
       : YOUR_COMPUTER_ALONE;
   } else if (computer && mounted.browser) {
     text =

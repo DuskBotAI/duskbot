@@ -50,11 +50,11 @@ describe("Claude: a tool call's input as it streams", () => {
     expect(JSON.stringify(reports)).not.toContain("/Users/me");
   });
 
-  it("reports a silent tool's call as soon as it opens, before the tool runs", () => {
+  it.each(["Bash", "PowerShell"])("reports a silent %s call as soon as it opens, before the tool runs", (name) => {
     const session = {};
-    const reports = claudeMessage([{ id: "toolu_bash", name: "Bash", json: ["{\"command\": \"sle", "ep 300\"}"] }])
+    const reports = claudeMessage([{ id: "toolu_shell", name, json: ["{\"command\": \"sle", "ep 300\"}"] }])
       .map((event) => claudeToolDraft(session, event)).filter((report) => report !== null);
-    expect(reports[0]).toEqual({ type: "turn.progress", activity: "command", itemId: "toolu_bash", bytes: 0 });
+    expect(reports[0]).toEqual({ type: "turn.progress", activity: "command", itemId: "toolu_shell", bytes: 0 });
     expect(reports.every((report) => report.activity === "command" && !report.file)).toBe(true);
   });
 

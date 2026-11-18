@@ -10,6 +10,7 @@ const CLAUDE_TOOLS: Record<string, TurnProgressActivity> = {
   MultiEdit: "edit",
   NotebookEdit: "edit",
   Bash: "command",
+  PowerShell: "command",
   WebSearch: "web",
   WebFetch: "fetch",
   Read: "read",

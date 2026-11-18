@@ -96,6 +96,60 @@ describe("a wait for the person (tailscale's sign-in and https)", () => {
   });
 });
 
+describe.skipIf(!dash || !existsSync("/usr/bin/node"))("tailnet https port 443", () => {
+  const ours = '{"TCP":{"443":{"HTTPS":true}},"Web":{"box.tail1.ts.net:443":{"Handlers":{"/":{"Proxy":"http://127.0.0.1:8799"}}}}}';
+  const other = '{"TCP":{"443":{"HTTPS":true}},"Web":{"box.tail1.ts.net:443":{"Handlers":{"/":{"Proxy":"http://127.0.0.1:3000"}}}}}';
+  const forwarded = '{"TCP":{"443":{"TCPForward":"127.0.0.1:5432"}}}';
+  const address = (status) => sourced(`TMP=$STATE; PORT=8799; WANT=tailscale; redact() { cat; }; ask_clear() { :; }; restart_for_address() { :; }
+tailscale_install() { :; }; tailscale_daemon() { :; }; ts_field() { [ "$1" = DNSName ] && echo box.tail1.ts.net || echo Running; }
+ts() { if [ "$1 $2" = "serve status" ]; then printf '%s' '${status}'; fi; }
+ts_with_link() { shift 3; while [ "$1" != -- ]; do shift; done; shift; echo "serve-call: $*"; }
+manifest_add() { echo "manifest: $1"; }
+address_tailscale && echo rc=0 || echo "rc=$?"`, [], dash);
+
+  it("serves it when nothing holds it", async () => {
+    for (const status of ["{}", "", "not json"]) {
+      const out = await address(status);
+      expect(out.stdout).toContain("serve-call: ts serve --bg --https=443 http://127.0.0.1:8799");
+      expect(out.stdout).toContain("manifest: tailscale-serve 443");
+      expect(out.address).toMatchObject({ via: "tailscale", host: "box.tail1.ts.net" });
+    }
+  });
+
+  it("serves it again when it already proxies to this server", async () => {
+    const out = await address(ours);
+    expect(out.stdout).toContain("serve-call: ts serve --bg --https=443 http://127.0.0.1:8799");
+    expect(out.address).toMatchObject({ via: "tailscale" });
+  });
+
+  it("leaves another service on it alone and uses the private relay", async () => {
+    for (const status of [other, forwarded]) {
+      const out = await address(status);
+      expect(out.stdout).not.toContain("serve-call");
+      expect(out.stdout).not.toContain("manifest:");
+      expect(out.stdout).toContain("already serves something else");
+      expect(out.stdout).toContain("rc=11");
+      expect(out.address).toMatchObject({ mode: "relay" });
+    }
+  });
+
+  it("is turned off on uninstall only while it still proxies to this server", async () => {
+    const uninstall = (await readFile(new URL("../uninstall.sh", import.meta.url), "utf8")).replace(/\nmain "\$@"\s*$/, "\n");
+    const dir = await mkdtemp(join(tmpdir(), "omb-ways-"));
+    try {
+      const holds = async (status) => {
+        const file = join(dir, "fixture.sh");
+        await writeFile(file, `${uninstall}\ntailscale() { printf '%s' '${status}'; }\nts_443_ours && echo ours || echo not\n`);
+        return (await run(dash, [file], { env: { PATH: "/usr/bin:/bin", TERM: "dumb" } })).stdout.trim();
+      };
+      expect(await holds(ours)).toBe("ours");
+      for (const status of [other, forwarded, "{}", "not json"]) expect(await holds(status)).toBe("not");
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+});
+
 describe("the agent's word on where its server is", () => {
   const read = (value) => () => JSON.stringify(value);
   it("reads the relay, a pinned address with its key, and a quick tunnel's current name", async () => {

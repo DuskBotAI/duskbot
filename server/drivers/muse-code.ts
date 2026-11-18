@@ -5,9 +5,9 @@
 // the instance a META_API_KEY), and the models come from Muse itself, so a
 // new Muse model reaches the picker without an app release.
 import { existsSync, mkdtempSync, rmSync } from "node:fs";
-import { readFile } from "node:fs/promises";
+import { readFile, realpath, stat } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
-import { join } from "node:path";
+import { isAbsolute, join } from "node:path";
 import { Connection, MspError, type DuplexTransport } from "@muse-code/sdk";
 import { z } from "zod";
 import { instanceEnvNames } from "../bot-box/env.ts";
@@ -18,6 +18,7 @@ import type {
 } from "../contracts.ts";
 import { newEventId, newId } from "../contracts.ts";
 import { augmentedPath } from "../env-path.ts";
+import { engineHomes } from "../engine-homes/engine-homes.ts";
 import { describeSpawnFailure, execCli, killCliTree, spawnCli, type CliOwner } from "../procs.ts";
 import { redactSecretsInText } from "../redact.ts";
 import { answersAlone } from "./permission-command.ts";
@@ -27,6 +28,7 @@ import { parseProtocolAskQuestions, questionAnswersById, type ProtocolAskQuestio
 import type { EffortLevel } from "../../shared/wire.ts";
 import { promptHalves, readPromptSplitReceipt, splitSessionPrompt, writePromptSplitReceipt, type PromptSplitReceipt } from "./prompt-split.ts";
 import { turnStdioMcpServers } from "./turn-mcp.ts";
+import { museMcpConfig, museMcpToolReferences } from "./muse-mcp.ts";
 
 const DRIVER_KIND = "museCode";
 const PROVIDER_ID = "meta";
@@ -210,6 +212,7 @@ interface Host {
   close(): Promise<unknown>;
   exited: Promise<unknown>;
   grantedMcp: boolean;
+  mcpNames?: ReadonlyMap<string, string>;
   /** A turn needing another posture or other MCP servers gets a fresh host resuming the same session. */
   key: string;
   closed: boolean;
@@ -226,6 +229,28 @@ interface ThreadState {
 }
 
 const asRecord = (value: unknown): Record<string, unknown> => value && typeof value === "object" ? value as Record<string, unknown> : {};
+
+function museSessionNotFound(error: unknown): boolean {
+  return error instanceof MspError && (error.kind === "sessionNotFound" || error.kind === "notFound");
+}
+
+async function readMuseSessionWorkspace(connection: Connection, sessionId: string): Promise<string> {
+  const result = await connection.request("session/read", { sessionId, excludeItems: true }).catch((error: unknown) => {
+    if (museSessionNotFound(error)) throw error;
+    const detail = error instanceof Error ? error.message : String(error);
+    throw new Error(`Muse Code could not read the saved session workspace. Retry or start a new conversation. ${detail}`);
+  });
+  return museSessionWorkspace(result);
+}
+
+async function museSessionWorkspace(result: Record<string, unknown>): Promise<string> {
+  const workspace = asRecord(result.session).workspaceRoot;
+  if (typeof workspace === "string" && isAbsolute(workspace)) {
+    const physical = await realpath(workspace).catch(() => undefined);
+    if (physical && (await stat(physical).catch(() => null))?.isDirectory()) return physical;
+  }
+  throw new Error("Muse Code's saved session workspace is unavailable. Restore its working folder or start a new conversation.");
+}
 
 /** Security: @muse-code/sdk 1.4.6's spawnMspConnection starts `muse serve` with its own child_process.spawn, outside
  * the bot box and the conversation's engine home. MSP runs over the stdio of a spawnCli process instead. */
@@ -545,8 +570,6 @@ export const MuseCodeDriver: ProviderDriver<MuseConfig> = {
     const ensureSession = async (state: ThreadState, turn: SendTurnInput, turnId: string): Promise<{ text: string; rebuilt: boolean; started: boolean }> => {
       const cwd = turn.cwd ?? process.cwd();
       const servers = turnStdioMcpServers(turn);
-      const mcpServers = Object.fromEntries(servers.map(server => [server.name,
-        { transport: "stdio", command: server.command, args: server.args, env: server.env, mode: "optional" }]));
       const approvalMode = museApprovalMode(turn.approvalMode);
       const key = JSON.stringify([cwd, museServeArgs(turn.approvalMode), servers]);
       if (turn.sessionReset) {
@@ -569,41 +592,69 @@ export const MuseCodeDriver: ProviderDriver<MuseConfig> = {
       }
       state.host = host;
       attach(state, host);
+      const requireActiveHost = () => {
+        if (state.active?.turnId !== turnId || state.host !== host || host.closed) {
+          throw new Error("Muse Code was stopped while it was starting.");
+        }
+      };
       if (servers.length && !host.grantedMcp) {
         emit({ type: "runtime.notice", threadId: state.threadId, turnId,
           message: "This Muse Code can't use the browser, teammates or apps. Update it to use them." });
       }
-      const config = servers.length && host.grantedMcp ? { config: { mcpServers } } : {};
+      const configureMcp = servers.length && host.grantedMcp ? (workspace: string) => {
+        const env = childEnv();
+        const mounts = museMcpConfig(servers, workspace, engineHomes.forSpawn(env)?.env ?? env, turn.toolScope === undefined);
+        host.mcpNames = mounts.names;
+        return mounts.config;
+      } : undefined;
       const resumeId = cursor ?? state.sessionId;
       if (resumeId) {
         try {
-          await host.connection.command("session/resume", { sessionId: resumeId, excludeItems: true, ...config });
+          const workspace = configureMcp && await readMuseSessionWorkspace(host.connection, resumeId);
+          requireActiveHost();
+          const config = workspace ? configureMcp?.(workspace) : undefined;
+          const resumed = await host.connection.command("session/resume", { sessionId: resumeId, excludeItems: true, config });
+          if (workspace && await museSessionWorkspace(resumed) !== workspace) {
+            throw new Error("Muse Code resumed in a different workspace than the one it reported. Start a new conversation to use its tools.");
+          }
+          requireActiveHost();
           state.sessionId = resumeId;
           await host.connection.command("session/setApprovalMode", { sessionId: resumeId, mode: approvalMode });
+          requireActiveHost();
           state.approvalMode = approvalMode;
           return { text: turn.text, rebuilt: false, started: true };
         } catch (error) {
-          const kind = error instanceof MspError ? (error as MspError & { kind?: string }).kind : undefined;
-          if (kind !== "sessionNotFound" && kind !== "notFound") throw error;
+          if (state.active?.turnId !== turnId || !museSessionNotFound(error)) {
+            if (state.host === host) await closeHost(state);
+            throw error;
+          }
         }
       }
-      const model = turn.model || catalog.default;
-      const started = asRecord(await host.connection.command("session/start", {
-        workspaceRoot: cwd, providerId: PROVIDER_ID, approvalMode, ...(model ? { modelId: model } : {}), ...config,
-      }));
-      const session = asRecord(started.session);
-      if (typeof session.sessionId !== "string") throw new Error("Muse Code started a session without an id.");
-      state.sessionId = session.sessionId;
-      state.model = typeof session.modelId === "string" ? session.modelId : model;
-      state.approvalMode = approvalMode;
-      const rebuilt = Boolean(resumeId && turn.recoveryText);
-      return { text: rebuilt ? turn.recoveryText! : turn.text, rebuilt, started: true };
+      try {
+        requireActiveHost();
+        const model = turn.model || catalog.default;
+        const started = asRecord(await host.connection.command("session/start", {
+          workspaceRoot: cwd, providerId: PROVIDER_ID, approvalMode, ...(model ? { modelId: model } : {}), config: configureMcp?.(cwd),
+        }));
+        requireActiveHost();
+        const session = asRecord(started.session);
+        if (typeof session.sessionId !== "string") throw new Error("Muse Code started a session without an id.");
+        state.sessionId = session.sessionId;
+        state.model = typeof session.modelId === "string" ? session.modelId : model;
+        state.approvalMode = approvalMode;
+        const rebuilt = Boolean(resumeId && turn.recoveryText);
+        return { text: rebuilt ? turn.recoveryText! : turn.text, rebuilt, started: true };
+      } catch (error) {
+        if (state.host === host) await closeHost(state);
+        throw error;
+      }
     };
 
     const runTurn = async (state: ThreadState, turn: SendTurnInput, active: ActiveTurn) => {
       const threadId = turn.threadId;
       try {
         const session = await ensureSession(state, turn, active.turnId);
+        if (active.finished) return;
         const host = state.host!;
         const sessionId = state.sessionId!;
         if (session.started) {
@@ -614,15 +665,17 @@ export const MuseCodeDriver: ProviderDriver<MuseConfig> = {
           state.model = turn.model;
         }
         const halves = promptHalves(turn);
+        const toolReferences = (text: string) => host.mcpNames ? museMcpToolReferences(text, host.mcpNames) : text;
+        const system = turn.system && toolReferences(turn.system);
         let text = session.text;
         if (halves.stable !== null) {
           const receiptKey = JSON.stringify([threadId, sessionId]);
-          const composed = splitSessionPrompt(halves.stable, halves.volatile, readPromptSplitReceipt(DRIVER_KIND, receiptKey),
-            turn.system, text, Boolean(turn.mentionTurn), RE_ANCHOR_TURNS);
+          const composed = splitSessionPrompt(toolReferences(halves.stable), toolReferences(halves.volatile), readPromptSplitReceipt(DRIVER_KIND, receiptKey),
+            system, text, Boolean(turn.mentionTurn), RE_ANCHOR_TURNS);
           text = composed.text;
           active.receipt = { key: receiptKey, receipt: composed.receipt };
-        } else if (turn.system && session.started) {
-          text = `${turn.system}\n\n${text}`;
+        } else if (system && session.started) {
+          text = `${system}\n\n${text}`;
         }
         const images = await Promise.all((turn.images ?? []).map(async (image) => ({
           type: "image", mediaType: image.mime, base64Data: (await readFile(image.path)).toString("base64"),

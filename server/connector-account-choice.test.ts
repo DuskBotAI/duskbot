@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { accountsForBot, createAccountChoiceRoutes, forgetAccount, readAccountChoices, setAccountChoice } from "./connector-account-choice.ts";
+import { accountsForBot, createAccountChoiceRoutes, forgetAccount, readAccountChoices, removeAccountAndForget, setAccountChoice } from "./connector-account-choice.ts";
 import { parseConnectorAccountsEnv, withChosenAccounts } from "./connector-account-pick.ts";
 import { PASS } from "./routes/table.ts";
 
@@ -48,7 +48,22 @@ describe("account choices", () => {
     expect(answers.map(([status]) => status)).toEqual([200, 400, 200]);
     expect(answers[2]![1]).toEqual({ defaults: { gmail: "ca_work" }, bots: {} });
     expect(await route(ctx("DELETE", "/api/connectors/gmail/accounts/ca_work"))).toBe(PASS);
-    expect(readAccountChoices(dir).defaults).toEqual({});
+    expect(readAccountChoices(dir).defaults, "the removal has not happened yet").toEqual({ gmail: "ca_work" });
+  });
+
+  it("keeps every pick of an account whose removal failed, so no bot moves to another account", async () => {
+    const dir = fresh();
+    setAccountChoice({ slug: "gmail", accountId: "ca_home" }, dir);
+    setAccountChoice({ slug: "gmail", accountId: "ca_work", botId: "nova" }, dir);
+    await expect(removeAccountAndForget("gmail", "ca_work", async () => { throw new Error("Composio refused"); }, dir)).rejects.toThrow("Composio refused");
+    expect(accountsForBot("nova", readAccountChoices(dir))).toEqual({ gmail: "ca_work" });
+  });
+
+  it("forgets an account's picks once it is removed, matching the app without case", async () => {
+    const dir = fresh();
+    setAccountChoice({ slug: "gmail", accountId: "ca_work", botId: "nova" }, dir);
+    expect(await removeAccountAndForget("Gmail", "ca_work", async () => ({ removed: 1 }), dir)).toEqual({ removed: 1 });
+    expect(readAccountChoices(dir).bots).toEqual({});
   });
 });
 

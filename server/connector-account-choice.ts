@@ -66,20 +66,25 @@ export function forgetAccount(slug: string, accountId: string, dir = DATA_DIR): 
   if (changed) writeAccountChoices(choices, dir);
 }
 
+/** Removes an account, then forgets its picks. A failed removal keeps them: a bot pinned to the account must not move to
+ * the app's default, which can be someone's other mailbox. */
+export async function removeAccountAndForget<T>(slug: string, accountId: string, remove: () => Promise<T>, dir = DATA_DIR): Promise<T> {
+  const removed = await remove();
+  forgetAccount(slug.toLowerCase(), accountId, dir);
+  return removed;
+}
+
 const entries = (choices: AccountChoices) => Object.keys(choices.defaults).length
   + Object.values(choices.bots).reduce((total, own) => total + Object.keys(own).length, 0);
 
 const CHOICE = /^\/api\/connectors\/([a-z0-9][a-z0-9_-]{0,80})\/account-choice$/;
-const ACCOUNT = /^\/api\/connectors\/([\w-]+)\/accounts\/([A-Za-z0-9][A-Za-z0-9_-]{0,127})$/;
 const choiceBody = z.object({ accountId: z.string().regex(ACCOUNT_ID).nullable(), botId: z.string().regex(BOT_ID).nullable().optional() }).strict();
 
 /** GET /api/connectors/account-choices: every default and pick. PUT …/<slug>/account-choice {accountId, botId?}: set one
- * (null clears it). Removing an account (the DELETE the main router answers) forgets it here first. */
+ * (null clears it). */
 export function createAccountChoiceRoutes(dir?: string): RouteHandler {
   return async ({ res, path, method, json, readBody, req }) => {
     if (path === "/api/connectors/account-choices" && method === "GET") return json(res, 200, readAccountChoices(dir));
-    const removed = method === "DELETE" ? ACCOUNT.exec(path) : null;
-    if (removed) { forgetAccount(removed[1]!.toLowerCase(), removed[2]!, dir); return PASS; }
     const m = CHOICE.exec(path);
     if (!m || method !== "PUT") return PASS;
     const parsed = choiceBody.safeParse(await readBody(req));

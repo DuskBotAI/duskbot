@@ -723,6 +723,9 @@ describe("PiDriver turns (fake CLI)", () => {
     const { turnId } = await instance.adapter.sendTurn({ threadId: "t-exit", text: "hi" });
     const done = await recorder.until((e) => e.type === "turn.completed" && e.turnId === turnId);
     expect(done).toMatchObject({ ok: false, stopReason: "failed" });
+    expect(recorder.events.filter((e) => e.type === "runtime.error" && e.turnId === turnId), "the chat says why, once").toEqual([
+      expect.objectContaining({ message: "pi exited 1 before it answered: dusk bot Pi MCP configuration could not be read" }),
+    ]);
     expect(instance.adapter.hasSession("t-exit")).toBe(false);
   });
 

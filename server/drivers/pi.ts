@@ -9,6 +9,7 @@ import { PROVIDER_CREDENTIAL_ENV, stripWorkspaceCredentialEnv } from "../config.
 import { openStartupModelCatalog, unconfirmedModelCatalog, writeStartupModelCache } from "../startup-model-catalog.ts";
 import { augmentedPath } from "../env-path.ts";
 import { describeSpawnFailure, execCli, killCliTree, spawnCli } from "../procs.ts";
+import { StderrTail, exitDetail } from "./acp/exit-report.ts";
 import {
   deletePromptSplitReceipt,
   promptHalves,
@@ -805,8 +806,15 @@ export const PiDriver: ProviderDriver<PiConfig> = {
         emit({ ...base(threadId, turnId), type: "runtime.error", message: fail.message, setup: fail.setup });
         settle(false);
       });
-      child.on("close", () => {
-        rejectWaiters(new Error("pi process exited before replying"));
+      const stderrTail = new StderrTail();
+      child.stderr.setEncoding("utf8");
+      child.stderr.on("data", (chunk: string) => stderrTail.write(chunk));
+      child.on("close", (code, signal) => {
+        if (settled) return;
+        stderrTail.flush();
+        const message = `pi exited ${code ?? signal ?? "unexpectedly"} before it answered${exitDetail(code, signal, stderrTail.text)}`;
+        rejectWaiters(new Error(message));
+        emit({ ...base(threadId, turnId), type: "runtime.error", message });
         settle(false);
       });
 

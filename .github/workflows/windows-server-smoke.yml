@@ -25,7 +25,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        variant: [clean, user, "defender,engines", slowcli]
+        variant: [clean, user, "defender,engines", upgrade, "upgrade,defender,engines"]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -38,7 +38,7 @@ jobs:
           Invoke-WebRequest -Uri $url -OutFile "$env:RUNNER_TEMP\setup.exe"
       - name: Install, open, wait
         shell: pwsh
-        run: ./scripts/windows-server-smoke.ps1 -Installer "$env:RUNNER_TEMP\setup.exe" -Out "$env:RUNNER_TEMP\smoke" -Variant ${{ matrix.variant }}
+        run: ./scripts/windows-server-smoke.ps1 -Installer "$env:RUNNER_TEMP\setup.exe" -Out "$env:RUNNER_TEMP\smoke" -Variant "${{ matrix.variant }}"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
@@ -55,7 +55,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        variant: [clean, user, "defender,engines", slowcli]
+        variant: [clean, user, "defender,engines", upgrade, "upgrade,defender,engines"]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -72,7 +72,7 @@ jobs:
       - run: pnpm package:win
       - name: Install, open, wait
         shell: pwsh
-        run: ./scripts/windows-server-smoke.ps1 -Installer (Get-ChildItem release/DuskBot-*-setup.exe | Select-Object -First 1).FullName -Out "$env:RUNNER_TEMP\smoke" -Variant ${{ matrix.variant }}
+        run: ./scripts/windows-server-smoke.ps1 -Installer (Get-ChildItem release/DuskBot-*-setup.exe | Select-Object -First 1).FullName -Out "$env:RUNNER_TEMP\smoke" -Variant "${{ matrix.variant }}"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:

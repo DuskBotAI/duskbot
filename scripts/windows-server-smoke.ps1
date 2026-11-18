@@ -47,6 +47,23 @@ switch ($Variant.Split(",")) {
     [Environment]::SetEnvironmentVariable("PATH", "C:\slowcli;$env:PATH", "Process")
     Note "claude -> $((Get-Command claude -ErrorAction SilentlyContinue).Source)"
   }
+  "upgrade" {
+    # 0.2.15 first, opened until its server is up, then the installer under test over it
+    Invoke-WebRequest -Uri "https://dusk.bot/releases/0.2.15/DuskBot-0.2.15-setup.exe" -OutFile "$env:TEMP\old-setup.exe"
+    Start-Process -FilePath "$env:TEMP\old-setup.exe" -ArgumentList "/S" -Wait
+    $old = Get-ChildItem -Path "$env:LOCALAPPDATA\Programs" -Recurse -Depth 2 -Filter "*.exe" | Where-Object { Test-Path (Join-Path $_.DirectoryName "resources\app.asar") } | Select-Object -First 1
+    Start-Process -FilePath $old.FullName | Out-Null
+    $t = Get-Date
+    while (((Get-Date) - $t).TotalSeconds -lt 180) {
+      Start-Sleep -Seconds 5
+      $l = Join-Path $env:APPDATA "duskbot\logs\server.log"
+      if ((Test-Path $l) -and ((Get-Content -Raw $l) -match "server ready pid=")) { Note "0.2.15 came up"; break }
+    }
+    Start-Sleep -Seconds 20
+    Get-Process | Where-Object { $_.Path -like "$($old.DirectoryName)*" } | Stop-Process -Force -ErrorAction SilentlyContinue
+    Start-Sleep -Seconds 5
+    Copy-Item (Join-Path $env:APPDATA "duskbot\logs\server.log") "$Out\server-0.2.15.log" -ErrorAction SilentlyContinue
+  }
   "ports" {
     foreach ($port in 8799, 18799, 28799) { netsh int ipv4 add excludedportrange protocol=tcp startport=$port numberofports=2 | Out-Null }
     netsh int ipv4 show excludedportrange protocol=tcp | Out-File "$Out\excluded-ports.txt"
@@ -61,8 +78,12 @@ function RunAs($file, $arguments, [switch]$Wait) {
     -Settings (New-ScheduledTaskSettingsSet -ExecutionTimeLimit (New-TimeSpan -Hours 1)) | Out-Null
   Start-ScheduledTask -TaskName $task
   if ($Wait) {
-    Start-Sleep -Seconds 3
-    while ((Get-ScheduledTask -TaskName $task).State -eq "Running") { Start-Sleep -Seconds 2 }
+    $t = Get-Date
+    while (((Get-Date) - $t).TotalSeconds -lt 300) {
+      Start-Sleep -Seconds 3
+      $info = Get-ScheduledTaskInfo -TaskName $task
+      if ((Get-ScheduledTask -TaskName $task).State -ne "Running" -and $info.LastTaskResult -ne 267011) { break }
+    }
     Note "task $file ended $((Get-ScheduledTaskInfo -TaskName $task).LastTaskResult)"
   }
 }

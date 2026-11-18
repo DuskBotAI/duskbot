@@ -18,9 +18,14 @@ permissions:
 
 jobs:
   published:
-    name: Published installer
+    name: Published installer (${{ matrix.variant }})
+    if: "!startsWith(github.ref, 'refs/heads/hotfix/')"
     runs-on: windows-latest
     timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        variant: [clean, defender, user, proxy, ports]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -33,19 +38,24 @@ jobs:
           Invoke-WebRequest -Uri $url -OutFile "$env:RUNNER_TEMP\setup.exe"
       - name: Install, open, wait
         shell: pwsh
-        run: ./scripts/windows-server-smoke.ps1 -Installer "$env:RUNNER_TEMP\setup.exe" -Out "$env:RUNNER_TEMP\smoke"
+        run: ./scripts/windows-server-smoke.ps1 -Installer "$env:RUNNER_TEMP\setup.exe" -Out "$env:RUNNER_TEMP\smoke" -Variant ${{ matrix.variant }}
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
-          name: smoke-published
+          name: smoke-published-${{ matrix.variant }}
           path: ${{ runner.temp }}/smoke
           if-no-files-found: warn
           retention-days: 7
 
   built:
-    name: Built from this commit
+    name: Built from this commit (${{ matrix.variant }})
+    if: startsWith(github.ref, 'refs/heads/hotfix/') || github.event_name == 'workflow_dispatch'
     runs-on: windows-latest
     timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        variant: [clean, defender, user, proxy, ports]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -62,11 +72,11 @@ jobs:
       - run: pnpm package:win
       - name: Install, open, wait
         shell: pwsh
-        run: ./scripts/windows-server-smoke.ps1 -Installer (Get-ChildItem release/DuskBot-*-setup.exe | Select-Object -First 1).FullName -Out "$env:RUNNER_TEMP\smoke"
+        run: ./scripts/windows-server-smoke.ps1 -Installer (Get-ChildItem release/DuskBot-*-setup.exe | Select-Object -First 1).FullName -Out "$env:RUNNER_TEMP\smoke" -Variant ${{ matrix.variant }}
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
-          name: smoke-built
+          name: smoke-built-${{ matrix.variant }}
           path: ${{ runner.temp }}/smoke
           if-no-files-found: warn
           retention-days: 7

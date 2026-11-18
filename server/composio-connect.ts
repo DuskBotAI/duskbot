@@ -128,7 +128,7 @@ export function composioCallFailure(error: unknown): { status: number; body: { e
   return { status: 502, body: { error: error instanceof Error ? error.message : String(error), code: "composio_failed" } };
 }
 
-const APP = /^\/api\/connectors\/composio-connect\/apps\/([a-z0-9][a-z0-9_-]{0,63})$/;
+const APP = /^\/api\/connectors\/composio-connect\/apps\/([a-z0-9_][a-z0-9_-]{0,63})$/;
 
 /** GET /api/connectors/composio-connect: is it added and signed in. GET …/apps/<slug>: is that app connected through it
  * (reads only). POST …/apps/<slug>: connect that app through it. */

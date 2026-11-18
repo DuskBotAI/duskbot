@@ -83,6 +83,18 @@ describe("the Composio Connect routes", () => {
     expect(await call(handler, "GET", "/api/connectors/other")).toBe(PASS);
   });
 
+  it("accepts Composio app slugs with a leading underscore", async () => {
+    const manage = vi.fn(async () => ({ status: "connected" as const }));
+    const handler = createComposioConnectRoutes({
+      servers: () => ({ "composio-connect": server }), signedIn: () => true,
+      withToken: async (_name, stored) => stored, refusal: () => null, manage,
+    });
+    expect(await call(handler, "POST", "/api/connectors/composio-connect/apps/_1password")).toEqual({ status: 200, body: { status: "connected" } });
+    expect(manage).toHaveBeenCalledWith(expect.anything(), "_1password", undefined, "add");
+    await call(handler, "GET", "/api/connectors/composio-connect/apps/_1password");
+    expect(manage).toHaveBeenLastCalledWith(expect.anything(), "_1password", undefined, "list");
+  });
+
   it("reads where Composio signs in ahead of the press while nobody is signed in yet", async () => {
     const warm = vi.fn();
     let servers: Record<string, unknown> = {};

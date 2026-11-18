@@ -368,7 +368,7 @@ function ManagedEngineSetup({ instance, signInOnly }: { instance: InstanceInfo; 
 
   if (!signInOnly) {
     return (
-      <div className="mt-3">
+      <div className="mt-3 min-w-0">
         <button
           type="button"
           disabled={busy !== null}
@@ -381,13 +381,13 @@ function ManagedEngineSetup({ instance, signInOnly }: { instance: InstanceInfo; 
         <p className="mt-1.5 text-center text-[11px] text-ink-tertiary">
           {t("engineSetup.downloadNote", { mb: Math.ceil(managed.downloadBytes / 1024 / 1024) })}
         </p>
-        {error && <p className="mt-2 text-[12px] text-danger">{error}</p>}
+        {error && <p className="mt-2 min-w-0 text-[12px] text-danger [overflow-wrap:anywhere]">{error}</p>}
       </div>
     );
   }
 
   return (
-    <div className="mt-3 space-y-2">
+    <div className="mt-3 min-w-0 space-y-2">
       <button
         type="button"
         disabled={busy !== null}
@@ -428,7 +428,7 @@ function ManagedEngineSetup({ instance, signInOnly }: { instance: InstanceInfo; 
           </details>
         </>
       )}
-      {error && <p className="text-[12px] text-danger">{error}</p>}
+      {error && <p className="min-w-0 text-[12px] text-danger [overflow-wrap:anywhere]">{error}</p>}
     </div>
   );
 }
@@ -601,7 +601,7 @@ export function EngineSetup({
   // The host does not open its sign-in and setup calls to a paired desktop, so point the person there instead.
   if (onHost) {
     return (
-      <div data-engine-setup-on-host className={cn(!unframed && "rounded-xl border border-transparent bg-control/30 p-3", className)}>
+      <div data-engine-setup-on-host className={cn("min-w-0", !unframed && "rounded-xl border border-transparent bg-control/30 p-3", className)}>
         <div className="text-[13px] font-semibold text-ink">{title}</div>
         <p className="mt-1 text-[12px] leading-relaxed text-ink-secondary">{t("remote.client.setUpOnHost", { name: instance.displayName })}</p>
       </div>
@@ -618,9 +618,9 @@ export function EngineSetup({
 
   if (!install || instance.snapshot.authenticationUnavailableReason) {
     return (
-      <div className={cn(!unframed && "rounded-xl border border-transparent bg-control/30 p-3", className)}>
+      <div className={cn("min-w-0", !unframed && "rounded-xl border border-transparent bg-control/30 p-3", className)}>
         <div className="text-[13px] font-semibold text-ink">{t("engineSetup.notReady", { name: instance.displayName })}</div>
-        <p className="mt-1 text-[12px] leading-relaxed text-ink-secondary">
+        <p className="mt-1 min-w-0 text-[12px] leading-relaxed text-ink-secondary [overflow-wrap:anywhere]">
           {instance.snapshot.authenticationUnavailableReason ?? instance.snapshot.reason ?? t("engineSetup.noReason")}
         </p>
       </div>
@@ -638,7 +638,7 @@ export function EngineSetup({
   }
 
   return (
-    <div className={cn(!unframed && "rounded-xl border border-transparent bg-control/30 p-3", className)}>
+    <div className={cn("min-w-0", !unframed && "rounded-xl border border-transparent bg-control/30 p-3", className)}>
       <div className="flex items-start gap-2.5">
         <span className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-lg bg-inset text-ink-secondary">
           {signInOnly ? <LogIn size={14} /> : <Download size={14} />}
@@ -650,12 +650,12 @@ export function EngineSetup({
       </div>
 
       {reason && (quiet ? (
-        <details data-engine-setup-reason className="mt-2 text-[12px] leading-4 text-ink-tertiary">
+        <details data-engine-setup-reason className="mt-2 min-w-0 text-[12px] leading-4 text-ink-tertiary">
           <summary className="cursor-pointer select-none hover:text-ink-secondary">{t("engineSetup.details")}</summary>
-          <p className="mt-1 whitespace-pre-wrap">{reason}</p>
+          <p className="mt-1 whitespace-pre-wrap [overflow-wrap:anywhere]">{reason}</p>
         </details>
       ) : (
-        <p role="alert" className="mt-2 text-[12px] leading-relaxed text-danger">
+        <p role="alert" className="mt-2 min-w-0 text-[12px] leading-relaxed [overflow-wrap:anywhere] text-danger">
           {reason}
         </p>
       ))}

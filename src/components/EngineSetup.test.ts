@@ -74,6 +74,19 @@ describe("managed engine setup errors", () => {
     expect(render(engine)).toContain("initialize timed out.");
   });
 
+  it("wraps long Antigravity profile paths inside the setup panel", () => {
+    const reason = `/home/dusk/.duskbot/providers/antigravity/${"provider-config-".repeat(5)}settings.json`;
+    const snapshots = [
+      { state: "unavailable" as const, reason },
+      { state: "unavailable" as const, authenticationUnavailableReason: reason },
+    ];
+    for (const snapshot of snapshots) {
+      const markup = render(managed(snapshot));
+      expect(markup).toContain(reason);
+      expect(markup).toContain("[overflow-wrap:anywhere]");
+    }
+  });
+
   it("preserves the installed engine's sign-in flow", () => {
     const engine = managed({ state: "available", authenticated: false, version: "1.1.1" });
     const markup = render(engine);

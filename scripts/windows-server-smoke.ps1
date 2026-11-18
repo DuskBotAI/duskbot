@@ -41,6 +41,10 @@ switch ($Variant) {
     foreach ($k in "HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "http_proxy", "https_proxy") { [Environment]::SetEnvironmentVariable($k, "http://127.0.0.1:9", "Process") }
     Note "proxy env set to a dead proxy"
   }
+  "engines" {
+    npm install -g --silent @anthropic-ai/claude-code @openai/codex @google/gemini-cli opencode-ai 2>&1 | Out-File "$Out\npm-install.txt"
+    foreach ($c in "claude", "codex", "gemini", "opencode") { Note "$c -> $((Get-Command $c -ErrorAction SilentlyContinue).Source)" }
+  }
   "ports" {
     foreach ($port in 8799, 18799, 28799) { netsh int ipv4 add excludedportrange protocol=tcp startport=$port numberofports=2 | Out-Null }
     netsh int ipv4 show excludedportrange protocol=tcp | Out-File "$Out\excluded-ports.txt"

@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 
-import { createAppUpdater, DESKTOP_MANIFEST_URL, DOWNLOAD_PAGE, installerIn, installerUrl, justUpdated, mirrorUrl, quietNow, RELEASE_KEYS, sumsUrl, updatePlace, verifiedRelease, zipIn, zipUrl } from "./app-update.mjs";
+import { createAppUpdater, DESKTOP_MANIFEST_URL, DOWNLOAD_PAGE, installerIn, installerUrl, justUpdated, mirrorUrl, nsisInstaller, quietNow, RELEASE_KEYS, setupIn, sumsUrl, updatePlace, verifiedRelease, windowsUpdatePlace, zipIn, zipUrl } from "./app-update.mjs";
 import { failReason, resumableDownload, UpdateError } from "./app-update-download.mjs";
 import { updateFailStage } from "./experience-relay.mjs";
 
@@ -290,6 +290,66 @@ test("Windows and Linux are given their own installer: dusk.bot's copy, or the d
   assert.equal(installerIn(`${"a".repeat(64)}  DuskBot-1.1.0-x86_64.AppImage\n`, "1.1.0", "linux", { appImage: true }), "DuskBot-1.1.0-x86_64.AppImage");
   assert.equal(installerIn(`${"a".repeat(64)}  DuskBot-1.1.0-amd64.deb\n`, "1.1.0", "linux", { appImage: true }), null);
   assert.equal(await installerUrl("1.1.0", null), DOWNLOAD_PAGE);
+});
+
+test("installed Windows downloads its verified installer and hands it over, from the downloads repo or dusk.bot's copy", async () => {
+  const stable = zipUrl("1.1.0", "DuskBot-setup.exe");
+  const win = world({ platform: "win32", extra: { [stable]: "exe" } });
+  assert.equal(await win.updater.check(), "1.1.0");
+  assert.equal(win.prepared.length, 1);
+  assert.equal(win.prepared[0].bytes.toString(), "exe");
+  assert.match(win.prepared[0].file, /DuskBot-1\.1\.0-setup\.exe$/);
+  assert.equal(win.fetched.some((u) => u.endsWith(".zip")), false);
+  assert.deepEqual(win.updater.state(), { ...IDLE, ready: "1.1.0", available: "1.1.0" });
+  assert.equal(win.updater.restart(), true);
+  assert.equal(win.installed, 1);
+  done(win);
+  const mirror = world({ platform: "win32", extra: { [stable]: () => new Response("no", { status: 503 }), [mirrorUrl("1.1.0", "DuskBot-1.1.0-setup.exe")]: "exe" } });
+  assert.equal(await mirror.updater.check(), "1.1.0");
+  assert.equal(mirror.prepared[0].bytes.toString(), "exe");
+  done(mirror);
+  const forged = world({ platform: "win32", extra: { [stable]: "not the exe", [mirrorUrl("1.1.0", "DuskBot-1.1.0-setup.exe")]: "not the exe" } });
+  assert.equal(await forged.updater.check(), null);
+  assert.equal(forged.prepared.length, 0);
+  assert.equal(forged.failures[0].stage, "checksum");
+  done(forged);
+  const portable = world({ platform: "win32", blocked: "readonly", extra: { [stable]: "exe" } });
+  await portable.updater.check();
+  assert.deepEqual(portable.updater.state().manual, { version: "1.1.0", url: DOWNLOAD_PAGE });
+  assert.equal(portable.fetched.includes(stable), false);
+  done(portable);
+  assert.deepEqual(setupIn(`${"a".repeat(64)}  DuskBot-1.2.3-setup.exe\n`, "1.2.3"), { name: "DuskBot-1.2.3-setup.exe", sha256: "a".repeat(64) });
+  assert.equal(setupIn(`${"a".repeat(64)}  DuskBot-setup.exe\n`, "1.2.3"), null);
+});
+
+test("only an NSIS install in a writable folder updates itself on Windows", () => {
+  const exe = "C:\\Users\\a\\AppData\\Local\\Programs\\dusk-bot\\Dusk Bot.exe";
+  const uninstaller = (file) => /[\\/]Uninstall Dusk Bot\.exe$/.test(file);
+  assert.equal(windowsUpdatePlace(exe, { exists: uninstaller, writable: () => true }), null);
+  assert.equal(windowsUpdatePlace(exe, { exists: () => false, writable: () => true }), "readonly", "the portable zip");
+  assert.equal(windowsUpdatePlace(exe, { exists: uninstaller, writable: () => false }), "readonly");
+});
+
+test("the NSIS installer runs silently once the app quits, and starts the app again only after a restart", async () => {
+  const runs = [];
+  let quits = 0;
+  const idle = nsisInstaller({ quit: () => { quits += 1; }, spawn: (file, args) => runs.push({ file, args }) });
+  assert.equal(idle.quitting(), false, "nothing downloaded, nothing run");
+  await idle.prepare("C:\\u\\DuskBot-1.1.0-setup.exe", "1.1.0");
+  assert.equal(idle.quitting(), true);
+  assert.equal(idle.quitting(), false, "once");
+  assert.deepEqual(runs, [{ file: "C:\\u\\DuskBot-1.1.0-setup.exe", args: ["--updated", "/S"] }]);
+  runs.length = 0;
+  const restart = nsisInstaller({ quit: () => { quits += 1; }, spawn: (file, args) => runs.push({ file, args }) });
+  await restart.prepare("setup.exe", "1.1.0");
+  restart.install();
+  assert.equal(quits, 1);
+  assert.equal(runs.length, 0, "it waits for the quit");
+  restart.quitting();
+  assert.deepEqual(runs, [{ file: "setup.exe", args: ["--updated", "/S", "--force-run"] }]);
+  const broken = nsisInstaller({ quit: () => {}, spawn: () => { throw new Error("ENOENT"); } });
+  await broken.prepare("setup.exe", "1.1.0");
+  assert.equal(broken.quitting(), false);
 });
 
 test("verifiedRelease and zipIn read only what they vouch for", () => {

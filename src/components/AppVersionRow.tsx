@@ -12,9 +12,9 @@ function ownBridge() {
 }
 
 /**
- * Settings > Version on this app's own page (electron/app-update.mjs). A mac app that installs its own updates checks,
- * downloads and restarts here, and always says how a check went; a source checkout says it is a dev build. Anything else
- * (Windows and Linux, a server's page, the browser) keeps `fallback`, the server's check.
+ * Settings > Version on this app's own page (electron/app-update.mjs). A mac or Windows app that installs its own updates
+ * checks, downloads and restarts here, and always says how a check went; a source checkout says it is a dev build.
+ * Anything else (Linux, a server's page, the browser) keeps `fallback`, the server's check.
  */
 export function AppVersionRow({ fallback, bridge = ownBridge() }: { fallback: ReactNode; bridge?: AppUpdateBridge }) {
   const [update, setUpdate] = useState<AppUpdateState | null>(bridge ? null : { ready: null, mode: "notice" });

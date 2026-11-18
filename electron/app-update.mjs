@@ -4,14 +4,16 @@
 // feed on 127.0.0.1 that only this process knows.
 // Squirrel.Mac installs only an app signed with the same Developer ID as the running one (its designated requirement),
 // and only one it can replace where it runs, so an unsigned build, or one run from a disk image or a translocated copy,
-// is shown how to update by hand instead. Windows and Linux are shown a link to their own installer.
+// is shown how to update by hand instead. Windows downloads its NSIS installer the same way, checked against those sums,
+// and runs it silently over the installed app (nsisInstaller); a portable copy, and Linux, are shown a link to their own
+// installer.
 // a downloaded update installs when the app quits, or at a quiet moment (locked, or no window focused and nobody touched
 // the mac for QUIET_IDLE_MS, with no turn, call or dictation running), and the app shows "restart to update" while it waits.
-import { execFile } from "node:child_process";
+import { execFile, spawn as spawnChild } from "node:child_process";
 import { createHash, createPublicKey, randomBytes, verify } from "node:crypto";
-import { accessSync, constants, createReadStream, mkdirSync, readdirSync, rmSync, statSync } from "node:fs";
+import { accessSync, constants, createReadStream, existsSync, mkdirSync, readdirSync, rmSync, statSync } from "node:fs";
 import { createServer } from "node:http";
-import { dirname, join } from "node:path";
+import { dirname, join, win32 } from "node:path";
 import { pipeline } from "node:stream/promises";
 
 import { failReason, resumableDownload, UpdateError } from "./app-update-download.mjs";
@@ -52,14 +54,22 @@ export function newer(a, b) {
   return false;
 }
 
-/** this arch's zip in a SHA256SUMS text: `{ name, sha256 }`, or null */
-export function zipIn(sums, version, arch) {
-  const name = `DuskBot-${version}-${arch}.zip`;
+function assetIn(sums, name) {
   for (const line of String(sums).split("\n")) {
     const match = /^([0-9a-f]{64}) {2}(\S+)$/.exec(line.trim());
     if (match && match[2] === name) return { name, sha256: match[1] };
   }
   return null;
+}
+
+/** this arch's zip in a SHA256SUMS text: `{ name, sha256 }`, or null */
+export function zipIn(sums, version, arch) {
+  return assetIn(sums, `DuskBot-${version}-${arch}.zip`);
+}
+
+/** the release's Windows installer in a SHA256SUMS text: `{ name, sha256 }`, or null */
+export function setupIn(sums, version) {
+  return assetIn(sums, `DuskBot-${version}-setup.exe`);
 }
 
 /**
@@ -126,6 +136,38 @@ export function squirrelInstaller({ autoUpdater, timeoutMs = 15 * 60_000 }) {
 }
 
 /**
+ * whether the NSIS installer can update the Windows app whose executable is `exe`: null when it can, "readonly" for a
+ * copy it did not install (the portable zip has no uninstaller beside it) or one in a folder this account can't write
+ */
+export function windowsUpdatePlace(exe, { productName = "Dusk Bot", exists = existsSync, writable = writableDir } = {}) {
+  const dir = win32.dirname(exe);
+  if (!exists(win32.join(dir, `Uninstall ${productName}.exe`))) return "readonly";
+  return writable(dir) ? null : "readonly";
+}
+
+/**
+ * runs the verified NSIS installer (electron-builder's oneClick, per-user) over this install once the app quits.
+ * electron-builder 26's installer.nsh: `/S` installs without a window, `--updated` closes the running app instead of
+ * asking, and `--force-run` starts the new version when it is done. `install()` quits and starts the new version;
+ * `quitting()` (main calls it on will-quit) installs a waiting update on any quit, and starts the app again only after
+ * `install()`. The installer is spawned detached so it outlives this process.
+ */
+export function nsisInstaller({ quit, spawn = (file, args) => { const child = spawnChild(file, args, { detached: true, stdio: "ignore" }); child.on("error", () => {}); child.unref(); }, log = () => {} }) {
+  let file = null, relaunch = false, launched = false;
+  return {
+    async prepare(downloaded) { file = downloaded; },
+    install() { relaunch = true; quit(); },
+    quitting() {
+      if (!file || launched) return false;
+      launched = true;
+      const args = ["--updated", "/S", ...(relaunch ? ["--force-run"] : [])];
+      try { spawn(file, args); } catch (error) { log(`app update: the installer did not start (${error instanceof Error ? error.message : String(error)})`); return false; }
+      return true;
+    },
+  };
+}
+
+/**
  * quiet enough to restart: nothing runs on this computer's server or in a call (update-when-quiet-main.mjs quietSignals),
  * and the screen is locked, or no window of this app is focused and nobody touched this mac or typed in the app for
  * QUIET_IDLE_MS
@@ -158,6 +200,9 @@ export const zipSources = (version, name) => [zipUrl(version, name), mirrorUrl(v
 // the downloads repo keeps the installers under the stable names dusk.bot/download links to
 const STABLE = { "setup.exe": "DuskBot-setup.exe", "x86_64.AppImage": "DuskBot.AppImage", "amd64.deb": "DuskBot-amd64.deb" };
 
+/** where a release's Windows installer can come from: the downloads repo keeps it under its stable name on that release */
+export const setupSources = (version, name) => [zipUrl(version, STABLE["setup.exe"]), mirrorUrl(version, name)];
+
 /** the installer someone on `platform` runs by hand, named as SHA256SUMS names it, or null */
 export function installerIn(sums, version, platform, { appImage = false } = {}) {
   const end = platform === "win32" ? "setup.exe" : platform === "linux" ? (appImage ? "x86_64.AppImage" : "amd64.deb") : null;
@@ -179,7 +224,8 @@ export async function installerUrl(version, name, fetchImpl = fetch) {
 
 /**
  * keeps the app current. on a mac (`installs`) that is Developer ID signed (`signed()`) and runs from a place it may
- * replace (`blocked()` is null), it downloads the update and restarts into it; otherwise the state names what the
+ * replace (`blocked()` is null), it downloads the update zip and restarts into it; on Windows (`platform` "win32") it
+ * downloads the release's installer instead; otherwise the state names what the
  * person can do: `blocked: "move"` (move the app to Applications) or `manual` (`{ version, url }`, a link to download
  * the release by hand). `fallback.check()` (update-notice.mjs) also tells an unsigned build, and any failure.
  * `onState` hears: `available` (a newer version), `progress` (0 to 1) while it downloads, `retrying` while a failed try
@@ -232,14 +278,15 @@ export function createAppUpdater({ current, arch, dir, fetchImpl = fetch, keys =
     if (where === "move") { stuck = "move"; manual = null; report(version, "translocated"); return null; }
     if (where === "readonly") { stuck = null; manual = { version, url: DOWNLOAD_PAGE }; report(version, "read_only"); return null; }
     stuck = manual = null;
-    const zip = zipIn(sums, version, arch);
-    if (!zip) throw new UpdateError("manifest", "no_zip", `release ${version} has no zip for ${arch}`);
+    const windows = platform === "win32";
+    const zip = windows ? setupIn(sums, version) : zipIn(sums, version, arch);
+    if (!zip) throw windows ? new UpdateError("manifest", "no_installer", `release ${version} has no Windows installer`) : new UpdateError("manifest", "no_zip", `release ${version} has no zip for ${arch}`);
     mkdirSync(dir, { recursive: true });
     for (const name of readdirSync(dir)) if (name !== zip.name && name !== `${zip.name}.part`) rmSync(join(dir, name), { recursive: true, force: true });
     const file = join(dir, zip.name);
     progress = 0; retrying = false; tell();
     try {
-      await resumableDownload({ sources: zipSources(version, zip.name), file, sha256: zip.sha256, fetchImpl, ...download,
+      await resumableDownload({ sources: (windows ? setupSources : zipSources)(version, zip.name), file, sha256: zip.sha256, fetchImpl, ...download,
         setKick: (fn) => { kick = fn; },
         onProgress: (fraction) => {
           // whole percents, so the window hears at most a hundred changes

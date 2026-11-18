@@ -79,7 +79,24 @@ AppArmor profile is bound to its install path).
 
 Anything that fails on the way, and every build that is not Developer ID signed (`codesign -dv` names no
 `Developer ID Application` authority and team), falls back to the old behaviour: one notification per version that
-opens dusk.bot/download (`electron/update-notice.mjs`). Windows and Linux keep that notification.
+opens dusk.bot/download (`electron/update-notice.mjs`). Linux keeps that notification.
+
+### How the Windows app updates itself
+
+The same check as the Mac (signed `latest.json`, then `SHA256SUMS`), for an app the NSIS installer put in a folder this
+account can write (`Uninstall Dusk Bot.exe` sits beside the executable, so the portable zip is left out and gets the
+download link):
+
+1. Downloads the release's installer from the downloads release under its stable name
+   (`.../download/v<version>/DuskBot-setup.exe`), or dusk.bot's copy (`DuskBot-<version>-setup.exe`), into
+   `%APPDATA%\<app>\app-update\` and checks it against `DuskBot-<version>-setup.exe` in `SHA256SUMS`.
+2. The sidebar shows "restart to update". When the person clicks it, or at the same quiet moment as the Mac, the app
+   quits and runs the installer detached with `--updated /S --force-run`: electron-builder's one-click installer
+   replaces the app without a window and starts the new version. A quit while an update waits runs it with
+   `--updated /S`, so it installs without starting the app again.
+
+Windows builds are not code-signed, so the check rests on the release signing key and the sums it vouches for. The
+first version with this updater needs one manual install; every version after it updates itself.
 
 What is needed once the Apple certificate exists:
 

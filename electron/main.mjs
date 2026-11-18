@@ -93,7 +93,7 @@ import {
 import capabilitiesModule from "./capabilities.cjs";
 import environmentsModule from "./environments.cjs";
 import localOriginModule from "./local-origin.cjs";
-import { aboutPanelOptions, buildApplicationMenu } from "./menu.mjs"; import { installDesktopBots } from "./desktop-bots.mjs"; import { installReloadKeys } from "./reload-keys.mjs"; import { startDesktopErrorReporting } from "./desktop-errors.mjs"; import { createUpdateNotice } from "./update-notice.mjs"; import { createAppUpdater, developerIdSigned, quietNow, squirrelInstaller, justUpdated, updatePlace, DOWNLOAD_PAGE } from "./app-update.mjs"; import { quietSignals } from "./update-when-quiet-main.mjs"; import { createDemoUpdater, demoUpdateFlag } from "./app-update-demo.mjs";
+import { aboutPanelOptions, buildApplicationMenu } from "./menu.mjs"; import { installDesktopBots } from "./desktop-bots.mjs"; import { installReloadKeys } from "./reload-keys.mjs"; import { startDesktopErrorReporting } from "./desktop-errors.mjs"; import { createUpdateNotice } from "./update-notice.mjs"; import { createAppUpdater, developerIdSigned, quietNow, squirrelInstaller, nsisInstaller, justUpdated, updatePlace, windowsUpdatePlace, DOWNLOAD_PAGE } from "./app-update.mjs"; import { quietSignals } from "./update-when-quiet-main.mjs"; import { createDemoUpdater, demoUpdateFlag } from "./app-update-demo.mjs";
 import { acquireDataDirLease } from "./data-dir-lease.mjs";
 import { offerMoveToApplications } from "./move-to-applications.mjs";
 import { switchLocalEnvironment } from "./environment-switch.mjs";
@@ -3715,9 +3715,9 @@ const requestSignalQuit = () => {
 process.once("SIGINT", requestSignalQuit);
 process.once("SIGTERM", requestSignalQuit);
 
-// the mac app installs its own updates when it is Developer ID signed (electron/app-update.mjs); elsewhere, and on an
-// unsigned build, the notice says a release is out
-let appUpdater = null, appUpdatedTo = null, appUpdateMode = app.isPackaged ? "notice" : "dev";
+// the mac app installs its own updates when it is Developer ID signed, and the installed Windows app runs the release's
+// installer silently (electron/app-update.mjs); elsewhere, and on an unsigned mac build, the notice says a release is out
+let appUpdater = null, appUpdatedTo = null, appUpdateMode = app.isPackaged ? "notice" : "dev", windowsInstaller = null;
 const appUpdateState = () => ({ ...(appUpdater?.state() ?? { ready: null, available: null, progress: null }), mode: appUpdateMode, updated: appUpdatedTo });
 const tellAppUpdate = () => { if (mainWindow && !mainWindow.isDestroyed() && senderIsLocal({ sender: mainWindow.webContents })) mainWindow.webContents.send("app-update:changed", appUpdateState()); };
 function startDemoUpdates() {
@@ -3728,12 +3728,24 @@ function startDemoUpdates() {
 }
 function startAppUpdates(notice) {
   const updateDir = path.join(app.getPath("userData"), "app-update");
-  const installedHere = () => fs.existsSync(path.join(updateDir, `DuskBot-${app.getVersion()}-${process.arch}.zip`));
+  const installedHere = () => fs.existsSync(path.join(updateDir, process.platform === "win32" ? `DuskBot-${app.getVersion()}-setup.exe` : `DuskBot-${app.getVersion()}-${process.arch}.zip`));
   if (justUpdated(jsonFile(path.join(app.getPath("userData"), "app-version.json")), app.getVersion(), installedHere)) {
     appUpdatedTo = app.getVersion();
     try { productEvents.action("app_updated", { how: installedHere() ? "self" : "manual" }); } catch {}
   }
   const onFailed = (message, info) => productEvents.action("update_failed", { stage: info?.stage ?? updateFailStage(message), reason: info?.reason });
+  const signals = () => quietSignals({ focused: () => Boolean(BrowserWindow.getFocusedWindow()), powerMonitor, window: () => mainWindow, lastInput: () => oneHome.lastInput(), local: localServerRequest, place: () => null,
+    cloudFetch: (...args) => session.defaultSession.fetch(...args), asleep: () => true, busy: () => (speechBusy() ? "dictation" : null) });
+  if (process.platform === "win32") {
+    const quiet = signals();
+    windowsInstaller = nsisInstaller({ quit: () => app.quit(), log: slog });
+    appUpdateMode = "self";
+    appUpdater = createAppUpdater({ current: app.getVersion(), arch: process.arch, dir: updateDir, platform: "win32", signed: async () => true, blocked: async () => windowsUpdatePlace(app.getPath("exe")),
+      installer: windowsInstaller, quiet: () => quietNow(quiet), fallback: notice, log: slog, onState: tellAppUpdate, onFailed });
+    appUpdater.start();
+    powerMonitor.on("resume", () => appUpdater?.soon?.());
+    return;
+  }
   if (process.platform !== "darwin") {
     notice.start();
     appUpdater = createAppUpdater({ current: app.getVersion(), arch: process.arch, dir: updateDir, installs: false, platform: process.platform, appImage: Boolean(process.env.APPIMAGE), fallback: { check: async () => null }, log: slog, onState: tellAppUpdate, onFailed, intervalMs: 6 * 60 * 60_000 });
@@ -3741,11 +3753,10 @@ function startAppUpdates(notice) {
     return;
   }
   const bundle = path.resolve(path.dirname(app.getPath("exe")), "..", "..");
-  const signals = quietSignals({ focused: () => Boolean(BrowserWindow.getFocusedWindow()), powerMonitor, window: () => mainWindow, lastInput: () => oneHome.lastInput(), local: localServerRequest, place: () => null,
-    cloudFetch: (...args) => session.defaultSession.fetch(...args), asleep: () => true, busy: () => (speechBusy() ? "dictation" : null) });
+  const quiet = signals();
   appUpdateMode = "self";
   appUpdater = createAppUpdater({ current: app.getVersion(), arch: process.arch, dir: updateDir, signed: () => developerIdSigned(bundle), blocked: async () => updatePlace(bundle),
-    installer: squirrelInstaller({ autoUpdater }), quiet: () => quietNow(signals), fallback: notice, log: slog, onState: tellAppUpdate, onFailed });
+    installer: squirrelInstaller({ autoUpdater }), quiet: () => quietNow(quiet), fallback: notice, log: slog, onState: tellAppUpdate, onFailed });
   appUpdater.start();
   powerMonitor.on("resume", () => appUpdater?.soon?.());
 }
@@ -3814,4 +3825,5 @@ function releaseDesktopDataDirLease() {
 // before-quit is too early (this app defers it); will-quit is Electron's last boundary, and the process hook covers app.exit().
 app.on("will-quit", releaseDesktopDataDirLease);
 app.on("will-quit", () => desktopTray?.destroy());
+app.on("will-quit", () => windowsInstaller?.quitting());
 process.once("exit", releaseDesktopDataDirLease);

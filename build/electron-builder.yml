@@ -44,6 +44,8 @@ files:
   - "!electron/resources/Dusk Bot Recorder.app/**"
   - "!**/node_modules/**"
   - package.json
+  # the phone relay hub a linked VPS runs; electron/phone-relay.mjs runs it for this computer's own phones
+  - apps/link-service/agent.mjs
 
 asar: true
 

@@ -5,6 +5,7 @@ import { QRCodeSVG } from "qrcode.react";
 import { universalPairLink, universalSignInLink, type MobileDevice, type MobilePairingRequest, type MobilePairingResponse } from "../../shared/mobile-link";
 import type { CloudPlanBridge } from "../../electron/cloud-account.mjs";
 import { companionBridge } from "@/lib/companion-bridge";
+import { relayBeforePairing } from "@/lib/phone-relay";
 import { copyText, type CopyFeedback } from "@/lib/copy-text";
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
@@ -266,6 +267,7 @@ export function MobilePairingCard({ remote, cloudHome = false, email, children }
       try {
         request.companion = (await companion.start()).endpoints;
       } catch {}
+      await relayBeforePairing();
     }
     const body = await api<MobilePairingResponse>("/api/mobile/pairing", { method: "POST", body: JSON.stringify(request) });
     return { qr: universalPairLink(body.link, body.code), code: body.code, expiresAt: body.expiresAt };

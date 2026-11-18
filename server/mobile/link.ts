@@ -258,7 +258,8 @@ export function createMobileLink(deps: MobileLinkDeps) {
 
   function workspace(): MobileLinkPayload["workspace"] {
     const own = deps.workspace();
-    return { name: own.name.slice(0, 80), environmentId: own.environmentId, kind: agentLive() ? "vps" : own.kind };
+    // a desktop serves its phones through its own relay hub too, and stays a computer to them
+    return { name: own.name.slice(0, 80), environmentId: own.environmentId, kind: own.kind === "server" && agentLive() ? "vps" : own.kind };
   }
 
   async function pairing(auth: RequestAuth, body: Record<string, unknown>): Promise<{ status: number; body: unknown }> {

@@ -9,6 +9,7 @@ import type { PhoneTransport } from "../transport/transport";
 import { forgetTranscriptShelf } from "@/state/transcript-cache";
 import { outboxKey } from "./active";
 import { PairError } from "./pair";
+import { directStillWorthIt, routeOrder, routeTimeout } from "./route-order";
 import { asleepAnswer, wakingAnswer } from "@/lib/cloud-power";
 
 /** `asleep`: the place's edge said its dusk cloud sleeps (or is waking). It is still the place: the app opens on it and
@@ -21,12 +22,14 @@ export async function connectToWorkspace(record: MobileConnectionRecord, token: 
     : { kind: "https", url: record.origin }] : []);
   let gone = false;
   let sleeping: WorkspaceTransport | null = null;
-  for (const route of routes) {
+  const startedAt = Date.now();
+  for (const route of routeOrder(routes)) {
     signal.throwIfAborted();
+    if (!directStillWorthIt(route, routes, startedAt)) continue;
     let transport: PhoneTransport | undefined;
     let response: Response;
     try {
-      const timed = AbortSignal.any([signal, AbortSignal.timeout(15_000)]);
+      const timed = AbortSignal.any([signal, AbortSignal.timeout(routeTimeout(route, routes, 15_000))]);
       const headers = { Authorization: `Bearer ${token}` };
       if (route.kind === "relay") {
         const relay = record.relay;
@@ -56,7 +59,8 @@ export async function connectToWorkspace(record: MobileConnectionRecord, token: 
     if (signal.aborted || (!response.ok && !companionRefused)) {
       if (transport.kind === "relay") transport.channel.close();
       signal.throwIfAborted();
-      if (response.status === 401) throw new PairError("refused");
+      // a computer's companion knows only the phones that paired through it; one paired over the relay is answered there
+      if (response.status === 401 && !(route.kind === "companion" && record.relay)) throw new PairError("refused");
       if (transport.kind !== "relay" && (asleepAnswer(response) || wakingAnswer(response))) sleeping ??= { ...transport, asleep: true };
       continue;
     }

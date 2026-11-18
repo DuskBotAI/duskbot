@@ -151,6 +151,21 @@ describe("mobile link", () => {
     expect(after.body.channels.some((one: { kind: string }) => one.kind === "device")).toBe(false);
   });
 
+  it("a desktop with its own relay hub puts the relay and its wi-fi routes in one code and stays a computer", async () => {
+    const mobile = link({ publicOrigin: () => null, workspace: () => ({ name: "My Mac", environmentId: "env-mac", kind: "mac" }) });
+    const agent = { base: "https://link.test", tunnel: "abcdefghij", pub: "A".repeat(43) };
+    const companionPhone = { ...owner, companionDevice: "phone-1" } as RequestAuth;
+    expect((await call(mobile, companionPhone, "POST", "/api/mobile/relay/sync", { ...agent, applied: 0, wait: 0 })).status).toBe(403);
+    await call(mobile, owner, "POST", "/api/mobile/relay/sync", { ...agent, applied: 0, wait: 0 });
+    const syncing = call(mobile, owner, "POST", "/api/mobile/relay/sync", { ...agent, applied: 1, wait: 5 });
+    const pairing = call(mobile, owner, "POST", "/api/mobile/pairing", { companion: [{ url: "http://192.168.1.20:8810", kind: "lan", priority: 200 }] });
+    const held = await syncing;
+    void call(mobile, owner, "POST", "/api/mobile/relay/sync", { ...agent, applied: held.body.rev, wait: 5 });
+    const answer = (await pairing).body as MobilePairingResponse;
+    expect(answer.payload.workspace.kind).toBe("mac");
+    expect(answer.payload.via.map((one) => one.kind)).toEqual(["relay", "companion"]);
+  });
+
   it("refuses a relay key no agreement can use", async () => {
     const mobile = link();
     const answer = (await call(mobile, owner, "POST", "/api/mobile/pairing")).body as MobilePairingResponse;

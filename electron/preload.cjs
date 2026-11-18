@@ -338,6 +338,11 @@ const bridge = {
     prepare: () => ipcRenderer.invoke("companion-account:prepare"),
     signOut: () => ipcRenderer.invoke("companion-account:sign-out"),
   },
+  /** This computer's relay to its phones: status only; the tunnel token and keys never leave the main process. */
+  phoneRelay: {
+    state: () => ipcRenderer.invoke("phone-relay:state"),
+    ready: () => ipcRenderer.invoke("phone-relay:ready"),
+  },
   /** Full/Custom never go through the loopback API, only the embedded server's private utilityProcess port. */
   approvals: {
     setMode: (botId, mode, options) => ipcRenderer.invoke("approvals:set-trusted-mode", botId, mode, options),

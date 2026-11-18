@@ -62,6 +62,9 @@ import {
 import { ConnectionDetail } from "./ConnectionDetail";
 import { PixelIcon, type PixelIconName } from "./ui/PixelIcon";
 import { requireUserPresence } from "@/lib/user-presence";
+import { phoneRelayBridge, relayPairingUsable, relayUnavailableMessage, useRelayPairing } from "@/lib/phone-relay";
+import type { PhoneRelayState } from "../types/duskDesktop";
+import { useStore } from "@/state/store";
 
 export interface PhoneDevice {
   id: string;
@@ -158,6 +161,10 @@ export const companionAccountActionError = (
 export interface PhoneSetupController {
   state: CompanionState | null;
   account: CompanionAccountState | null;
+  /** this computer's relay to its phones; null in a build without one */
+  relay: PhoneRelayState | null;
+  /** the secure route is the relay: the pairing code reaches this computer from any network */
+  relayPairing: boolean;
   phase: PhoneSetupPhase;
   email: string;
   code: string;
@@ -197,6 +204,7 @@ export interface PhoneSetupController {
 export function usePhoneSetupController(profileEmail = ""): PhoneSetupController {
   const [state, setState] = useState<CompanionState | null>(null);
   const [account, setAccount] = useState<CompanionAccountState | null>(null);
+  const [relay, setRelay] = useState<PhoneRelayState | null>(null);
   const [email, setEmailState] = useState(profileEmail);
   const [code, setCodeState] = useState("");
   const [codeSent, setCodeSent] = useState(false);
@@ -233,6 +241,7 @@ export function usePhoneSetupController(profileEmail = ""): PhoneSetupController
 
   useEffect(() => {
     mounted.current = true;
+    void phoneRelayBridge()?.state().then((next) => { if (mounted.current) setRelay(next); }, () => {});
     return () => {
       mounted.current = false;
       setupGeneration.current += 1;
@@ -503,6 +512,8 @@ export function usePhoneSetupController(profileEmail = ""): PhoneSetupController
     setError(null);
     setAccountError(null);
     setSetupTimedOut(false);
+    void phoneRelayBridge()?.state().then((next) => { if (mounted.current) setRelay(next); }, () => {});
+    if (relayPairingUsable(relay) && phonePairingGate(account, state, false) !== "open") return;
     if (
       phonePairingGate(account, state, false) === "open"
       || (account?.available && (account.status === "ready" || account.status === "connecting"))
@@ -510,7 +521,7 @@ export function usePhoneSetupController(profileEmail = ""): PhoneSetupController
       setProvisioning(true);
       void openPairing("automatic", account, generation);
     }
-  }, [account, openPairing, state]);
+  }, [account, openPairing, relay, state]);
 
   const useLocalNow = useCallback(() => {
     const baseline = phoneSetupBaseline(state?.devices ?? null);
@@ -840,6 +851,9 @@ export function usePhoneSetupController(profileEmail = ""): PhoneSetupController
   return {
     state,
     account,
+    relay,
+    relayPairing: flow.active && !flow.localFallback && !flow.tailscaleFallback && relayPairingUsable(relay)
+      && !state?.endpoints?.some((endpoint) => endpoint.kind === "hosted"),
     phase,
     email,
     code,
@@ -947,18 +961,21 @@ export function PhoneSetupFlowView({ controller }: { controller: PhoneSetupContr
     );
   }
 
+  if (c.relayPairing) return <RelayPairingRows onCancel={c.cancel} onDone={c.finish} />;
+
   if (c.phase === "sign-in") {
     const unavailable = !c.account?.available;
     const failed = c.account?.status === "error" || c.setupTimedOut;
     const problem = unavailable
-      ? secureAccessUnavailableMessage(c.account)
+      ? relayUnavailableMessage(c.relay) ?? secureAccessUnavailableMessage(c.account)
       : c.setupTimedOut
         ? t("phone.signIn.timedOut")
         : failed ? c.account?.message ?? t("phone.signIn.failed") : null;
     return (
       <>
         <FlowRow title={unavailable || failed ? t("phone.signIn.attention") : t("phone.signIn.title")} detail={problem} alert={Boolean(c.setupTimedOut)}>
-          {(failed || (unavailable && secureAccessRetryHelps(c.account))) && (
+          {unavailable && c.relay?.status === "signed-out" && <RelaySignInButton />}
+          {(failed || (unavailable && c.relay?.status !== "signed-out" && secureAccessRetryHelps(c.account))) && (
             <button type="button" disabled={c.accountBusy} onClick={c.retryAccount} className="ui-button">
               {c.accountBusy ? t("remote.account.retrying") : t("phone.signIn.retry")}
             </button>
@@ -1066,6 +1083,57 @@ export function PhoneSetupFlowView({ controller }: { controller: PhoneSetupContr
       )}
     </>
   );
+}
+
+/** The secure route through this computer's relay: one code with the relay and the wi-fi routes, then the phone. */
+function RelayPairingRows({ onCancel, onDone }: { onCancel: () => void; onDone: () => void }) {
+  const pairing = useRelayPairing(true);
+  if (pairing.paired) {
+    return (
+      <FlowRow title={<span className="inline-flex items-center gap-2"><Check size={14} className="text-success" />{t("phone.success.title")}</span>}>
+        <button type="button" onClick={onDone} className="ui-button">{t("phone.success.done")}</button>
+      </FlowRow>
+    );
+  }
+  if (!pairing.offer) {
+    return (
+      <>
+        <FlowRow title={<span className="inline-flex items-center gap-2">{!pairing.error && <Loader2 size={13} className="animate-spin text-ink-secondary" />}{t("phone.verifying.local")}</span>}>
+          {pairing.error && <button type="button" onClick={() => void pairing.renew()} className="ui-button">{t("phone.signIn.retry")}</button>}
+          <button type="button" onClick={onCancel} className="ui-button">{t("common.cancel")}</button>
+        </FlowRow>
+        {pairing.error && <ErrorLine>{pairing.error}</ErrorLine>}
+      </>
+    );
+  }
+  return (
+    <>
+      <FlowRow
+        title={pairing.expired ? t("phone.code.expired") : t("settings.w6.phone.scan")}
+        detail={pairing.expired ? undefined : t(pairing.offer.anywhere ? "phone.relay.anywhere" : "phone.relay.sameWifi")}
+      >
+        {pairing.expired && <button type="button" onClick={() => void pairing.renew()} className="ui-button">{t("settings.w6.phone.newCode")}</button>}
+        <button type="button" onClick={onCancel} className="ui-button">{t("common.cancel")}</button>
+      </FlowRow>
+      {!pairing.expired && (
+        <div className="flex justify-center px-3.5 pb-3">
+          <div className="rounded-[10px] bg-white p-3 outline outline-[0.5px] -outline-offset-[0.5px] outline-transparent" aria-label={t("phone.code.qrAria")}>
+            <QRCodeSVG value={pairing.offer.qr} size={160} level="M" bgColor="#ffffff" fgColor="#111111" />
+          </div>
+        </div>
+      )}
+      {!pairing.expired && pairing.offer.code && (
+        <FlowRow title={t("phone.code.manual")} detail={t("phone.code.expiresIn", { seconds: pairing.secondsLeft })}>
+          <span className="font-mono text-[15px] tracking-[0.12em] text-ink">{pairing.offer.code}</span>
+        </FlowRow>
+      )}
+    </>
+  );
+}
+
+function RelaySignInButton() {
+  const { dispatch } = useStore();
+  return <button type="button" onClick={() => dispatch({ type: "openCloudAdd", source: "app_settings", signIn: true })} className="ui-button">{t("phone.relay.signInAction")}</button>;
 }
 
 export { companionPairingMode };

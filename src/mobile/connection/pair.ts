@@ -5,6 +5,7 @@ import { cleanPhoneSignInCode } from "../../../shared/account-api";
 import type { MobilePlatform } from "../platform";
 import { createRelaySecrets, hex, hkdf, sha256hex, subtle, unbase64, unseal, UnsupportedCryptoError, utf8, type RelaySecrets } from "../transport/link-crypto";
 import { open as openRelay } from "../transport/relay";
+import { directStillWorthIt, routeOrder, routeTimeout } from "./route-order";
 
 export type TypedPairing = MobilePairingPayload;
 export type TypedCode = { kind: "code"; code: string };
@@ -217,9 +218,11 @@ async function redeemPairingResult(payload: MobilePairingPayload, platform: Mobi
       ...(keys ? { relay: { pub: keys.pub, verifier: await sha256hex(keys.token) } } : {}),
     };
     let lastError = new PairError("unreachable");
-    for (const route of payload.via) {
+    const startedAt = Date.now();
+    for (const route of routeOrder(payload.via)) {
       if (route.kind === "relay" && !keys) { lastError = new PairError("unsupported"); continue; }
       if (route.kind === "companion" && !platform.native) { lastError = new PairError("unsupported"); continue; }
+      if (!directStillWorthIt(route, payload.via, startedAt)) continue;
       let channel: ReturnType<typeof openRelay> | undefined;
       let response: Response;
       let answer: unknown;
@@ -230,7 +233,7 @@ async function redeemPairingResult(payload: MobilePairingPayload, platform: Mobi
           channel = openRelay(route.base, route.channel, route.token, unbase64(route.key));
           response = await channel.request("POST", "/api/mobile/redeem", headers, utf8(body), AbortSignal.timeout(20_000));
         } else {
-          response = await fetch(`${route.url}/api/mobile/redeem`, { method: "POST", headers, body, credentials: "omit", redirect: "error", signal: AbortSignal.timeout(15_000) });
+          response = await fetch(`${route.url}/api/mobile/redeem`, { method: "POST", headers, body, credentials: "omit", redirect: "error", signal: AbortSignal.timeout(routeTimeout(route, payload.via, 15_000)) });
         }
         answer = await response.json().catch(() => null);
       } catch (error) { lastError = pairError(error); continue; }

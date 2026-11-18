@@ -311,6 +311,13 @@ phone's session. Phone channels refuse agent controls and strip cookies and `x-d
 a per-channel remote address, so they never receive loopback trust. Removing a channel from the harness closes its
 forwarded requests and removes it from the relay.
 
+A desktop runs the same hub for its own phones (`electron/phone-relay.mjs`, which imports `createPhoneHub` from this
+file; the desktop package ships it). While remote access is on, the app makes a tunnel for itself through the ordinary
+setup session (`POST /v1/sessions` with the signed-in account's grant, then `claim` and `result` from the same app),
+keeps it per workspace with its phone keys in the OS keychain, and syncs channels with its harness as the desktop owner
+(`x-dusk-desktop-owner`, which the hub strips from every phone request). A dropped tunnel is made again with the same
+phone keys, so the phones' channels carry over. Nothing here changes for it: it is one more tunnel on the account.
+
 The agent keeps its X25519 phone keys in `phone-keys.json` beside `tunnel.json`, with mode 0600. Grant keys come from
 the harness; device keys derive from the phone and agent key pairs using the channel id. Set `DUSK_LINK_PHONES=off`
 to disable the phone hub. Phone clients use `createTunnelProxy` with `id` set to the channel id and `route` set to

@@ -361,6 +361,12 @@ const __APP_VERSION__: string;
         prepare?(): Promise<CompanionAccountState>;
         signOut(): Promise<CompanionAccountState>;
       };
+      /** This computer's relay to its phones (electron/phone-relay.mjs); absent on remote pages and older builds.
+       * `ready` starts it when remote access is on and waits a few seconds for it. */
+      phoneRelay?: {
+        state(): Promise<PhoneRelayState>;
+        ready(): Promise<PhoneRelayState>;
+      };
       /** Local-shell-only bridge for trusted approval-mode transitions. It is
        * absent on remote server pages and in older desktop builds. */
       approvals?: {
@@ -549,6 +555,14 @@ export interface LinuxLocalControlStatus {
   session?: "x11" | "wayland" | "headless" | "unknown";
   compositor?: "gnome-mutter";
   warnings?: Array<{ label: string; status: string; message: string; detail?: string }>;
+}
+
+/** `off`: remote access is off (it can start); `signed-out`: no dusk account to make the relay with; `error`: the link
+ * service refused, `message` says why. */
+export interface PhoneRelayState {
+  status: "off" | "signed-out" | "starting" | "ready" | "error";
+  code?: string;
+  message?: string;
 }
 
 export interface CompanionAccountState {

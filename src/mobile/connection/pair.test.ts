@@ -287,6 +287,19 @@ describe("workspace reconnect", () => {
     expect(opened).not.toHaveBeenCalled();
   });
 
+  it("tries a computer's wi-fi first, and a phone paired over the relay goes on to it when the companion never saw it", async () => {
+    const { record, token, platform } = await saved();
+    const agent = await createRelaySecrets();
+    record.relay!.agentPub = agent.pub;
+    record.via = [record.via!.find((route) => route.kind === "relay")!, { kind: "companion", url: "http://mac.test:8810", net: "lan", priority: 1 }];
+    const channel = { request: vi.fn().mockResolvedValue(response({})), close: vi.fn() };
+    vi.spyOn(relay, "open").mockReturnValue(channel);
+    const fetched = vi.fn().mockResolvedValue(response({}, 401));
+    vi.stubGlobal("fetch", fetched);
+    expect(await connectToWorkspace(record, token, platform, new AbortController().signal)).toEqual({ kind: "relay", channel, token });
+    expect(fetched.mock.calls[0][0]).toBe("http://mac.test:8810/api/auth/session");
+  });
+
   it.each([403, 404])("accepts HTTP %s from a companion after pairing has validated the token", async (status) => {
     const { record, token, platform } = await saved();
     record.via = [{ kind: "companion", url: "http://mac.test:8810", net: "lan", priority: 1 }];

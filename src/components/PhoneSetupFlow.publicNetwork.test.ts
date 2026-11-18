@@ -20,6 +20,8 @@ const noop = () => {};
 const controller = (over: Partial<PhoneSetupController>): PhoneSetupController => ({
   state,
   account: null,
+  relay: null,
+  relayPairing: false,
   phase: "qr",
   email: "",
   code: "",

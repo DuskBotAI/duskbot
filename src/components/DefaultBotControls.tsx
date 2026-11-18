@@ -31,7 +31,7 @@ export function HideDefaultBotItem({ bot, onDone, className = "flex w-full items
   );
 }
 
-/** Settings → General: whether the viewer's own Dusk has a row in the sidebar. */
+/** Settings → Models, under New bots: whether the viewer's own Dusk has a row in the sidebar. */
 export function DefaultBotSidebarRow({ simple = false }: { simple?: boolean }) {
   const { state, dispatch } = useStore();
   const bot = myDefaultBot(state.bots, useViewerEmail());

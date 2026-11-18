@@ -236,7 +236,7 @@ describe("Dusk, every person's helper", () => {
     const other = store.createBot({ name: "Writer" });
     expect(() => store.deleteBot(maus.id)).toThrow(/dusk bot can't be deleted or archived/);
     expect(store.bot(maus.id)).toBeTruthy();
-    expect(defaultBotPatchRefusal(maus, { hidden: true })).toMatch(/Show dusk bot in the sidebar/);
+    expect(defaultBotPatchRefusal(maus, { hidden: true })).toMatch(/Show dusk bot in the sidebar" in Settings → Models, under New bots\./);
     expect(defaultBotPatchRefusal(other, { sidebarHidden: true })).toMatch(/Only your helper/);
     expect(defaultBotPatchRefusal(maus, { sidebarHidden: "yes" })).toBe("sidebarHidden must be true or false");
     expect(defaultBotPatchRefusal(maus, { sidebarHidden: true })).toBeNull();

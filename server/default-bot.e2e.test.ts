@@ -47,7 +47,7 @@ it("makes Dusk a new install's first bot, never deleted, hidden by its switch, w
 
     const refused = await api("DELETE", `/api/bots/${maus.id}`);
     expect(refused.status).toBe(409);
-    expect(refused.body.error).toBe(`${maus.name} can't be deleted or archived. To take it off the sidebar, choose Hide in its menu, or turn off "Show ${maus.name} in the sidebar" in Settings → General.`);
+    expect(refused.body.error).toBe(`${maus.name} can't be deleted or archived. To take it off the sidebar, choose Hide in its menu, or turn off "Show ${maus.name} in the sidebar" in Settings → Models, under New bots.`);
     expect((await api("PATCH", `/api/bots/${maus.id}`, { hidden: true })).status).toBe(400);
     expect((await api("PATCH", `/api/bots/${maus.id}`, { sidebarHidden: true })).status).toBe(200);
     expect((await bots()).find((bot) => bot.id === maus.id)?.sidebarHidden).toBe(true);

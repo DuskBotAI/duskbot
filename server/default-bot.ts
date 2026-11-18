@@ -19,7 +19,7 @@ const STARTER_COLOR = "silver";
 export const HELPER_ASKS = ["What are my bots up to?", "Set up a bot for my inbox", "Make me a morning routine", "How do I connect my email?"];
 
 export function defaultBotRefusal(name: string): string {
-  return `${name} can't be deleted or archived. To take it off the sidebar, choose Hide in its menu, or turn off "Show ${name} in the sidebar" in Settings → General.`;
+  return `${name} can't be deleted or archived. To take it off the sidebar, choose Hide in its menu, or turn off "Show ${name} in the sidebar" in Settings → Models, under New bots.`;
 }
 
 /** Why a PATCH may not change this bot so, or null. */

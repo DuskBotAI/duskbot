@@ -1585,6 +1585,11 @@ ts() { tailscale "$@"; }
 ts_field() { # BackendState | DNSName
   ts status --json 2>/dev/null | /usr/bin/node -e 'let t="";process.stdin.on("data",(c)=>t+=c).on("end",()=>{try{const s=JSON.parse(t);const v=process.argv[1]==="DNSName"?s.Self?.DNSName:s.BackendState;console.log(String(v??"").replace(/\.$/,""))}catch{}})' "$1" 2>/dev/null || true
 }
+# tailnet https port 443: free, ours (a proxy to this server alone) or taken. a status that cannot be read counts as free,
+# and `serve` then fails or asks the person
+ts_https_443() { # dnsname
+  ts serve status --json 2>/dev/null | /usr/bin/node -e 'let t="";process.stdin.on("data",(c)=>t+=c).on("end",()=>{try{const s=JSON.parse(t);if(!s.TCP?.["443"]){console.log("free");return}const h=s.Web?.[process.argv[1]+":443"]?.Handlers??{};console.log(Object.keys(h).join()==="/"&&h["/"].Proxy===process.argv[2]?"ours":"taken")}catch{console.log("free")}})' "$1" "http://127.0.0.1:$PORT" 2>/dev/null || echo free
+}
 tailscale_install() {
   command -v tailscale >/dev/null 2>&1 && return 0
   echo "installing Tailscale (its own installer, from tailscale.com)"
@@ -1649,6 +1654,7 @@ address_tailscale() {
   dns=$(ts_field DNSName)
   [ -n "$dns" ] || { relay_address "this server has no MagicDNS name; turn MagicDNS on for your tailnet. Using the private relay"; return 11; }
   echo "on the tailnet as $dns"
+  [ "$(ts_https_443 "$dns")" != taken ] || { relay_address "tailnet https port 443 already serves something else here; leaving it alone and using the private relay"; return 11; }
   # https for the tailnet: `tailscale serve` prints the one admin link that turns it on and waits for it
   if ! ts_with_link tailscale-https 1800 'https://login\.tailscale\.com/[A-Za-z0-9/._?=&-]*' \
     "Turn on HTTPS for your tailnet (one click), so this server gets an https address:" -- ts serve --bg --https=443 "http://127.0.0.1:$PORT"; then

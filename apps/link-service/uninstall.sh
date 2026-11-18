@@ -737,6 +737,18 @@ do_caddy() {
   echo "Caddy no longer serves this server's address"
 }
 
+# 0 only when tailnet https port 443 still proxies to the dusk bot server alone; a status that cannot be read is not ours
+ts_443_ours() {
+  _status=$(tailscale serve status --json 2>/dev/null) || return 1
+  _js='const s=JSON.parse(process.argv[1]);const w=Object.entries(s.Web??{}).find(([k])=>k.endsWith(":443"));const h=w?.[1].Handlers??{};process.exit(Object.keys(h).join()==="/"&&h["/"].Proxy==="http://127.0.0.1:8799"?0:1)'
+  _py='import json,sys
+s=json.loads(sys.argv[1]);w=[v for k,v in (s.get("Web") or {}).items() if k.endswith(":443")];h=(w[0].get("Handlers") or {}) if w else {}
+sys.exit(0 if list(h)==["/"] and (h["/"] or {}).get("Proxy")=="http://127.0.0.1:8799" else 1)'
+  if [ -x /usr/bin/node ]; then /usr/bin/node -e "$_js" "$_status" 2>/dev/null
+  elif command -v python3 >/dev/null 2>&1; then python3 -c "$_py" "$_status" 2>/dev/null
+  else return 1; fi
+}
+
 do_files() {
   removed=""
   if [ -f "$BWRAP_PROFILE" ]; then
@@ -744,7 +756,10 @@ do_files() {
     x rm -f "$BWRAP_PROFILE"; removed="$removed $BWRAP_PROFILE"
   fi
   # the tailnet address this server served dusk bot at
-  if in_manifest "tailscale-serve 443" && command -v tailscale >/dev/null 2>&1; then x tailscale serve --https=443 off 2>&1 || true; fi
+  if in_manifest "tailscale-serve 443" && command -v tailscale >/dev/null 2>&1; then
+    if ts_443_ours; then x tailscale serve --https=443 off 2>&1 || true
+    else echo "tailnet https port 443 serves something else now; leaving it alone"; fi
+  fi
   for path in "$OPT" "$LOGS_DIR" "$STATE" "$FENCE" "$LIB" "$ETC" /etc/duskbot-address.json /etc/duskbot-cloudflared; do
     if [ -e "$path" ]; then x rm -rf "$path"; removed="$removed $path"; fi
   done

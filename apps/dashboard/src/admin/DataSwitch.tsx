@@ -1,5 +1,5 @@
 import { cx } from "../ui/kit";
-import { adminData, adminMoney, adminTests, setAdminData } from "./api";
+import { adminData, adminMoney, adminTests, setAdminData, useAdminRole } from "./api";
 
 /** whose analytics the pages show: the live site's (read only) or this service's own; people, clouds and revenue stay this service's */
 export function DataSwitch({ live }: { live: string }) {
@@ -17,13 +17,14 @@ export function DataSwitch({ live }: { live: string }) {
 
 /** a plain line over every page when it isn't production's data, so staging numbers are never read as real */
 export function StagingTag({ environment, live }: { environment: string; live: string | null | undefined }) {
+  const owner = useAdminRole() === "owner";
   if (environment === "production") return null;
   const money = adminMoney();
   const analytics = live && adminData() === "live" ? `visits from ${live}; ` : "";
   return (
     <p className="mb-5 flex flex-wrap items-center gap-2 text-12 text-ink-3">
       <span className="inline-flex h-[22px] items-center rounded-full bg-wash-lemon px-2 text-ink">{environment === "preview" ? "staging data" : `${environment} data`}</span>
-      <span>{analytics}people, money and clouds from {environment === "preview" ? "preview" : "this service"}, counting {money === "all" ? "live and test money" : `${money} money only`}{money !== "test" && !adminTests() ? ", test accounts left out" : ""}.</span>
+      <span>{analytics}{owner ? "people, money and clouds" : "people and money"} from {environment === "preview" ? "preview" : "this service"}, counting {money === "all" ? "live and test money" : `${money} money only`}{money !== "test" && !adminTests() ? ", test accounts left out" : ""}.</span>
     </p>
   );
 }

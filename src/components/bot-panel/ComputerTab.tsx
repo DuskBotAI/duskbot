@@ -294,15 +294,16 @@ export function ComputerTab({ bot, derived, cloudFor }: {
     : stage === "moved" || stage === "open" ? t("runsOn.openCloud")
     : stage === "coming-back" ? t("runsOn.movingBack") : t("runsOn.moveDuskCloud");
   const detail = report?.detail ?? null;
-  // this computer's bot leads with its browser; the dusk cloud card follows it, whatever step the account is at
+  // a bot leads with its browser on this computer, and on a server when its computer is that browser; the dusk cloud card follows it
   const cloudOffer = local && cloudBots.length > 0 && !storeApp() && <CloudCtaCard bot={cloudBots[0]!} group={cloudBots} stage={stage} cloudDesktop={cloudDesktop} />;
-  const ownScreen = !local || current === "vm";
+  const ownScreen = current === "vm" || (!local && current !== "browser");
+  const browserAfter = local ? cloudOffer : toCloud && <CloudDesktopCta bots={cloudBots} stage={stage} label={cloudLabel} />;
   // a bot set to use this Mac asks for the Mac's permissions it lacks when the person starts its browser, never before
   const askFirst = local && current === "local" ? macPermissionsBridge() : null;
 
   return (
     <div data-panel-tabpanel="computer">
-      {!ownScreen ? <LocalBrowserSection bot={bot} askFirst={askFirst} after={cloudOffer} /> : <>
+      {!ownScreen ? <LocalBrowserSection bot={bot} askFirst={askFirst} after={browserAfter} /> : <>
         <div ref={setScreenBox}>
           <Suspense fallback={<AsleepScreen bot={bot} off={current === "off"} />}>
             <ComputerPanel bot={bot} inline visible={onScreen} onReport={setReport} />

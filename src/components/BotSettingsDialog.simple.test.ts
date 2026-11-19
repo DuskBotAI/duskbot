@@ -759,6 +759,17 @@ describe("the Computer tab", () => {
     }
   });
 
+  it("on a server shows a browser bot its browser there, not a screen with nothing on it, and keeps the move to dusk cloud", () => {
+    const rendered = computer(makeBot({ computer: "browser" }));
+    const section = rendered.nodes.find((node) => "askFirst" in node.props);
+    expect(section?.props.bot).toMatchObject({ id: "scout" });
+    expect(section?.props.askFirst, "the server's browser asks for no Mac permissions").toBeNull();
+    expect(rendered.nodes.some((node) => node.props.inline === true)).toBe(false);
+    expect(rendered.html).not.toContain('data-panel-screen-of=""');
+    const after = capture(() => section!.props.after as Node);
+    expect(after.html).toContain('data-panel-card="cloud-desktop"');
+  });
+
   it("on this computer drops the screen choice and preview, and offers dusk cloud through checkout", () => {
     fixture.otherServer = null;
     const rendered = computer(cloudBot());

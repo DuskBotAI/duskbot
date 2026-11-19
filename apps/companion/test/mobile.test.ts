@@ -273,6 +273,54 @@ describe("mobile HTTP forwarding", () => {
     expect(reached).toHaveBeenCalledTimes(3);
   });
 
+  it("answers the app's preflight with CORS headers and no token", async () => {
+    const reached = vi.fn((_req: IncomingMessage, res: Parameters<RequestListener>[1]) => res.end());
+    const app = await fixture(reached);
+    for (const origin of ["capacitor://localhost", "https://localhost", "http://localhost"]) {
+      const response = await fetch(`${app.url}/api/events`, { method: "OPTIONS", headers: {
+        origin,
+        "access-control-request-method": "GET",
+        "access-control-request-headers": "authorization, cache-control",
+      } });
+      expect(response.status).toBe(204);
+      expect(response.headers.get("access-control-allow-origin")).toBe(origin);
+      expect(response.headers.get("access-control-allow-methods")).toBe("GET");
+      expect(response.headers.get("access-control-allow-headers")).toBe("Authorization, Cache-Control");
+      expect(response.headers.get("access-control-allow-credentials")).toBeNull();
+      expect(response.headers.get("vary")).toContain("Origin");
+    }
+    expect(reached).not.toHaveBeenCalled();
+    expect(app.authenticate).not.toHaveBeenCalled();
+  });
+
+  it("grants CORS on an authenticated app-origin response", async () => {
+    const app = await fixture((_req, res) => res.end("ok"));
+    app.mobile.remember(TOKEN, "phone");
+    const response = await fetch(`${app.url}/api/bots`, { headers: { ...auth, origin: "https://localhost" } });
+    expect(response.status).toBe(200);
+    expect(response.headers.get("access-control-allow-origin")).toBe("https://localhost");
+    expect(response.headers.get("access-control-allow-credentials")).toBeNull();
+    expect(response.headers.get("vary")).toContain("Origin");
+    expect(await response.text()).toBe("ok");
+  });
+
+  it("never grants CORS to an unrelated web origin", async () => {
+    const app = await fixture((_req, res) => res.end("ok"));
+    app.mobile.remember(TOKEN, "phone");
+    for (const origin of ["https://evil.example", "https://localhost.evil.example", "https://localhost:123"]) {
+      const response = await fetch(`${app.url}/api/bots`, { headers: { ...auth, origin } });
+      expect(response.status).toBe(403);
+      expect(response.headers.get("access-control-allow-origin")).toBeNull();
+      const preflight = await fetch(`${app.url}/api/events`, { method: "OPTIONS", headers: {
+        origin,
+        "access-control-request-method": "GET",
+        "access-control-request-headers": "authorization",
+      } });
+      expect(preflight.status).toBe(403);
+      expect(preflight.headers.get("access-control-allow-origin")).toBeNull();
+    }
+  });
+
   it("denies redemption when mobile sessions are not configured", async () => {
     const reached = vi.fn((_req: IncomingMessage, res: Parameters<RequestListener>[1]) => res.end());
     const app = await fixture(reached, { mobile: undefined });
@@ -296,6 +344,31 @@ describe("mobile HTTP forwarding", () => {
     expect(ended).toBe(false);
     finish();
     while (!(await reader.read()).done) {}
+  });
+
+  it("keeps CORS headers on the event stream response", async () => {
+    const event = 'data: {"kind":"hello"}\n\n';
+    const app = await fixture((_req, res) => {
+      res.writeHead(200, { "content-type": "text/event-stream" });
+      res.write(event);
+    });
+    app.mobile.remember(TOKEN, "phone");
+    const controller = new AbortController();
+    try {
+      const response = await fetch(`${app.url}/api/events`, {
+        headers: { ...auth, origin: "https://localhost", accept: "text/event-stream" },
+        signal: controller.signal,
+      });
+      expect(response.status).toBe(200);
+      expect(response.headers.get("access-control-allow-origin")).toBe("https://localhost");
+      expect(response.headers.get("vary")).toContain("Origin");
+      expect(response.headers.get("content-type")).toContain("text/event-stream");
+      const reader = response.body!.getReader();
+      expect(new TextDecoder().decode((await reader.read()).value)).toContain('"kind":"hello"');
+      await reader.cancel();
+    } finally {
+      controller.abort();
+    }
   });
 
   it("streams a 3 MB upload byte for byte", async () => {

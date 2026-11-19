@@ -66,7 +66,43 @@ const PHONE_SECRET_PROVIDE_PATH = /^\/api\/bots\/[\w-]+\/secret-cards\/[\w-]+\/p
 /** The app's WebViews load from these origins. A web page cannot forge one, so
  * letting them through does not let a site with a stolen token use the sidecar. */
 const APP_ORIGINS = new Set(["capacitor://localhost", "https://localhost", "http://localhost"]);
-const isAppOrigin = (origin: string | undefined): boolean => origin !== undefined && APP_ORIGINS.has(origin);
+const isAppOrigin = (origin: string | undefined): origin is string => origin !== undefined && APP_ORIGINS.has(origin);
+
+const CORS_METHODS = new Set(["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE"]);
+// Older phone builds send cache-control on the live stream; a refused preflight left them "Reconnecting" forever.
+const CORS_HEADERS = ["Accept", "Authorization", "Cache-Control", "Content-Type", "Last-Event-ID", "X-Dusk-Background", "X-Dusk-Sha256"];
+
+function allowMobileOrigin(res: ServerResponse, origin: string): void {
+  res.setHeader("access-control-allow-origin", origin);
+  res.removeHeader("access-control-allow-credentials");
+  res.setHeader("access-control-expose-headers", "Content-Disposition, X-duskbot-Folder, X-Dusk-Cloud-Power");
+  const vary = String(res.getHeader("vary") ?? "").split(",").map(name => name.trim()).filter(Boolean);
+  if (!vary.some(name => name.toLowerCase() === "origin" || name === "*")) vary.push("Origin");
+  res.setHeader("vary", vary.join(", "));
+}
+
+/** A preflight carries no token: answer it on the origin alone, then check the
+ * bearer on the real request, the way the harness does. */
+function answerMobilePreflight(req: IncomingMessage, res: ServerResponse): boolean {
+  const origin = req.headers.origin;
+  const path = (req.url ?? "").split("?")[0];
+  if (req.method !== "OPTIONS" || !isAppOrigin(origin) || !path.startsWith("/api/")) return false;
+  const method = req.headers["access-control-request-method"];
+  const requested = typeof req.headers["access-control-request-headers"] === "string"
+    ? req.headers["access-control-request-headers"].toLowerCase().split(",").map(name => name.trim())
+    : [];
+  if (typeof method !== "string" || !CORS_METHODS.has(method) || !requested.includes("authorization") ||
+      requested.some(name => !CORS_HEADERS.some(allowed => allowed.toLowerCase() === name))) {
+    sendJson(res, 403, { error: "forbidden: preflight request" });
+    return true;
+  }
+  allowMobileOrigin(res, origin);
+  res.setHeader("access-control-allow-methods", method);
+  res.setHeader("access-control-allow-headers", CORS_HEADERS.filter(header => requested.includes(header.toLowerCase())).join(", "));
+  res.setHeader("cache-control", "no-store");
+  res.writeHead(204).end();
+  return true;
+}
 
 export function proxyHeadersTimeoutMs(url: string, override?: number): number {
   return override
@@ -111,7 +147,7 @@ const PRIVATE_RESPONSE_HEADERS = {
   "cdn-cache-control": "no-store",
   "cloudflare-cdn-cache-control": "no-store",
   pragma: "no-cache",
-  vary: "Authorization",
+  vary: "Authorization, Origin",
 } as const;
 
 /** Responses can cross a public CDN on the managed HTTPS endpoint, so none may
@@ -265,6 +301,7 @@ const forgetMobile = (options: ProxyOptions, token: string): void => {
 };
 
 function forwardMobile(req: IncomingMessage, res: ServerResponse, options: ProxyOptions, token?: string): void {
+  if (token && isAppOrigin(req.headers.origin)) allowMobileOrigin(res, req.headers.origin);
   const redeem = token === undefined;
   const headers = { ...forwardHeaders(req, undefined, undefined, false), ...remoteHeaders(req) };
   if (redeem) {
@@ -464,6 +501,7 @@ export function createProxyHandler(options: ProxyOptions) {
     if (req.headers.origin && !isAppOrigin(req.headers.origin)) {
       return sendJson(res, 403, { error: "forbidden: cross-origin request" });
     }
+    if (answerMobilePreflight(req, res)) return;
 
     const token = bearerToken(req.headers.authorization);
     if (method === "POST" && path === "/api/mobile/redeem") {
@@ -507,6 +545,8 @@ export function createProxyHandler(options: ProxyOptions) {
       authenticated: Boolean(device),
     });
     if (denial) return sendJson(res, denial.status, { error: denial.error });
+
+    if (isAppOrigin(req.headers.origin)) allowMobileOrigin(res, req.headers.origin);
 
     // Pairing grants the ordinary companion surface, not a computer's browser
     // session; the owner enables this per device, off by default.

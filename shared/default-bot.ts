@@ -14,7 +14,7 @@ export interface DefaultBotMark {
 export interface DefaultBotFields {
   /** This bot is its place's (or, on a Team Cloud, its member's) Dusk. Never deleted or archived. */
   defaultBot?: DefaultBotMark;
-  /** Settings → General "Show Dusk in the sidebar" is off: the bot keeps working, only its sidebar row is gone. */
+  /** Settings → Models "Show Dusk in the sidebar" is off: the bot keeps working, only its sidebar row is gone. */
   sidebarHidden?: boolean;
   /** Its person has seen Dusk's first-launch welcome here and chose Add or Not now. */
   welcomed?: boolean;

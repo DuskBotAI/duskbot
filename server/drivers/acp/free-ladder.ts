@@ -28,6 +28,13 @@ export function lightVariant(variants: readonly { id: string }[] | undefined): s
   return LIGHT_VARIANTS.find((id) => variants?.some((variant) => variant.id === id));
 }
 
+/** The variant a model advertises: keep a supported choice, else its own default, else none. */
+export function advertisedVariant(variants: readonly { id: string }[] | undefined, preferred: string | undefined): string | undefined {
+  if (preferred === undefined || !variants) return preferred;
+  if (variants.some((variant) => variant.id === preferred)) return preferred;
+  return variants.some((variant) => variant.id === "default") ? "default" : undefined;
+}
+
 /** Why a free model failed, from its error or the provider error OpenCode logged for it. */
 export function freeFailure(message: string, flags: { limit?: boolean; empty?: boolean; silent?: boolean } = {}): FreeFailure {
   if (flags.limit || FREE_POOL_LIMIT.test(message)) return "pool_limit";

@@ -27,7 +27,7 @@ import {
 import { readSessionReport } from "./session-reports.ts";
 import { pickSessionModel, SessionModelControls, type AcpModelSelection } from "./session-model-controls.ts";
 import { acpVariantOption } from "./config-options.ts";
-import { coolFreeRung, FREE_POOL_LIMIT, FREE_PROBE_MS, FREE_PROBE_PROMPT, freeFailure, freeLadder, probeFreeLadder, warmFreeModel, warmFreeRung, type FreeFailure, type FreeRung } from "./free-ladder.ts";
+import { advertisedVariant, coolFreeRung, FREE_POOL_LIMIT, FREE_PROBE_MS, FREE_PROBE_PROMPT, freeFailure, freeLadder, probeFreeLadder, warmFreeModel, warmFreeRung, type FreeFailure, type FreeRung } from "./free-ladder.ts";
 import { trail } from "../../trail.ts";
 import { versionFromProbe } from "./version-probe.ts"; import { engineHomes } from "../../engine-homes/engine-homes.ts";
 
@@ -1455,9 +1455,12 @@ export function createAcpDriver(support: AcpSupport): ProviderDriver<AcpConfig> 
                 // initialize's currentModelId is the CLI default, not this turn's model.
                 if (!selectedModel && cliTurn.model) selectedModel = cliTurn.model;
               }
-              // a free rung's lighter setting is a preference: a model that does not offer it runs at its own
-              if (variant !== undefined && ladder && !acpVariantOption(session.sessionConfigResult)?.options.some((entry) => entry.id === variant)) {
-                variant = undefined;
+              // a free rung's lighter setting is a preference: use one the model advertises, else its default, else none
+              if (variant !== undefined && ladder) {
+                variant = advertisedVariant(catalog.models.options.find((option) => option.id === cliTurn.model)?.variants, variant);
+                if (variant !== undefined && !acpVariantOption(session.sessionConfigResult)?.options.some((entry) => entry.id === variant)) {
+                  variant = undefined;
+                }
               }
               if (variant !== undefined) {
                 const option = requestedVariantOption();

@@ -63,6 +63,11 @@ const HEADERS_TIMEOUT_MS = 30_000;
 const PHONE_SECRET_HEADERS_TIMEOUT_MS = 105_000;
 const PHONE_SECRET_PROVIDE_PATH = /^\/api\/bots\/[\w-]+\/secret-cards\/[\w-]+\/provide(?:\?|$)/;
 
+/** The app's WebViews load from these origins. A web page cannot forge one, so
+ * letting them through does not let a site with a stolen token use the sidecar. */
+const APP_ORIGINS = new Set(["capacitor://localhost", "https://localhost", "http://localhost"]);
+const isAppOrigin = (origin: string | undefined): boolean => origin !== undefined && APP_ORIGINS.has(origin);
+
 export function proxyHeadersTimeoutMs(url: string, override?: number): number {
   return override
     ?? (PHONE_SECRET_PROVIDE_PATH.test(url) ? PHONE_SECRET_HEADERS_TIMEOUT_MS : HEADERS_TIMEOUT_MS);
@@ -454,9 +459,9 @@ export function createProxyHandler(options: ProxyOptions) {
     const path = (req.url ?? "/").split("?")[0];
     const method = req.method ?? "GET";
 
-    // A native app sends no Origin: anything with one is a browser, refused
-    // before the token is looked at.
-    if (req.headers.origin) {
+    // Only the app's own WebView origins may carry a token; every other Origin
+    // is a web page, refused before the token is looked at.
+    if (req.headers.origin && !isAppOrigin(req.headers.origin)) {
       return sendJson(res, 403, { error: "forbidden: cross-origin request" });
     }
 
@@ -837,7 +842,7 @@ export function createProxyHandler(options: ProxyOptions) {
   };
 
   handle.upgrade = (req: IncomingMessage, socket: Duplex, head: Buffer): void => {
-    if (req.headers.origin) {
+    if (req.headers.origin && !isAppOrigin(req.headers.origin)) {
       socket.destroy();
       return;
     }

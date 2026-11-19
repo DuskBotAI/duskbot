@@ -258,6 +258,21 @@ describe("mobile HTTP forwarding", () => {
     expect(app.authenticate).not.toHaveBeenCalled();
   });
 
+  it("lets the app's own WebView origins stream but still refuses web origins", async () => {
+    const reached = vi.fn((_req: IncomingMessage, res: Parameters<RequestListener>[1]) => res.end("ok"));
+    const app = await fixture(reached);
+    app.mobile.remember(TOKEN, "phone");
+    for (const origin of ["capacitor://localhost", "https://localhost", "http://localhost"]) {
+      const response = await fetch(`${app.url}/api/events`, { headers: { ...auth, origin } });
+      expect(response.status).toBe(200);
+      expect(await response.text()).toBe("ok");
+    }
+    for (const origin of ["https://evil.example", "https://localhost.evil.example", "https://localhost:123", "null"]) {
+      expect((await fetch(`${app.url}/api/events`, { headers: { ...auth, origin } })).status).toBe(403);
+    }
+    expect(reached).toHaveBeenCalledTimes(3);
+  });
+
   it("denies redemption when mobile sessions are not configured", async () => {
     const reached = vi.fn((_req: IncomingMessage, res: Parameters<RequestListener>[1]) => res.end());
     const app = await fixture(reached, { mobile: undefined });
@@ -398,6 +413,29 @@ describe("mobile WebSocket forwarding", () => {
     });
     expect(status === null || status === 401).toBe(true);
     expect(reached).not.toHaveBeenCalled();
+  });
+
+  it("lets the app's own WebView origins reach the upgrade gate but not a web origin", async () => {
+    const app = await fixture((_req, res) => res.end());
+    app.mobile.remember(TOKEN, "phone");
+    const reached = vi.fn();
+    app.harness.on("upgrade", (_req, socket) => {
+      reached();
+      socket.on("error", () => {});
+      socket.destroy();
+    });
+    const tryUpgrade = (origin: string) => new Promise<void>((resolve, reject) => {
+      const req = upgradeRequest(app.port, { origin });
+      req.on("response", (res) => { res.resume(); resolve(); });
+      req.on("upgrade", (_res, socket) => { socket.destroy(); resolve(); });
+      req.on("error", (error: NodeJS.ErrnoException) => error.code === "ECONNRESET" ? resolve() : reject(error));
+      req.end();
+    });
+
+    for (const origin of ["capacitor://localhost", "https://localhost", "http://localhost"]) await tryUpgrade(origin);
+    expect(reached).toHaveBeenCalledTimes(3);
+    await tryUpgrade("https://evil.example");
+    expect(reached).toHaveBeenCalledTimes(3);
   });
 });
 

@@ -130,12 +130,21 @@ const KEYS: Record<string, Params> = {
 
 /** Its centre, once it is scrolled into view and is what a click there would hit. */
 const CLICK_POINT = (selector: string) => `(() => {
-  const el = document.querySelector(${JSON.stringify(selector)});
+  const find = (sel, root) => {
+    for (const el of root.children) {
+      if (el.matches(sel)) return el;
+      const inner = (el.shadowRoot && find(sel, el.shadowRoot)) || find(sel, el);
+      if (inner) return inner;
+    }
+    return null;
+  };
+  const el = find(${JSON.stringify(selector)}, document);
   if (!(el instanceof Element)) return JSON.stringify({ found: false });
   try { el.scrollIntoView({ block: "center" }); } catch {}
   const box = el.getBoundingClientRect();
   const x = box.left + box.width / 2, y = box.top + box.height / 2;
-  const hit = document.elementFromPoint(x, y);
+  const root = el.getRootNode();
+  const hit = (root.elementFromPoint ? root : document).elementFromPoint(x, y);
   return JSON.stringify({ found: true, x, y, hit: Boolean(hit && (hit === el || el.contains(hit))) });
 })()`;
 

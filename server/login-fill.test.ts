@@ -368,3 +368,35 @@ describe("one-time codes and fields", () => {
     expect(page.field("input[name=password]").value).toBe("");
   });
 });
+
+describe("a login form built from web components", () => {
+  // Material Web and Lit sites keep their <input>s in open shadow roots, where document.querySelector never looks.
+  const SHADOW_FORM = `<md-outlined-text-field id="user"></md-outlined-text-field><md-outlined-text-field id="pass"></md-outlined-text-field>`;
+  function shadowForm(page: FakeLoginPage) {
+    const document = page.window.document;
+    const root = (id: string, input: string) => {
+      const shadow = document.getElementById(id)!.attachShadow({ mode: "open" });
+      shadow.innerHTML = input;
+      return shadow;
+    };
+    return {
+      user: root("user", `<input type="text" aria-label="E-mail">`),
+      pass: root("pass", `<input type="password" aria-label="Password">`),
+    };
+  }
+
+  it("finds the fields inside the shadow roots and types into them", async () => {
+    const { page, fill } = setup("https://example.com/login", SHADOW_FORM, [{ host: "example.com", username: "alice@example.com" }], { submit: false });
+    const shadow = shadowForm(page);
+    const outcome = await fill();
+    expect(outcome).toMatchObject({ ok: true, filled: ["username", "password"] });
+    expect(page.typed).toEqual(["alice@example.com", PASSWORD]);
+    expect((shadow.user.querySelector("input") as unknown as { value: string }).value).toBe("alice@example.com");
+    expect((shadow.pass.querySelector("input") as unknown as { value: string }).value).toBe(PASSWORD);
+    expectNoSecret(outcome, page, [PASSWORD]);
+    await outcome.held!.clear!();
+    expect((shadow.pass.querySelector("input") as unknown as { value: string }).value).toBe("");
+    expect(shadow.user.querySelectorAll("[data-dusk-login]")).toHaveLength(0);
+    expect(shadow.pass.querySelectorAll("[data-dusk-login]")).toHaveLength(0);
+  });
+});

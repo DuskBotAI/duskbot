@@ -212,6 +212,8 @@ CMD ["node", "/app/dist-server/cloud-home-start.js"]
 
 # The self-hosted server, last so a build without --target builds it.
 FROM runtime AS server
+ARG RELEASE_IMAGE
+ENV DUSK_RELEASE_IMAGE=${RELEASE_IMAGE}
 # Optional engine CLIs baked into the image (space-separated npm packages).
 ARG ENGINES=""
 RUN if [ -n "$ENGINES" ]; then HOME=/tmp/dusk-build-home npm install -g $ENGINES && rm -rf /tmp/dusk-build-home /tmp/node-compile-cache; fi

@@ -11,6 +11,7 @@ vi.mock("react", async (original) => ({
   useEffect: (effect: EffectCallback) => { f.effects.push(effect); },
 }));
 vi.mock("@/state/store", () => ({ api: vi.fn(async () => f.check), useStore: () => ({ state: { config: {} }, dispatch: vi.fn() }) }));
+import { api } from "@/state/store";
 import { useServerUpdateItem } from "./SidebarProfileMenu";
 
 // The server the window shows, on 0.1.116 from npm, while 0.1.127 is out.
@@ -62,4 +63,23 @@ it("keeps today's row in a browser on that server and in the app on this compute
   };
   expect(await checkedRow({ location: { host: "bots.example.test" } })).toEqual(today);
   expect(await checkedRow({ duskDesktop: { app: { version: "0.1.127", ownPage: true } }, location: { host: "127.0.0.1:8799" } })).toEqual(today);
+});
+
+
+it("sends Update now and the idle update preference to the linked workspace", async () => {
+  const compose = { supported: true, automatic: false, phase: "idle" as const };
+  f.check = { install: "docker", current: "0.2.22", latest: "0.2.23", available: true, compose };
+  const row = await checkedRow({ location: { host: "office.example.test" }, duskDesktop: { app: { ownPage: false }, workspaces: { state: async () => ({ local: false, name: "Office" }) } } });
+  expect(row.label).toBe("Update Office to 0.2.23");
+  f.check = { ...compose, automatic: true };
+  entry!.toggleAutomatic!();
+  await flush();
+  render();
+  expect(api).toHaveBeenCalledWith("/api/updates/automatic", expect.objectContaining({ method: "POST", body: '{"enabled":true}' }));
+  f.check = { ...compose, phase: "updating" };
+  entry!.item.onSelect?.();
+  await flush();
+  render();
+  expect(api).toHaveBeenCalledWith("/api/updates/apply", expect.objectContaining({ method: "POST" }));
+  expect(entry!.pending).toBe(true);
 });

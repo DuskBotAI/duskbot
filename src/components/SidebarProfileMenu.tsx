@@ -215,13 +215,15 @@ interface UpdateEntry {
   pending: boolean;
   label: string;
   source?: "server";
+  check?: ServerUpdateCheck | null;
+  toggleAutomatic?: () => void;
 }
 
 /** The update a Simple account menu raises to its top row: one waiting to be installed, or one that failed. */
-export function simpleUpdateTop(entry: Pick<UpdateEntry, "phase" | "source"> | null): { label: string; action: string } | null {
+export function simpleUpdateTop(entry: Pick<UpdateEntry, "phase" | "source" | "check"> | null): { label: string; action: string } | null {
   const ready = () => t("sidebar.update.readyShort");
   if (entry?.source === "server") {
-    if (entry.phase === "available") return { label: ready(), action: t("sidebar.update.installAction") };
+    if (entry.phase === "available") return { label: ready(), action: t(entry.check?.install === "docker" && !entry.check.compose?.supported ? "settings.simple.updates.seeRelease" : "sidebar.update.installAction") };
     if (entry.phase === "reload") return { label: ready(), action: t("sidebar.update.restartAction") };
   }
   return null;
@@ -232,38 +234,92 @@ export function useServerUpdateItem(enabled: boolean): UpdateEntry | null {
   const [check, setCheck] = useState<ServerUpdateCheck | null>(null);
   const otherServer = useOtherServerName(enabled);
 
+  const [error, setError] = useState("");
+  const updating = check?.compose?.phase === "updating";
   useEffect(() => {
-    if (phase !== "up-to-date") return;
+    if (phase !== "up-to-date" || check?.compose) return;
     const timer = setTimeout(() => setPhase("idle"), 3000);
     return () => clearTimeout(timer);
-  }, [phase]);
+  }, [phase, check]);
+
+  useEffect(() => {
+    if (!updating || !check) return;
+    const target = check;
+    let active = true;
+    let timer: ReturnType<typeof setTimeout>;
+    const deadline = Date.now() + 25 * 60_000;
+    let disconnected = 0;
+    async function refresh() {
+      try {
+        const status = await api<Pick<ServerUpdateCheck, "current" | "compose">>("/api/updates/compose", { timeoutMs: 15_000 });
+        if (!active) return;
+        if (!status.current || !status.compose || (!status.compose.supported && status.compose.phase !== "failed")) throw new Error("Reconnecting");
+        disconnected = 0;
+        if (status.compose.phase !== "updating") {
+          const next = { ...target, ...status, available: target.latest !== status.current && target.available };
+          setCheck(next);
+          setPhase(serverCheckPhase(next));
+          return;
+        }
+      } catch {
+        if (!active) return;
+        disconnected ||= Date.now();
+      }
+      if (Date.now() >= deadline || (disconnected && Date.now() - disconnected > 120_000)) {
+        setError(t("settings.updates.hostUnreachable"));
+        setPhase("error");
+        setCheck(null);
+        return;
+      }
+      timer = setTimeout(() => void refresh(), 4000);
+    }
+    timer = setTimeout(() => void refresh(), 4000);
+    return () => { active = false; clearTimeout(timer); };
+  }, [updating, check]);
 
   if (!enabled) return null;
+  const fail = (cause: unknown) => {
+    setError(cause instanceof Error ? cause.message : String(cause));
+    setPhase("error");
+  };
+  const mutate = async (path: string, body: object) => {
+    if (!check) return;
+    setPhase("checking");
+    setError("");
+    try {
+      const compose = await api<NonNullable<ServerUpdateCheck["compose"]>>(path, { method: "POST", body: JSON.stringify(body), timeoutMs: 30_000 });
+      setCheck({ ...check, compose });
+      setPhase(serverCheckPhase(check));
+    } catch (cause) { fail(cause); }
+  };
   const row = serverUpdateRow(phase, check, appVersion(), otherServer);
+  const supported = check?.compose?.supported;
+  const install = phase === "available" && supported;
+  const label = updating ? t("settings.updates.updatingServer") : install
+    ? t("settings.updates.installServer", { name: otherServer ?? t("settings.updates.thisServer"), version: check!.latest! }) : row.label;
   return {
-    phase,
-    pending: false,
-    label: row.label,
-    source: "server",
+    phase, check, pending: updating, label, source: "server",
+    toggleAutomatic: supported ? () => void mutate("/api/updates/automatic", { enabled: !check.compose?.automatic }) : undefined,
     item: {
-      key: "update",
-      label: row.label,
-      subtitle: row.subtitle,
-      icon: <UpdateIcon phase={phase} pending={false} />,
-      disabled: phase === "checking",
+      key: "update", label,
+      subtitle: error || [check?.compose?.message, supported ? undefined : row.subtitle].filter(Boolean).join(" ") || undefined,
+      icon: <UpdateIcon phase={phase} pending={updating} />,
+      disabled: phase === "checking" || updating,
       keepOpen: true,
       attention: phase === "available" || phase === "reload" || phase === "error",
-      attentionTone: phase === "error" ? "danger" : "accent",
+      attentionTone: phase === "error" || check?.compose?.phase === "failed" ? "danger" : "accent",
       onSelect: () => {
+        if (install) return void mutate("/api/updates/apply", {});
         if (phase === "available" && check?.releaseUrl) return void openExternalLink(check.releaseUrl);
         if (phase === "reload") return window.location.reload();
         setPhase("checking");
+        setError("");
         void api<ServerUpdateCheck>("/api/updates/check", { timeoutMs: 20_000 })
           .then((next) => {
             setCheck(next);
             setPhase(serverCheckPhase(next));
           })
-          .catch(() => setPhase("error"));
+          .catch(fail);
       },
     },
   };

@@ -1,3 +1,4 @@
+import { isLongPollPath } from "./routes/phones.ts";
 import { randomUUID } from "node:crypto";
 import { createReadStream, createWriteStream, existsSync, lstatSync, mkdirSync, readdirSync, statSync, unlinkSync } from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
@@ -27,6 +28,11 @@ export function isWorkspaceBackupSessionControl(method: string, path: string): b
   return (method === "GET" && path === "/api/auth/sessions") ||
     (method === "POST" && path === "/api/auth/logout") ||
     (method === "DELETE" && /^\/api\/auth\/sessions\/[\w-]+$/.test(path));
+}
+
+export function tracksWorkspaceRequest(method: string, path: string): boolean {
+  return path.startsWith("/api/") && path !== "/api/events" && path !== "/api/health" && path !== "/api/sync/changes"
+    && !isLongPollPath(path) && !isWorkspaceBackupSessionControl(method, path);
 }
 
 /** Admin-only; passwords and raw credential metadata never appear in URLs, responses, logs or broadcasts. */

@@ -1,0 +1,4 @@
+services:
+  dusk:
+    volumes:
+      - ./.dusk-updater/socket:/run/dusk-compose-updater:ro

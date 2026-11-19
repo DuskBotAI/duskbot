@@ -119,7 +119,7 @@ Ask once and it becomes a routine. Schedules can be `once`, `daily` on chosen we
 </tr>
 </table>
 
-Routines run inside the dusk bot server, next to the bot. A sleeping computer runs nothing, so while it's plugged in the desktop app keeps it awake for the hour before a due routine, and a missed run can still start up to 12 hours late. On dusk cloud or your own server they run around the clock. See [routine schedules](docs/routine-schedules.md).
+Routines run inside the dusk bot server, next to the bot. A sleeping computer runs nothing, so while it's plugged in the desktop app keeps it awake for the hour before a due routine. When it comes back, a routine missed while asleep runs once, however late it is. On dusk cloud or your own server they run around the clock. See [routine schedules](docs/routine-schedules.md).
 
 ## Apps and AI
 

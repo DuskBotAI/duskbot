@@ -277,7 +277,7 @@ export interface RoutineManagerOptions {
   heldAfterWake?: () => boolean; held?: (run: RoutineRun) => string | null; decorate?: (routine: Routine) => Partial<Routine>; /** How much earlier than its time a run may start (a Cloud home folding an "around" run into its wake). */ earlyMs?: (routine: Routine) => number;
 }
 
-const CATCH_UP_MS = 12 * 60 * 60_000, WAKE_HORIZON_MS = 60 * 60_000;
+const CATCH_UP_MS = 12 * 60 * 60_000, WAKE_HORIZON_MS = 60 * 60_000, SCHEDULE_STAGGER_MS = 15_000;
 export const ROUTINE_RESTARTED = "dusk bot restarted while this routine was running";
 const MAX_RUNS = 2_000;
 function cloneRoutine(routine: Routine): Routine {
@@ -965,7 +965,7 @@ export class RoutineManager {
       routine.enabled && routine.runOnStartup && routine.schedule.type !== "once" &&
       (routine.schedule.type !== "interval" || routine.schedule.endsAt === undefined || now <= routine.schedule.endsAt));
     const marked = flagged.filter((routine) =>
-      !(routine.nextRunAt != null && routine.nextRunAt <= now && now - routine.nextRunAt <= CATCH_UP_MS) &&
+      !(routine.nextRunAt != null && routine.nextRunAt <= now) &&
       !this.runs.some((run) => run.routineId === routine.id && ["queued", "running", "waiting"].includes(run.status)));
     if (marked.length === 0 && launchId === undefined) return true;
     const previousLaunchId = this.startupLaunchId;
@@ -1028,8 +1028,8 @@ export class RoutineManager {
               continue;
             }
             const pendingAt = routine.nextRunAt!;
-            const late = now - pendingAt;
-            const scheduledFor = routine.schedule.type === "interval" && late <= CATCH_UP_MS
+            // The drain loop rebases a queued interval run the same way, however late it is.
+            const scheduledFor = routine.schedule.type === "interval"
               ? latestIntervalOccurrence(routine.schedule, now) ?? pendingAt
               : pendingAt;
             const overlapping = !runsOnce(routine.schedule) && this.runs.some(
@@ -1039,12 +1039,6 @@ export class RoutineManager {
               (run.triggerSource ?? (run.manual ? "manual" : "schedule")) === "schedule");
             if (!overlapping || (routine.overlap === "queue" && !scheduledQueued)) {
               const run = this.newRun(routine, scheduledFor, false, allocations);
-              // A reset is a state, not a moment: it still holds however late the computer wakes.
-              if (late > CATCH_UP_MS && routine.schedule.type !== "limit_reset") {
-                run.status = "missed";
-                run.finishedAt = now;
-                run.error = "This computer was offline for more than 12 hours after the scheduled time";
-              }
               scheduledRuns.push(run);
             } else {
               const waiting = this.runs.find((run) => run.routineId === routine.id && run.status === "waiting" && run.waitingSince !== undefined);
@@ -1061,6 +1055,9 @@ export class RoutineManager {
             }
             this.advancePastOccurrence(routine, now, scheduledFor);
           }
+          // Several routines can come due in one wake tick; start them 15 s apart, oldest first, instead of all at once.
+          const toStart = scheduledRuns.filter((run) => run.status === "queued").sort((a, b) => a.scheduledFor - b.scheduledFor);
+          for (let index = 1; index < toStart.length; index += 1) toStart[index]!.retryAt = now + index * SCHEDULE_STAGGER_MS;
         }, () => this.discardResultsThreads(allocations));
       }
       // Publish only after the scheduler batch is durable: reporting may persist transcript cards.

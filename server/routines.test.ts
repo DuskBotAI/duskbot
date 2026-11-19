@@ -247,11 +247,13 @@ describe("bounded scheduled overlap and run health", () => {
     expect(h.manager.listRuns()[0]).toMatchObject({ status: "running", threadId: thread });
   });
 
-  it("lets different scheduled routines on the same bot run independently", async () => {
+  it("lets different scheduled routines on the same bot run independently, 15 seconds apart", async () => {
     const h = harness(start);
     h.manager.create(input());
     h.manager.create({ ...input(), name: "Second routine", overlap: "queue" });
     h.setNow(start + 5 * 60_000); await h.manager.tick();
+    expect(h.started).toHaveLength(1);
+    h.setNow(start + 5 * 60_000 + 15_000); await h.manager.tick();
     expect(h.started).toHaveLength(2);
     expect(h.manager.listRuns().every(run => run.status === "running")).toBe(true);
   });
@@ -262,7 +264,10 @@ describe("bounded scheduled overlap and run health", () => {
     h.manager.runNow(routine.id); await h.manager.tick();
     finish(h, "thread-1", false);
     const cancelled = h.manager.runNow(routine.id)!; await h.manager.cancelRun(cancelled.id);
-    h.setNow(start + 24 * 3_600_000); await h.manager.tick();
+    h.setNow(start + 24 * 3_600_000);
+    h.options.held = () => "Held by the fixture";
+    await h.manager.tick();
+    delete h.options.held;
     expect(h.manager.listRuns().some(run => run.status === "missed")).toBe(true);
     expect(h.manager.listRoutines()[0].failureStreak).toBe(1);
   });
@@ -711,14 +716,14 @@ describe("cron routines use the existing persistent scheduler", () => {
     expect(h.manager.listRoutines()[0].nextRunAt).toBe(start + 8 * 3_600_000 + 60_000);
   });
 
-  it("records one missed receipt after longer downtime and advances straight to the future", async () => {
+  it("starts the newest occurrence once after longer downtime and advances straight to the future", async () => {
     const h = harness(start);
     const routine = h.manager.create(input({ ...monthly, expression: "* * * * *" }));
     h.setNow(start + 20 * 3_600_000);
     await h.manager.tick(); await h.manager.tick();
-    expect(h.started).toHaveLength(0);
+    expect(h.started).toHaveLength(1);
     expect(h.manager.listRuns()).toHaveLength(1);
-    expect(h.manager.listRuns()[0]).toMatchObject({ scheduledFor: routine.nextRunAt, status: "missed" });
+    expect(h.manager.listRuns()[0]).toMatchObject({ scheduledFor: routine.nextRunAt, status: "running" });
     expect(h.manager.listRoutines()[0].nextRunAt).toBe(start + 20 * 3_600_000 + 60_000);
   });
 
@@ -886,7 +891,7 @@ describe("persistent routine results destinations", () => {
     expect(h.visible.has("chosen")).toBe(true);
   });
 
-  describe.each(["manual", "schedule", "missed"])("uncommitted %s runs", (trigger) => {
+  describe.each(["manual", "schedule", "late"])("uncommitted %s runs", (trigger) => {
     it.each(["new", "chosen", "deleted", "trusted"])("rolls back a %s destination without publishing and retries safely", async (destination) => {
       const h = resultsHarness();
       h.setBot("busy");
@@ -896,7 +901,7 @@ describe("persistent routine results destinations", () => {
         ...(["chosen", "deleted"].includes(destination) ? { resultsThreadId: "chosen" } : {}),
       }, destination === "trusted" ? request("create", "trusted-source") : undefined);
       if (destination === "deleted") h.visible.delete("chosen");
-      h.setNow(trigger === "missed" ? due + 13 * 3_600_000 : due);
+      h.setNow(trigger === "late" ? due + 13 * 3_600_000 : due);
       const beforeRoutines = h.manager.listRoutines();
       const persisted = readFileSync(h.options.file!, "utf8");
       const discard = vi.fn((_botId: string, threadId: string) => h.visible.delete(threadId));
@@ -935,13 +940,13 @@ describe("persistent routine results destinations", () => {
       else await h.manager.tick();
       const [run] = h.manager.listRuns();
       expect(h.manager.listRuns()).toHaveLength(1);
-      expect(run).toMatchObject({ status: trigger === "missed" ? "missed" : "queued" });
+      expect(run).toMatchObject({ status: "queued" });
       expect(run?.resultsThreadId).toBe(allocated ? "results-2" : destination === "chosen" ? "chosen" : undefined);
       expect(h.created()).toBe(allocated ? 2 : 0);
       // A scheduled retry lands behind the still-busy bot, so the queued receipt publishes for creation and for its deferral stamp.
-      expect(h.changed).toHaveLength(trigger === "schedule" ? 2 : 1);
-      if (trigger === "schedule") expect(h.changed.at(-1)).toMatchObject({ id: run!.id, deferredAt: due });
-      expect(h.failed).toHaveLength(trigger === "missed" ? 1 : 0);
+      expect(h.changed).toHaveLength(trigger === "manual" ? 1 : 2);
+      if (trigger !== "manual") expect(h.changed.at(-1)).toMatchObject({ id: run!.id, deferredAt: h.options.now!() });
+      expect(h.failed).toHaveLength(0);
       expect(observations.length).toBeGreaterThan(0);
       for (const { payload, persisted: saved } of observations) {
         // A week's tally and the runs strip are derived from the runs on every read, never stored on the routine.
@@ -3256,7 +3261,9 @@ describe("RoutineManager", () => {
       schedule: { type: "once", at: new Date(2026, 7, 17, 8, 4).getTime() },
     });
 
+    h.options.held = () => "Held by the fixture";
     await h.manager.tick();
+    delete h.options.held;
     h.setNow(broken.nextRunAt!);
     await h.manager.tick();
     h.manager.handleRuntimeEvent({
@@ -3357,7 +3364,9 @@ describe("RoutineManager", () => {
       await h.manager.tick();
       finish(h, "thread-3", false);
       h.setNow(nextRunAt(h, doomed.id) + 13 * 60 * 60_000);
+      h.options.held = () => "Held by the fixture";
       await h.manager.tick();
+      delete h.options.held;
       const kept = h.manager.create({
         name: "Kept report", prompt: "Write it", botId: "maus-2",
         schedule: { type: "once", at: h.options.now!() + 60_000 },
@@ -3442,7 +3451,7 @@ describe("RoutineManager", () => {
     expect(h.manager.listRoutines()[0]!.nextRunAt).toBeGreaterThan(routine.nextRunAt!);
   });
 
-  it("records a missed receipt instead of launching very stale work", async () => {
+  it("runs a routine missed while offline for more than 12 hours, keeping its original time", async () => {
     const h = harness();
     const routine = h.manager.create({
       name: "Old check",
@@ -3452,12 +3461,12 @@ describe("RoutineManager", () => {
     });
     h.setNow(routine.nextRunAt! + 13 * 60 * 60_000);
     await h.manager.tick();
-    expect(h.manager.listRuns()[0]).toMatchObject({ status: "missed" });
-    expect(h.started).toHaveLength(0);
-    expect(h.failed).toMatchObject([{ id: h.manager.listRuns()[0]!.id, status: "missed" }]);
+    expect(h.started).toHaveLength(1);
+    expect(h.manager.listRuns()[0]).toMatchObject({ status: "running", scheduledFor: routine.nextRunAt });
+    expect(h.failed).toHaveLength(0);
   });
 
-  it("records a missed receipt for a once routine created with a long-past time", async () => {
+  it("runs a once routine created with a long-past time, keeping its original time", async () => {
     const h = harness();
     const staleAt = new Date(2026, 7, 16, 6, 0, 0).getTime();
     const routine = h.manager.create({
@@ -3468,8 +3477,8 @@ describe("RoutineManager", () => {
     });
     expect(routine.nextRunAt).toBe(staleAt);
     await h.manager.tick();
-    expect(h.manager.listRuns()[0]).toMatchObject({ status: "missed", scheduledFor: staleAt });
-    expect(h.started).toHaveLength(0);
+    expect(h.started).toHaveLength(1);
+    expect(h.manager.listRuns()[0]).toMatchObject({ status: "running", scheduledFor: staleAt });
   });
 
   it("runs a once routine created slightly late and records the original scheduled time", async () => {
@@ -3485,6 +3494,35 @@ describe("RoutineManager", () => {
     await h.manager.tick();
     expect(h.started).toHaveLength(1);
     expect(h.manager.listRuns()[0]).toMatchObject({ status: "running", scheduledFor: lateAt });
+  });
+
+  it("runs a routine missed while offline for more than 12 hours instead of leaving a missed receipt", async () => {
+    const h = harness();
+    const routine = h.manager.create({
+      name: "Evening triage", prompt: "Triage the inbox", botId: "maus-1",
+      schedule: { type: "daily", time: "22:45", weekdays: [0, 1, 2, 3, 4, 5, 6] },
+    });
+    h.setNow(routine.nextRunAt! + 24 * 60 * 60_000);
+    await h.manager.tick();
+    expect(h.started).toHaveLength(1);
+    expect(h.manager.listRuns()).toMatchObject([{ triggerSource: "schedule", status: "running", scheduledFor: routine.nextRunAt }]);
+    expect(h.failed).toHaveLength(0);
+  });
+
+  it("staggers scheduled runs that come due together, oldest occurrence first", async () => {
+    const h = harness();
+    h.setBot("busy");
+    const at = new Date(2026, 7, 17, 8, 0, 0).getTime();
+    const routines = [0, 1, 2].map((slot) => h.manager.create({
+      name: `Check ${slot}`, prompt: `Do ${slot}`, botId: `maus-${slot}`,
+      schedule: { type: "once", at: at + slot * 60_000 },
+    }));
+    h.setNow(at + 3 * 60_000);
+    await h.manager.tick();
+    const runs = routines.map((routine) => h.manager.listRuns().find((run) => run.routineId === routine.id)!);
+    expect(runs.map((run) => run.scheduledFor)).toEqual([at, at + 60_000, at + 2 * 60_000]);
+    expect(runs.map((run) => run.retryAt)).toEqual([undefined, at + 3 * 60_000 + 15_000, at + 3 * 60_000 + 30_000]);
+    expect(runs.every((run) => run.status === "queued")).toBe(true);
   });
 });
 
@@ -3584,7 +3622,7 @@ describe("run on startup", () => {
     expect(booted.listRuns().map((run) => run.triggerSource)).toEqual(["manual"]);
   });
 
-  it("replaces an occurrence too late to catch up, instead of also reporting it missed", async () => {
+  it("backfills a stale occurrence once when the computer wakes long after its time", async () => {
     const h = harness(start);
     const routine = h.manager.create(daily({ runOnStartup: true, overlap: "queue" }));
     h.setNow(routine.nextRunAt! + 13 * 60 * 60_000);
@@ -3593,12 +3631,12 @@ describe("run on startup", () => {
     await expect.poll(() => h.started.length).toBe(1);
     await booted.tick();
     booted.stop();
-    expect(booted.listRuns().map((run) => [run.triggerSource, run.status])).toEqual([["startup", "running"]]);
+    expect(booted.listRuns().map((run) => [run.triggerSource, run.status])).toEqual([["schedule", "running"]]);
     expect(h.failed).toHaveLength(0);
     expect(booted.listRoutines()[0].nextRunAt).toBeGreaterThan(routine.nextRunAt! + 13 * 60 * 60_000);
   });
 
-  it.each([2, 14])("does not start an interval that ended offline after %s hours", async (hours) => {
+  it.each([2, 14])("does not start an interval that ended before this scheduled run could begin (%s hours)", async (hours) => {
     const h = harness(start);
     const endsAt = start + hours * 60 * 60_000;
     const routine = h.manager.create(daily({ runOnStartup: true,
@@ -3610,7 +3648,7 @@ describe("run on startup", () => {
       await expect.poll(() => booted.isTicking).toBe(false);
       expect(h.started).toHaveLength(0);
       expect(booted.listRuns()).toHaveLength(1);
-      expect(booted.listRuns()[0]).toMatchObject({ routineId: routine.id, triggerSource: "schedule", status: "missed" });
+      expect(booted.listRuns()[0]).toMatchObject({ routineId: routine.id, triggerSource: "schedule", status: "missed", error: "The routine ended before this scheduled run could start" });
       expect(booted.listRoutines()[0]).toMatchObject({ enabled: false, nextRunAt: null });
       expect(new RoutineManager(h.options).listRoutines()[0]).toMatchObject({ enabled: false, nextRunAt: null });
     } finally {
@@ -3618,7 +3656,7 @@ describe("run on startup", () => {
     }
   });
 
-  it.each([-1, 0])("still allows startup just before or at the inclusive interval end (%s ms)", async (offset) => {
+  it.each([-1, 0])("still runs a routine just before or at the inclusive interval end (%s ms)", async (offset) => {
     const h = harness(start);
     const endsAt = start + 14 * 60 * 60_000;
     h.manager.create(daily({ runOnStartup: true,
@@ -3629,7 +3667,7 @@ describe("run on startup", () => {
     try {
       await expect.poll(() => h.started.length).toBe(1);
       expect(booted.listRuns()).toHaveLength(1);
-      expect(booted.listRuns()[0]).toMatchObject({ triggerSource: "startup", status: "running", scheduledFor: endsAt + offset });
+      expect(booted.listRuns()[0]).toMatchObject({ status: "running", scheduledFor: offset === 0 ? endsAt : endsAt - 60 * 60_000 });
     } finally {
       booted.stop();
     }

@@ -83,12 +83,13 @@ use an appropriate event/webhook workflow instead of a fake weekly schedule.
   routine and while one runs (Settings → Computer → *Keep this computer awake
   for scheduled automations*, on by default; a closed lid still sleeps). For true 24/7, run
   dusk bot on a VPS — see [deploy-vps.md](deploy-vps.md).
-- Existing catch-up policy remains: up to 12 hours late, one missed occurrence
-  can be dispatched; older work receives a missed-run receipt. The next date
-  advances without replaying every missed minute. Queued/running/waiting work
-  for the same cron routine does not accumulate overlapping copies (a run is
-  waiting while teammates still owe it results on the job runtime,
-  docs/runtime-contract.md §9).
+- When the computer comes back, a routine missed while it slept runs once,
+  however late it is. The next date advances without replaying every missed
+  minute. Several routines that become due in the same pass start 15 seconds
+  apart, oldest first, so a wake does not hit every bot at once.
+  Queued/running/waiting work for the same cron routine does not accumulate
+  overlapping copies (a run is waiting while teammates still owe it results on
+  the job runtime, docs/runtime-contract.md §9).
 - A run that asks you for an approval or an answer waits for you. Its card and
   the Routines log say what it waits for ("Waiting for your approval to use
   COMPOSIO_SEARCH_TOOLS"), the approval notification names the routine, and the

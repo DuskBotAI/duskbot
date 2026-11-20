@@ -35,7 +35,7 @@ const WHOLE = ["language", "talkingStyle", "defaultModelSelection", "automaticRe
 const FIELDS = [
   "profile.name", "profile.aboutMe", "profile.avatarUrl",
   ...["skillAuthoring", "skillReview", "skillReviewSteps", "showToolCalls", "browser", "llmThreadTitles", "quickUpdates", "smartSetupChoices", "autoRecall",
-    "skillsLibrary", "shareLearnedSkills", "roomMemoryCapture", "parallelRoomJobs", "acpPlanLines", "agentsToolBridge"].map((name) => `features.${name}`),
+    "skillsLibrary", "shareLearnedSkills", "roomMemoryCapture", "parallelRoomJobs", "acpPlanLines", "agentsToolBridge", "suggestions", "suggestionsPerDay"].map((name) => `features.${name}`),
   "onboarding.hintsSeen", "onboarding.reelSeen",
   "anthropic.everyClaudeBot",
   "tts.provider", "tts.voice", "tts.model", "tts.fishModel",

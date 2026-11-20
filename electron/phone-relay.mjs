@@ -32,8 +32,12 @@ export function proxyFromResolved(answer) {
   return null;
 }
 
-/** the computer's own proxy settings (system, PAC or WPAD) for each relay address, as Chromium resolves them */
-export const systemProxy = (session) => async (target) => proxyFromResolved(await session.resolveProxy(target.href).catch(() => "DIRECT"));
+/** the computer's own proxy settings (system, PAC or WPAD) for each relay address, as Chromium resolves them. Electron
+ * throws when `session.defaultSession` is read before the app is ready, so it is read only when a relay address is. */
+export const systemProxy = (session) => async (target) => {
+  const answer = await Promise.resolve().then(() => session().resolveProxy(target.href)).catch(() => "DIRECT");
+  return proxyFromResolved(answer);
+};
 
 /** what the link service said, as a reason the pane can show; `code` is the service's own when it gave one */
 export class RelaySetupError extends Error {
@@ -123,6 +127,7 @@ export function desktopHarnessSync({ port, ownerToken, request = httpRequest }) 
  *   loadHub(): Promise<{ createPhoneHub: Function }>,
  *   port(): number,
  *   ownerToken(): string,
+ *   sync?: Function,
  *   scope?(): string,
  *   fetch?: typeof fetch,
  *   log?: (line: string) => void,
@@ -162,7 +167,7 @@ export function createPhoneRelay(deps) {
     if (stopped || running || scope() !== at || !deps.wanted()) return;
     const { tunnel, keys } = saved;
     const one = { scope: at };
-    const sync = desktopHarnessSync({ port: deps.port, ownerToken: deps.ownerToken });
+    const sync = deps.sync ?? desktopHarnessSync({ port: deps.port, ownerToken: deps.ownerToken });
     // a sync reporting an applied revision means the relay took this computer's channels
     one.hub = createPhoneHub({
       base: tunnel.base, id: tunnel.id, token: tunnel.token, keys, ...(deps.proxy ? { proxy: deps.proxy } : {}),
@@ -336,9 +341,10 @@ export function phoneRelayStore({ jsonFile, userData, encryption }) {
  * Electron main's wiring: `phone-relay:state` and `phone-relay:ready` for the local page, and a relay kept up while
  * `wanted()`. Returns the relay.
  */
-export function installPhoneRelay({ ipcMain, guard, jsonFile, userData, dataDir, encryption, powerMonitor, ...deps }) {
+export function installPhoneRelay({ ipcMain, guard, jsonFile, userData, dataDir, encryption, powerMonitor, session, ...deps }) {
   const relay = createPhoneRelay({
     base: (process.env.DUSK_LINK_BASE || PHONE_RELAY_BASE).replace(/\/+$/, ""),
+    proxy: systemProxy(() => session.defaultSession),
     store: phoneRelayStore({ jsonFile, userData, encryption }),
     scope: () => String(dataDir() ?? ""),
     loadHub: () => import("../apps/link-service/agent.mjs"),

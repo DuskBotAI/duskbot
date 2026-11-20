@@ -6,6 +6,7 @@ import type { EmailConfig } from "../email/layout.ts";
 import type { StoredCloud } from "../clouds/types.ts";
 import { BANNER_MAX_BYTES, checkBanner } from "../../../../server/workspace-banner.ts";
 import { BUG_REPORT_STATUSES, type BugReportRow, type BugReportStatus, type BugReportStore, type ReportImage } from "./store.ts";
+import { BUG_REPORT_THEMES, isTheme, themeOf } from "./themes.ts";
 
 export const BUG_REPORT_PATH = "/api/bug-reports";
 export const BUG_REPORT_STATUS_PATH = "/api/bug-reports/status";
@@ -54,6 +55,15 @@ export interface BugReportsOptions {
 }
 
 const text = (value: unknown) => (typeof value === "string" ? value : "");
+/** the newest reports read to group them by theme; past it the themes say they are capped */
+const THEME_SCAN = 5000;
+const BULK_MAX = 200;
+/** the version a status change says it was fixed in: only with "fixed", and only a release version */
+function fixedInOf(input: Record<string, unknown>): string | null {
+  const fixedIn = input.status === "fixed" && input.fixedIn !== undefined && input.fixedIn !== null && input.fixedIn !== "" ? text(input.fixedIn).trim() : null;
+  if (fixedIn !== null && !VERSION.test(fixedIn)) throw new BugReportError(400, "invalid_request", "fixedIn must be a version like 0.1.150.");
+  return fixedIn;
+}
 // oxlint-disable-next-line no-control-regex -- control characters are what a one-line field refuses
 const oneLine = (value: string) => value.replace(/[\u0000-\u001f\u007f]+/g, " ").trim();
 
@@ -244,10 +254,30 @@ export function createBugReports(options: BugReportsOptions) {
       options.admin(req, false);
       const limitRows = url.searchParams.has("limit") ? integer(url.searchParams.get("limit"), 1, 100) : 30;
       const before = url.searchParams.has("before") ? integer(url.searchParams.get("before"), 1, Number.MAX_SAFE_INTEGER) : undefined;
-      const status = url.searchParams.get("status") || undefined;
+      const status = url.searchParams.get("status") || undefined, theme = url.searchParams.get("theme") || undefined;
       if (status !== undefined && !isStatus(status)) throw new BugReportError(400, "invalid_request", "Invalid status.");
-      const [reports, counts] = await Promise.all([store.list({ limit: limitRows, before, status }), store.counts()]);
-      json(res, 200, { reports, counts, next: reports.length === limitRows ? reports.at(-1)!.receivedAt : null });
+      if (theme !== undefined && !isTheme(theme)) throw new BugReportError(400, "invalid_request", "Invalid theme.");
+      const real = req.headers["x-dusk-admin-tests"] !== "show";
+      const [summaries, counts] = await Promise.all([store.summaries({ real, max: THEME_SCAN }), store.counts({ real })]);
+      const themed = summaries.map(row => ({ ...row, theme: themeOf(row.description) }));
+      const ids = theme ? themed.filter(row => row.theme === theme).map(row => row.id) : undefined;
+      const reports = (await store.list({ limit: limitRows, before, status, real, ids })).map(row => ({ ...row, theme: themeOf(row.description) }));
+      const themes = BUG_REPORT_THEMES.map(name => ({ theme: name, count: themed.filter(row => row.theme === name).length, open: themed.filter(row => row.theme === name && (row.status === "new" || row.status === "looking")).length }))
+        .filter(row => row.count > 0);
+      json(res, 200, { reports, counts, themes, themesCapped: summaries.length === THEME_SCAN, next: reports.length === limitRows ? reports.at(-1)!.receivedAt : null });
+      return true;
+    }
+    if (method === "POST" && path === "/v1/admin/bug-reports/bulk") {
+      const actor = options.admin(req, true);
+      const input = options.bodyObject(await readCapped(req, 16 * 1024));
+      const ids = Array.isArray(input.ids) ? input.ids : null;
+      if (!ids || !ids.length || ids.length > BULK_MAX || !ids.every(id => typeof id === "string" && /^[A-Za-z0-9_-]{1,64}$/.test(id))) throw new BugReportError(400, "invalid_request", `ids must list 1 to ${BULK_MAX} reports.`);
+      if (!isStatus(input.status)) throw new BugReportError(400, "invalid_request", `status must be one of ${BUG_REPORT_STATUSES.join(", ")}.`);
+      const fixedIn = fixedInOf(input);
+      const status = input.status, at = now();
+      const changed = (await Promise.all([...new Set(ids as string[])].map(id => store.setStatus(id, status, fixedIn, at)))).filter((row): row is BugReportRow => !!row);
+      for (const report of changed) options.audit?.(actor, "bug_report.status", report.id, { status: report.status, fixedIn: report.fixedIn });
+      json(res, 200, { reports: changed.map(row => ({ ...row, theme: themeOf(row.description) })) });
       return true;
     }
     const picture = /^\/v1\/admin\/bug-reports\/([A-Za-z0-9_-]{1,64})\/images\/(\d{1,2})$/.exec(path);
@@ -273,8 +303,7 @@ export function createBugReports(options: BugReportsOptions) {
       const actor = options.admin(req, true);
       const input = options.bodyObject(await readCapped(req, 4 * 1024));
       if (!isStatus(input.status)) throw new BugReportError(400, "invalid_request", `status must be one of ${BUG_REPORT_STATUSES.join(", ")}.`);
-      const fixedIn = input.status === "fixed" && input.fixedIn !== undefined && input.fixedIn !== null && input.fixedIn !== "" ? text(input.fixedIn).trim() : null;
-      if (fixedIn !== null && !VERSION.test(fixedIn)) throw new BugReportError(400, "invalid_request", "fixedIn must be a version like 0.1.150.");
+      const fixedIn = fixedInOf(input);
       const report = await store.setStatus(one[1]!, input.status, fixedIn, now());
       if (!report) throw new BugReportError(404, "not_found", "No such report.");
       options.audit?.(actor, "bug_report.status", report.id, { status: report.status, fixedIn: report.fixedIn });

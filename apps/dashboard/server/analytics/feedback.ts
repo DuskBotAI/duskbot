@@ -28,10 +28,12 @@ export interface FeedbackAnswer {
   next: number | null;
   /** notes per kind over the last THEME_DAYS days */
   counts: Record<FeedbackKind, number>;
+  /** true when a kind had more than FEEDBACK_MAX notes in the window, so its count stops there */
+  countsCapped: boolean;
   /** themes across the notes of the last THEME_DAYS days, friction first */
   themes: Theme[];
 }
-export const THEME_DAYS = 30, FEEDBACK_PAGE = 50, FEEDBACK_SCAN = 500;
+export const THEME_DAYS = 30, FEEDBACK_PAGE = 50, FEEDBACK_SCAN = 500, FEEDBACK_MAX = 50_000;
 const DAY = 86_400_000;
 
 const OS_WORD: Record<string, string> = { mac: "mac", windows: "windows", linux: "linux" };
@@ -57,6 +59,21 @@ export function feedbackNote(record: UsageRecord): FeedbackNote | null {
   return null;
 }
 
+/** every record of a kind in [since, until), read a page at a time, up to `max` */
+export async function allRecords(store: UsageStore, kind: UsageRecord["kind"], since: number, until: number, max = FEEDBACK_MAX): Promise<{ rows: UsageRecord[]; capped: boolean }> {
+  const rows: UsageRecord[] = [], seen = new Set<string>();
+  let end = until;
+  while (rows.length < max) {
+    const page = await store.records(kind, since, end, FEEDBACK_SCAN);
+    const fresh = page.filter(record => !seen.has(record.id));
+    for (const record of fresh) { seen.add(record.id); rows.push(record); }
+    if (page.length < FEEDBACK_SCAN || !fresh.length) return { rows, capped: false };
+    // the next page starts at the oldest time read, so records sharing that millisecond are not skipped
+    end = page.at(-1)!.at + 1;
+  }
+  return { rows: rows.slice(0, max), capped: true };
+}
+
 export async function feedbackAnswer(store: UsageStore, input: { now: number; kind: FeedbackKind | null; before: number | null; limit?: number;
   /** notes that stay out (test accounts', harness installs'); the page cursor still walks past them */
   hidden?: (record: UsageRecord) => boolean }): Promise<FeedbackAnswer> {
@@ -64,14 +81,14 @@ export async function feedbackAnswer(store: UsageStore, input: { now: number; ki
   const until = input.before ?? input.now + 1, since = input.now - 90 * DAY, recent = input.now - THEME_DAYS * DAY;
   const [pages, ...windows] = await Promise.all([
     Promise.all(kinds.map(kind => store.records(RECORD_KIND[kind], since, until, limit + 1))),
-    ...FEEDBACK_KINDS.map(kind => store.records(RECORD_KIND[kind], recent, input.now + 1, FEEDBACK_SCAN)),
+    ...FEEDBACK_KINDS.map(kind => allRecords(store, RECORD_KIND[kind], recent, input.now + 1)),
   ]);
   const hidden = input.hidden, kept = (record: UsageRecord) => !hidden || !hidden(record);
   const page = pages.flat().sort((a, b) => b.at - a.at || a.id.localeCompare(b.id)).map(record => ({ record, note: feedbackNote(record) })).filter(row => !!row.note);
   const walked = page.slice(0, limit), shown = walked.filter(row => kept(row.record)).map(row => row.note!);
-  const ownWindows = windows.map(rows => rows.filter(kept));
+  const ownWindows = windows.map(window => window.rows.filter(kept));
   const counts = Object.fromEntries(FEEDBACK_KINDS.map((kind, index) => [kind, ownWindows[index]!.length])) as Record<FeedbackKind, number>;
   const texts = FEEDBACK_KINDS.flatMap((kind, index) => input.kind && input.kind !== kind ? [] : ownWindows[index]!.map(feedbackNote).map(note => note?.text).filter((text): text is string => !!text));
   const themes = themesOf(texts).sort((a, b) => Number(b.pain) - Number(a.pain) || b.count - a.count);
-  return { notes: shown, next: page.length > limit ? walked.at(-1)!.record.at : null, counts, themes };
+  return { notes: shown, next: page.length > limit ? walked.at(-1)!.record.at : null, counts, countsCapped: windows.some(window => window.capped), themes };
 }

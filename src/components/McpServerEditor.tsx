@@ -1,9 +1,10 @@
-import { useState } from "react";
+import { useRef, useState, type CSSProperties } from "react";
 import { ChevronDown, ChevronRight, Loader2 } from "../icons";
 
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
 import { readMcpPaste, type McpPasteError } from "@/lib/mcp-paste";
+import { useSystemControl } from "@/lib/system-control";
 
 import { McpResultBudgetField, withResultBudget, type McpMessage } from "./McpResultBudgetField";
 import { McpSecretRows } from "./McpSecretRows";
@@ -19,6 +20,47 @@ export interface McpServerSubmission {
 
 const FIELD = "mt-1.5 w-full rounded-lg border border-transparent bg-raised px-3 py-2.5 text-[13px] text-ink outline-none focus:border-accent";
 const LABEL = "text-[12px] font-medium text-ink-secondary";
+
+const TRANSPORTS = ["remote", "stdio"] as const;
+
+function TransportSegmented({ value, onChange }: { value: "remote" | "stdio"; onChange: (transport: "remote" | "stdio") => void }) {
+  const room = useRef<HTMLDivElement>(null);
+  const items = TRANSPORTS.map((transport) => t(transport === "stdio" ? "mcp.transport.stdio" : "mcp.transport.remote"));
+  const selected = Math.max(0, TRANSPORTS.indexOf(value));
+  const system = useSystemControl(
+    room,
+    { kind: "segmented", items, selected, label: t("mcp.field.type") },
+    (index) => {
+      const picked = typeof index === "number" ? TRANSPORTS[index] : undefined;
+      if (picked && picked !== value) onChange(picked);
+    },
+  );
+  if (system) {
+    return (
+      <div ref={room} aria-hidden="true" data-segmented-room="" className="inline-flex h-9 items-center">
+        {items.map((label) => (
+          <span key={label} className="invisible whitespace-nowrap px-3.5 text-[15px] font-medium">{label}</span>
+        ))}
+      </div>
+    );
+  }
+  return (
+    <div
+      className="inline-flex rounded-lg bg-raised p-0.5"
+      role="radiogroup"
+      aria-label={t("mcp.field.type")}
+      data-segmented=""
+      style={{ "--seg-count": TRANSPORTS.length, "--seg-index": selected } as CSSProperties}
+    >
+      {TRANSPORTS.map((transport, index) => (
+        <button key={transport} type="button" role="radio" aria-checked={value === transport} aria-pressed={value === transport} onClick={() => onChange(transport)}
+          className={cn("rounded-md px-3 py-1.5 text-[12px] font-medium transition-colors", value === transport ? "bg-card text-ink shadow-sm" : "text-ink-secondary hover:text-ink")}>
+          {items[index]}
+        </button>
+      ))}
+    </div>
+  );
+}
 
 function where(draft: McpDraft): string {
   if (draft.transport === "stdio") return draft.command;
@@ -124,14 +166,7 @@ export function McpServerEditor({ server, fixKeys = false, taken, team, busy, on
       {details && draft && (
         <div className="mt-3">
           {adding && (
-            <div className="inline-flex rounded-lg bg-raised p-0.5" role="radiogroup" aria-label={t("mcp.field.type")}>
-              {(["remote", "stdio"] as const).map((transport) => (
-                <button key={transport} type="button" role="radio" aria-checked={draft.transport === transport} onClick={() => setDraft((current) => ({ ...current, transport }))}
-                  className={cn("rounded-md px-3 py-1.5 text-[12px] font-medium transition-colors", draft.transport === transport ? "bg-card text-ink shadow-sm" : "text-ink-secondary hover:text-ink")}>
-                  {t(transport === "stdio" ? "mcp.transport.stdio" : "mcp.transport.remote")}
-                </button>
-              ))}
-            </div>
+            <TransportSegmented value={draft.transport} onChange={(transport) => setDraft((current) => ({ ...current, transport }))} />
           )}
           <div className="mt-4 grid gap-4 sm:grid-cols-2">
             <label className="block">

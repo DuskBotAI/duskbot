@@ -78,7 +78,7 @@ const KEEP_BYTES = 64 * 1024;
 
 /** homeVolumeProblem over a tar that arrives in pieces: the same rules as tarEntries, holding one header and at most
  *  KEEP_BYTES of an entry at a time, so a volume of any size is checked in a few kilobytes */
-export function homeVolumeScan(cloudId: string) {
+export function homeVolumeScan(cloudId: string, onEntry?: (name: string, size: number) => void) {
   const header = Buffer.alloc(512);
   let have = 0, left = 0, pad = 0, done = false, broken = false, longName: string | null = null;
   let entry: { name: string; type: string; keep: Buffer[] | null; kept: number; marker: boolean } | null = null;
@@ -104,6 +104,7 @@ export function homeVolumeScan(cloudId: string) {
     const parts = name.split("/"), isMarker = type !== "L" && type !== "x" && parts.at(-1) === MARKER_FILE && parts.length <= 3;
     // a cloud home's data folder keeps its name from before the rename (CLOUD_HOME), so its backups do too
     if (type !== "L" && type !== "x" && parts.slice(0, -1).includes(CLOUD_HOME.dataName)) data = true;
+    if (type !== "L" && type !== "x") onEntry?.(name, size);
     entry = { name, type, keep: type === "L" || type === "x" || isMarker ? [] : null, kept: 0, marker: isMarker };
     left = size; pad = Math.ceil(size / 512) * 512 - size;
     if (left === 0) finish();

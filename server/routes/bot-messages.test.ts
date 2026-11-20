@@ -209,6 +209,19 @@ describe("POST /api/bots/:id/messages and who typed it", () => {
   });
 });
 
+describe("a line typed while a send card waits", () => {
+  it("stops the card's wait for a typed line, never for a press or a relay", async () => {
+    const stopped: string[] = [];
+    const { store, bot, threadId, post, show } = await fixture({ typedOverHeldCards: (thread: string) => { stopped.push(thread); } });
+    await post({ threadId, sendId: SEND, text: "cancel that, book 10am instead" });
+    expect(stopped).toEqual([threadId]);
+    await post({ threadId, sendId: OTHER_SEND, text: "x", widgetAction: { messageId: show("routineForm"), ref: "confirm", values: { days: "mon", report: "discord:releases" } } });
+    store.patchBot(bot.id, { approvalMode: "ask", autoApprove: false });
+    await post({ threadId, sendId: "send-3", text: "y", expectedActiveLeafId: store.activeLeaf(threadId), expectedApprovalMode: "ask" }, "/guarded");
+    expect(stopped).toEqual([threadId]);
+  });
+});
+
 describe("POST /api/bots/:id/messages with widgetAction", () => {
   it("lets the server answer a press on its own card with no turn, refuses it for someone else, and reads no widget in another bot's chat", async () => {
     const { store, threadId, state, post, show, sent } = await fixture();

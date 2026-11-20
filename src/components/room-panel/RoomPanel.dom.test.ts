@@ -108,7 +108,7 @@ afterEach(() => {
 
 // icon-font glyphs sit in the private use planes; read only the words
 const words = (element: Element | null) => element?.textContent?.replace(/[\u{E000}-\u{F8FF}\u{F0000}-\u{10FFFD}]/gu, "") ?? null;
-const modal = (name: string) => $(`[data-panel-modal="${name}"]`);
+const modal = (name: string) => [...document.querySelectorAll<HTMLElement>(`[data-panel-modal="${name}"]`)].find((el) => !el.closest("[data-leaving]")) ?? null;
 
 describe("the Room panel's card", () => {
   it("shows the room's faces and name, then who responds, the folder, the instructions and the members as plain rows", () => {
@@ -441,7 +441,7 @@ describe("Escape", () => {
 
   it("closes from the ✕ too", () => {
     render(room());
-    click($('[data-room-panel] [aria-label="Close"]'));
+    click($('[data-room-panel] [aria-label="Close panel"]'));
     expect(seen.open).toBeNull();
     expect(document.activeElement).toBe(opener);
   });

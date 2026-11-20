@@ -1,6 +1,8 @@
 import { ModalLayer } from "../ui/ModalLayer";
 import { BookOpen, Trash2 } from "../../icons";
 import { t } from "@/lib/i18n";
+import { phoneApp } from "@/lib/store-app";
+import { wakeSystemControls } from "@/lib/system-control";
 import { useEffect, useRef, useState } from "react";
 
 import { useStore, type Bot } from "@/state/store";
@@ -214,6 +216,13 @@ export function SkillReviewDialog({
     };
   }, [working]);
 
+  const phone = phoneApp();
+  useEffect(() => {
+    if (!phone) return;
+    wakeSystemControls();
+    return () => wakeSystemControls();
+  }, [phone]);
+
   return (
     <ModalLayer><div
       ref={dialogRef}
@@ -221,6 +230,8 @@ export function SkillReviewDialog({
       role="dialog"
       aria-modal="true"
       aria-labelledby="skill-review-title"
+      data-phone-modal-layer={phone ? "" : undefined}
+      style={phone ? { paddingTop: "max(var(--m-safe-top, 0px), 16px)", paddingBottom: "max(var(--m-safe-bottom, 0px), 16px)" } : undefined}
       className="fixed inset-0 z-[90] flex items-center justify-center bg-black/45 p-6"
     >
       <div className="flex max-h-[min(760px,90vh)] w-full max-w-2xl flex-col rounded-2xl bg-card p-5 shadow-2xl">

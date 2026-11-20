@@ -43,7 +43,8 @@ function fixtureHome() {
   return home;
 }
 
-async function serve({ local = true, home = fixtureHome(), dataDir }: { local?: boolean; home?: string; dataDir?: string } = {}) {
+type Connect = (botId: string, platform: "telegram" | "discord", token: string, allowed: string[]) => Promise<{ platform: "telegram" | "discord"; state: "online"; handle: string; allowed: []; knocked: [] }>;
+async function serve({ local = true, home = fixtureHome(), dataDir, connectChannel }: { local?: boolean; home?: string; dataDir?: string; connectChannel?: Connect } = {}) {
   const cfg = { mcpServers: {} } as Pick<AppConfig, "mcpServers" | "features">;
   const bot = { id: `bot-${randomUUID().slice(0, 8)}` };
   let busy = false;
@@ -56,6 +57,7 @@ async function serve({ local = true, home = fixtureHome(), dataDir }: { local?: 
     botExists: (id) => id === bot.id,
     machine: () => ({ ...thisMachine(), home, platform: "darwin", env: {} }),
     ...(dataDir ? { dataDir } : {}),
+    ...(connectChannel ? { connectChannel } : {}),
   })];
   const server = createServer(async (req, res) => {
     const url = new URL(req.url ?? "/", "http://localhost");
@@ -170,5 +172,30 @@ describe("the setup import routes", () => {
     expect((await call("POST", "/api/setup-import", { body: { skills: true, everything: true } })).status).toBe(400);
     expect((await call("POST", "/api/setup-import", { body: { skills: "yes" } })).status).toBe(400);
     expect((await call("POST", "/api/setup-import", { body: "skills=true", type: "text/plain" })).status).toBe(415);
+  });
+});
+
+describe("chat apps carried over in a move", () => {
+  it("connects the moved bot to its old Telegram bot on the owner's loopback, and only for a place the look found", async () => {
+    const home = fixtureHome();
+    const token = "7000001:AAH" + "x".repeat(32);
+    mkdirSync(join(home, ".hermes"), { recursive: true });
+    writeFileSync(join(home, ".hermes", "SOUL.md"), "You are Hermes.\n");
+    writeFileSync(join(home, ".hermes", ".env"), `TELEGRAM_BOT_TOKEN=${token}\nTELEGRAM_ALLOWED_USERS=501\n`);
+    const connected: unknown[] = [];
+    const { call, bot } = await serve({ home, connectChannel: async (botId, platform, value, allowed) => {
+      connected.push({ botId, platform, value, allowed });
+      return { platform, state: "online", handle: "@nova_test_bot", allowed: [], knocked: [] };
+    } });
+    const ref = `hermes:${join(home, ".hermes")}`;
+    expect((await call("POST", "/api/setup-import/channels", { auth: "service", body: { ref, botId: bot.id } })).status).toBe(403);
+    expect((await call("POST", "/api/setup-import/channels", { body: { ref: `hermes:${home}`, botId: bot.id } })).status).toBe(404);
+    expect((await call("POST", "/api/setup-import/channels", { body: { ref, botId: "someone-else" } })).status).toBe(400);
+    const answer = await call("POST", "/api/setup-import/channels", { body: { ref, botId: bot.id } });
+    const text = await answer.text();
+    expect(answer.status).toBe(200);
+    expect(text).not.toContain(token);
+    expect(JSON.parse(text)).toEqual({ channels: [{ platform: "telegram", ok: true, handle: "@nova_test_bot" }] });
+    expect(connected).toEqual([{ botId: bot.id, platform: "telegram", value: token, allowed: ["501"] }]);
   });
 });

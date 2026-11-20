@@ -27,3 +27,17 @@ it("draws its words in the field's own type and padding, so the caret stays at t
   expect([mirror().fontSize, mirror().lineHeight, mirror().paddingLeft], "and follows the field when its classes change").toEqual(["15px", "24px", "4px"]);
   act(() => root.unmount());
 });
+
+it("sits over the field where the wrapper pads it, so the typed words start where the placeholder and the caret do", async () => {
+  vi.stubGlobal("ResizeObserver", class { observe() {} disconnect() {} });
+  const offsetLeft = vi.spyOn(HTMLElement.prototype, "offsetLeft", "get").mockImplementation(function (this: HTMLElement) { return this.tagName === "TEXTAREA" ? 6 : 0; });
+  const root = createRoot(document.body.appendChild(document.createElement("div")));
+  const inputRef = createRef<HTMLTextAreaElement>();
+  await act(async () => {
+    root.render(createElement(MentionTextarea, { inputRef, peers: [], wrapperClassName: "px-1.5", value: "hey", onChange: () => {} }));
+  });
+  const mirror = document.querySelector<HTMLElement>(".mention-editor-mirror")!.style;
+  expect([mirror.left, mirror.right]).toEqual(["6px", "auto"]);
+  offsetLeft.mockRestore();
+  act(() => root.unmount());
+});

@@ -605,7 +605,8 @@ export const CodexDriver: ProviderDriver<CodexConfig> = {
           mountSelected("computer", "computer", turn.integrations.localComputer); if (selectedMcp.has("computer")) appServerArgs.push("-c", `mcp_servers.computer.tool_timeout_sec=${COMPUTER_TOOL_TIMEOUT_SECONDS}`);
         }
         if (turn.integrations?.browser) {
-          mountSelected("browser", "browser", turn.integrations.browser);
+          // OpenAI's Responses API refuses a tool namespace named "browser" (400 "reserved namespace 'browser'", 2026-11)
+          mountSelected("browser", "duskbot_browser", turn.integrations.browser);
         }
         for (const name of ["data", "email", "device"] as const) if (turn.integrations?.[name]) mountSelected(name, name, turn.integrations[name]);
         // A `-c` override merges with a same-named server in config.toml, and stdio over url is

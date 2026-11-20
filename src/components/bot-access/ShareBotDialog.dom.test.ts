@@ -105,12 +105,12 @@ it("removes a person at once, says so with Undo, and Undo puts the sharing back 
   await open(editable);
   await choose("Bob's access", "remove");
   expect(server.calls).toEqual([{ path: "/api/bots/payroll/access", body: { everyone: "none", people: { [CARA.email]: "chat" } } }]);
-  const toast = document.querySelector<HTMLElement>("[data-access-toast]")!;
+  const toast = document.querySelector<HTMLElement>("[data-access-toast]:not([data-exit-ghost])")!;
   expect(toast.textContent).toContain("Removed Bob");
   toast.querySelector("button")!.click();
   await settle();
   expect(server.calls[1]).toEqual({ path: "/api/bots/payroll/access", body: editable.access });
-  expect(document.querySelector("[data-access-toast]")).toBeNull();
+  expect(document.querySelector("[data-access-toast]:not([data-exit-ghost])")).toBeNull();
 });
 
 it("suggests teammates not yet added, and arrow keys and Enter add one at Can chat with Undo", async () => {
@@ -128,8 +128,8 @@ it("suggests teammates not yet added, and arrow keys and Enter add one at Can ch
   expect(offered().find((row) => row.getAttribute("aria-selected") === "true")!.dataset.shareSuggestion).toBe(EVE.email);
   await press("Enter");
   expect(server.calls.at(-1)!.body).toEqual({ everyone: "none", people: { [BOB.email]: "view", [CARA.email]: "chat", [EVE.email]: "chat" } });
-  expect(document.querySelector("[data-access-toast]")!.textContent).toContain("Added Eve");
-  expect(document.querySelector("[data-access-toast]")!.textContent).not.toContain("Can chat");
+  expect(document.querySelector("[data-access-toast]:not([data-exit-ghost])")!.textContent).toContain("Added Eve");
+  expect(document.querySelector("[data-access-toast]:not([data-exit-ghost])")!.textContent).not.toContain("Can chat");
   expect(offered()).toEqual([]);
   expect(document.activeElement).toBe(field());
 });
@@ -170,7 +170,7 @@ it("removes a person, and switches between everyone in the team using it and onl
   expect(server.calls.at(-1)!.body).toEqual({ everyone: "none", people: { [BOB.email]: "view" } });
   await choose("General access", "everyone");
   expect(server.calls.at(-1)!.body).toEqual({ everyone: "chat", people: editable.access!.people });
-  expect(document.querySelector("[data-access-toast]")!.textContent).toContain("Everyone in Acme can use it now");
+  expect(document.querySelector("[data-access-toast]:not([data-exit-ghost])")!.textContent).toContain("Everyone in Acme can use it now");
   flushSync(() => root.unmount());
   document.body.innerHTML = "";
   host = document.createElement("div");

@@ -137,3 +137,23 @@ function sentence(text: string): string {
   const capital = `${text.charAt(0).toUpperCase()}${text.slice(1)}`;
   return /[.!?…"]$/.test(capital) ? capital : `${capital}.`;
 }
+
+const PROGRESS_STEPS = 15;
+const STEP_DETAIL_CHARS = 100;
+const LAST_WORDS_CHARS = 300;
+
+/** What a turn a restart cut had already done, as lines for the turn that continues it: each tool step in order with how
+ * it ended, then the last words it wrote. */
+export function cutTurnProgress(rows: readonly Message[]): string[] {
+  const steps = toolRows(rows).filter((row) => row.tool!.itemId !== undefined).map((row) => {
+    const tool = row.tool!;
+    const detail = [tool.summary, tool.input].find((text): text is string => typeof text === "string" && text.trim() !== "");
+    const state = tool.ok === false ? "failed" : tool.ok === true ? "done" : "cut off, may not have finished";
+    return `${tool.label ?? tool.name}${detail ? ` (${clip(detail, STEP_DETAIL_CHARS)})` : ""}: ${state}`;
+  });
+  const shown = steps.slice(-PROGRESS_STEPS);
+  const lines = steps.length > shown.length ? [`${steps.length - shown.length} earlier steps`, ...shown] : shown;
+  const said = rows.findLast((row) => row.role === "bot" && row.kind === "text" && typeof row.text === "string" && row.text.trim() !== "");
+  if (said?.text) lines.push(`its last words: "${clip(said.text, LAST_WORDS_CHARS)}"`);
+  return lines;
+}

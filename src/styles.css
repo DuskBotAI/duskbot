@@ -1,5 +1,9 @@
 @import "tailwindcss";
 
+/* the composer's live height (src/lib/composer-dock.ts): set on each element that reads it, never inherited, so a change
+   restyles those elements alone instead of the whole transcript under the scroller */
+@property --composer-dock { syntax: "*"; inherits: false; }
+
 /* Phones and tablets have no hover, and Tailwind only applies `hover:` and
    `group-hover:` under `@media (hover: hover)`. A control revealed on hover
    (`opacity-0 group-hover:opacity-100`) is therefore invisible there. Pair
@@ -10,6 +14,8 @@
     @slot;
   }
 }
+/* the phone app answers a press with its own scale or ripple (src/mobile/press.ts), never a pressed fill */
+@custom-variant active (&:active:where(:not(html[data-mobile-app] *)));
 
 /* Inline mentions keep the surrounding font metrics, including in the
    textarea mirror. No padding/border/font-weight changes that shift the caret. */
@@ -120,7 +126,7 @@ a.link-pill:focus-visible {
   color: var(--color-ink-secondary);
   cursor: pointer;
 }
-.table-action:hover, .table-action[aria-pressed="true"] { background: var(--color-raised); color: var(--color-ink); }
+.table-action:hover:where(:not(html[data-mobile-app] *)), .table-action[aria-pressed="true"] { background: var(--color-raised); color: var(--color-ink); }
 .table-action:focus-visible { outline: none; outline-offset: 1px; }
 @media (pointer: coarse) { .table-action { min-width: 40px; min-height: 40px; } }
 /* inside a 28px file pill under a reply, the table preview is a 24px circle */
@@ -1202,7 +1208,7 @@ a.link-pill:focus-visible {
   background: var(--color-ink);
   color: var(--color-app);
 }
-:root:is([data-skin="midnight"], [data-skin="daylight"], [data-skin="grok"], [data-skin="grok-dark"]) .ui-button-primary:not(:disabled):is(:hover, :active) {
+:root:is([data-skin="midnight"], [data-skin="daylight"], [data-skin="grok"], [data-skin="grok-dark"]) .ui-button-primary:not(:disabled):is(:hover, :active):where(:not(html[data-mobile-app] *)) {
   background: color-mix(in srgb, var(--color-ink) 88.5%, var(--color-app));
   color: var(--color-app);
   filter: none;
@@ -1224,10 +1230,10 @@ a.link-pill:focus-visible {
   background-color: var(--bot-button);
   color: var(--bot-button-ink);
 }
-.bot-button:enabled:hover {
+.bot-button:enabled:hover:where(:not(html[data-mobile-app] *)) {
   background-color: var(--bot-button-hover);
 }
-.bot-button:enabled:active {
+.bot-button:enabled:active:where(:not(html[data-mobile-app] *)) {
   background-color: var(--bot-button-pressed);
 }
 .bot-button:disabled {
@@ -1299,7 +1305,7 @@ a.link-pill:focus-visible {
 [data-chat-bubble="simple"].chat-text {
   line-height: 22px;
 }
-[data-chat-bubble="simple"] .chat-md > * + * {
+[data-chat-bubble="simple"] .chat-md > :where(:not(:first-child)) {
   margin-top: 10px;
 }
 /* A card under its own bot's bubble (and a bubble under its card) sits 12px below it, not the 16px between senders. */
@@ -1483,8 +1489,8 @@ body {
     background: var(--color-accent);
     color: var(--color-accent-ink);
   }
-  .ui-button-primary:enabled:hover,
-  a.ui-button-primary:hover {
+  .ui-button-primary:enabled:hover:where(:not(html[data-mobile-app] *)),
+  a.ui-button-primary:hover:where(:not(html[data-mobile-app] *)) {
     background: var(--color-accent);
     color: var(--color-accent-ink);
     filter: brightness(1.1);
@@ -1508,8 +1514,8 @@ body {
     line-height: 1.25rem;
     transition: background-color 120ms ease, color 120ms ease;
   }
-  button.ui-pill:enabled:hover,
-  a.ui-pill:hover {
+  button.ui-pill:enabled:hover:where(:not(html[data-mobile-app] *)),
+  a.ui-pill:hover:where(:not(html[data-mobile-app] *)) {
     background: var(--color-raised-hover);
     color: var(--color-ink);
   }
@@ -1557,15 +1563,15 @@ body {
     font-weight: 400;
     line-height: 18px;
   }
-  .ui-menu-row:enabled:hover { background: var(--color-menu-hover); }
+  .ui-menu-row:enabled:hover:where(:not(html[data-mobile-app] *)) { background: var(--color-menu-hover); }
   .ui-menu-row:disabled { opacity: 0.6; }
-  .ui-button:enabled:hover,
-  .ui-icon-button:enabled:hover {
+  .ui-button:enabled:hover:where(:not(html[data-mobile-app] *)),
+  .ui-icon-button:enabled:hover:where(:not(html[data-mobile-app] *)) {
     background: var(--color-raised-hover);
     color: var(--color-ink);
   }
-  .ui-button:enabled:active,
-  .ui-icon-button:enabled:active {
+  .ui-button:enabled:active:where(:not(html[data-mobile-app] *)),
+  .ui-icon-button:enabled:active:where(:not(html[data-mobile-app] *)) {
     background: var(--color-raised);
   }
   .ui-button:disabled,
@@ -1579,7 +1585,7 @@ body {
     border-color: transparent;
     background: color-mix(in srgb, var(--color-ink) 8%, transparent);
   }
-  :root:is([data-skin="midnight"], [data-skin="grok-dark"]) .ui-button:enabled:is(:hover, :active) {
+  :root:is([data-skin="midnight"], [data-skin="grok-dark"]) .ui-button:enabled:is(:hover, :active):where(:not(html[data-mobile-app] *)) {
     background: color-mix(in srgb, var(--color-ink) 12%, transparent);
   }
   :root:is([data-skin="midnight"], [data-skin="daylight"], [data-skin="grok"], [data-skin="grok-dark"]) :is(.ui-button, .ui-icon-button) {
@@ -1589,7 +1595,7 @@ body {
     border-color: transparent;
     background: color-mix(in srgb, var(--color-ink) 9%, transparent);
   }
-  :root:is([data-skin="daylight"], [data-skin="grok"]) .ui-button:enabled:is(:hover, :active) {
+  :root:is([data-skin="daylight"], [data-skin="grok"]) .ui-button:enabled:is(:hover, :active):where(:not(html[data-mobile-app] *)) {
     background: color-mix(in srgb, var(--color-ink) 13%, transparent);
   }
   /* A dialog for the first-run surfaces: the menu tone on a hairline of ink, lifted only in Daylight. */
@@ -2295,7 +2301,7 @@ html[data-cloud-intent-morph] [data-tour="composer"] { view-transition-name: clo
   text-align: start;
   cursor: pointer;
 }
-.turn-now-toggle:hover, .turn-now-toggle[aria-expanded="true"] {
+.turn-now-toggle:hover:where(:not(html[data-mobile-app] *)), .turn-now-toggle[aria-expanded="true"] {
   background: color-mix(in srgb, var(--color-ink) 5%, transparent);
 }
 .turn-now-toggle:focus-visible {
@@ -3453,4 +3459,10 @@ button:disabled.bg-danger {
   .voice-call-pill, .voice-call-menu, .voice-call-swap { animation: voice-call-fade 160ms linear both; }
   .voice-call-pill-out, .voice-call-menu-out { animation: voice-call-unfade 160ms linear both; }
   .voice-call-press:active:not(:disabled) { transform: none; }
+}
+
+[data-sidebar] ~ main { anchor-name: --app-main; }
+.topbar-notice-frame { position-anchor: --app-main; top: anchor(top, 0px); left: anchor(left, 0px); right: anchor(right, 0px); }
+@supports not (anchor-name: --app-main) {
+  .topbar-notice-frame { top: 0; left: 0; right: 0; }
 }

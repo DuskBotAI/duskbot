@@ -70,8 +70,15 @@ export function thumbBox({ scrollTop, scrollHeight, clientHeight }: Pick<HTMLEle
 }
 
 /** Grok's overlay scrollbar: a 5px thumb of 8% ink, 2px off the edge, that fades in while the pointer is over the list
- * (12% under the pointer itself) and out 150ms after it leaves. Dragging it scrolls the list. */
-export function OverlayScrollbar({ scroller, style }: { scroller: HTMLElement | null; style?: CSSProperties }) {
+ * (12% under the pointer itself) and out 150ms after it leaves. Dragging it scrolls the list. A touch screen has no
+ * pointer to show it for, and gets none. */
+export function OverlayScrollbar(props: { scroller: HTMLElement | null; style?: CSSProperties }) {
+  return canHover() ? <PointerScrollbar {...props} /> : null;
+}
+
+const canHover = () => typeof matchMedia !== "function" || matchMedia("(any-hover: hover)").matches;
+
+function PointerScrollbar({ scroller, style }: { scroller: HTMLElement | null; style?: CSSProperties }) {
   const track = useRef<HTMLDivElement>(null);
   // the thumb's place follows the scroll straight in its style; only its size and presence re-render
   const box = useRef<ThumbBox>(null);

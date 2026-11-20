@@ -196,7 +196,7 @@ it("S2 parks a teammate on NEEDS INPUT, passes her question to the Chief once, c
   expect(parked).toMatchObject({ status: "needs_input", question: expect.stringContaining("which repository?") });
   expect(parked.outcome).toBeUndefined();
   const work = parked.assignee.destination.threadId as string;
-  expect(work).not.toBe(f.mira.activeTaskId);
+  expect(work).toBe(f.mira.activeTaskId);
   await expect.poll(async () => (await f.chips(job, "needs your input")).length, { timeout: 15_000 }).toBeGreaterThanOrEqual(1);
   expect((await f.chips(job, "needs your input")).some((message: any) => chipText(message).includes("which repository?"))).toBe(true);
   await expect.poll(async () => await f.said(job, "C-ASKED: Mira needs the repository.") === 1 && f.roots()[0]?.status === "waiting", { timeout: 30_000 }).toBe(true);
@@ -223,7 +223,7 @@ it("S2 parks a teammate on NEEDS INPUT, passes her question to the Chief once, c
   expect((await f.messages(job)).filter((message: any) => message.tool?.name === "Mira replied")).toHaveLength(1);
 }), hostTimeout(60_000));
 
-it("S2b resumes the Chief once with a parked question, keeps one question chip across a restart and names the parked thread as waiting on the person", () => scenario(async (f) => {
+it("S2b resumes the Chief once with a parked question, keeps one question chip across a restart, and the Chief cannot close the teammate's own chat", () => scenario(async (f) => {
   await askMeFirst(f);
   const brief = "S2B-BRIEF: tag the release in the repository and report the tag.";
   f.script(f.clive.id,
@@ -261,8 +261,9 @@ it("S2b resumes the Chief once with a parked question, keeps one question chip a
   await f.say(f.clive.id, check, "S2B-CHECK: how is Mira's tagging going?");
   await expect.poll(() => f.turn("C1")?.evidence?.length ?? 0, { timeout: 30_000 }).toBeGreaterThanOrEqual(4);
   const [listed, refused] = f.turn("C1").evidence.slice(-2).map((entry: any) => entry.response.result.content[0].text as string);
-  expect(listed).toMatch(new RegExp(`\\(on @Mira, waiting on the person\\) \\[thread id: ${work}\\]`));
-  expect(refused).toContain("waiting on the person's answer");
+  // one chat per bot: Mira's work runs in her own chat, which is hers, not one of the Chief's threads
+  expect(listed).not.toContain(work);
+  expect(refused).toContain("not yours to close");
 }), hostTimeout(90_000));
 
 it("S3 runs a cut teammate turn again once after a restart and resumes the Chief with the report", () => scenario(async (f) => {

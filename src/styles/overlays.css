@@ -33,12 +33,6 @@
 
 /* bencho's menu: in from 4px toward the trigger at .97 over 120ms, out 2px at .98 over 80ms. A menu that opens above its
    trigger sets --menu-shift to a positive value, and its transform-origin to the trigger, so it grows out of it. */
-@keyframes overlay-menu-in {
-  from { opacity: 0; transform: translate3d(0, calc(var(--menu-shift, -4px)), 0) scale(0.97); }
-}
-@keyframes overlay-menu-out {
-  to { opacity: 0; transform: translate3d(0, calc(var(--menu-shift, -4px) / 2), 0) scale(0.98); }
-}
 @keyframes overlay-fade-in {
   from { opacity: 0; }
 }
@@ -46,45 +40,55 @@
   to { opacity: 0; }
 }
 
-/* anchored surfaces: a menu, listbox or popover grows out of its trigger; a non-modal dialog is a popover */
+/* anchored surfaces: a menu, listbox or popover grows out of its trigger; a non-modal dialog is a popover. They move on
+   transitions from a starting style, not keyframes: opened again while it closes, a menu turns back from where it is
+   instead of starting over from nothing */
 :is([role="menu"], [role="listbox"], .popover-surface, .menu-surface, [role="dialog"]:not([aria-modal="true"], .ui-modal, .ui-dialog)).animate-pop-in {
-  animation: overlay-menu-in 120ms var(--ease-menu-in);
+  transition: opacity calc(120ms * var(--motion-scale, 1)) var(--motion-ease-out, var(--ease-menu-in)), transform calc(120ms * var(--motion-scale, 1)) var(--motion-ease-out, var(--ease-menu-in));
+}
+@starting-style {
+  :is([role="menu"], [role="listbox"], .popover-surface, .menu-surface, [role="dialog"]:not([aria-modal="true"], .ui-modal, .ui-dialog)).animate-pop-in { opacity: 0; transform: translate3d(0, calc(var(--menu-shift, -4px)), 0) scale(0.97); }
 }
 :is([role="menu"], [role="listbox"], .popover-surface, .menu-surface, [role="dialog"]:not([aria-modal="true"], .ui-modal, .ui-dialog)).animate-pop-out {
-  animation: overlay-menu-out 80ms var(--ease-out-bencho) forwards;
+  opacity: 0;
+  transform: translate3d(0, calc(var(--menu-shift, -4px) / 2), 0) scale(0.98);
+  transition: opacity calc(80ms * var(--motion-scale, 1)) var(--motion-ease-out, var(--ease-out-bencho)), transform calc(80ms * var(--motion-scale, 1)) var(--motion-ease-out, var(--ease-out-bencho));
 }
 /* the select menus (SettingsSelect, SelectPill) open as the dashboard's do: a soft 180ms fade and grow, out in 120ms */
-[role="listbox"]:is([data-settings-listbox], [data-panel-listbox]).animate-pop-in { animation-duration: 180ms; }
-[role="listbox"]:is([data-settings-listbox], [data-panel-listbox]).animate-pop-out { animation-duration: 120ms; }
+[role="listbox"]:is([data-settings-listbox], [data-panel-listbox]).animate-pop-in { transition-duration: calc(180ms * var(--motion-scale, 1)); }
+[role="listbox"]:is([data-settings-listbox], [data-panel-listbox]).animate-pop-out { transition-duration: calc(120ms * var(--motion-scale, 1)); }
 /* the model picker grows from its trigger with no travel: .97 and a fade over 160ms, out at .99 over 120ms */
-@keyframes overlay-picker-in { from { opacity: 0; transform: scale(0.97); } }
-@keyframes overlay-picker-out { to { opacity: 0; transform: scale(0.99); } }
-[role="dialog"][data-model-picker-content].animate-pop-in { animation: overlay-picker-in 160ms var(--ease-out-bencho); }
-[role="dialog"][data-model-picker-content].animate-pop-out { animation: overlay-picker-out 120ms var(--ease-out-bencho) forwards; }
+[role="dialog"][data-model-picker-content].animate-pop-in { transition: opacity calc(160ms * var(--motion-scale, 1)) var(--motion-ease-out, var(--ease-out-bencho)), transform calc(160ms * var(--motion-scale, 1)) var(--motion-ease-out, var(--ease-out-bencho)); }
+@starting-style {
+  [role="dialog"][data-model-picker-content].animate-pop-in { opacity: 0; transform: scale(0.97); }
+}
+[role="dialog"][data-model-picker-content].animate-pop-out { transform: scale(0.99); transition: opacity calc(120ms * var(--motion-scale, 1)) var(--motion-ease-out, var(--ease-out-bencho)), transform calc(120ms * var(--motion-scale, 1)) var(--motion-ease-out, var(--ease-out-bencho)); }
 /* the sidebar's popover menus (profile, plus, a bot's menu): in from 4px at .97 over 150ms, out as a 100ms fade; a
    submenu slides 4px out of its parent's side as it fades in */
-[role="menu"][data-sidebar-popover-menu].animate-pop-in { animation: overlay-menu-in 150ms var(--ease-out-bencho); }
-[role="menu"][data-sidebar-popover-menu].animate-pop-out { animation: overlay-fade-out 100ms var(--ease-out-bencho) forwards; }
+[role="menu"][data-sidebar-popover-menu].animate-pop-in { transition: opacity calc(150ms * var(--motion-scale, 1)) var(--motion-ease-out, var(--ease-out-bencho)), transform calc(150ms * var(--motion-scale, 1)) var(--motion-ease-out, var(--ease-out-bencho)); }
+[role="menu"][data-sidebar-popover-menu].animate-pop-out { transform: none; transition: opacity calc(100ms * var(--motion-scale, 1)) var(--motion-ease-out, var(--ease-out-bencho)); }
 @keyframes overlay-submenu-in { from { opacity: 0; transform: translate3d(var(--sub-shift, -4px), 0, 0); } }
-[role="menu"][data-sidebar-popover-submenu] { animation: overlay-submenu-in 120ms var(--ease-out-bencho); }
+[role="menu"][data-sidebar-popover-submenu] { animation: overlay-submenu-in calc(120ms * var(--motion-scale, 1)) var(--motion-ease-out, var(--ease-out-bencho)); }
 @media (prefers-reduced-motion: reduce) {
   [role="menu"][data-sidebar-popover-submenu] { animation: overlay-fade-in 120ms ease-out; }
 }
 :root[data-reduced-motion="true"] [role="menu"][data-sidebar-popover-submenu] { animation: overlay-fade-in 120ms ease-out; }
 /* less movement, not less feedback: the same surfaces fade without scaling or travel */
 @media (prefers-reduced-motion: reduce) {
-  :is([role="menu"], [role="listbox"], .popover-surface, .menu-surface, [role="dialog"]:not([aria-modal="true"], .ui-modal, .ui-dialog)).animate-pop-in {
-    animation: overlay-fade-in var(--overlay-fast) ease-out;
+  :is([role="menu"], [role="listbox"], .popover-surface, .menu-surface, [role="dialog"]:not([aria-modal="true"], .ui-modal, .ui-dialog)):is(.animate-pop-in, .animate-pop-out) {
+    transform: none;
+    transition: opacity var(--overlay-fast) ease-out;
   }
-  :is([role="menu"], [role="listbox"], .popover-surface, .menu-surface, [role="dialog"]:not([aria-modal="true"], .ui-modal, .ui-dialog)).animate-pop-out {
-    animation: overlay-fade-out var(--overlay-fast) ease-out forwards;
+  @starting-style {
+    :is([role="menu"], [role="listbox"], .popover-surface, .menu-surface, [role="dialog"]:not([aria-modal="true"], .ui-modal, .ui-dialog)).animate-pop-in { transform: none; }
   }
 }
-:root[data-reduced-motion="true"] :is([role="menu"], [role="listbox"], .popover-surface, .menu-surface, [role="dialog"]:not([aria-modal="true"], .ui-modal, .ui-dialog)).animate-pop-in {
-  animation: overlay-fade-in var(--overlay-fast) ease-out;
+:root[data-reduced-motion="true"] :is([role="menu"], [role="listbox"], .popover-surface, .menu-surface, [role="dialog"]:not([aria-modal="true"], .ui-modal, .ui-dialog)):is(.animate-pop-in, .animate-pop-out) {
+  transform: none;
+  transition: opacity var(--overlay-fast) ease-out;
 }
-:root[data-reduced-motion="true"] :is([role="menu"], [role="listbox"], .popover-surface, .menu-surface, [role="dialog"]:not([aria-modal="true"], .ui-modal, .ui-dialog)).animate-pop-out {
-  animation: overlay-fade-out var(--overlay-fast) ease-out forwards;
+@starting-style {
+  :root[data-reduced-motion="true"] :is([role="menu"], [role="listbox"], .popover-surface, .menu-surface, [role="dialog"]:not([aria-modal="true"], .ui-modal, .ui-dialog)).animate-pop-in { transform: none; }
 }
 /* a menu or listbox holds focus only to steer its highlighted row (Grok moves focus onto the row instead), so the
    container draws no ring of its own; the highlighted row is the cue */
@@ -93,7 +97,7 @@
 /* a link's preview grows out of its link on the menu's curve and timing; a quick re-hover reverses it mid-way, so these
    are transitions, not keyframes. The origin is set beside the link when the card is placed. */
 .link-preview {
-  transition: opacity 120ms var(--ease-menu-in), transform 120ms var(--ease-menu-in);
+  transition: opacity calc(120ms * var(--motion-scale, 1)) var(--motion-ease-out, var(--ease-menu-in)), transform calc(120ms * var(--motion-scale, 1)) var(--motion-ease-out, var(--ease-menu-in));
 }
 @starting-style {
   .link-preview[data-state="open"] { opacity: 0; transform: scale(0.97); }
@@ -102,7 +106,7 @@
   opacity: 0;
   transform: scale(0.98);
   pointer-events: none;
-  transition-duration: 80ms;
+  transition-duration: calc(80ms * var(--motion-scale, 1));
   transition-timing-function: var(--ease-out-bencho);
 }
 @media (prefers-reduced-motion: reduce) {
@@ -118,10 +122,10 @@
    travel. A list a dialog fetches fades in, and a wait that ends fast never shows its spinner. */
 @keyframes dialog-sheet-in { from { opacity: 0; transform: scale(0.96); } }
 :is([role="alertdialog"], [role="dialog"][aria-modal="true"], .ui-modal, .ui-dialog, .templates-sheet):not(.popover-surface, .menu-surface) {
-  animation: dialog-sheet-in 200ms var(--ease-out-bencho);
+  animation: dialog-sheet-in calc(200ms * var(--motion-scale, 1)) var(--motion-ease-out, var(--ease-out-bencho));
 }
 :is([role="alertdialog"], [aria-modal="true"], .ui-modal, .ui-dialog):not(.popover-surface, .menu-surface).animate-pop-out {
-  animation: overlay-fade-out 120ms var(--ease-out-bencho) forwards;
+  animation: overlay-fade-out calc(120ms * var(--motion-scale, 1)) var(--motion-ease-out, var(--ease-out-bencho)) forwards;
 }
 /* the command palette is opened many times a day: it stays raw */
 [data-raw-dialog] { animation: none !important; }
@@ -129,15 +133,15 @@
 .ui-dialog-scrim,
 .ui-dialog-scrim-panel,
 .settings-backdrop {
-  animation: overlay-fade-in 160ms var(--ease-out-bencho);
+  animation: overlay-fade-in calc(160ms * var(--motion-scale, 1)) var(--motion-ease-out, var(--ease-out-bencho));
 }
 /* Templates opened from Connect apps: that window's scrim is already up and leaves in the same commit, so this one
    takes over still, with no scrim fade or sheet rise to flash the bare app between them. */
 .ui-dialog-scrim[data-handoff]:not([data-leaving]),
 .ui-dialog-scrim[data-handoff]:not([data-leaving]) > .templates-sheet { animation: none !important; }
-:is(.ui-scrim, .ui-dialog-scrim)[data-leaving] { pointer-events: none; animation: overlay-fade-out 120ms var(--ease-out-bencho) forwards; }
-.templates-fade { animation: overlay-fade-in 160ms var(--ease-out-bencho); }
-.templates-wait { animation: overlay-fade-in 160ms var(--ease-out-bencho) 200ms backwards; }
+:is(.ui-scrim, .ui-dialog-scrim)[data-leaving] { pointer-events: none; animation: overlay-fade-out calc(120ms * var(--motion-scale, 1)) var(--motion-ease-out, var(--ease-out-bencho)) forwards; }
+.templates-fade { animation: overlay-fade-in calc(160ms * var(--motion-scale, 1)) var(--motion-ease-out, var(--ease-out-bencho)); }
+.templates-wait { animation: overlay-fade-in calc(160ms * var(--motion-scale, 1)) var(--motion-ease-out, var(--ease-out-bencho)) 200ms backwards; }
 @media (prefers-reduced-motion: reduce) {
   :is([role="alertdialog"], [role="dialog"][aria-modal="true"], .ui-modal, .ui-dialog, .templates-sheet):not(.popover-surface, .menu-surface) {
     animation: overlay-fade-in 160ms ease-out;
@@ -180,7 +184,7 @@
   background: var(--color-danger);
   color: var(--color-danger-ink);
 }
-.ui-button.ui-button-danger:enabled:is(:hover, :active) {
+.ui-button.ui-button-danger:enabled:is(:hover, :active):where(:not(html[data-mobile-app] *)) {
   background: color-mix(in srgb, var(--color-danger) 88%, black);
   color: var(--color-danger-ink);
 }
@@ -232,7 +236,7 @@
   opacity: 0.7;
   cursor: pointer;
 }
-.ui-toast-close:hover { opacity: 1; background: color-mix(in srgb, currentColor 16%, transparent); }
+.ui-toast-close:hover:where(:not(html[data-mobile-app] *)) { opacity: 1; background: color-mix(in srgb, currentColor 16%, transparent); }
 .ui-toast-close:focus-visible { opacity: 1; outline: none; outline-offset: 1px; }
 
 /* A tooltip, as Grok Bot's: white on the inline lift, 12/16 text, 6px corners. Its edge is drawn inside it, a half-pixel

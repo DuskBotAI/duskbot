@@ -47,7 +47,7 @@ export function NewBotEffortRow() {
       <SettingsSelect
         value={current}
         disabled={saving}
-        aria-label={t("settings.newBotEffort.aria")}
+        aria-label={t("settings.newBotEffort.title")}
         onChange={(event) => void save(event.target.value)}
       >
         <option value="">{t("settings.newBotEffort.default")}</option>
@@ -130,10 +130,37 @@ export function QuickUpdatesRow() {
     >
       <Switch
         checked={enabled}
-        aria-label={t("settings.quickUpdates.aria")}
+        aria-label={t("settings.quickUpdates.title")}
         disabled={saving}
         onClick={() => void save(!enabled)}
       />
+    </SettingRow>
+  );
+}
+
+/** Suggestions from the bots, on unless switched off here or per bot. */
+export function SuggestionsRow() {
+  const { state, dispatch } = useStore();
+  const enabled = state.config?.features?.suggestions !== false;
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const save = async (next: boolean) => {
+    if (saving) return;
+    setSaving(true);
+    setError("");
+    try {
+      const config: ConfigStatus = await api("/api/config", { method: "PATCH", body: JSON.stringify({ features: { suggestions: next } }) });
+      dispatch({ type: "configStatus", config });
+    } catch (cause) {
+      setError(friendlyError(cause, t("settings.suggestions.error")));
+    } finally {
+      setSaving(false);
+    }
+  };
+  return (
+    <SettingRow icon="sparkle" title={t("settings.suggestions.title")} subtitle={t("settings.suggestions.subtitle")}
+      message={error ? <p role="alert" className="text-danger">{error}</p> : null}>
+      <Switch checked={enabled} aria-label={t("settings.suggestions.title")} disabled={saving} onClick={() => void save(!enabled)} />
     </SettingRow>
   );
 }

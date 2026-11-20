@@ -1,4 +1,6 @@
 import { carryLegacySafeStorageKey, DATA_DIR_NAMES, dataDirFor, devAppName, fromLegacyLink, LEGACY } from "./legacy-names.mjs";
+import { syncHookOrigin } from "./hook-origin.mjs";
+import { createCloudGone } from "./cloud-gone.mjs";
 import { app, autoUpdater, BrowserWindow, Tray, WebContentsView, clipboard, desktopCapturer, dialog, globalShortcut, ipcMain, Menu, nativeImage, net, Notification as ElectronNotification, powerMonitor, powerSaveBlocker, safeStorage, screen, session, shell, systemPreferences, utilityProcess, nativeTheme } from "electron";
 import { createRequire } from "node:module";
 import { randomBytes, randomUUID } from "node:crypto";
@@ -9,7 +11,7 @@ import { fileURLToPath } from "node:url";
 import { buildErrorPage, desktopViewerErrorPage, RENDERER_CRASHES, serverPageAction, serverProblemReportUrl, windowCrashedPage } from "./error-pages.mjs";
 import { loadWithOneRetry, offerRestart } from "./recovery-prompts.mjs";
 import { pickServerPort, strandedServerOn } from "./server-port.mjs";
-import { startCua, stopCua, registerCuaIpc, setCuaStateListener, grantLocalComputer } from "./cua.mjs";
+import { startCua, stopCua, registerCuaIpc, setCuaStateListener, grantLocalComputer, cuaConnection, requestComputerUse } from "./cua.mjs";
 import { finishSpeech, speechBusy, startSpeech, stopSpeech } from "./speech.mjs";
 import { installTalk, isTalkPanel } from "./talk-main.mjs";
 import { installVoiceInput } from "./voice-input-main.mjs";
@@ -100,7 +102,7 @@ import { acquireDataDirLease } from "./data-dir-lease.mjs";
 import { offerMoveToApplications } from "./move-to-applications.mjs";
 import { switchLocalEnvironment } from "./environment-switch.mjs";
 import { createManagedDesktopClient, createManagedDesktopRelay, createManagedDesktopStore } from "./managed-desktop.mjs";
-import { analyticsAllowed, createProductEvents } from "./product-events.mjs"; import { crashProps, createExperienceRelay, updateFailStage } from "./experience-relay.mjs"; import { UTILITY_NAMES } from "./utility-names.mjs"; import { createUsageNotes } from "./usage-notes.mjs";
+import { analyticsAllowed, createProductEvents } from "./product-events.mjs"; import { crashProps, createExperienceRelay, exitWord, updateFailStage } from "./experience-relay.mjs"; import { UTILITY_NAMES } from "./utility-names.mjs"; import { createUsageNotes } from "./usage-notes.mjs"; import { createStderrTail, exitCodeText } from "./process-exit.mjs";
 import { createAccountErrors } from "./account-errors.mjs";
 import { CHECKOUT_SOURCES, cloudMenuSublabel, cloudTarget, createCloudAccountClient, createCloudAccountStore } from "./cloud-account.mjs"; import { isAppLink } from "./cloud-signin.mjs";
 import { ACCOUNT_PAGES, installCloudPlanIpc } from "./cloud-plan-ipc.mjs";
@@ -112,7 +114,7 @@ import { installMacPermissions } from "./mac-permissions.mjs";
 import { createDesktopIncludedX } from "./included-x.mjs"; import { createDesktopIncludedPages } from "./included-pages.mjs";
 import { createLastSeenStore } from "./cloud-last-seen.mjs";
 import { createCloudFocus } from "./cloud-focus.mjs";
-import { cloudPageSenderAllowed, cloudPlanDisk, createCloudPowerGate, isCloudHomeEntry, myCloudOrigin, rememberedCloudHome, signInCloudSession, withCloudHome } from "./cloud-home.mjs"; import { installCloudMac } from "./cloud-mac-main.mjs";
+import { cloudPageSenderAllowed, cloudPlanDisk, createCloudPowerGate, isCloudHomeEntry, myCloudOrigin, rememberedCloudHome, signInCloudSession, withCloudHome } from "./cloud-home.mjs"; import { installCloudMac } from "./cloud-mac-main.mjs"; import { servesMacJobs } from "./mac-control-tools.mjs";
 import { installCloudFiles } from "./cloud-sync-main.mjs";
 import { createCloudEntry } from "./cloud-entry.mjs";
 import { createOpenAtLogin, installOpenAtLogin } from "./open-at-login.mjs";
@@ -434,7 +436,7 @@ const serverSupervisor = createServerSupervisor({
     serverReady = true;
     setLocalOrigin(confirmedRendererOrigin());
     slog(`server ready pid=${proc.pid} port=${SERVER_PORT}`);
-    syncUsageSignals();
+    syncUsageSignals(); syncHookOrigin({ status: managedCompanionConnector?.getStatus(), wanted: companionDesiredThisLaunch, request: localServerRequest });
     syncManagedComposioCredentials(); includedX.serverStarted(); includedPages.serverStarted(); railChanged(); ambientSurfaces.refresh();
     reportOwnListeners(proc);
     orgLibrary?.runtimeReady();
@@ -449,7 +451,7 @@ const serverSupervisor = createServerSupervisor({
       });
     }
   },
-  onCrash() { const props = crashProps("server", "crashed", { ending: appEnding() }); if (props) productEvents.action("crash", props); },
+  onCrash() { const exit = lastServerExit, props = crashProps("server", "crashed", { ending: appEnding(), exitCode: exit?.code }); if (props) productEvents.action("crash", props); if (!appEnding()) accountErrors.capture(new Error(`server process stopped (exit ${exitCodeText(exit?.code)})${exit?.problem ? `: ${exit.problem}` : ""}`)); },
   onUnavailable() {
     serverReady = false;
     serverProc = null;
@@ -535,7 +537,7 @@ import {
   stopCompanion,
 } from "./companion.mjs";
 import { autoStartCompanion } from "./companion-autostart.mjs";
-import { createRoutineWakeHold, rememberRoutineWake, routineWakeSettings } from "./routine-wake.mjs";
+import { createRoutineWakeHold, rememberRoutineWake, routineWakePatch, routineWakeSettings } from "./routine-wake.mjs";
 import { CREDENTIAL_PATCH, credentialSaveError } from "./credential-patch.mjs";
 import { createCappedLog } from "./capped-log.mjs";
 import { TRAIL_CAP_BYTES, configureTrail, createTrailWriter, trail } from "./trail.mjs";
@@ -553,14 +555,14 @@ const localOrHome = (channel, handler) => (event, ...args) => (homeWindow.homePa
 const productEvents = createProductEvents({ origin: cloudTarget(process.env).origin, token: () => cloudAccount?.eventToken?.() ?? null, platform: process.platform, version: app.isPackaged ? app.getVersion() : `${app.getVersion()}+dev`,
   enabled: analyticsAllowed({ packaged: app.isPackaged, env: process.env, custom: cloudTarget(process.env).custom }) });
 for (const [kind, emitter] of [["page", "render-process-gone"], ["child", "child-process-gone"]]) {
-  app.on(emitter, (...args) => { const details = args.at(-1); const props = crashProps(kind === "page" ? "page" : details?.type, details?.reason, { name: details?.name, ending: appEnding() }); if (props) productEvents.action("crash", props); });
+  app.on(emitter, (...args) => { const details = args.at(-1); const props = crashProps(kind === "page" ? "page" : details?.type, details?.reason, { name: details?.name, ending: appEnding(), exitCode: details?.exitCode }); if (props) productEvents.action("crash", props); });
 }
 ipcMain.handle("product-events:send", localOrHome("product-events:send", (_event, batch) => productEvents.send(batch)));
 ipcMain.handle("product-events:clear", localOrHome("product-events:clear", () => productEvents.clear()));
 ipcMain.handle("product-events:last", localOrHome("product-events:last", (_event, batch) => productEvents.last(batch)));
 const accountErrors = createAccountErrors({ origin: cloudTarget(process.env).origin, platform: process.platform, release: process.getSystemVersion?.(), version: app.getVersion(),
   enabled: () => app.isPackaged && process.env.DUSK_ERROR_REPORTS !== "0" && (desktopPrefs?.errorReports() ?? false) });
-accountErrors.watch(app);
+accountErrors.watch(app, process, { ending: () => appEnding() });
 ipcMain.handle("error-reports:send", localOrHome("error-reports:send", (_event, report) => accountErrors.send(report)));
 
 let companionPowerBlocker = null;
@@ -593,6 +595,9 @@ const routineWake = createRoutineWakeHold({
   powerMonitor, isOnline: () => net.isOnline(),
   notify: (event) => localServerRequest("/api/routines/wake", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ event }) }).then((response) => { if (!response.ok) throw new Error(`HTTP ${response.status}`); }),
 });
+
+const cloudGone = createCloudGone({ log: (line) => slog(line) });
+const cloudFetch = cloudGone.wrap((...args) => session.defaultSession.fetch(...args));
 
 function slog(line) {
   try {
@@ -703,7 +708,7 @@ function ensureManagedCompanionConnector() {
     runtimeExecutable: process.execPath,
     runtimeRoot: path.join(app.getPath("userData"), "managed-companion-tunnel"),
     onChange: (status) => {
-      slog(`managed companion connection ${status.status}`);
+      slog(`managed companion connection ${status.status}`); if (serverReady) syncHookOrigin({ status: managedCompanionConnector?.getStatus(), wanted: companionDesiredThisLaunch, request: localServerRequest });
       if (!companionDesiredThisLaunch) return;
       void reconcileCompanionAdvertisement(status.ready ? status.endpoint : null);
     },
@@ -770,7 +775,7 @@ async function startDesktopCompanion({ waitForHosted = true, remember = true } =
 }
 
 async function stopDesktopCompanion({ remember = true } = {}) {
-  companionDesiredThisLaunch = false;
+  companionDesiredThisLaunch = false; if (serverReady) syncHookOrigin({ status: managedCompanionConnector?.getStatus(), wanted: companionDesiredThisLaunch, request: localServerRequest });
   companionLaunchGeneration += 1;
   if (remember) rememberCompanionEnabled(false);
   syncCompanionKeepAwake(false, false);
@@ -787,10 +792,10 @@ async function refreshDesktopCompanionTailscale() {
   return decorateDesktopCompanionState(await companionRefreshTailscale());
 }
 
-setCompanionLifecycleListener(({ expected, pid }) => {
+setCompanionLifecycleListener(({ expected, pid, code }) => {
   if (expected || appEnding()) return;
-  slog(`owned companion exited unexpectedly pid=${pid ?? "unknown"}`);
-  productEvents.action("crash", { kind: "utility", reason: "companion_exit" });
+  slog(`owned companion exited unexpectedly pid=${pid ?? "unknown"} code=${code}`);
+  productEvents.action("crash", { kind: "utility", reason: "companion_exit", service: "companion", ...(exitWord(code) ? { exit: exitWord(code) } : {}) }); accountErrors.capture(new Error(`companion process stopped (exit ${exitCodeText(code)})`));
   companionDesiredThisLaunch = false;
   companionLaunchGeneration += 1;
   syncCompanionKeepAwake(false, false);
@@ -887,7 +892,7 @@ async function gatherDiagnostics() {
 }
 
 /** Why the background server isn't up (a key of SERVER_FAILURES), once it failed. */
-let serverFailure = "timeout";
+let serverFailure = "timeout"; let lastServerExit = null;
 let serverRestarting = null;
 
 function showsLocalPage(win) {
@@ -1306,7 +1311,7 @@ async function startServerOn(port, dataDir = runningDataDir ?? startupEnvironmen
     listening.hear(String(d));
     slog(`[out] ${String(d).trimEnd()}`);
   });
-  proc.stderr?.on("data", (d) => slog(`[err] ${String(d).trimEnd()}`));
+  const stderrTail = createStderrTail(); proc.stderr?.on("data", (d) => { stderrTail.push(d); slog(`[err] ${String(d).trimEnd()}`); });
   proc.on("message", (message) => {
     if (!serverSupervisor.isCurrent(proc)) return;
     try {
@@ -1327,7 +1332,7 @@ async function startServerOn(port, dataDir = runningDataDir ?? startupEnvironmen
   });
   let exited = false;
   proc.once("exit", (code) => {
-    exited = true;
+    exited = true; lastServerExit = { code, problem: stderrTail.problem() };
     trustedApprovalMode.rejectProcess(proc);
     managedDesktopRelay.rejectProcess(proc);
     resolveServerExit();
@@ -1714,7 +1719,7 @@ function persistEnvironments(next, why = null) {
   try { railChanged(); } catch {}
 }
 
-const workspaceReconnect = createWorkspaceReconnect({ fetch: (...args) => session.defaultSession.fetch(...args), store: jsonFile(path.join(app.getPath("userData"), "workspace-frames.json")),
+const workspaceReconnect = createWorkspaceReconnect({ fetch: cloudFetch, store: jsonFile(path.join(app.getPath("userData"), "workspace-frames.json")),
   window: () => (mainWindow && !mainWindow.isDestroyed() ? mainWindow : null), localOrigin: rendererOrigin, localReady: () => serverReady,
   active: () => activeRemote(environmentsState), keeps: entry => handSaved(entry),
   places: () => [{ id: LOCAL_ID, name: "This computer", local: true }, ...environmentsState.environments.map(entry => ({ id: entry.id, name: entry.name }))],
@@ -1892,7 +1897,7 @@ async function switchEnvironmentNow(id) {
       if (!(await cloudHomeSignedIn(entry.origin))) { await openCloudSettings(); return; }
     }
   }
-  if (entry && handSaved(entry) && !(await serverOpens(entry, { fetch: (...args) => session.defaultSession.fetch(...args), dialog, forget: (gone) => forgetEnvironment(gone, false, true) }))) return false;
+  if (entry && handSaved(entry) && !(await serverOpens(entry, { fetch: cloudFetch, dialog, forget: (gone) => forgetEnvironment(gone, false, true) }))) return false;
   persistEnvironments(withActive(environmentsState, id), "chosen"); return navigateMainWindow(activeOrigin());
 }
 
@@ -2043,7 +2048,7 @@ async function connectHostedWorkspace(input, name) {
   });
   if (response !== 0) return false;
   // a server that has never answered is not switched to: it stays where the person is, or isn't saved at all
-  const reach = await newServerReach(link, { fetch: (...args) => session.defaultSession.fetch(...args), dialog });
+  const reach = await newServerReach(link, { fetch: cloudFetch, dialog });
   if (reach === "cancel") return false;
   let next = withEnvironment(environmentsState, { origin: link.origin, name }, () => randomUUID());
   const added = next.environments.find((e) => e.origin === link.origin);
@@ -2108,7 +2113,7 @@ const CARRY_BEFORE_OPEN_MS = 8_000;
 async function welcomeBeforeOpen(origin) {
   if (!origin || desktopRemoteAccess || welcomedClouds.has(origin)) return;
   welcomedClouds.add(origin);
-  const carried = carryWelcomeToCloud({ origin, fetch: (...args) => session.defaultSession.fetch(...args), localRequest: localServerRequest, handoff: what => oneHome.handoff(what), log: slog })
+  const carried = carryWelcomeToCloud({ origin, fetch: cloudFetch, localRequest: localServerRequest, handoff: what => oneHome.handoff(what), log: slog })
     .then((changed) => { slog(`cloud welcome: ${changed ? "carried from this computer before it opened" : "nothing to carry"}`); return true; }, () => false);
   const done = await Promise.race([carried, new Promise(resolve => setTimeout(() => resolve(false), CARRY_BEFORE_OPEN_MS))]);
   if (!done) welcomedClouds.delete(origin);
@@ -2122,7 +2127,7 @@ async function welcomedOnCloud() {
     if (waited >= 6 * 60_000) { welcomedClouds.delete(origin); return; }
     await new Promise(done => setTimeout(done, 3_000));
   }
-  const changed = await carryWelcomeToCloud({ origin, fetch: (...args) => session.defaultSession.fetch(...args), localRequest: localServerRequest, handoff: what => oneHome.handoff(what), log: slog });
+  const changed = await carryWelcomeToCloud({ origin, fetch: cloudFetch, localRequest: localServerRequest, handoff: what => oneHome.handoff(what), log: slog });
   slog(`cloud welcome: ${changed ? "carried from this computer" : "nothing to carry"}`);
   if (!changed || !showsCloud()) return;
   // a page from an older cloud still showing its own welcome
@@ -2147,7 +2152,7 @@ function activatePlace(place) {
 
 async function cloudHomeSignedIn(origin, timeoutMs = 5_000) {
   try {
-    const response = await session.defaultSession.fetch(`${origin}/api/auth/session`, { credentials: "include", signal: AbortSignal.timeout(timeoutMs) });
+    const response = await cloudFetch(`${origin}/api/auth/session`, { credentials: "include", signal: AbortSignal.timeout(timeoutMs) });
     return response.ok && (await response.json())?.kind === "session";
   } catch { return false; }
 }
@@ -2182,6 +2187,7 @@ async function forgetEnvironment(id, purge = false, confirmed = false, { unlink 
   const env = environmentsState.environments.find((e) => e.id === id);
   if (!env) return;
   if (env.kind === "local" && environmentsState.activeId === id) return { ok: false, error: "active" };
+  if (unlink && !quiet && ownHome?.home()?.id === id) return dialog.showMessageBox({ type: "info", message: `Your bots live on ${env.name}`, detail: "Bring them back to this computer first, then you can remove it." }).then(() => ({ ok: false, error: "home" }));
   if (env.kind !== "local" && !confirmed) {
     const { response } = await dialog.showMessageBox({
       type: "warning",
@@ -2226,7 +2232,7 @@ async function forgetEnvironment(id, purge = false, confirmed = false, { unlink 
   // quiet: start fresh deleted that server's data, its sessions with it, so there is nothing to sign out of or warn about
   if (!quiet) try {
     // Revoke the session on the server while the cookie is still here.
-    const response = await session.defaultSession.fetch(`${env.origin}/api/auth/logout`, { method: "POST", credentials: "include", headers: { origin: env.origin }, signal: AbortSignal.timeout(5_000) });
+    const response = await cloudFetch(`${env.origin}/api/auth/logout`, { method: "POST", credentials: "include", headers: { origin: env.origin }, signal: AbortSignal.timeout(5_000) });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
   } catch (error) {
     slog(`forget server: logout skipped (${error?.message ?? error})`);
@@ -2401,10 +2407,13 @@ function createWindow({ deferNavigation = false } = {}) {
     workspaceReconnect.lost(remote);
   });
   win.webContents.on("did-navigate", (_event, url, code) => {
+    // 410: the edge's answer for a deleted dusk cloud: its own screen says so instead of a bare error page
+    if (code === 410 && homeWindow.failed(url)) return;
     homeWindow.navigated(url);
     const remote = activeRemote(environmentsState);
     let origin = null;
     try { origin = new URL(url).origin; } catch {}
+    if (remote && code === 410 && origin === remote.origin) return void workspaceReconnect.lost({ ...remote, gone: true });
     if (remote && proxyAnswersForDownServer(code) && origin === remote.origin) return void workspaceReconnect.lost(remote);
     workspaceReconnect.loaded(url);
   });
@@ -2789,8 +2798,8 @@ ipcMain.handle("companion:keep-awake", localOnly("companion:keep-awake", async (
   return desktopCompanionState();
 }));
 ipcMain.handle("routines:wake-state", localOnly("routines:wake-state", () => routineWake.poll()));
-ipcMain.handle("routines:keep-awake", localOnly("routines:keep-awake", async (_event, enabled) => {
-  rememberRoutineWake(app.getPath("userData"), Boolean(enabled));
+ipcMain.handle("routines:keep-awake", localOnly("routines:keep-awake", async (_event, patch) => {
+  rememberRoutineWake(app.getPath("userData"), routineWakePatch(patch));
   return routineWake.poll();
 }));
 ipcMain.handle("companion:refresh-tailscale", localOnly("companion:refresh-tailscale", () => refreshDesktopCompanionTailscale()));
@@ -3019,10 +3028,10 @@ const localServerRequest = async (route, init = {}) => {
   if (!(serverProc || !app.isPackaged) || !serverReady) throw new Error("This computer's background server is unavailable. Restart the app and try again.");
   return fetch(`http://127.0.0.1:${SERVER_PORT}${route}`, { ...init, redirect: "error", credentials: "omit", headers: { ...init.headers, [DESKTOP_MUTATION_HEADER]: desktopMutationToken } });
 };
-const usageNotes = createUsageNotes({ origin: cloudTarget(process.env).origin, install: () => productEvents.install(), token: () => cloudAccount?.eventToken?.() ?? null, localRequest: localServerRequest, platform: process.platform, version: app.getVersion() }); usageNotes.start(); const experienceRelay = createExperienceRelay({ localRequest: localServerRequest, events: productEvents }); experienceRelay.start(); const teamProfileSeeds = createTeamProfileSeeds({ teamFetch: (...args) => session.defaultSession.fetch(...args), localRequest: localServerRequest, log: slog });
+const usageNotes = createUsageNotes({ origin: cloudTarget(process.env).origin, install: () => productEvents.install(), token: () => cloudAccount?.eventToken?.() ?? null, localRequest: localServerRequest, platform: process.platform, version: app.getVersion() }); usageNotes.start(); const experienceRelay = createExperienceRelay({ localRequest: localServerRequest, events: productEvents }); experienceRelay.start(); const teamProfileSeeds = createTeamProfileSeeds({ teamFetch: cloudFetch, localRequest: localServerRequest, log: slog });
 const enrollMemory = jsonFile(path.join(app.getPath("userData"), "account-enroll.json")); const accountEnroll = createAccountEnroll({ client: ensureCloudAccount, localRequest: localServerRequest, readMemory: () => { try { return enrollMemory.read(); } catch { return null; } }, writeMemory: enrollMemory.write, log: slog }); const accountGate = installAccountGate({ ipcMain, guard: localWorkspaceOnly, client: ensureCloudAccount, required: accountGateNeeded, window: () => mainWindow, plainStorage: plainSignInStorage, restored: cloudAccountRestored });
 let settingsSyncMain = null;
-const oneHome = installOneHome({ ipcMain, settingsHome: (call) => settingsSyncMain?.bringHome(call), clean: cleanWorkspace, cloudPage: cloudPageAsking, pageOrigin: activePageOrigin, confirmMove: confirmTeamMove, server: () => serverProc, cookieFetch: (...args) => session.defaultSession.fetch(...args), home: () => (myCloud() && cloudAccount ? { origin: myCloud(), grant: () => cloudAccount.pairHome() } : null), power: cloudPower, file: () => path.join(app.getPath("userData"), "cloud-send.json"), localRequest: localServerRequest, space: { disk: () => cloudPlanDisk(ensureCloudAccount().state()), grow: sizeGb => ensureCloudAccount().growDisk(sizeGb) }, reconnect: origin => signInCloudSession({ origin, mine: myCloud(), pair: () => ensureCloudAccount().pairHome(), fetch: (...args) => session.defaultSession.fetch(...args) }), window: () => (desktopRemoteAccess ? null : mainWindow), localOrigin: rendererOrigin, account: () => cloudAccount, journalFile: () => path.join(app.getPath("userData"), "one-home.json"), tempRoot: () => path.join(app.getPath("temp"), "dusk-one-home"), phone: { paired: () => companionEnabledAtRest(), stop: () => stopDesktopCompanion({ remember: false }).then(() => {}), start: () => startDesktopCompanion({ waitForHosted: false, remember: false }).then(() => {}) }, openHome: () => void showHome({ place: "cloud" }), openTeam: team => void showHome({ place: { team: team.id, name: team.name } }), openLocal: () => void showHome(), restart: () => relaunchAfterDesktopRemoteChange(), version: app.getVersion(), log: slog, other: () => ownHome, accountsHere: () => accountRing()?.count() ?? 1, offer: { store: jsonFile(path.join(app.getPath("userData"), "cloud-move-offer.json")), track: (name, props) => productEvents.action(name, props) } }); ownHome = installOwnHome({ localRequest: localServerRequest, clean: cleanWorkspace, fetch: (...args) => session.defaultSession.fetch(...args), environments: () => environmentsState.environments, handoff: what => oneHome.handoff(what), cloudJournal: () => oneHome.journal(), journal: jsonFile(path.join(app.getPath("userData"), "own-home.json")), choice: jsonFile(path.join(app.getPath("userData"), "own-home-choice.json")), sendState: jsonFile(path.join(app.getPath("userData"), "own-home-send.json")), phone: { paired: () => companionEnabledAtRest(), stop: () => stopDesktopCompanion({ remember: false }).then(() => {}), start: () => startDesktopCompanion({ waitForHosted: false, remember: false }).then(() => {}) }, openHome: place => void workspaceMenuAction(() => switchEnvironment(place.id)), lastInput: oneHome.lastInput, version: app.getVersion(), log: slog, onChange: () => { oneHome.publish(); railChanged(); ownMoveSettled(); } }); twoPlaces = installTwoPlacesMain({ ipcMain, guard: localWorkspaceOnly, localRequest: localServerRequest, fetch: (...args) => session.defaultSession.fetch(...args), environments: () => environmentsState.environments, cloud: () => ({ origin: myCloud(), asleep: cloudPower.asleep() }), oneHome, ownHome, dismissed: jsonFile(path.join(app.getPath("userData"), "two-places.json")), account: () => cloudAccount, teamsRemembered: jsonFile(path.join(app.getPath("userData"), "team-places.json")), log: slog, tell: () => { if (mainWindow && !mainWindow.isDestroyed() && senderIsLocal({ sender: mainWindow.webContents })) mainWindow.webContents.send("two-places:changed"); } }); installConnectorSyncMain({ localRequest: localServerRequest, handoff: what => oneHome.handoff(what), fetch: (...args) => session.defaultSession.fetch(...args), environments: () => environmentsState.environments, cloud: () => ({ origin: desktopRemoteAccess ? null : myCloud(), asleep: cloudPower.asleep(), sleeps: cloudAccount?.power()?.sleeps === true }), ownHome, log: slog }); settingsSyncMain = installSettingsSyncMain({ localRequest: localServerRequest, handoff: what => oneHome.handoff(what), fetch: (...args) => session.defaultSession.fetch(...args), environments: () => environmentsState.environments, cloud: () => ({ origin: desktopRemoteAccess ? null : myCloud(), asleep: cloudPower.asleep(), sleeps: cloudAccount?.power()?.sleeps === true }), ownHome, saveSecret: saveSyncedSecret, log: slog }); const vpsLink = installVpsLink({ ipcMain, powerMonitor, powerSaveBlocker, appVersion: app.getVersion(), myCloud: () => (desktopRemoteAccess ? null : myCloud()), cloudAwake: () => !cloudPower.asleep(), linkGrant: async () => { try { return await ensureCloudAccount().linkGrant(); } catch { return null; } }, ...(accountApp() ? { signIn: () => ensureCloudAccount().continueInBrowser({ kind: "signin", source: "server_link" }) } : {}), screenIce: async () => { try { return await ensureCloudAccount().screenIce(); } catch { return null; } }, pageOrigin: activePageOrigin, whenReady: () => app.whenReady(), guard: localWorkspaceOnly, userData: app.getPath("userData"), session, shell, encryption: cloudEncryption, jsonFile, environments: () => environmentsState, persist: persistEnvironments, withEnvironment, makeId: randomUUID, forgetEnvironment: (id, how) => forgetEnvironment(id, false, true, { ...(how?.replaced ? { unlink: false } : {}), ...(how?.quiet ? { quiet: true } : {}) }), ownHome, localRequest: localServerRequest, switchTo: id => workspaceMenuAction(() => switchEnvironment(id)), relaunch: () => relaunchAfterDesktopRemoteChange(), dataDir: () => runningDataDir, label: () => os.hostname().replace(/\.local$/, "").slice(0, 60) || "my computer", log: slog, tell: view => { if (mainWindow && !mainWindow.isDestroyed() && senderIsLocal({ sender: mainWindow.webContents })) mainWindow.webContents.send("vps-link:changed", view); void serverEnroll?.kick(); } }); void import("./phone-relay.mjs").then(({ installPhoneRelay, systemProxy }) => installPhoneRelay({ ipcMain, powerMonitor, fetch: (...args) => session.defaultSession.fetch(...args), proxy: systemProxy(session.defaultSession), guard: localWorkspaceOnly, jsonFile, userData: app.getPath("userData"), dataDir: () => runningDataDir, encryption: cloudEncryption, wanted: () => !desktopRemoteAccess && serverReady && companionEnabledAtRest() && !oneHome.away() && !ownHome?.away(), signedIn: () => cloudAccount?.state().status === "connected", linkGrant: async () => { try { return await ensureCloudAccount().linkGrant(); } catch { return null; } }, label: () => `${os.hostname().replace(/\.local$/, "").slice(0, 50) || "computer"} phones`, port: () => SERVER_PORT, ownerToken: () => desktopMutationToken, log: slog }));
+const oneHome = installOneHome({ ipcMain, settingsHome: (call) => settingsSyncMain?.bringHome(call), clean: cleanWorkspace, cloudPage: cloudPageAsking, pageOrigin: activePageOrigin, confirmMove: confirmTeamMove, server: () => serverProc, cookieFetch: cloudFetch, home: () => (myCloud() && cloudAccount ? { origin: myCloud(), grant: () => cloudAccount.pairHome() } : null), power: cloudPower, file: () => path.join(app.getPath("userData"), "cloud-send.json"), localRequest: localServerRequest, space: { disk: () => cloudPlanDisk(ensureCloudAccount().state()), grow: sizeGb => ensureCloudAccount().growDisk(sizeGb) }, reconnect: origin => signInCloudSession({ origin, mine: myCloud(), pair: () => ensureCloudAccount().pairHome(), fetch: cloudFetch }), window: () => (desktopRemoteAccess ? null : mainWindow), localOrigin: rendererOrigin, account: () => cloudAccount, journalFile: () => path.join(app.getPath("userData"), "one-home.json"), tempRoot: () => path.join(app.getPath("temp"), "dusk-one-home"), phone: { paired: () => companionEnabledAtRest(), stop: () => stopDesktopCompanion({ remember: false }).then(() => {}), start: () => startDesktopCompanion({ waitForHosted: false, remember: false }).then(() => {}) }, openHome: () => void showHome({ place: "cloud" }), openTeam: team => void showHome({ place: { team: team.id, name: team.name } }), openLocal: () => void showHome(), restart: () => relaunchAfterDesktopRemoteChange(), version: app.getVersion(), log: slog, other: () => ownHome, accountsHere: () => accountRing()?.count() ?? 1, offer: { store: jsonFile(path.join(app.getPath("userData"), "cloud-move-offer.json")), track: (name, props) => productEvents.action(name, props) } }); ownHome = installOwnHome({ localRequest: localServerRequest, clean: cleanWorkspace, fetch: cloudFetch, environments: () => environmentsState.environments, handoff: what => oneHome.handoff(what), cloudJournal: () => oneHome.journal(), journal: jsonFile(path.join(app.getPath("userData"), "own-home.json")), choice: jsonFile(path.join(app.getPath("userData"), "own-home-choice.json")), sendState: jsonFile(path.join(app.getPath("userData"), "own-home-send.json")), phone: { paired: () => companionEnabledAtRest(), stop: () => stopDesktopCompanion({ remember: false }).then(() => {}), start: () => startDesktopCompanion({ waitForHosted: false, remember: false }).then(() => {}) }, openHome: place => void workspaceMenuAction(() => switchEnvironment(place.id)), lastInput: oneHome.lastInput, version: app.getVersion(), log: slog, onChange: () => { oneHome.publish(); railChanged(); ownMoveSettled(); } }); twoPlaces = installTwoPlacesMain({ ipcMain, guard: localWorkspaceOnly, localRequest: localServerRequest, fetch: cloudFetch, environments: () => environmentsState.environments, cloud: () => ({ origin: myCloud(), asleep: cloudPower.asleep() }), oneHome, ownHome, dismissed: jsonFile(path.join(app.getPath("userData"), "two-places.json")), account: () => cloudAccount, teamsRemembered: jsonFile(path.join(app.getPath("userData"), "team-places.json")), log: slog, tell: () => { if (mainWindow && !mainWindow.isDestroyed() && senderIsLocal({ sender: mainWindow.webContents })) mainWindow.webContents.send("two-places:changed"); } }); installConnectorSyncMain({ localRequest: localServerRequest, handoff: what => oneHome.handoff(what), fetch: cloudFetch, environments: () => cloudGone.keep(environmentsState.environments), cloud: () => ({ origin: desktopRemoteAccess ? null : cloudGone.live(myCloud()), asleep: cloudPower.asleep(), sleeps: cloudAccount?.power()?.sleeps === true }), ownHome, log: slog }); settingsSyncMain = installSettingsSyncMain({ localRequest: localServerRequest, handoff: what => oneHome.handoff(what), fetch: cloudFetch, environments: () => cloudGone.keep(environmentsState.environments), cloud: () => ({ origin: desktopRemoteAccess ? null : cloudGone.live(myCloud()), asleep: cloudPower.asleep(), sleeps: cloudAccount?.power()?.sleeps === true }), ownHome, saveSecret: saveSyncedSecret, log: slog }); const vpsLink = installVpsLink({ ipcMain, clean: cleanWorkspace, powerMonitor, powerSaveBlocker, appVersion: app.getVersion(), myCloud: () => (desktopRemoteAccess ? null : cloudGone.live(myCloud())), cloudAwake: () => !cloudPower.asleep(), linkGrant: async () => { try { return await ensureCloudAccount().linkGrant(); } catch { return null; } }, ...(accountApp() ? { signIn: () => ensureCloudAccount().continueInBrowser({ kind: "signin", source: "server_link" }) } : {}), screenIce: async () => { try { return await ensureCloudAccount().screenIce(); } catch { return null; } }, pageOrigin: activePageOrigin, whenReady: () => app.whenReady(), guard: localWorkspaceOnly, userData: app.getPath("userData"), session, shell, encryption: cloudEncryption, jsonFile, environments: () => environmentsState, persist: persistEnvironments, withEnvironment, makeId: randomUUID, forgetEnvironment: (id, how) => forgetEnvironment(id, false, true, { ...(how?.replaced ? { unlink: false } : {}), ...(how?.quiet ? { quiet: true } : {}) }), ownHome, localRequest: localServerRequest, switchTo: id => workspaceMenuAction(() => switchEnvironment(id)), relaunch: () => relaunchAfterDesktopRemoteChange(), dataDir: () => runningDataDir, label: () => os.hostname().replace(/\.local$/, "").slice(0, 60) || "my computer", log: slog, tell: view => { if (mainWindow && !mainWindow.isDestroyed() && senderIsLocal({ sender: mainWindow.webContents })) mainWindow.webContents.send("vps-link:changed", view); void serverEnroll?.kick(); } }); void import("./phone-relay.mjs").then(({ installPhoneRelay }) => installPhoneRelay({ ipcMain, powerMonitor, session, fetch: cloudFetch, guard: localWorkspaceOnly, jsonFile, userData: app.getPath("userData"), dataDir: () => runningDataDir, encryption: cloudEncryption, wanted: () => !desktopRemoteAccess && serverReady && companionEnabledAtRest() && !oneHome.away() && !ownHome?.away(), signedIn: () => cloudAccount?.state().status === "connected", linkGrant: async () => { try { return await ensureCloudAccount().linkGrant(); } catch { return null; } }, label: () => `${os.hostname().replace(/\.local$/, "").slice(0, 50) || "computer"} phones`, port: () => SERVER_PORT, ownerToken: () => desktopMutationToken, log: slog })).catch(error => slog(`phone relay did not start: ${error?.message ?? error}`));
 if (!desktopRemoteAccess) serverEnroll = createServerEnroll({ client: ensureCloudAccount, servers: () => vpsLink.servers().filter(server => environmentsState.environments.some(entry => entry.id === server.id)),
   call: (id, method, route, body) => vpsLink.ownerCall(id, method, route, body), store: jsonFile(path.join(app.getPath("userData"), "server-enroll.json")), log: slog });
 // A VPS's bots straight to My Cloud (vps-cloud-move-main.mjs); via this computer when the VPS can't do it itself.
@@ -3037,8 +3046,8 @@ async function viaMacFollow() {
   if (offer && offer.state().stage !== "none" && !offer.accepted()) await offer.accept("vps_move").catch(error => slog(`vps to cloud: this computer's move did not start (${error?.message ?? error})`));
   else void oneHome.kick();
 }
-if (!desktopRemoteAccess) installCloudMac({ ipcMain, dialog, shell, allowed: event => cloudPageAsking(event) !== null, window: () => mainWindow, fetch: (...args) => session.defaultSession.fetch(...args), label: () => os.hostname().replace(/\.local$/, "").slice(0, 60) || "my computer", userData: app.getPath("userData"), jsonFile, myCloud, cloudAwake: () => !cloudPower.asleep(), linkKey: async () => (await ensureCloudAccount().pairHome())?.linkKey ?? null, reauth: origin => signInCloudSession({ origin, mine: myCloud(), pair: () => ensureCloudAccount().pairHome(), fetch: (...args) => session.defaultSession.fetch(...args) }), log: slog }); const vpsCloudMove = desktopRemoteAccess ? null : installVpsCloudMoveMain({ ipcMain, pageOrigin: activePageOrigin, localPage: event => senderIsLocal(event), environments: () => environmentsState.environments, fetch: (...args) => session.defaultSession.fetch(...args), cloud: () => oneHomeCloud(cloudAccount?.state()), home: () => (myCloud() && cloudAccount ? { origin: myCloud(), grant: () => cloudAccount.pairHome() } : null),
-  cloudRead: async route => { const origin = myCloud(); if (!origin) throw new Error("This app has no My Cloud yet."); const ask = () => session.defaultSession.fetch(`${origin}${route}`, { credentials: "include", cache: "no-store", redirect: "error", signal: AbortSignal.timeout(10_000), headers: { accept: "application/json", origin } }); const response = await ask(); if (response.status !== 401 || !(await signInCloudSession({ origin, mine: myCloud(), pair: () => ensureCloudAccount().pairHome(), fetch: (...args) => session.defaultSession.fetch(...args) }))) return response; return ask(); },
+if (!desktopRemoteAccess && servesMacJobs()) installCloudMac({ ipcMain, dialog, shell, allowed: event => cloudPageAsking(event) !== null, window: () => mainWindow, fetch: cloudFetch, label: () => os.hostname().replace(/\.local$/, "").slice(0, 60) || "my computer", userData: app.getPath("userData"), jsonFile, myCloud, cloudAwake: () => !cloudPower.asleep(), linkKey: async () => (await ensureCloudAccount().pairHome())?.linkKey ?? null, reauth: origin => signInCloudSession({ origin, mine: myCloud(), pair: () => ensureCloudAccount().pairHome(), fetch: cloudFetch }), log: slog, driver: cuaConnection, computerUse: requestComputerUse, Tray, Menu, nativeImage, resourcesDir: path.join(__dirname, "resources") }); const vpsCloudMove = desktopRemoteAccess ? null : installVpsCloudMoveMain({ ipcMain, pageOrigin: activePageOrigin, localPage: event => senderIsLocal(event), environments: () => environmentsState.environments, fetch: cloudFetch, cloud: () => oneHomeCloud(cloudAccount?.state()), home: () => (myCloud() && cloudAccount ? { origin: myCloud(), grant: () => cloudAccount.pairHome() } : null),
+  cloudRead: async route => { const origin = myCloud(); if (!origin) throw new Error("This app has no My Cloud yet."); const ask = () => cloudFetch(`${origin}${route}`, { credentials: "include", cache: "no-store", redirect: "error", signal: AbortSignal.timeout(10_000), headers: { accept: "application/json", origin } }); const response = await ask(); if (response.status !== 401 || !(await signInCloudSession({ origin, mine: myCloud(), pair: () => ensureCloudAccount().pairHome(), fetch: cloudFetch }))) return response; return ask(); },
   file: name => jsonFile(path.join(app.getPath("userData"), name)), account: () => { try { return accountApp() ? ensureCloudAccount() : cloudAccount; } catch { return cloudAccount; } },
   viaMac: { available: place => { const where = vpsLink.where(); return where.place === "vps" && where.server?.origin === place.origin; }, start: async () => { viaMacFile.write({ v: 1, at: Date.now(), step: "back" }); await vpsLink.moveBack(); }, view: viaMacView },
   openHome: () => void showHome({ place: "cloud" }), lastInput: oneHome.lastInput, track: (name, props) => productEvents.action(name, props), version: app.getVersion(), log: slog,
@@ -3052,7 +3061,7 @@ trailMain = installTrailMain({ ipcMain, app, dialog, shell, powerMonitor, Browse
 const homePlaces = createHomePlaces({ store: jsonFile(path.join(app.getPath("userData"), "home-place.json")), environments: () => environmentsState, persist: persistEnvironments, makeId: randomUUID, homeOrigin: myCloud, log: slog });
 const homeWindow = createHomeWindow({ cloudRoute: WELCOMED_ROUTE, beforeOpen: welcomeBeforeOpen, holdPaint: holdMainWindowPaint, clean: cleanWorkspace, journal: () => oneHome.journal() ?? vpsCloudMove?.homeJournal() ?? null, frozen: oneHome.marker, account: () => (accountApp() ? cloudAccount : null), restored: cloudAccountRestored,
   window: () => (mainWindow && !mainWindow.isDestroyed() ? mainWindow : null), ensureWindow: () => { if (!mainWindow || mainWindow.isDestroyed()) createWindow({ deferNavigation: true }); },
-  localOrigin: rendererOrigin, cookieFetch: (...args) => session.defaultSession.fetch(...args), power: cloudPower, splash: () => startupScreen, lastInput: oneHome.lastInput, rehomed: () => talk.homeChanged(), log: slog,
+  localOrigin: rendererOrigin, cookieFetch: cloudFetch, power: cloudPower, splash: () => startupScreen, lastInput: oneHome.lastInput, rehomed: () => talk.homeChanged(), log: slog,
   hosts: () => session.defaultSession, readyStore: jsonFile(path.join(app.getPath("userData"), "cloud-ready.json")), ownMove: () => ownHome?.underWay() ?? null, ownAway: () => ownHome?.away() === true, lastSeen: createLastSeenStore({ file: path.join(app.getPath("userData"), "cloud-last-seen.bin"), encryption: cloudEncryption }),
   remembered: homePlaces.remembered, remember: homePlaces.remember, left: homePlaces.left, drop: homePlaces.drop,
   publish: view => { if (mainWindow && !mainWindow.isDestroyed() && senderIsLocal({ sender: mainWindow.webContents })) mainWindow.webContents.send("home:state-changed", view); },
@@ -3072,8 +3081,8 @@ function ownMoveSettled() {
   catch (error) { slog(`home: ${error?.message ?? error}`); }
 }
 // My Cloud's page focused in the window: the home hears it every few minutes, so its power policy keeps it up meanwhile
-const cloudFocus = createCloudFocus({ fetch: (...args) => session.defaultSession.fetch(...args), lastInput: oneHome.lastInput, log: slog, focused: () => Boolean(mainWindow && !mainWindow.isDestroyed() && mainWindow.isFocused()),
-  origin: () => { const origin = myCloud(); if (!origin || homeWindow.placeOrigin() !== origin || cloudPower.asleep() || homeWindow.asleepAt(origin)) return null; try { return new URL(mainWindow.webContents.getURL()).origin === origin ? origin : null; } catch { return null; } } });
+const cloudFocus = createCloudFocus({ fetch: cloudFetch, lastInput: oneHome.lastInput, log: slog, focused: () => Boolean(mainWindow && !mainWindow.isDestroyed() && mainWindow.isFocused()),
+  origin: () => { const origin = cloudGone.live(myCloud()); if (!origin || homeWindow.placeOrigin() !== origin || cloudPower.asleep() || homeWindow.asleepAt(origin)) return null; try { return new URL(mainWindow.webContents.getURL()).origin === origin ? origin : null; } catch { return null; } } });
 app.on("browser-window-focus", () => { cloudFocus.check(); });
 /** Every path that shows the window: My Cloud once it is the person's home, else as before. */
 function showHome(options) {
@@ -3081,7 +3090,7 @@ function showHome(options) {
   return options?.place ? workspaceSwitch.around(shown) : shown();
 }
 const openOwnCloud = id => showHome({ place: { cloud: id, name: environmentsState.environments.find(entry => entry.cloud?.id === id)?.name } });
-const placeInbox = createPlaceInboxWatch({ places: () => [{ id: LOCAL_ID, local: true }, ...environmentsState.environments.filter(entry => entry.kind !== "local" && entry.origin)], activeId: () => environmentsState.activeId, local: localServerRequest, cloudFetch: (...args) => session.defaultSession.fetch(...args), asleep: origin => homeWindow.asleepAt(origin), shown: () => !desktopRemoteAccess && serverReady && Boolean(mainWindow && !mainWindow.isDestroyed() && mainWindow.isVisible()), changed: () => railChanged() });
+const placeInbox = createPlaceInboxWatch({ places: () => [{ id: LOCAL_ID, local: true }, ...cloudGone.keep(environmentsState.environments.filter(entry => entry.kind !== "local" && entry.origin))], activeId: () => environmentsState.activeId, local: localServerRequest, cloudFetch: cloudFetch, asleep: origin => homeWindow.asleepAt(origin), shown: () => !desktopRemoteAccess && serverReady && Boolean(mainWindow && !mainWindow.isDestroyed() && mainWindow.isVisible()), changed: () => railChanged() });
 /** A server of the person's own this app linked, which can move to dusk cloud from here now. */
 const serverCanMove = id => Boolean(!desktopRemoteAccess && vpsCloudMove && !vpsCloudMove.away() && vpsLink.servers().some(server => server.id === id));
 const railList = () => { ownHome?.refresh(); return railPlaces({ saved: environmentsState, waiting: placeInbox.waiting, home: homeWindow.cloudOrigin() ?? ownHome?.origin() ?? null, mine: myCloud(), state: desktopRemoteAccess ? null : cloudAccount?.state(), offers: entry => !desktopRemoteAccess && ownHome?.offers(entry) === true, cloudMoves: entry => serverCanMove(entry.id), accounts: accountRing.waiting() }); };
@@ -3092,7 +3101,8 @@ const chromeRail = createChromeRail({ createView: options => new WebContentsView
 chromeRail.install(ipcMain);
 function railChanged() { chromeRail.refresh(); rail.changed(); void localUi?.refresh(); }
 const accountPages = [() => (mainWindow && !mainWindow.isDestroyed() && senderIsLocal({ sender: mainWindow.webContents }) ? mainWindow.webContents : null), () => ({ send: channel => chromeRail.send(channel) })];
-const accountRing = createDesktopRing({ allowed: accountApp, active: cloudAccountStore, savedStore: () => createCloudAccountStore({ file: path.join(app.getPath("userData"), cloudTarget(process.env).saved), encryption: signInEncryption }), stash: () => jsonFile(path.join(app.getPath("userData"), cloudTarget(process.env).places)), client: ensureCloudAccount, origin: cloudTarget(process.env).origin, makeClient: ({ store, onState }) => createCloudAccountClient({ store, onState, platform: process.platform, deviceName: os.hostname().slice(0, 100) || "my computer", appVersion: app.getVersion(), origin: cloudTarget(process.env).origin, custom: cloudTarget(process.env).custom, openBrowser: url => shell.openExternal(url) }), saved: () => environmentsState, persist: persistEnvironments, session: () => session.defaultSession, mine: () => myCloud(), leaveWindow: () => (mainWindow && !mainWindow.isDestroyed() && !senderIsLocal({ sender: mainWindow.webContents }) ? navigateMainWindow(rendererOrigin()) : null), rows: () => railList(), holding: () => oneHome.holding(), letGo: () => { homeWindow.accountLeaving(); homePlaces.remember(null); }, settled: () => showHome(), tell: () => { accounts.tell(); railChanged(); }, log: slog }); const accounts = installAccounts({ ipcMain, ownPage: event => chromeRail.owns(event) || cloudPageAsking(event) === "local", ownPlace: event => cloudPageAsking(event) === "cloud" || ownCloudPage(event) !== null || (homeWindow.homePage(event) && homeWindow.shown()?.kind !== "team"), placePage: event => cloudPageAsking(event) !== null || ownCloudPage(event) !== null || homeWindow.homePage(event) || (Boolean(ownHome?.home()) && activeEnvironment(environmentsState)?.origin === ownHome.home().origin && workspaceSenderAllowed(event, mainWindow?.webContents, environmentsState, rendererOrigin())), account: () => (accountApp() ? cloudAccount : null), client: ensureCloudAccount, ring: accountRing, holdSheet: open => chromeRail.holdOpen(open), tellSheet: () => chromeRail.send("accounts:open-sheet"), tell: () => { for (const page of accountPages) page()?.send("accounts:changed"); } });
+const ownHomeShown = () => Boolean(ownHome?.home()) && activeEnvironment(environmentsState)?.origin === ownHome.home().origin;
+const accountRing = createDesktopRing({ allowed: accountApp, active: cloudAccountStore, savedStore: () => createCloudAccountStore({ file: path.join(app.getPath("userData"), cloudTarget(process.env).saved), encryption: signInEncryption }), stash: () => jsonFile(path.join(app.getPath("userData"), cloudTarget(process.env).places)), client: ensureCloudAccount, origin: cloudTarget(process.env).origin, makeClient: ({ store, onState }) => createCloudAccountClient({ store, onState, platform: process.platform, deviceName: os.hostname().slice(0, 100) || "my computer", appVersion: app.getVersion(), origin: cloudTarget(process.env).origin, custom: cloudTarget(process.env).custom, openBrowser: url => shell.openExternal(url) }), saved: () => environmentsState, persist: persistEnvironments, session: () => session.defaultSession, mine: () => myCloud(), leaveWindow: () => (mainWindow && !mainWindow.isDestroyed() && !senderIsLocal({ sender: mainWindow.webContents }) && !ownHomeShown() ? navigateMainWindow(rendererOrigin()) : null), rows: () => railList(), holding: () => oneHome.holding(), letGo: () => { homeWindow.accountLeaving({ keep: ownHomeShown() }); homePlaces.remember(null); }, settled: () => showHome(), tell: () => { accounts.tell(); railChanged(); }, log: slog }); const accounts = installAccounts({ ipcMain, ownPage: event => chromeRail.owns(event) || cloudPageAsking(event) === "local", ownPlace: event => cloudPageAsking(event) === "cloud" || ownCloudPage(event) !== null || (homeWindow.homePage(event) && homeWindow.shown()?.kind !== "team"), placePage: event => cloudPageAsking(event) !== null || ownCloudPage(event) !== null || homeWindow.homePage(event) || (ownHomeShown() && workspaceSenderAllowed(event, mainWindow?.webContents, environmentsState, rendererOrigin())), account: () => (accountApp() ? cloudAccount : null), client: ensureCloudAccount, ring: accountRing, holdSheet: open => chromeRail.holdOpen(open), tellSheet: () => chromeRail.send("accounts:open-sheet"), tell: () => { for (const page of accountPages) page()?.send("accounts:changed"); } });
 
 // Start fresh: this computer's reset (electron/start-fresh.mjs). Only from this computer's own page or My Cloud's, never a
 // team's or a page a server sent, and never in remote access. It signs this computer out and clears what is kept here;
@@ -3132,10 +3142,10 @@ const rail = installCloudRail({ ipcMain, clipboard, openCloud: openOwnCloud, swi
   add: { choices: () => ({ cloud: cloudOffersAllowed(), link: !desktopRemoteAccess, address: !desktopRemoteAccess && !homeWindow.cloudOrigin(), account: !desktopRemoteAccess && Boolean(accounts.view().active) }),
     run: (choice, link) => (choice === "link" ? (link ? connectHostedWorkspace(link) : addServerFromClipboard()) : choice === "address" ? openWorkspaceSettings() : homeWindow.cloudOrigin() ? undefined : openCloudAdd("app_menu")) } });
 const announceAddedCloud = createAddedCloudNotice({ Notification, focused: () => Boolean(mainWindow && !mainWindow.isDestroyed() && mainWindow.isFocused()), sheetOpen: rail.sheetOpen,
-  open: id => { if (!desktopTray?.show()) activateExistingWindow(appWindows()); void openOwnCloud(id); }, shown: () => cloudAccount?.addDone() }); const desktopNotifications = installDesktopNotifications({ ipcMain, Notification, nativeImage, fetch: (...args) => session.defaultSession.fetch(...args), window: () => mainWindow, mayNotify: (contents, url) => appPermissions?.check(contents, "notifications", url, { isMainFrame: true }) === true, reveal: revealForLink, openPlace: origin => (origin === homeWindow.cloudOrigin() ? showHome({ place: "cloud" }) : workspaceMenuAction(() => switchEnvironment(origin === rendererOrigin() ? LOCAL_ID : environmentsState.environments.find(entry => entry.origin === origin)?.id))) });
+  open: id => { if (!desktopTray?.show()) activateExistingWindow(appWindows()); void openOwnCloud(id); }, shown: () => cloudAccount?.addDone() }); const desktopNotifications = installDesktopNotifications({ ipcMain, Notification, nativeImage, fetch: cloudFetch, window: () => mainWindow, mayNotify: (contents, url) => appPermissions?.check(contents, "notifications", url, { isMainFrame: true }) === true, reveal: revealForLink, openPlace: origin => (origin === homeWindow.cloudOrigin() ? showHome({ place: "cloud" }) : workspaceMenuAction(() => switchEnvironment(origin === rendererOrigin() ? LOCAL_ID : environmentsState.environments.find(entry => entry.origin === origin)?.id))) });
 const botsElsewhere = installBotsElsewhere({ ipcMain, guard: localWorkspaceOnly, places: () => placesElsewhere({ environments: environmentsState.environments, moved: ownHome?.home() ?? null, cloudOrigin: homeWindow.cloudOrigin() }), account: () => (desktopRemoteAccess ? null : cloudAccount?.state().account ?? null), store: accountSetupStore({ local: localAccountSetupStore(jsonFile(path.join(app.getPath("userData"), "account-setups.json"))), remote: remoteAccountSetupStore(), log: slog }),
   open: id => (id === CLOUD_HOME_ID ? showHome({ place: "cloud" }) : workspaceMenuAction(() => switchEnvironment(id))), connectCloud: () => workspaceMenuAction(() => connectCloudHome()), chosen: placesChosen, log: slog,
-  counts: () => readBotCounts({ places: environmentsState.environments.filter(entry => entry.kind !== "local" && entry.origin), fetch: (...args) => session.defaultSession.fetch(...args), asleep: origin => homeWindow.asleepAt(origin) }) });
+  counts: () => readBotCounts({ places: cloudGone.keep(environmentsState.environments.filter(entry => entry.kind !== "local" && entry.origin)), fetch: cloudFetch, asleep: origin => homeWindow.asleepAt(origin) }) });
 // A place's colour (place-look.mjs): the Admin's for a Cloud, this app's for This computer and a server connected by
 // hand; changed on the place's own page or from the window's rail, whatever that server runs.
 installPlaceLook({ ipcMain, guard: workspaceOnly, place: () => savedPlace(environmentsState), session: () => ({ clouds: desktopRemoteAccess ? null : cloudAccount?.state().clouds ?? null, homeOrigin: myCloud() }),
@@ -3143,9 +3153,9 @@ installPlaceLook({ ipcMain, guard: workspaceOnly, place: () => savedPlace(enviro
   rail: { owns: event => chromeRail.owns(event), places: railList, saved: id => savedPlace(environmentsState, id) } });
 const cloudSync = installCloudFiles({
   app, ipcMain, dialog, shell, powerMonitor, localWorkspaceOnly, localDataDir: desktopDataDir(),
-  fetch: (...args) => session.defaultSession.fetch(...args),
+  fetch: cloudFetch,
   send: (channel, value) => { if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send(channel, value); },
-  cloudOrigin: () => myCloud(), cloudAccount: () => ensureCloudAccount(), stateDir: cloudTarget(process.env).sync, power: cloudPower,
+  cloudOrigin: () => cloudGone.live(myCloud()), cloudAccount: () => ensureCloudAccount(), stateDir: cloudTarget(process.env).sync, power: cloudPower,
 });
 
 userPresence = installUserPresence({ ipcMain, guard: workspaceOnly, dialog, systemPreferences, log: slog, window: () => mainWindow, trusted: senderIsLocal });
@@ -3207,7 +3217,6 @@ ipcMain.handle("workspaces:menu", workspaceOnly(async (_event, from) => {
       onForget: (id) => void workspaceMenuAction(() => forgetEnvironment(id)),
       ...(serverCanMove(environmentsState.activeId) ? { onCloudMove: (id) => void askServerCloudMove(id).catch(error => slog(`cloud move menu: ${error?.message ?? error}`)) } : {}),
       ...cloudMenuOptions(from === "howto" ? "app_howto" : "app_menu"),
-      ...(homeWindow.cloudOrigin() && cloudOffersAllowed() ? { onAddCloud: () => void ensureCloudAccount().webHandoff({ page: "cloud" }).catch(error => slog(`add cloud: ${error?.message ?? error}`)) } : {}),
       kindIcon: placeKindIcon,
       // with My Cloud home, this computer stays one tap away: once its bots moved it opens fresh (its own first bot), never the frozen copy that refuses every send
       onLocal: () => void workspaceMenuAction(() => (cleanWorkspace.marker().frozen ? workspaceSwitch.around(() => homeWindow.openHere()) : activeEnvironment(environmentsState) ? switchEnvironment(LOCAL_ID) : workspaceSwitch.around(() => (homePlaces.remember(null), persistEnvironments(withActive(environmentsState, LOCAL_ID), "chosen"), navigateMainWindow(rendererOrigin()))))),
@@ -3698,7 +3707,7 @@ function startAppUpdates(notice) {
   }
   const onFailed = (message, info) => productEvents.action("update_failed", { stage: info?.stage ?? updateFailStage(message), reason: info?.reason });
   const signals = quietSignals({ focused: () => Boolean(BrowserWindow.getFocusedWindow()), powerMonitor, window: () => mainWindow, lastInput: () => oneHome.lastInput(), local: localServerRequest, place: () => null,
-    cloudFetch: (...args) => session.defaultSession.fetch(...args), asleep: () => true, busy: () => (speechBusy() ? "dictation" : null) });
+    cloudFetch: cloudFetch, asleep: () => true, busy: () => (speechBusy() ? "dictation" : null) });
   if (process.platform === "win32") windowsInstaller = nsisInstaller({ dir: updateDir, current: app.getVersion(), quit: () => app.quit(), log: slog });
   const own = windowsInstaller ? { platform: "win32", signed: async () => true, blocked: async () => windowsPlace(app.getPath("exe")), asset: setupIn, sources: setupSources, keep: [TRIED], installer: windowsInstaller } : process.platform === "linux" && process.env.APPIMAGE ? appImageUpdates({ app, dir: updateDir, log: slog }) : null;
   if (own) {
@@ -3710,7 +3719,7 @@ function startAppUpdates(notice) {
   }
   if (process.platform !== "darwin") {
     notice.start();
-    appUpdater = createAppUpdater({ current: app.getVersion(), arch: process.arch, dir: updateDir, installs: false, platform: process.platform, appImage: Boolean(process.env.APPIMAGE), fallback: { check: async () => null }, log: slog, onState: tellAppUpdate, onFailed, intervalMs: 6 * 60 * 60_000 });
+    appUpdater = createAppUpdater({ current: app.getVersion(), arch: process.arch, dir: updateDir, installs: false, platform: process.platform, appImage: Boolean(process.env.APPIMAGE), fallback: { check: async () => null }, log: slog, onState: tellAppUpdate, onFailed });
     appUpdater.start();
     return;
   }

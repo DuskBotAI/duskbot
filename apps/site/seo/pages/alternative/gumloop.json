@@ -11,7 +11,7 @@
     "gumloop vs zapier"
   ],
   "answer": "**keep the builder if you like building. text a bot if you want to hand over the job.** gumloop already has chat, agents and browser work. dusk gives you named bots with standing jobs and a choice of where they live. choose by how you want to work, then add up both the hosting and ai bills.",
-  "updated": "2026-11-12",
+  "updated": "2026-11-20",
   "review": {
     "status": "approved",
     "by": "lead agent: independent reviewer pass against seo/facts (4 reviewers), every finding applied, automated gate",
@@ -134,7 +134,7 @@
         "label": "conversation channels",
         "cells": [
           "chat, slack, teams, imessage and email on its homepage",
-          "desktop app and paired phone browser; store apps are on the way"
+          "desktop or iphone app; on android, pair through the browser until the google play release"
         ],
         "src": [
           1,

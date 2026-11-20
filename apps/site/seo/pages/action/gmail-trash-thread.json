@@ -1,0 +1,93 @@
+{
+  "path": "/integrations/gmail/trash-thread",
+  "type": "action",
+  "title": "Move an entire Gmail conversation to trash with AI",
+  "nav": "trash a conversation",
+  "h1": "move every reply in a gmail thread to trash",
+  "description": "Clear a finished Gmail thread after reviewing everyone who replied. Learn when to move the whole conversation and when to remove a single message.",
+  "keyword": "trash gmail thread with ai",
+  "keywords": [
+    "move entire gmail conversation to trash",
+    "chatgpt clean up gmail threads",
+    "claude trash a gmail conversation"
+  ],
+  "answer": "**one click on the wrong thread can take the customer’s reply with it.** a bot can move a whole gmail conversation to trash, including every message in it. have it read the replies and show you the participants first. if only the opening email belongs in trash, choose the single-message action.",
+  "updated": "2026-11-20",
+  "review": {
+    "status": "approved",
+    "by": "lead agent, after four independent reviewers read every page against seo/facts (2026-11-20); every finding applied",
+    "at": "2026-11-20"
+  },
+  "tags": [
+    "gmail",
+    "trash a conversation"
+  ],
+  "connectors": [
+    "gmail"
+  ],
+  "related": [
+    "/integrations/gmail",
+    "/integrations/gmail/untrash-thread",
+    "/integrations/gmail/move-to-trash"
+  ],
+  "art": {
+    "logo": "gmail",
+    "label": "Gmail",
+    "props": [
+      "p-folder",
+      "s-mailbox"
+    ],
+    "bubble": "every reply goes too"
+  },
+  "og_line": "read the last reply before you bin the lot.",
+  "action": {
+    "toolkit": "gmail",
+    "slug": "GMAIL_MOVE_THREAD_TO_TRASH"
+  },
+  "what": "**a thread's subject tells you how it started. the replies tell you what you'd lose.** a rehearsal alert might end with a colleague asking a real question. have the bot use gmail's thread lookup to get the conversation id and inspect its messages before proposing the move.",
+  "uses": [
+    "clear a completed test run once you know every reply came from the test account",
+    "remove a dummy registration conversation after a practice session",
+    "retire a string of sample announcements while keeping any conversation a colleague joined"
+  ],
+  "routine": {
+    "message": "every wednesday after rehearsal at 6, find work gmail threads titled lighting desk test. read all messages and skip any thread with a reply from outside the rehearsal mailbox. show the subject, participants and last line here. ask me before you change anything and move only the thread i choose to trash. never empty trash.",
+    "when": "wednesdays at 6 pm after the lighting rehearsal",
+    "needs": "work gmail connected with read and write for thread lookup and moving a thread to trash",
+    "output": "lighting desk test, afternoon run: rehearsal mailbox only. last line: dimmer test complete.\nevening run kept out of the proposal. rosemary king asked about a failed lamp."
+  },
+  "steps": [
+    "in **Connected apps**, choose the gmail account that receives the test notices.",
+    "use **read only** for a first pass. ask for the thread id and the participants in each match.",
+    "to move a conversation, allow **read and write**. review any new replies before confirming the id."
+  ],
+  "watch": [
+    "**a thread id covers every message in it.** even a reply that lacks the words you searched for moves with the conversation.",
+    "**subject matches can span several threads.** ask to see separate candidates and keep their ids apart.",
+    "**permanent deletion is a different action.** keep it off this bot's allowed list."
+  ],
+  "faq": [
+    {
+      "q": "can i keep the last reply and trash the rest in one thread move?",
+      "a": "**choose individual messages for that job.** moving the thread takes the last reply along."
+    },
+    {
+      "q": "what if i picked the wrong conversation?",
+      "a": "**look in trash for the thread.** while it's there, the untrash thread action can bring its messages back."
+    }
+  ],
+  "sources": [
+    {
+      "label": "dusk bot docs: files and apps",
+      "url": "/docs/files-and-apps"
+    },
+    {
+      "label": "dusk bot docs: routines",
+      "url": "/docs/routines"
+    }
+  ],
+  "voice": 2,
+  "tip": {
+    "text": "if you only want a quiet inbox and still need this correspondence, leave trash out of the job."
+  }
+}

@@ -121,8 +121,8 @@ export const SearchSheet: ComponentType<SheetPageProps<"search">> = ({ open, onC
 
   return (
     <Sheet open={open} onClose={onClose} title={t("mobile.search.title")} full flush>
-      <div className="sticky top-0 z-10 flex items-center gap-1 bg-app px-4 pb-3 pt-6">
-        <div className="flex h-11 min-w-0 flex-1 items-center rounded-full bg-ink/[0.05] pl-3">
+      <div className="sticky top-0 z-10 flex items-center gap-1 bg-(--m-sheet-page) px-4 pb-3 pt-6">
+        <div className="flex h-11 min-w-0 flex-1 items-center rounded-full bg-menu pl-3">
           <Search aria-hidden size={19} className="shrink-0 text-ink-secondary" />
           <label className="sr-only" htmlFor="mobile-search-input">{t("mobile.search.title")}</label>
           <input ref={input} id="mobile-search-input" autoFocus type="search" enterKeyHint="search" autoComplete="off" value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t("mobile.search.placeholder")} className="h-11 min-w-0 flex-1 appearance-none rounded-full bg-transparent px-2 text-[16px] text-ink placeholder:text-ink-tertiary [&::-webkit-search-cancel-button]:appearance-none" />
@@ -151,12 +151,12 @@ export const SearchSheet: ComponentType<SheetPageProps<"search">> = ({ open, onC
       ) : <div className="px-2">
         {(bots.length > 0 || groups.length > 0) && <SettingsSection title={t("mobile.search.owners")}>
           <ul>
-            {bots.map((bot) => <li key={bot.id}><button type="button" onClick={() => onOpenChat(bot.id)} className="mobile-row flex min-h-[76px] w-full items-center gap-3.5 rounded-2xl px-3 py-3 text-left text-ink"><BotAvatar bot={bot} size={52} animated={false} label="" /><span className="min-w-0 truncate text-[16px] font-semibold">{bot.name}</span></button></li>)}
-            {groups.map((group) => <li key={group.id}><button type="button" onClick={() => onOpenChat(group.id)} className="mobile-row flex min-h-[76px] w-full items-center gap-3.5 rounded-2xl px-3 py-3 text-left text-ink"><GroupAvatar members={state.bots.filter((bot) => group.memberIds.includes(bot.id))} size={52} you={you} /><span className="min-w-0 truncate text-[16px] font-semibold">{group.name}</span></button></li>)}
+            {bots.map((bot) => <li key={bot.id}><button type="button" onClick={() => onOpenChat(bot.id)} className="mobile-row flex min-h-[64px] w-full items-center gap-3 rounded-2xl px-3 py-2 text-left text-ink"><BotAvatar bot={bot} size={40} animated={false} label="" /><span className="min-w-0 truncate text-[16px] font-semibold">{bot.name}</span></button></li>)}
+            {groups.map((group) => <li key={group.id}><button type="button" onClick={() => onOpenChat(group.id)} className="mobile-row flex min-h-[64px] w-full items-center gap-3 rounded-2xl px-3 py-2 text-left text-ink"><GroupAvatar members={state.bots.filter((bot) => group.memberIds.includes(bot.id))} size={40} you={you} /><span className="min-w-0 truncate text-[16px] font-semibold">{group.name}</span></button></li>)}
           </ul>
         </SettingsSection>}
-        {loading ? <div role="status" aria-label={t("mobile.search.loading")} className="px-4 py-2">
-          {[0, 1, 2].map((i) => <div key={i} aria-hidden className="flex min-h-[76px] items-center gap-3"><span className="size-8 shrink-0 rounded-full bg-ink/[0.05]" /><span className="flex-1 space-y-2"><span className="block h-3 w-1/3 rounded-full bg-ink/[0.05]" /><span className="block h-3 w-4/5 rounded-full bg-ink/[0.05]" /><span className="block h-3 w-2/3 rounded-full bg-ink/[0.05]" /></span></div>)}
+        {loading ? <div role="status" aria-label={t("mobile.search.loading")} className="px-3 py-2">
+          {[0, 1, 2].map((i) => <div key={i} aria-hidden className="flex min-h-[64px] items-center gap-3"><span className="size-10 shrink-0 rounded-full bg-ink/[0.05]" /><span className="flex-1 space-y-2"><span className="block h-3 w-1/3 rounded-full bg-ink/[0.05]" /><span className="block h-3 w-4/5 rounded-full bg-ink/[0.05]" /><span className="block h-3 w-2/3 rounded-full bg-ink/[0.05]" /></span></div>)}
         </div> : current && results.status === "error" ? <div role="alert" className="px-4 py-5">
           <p className="text-[15px] text-danger">{t("mobile.search.error")}</p>
           <button type="button" onClick={() => { setResults({ query: q, status: "loading", hits: [] }); setRetry((value) => value + 1); }} className="mobile-press mt-3 h-12 rounded-full bg-ink px-6 text-[15px] font-semibold text-app">{t("mobile.search.retry")}</button>
@@ -165,8 +165,8 @@ export const SearchSheet: ComponentType<SheetPageProps<"search">> = ({ open, onC
             {hits.map((hit) => {
               const bot = state.bots.find((candidate) => candidate.id === hit.botId);
               const group = state.groups.find((candidate) => candidate.id === hit.groupId);
-              return <li key={`${hit.threadId}:${hit.messageId}`}><button type="button" disabled={opening} onClick={() => { void openHit(hit); }} className="mobile-row flex min-h-[76px] w-full items-start gap-3 rounded-2xl px-4 py-3 text-left disabled:opacity-60">
-                <span className="shrink-0">{group ? <GroupAvatar members={state.bots.filter((candidate) => group.memberIds.includes(candidate.id))} size={32} you={you} /> : bot ? <BotAvatar bot={bot} size={32} animated={false} label="" /> : <MausAvatar color="blue" size={32} animated={false} label="" />}</span>
+              return <li key={`${hit.threadId}:${hit.messageId}`}><button type="button" disabled={opening} onClick={() => { void openHit(hit); }} className="mobile-row flex min-h-[64px] w-full items-start gap-3 rounded-2xl px-3 py-3 text-left disabled:opacity-60">
+                <span className="shrink-0">{group ? <GroupAvatar members={state.bots.filter((candidate) => group.memberIds.includes(candidate.id))} size={40} you={you} /> : bot ? <BotAvatar bot={bot} size={40} animated={false} label="" /> : <MausAvatar color="blue" size={40} animated={false} label="" />}</span>
                 <span className="min-w-0 flex-1">
                   <span className="flex items-baseline gap-2"><span className="min-w-0 flex-1 truncate text-[16px] font-semibold text-ink">{hit.name}</span><time dateTime={new Date(hit.at).toISOString()} className="shrink-0 text-[14px] font-medium tabular-nums text-ink-secondary">{listTime(hit.at)}</time></span>
                   <span className="mt-1 line-clamp-2 text-[15px] leading-5 text-ink-secondary">{searchSnippetParts(searchSnippetText(hit.snippet), q).map((part, index) => <span key={index} className={part.matched ? "font-semibold text-ink" : undefined}>{part.text}</span>)}</span>

@@ -72,8 +72,10 @@ describe("a failure card, whatever the engine said", () => {
             const { card, title, plain, buttons } = await show(cause, reason, group, onRetry);
             const at = `${reason ?? "no reason"} / ${group ? "group" : "direct"} / ${onRetry ? "retry" : "no retry"} / ${cause.slice(0, 40)}`;
             if (!card) { problems.push(`${at}: no card`); continue; }
-            if (card.getAttribute("role") !== "alert") problems.push(`${at}: not an error card`);
-            if (!/failed to respond|couldn't respond/.test(title)) problems.push(`${at}: title "${title}"`);
+            // a usage limit is a calm notice that says until when, never an error
+            const limit = reason === "usage_limit";
+            if (card.getAttribute("role") !== (limit ? "status" : "alert")) problems.push(`${at}: ${limit ? "not a notice" : "not an error card"}`);
+            if (!(limit ? /^Claude hit its limit/ : /failed to respond|couldn't respond/).test(title)) problems.push(`${at}: title "${title}"`);
             if (!plain || rawDetailIn(plain)) problems.push(`${at}: plain line "${plain}"`);
             const firstLine = shortenHomePaths(cause).split("\n")[0]!;
             if ((card.textContent ?? "").includes(firstLine)) problems.push(`${at}: shows the raw cause`);

@@ -104,6 +104,21 @@ describe("saveBotAttachment", () => {
     }
   });
 
+  it("attaches a code file as a plain-text download that keeps its name, and refuses one that is not text or too big", async () => {
+    const code = "import sys\nprint(sys.argv)\n";
+    writeFileSync(join(WORK, "rename.py"), code);
+    const saved = await saveBotAttachment({ path: "rename.py", roots: [WORK] });
+    expect(saved.attachment).toMatchObject({ kind: "file", mime: "text/plain", name: "rename.py" });
+    expect(saved.attachment.path.endsWith(".txt")).toBe(true);
+    expect(readFileSync(saved.attachment.path, "utf8")).toBe(code);
+    writeFileSync(join(WORK, "deploy.sh"), "#!/bin/sh\necho hi\n");
+    expect((await saveBotAttachment({ path: "deploy.sh", roots: [WORK] })).attachment).toMatchObject({ mime: "text/plain", name: "deploy.sh" });
+    writeFileSync(join(WORK, "packed.py"), Buffer.from([0x7f, 0x45, 0x4c, 0x46, 0x00, 0x01]));
+    await expect(saveBotAttachment({ path: "packed.py", roots: [WORK] })).rejects.toMatchObject({ status: 415, message: expect.stringContaining("not plain text") });
+    writeFileSync(join(WORK, "huge.js"), "x".repeat(1024 * 1024 + 1));
+    await expect(saveBotAttachment({ path: "huge.js", roots: [WORK] })).rejects.toMatchObject({ status: 413 });
+  });
+
   it("rejects a missing path and an empty request", async () => {
     await expect(saveBotAttachment({ path: "nope.pdf", roots: [WORK] })).rejects.toMatchObject({ status: 404 });
     await expect(saveBotAttachment({ path: "  ", roots: [WORK] })).rejects.toMatchObject({ status: 400 });

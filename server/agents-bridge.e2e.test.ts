@@ -126,7 +126,7 @@ it("keeps a turn on the whole catalog until the switch is on, then mounts the br
       // a Claude turn loads only the hot tools up front; the rest are found through tool search
       const upFront = listed.filter((tool) => tool._meta?.["anthropic/alwaysLoad"] !== false).map((tool) => tool.name);
       expect(upFront).toEqual(expect.arrayContaining(["coordinate_bots", "memory_update"]));
-      expect(upFront).not.toContain("trigger");
+      expect(upFront).not.toContain("trigger_info");
       whole = listed.map(({ _meta, ...tool }) => tool);
       expect(whole.map((tool) => tool.name)).toEqual(expect.arrayContaining(["coordinate_bots", "trigger", "trigger_info", "session_search"]));
       expect(whole.map((tool) => tool.name)).not.toEqual(expect.arrayContaining(["find_tool"]));
@@ -160,7 +160,8 @@ it("keeps a turn on the whole catalog until the switch is on, then mounts the br
       expect(JSON.stringify(list.result!.tools)).toBe(JSON.stringify(createToolBridge(whole).listed));
       expect(namesOf(list).slice(-2)).toEqual(["find_tool", "use_tool"]);
       expect(namesOf(list)).toEqual(expect.arrayContaining(["coordinate_bots", "post_to_room", "memory_update", "request_sign_in"]));
-      expect(namesOf(list)).not.toEqual(expect.arrayContaining(["trigger"]));
+      expect(namesOf(list)).toContain("trigger");
+      expect(namesOf(list)).not.toContain("trigger_info");
       expect(JSON.stringify(list.result!.tools).length).toBeLessThan(JSON.stringify(whole).length / 2);
 
       // found from how a person would ask, with the schema the whole catalog lists

@@ -33,7 +33,7 @@ export function CodeViewer({ code, lang, open, onClose }: { code: string; lang: 
         </RoundButton>
       </div>}
       bodyClassName="!overflow-x-hidden">
-      <div dir="ltr" data-code-viewer="" data-wrap={wrap || undefined}
+      <div dir="ltr" data-code-viewer="" data-selectable="" data-wrap={wrap || undefined}
         className={cn("code-viewer mx-3 mb-3 rounded-2xl bg-ink/[0.04] py-3 font-mono text-[13px] leading-[1.6]", wrap ? "overflow-x-hidden" : "overflow-x-auto")}>
         {markup
           ? <div className="[&_pre]:!bg-transparent [&_pre]:m-0 [&_pre]:w-max [&_pre]:min-w-full" dangerouslySetInnerHTML={markup} />

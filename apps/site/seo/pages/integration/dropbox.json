@@ -1,0 +1,136 @@
+{
+  "path": "/integrations/dropbox",
+  "type": "integration",
+  "title": "Dropbox AI assistant for sorting a client delivery folder",
+  "nav": "dropbox",
+  "h1": "a dropbox bot for files that arrive out of order",
+  "description": "Sort a Dropbox intake folder by destination, find revisions of a disputed delivery, and spot file requests that close before the handoff.",
+  "keyword": "dropbox bot",
+  "keywords": [
+    "dropbox ai assistant",
+    "dropbox ai agent"
+  ],
+  "answer": "**a folder full of final files still leaves someone guessing which one to deliver.** point a dusk bot at your dropbox intake folder. give it the client folder names and ask for proposed moves in chat. it can also look up a file's revisions or pull the deadline from an open file request.",
+  "updated": "2026-11-20",
+  "review": {
+    "status": "approved",
+    "by": "lead agent, after four independent reviewers read every page against seo/facts (2026-11-20); every finding applied",
+    "at": "2026-11-20"
+  },
+  "voice": 2,
+  "tags": [
+    "files",
+    "intake",
+    "revisions"
+  ],
+  "connectors": [
+    "dropbox"
+  ],
+  "related": [
+    "/routines/dropbox-inbox-folder-sort",
+    "/use-cases/client-onboarding",
+    "/integrations/google-drive"
+  ],
+  "art": {
+    "logo": "dropbox",
+    "props": [
+      "p-folder"
+    ],
+    "bubble": "where does this go"
+  },
+  "og_line": "settle the destination before moving the file.",
+  "app": {
+    "name": "Dropbox",
+    "toolkit": "dropbox",
+    "intro": "**use the whole path to identify the file.** two clients can submit a file with the same name. listing the folder gives you each location. reading revisions answers a different question about what happened to one file.",
+    "highlight": [
+      {
+        "slug": "DROPBOX_LIST_FILES_IN_FOLDER",
+        "use": "inventory the files immediately inside the intake folder"
+      },
+      {
+        "slug": "DROPBOX_LIST_FOLDER_CONTINUE",
+        "use": "finish the inventory when dropbox returns another page"
+      },
+      {
+        "slug": "DROPBOX_GET_METADATA",
+        "use": "confirm that a proposed destination path points to a folder"
+      },
+      {
+        "slug": "DROPBOX_LIST_FILE_REVISIONS",
+        "use": "inspect earlier versions under one delivery path"
+      },
+      {
+        "slug": "DROPBOX_LIST_FILE_REQUESTS",
+        "use": "find requests owned by the connected account"
+      },
+      {
+        "slug": "DROPBOX_GET_FILE_REQUEST",
+        "use": "read the status and deadline on one request"
+      },
+      {
+        "slug": "DROPBOX_MOVE_FILE_OR_FOLDER",
+        "use": "move the chosen file to the exact approved destination"
+      }
+    ],
+    "setup": "**give it a real folder path and a filing rule.** name the intake folder, destination folders and how your filenames identify a client. start with the listing actions. review one proposed move against the actual file before enabling moves."
+  },
+  "routines_intro": "**decide what counts as evidence for filing.** a client code at the start of a filename can be enough. a familiar first name usually isn't. for the revision routine, give the bot a specific delivery path.",
+  "routines": [
+    {
+      "name": "sort the intake tray",
+      "message": "every weekday at noon, list the files directly inside my intake folder. continue to the end of the listing. match the client prefix to my destination list. give me source and destination paths in chat. set aside unknown prefixes and existing destination names. ask me before you change anything.",
+      "when": "weekdays at 12:00",
+      "output": "a move list with ambiguous files held aside"
+    },
+    {
+      "name": "which revision did we deliver",
+      "message": "every friday at 3, read the revision history for <delivery file path>. list revisions from this week with their ids and times. mark the newest one returned. if there were no changes, give me one line. don't restore any files.",
+      "when": "fridays at 15:00",
+      "output": "a dated record for one delivery file"
+    },
+    {
+      "name": "requests near their deadline",
+      "message": "each monday at 9, list my open dropbox file requests. look up the deadlines. bring me the requests due this week, earliest first, with the destination folder. put requests without a deadline in a separate count. leave every request open.",
+      "when": "mondays at 09:00",
+      "output": "an intake calendar for the person collecting assets"
+    }
+  ],
+  "asks": "**approve the path pair before allowing a move.** dropbox moves change files without a sending prompt. a read-only bot can prepare the filing plan. if you enable moves, keep the ask-first line and review each collision. renaming a file to make it fit can hide a second submission.",
+  "cannot": [
+    "**see the entire intake from the first results alone.** when dropbox offers a continuation cursor, more entries remain.",
+    "**identify the chosen design from a revision timestamp.** the history tells you which file changed last. your approval record tells you which version the client accepted.",
+    "**list another person's requests as yours.** the request listing covers the connected user's own requests. choose the account that collected the files."
+  ],
+  "sections": [
+    {
+      "h": "when the filenames give you nothing",
+      "md": "**sort unmarked submissions with the person who received them.** if the same artwork appears under several names, the bot needs a delivery rule or an approval record. for a single disputed proof, opening the artwork with the client is the shorter job."
+    }
+  ],
+  "faq": [
+    {
+      "q": "can the bot sort dropbox without moving anything?",
+      "a": "**yes. let it list folders and read metadata.** get a proposed source and destination for each file. unknown clients stay in the intake report."
+    },
+    {
+      "q": "can i ask for previous versions of a whole folder?",
+      "a": "**choose the file first.** the revision action takes a file path. list the folder to find its contents, then inspect the specific delivery."
+    }
+  ],
+  "worked": {
+    "intro": "an example from a studio intake.",
+    "before": "veronica receives maple-cover.pdf and cover-final.pdf in the same intake folder. only the first has a known client prefix.",
+    "after": "maple-cover.pdf → maple/artwork/maple-cover.pdf\ncover-final.pdf → hold. which client sent this cover?"
+  },
+  "sources": [
+    {
+      "label": "dusk bot docs: connected apps",
+      "url": "/docs/files-and-apps"
+    },
+    {
+      "label": "dusk bot docs: routines",
+      "url": "/docs/routines"
+    }
+  ]
+}

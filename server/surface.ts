@@ -40,24 +40,26 @@ const NO_BROWSER_NOTE =
   " This bot is set to work in the built-in browser, but the built-in browser is switched off in App Settings, so you have no browser and no computer this turn: say so instead of guessing.";
 
 const OFF_NOTE =
-  " This bot's \"Works on\" setting is Off, so no computer and no built-in browser are mounted this turn: you cannot open a page, click, or type on any screen. If the user asks for something that needs one, tell them Works on is Off in this bot's settings, never claim you are opening a browser you do not have.";
+  " This bot's \"Works on\" setting is Off, so no computer or built-in browser is mounted this turn. Everything else works (automations, waits, memory, connected apps, teammates, files you make here): do the job with those. Only a step that needs a screen or a shell is out: do the rest, give the person that step's exact command or clicks, and say in one line that turning on Works on in this bot's settings lets you do it yourself.";
 
 const NO_PERMISSION_TALK = " Never explain permissions or System Settings yourself, and never claim to have used this computer's screen.";
 
 /** A bot on this computer whose screen control the OS has not granted yet: it chats and works in its browser as usual.
- * `missing`: the grants macOS still withholds, by name; `ask`: request_screen_access is mounted. */
-export function screenAccessMissingNote(browser: boolean, missing: readonly string[] = [], ask = false): string {
+ * `missing`: the grants macOS still withholds, by name; `ask`: request_screen_access is mounted; `shell`: the bot has a shell on this computer. */
+export function screenAccessMissingNote(browser: boolean, missing: readonly string[] = [], ask = false, shell = false): string {
   const withheld = missing.length ? ` (macOS has not given dusk bot ${missing.join(" or ")} on this Mac yet)` : "";
-  const desktop = ` Only a task that truly needs this computer's own desktop apps, or files outside the browser, needs screen control${withheld}.`
+  const desktop = (shell ? " Files and commands on this computer need no screen control: your own shell and file tools work on it now, so find, read and change files and run commands with them." : "")
+    + ` Only a task that truly needs this computer's own desktop apps${shell ? "" : ", or files outside the browser,"} needs screen control${withheld}.`
     + (ask ? " For such a task, call request_screen_access with a one-line reason: the person sees one way to allow it. Never call it for web work." : "")
-    + " Then say in one short sentence that controlling a computer's apps also comes with dusk cloud plans, on your own cloud computer"
-    + (browser ? ", and offer to do it in your built-in browser when that could work." : ".");
+    + (ask ? " After calling it, say in one short line that you will carry on as soon as it is allowed, and meanwhile do what you can" : " Meanwhile do what you can")
+    + (browser ? ", in your built-in browser when that could work." : ".");
   return browser
     ? " Your built-in browser is available this turn and is the default for everything on the web: opening a site, searching, reading pages, filling in forms, signing in. When the person asks you to open a site or do anything a browser can do, go straight to your built-in browser and do it; never say you cannot open a website. Control of this computer's desktop apps is not available." + desktop + NO_PERMISSION_TALK
     : " Control of this computer's desktop apps is not available this turn. Answer and chat normally, with web search and page fetches for lookups." + desktop + NO_PERMISSION_TALK;
 }
 
-export function computerSkippedNote(cause: string, incident = true): string {
+export function computerSkippedNote(cause: string, incident = true, gone = false): string {
+  if (!incident && gone) return " Your computer is not set up right now, so no computer is mounted this turn: answer and work without it. Only if the request truly needs a screen, say in one short sentence that your computer isn't set up and the person can set it up again in Settings > Computers; never quote an error, and never claim to have used that computer.";
   if (!incident) return " Your computer is not answering right now, so no computer is mounted this turn: answer and work without it. Only if the request truly needs a screen, say in one short sentence that your computer isn't answering and the person can try again in a minute; never quote an error, and never claim to have used that computer.";
   const why = cause.trim().replace(/[\s.]+$/, "");
   return ` This turn answers a Team incidents report and your computer could not be prepared for it (${why}), so no computer is mounted: you cannot open, click or check anything on it this turn. Act through your teammates, or tell the person what only they can fix, never claim to have checked that computer yourself.`;

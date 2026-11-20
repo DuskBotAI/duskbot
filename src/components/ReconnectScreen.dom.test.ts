@@ -88,3 +88,18 @@ it("a server that connected before offers no remove on its wait", async () => {
   expect(host.querySelector("[data-reconnect-remove]")).toBeNull();
   expect(host.textContent).toContain("Nothing is lost");
 });
+
+it("a dusk cloud that was deleted says so once: no countdown, no Try now, only Remove and the other places", async () => {
+  const { bridge } = bridgeOf({ ...VIEW, gone: true, nextAt: null, checking: false });
+  expect(reconnectText({ ...VIEW, gone: true }, NOW)).toEqual({ title: "Garage server was deleted", next: null });
+  root = createRoot(host);
+  await act(async () => { root!.render(createElement(ReconnectScreen, { bridge })); });
+  await settle();
+  expect(host.querySelector("[role='status']")?.textContent).toBe("Garage server was deleted");
+  expect(host.textContent).toContain("no longer exists");
+  expect(host.querySelector("[data-reconnect-retry]")).toBeNull();
+  expect(host.querySelector("[data-reconnect-next]")).toBeNull();
+  expect(host.querySelector("[data-reconnect-places]")).not.toBeNull();
+  host.querySelector<HTMLButtonElement>("[data-reconnect-remove]")!.click();
+  expect(bridge.remove).toHaveBeenCalledTimes(1);
+});

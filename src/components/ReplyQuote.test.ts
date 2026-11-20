@@ -20,6 +20,13 @@ describe("composer reply strip", () => {
     expect(html).toContain('aria-label="Cancel reply"');
   });
 
+  it("shows the picture of a message it answers, as the sent quote does", () => {
+    const picture = { ...target, attachments: [{ kind: "image", path: "/api/attachments/123e4567-e89b-42d3-a456-426614174000.png", mime: "image/png" }] } as Message;
+    const strip = renderToStaticMarkup(createElement(ComposerReplyStrip, { message: picture, onClear: () => {} }));
+    expect(strip).toMatch(/<img[^>]*src="\/api\/attachments\/123e4567-e89b-42d3-a456-426614174000.png"[^>]*data-reply-thumbnail|data-reply-thumbnail[^>]*src="\/api\/attachments\/123e4567/);
+    expect(html).not.toContain("data-reply-thumbnail");
+  });
+
   it("names who it answers for screen readers, not as a second visible line", () => {
     expect(html).toMatch(/role="group" aria-label="Replying to Willow"/);
     expect(html).toContain('<span class="sr-only">Replying to Willow: </span>');

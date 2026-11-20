@@ -24,13 +24,14 @@ describe("room summary of what fell out of the window", () => {
     expect(first).toContain("40 earlier messages");
     expect(first).not.toContain("Not in the summary yet");
     expect(prompts[0]).toContain("Sam: line 0");
-    expect(prompts[0]).toContain("Current ask:");
+    expect(prompts[0]).toContain("## Goal");
+    expect(first).toContain(`## What people in the room said, word for word\n- "Sam: line 0"`);
 
     const second = await earlier.prompt("t", "b", input(lines(45)));
     expect(writer).toHaveBeenCalledTimes(1);
     expect(second).toContain("codename Bluebird");
     expect(second).toContain("Ben: line 41");
-    expect(second).not.toContain("Sam: line 38");
+    expect(second.slice(second.indexOf("Not in the summary yet"))).not.toContain("Sam: line 38");
   });
 
   it("folds the old summary forward once enough new lines pile up, in the background", async () => {
@@ -40,7 +41,7 @@ describe("room summary of what fell out of the window", () => {
     const stale = await earlier.prompt("t", "b", input(lines(10 + ROOM_EARLIER_BATCH)));
     expect(stale).toContain("first");
     await vi.waitFor(() => expect(writer).toHaveBeenCalledTimes(2));
-    expect(String(writer.mock.calls[1]![0])).toContain("Earlier summary of this room:\\nfirst");
+    expect(String(writer.mock.calls[1]![0])).toContain("Earlier summary of this room:\\nCheckpoint written by a helper model (may be incomplete):\\nfirst");
     expect(String(writer.mock.calls[1]![0])).not.toContain("Sam: line 0\"");
     await vi.waitFor(async () => expect(await earlier.prompt("t", "b", input(lines(10 + ROOM_EARLIER_BATCH)))).toContain("second"));
   });
@@ -56,9 +57,11 @@ describe("room summary of what fell out of the window", () => {
     const block = await earlier.prompt("t", "b", input(huge));
     expect(writer).toHaveBeenCalledTimes(chunks.length);
     expect(prompts[0]).toContain("codename Bluebird");
-    expect(prompts[1]).toContain("Earlier summary of this room:\\nExact details: codename Bluebird.");
+    expect(prompts[1]).toContain("Earlier summary of this room:\\nCheckpoint written by a helper model (may be incomplete):\\nExact details: codename Bluebird.");
     expect(block).toContain("3000 earlier messages");
     expect(block).toContain(`carried ${chunks.length}`);
+    // the opening line's words outlive every refold, whatever the helper kept
+    expect(block).toContain(`- "Sam: codename Bluebird`);
   });
 
   it("goes on with excerpts when the room's engine has no quick model, or the summary fails", async () => {

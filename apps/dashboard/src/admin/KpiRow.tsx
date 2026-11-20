@@ -151,7 +151,7 @@ export function KpiRow({ cards, layout, onLayout: setLayout }: { cards: KpiCard[
   };
 
   return (
-    <div ref={grid} className="relative grid grid-cols-8 gap-1.5 max-xl:grid-cols-4 max-sm:grid-cols-2">
+    <div ref={grid} className="relative grid grid-cols-7 gap-1.5 max-xl:grid-cols-4 max-sm:grid-cols-2">
       {order.map((id, i) => {
         const card = byId.get(id)!, tint = tintOf(layout, id);
         const items: MenuItem[] = [

@@ -1,0 +1,132 @@
+{
+  "path": "/integrations/todoist",
+  "type": "integration",
+  "title": "Todoist AI assistant for a realistic evening plan",
+  "nav": "todoist",
+  "h1": "a todoist bot for deciding what gets tomorrow morning",
+  "description": "Build tomorrow's shortlist from actual Todoist tasks, group errands by label, and recover finished work by completion date. Keep due dates in your hands.",
+  "keyword": "todoist bot",
+  "keywords": [
+    "todoist ai assistant",
+    "todoist ai agent"
+  ],
+  "answer": "**pick tomorrow's first task before you close today's list.** a todoist bot can read overdue tasks alongside tomorrow's commitments and bring you a shortlist in dusk chat. tell it which deadlines are firm. it can also pull errands for your next trip and find the work you actually finished this week.",
+  "updated": "2026-11-20",
+  "review": {
+    "status": "approved",
+    "by": "lead agent, after four independent reviewers read every page against seo/facts (2026-11-20); every finding applied",
+    "at": "2026-11-20"
+  },
+  "voice": 2,
+  "tags": [
+    "tasks",
+    "planning",
+    "personal"
+  ],
+  "connectors": [
+    "todoist"
+  ],
+  "related": [
+    "/routines/todoist-evening-plan",
+    "/integrations/trello",
+    "/integrations/google-calendar"
+  ],
+  "art": {
+    "label": "Todoist",
+    "props": [
+      "s-notebook"
+    ],
+    "bubble": "what can actually wait"
+  },
+  "og_line": "pick a first task without moving every date.",
+  "app": {
+    "name": "Todoist",
+    "toolkit": "todoist",
+    "intro": "**use the right list for the question.** active tasks answer what's left. completed tasks answer what got done. name the project or label exactly as it appears in your account so another project with similar work stays out of the plan.",
+    "highlight": [
+      {
+        "slug": "TODOIST_GET_ALL_TASKS",
+        "use": "find incomplete tasks due tomorrow or already overdue"
+      },
+      {
+        "slug": "TODOIST_GET_TASK2",
+        "use": "open an active task by id before deciding whether it can wait"
+      },
+      {
+        "slug": "TODOIST_LIST_LABELS",
+        "use": "find the actual errand label you use"
+      },
+      {
+        "slug": "TODOIST_LIST_SECTIONS",
+        "use": "see how you divide a project before grouping its work"
+      },
+      {
+        "slug": "TODOIST_GET_COMPLETED_TASKS_BY_COMPLETION_DATE",
+        "use": "find the tasks you finished during the week"
+      },
+      {
+        "slug": "TODOIST_UPDATE_TASK",
+        "use": "change a due date after you choose the task and new date"
+      }
+    ],
+    "setup": "**tell the bot which dates you promised someone else.** a due date alone doesn't explain the cost of moving it. connect todoist read only, then name the projects and labels you use. ask for one evening plan in chat before turning it into a routine."
+  },
+  "routines_intro": "**reserve one clear decision for each message.** an evening plan should tell you where to start. a shopping trip needs a list you can use away from your desk. your weekly recap needs completion dates.",
+  "routines": [
+    {
+      "name": "tomorrow's first task",
+      "message": "every weekday at 6 pm, read my overdue tasks and tasks due tomorrow. ask me which deadlines are firm at setup. suggest one task to start with and tell me why. separate the remaining commitments from things i could move. keep all dates and priorities as they are.",
+      "when": "weekdays at 18:00",
+      "output": "a first task and a shortlist of dates to reconsider"
+    },
+    {
+      "name": "errands before the trip",
+      "message": "every saturday at 9, find my open tasks with the errands label. group them by shop or location only when the task says where to go. put missing locations under decide before leaving. include anything already overdue. leave the tasks open.",
+      "when": "saturdays at 09:00",
+      "output": "a trip list grouped by the places you actually need to visit"
+    },
+    {
+      "name": "finished this week",
+      "message": "each friday at 4, read tasks i completed since monday in my work project. group them by section. include tasks with no due date if i completed them this week. give me a short recap here and leave unrelated personal tasks out.",
+      "when": "fridays at 16:00",
+      "output": "finished work for a weekly update, including unscheduled tasks"
+    }
+  ],
+  "asks": "**a plan in chat leaves your due dates intact.** changing a task's date or priority is a write. it can run without an approval card. keep the planner read only. for a bot that can reschedule, give it the instruction “ask me before you change anything.”",
+  "cannot": [
+    "**find finished work in the active task listing.** it returns incomplete tasks. asking for completed items through that filter fails.",
+    "**pull a whole year in one completion-date request.** the completion action limits a window to about three months. review shorter periods for a longer recap.",
+    "**move a task to another project with the update action.** that action changes task properties. leave project moves out of a date-editing routine."
+  ],
+  "sections": [
+    {
+      "h": "make a shortlist you can finish",
+      "md": "**give the bot the morning you actually have.** if you only have a short stretch before an appointment, say so in chat. ask for one small first step where a task looks too large. if you already know the next task, opening it yourself is faster."
+    }
+  ],
+  "faq": [
+    {
+      "q": "does a todoist bot need write access to filter overdue tasks?",
+      "a": "**no. the active task listing accepts an overdue filter.** allow that read action for the evening plan. the separate action named filter tasks counts as a change in dusk."
+    },
+    {
+      "q": "can i recap tasks that had no deadline?",
+      "a": "**yes. ask for completion dates.** set the project and time window. using the original due date would leave out precisely the unscheduled work you're trying to remember."
+    }
+  ],
+  "worked": {
+    "intro": "a made-up evening shortlist.",
+    "before": "viktor has an overdue reading task and a proof due to the printer tomorrow. he told the bot the printer's deadline is firm.",
+    "after": "start with the proof. the printer needs your signoff tomorrow.\nreading can wait. choose a new date if you want one."
+  },
+  "sources": [
+    {
+      "label": "dusk bot docs: connected apps",
+      "url": "/docs/files-and-apps"
+    },
+    {
+      "label": "dusk bot docs: routines",
+      "url": "/docs/routines"
+    }
+  ]
+}

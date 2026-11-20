@@ -1,0 +1,109 @@
+{
+  "path": "/guides/move-from-grok-bot",
+  "type": "guide",
+  "title": "How to export your Grok Bot setup and move it to dusk bot",
+  "nav": "move from grok bot",
+  "h1": "how to export your grok bot setup",
+  "description": "Move skills, routines and memories into dusk bot one bot at a time. Preview the file, switch schedules safely and keep your Cursor account when you cancel.",
+  "keyword": "export grok bot",
+  "keywords": [
+    "grok bot export",
+    "move from grok bot",
+    "switch from grok bot",
+    "cancel grok bot"
+  ],
+  "answer": "**ask your grok bot to write down its setup as a file.** there is no export button for the whole bot.[^1] in dusk bot, open settings → import → **Move from Grok Bot**. paste or drop the file. you can see the bot’s name and counts for skills, routines and memories before you import anything.",
+  "tags": [
+    "grok bot",
+    "migration",
+    "export",
+    "routines"
+  ],
+  "related": [
+    "/alternatives/grok-bot",
+    "/vs/grok-bot",
+    "/guides/grok-bot-pricing"
+  ],
+  "art": {
+    "label": "Grok Bot",
+    "props": [
+      "p-folder",
+      "s-parcel"
+    ],
+    "bubble": "bring the setup over"
+  },
+  "og_line": "keep the setup and switch each schedule once.",
+  "sections": [
+    {
+      "h": "save files you still need to open",
+      "md": "**save the bot’s work separately from its instructions.** if a bot made a spreadsheet you need next month, download the spreadsheet. grok offers individual file downloads and **download all**. for a call, you can export its transcript or recording.[^1]\n\n**share → create a copy** publishes a bot template by link. it includes identity, skills and routines. it leaves out history and memory. to keep the preferences you taught the bot, follow the [import steps](#move-a-bot-from-its-first-file-to-its-first-run).[^1]"
+    },
+    {
+      "h": "read the preview before accepting",
+      "md": "**look for the bot’s name first, then the counts.** a skill holds instructions you reuse. a routine says when a workflow should run. memories include preferences and rules you have taught the bot. the preview counts each kind separately.[^1][^2]\n\nif the bot has a regular job and the preview shows no routines, stop there. compare the file with the schedule in grok. for a missing preference, ask the original bot what it remembers. grok lets you inspect its memory in chat.[^1]\n\nthe preview counts skills, routines and memories. it makes no promise about chat history, browser sessions or sign-ins. keep access to anything you still need to inspect."
+    },
+    {
+      "h": "give each routine a single home during the trial week",
+      "md": "**keep both apps for a week, with each schedule active in just one.** pick a routine whose result you can recognize. turn it off in grok before you turn it on in dusk. look at the next run on the dusk routine card.[^3]\n\nfor a desktop trial, leave dusk open and the computer awake when the job is due. look for the result in run history under automations. if you need the old schedule back, pause the dusk routine first.[^3]\n\ntreat the week as your own comparison period. keeping both services may cost money. the [side-by-side comparison](/vs/grok-bot) covers phone access, storage and the monthly bill."
+    },
+    {
+      "h": "cancel the plan without deleting cursor",
+      "md": "**decide whether you still use the rest of the subscription.** grok bot comes with qualifying x or legacy plans. there is no separate bot subscription to cancel. if you still want cursor, find the plan that pays for it before changing billing.[^4][^5]\n\naccount deletion removes bots, chats, computers and connected apps. deleting the grok bot service also deletes your whole cursor account. cursor purges the data within 30 days. do not use deletion as a shortcut to stopping renewal.[^4]\n\nif continuing with grok looks easier than rebuilding a workflow, keep it. the [grok bot alternatives](/alternatives/grok-bot) compare what you can keep on each service."
+    }
+  ],
+  "steps": {
+    "h": "move a bot from its first file to its first run",
+    "items": [
+      "**pick a bot you know well.** note a skill, a schedule and a preference you expect to find again.",
+      "**open the importer.** in dusk settings, choose import, then **Move from Grok Bot**. the import needs no sign-in and makes no network call.",
+      "**message that bot in grok.** ask it to write its setup to a file for the move. work with one bot at a time so the file and preview belong together.",
+      "**paste or drop the setup file into dusk.** read the name and preview counts. import when they match what you expect.",
+      "**hand over the schedules individually.** turn a routine off in grok, then on in dusk. look for its first result before retiring the old setup.",
+      "**finish the trial week before changing the bill.** keep the files you need and confirm which subscription you would be canceling.[^4][^5]"
+    ]
+  },
+  "faq": [
+    {
+      "q": "can i export all my grok bot conversations?",
+      "a": "**the grok bot docs list no full conversation export.** downloading files or exporting a call transcript saves those items. a shared bot template omits conversation history. keep the original account available if you still need old chats.[^1]"
+    },
+    {
+      "q": "does a week of testing mean my grok trial will renew?",
+      "a": "**the offer matters.** the one-time cursor account credit expires within seven days and never converts. an ios app store trial converts to a paid apple subscription. read the offer you accepted before choosing the date to cancel.[^4]"
+    }
+  ],
+  "updated": "2026-11-20",
+  "review": {
+    "status": "approved",
+    "by": "lead agent, after four independent reviewers read every page against seo/facts (2026-11-20); every finding applied",
+    "at": "2026-11-20"
+  },
+  "voice": 2,
+  "connectors": [],
+  "sources": [
+    {
+      "label": "grok bot memory, downloads and template copies",
+      "url": "https://docs.x.ai/grok-bot/bots.md",
+      "checked": "2026-11-20"
+    },
+    {
+      "label": "grok bot skills and routine schedules",
+      "url": "https://docs.x.ai/grok-bot/skills-routines-and-automations.md",
+      "checked": "2026-11-20"
+    },
+    {
+      "label": "dusk bot routine cards and run history",
+      "url": "/docs/routines"
+    },
+    {
+      "label": "grok bot faq on accounts, deletion and trials",
+      "url": "https://docs.x.ai/grok-bot/faq.md",
+      "checked": "2026-11-20"
+    },
+    {
+      "label": "x subscription plan coverage",
+      "url": "https://docs.x.ai/x-subscription/pricing.md",
+      "checked": "2026-11-20"
+    }
+  ]
+}

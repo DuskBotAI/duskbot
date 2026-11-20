@@ -18,7 +18,7 @@ export type ConnectState =
   | { stage: "preparing"; since: number }
   | { stage: "installing"; since: number; downloadBytes: number | null; progress?: InstallProgress | null }
   | { stage: "opening"; since: number }
-  | { stage: "waiting"; since: number; kind: WaitKind; flowId: string; link: string | null; code: string | null; opened: boolean }
+  | { stage: "waiting"; since: number; kind: WaitKind; flowId: string; link: string | null; code: string | null; opened: boolean; problem?: string | null }
   | { stage: "confirming"; since: number }
   | { stage: "connected"; reused: boolean }
   | { stage: "failed"; at: ConnectStageName; reason: FailReason; message: string | null; link: string | null };
@@ -537,22 +537,31 @@ export class ConnectFlow {
     const polling = new AbortController();
     const stopPolling = () => polling.abort();
     signal.addEventListener("abort", stopPolling, { once: true });
+    const waiting = this.state;
     try {
-      const typed = new Promise<string>((resolve, reject) => {
-        this.pasteDone = resolve;
-        signal.addEventListener("abort", () => reject(new StageEnded("timeout")), { once: true });
-      });
       const byItself = kind === "redirect"
         ? this.poll(run, polling.signal, base, flowId, "callback", provider, target, { relaying: false }).then(() => null)
         : new Promise<null>(() => {});
       byItself.catch(() => {});
-      const value = await Promise.race([typed, byItself]);
-      this.pasteDone = null;
-      polling.abort();
-      if (value === null) return;
-      this.set({ stage: "confirming", since: this.now() }, run);
-      const body = kind === "redirect" ? { flowId, callbackUrl: value } : { flowId, code: value };
-      await this.deps.api(`${base}/auth/complete`, { method: "POST", body: JSON.stringify(body), signal });
+      for (;;) {
+        const typed = new Promise<string>((resolve, reject) => {
+          this.pasteDone = resolve;
+          signal.addEventListener("abort", () => reject(new StageEnded("timeout")), { once: true });
+        });
+        const value = await Promise.race([typed, byItself]);
+        this.pasteDone = null;
+        if (value === null) return;
+        this.set({ stage: "confirming", since: this.now() }, run);
+        const body = kind === "redirect" ? { flowId, callbackUrl: value } : { flowId, code: value };
+        try {
+          await this.deps.api(`${base}/auth/complete`, { method: "POST", body: JSON.stringify(body), signal });
+          return;
+        } catch (cause) {
+          // 400: the server turned the paste away before using it, so the same sign-in still takes another one
+          if (signal.aborted || (cause as { status?: number }).status !== 400 || waiting.stage !== "waiting") throw cause;
+          this.set({ ...waiting, since: this.now(), problem: messageOf(cause) }, run);
+        }
+      }
     } finally {
       polling.abort();
       signal.removeEventListener("abort", stopPolling);

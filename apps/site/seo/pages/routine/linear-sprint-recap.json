@@ -1,0 +1,92 @@
+{
+  "path": "/routines/linear-sprint-recap",
+  "type": "routine",
+  "title": "Linear sprint recap for the cycle’s closing meeting",
+  "nav": "linear sprint recap",
+  "h1": "recap a linear cycle before the sprint closes",
+  "description": "Review one Linear team’s closing cycle. See which issues finished, which the team canceled and which still need a carryover decision.",
+  "keyword": "linear sprint recap",
+  "keywords": [
+    "linear cycle summary",
+    "sprint review routine"
+  ],
+  "answer": "**take unfinished issues into sprint review while the team can still decide what happens to them.** this linear recap reads one team’s cycle on its closing day. it groups the issues by their current state and brings open work into dusk chat by name. the team decides what to carry forward.",
+  "updated": "2026-11-20",
+  "review": {
+    "status": "approved",
+    "by": "lead agent, after four independent reviewers read every page against seo/facts (2026-11-20); every finding applied",
+    "at": "2026-11-20"
+  },
+  "voice": 2,
+  "tags": [
+    "routine",
+    "linear",
+    "sprint",
+    "planning"
+  ],
+  "connectors": [
+    "linear"
+  ],
+  "related": [
+    "/integrations/linear",
+    "/routines/trello-overdue-cards",
+    "/routines/github-issue-triage"
+  ],
+  "art": {
+    "logo": "linear",
+    "label": "Linear",
+    "props": [
+      "s-signpost",
+      "p-folder"
+    ],
+    "bubble": "carry this forward"
+  },
+  "og_line": "bring the open decision to sprint review.",
+  "routine": {
+    "message": "every weekday at 2pm, read the cycles for the mobile team (id 593bf852-7cf8-483b-b27e-2f658d545c3c) in linear. use the europe/london time zone. continue only if a cycle ends on today's local date. fetch that team's issues across all pages, including archived ones. match by cycle id. read issue details when membership is unclear.\n\nin this chat, name the cycle and snapshot time. give completed and canceled issues separate lines with id and title. for each remaining issue show id, title, state, and assignee if present. ask which open items should carry over. never move an issue, change its state or assign it.\n\nstay silent if no cycle ends today or the cycle has no issues. if missing data could change that conclusion, report the gap.",
+    "when": "weekdays at 2pm in the team’s time zone, with a recap only on a cycle’s closing date",
+    "needs": "linear read only for the team’s cycles, team issues and individual issue details. use your linear team id, name and time zone.",
+    "output": "mobile · cycle 18 · friday 14:00\ncomplete: mob-84 · restore saved filter\ncanceled: mob-81 · remove old help tab\nopen: mob-88 · retry interrupted upload · in review · ruth dale\ncarry mob-88 forward, or finish the review this afternoon?"
+  },
+  "knobs": [
+    "**match the meeting.** if the review falls a day early, ask for the cycle ending tomorrow. label the snapshot with today’s date.",
+    "**use your workflow states.** give the bot your definitions for complete and canceled. identify review states that still require a decision.",
+    "**put a name beside the carryover.** if several issues remain, group them by assignee. keep unassigned work visible."
+  ],
+  "fails": [
+    "**the wrong sprint appears.** two teams can have a cycle with the same number. read the team’s cycle id before selecting issues.[^1]",
+    "**a canceled item sounds like a delivery.** keep cancellation separate even when neither item needs further work.",
+    "**the recap and the meeting disagree.** look at the snapshot time. an issue completed during the meeting still appears open in an earlier recap."
+  ],
+  "sections": [
+    {
+      "h": "what the recap can tell the team",
+      "md": "**use the open list to make one decision per issue.** should someone finish the review today, split the remaining work, or put it back in the backlog? the issue id keeps that discussion attached to the right piece of work.\n\nif you need the exact scope the team committed to on day one, this snapshot is the wrong pick. an issue moved out of the cycle before the run won’t appear."
+    }
+  ],
+  "faq": [
+    {
+      "q": "does a completed issue mean the change shipped?",
+      "a": "**it means the issue reached a state your team calls complete.** confirm deployment separately before telling a customer the change is live."
+    },
+    {
+      "q": "can i use the same routine for two-week sprints?",
+      "a": "**yes. the end date selects the cycle.** the bot looks on weekdays and stays quiet between closing dates. include a weekend day if your cycles finish then."
+    }
+  ],
+  "sources": [
+    {
+      "label": "composio: linear actions",
+      "url": "https://docs.composio.dev/toolkits/linear",
+      "checked": "2026-11-12"
+    },
+    {
+      "label": "dusk bot docs: routines",
+      "url": "/docs/routines"
+    },
+    {
+      "label": "dusk bot docs: connected apps",
+      "url": "/docs/files-and-apps"
+    }
+  ]
+}

@@ -421,7 +421,9 @@ it("resolves a unique teammate name in a bot_ids slot, and refuses an ambiguous 
   expect(node.status).toBe("completed");
   expect((await f.messages(f.destination.activeTaskId)).some((m: any) => m.text?.includes("Please build CSV"))).toBe(true);
 
-  const twin = (await f.cli("new-bot", "--name", f.target.name, "--section", "A")).bot;
+  // a new bot under a taken name gets a number, so the twin takes the name by a rename, which allows it
+  const twin = (await f.cli("new-bot", "--name", `${f.target.name} copy`, "--section", "A")).bot;
+  await f.api(`/api/bots/${twin.id}`, { name: f.target.name }, "PATCH");
   expect(twin.id).not.toBe(f.target.id);
   f.plan[f.sender.id] = { steps: [{ expectError: true, arguments: { group_id: f.destination.id, bot_ids: [f.target.name], message: "Review CSV" } }], reply: "Refused" };
   f.savePlan(); await f.cli("send-channel", "--channel", f.source.id, "--text", "@Director Ask again");
@@ -503,8 +505,8 @@ it("hands work a Chief addresses into its room to the bots it just made, which a
   expect(children.map((node: any) => node.botId).sort()).toEqual(made3.map((bot: any) => bot.id).sort());
   for (const node of children) {
     expect([node.status, node.groupId]).toEqual(["completed", undefined]);
-    const task = made3.find((bot: any) => bot.id === node.botId).tasks.find((t: any) => t.threadId === node.threadId);
-    expect(task.openedBy).toMatchObject({ botId: f.sender.id, threadId: f.source.activeTaskId, kind: "work" });
+    // one chat per bot: the work lands in the new bot's own chat
+    expect(node.threadId).toBe(made3.find((bot: any) => bot.id === node.botId).threadId);
   }
   const turns = f.provider();
   for (const bot of made3) {

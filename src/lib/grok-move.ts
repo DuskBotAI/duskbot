@@ -38,8 +38,9 @@ export function foundExports(files: GrokLook["files"]): FoundExports {
 }
 
 export interface GrokPreview {
-  /** `addedAs`: the Bot's name here, numbered when it is taken. */
-  plans: Array<GrokMovePlan & { addedAs: string }>;
+  /** `addedAs`: the Bot's name here, numbered when it is taken. `channelRef`: its old app's chat-app bots, which the
+   * server connects again once it lands. */
+  plans: Array<GrokMovePlan & { addedAs: string; channelRef?: string }>;
   moved: string[];
   unreadable: string[];
 }
@@ -67,7 +68,7 @@ export function previewGrokMove(bots: readonly GrokBot[], facts: GrokPreviewFact
       if (planned.has(plan.packageId)) continue;
       planned.add(plan.packageId);
       for (const connection of plan.document.package.connections ?? []) servers.add(connection.key);
-      preview.plans.push({ ...plan, addedAs: takeImportName(plan.name, names) });
+      preview.plans.push({ ...plan, addedAs: takeImportName(plan.name, names), ...(bot.channelRef ? { channelRef: bot.channelRef } : {}) });
     } catch {
       preview.unreadable.push(bot.name);
     }
@@ -123,6 +124,9 @@ export async function runGrokMove(preview: GrokPreview, dispatch: (action: Actio
       // passages and the overflow of its memory: its own engine condenses them into notes, now or once it has one
       if (plan.distill.length) {
         await api(`/api/bots/${encodeURIComponent(bot.id)}/memory/import-distill`, { method: "POST", body: JSON.stringify({ from, chunks: plan.distill.slice(0, 10) }) }).catch(() => {});
+      }
+      if (plan.channelRef) {
+        await api("/api/setup-import/channels", { method: "POST", body: JSON.stringify({ ref: plan.channelRef, botId: bot.id }) }).catch(() => {});
       }
       report.bots.push({ id: bot.id, name: bot.name, ...(bot.section ? { section: bot.section } : {}), skills: plan.skills.length, skillsOff, routines: plan.routines, notes: plan.notes, memories: plan.memories, apps: plan.apps, facts: plan.facts.length });
     } catch {

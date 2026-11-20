@@ -10,9 +10,26 @@ export interface WebhookRouteDeps {
   webhooks: WebhookManager;
   ingress: () => { available: boolean; baseUrl: string; error?: string };
   visible: (auth: RequestAuth) => { everything: boolean; bot(id: string): boolean; group(id: string): boolean };
+  /** The desktop app says where the internet reaches this computer's addresses (its Remote access route), or that
+   *  nothing does. Absent off the desktop. */
+  publicOrigin?: (origin: string | null) => void;
+  /** A bot's mail address and its routes, or null before it has one. */
+  mail?: (botId: string) => unknown;
 }
 
-export function createWebhookRoutes({ webhooks, ingress, visible }: WebhookRouteDeps): RouteHandler {
+/** A complete https origin, nothing more: it becomes the start of every address the app and bots hand out. */
+export function publicHookOrigin(value: unknown): string | null | undefined {
+  if (value === null) return null;
+  if (typeof value !== "string" || value.length > 300) return undefined;
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" && !url.username && !url.password && url.origin === value.replace(/\/+$/, "") ? url.origin : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+export function createWebhookRoutes({ webhooks, ingress, visible, publicOrigin, mail }: WebhookRouteDeps): RouteHandler {
   const withCredential = (webhook: { endpointId: string }, secret: string) => {
     const status = ingress();
     return { ingress: status, credential: webhookCredential(status.baseUrl, webhook.endpointId, secret) };
@@ -23,6 +40,19 @@ export function createWebhookRoutes({ webhooks, ingress, visible }: WebhookRoute
       const shownHooks = webhooks.list().filter((webhook) => webhookVisible(webhook, seen));
       const shownIds = new Set(shownHooks.map((webhook) => webhook.id));
       return json(res, 200, { webhooks: shownHooks, attempts: webhooks.listAttempts().filter((attempt) => seen.everything || shownIds.has(attempt.webhookId)), ingress: ingress() });
+    }
+    const mailOf = method === "GET" && mail ? /^\/api\/webhooks\/mail\/([\w-]{1,128})$/.exec(path) : null;
+    if (mailOf) {
+      if (!visible(auth).bot(mailOf[1]!)) return json(res, 404, { error: "no such bot" });
+      return json(res, 200, { mail: mail!(mailOf[1]!) });
+    }
+    if (path === "/api/webhooks/public-origin" && method === "PUT") {
+      if (!publicOrigin || auth.kind !== "loopback" || auth.companionDevice) return json(res, 403, { error: "Only the desktop app sets this." });
+      const body = await readBody(req) as { origin?: unknown } | null;
+      const origin = publicHookOrigin(body?.origin);
+      if (origin === undefined) return json(res, 400, { error: "origin must be an https origin or null" });
+      publicOrigin(origin);
+      return json(res, 200, { ingress: ingress() });
     }
     if (path === "/api/webhooks" && method === "POST") {
       const created = webhooks.create(await readBody(req));

@@ -8,7 +8,8 @@ import { isValidElement, useCallback, useEffect, useLayoutEffect, useMemo, useRe
 import { Mic } from "../icons";
 import { useStore, visibleMessages, currentTaskBot, type Bot, type Group, type InstanceInfo, type Message } from "@/state/store";
 import { cn } from "@/lib/cn";
-import { PHONE_LAYOUT, useMediaQuery } from "@/lib/use-media-query";
+import { usePhoneLayout } from "@/lib/use-media-query";
+import { phoneOffline } from "@/mobile/network";
 import { useMenuMotion } from "./MenuMotion";
 import { ELEVATED_CARD, ELEVATED_FLOAT } from "./elevated";
 import { activeLocale, t } from "@/lib/i18n";
@@ -157,7 +158,7 @@ export function Composer({
   const { state, dispatch } = useStore();
   const { threads, currentBotId } = useThreadRefs();
   // On a phone the composer is a dock: a round + (attach and every other tool), then one pill with the field and the mic.
-  const singleRow = useMediaQuery(PHONE_LAYOUT);
+  const singleRow = usePhoneLayout();
   // On a wider screen: one pill holding a round +, the field, the mic and one round button in the bot's colour.
   const simpleDock = !singleRow;
   // a software keyboard has no shift to hold for a new line, so a phone's return adds one and Send sends
@@ -456,13 +457,6 @@ export function Composer({
       inputRef.current?.setSelectionRange(next.caret, next.caret);
     });
   };
-  const teachTask = () => {
-    const learn = "/learn ";
-    editText(learn + text.replace(/^\/learn\s*/, "").trimStart());
-    setCaret(learn.length);
-    setChannelMode("chat");
-    requestAnimationFrame(() => { inputRef.current?.focus(); inputRef.current?.setSelectionRange(learn.length, learn.length); });
-  };
 
   const pendingCount = (state.pendingQueued[threadId] ?? []).length;
   const queuedMessages = state.pendingQueued[threadId] ?? [];
@@ -716,7 +710,7 @@ export function Composer({
       channelMode: effectiveChannelMode, mentions: picks.ids(body),
     };
     const sendId = sentDraft.sendId;
-    const onSettled = holdSend(sendId);
+    const onSettled = phoneOffline() ? () => {} : holdSend(sendId);
     if (group) {
       dispatch({
         type: "sendGroup",
@@ -943,7 +937,7 @@ export function Composer({
         <MentionMenu listRef={mentionListRef} motion={mentionMotion} choices={candidates} highlight={highlight}
           everyoneCount={mentionEveryoneCount} onPick={pickMention} onHighlight={setHighlight} />
         {approval && (
-          <div className={cn("mb-2 overflow-hidden rounded-[24px]", ELEVATED_CARD)}>
+          <div data-approval-dock="" className={cn("mb-2 overflow-hidden rounded-[24px] shadow-[0_10px_32px_-14px_rgb(24_24_32/0.28),0_1px_3px_rgb(24_24_32/0.06)]", ELEVATED_CARD)}>
             <PendingApprovalPanel
               key={approval.requestId}
               pending={approval}
@@ -999,10 +993,10 @@ export function Composer({
         <div data-composer-row data-glyph-swap={glyphs.swapped ? "" : undefined} data-glyph-from-held={glyphs.swapped && glyphs.fromHeld ? "" : undefined} style={simpleDock ? slot.vars : undefined} className={cn("flex items-end", simpleDock ? cn("gap-2", stacked && "gap-y-2") : "gap-1", !singleRow && !simpleDock && "@max-[30rem]/composer:flex-wrap", stacked && "flex-wrap")}>
           {pickers.inputs}
           {/* the phone's + is the pill's first control, at its left edge, the size of the others */}
-          {singleRow && !locked && <PhonePlus onAttach={pickers.files} attachChoices={pickers.choices} goal={goal} teach={canLearn ? teachTask : undefined} approval={approvalChoice && modeBot && { name: modeBot.name, choice: approvalChoice }} callBotId={live && bot && !group ? bot.id : undefined} />}
+          {singleRow && !locked && <PhonePlus onAttach={pickers.files} attachChoices={pickers.choices} />}
           {!locked && !singleRow && (
             <div className={cn("flex items-center gap-1", simpleDock ? "shrink-0" : "flex-wrap")}>
-              {simpleDock && <ComposerPlusMenu onAttach={pickers.files} attachChoices={pickers.choices} goal={goal} teach={canLearn ? teachTask : undefined} />}
+              {simpleDock && <ComposerPlusMenu onAttach={pickers.files} attachChoices={pickers.choices} />}
               {/* a mode's chip shows only while it is on, so a choice made in the + menu or the bot panel stays in view */}
               {goal?.on && <GoalToggle {...goal} compact={simpleDock} />}
               {simpleDock && approvalChoice && profile && bot && approvalModeFor(bot) !== approvalModeFor(profile) && <ApprovalChip choice={approvalChoice} />}
@@ -1114,7 +1108,7 @@ export function Composer({
             locked: setupLocked, approval: blocking, attaching: attachmentPending, attached: attachments.length > 0, listening: recording,
             replying: Boolean(replyTo), busy, group, members: members ?? [], goal: channelMode === "goal", botName: bot?.name ?? "",
             setupHint: group ? null : setupRequestPlaceholder(bot, threadId),
-            question: !group && pendingQuestion(bot?.messages),
+            question: !group && pendingQuestion(bot?.messages), narrow: phoneApp(),
           })}
           aria-label={t("composer.placeholder.bot", { name: group ? group.name : (bot?.name ?? "") })}
             className={cn(

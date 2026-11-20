@@ -47,8 +47,8 @@ export function createHomeClient(options: { fetch?: typeof fetch; now?: () => nu
         return { ok: value?.ok === true, nextDueAt: Number.isSafeInteger(value?.nextDueAt) ? value!.nextDueAt as number : null };
       } catch { return { ok: false, nextDueAt: null }; }
     },
-    async entitle(origin, secret, token) {
-      const value = await request(origin, secret, "POST", "/api/cloud/entitlement", JSON.stringify({ v: 1, token })) as { ok?: unknown; expiresAt?: unknown } | null;
+    async entitle(origin, secret, token, linkGrant) {
+      const value = await request(origin, secret, "POST", "/api/cloud/entitlement", JSON.stringify({ v: 1, token, ...(linkGrant ? { linkGrant } : {}) })) as { ok?: unknown; expiresAt?: unknown } | null;
       if (value?.ok !== true || !Number.isSafeInteger(value.expiresAt)) throw new Error("Invalid cloud entitlement answer.");
       return { expiresAt: value.expiresAt as number };
     },

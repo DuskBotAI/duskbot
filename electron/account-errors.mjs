@@ -2,6 +2,7 @@
 // else; it is sent without the account token or cookies, and only while the person keeps error reports on. the account
 // service scrubs every field again.
 import { scrubText, stackFrames } from "./error-report.mjs";
+import { exitCodeText } from "./process-exit.mjs";
 
 const MAX_PER_HOUR = 10;
 const REQUEST_MS = 10_000;
@@ -52,10 +53,11 @@ export function createAccountErrors({ origin, enabled, platform, release, versio
     },
     capture,
     /** the main process's own fatal errors and its pages' and helpers' crashes */
-    watch(app, proc = process) {
+    watch(app, proc = process, { ending = () => false, platform = process.platform } = {}) {
+      const gone = (what, details) => new Error(`${what} ${details.reason} (exit ${exitCodeText(details.exitCode, platform)})${ending() ? " while quitting" : ""}`);
       proc.on("uncaughtExceptionMonitor", error => capture(error));
-      app.on("render-process-gone", (_event, _contents, details) => { if (CRASHES.has(details?.reason)) capture(new Error(`page process ${details.reason} (exit ${details.exitCode ?? "none"})`)); });
-      app.on("child-process-gone", (_event, details) => { if (CRASHES.has(details?.reason)) capture(new Error(`${details.type} process ${details.reason} (exit ${details.exitCode ?? "none"})`)); });
+      app.on("render-process-gone", (_event, _contents, details) => { if (CRASHES.has(details?.reason)) capture(gone("page process", details)); });
+      app.on("child-process-gone", (_event, details) => { if (CRASHES.has(details?.reason)) capture(gone(`${details.type} process${details.name ? ` ${scrubText(details.name).slice(0, 40)}` : ""}`, details)); });
     },
   };
 }

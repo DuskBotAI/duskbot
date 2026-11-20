@@ -2,7 +2,9 @@ import { useEffect, useRef, useState } from "react";
 import { activeLocale, t } from "@/lib/i18n";
 import { formatCost } from "@/lib/usage-trace";
 import { api } from "@/state/store";
-import type { AllowanceReport, AutoTopUp, BatteryReport, DailyUsageReport, RoutineForecast, SpendCapInput } from "../../shared/spend";
+import type { AllowanceReport, AutoTopUp, BatteryReport, DailyUsageReport, RoutineForecast, SpendCapInput, UsagePeriod } from "../../shared/spend";
+import type { RoutineSchedule } from "../../shared/routines";
+import { formatTokens } from "@/lib/usage";
 import type { RoutinePause } from "../../shared/routines";
 import { deviceHourCycle } from "@/lib/format-time";
 
@@ -64,7 +66,7 @@ export function useLoadedState<T>(load: () => Promise<T>, version: unknown): { v
 /** "About 168 runs a week · about $3.20 a week · 12% of your week", saying only what is known. */
 export function forecastLine(forecast: RoutineForecast): string {
   const parts: string[] = [];
-  if (forecast.runsPerWeek !== null) parts.push(t("routines.cost.runs", { count: String(forecast.runsPerWeek) }));
+  if (forecast.runsPerWeek !== null) parts.push(forecast.runsPerWeek === 1 ? t("routines.cost.runs.one") : t("routines.cost.runs", { count: String(forecast.runsPerWeek) }));
   if (forecast.weekUsd !== null) parts.push(t("routines.cost.week", { amount: formatCost(forecast.weekUsd) }));
   else parts.push(t("routines.cost.noPrice"));
   if (forecast.shareOfWeek !== null) parts.push(t("routines.cost.share", { percent: sharePercent(forecast.shareOfWeek) }));
@@ -75,4 +77,27 @@ export function pauseLine(pause: RoutinePause): string {
   return pause.by === "cap"
     ? t("routines.paused.cap", { amount: formatCost(pause.capUsd) })
     : t("routines.paused.failures", { error: pause.error });
+}
+
+/** "12 runs · $0.40", or tokens while nothing it used has a price. */
+export function periodLine(period: UsagePeriod): string {
+  const runs = period.runs === 1 ? t("routines.usage.run.one") : t("routines.usage.runs", { count: String(period.runs) });
+  return `${runs} · ${period.usd > 0 ? formatCost(period.usd) : t("routines.usage.tokens", { count: formatTokens(period.tokens) })}`;
+}
+
+const LESS_OFTEN_MINUTES = [15, 30, 60, 120, 240, 480, 1440] as const;
+
+/** The next slower step for an every-N-minutes schedule; null for one that is not, or already runs once a day. */
+export function lessOften(schedule: RoutineSchedule): RoutineSchedule | null {
+  if (schedule.type !== "interval") return null;
+  const next = LESS_OFTEN_MINUTES.find((minutes) => minutes > schedule.everyMinutes);
+  return next ? { ...schedule, everyMinutes: next } : null;
+}
+
+/** The one warning worth reading, with the numbers it rests on: a spike first, then a share, then a pace. */
+export function forecastWarning(forecast: RoutineForecast): string | null {
+  if (forecast.warnings.includes("spike")) return t("routines.cost.spike");
+  if (forecast.warnings.includes("costly") && forecast.shareOfWeek !== null) return t("routines.cost.costlyShare", { percent: sharePercent(forecast.shareOfWeek) });
+  if (forecast.warnings.includes("frequent")) return t("routines.cost.frequent");
+  return null;
 }

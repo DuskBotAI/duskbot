@@ -417,7 +417,9 @@ export function createTraceRecorder(options: { dataDir: string; now?: () => numb
       const answer = (body ?? {}) as { error?: unknown; result?: { isError?: unknown; content?: Array<{ text?: unknown }> } };
       const failed = answer.error !== undefined || answer.result?.isError === true;
       const detail = toolDetail(name, request?.params?.arguments);
-      const error = failed ? errorLine(typeof answer.error === "string" ? answer.error : answer.result?.content?.find((part) => typeof part.text === "string")?.text) : undefined;
+      const rpc = answer.error && typeof answer.error === "object" ? answer.error as { code?: unknown; message?: unknown } : undefined;
+      const error = failed ? errorLine(typeof answer.error === "string" ? answer.error : typeof rpc?.message === "string" ? `${rpc.code ?? ""} ${rpc.message}`.trim()
+        : answer.result?.content?.find((part) => typeof part.text === "string")?.text) : undefined;
       receipt(threadId, { name, startedAt, endedAt: now(), ok: !failed, ...(detail ? { detail } : {}), ...(error ? { error } : {}) });
       return body;
     });
@@ -450,12 +452,15 @@ export function createTraceRecorder(options: { dataDir: string; now?: () => numb
       const turn = ended.get(threadId)?.turn;
       return turn ? [...turn.tools.values()].flatMap((tool) => (tool.itemId && turn.actions.get(tool.itemId)) || [tool.name]) : [];
     },
-    /** The tools that failed in an ended, not yet settled turn, and when its first model step ended. */
-    turnDetail(threadId: string): { failedNames: string[]; firstStepAt?: number } {
+    /** The tools that failed in an ended, not yet settled turn, each with its error line, and when its first model step
+     * ended. */
+    turnDetail(threadId: string): { failedNames: string[]; failedCalls: Array<{ name: string; error?: string }>; firstStepAt?: number } {
       const turn = ended.get(threadId)?.turn;
-      if (!turn) return { failedNames: [] };
+      if (!turn) return { failedNames: [], failedCalls: [] };
       const first = turn.steps.find((step) => typeof step.endedAt === "number");
-      return { failedNames: [...turn.tools.values()].filter((tool) => tool.status === "error").flatMap((tool) => (tool.itemId && turn.actions.get(tool.itemId)) || [tool.name]), ...(first?.endedAt ? { firstStepAt: first.endedAt } : {}) };
+      const failedCalls = [...turn.tools.values()].filter((tool) => tool.status === "error")
+        .flatMap((tool) => ((tool.itemId && turn.actions.get(tool.itemId)) || [tool.name]).map((name) => ({ name, ...(tool.error ? { error: tool.error } : {}) })));
+      return { failedNames: failedCalls.map((call) => call.name), failedCalls, ...(first?.endedAt ? { firstStepAt: first.endedAt } : {}) };
     },
     liveTurns,
     /** The next turn to start on `threadId` belongs to coordinator node `node`, or to an explicit parent turn. */

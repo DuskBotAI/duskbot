@@ -4,6 +4,7 @@ import { requestChatFind } from "@/lib/chat-find";
 import { copyTranscriptToClipboard, downloadMarkdownTranscript, formatTranscriptMarkdown, slugifyTranscriptFilename } from "@/lib/export-transcript";
 import { t } from "@/lib/i18n";
 import { openSettings } from "@/lib/open-settings";
+import { systemMenu } from "@/lib/system-menu";
 import { useStore } from "@/state/store";
 import { ConfirmDialog } from "../ConfirmDialog";
 import { PRESET_TURN_LIMITS, useConversationTurnLimit } from "../ConversationTurnLimit";
@@ -47,7 +48,15 @@ export function RoomAdvancedTab(props: RoomRowsProps) {
       </Card>
 
       <Card label={t("room.panel.section.chat")} anchor="chat">
-        <ItemRow data-panel-row="turn-limit" title={t("room.panel.turnLimit")}>
+        <ItemRow
+          data-panel-row="turn-limit"
+          title={t("room.panel.turnLimit")}
+          onClick={(event) => {
+            if (!systemMenu()) return;
+            const pill = event.currentTarget.querySelector<HTMLButtonElement>("[data-select-pill]");
+            if (pill && !pill.contains(event.target as Node)) pill.click();
+          }}
+        >
           <SelectPill
             data-panel-select="turn-limit"
             aria-label={t("room.panel.turnLimit")}

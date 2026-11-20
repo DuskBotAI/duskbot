@@ -75,6 +75,7 @@ export const GrokDriver: ProviderDriver<GrokConfig> = {
       apiKey,
       apiUrl: config.url,
       tools: config.tools,
+      computerUse: true, imageInput: (model) => /^grok-(?:4|2-vision)/i.test(model) && !/code/i.test(model),
       models: () => catalog,
       refreshModels,
       effort: { levels: ["low", "medium", "high", "xhigh"], forModel: xaiEffortLevels },

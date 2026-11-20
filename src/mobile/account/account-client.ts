@@ -18,7 +18,8 @@ export function mobileFace(account: unknown): Pick<MobileAccount, "avatarUrl" | 
   const choice = parseUserAvatarChoice(avatar);
   return { ...(photo ? { avatarUrl: photo } : {}), ...(choice ? { avatar: choice } : {}) };
 }
-export type MobileCloud = { id: string; name: string; status: string; origin: string | null; primary: boolean; asleep: boolean };
+/** `payment`: its renewal failed; it keeps running until `fixBy` */
+export type MobileCloud = { id: string; name: string; status: string; origin: string | null; primary: boolean; asleep: boolean; payment?: { fixBy: number; trial?: true } };
 /** a team's dusk cloud this account is a member of, as the session lists it */
 export type MobileTeamCloud = { id: string; name: string; status: string; origin: string | null; asleep: boolean };
 /** one of the account's computers (a Mac, a pc or a server it linked), as the service lists it */
@@ -47,6 +48,9 @@ export async function appleNonce(): Promise<{ raw: string; hash: string }> {
 const TOKEN = /^omc_[A-Za-z0-9_-]{43}$/;
 const OPAQUE = /^[A-Za-z0-9_-]{43}$/;
 const SECRET = "dusk.account";
+/** the phone's other signed-in accounts, each with its own session, kept beside the one in use */
+const OTHERS = "dusk.account.others";
+const MAX_OTHERS = 5;
 const PENDING = "dusk.account.pending";
 const OAUTH_ERRORS: readonly string[] = ["oauth_denied", "oauth_failed", "oauth_expired", "provider_unavailable", "signup_closed", "identity_taken"];
 const object = (value: unknown): value is Record<string, unknown> => Boolean(value) && typeof value === "object" && !Array.isArray(value);
@@ -56,6 +60,13 @@ const savedGrant = (value: unknown): StoredGrant | null =>
   object(value) && typeof value.origin === "string" && typeof value.token === "string" && TOKEN.test(value.token) && expiry(value.expiresAt)
     && identity(value.account) && typeof value.deviceId === "string" && value.deviceId ? value as StoredGrant : null;
 const parse = (value: string | null): unknown => { try { return value ? JSON.parse(value) : null; } catch { return null; } };
+const savedOthers = (value: unknown): StoredGrant[] => Array.isArray(value) ? value.map(savedGrant).filter((one): one is StoredGrant => one !== null).slice(0, MAX_OTHERS) : [];
+
+/** The account service the sign-in kept in the Keychain was made on, whatever this launch would sign in to. */
+export async function keptSignInOrigin(platform: Pick<MobilePlatform, "secrets">): Promise<string | null> {
+  const saved = savedGrant(parse(await platform.secrets.get(SECRET).catch(() => null)));
+  return saved?.origin ?? null;
+}
 const CLOUD_ID = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/;
 const GRANT_CODE = /^[2-9A-HJ-NP-Z]{4}-[2-9A-HJ-NP-Z]{4}-[2-9A-HJ-NP-Z]{4}$/;
 const MAX_GRANT_MS = 10 * 60_000;
@@ -80,7 +91,9 @@ export function parseOwnClouds(input: unknown): MobileCloud[] {
     seen.add(entry.id);
     const name = typeof entry.name === "string" && entry.name.trim() ? entry.name.trim().slice(0, 40) : "my cloud";
     const asleep = entry.status === "ready" && object(entry.power) && (entry.power.state === "asleep" || entry.power.state === "waking");
-    clouds.push({ id: entry.id, name, status: entry.status, origin: httpsOrigin(entry.origin), primary: entry.primary === true, asleep });
+    const fixBy = object(entry.payment) && Number.isSafeInteger(entry.payment.fixBy) && (entry.payment.fixBy as number) > 0 ? entry.payment.fixBy as number : null;
+    const trial = object(entry.payment) && entry.payment.trial === true;
+    clouds.push({ id: entry.id, name, status: entry.status, origin: httpsOrigin(entry.origin), primary: entry.primary === true, asleep, ...(fixBy ? { payment: { fixBy, ...(trial ? { trial: true as const } : {}) } } : {}) });
   }
   return clouds.sort((a, b) => Number(b.primary) - Number(a.primary));
 }
@@ -154,6 +167,7 @@ export function createMobileAccount({ platform, origin, fetch: requestFetch = gl
   platform: MobilePlatform; origin: string; fetch?: typeof globalThis.fetch;
 }) {
   let grant: StoredGrant | null = null;
+  let others: StoredGrant[] = [];
   let attempt: { id: string; email: string; expiresAt: number; wrong: number } | null = null;
   let generation = 0;
   let iceCache: { grant: StoredGrant; until: number; servers: IceServer[] } | null = null;
@@ -187,19 +201,70 @@ export function createMobileAccount({ platform, origin, fetch: requestFetch = gl
     if (!response.ok) throw new AccountRequestError(response.status, object(result) ? typeof result.code === "string" ? result.code : typeof result.error === "string" ? result.error : undefined : undefined);
     return result;
   };
+  // a Keychain that cannot be read now throws here, so nothing is written back over the accounts it holds
+  const readOthers = async () => savedOthers(parse(await platform.secrets.get(OTHERS)));
+  const writeOthers = async (next: StoredGrant[]) => {
+    others = next.slice(0, MAX_OTHERS);
+    if (others.length) await platform.secrets.set(OTHERS, JSON.stringify(others));
+    else await platform.secrets.remove(OTHERS);
+  };
+  const endSession = (token: string) => request(ACCOUNT_ROUTES.appSession, "DELETE", {}, token).then(() => {}, () => {});
+  /** `next` becomes the account in use; the one it replaces stays signed in beside it, unless it is the same account */
+  const take = async (next: StoredGrant | null) => {
+    const before = grant;
+    const kept = (await readOthers()).filter((one) => one.account.id !== next?.account.id && one.account.id !== before?.account.id);
+    const keepBefore = before && next && before.account.id !== next.account.id ? [before] : [];
+    if (next) await platform.secrets.set(SECRET, JSON.stringify(next));
+    else await platform.secrets.remove(SECRET);
+    await writeOthers([...keepBefore, ...kept]);
+    grant = next; iceCache = null; analytics();
+    if (before && next && before.account.id === next.account.id && before.token !== next.token) void endSession(before.token);
+  };
+  const usable = (one: StoredGrant) => one.origin === origin && one.expiresAt > Date.now();
+  const tokenOf = (accountId?: string): string | null => {
+    if (!accountId || accountId === grant?.account.id) return grant?.token ?? null;
+    const other = others.find((one) => one.account.id === accountId);
+    return other && usable(other) ? other.token : null;
+  };
+  /** each kept session is checked, which slides its end on the service; one the service no longer knows is forgotten */
+  const refreshOthers = async () => {
+    const kept = (await readOthers()).filter((one) => one.origin === origin);
+    const answers = await Promise.all(kept.map(async (one): Promise<StoredGrant | null> => {
+      try {
+        const session = await request(ACCOUNT_ROUTES.appSession, "GET", undefined, one.token);
+        const renewed = object(session) && expiry(session.expiresAt) && session.expiresAt > one.expiresAt ? session.expiresAt : one.expiresAt;
+        return { ...one, expiresAt: renewed, account: { id: one.account.id, email: one.account.email, ...mobileFace(object(session) ? session.account : null) } };
+      } catch (error) {
+        return error instanceof AccountRequestError && error.status === 401 && error.code === "invalid_token" ? null : one;
+      }
+    }));
+    const checked = new Map(kept.map((one, index) => [one.token, answers[index]]));
+    await writeOthers((await readOthers()).flatMap((one) => {
+      const answer = checked.get(one.token);
+      return answer === undefined ? [one] : answer ? [answer] : [];
+    }));
+  };
+  /** with no account in use, the next one still signed in on the phone takes over */
+  const promote = async (): Promise<StoredGrant | null> => {
+    grant = null;
+    const next = (await readOthers()).find(usable) ?? null;
+    if (next) await take(next);
+    return next;
+  };
   const adopt = async (value: unknown, stamp: number): Promise<boolean> => {
     if (stamp !== generation || !object(value) || value.cloudContractVersion !== 1 || typeof value.accessToken !== "string" || !TOKEN.test(value.accessToken)
       || !expiry(value.expiresAt) || value.expiresAt <= Date.now() || !object(value.device) || typeof value.device.id !== "string" || !value.device.id || !identity(value.account)) return false;
     const next = { origin, token: value.accessToken, expiresAt: value.expiresAt, account: { id: value.account.id, email: value.account.email, ...mobileFace(value.account) }, deviceId: value.device.id };
-    await platform.secrets.set(SECRET, JSON.stringify(next));
-    if (stamp !== generation) { await platform.secrets.remove(SECRET); return false; }
-    grant = next; attempt = null; analytics();
+    await take(next);
+    if (stamp !== generation) { await platform.secrets.remove(SECRET); grant = null; analytics(); return false; }
+    attempt = null;
     return true;
   };
-  const pairing = async (path: string, body: unknown, cloudOrigin: string | null): Promise<CloudPairResult> => {
-    if (!grant) return { outcome: "signed-out" };
+  const pairing = async (path: string, body: unknown, cloudOrigin: string | null, accountId?: string): Promise<CloudPairResult> => {
+    const token = tokenOf(accountId);
+    if (!token) return { outcome: "signed-out" };
     try {
-      const paired = parsePairGrant(await request(path, "POST", body, grant.token), cloudOrigin);
+      const paired = parsePairGrant(await request(path, "POST", body, token), cloudOrigin);
       return paired ? { outcome: "paired", grant: paired } : { outcome: "failed" };
     } catch (error) {
       if (!(error instanceof AccountRequestError) || error.opaque) return { outcome: "failed" };
@@ -211,18 +276,33 @@ export function createMobileAccount({ platform, origin, fetch: requestFetch = gl
   };
   return {
     account: () => grant?.account ?? null,
+    /** every account signed in on this phone, the one in use first */
+    accounts: (): MobileAccount[] => [...(grant ? [grant.account] : []), ...others.filter((one) => usable(one) && one.account.id !== grant?.account.id).map((one) => one.account)],
+    /** Another signed-in account becomes the one in use; the one in use before stays signed in. */
+    async switchAccount(accountId: string): Promise<MobileAccount | null> {
+      if (grant?.account.id === accountId) return grant.account;
+      const target = (await readOthers()).find((one) => one.account.id === accountId);
+      if (!target || !usable(target)) return null;
+      ++generation;
+      attempt = null;
+      await take(target);
+      return target.account;
+    },
     /** The saved sign-in as the Keychain has it, at once and without the network, so a launch never waits on it. */
     async cached(): Promise<MobileAccount | null> {
       const saved = savedGrant(parse(await platform.secrets.get(SECRET)));
+      others = await readOthers();
       if (saved && saved.origin === origin && saved.expiresAt > Date.now()) { grant = saved; analytics(); }
       return grant?.account ?? null;
     },
     async restore(): Promise<MobileAccount | null> {
       const stamp = generation;
+      others = await readOthers();
+      if (others.length) void refreshOthers().catch(() => {});
       const value = parse(await platform.secrets.get(SECRET));
-      if (!object(value) || value.origin !== origin) { grant = null; analytics(); return null; }
+      if (!object(value) || value.origin !== origin) { grant = null; analytics(); return (await promote())?.account ?? null; }
       const saved = savedGrant(value);
-      if (!saved) { grant = null; analytics(); await platform.secrets.remove(SECRET); return null; }
+      if (!saved) { grant = null; analytics(); await platform.secrets.remove(SECRET); return (await promote())?.account ?? null; }
       try {
         const session = await request(ACCOUNT_ROUTES.appSession, "GET", undefined, saved.token);
         if (stamp !== generation) return null;
@@ -235,7 +315,7 @@ export function createMobileAccount({ platform, origin, fetch: requestFetch = gl
         if (stamp !== generation) return null;
         // only the service saying the session is gone signs the phone out; an outage, a rate limit or a captive
         // portal's page keeps a session that has not run out
-        if (error instanceof AccountRequestError && error.status === 401 && error.code === "invalid_token") { grant = null; await platform.secrets.remove(SECRET); }
+        if (error instanceof AccountRequestError && error.status === 401 && error.code === "invalid_token") { grant = null; await platform.secrets.remove(SECRET); await promote(); }
         else grant = saved.expiresAt > Date.now() ? saved : null;
       }
       analytics();
@@ -269,17 +349,15 @@ export function createMobileAccount({ platform, origin, fetch: requestFetch = gl
       }
     },
     cancelEmail() { attempt = null; },
-    /** A code a signed-in desktop showed (typed, or carried by its qr's link) logs this phone in to that account; a
-     * sign-in this phone held before is ended on the service once the new one is kept. */
+    /** A code a signed-in desktop showed (typed, or carried by its qr's link) logs this phone in to that account; an
+     * account the phone was using before stays signed in beside it. */
     async phoneCode(code: string): Promise<PhoneCodeResult> {
       const typed = cleanPhoneSignInCode(code);
       if (!typed) return { outcome: "wrong-code" };
-      const stamp = ++generation, before = grant?.token;
+      const stamp = ++generation;
       try {
         const value = await request(ACCOUNT_ROUTES.appPhoneSignIn, "POST", { code: typed, ...device() });
-        if (!await adopt(value, stamp)) return { outcome: "failed" };
-        if (before && before !== grant?.token) void request(ACCOUNT_ROUTES.appSession, "DELETE", {}, before).catch(() => {});
-        return { outcome: "signed-in" };
+        return { outcome: await adopt(value, stamp) ? "signed-in" : "failed" };
       } catch (error) {
         if (!(error instanceof AccountRequestError)) return { outcome: "offline" };
         if (error.code === "invalid_code") return { outcome: "wrong-code" };
@@ -342,12 +420,22 @@ export function createMobileAccount({ platform, origin, fetch: requestFetch = gl
         return { outcome: await adopt(result, stamp) ? "signed-in" : "failed" };
       } catch { return { outcome: "failed" }; }
     },
-    async signOut(): Promise<void> {
+    /** Signs the account in use out; the next account still signed in on the phone, if any, takes over. */
+    async signOut(): Promise<MobileAccount | null> {
       ++generation;
       const token = grant?.token;
       grant = null; attempt = null; analytics();
       await Promise.all([platform.secrets.remove(SECRET), platform.secrets.remove(PENDING)]);
-      if (token) { try { await request(ACCOUNT_ROUTES.appSession, "DELETE", {}, token); } catch {} }
+      const next = await promote();
+      if (token) await endSession(token);
+      return next?.account ?? null;
+    },
+    /** Every account on the phone signs out, for a move to another account service. */
+    async signOutAll(): Promise<void> {
+      const kept = await readOthers();
+      await writeOthers([]);
+      await this.signOut();
+      await Promise.all(kept.filter((one) => one.origin === origin).map((one) => endSession(one.token)));
     },
     /** Deletes the account for good from the app itself (App Store guideline 5.1.1(v)); the phone is signed out after. */
     async deleteAccount(): Promise<"deleted" | "signed-out" | "failed"> {
@@ -364,6 +452,7 @@ export function createMobileAccount({ platform, origin, fetch: requestFetch = gl
       ++generation;
       grant = null; attempt = null; iceCache = null; analytics();
       await Promise.all([platform.secrets.remove(SECRET), platform.secrets.remove(PENDING)]);
+      await promote();
       return outcome;
     },
     async clouds(): Promise<MobileCloud[] | null> {
@@ -375,9 +464,9 @@ export function createMobileAccount({ platform, origin, fetch: requestFetch = gl
     },
     /** the account's own clouds, its teams' clouds and its computers; null when signed out or the session is unreadable.
      * a service without the computers list answers none */
-    async places(): Promise<AccountPlaces | null> {
-      if (!grant) return null;
-      const token = grant.token;
+    async places(accountId?: string): Promise<AccountPlaces | null> {
+      const token = tokenOf(accountId);
+      if (!token) return null;
       try {
         const [value, computers] = await Promise.all([request(ACCOUNT_ROUTES.appSession, "GET", undefined, token),
           request(ACCOUNT_ROUTES.appComputers, "GET", undefined, token).then(parseComputers, () => [])]);
@@ -385,10 +474,11 @@ export function createMobileAccount({ platform, origin, fetch: requestFetch = gl
       } catch { return null; }
     },
     /** a one-time pairing link from one of the account's computers, asked of it through the service while it is online */
-    async pairComputer(computer: Pick<MobileComputer, "id">): Promise<ComputerPairResult> {
-      if (!grant) return { outcome: "signed-out" };
+    async pairComputer(computer: Pick<MobileComputer, "id">, accountId?: string): Promise<ComputerPairResult> {
+      const token = tokenOf(accountId);
+      if (!token) return { outcome: "signed-out" };
       try {
-        const link = parseComputerPair(await request(ACCOUNT_ROUTES.appComputerPair(computer.id), "POST", {}, grant.token));
+        const link = parseComputerPair(await request(ACCOUNT_ROUTES.appComputerPair(computer.id), "POST", {}, token));
         return link ? { outcome: "paired", link } : { outcome: "failed" };
       } catch (error) {
         if (!(error instanceof AccountRequestError) || error.opaque) return { outcome: "failed" };
@@ -399,17 +489,18 @@ export function createMobileAccount({ platform, origin, fetch: requestFetch = gl
         return { outcome: "failed" };
       }
     },
-    pairCloud(cloud: Pick<MobileCloud, "id" | "origin">): Promise<CloudPairResult> {
-      return pairing(CLOUD_PAIRING, { cloudId: cloud.id }, cloud.origin);
+    pairCloud(cloud: Pick<MobileCloud, "id" | "origin">, accountId?: string): Promise<CloudPairResult> {
+      return pairing(CLOUD_PAIRING, { cloudId: cloud.id }, cloud.origin, accountId);
     },
     /** a pairing grant for a team's cloud; the service signs it only for a current member */
-    pairTeamCloud(cloud: Pick<MobileTeamCloud, "id" | "origin">): Promise<CloudPairResult> {
-      return pairing(`/api/cloud/desktop/teams/${encodeURIComponent(cloud.id)}/pairing`, {}, cloud.origin);
+    pairTeamCloud(cloud: Pick<MobileTeamCloud, "id" | "origin">, accountId?: string): Promise<CloudPairResult> {
+      return pairing(`/api/cloud/desktop/teams/${encodeURIComponent(cloud.id)}/pairing`, {}, cloud.origin, accountId);
     },
     /** Wakes the account's primary Cloud, the one the wake route answers for. */
-    async wakeCloud(): Promise<boolean> {
-      if (!grant) return false;
-      try { await request(CLOUD_WAKE, "POST", { intent: "click" }, grant.token); return true; } catch { return false; }
+    async wakeCloud(accountId?: string): Promise<boolean> {
+      const token = tokenOf(accountId);
+      if (!token) return false;
+      try { await request(CLOUD_WAKE, "POST", { intent: "click" }, token); return true; } catch { return false; }
     },
     /** Cloudflare TURN for the phone's direct link to its server, minted for this sign-in; none when signed out. */
     async screenIce(): Promise<IceServer[]> {

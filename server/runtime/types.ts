@@ -314,6 +314,8 @@ export interface TurnRunner {
   /** What the cut turn of this node already did outward, as short labels. Read at open() only: a
    * turn that acted outward is not run again. Absent or empty: the turn reruns once. */
   outward?(a: Assignment): string[];
+  /** What the cut turn of this node already did, as short lines, for the turn that reruns it. */
+  progress?(a: Assignment): string[];
 }
 
 export interface Clock {

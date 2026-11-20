@@ -1,15 +1,33 @@
 import type { AppState } from "@/state/store";
 import { threadsNeedingPages } from "@/state/use-selected-transcript";
+import type { MobileConnectionRecord } from "../../shared/mobile-link";
 
 const OPEN_CHAT_KEY = "dusk.mobile.openChat";
 
-/** The chat open when the page last unloaded: iOS reclaiming a backgrounded web view reloads the page, sessionStorage stays. */
-export function readOpenChat(): string | null {
-  try { return sessionStorage.getItem(OPEN_CHAT_KEY); } catch { return null; }
+/** The chat open when the page last unloaded on this place: iOS reclaiming a backgrounded web view reloads the page,
+ * sessionStorage stays. A chat kept for another place, or before a sign-out, is not reopened. */
+export function readOpenChat(place: string | null): string | null {
+  try {
+    const kept: unknown = JSON.parse(sessionStorage.getItem(OPEN_CHAT_KEY) ?? "null");
+    if (!kept || typeof kept !== "object") return null;
+    const { place: keptPlace, chat } = kept as { place?: unknown; chat?: unknown };
+    return keptPlace === place && typeof chat === "string" && chat ? chat : null;
+  } catch { return null; }
 }
 
-export function rememberOpenChat(id: string | null): void {
-  try { if (id) sessionStorage.setItem(OPEN_CHAT_KEY, id); else sessionStorage.removeItem(OPEN_CHAT_KEY); } catch { /* storage off */ }
+export function rememberOpenChat(id: string | null, place: string | null = null): void {
+  try {
+    if (id) sessionStorage.setItem(OPEN_CHAT_KEY, JSON.stringify({ place, chat: id }));
+    else sessionStorage.removeItem(OPEN_CHAT_KEY);
+  } catch { /* storage off */ }
+}
+
+/** The saved place a link or notification belongs to when it is not the one on screen: its chat lives there. */
+export function placeForTarget(environmentId: string | undefined, records: readonly Pick<MobileConnectionRecord, "id" | "environmentId">[], activeId: string | null): string | null {
+  if (!environmentId) return null;
+  const active = records.find((record) => record.id === activeId);
+  if (active?.environmentId === environmentId) return null;
+  return records.find((record) => record.environmentId === environmentId)?.id ?? null;
 }
 
 /** "wait" until the snapshot has landed; then the chat to open again, or null when it is gone from this workspace. */

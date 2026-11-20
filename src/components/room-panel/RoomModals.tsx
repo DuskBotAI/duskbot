@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { AnimatePresence } from "motion/react";
 
 import { effectiveDefaultResponder } from "@/lib/group-routing";
 import { t } from "@/lib/i18n";
@@ -112,7 +113,7 @@ export function RoomFolderModal({ group }: { group: Group; onClose: () => void }
         </div>
         {error && !typing && <NoteRow tone="warn">{error}</NoteRow>}
       </Card>
-      {typing && <FolderPathDialog title={t("room.folder.title")} initial={group.cwd ?? ""} saving={saving} error={error} onSave={save} onClose={() => setTyping(false)} />}
+      <AnimatePresence>{typing && <FolderPathDialog key="folder-path-dialog" title={t("room.folder.title")} initial={group.cwd ?? ""} saving={saving} error={error} onSave={save} onClose={() => setTyping(false)} />}</AnimatePresence>
     </SheetPane>
   );
 }
@@ -178,7 +179,7 @@ export function RoomAboutModal({ group }: { group: Group; onClose: () => void })
         <NavRow data-sheet-row="name" title={t("botPanel.ui.botSettingsSimpleName")} value={group.name} onClick={() => setEditing(true)} />
         <NavRow data-sheet-row="description" title={t("botPanel.ui.presetShareDescription")} value={group.description || t("room.panel.descriptionHint")} onClick={() => setEditing(true)} />
       </Card>
-      {editing && <RoomAboutDialog group={group} onClose={() => setEditing(false)} />}
+      <AnimatePresence>{editing && <RoomAboutDialog key="room-about-dialog" group={group} onClose={() => setEditing(false)} />}</AnimatePresence>
     </SheetPane>
   );
 }

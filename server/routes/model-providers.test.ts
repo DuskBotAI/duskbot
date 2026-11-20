@@ -124,10 +124,37 @@ describe("model provider routes", () => {
     const provider = vi.fn(async () => new Response(JSON.stringify({ data: [{ id: "llama-3.3-70b-versatile" }] }), { status: 200 }));
     const { call } = await serve({ fetch: provider as unknown as typeof fetch });
     expect((await call("POST", "/api/model-providers/models", { provider: "groq", key: "k" })).body)
-      .toEqual({ ok: true, models: ["llama-3.3-70b-versatile"], source: "provider" });
+      .toEqual({ ok: true, models: ["llama-3.3-70b-versatile"], source: "provider", result: "works", model: "llama-3.3-70b-versatile" });
     const perplexity = (await call("POST", "/api/model-providers/models", { provider: "perplexity", key: "k" })).body;
     expect(perplexity.source).toBe("catalog");
     expect(perplexity.models.length).toBeGreaterThan(0);
     expect((await call("POST", "/api/model-providers/models", { provider: "custom-openai", key: "k", fields: { baseUrl: "http://example.com/v1" } })).status).toBe(400);
+  });
+
+  it("say plainly whether a pasted key runs a reply: wrong key, no credit, wrong model with one to use, or unreachable", async () => {
+    let probe: { status: number; body: unknown } = { status: 200, body: {} };
+    const asked: string[] = [];
+    const provider = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+      asked.push(`${init?.method ?? "GET"} ${String(url)}`);
+      if (String(url).endsWith("/models")) return Response.json({ data: [{ id: "llama-3.3-70b-versatile" }, { id: "llama-3.1-8b-instant" }] });
+      return Response.json(probe.body, { status: probe.status });
+    });
+    const { call } = await serve({ fetch: provider as unknown as typeof fetch });
+    const check = async (fields?: Record<string, string>) => (await call("POST", "/api/model-providers/models", { provider: "groq", key: "gsk_secret_value", ...(fields ? { fields } : {}) })).body;
+
+    expect(await check()).toMatchObject({ ok: true, result: "works", model: "llama-3.1-8b-instant" });
+    expect(asked.at(-1)).toBe("POST https://api.groq.com/openai/v1/chat/completions");
+    probe = { status: 401, body: { error: { message: "Invalid API Key gsk_secret_value" } } };
+    const wrong = await check();
+    expect(wrong).toMatchObject({ result: "wrong_key" });
+    expect(JSON.stringify(wrong)).not.toContain("gsk_secret_value");
+    probe = { status: 429, body: { error: { message: "You exceeded your current quota, please check your plan and billing details.", code: "insufficient_quota" } } };
+    expect(await check()).toMatchObject({ result: "no_credit" });
+    probe = { status: 404, body: { error: { message: "The model `llama-3.3-70b` does not exist or you do not have access to it.", code: "model_not_found" } } };
+    expect(await check({ model: "llama-3.3-70b" })).toMatchObject({ result: "wrong_model", model: "llama-3.3-70b", suggestedModel: "llama-3.3-70b-versatile" });
+
+    const offline = vi.fn(async () => { throw new TypeError("fetch failed"); });
+    const { call: callOffline } = await serve({ fetch: offline as unknown as typeof fetch });
+    expect((await callOffline("POST", "/api/model-providers/models", { provider: "groq", key: "k" })).body).toEqual({ ok: false, reason: "unreachable", result: "unreachable" });
   });
 });

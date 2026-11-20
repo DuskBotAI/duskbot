@@ -13,6 +13,37 @@ const VERSION = /^[0-9A-Za-z.+-]{1,40}$/;
 const IMAGE = /^[a-z0-9][a-z0-9._/-]{0,150}(:[A-Za-z0-9._-]{1,64})?$/;
 const SIGNATURE = /^r1\.[a-z0-9-]{1,32}\.[A-Za-z0-9_-]{1,4000}\.[A-Za-z0-9_-]{40,200}$/;
 
+const SEMVER = /^\d+\.\d+\.\d+$/;
+export const FLEET_WINDOW_MS = 24 * 3_600_000;
+
+/**
+ * the versions linked servers said they run when they last asked for an update (in memory: a restart forgets them, and
+ * every server asks again within its poll): `counts()` is `{ windowMs, servers: [{ version, count }], agents: [...] }`,
+ * newest version first, and never names a server
+ */
+export function createFleet(now = Date.now) {
+  const seen = new Map();
+  const clean = (value) => (typeof value === "string" && SEMVER.test(value) ? value : null);
+  const tally = (rows, key) => {
+    const counts = new Map();
+    for (const row of rows) counts.set(row[key] ?? "unknown", (counts.get(row[key] ?? "unknown") ?? 0) + 1);
+    const order = (v) => (v === "unknown" ? [-1] : v.split(".").map(Number));
+    return [...counts].map(([version, count]) => ({ version, count })).sort((a, b) => {
+      const x = order(a.version), y = order(b.version);
+      for (let i = 0; i < 3; i += 1) if ((x[i] ?? -1) !== (y[i] ?? -1)) return (y[i] ?? -1) - (x[i] ?? -1);
+      return 0;
+    });
+  };
+  return {
+    saw(id, server, agent) { seen.delete(id); seen.set(id, { server: clean(server), agent: clean(agent), at: now() }); },
+    counts() {
+      for (const [id, row] of seen) if (now() - row.at > FLEET_WINDOW_MS) seen.delete(id);
+      const rows = [...seen.values()];
+      return { windowMs: FLEET_WINDOW_MS, servers: tally(rows, "server"), agents: tally(rows, "agent") };
+    },
+  };
+}
+
 /** @param {string | null} dir */
 export function createPackages(dir) {
   let cached = null;
@@ -70,5 +101,11 @@ export function createPackages(dir) {
     }
   }
 
-  return { current, find, policy };
+  /** the operator's own update-policy.json says `paused`: linked servers are offered no build (new installs still are) */
+  function paused() {
+    if (!dir) return false;
+    try { return JSON.parse(JSON.parse(readFileSync(join(dir, "update-policy.json"), "utf8")).body).paused === true; } catch { return false; }
+  }
+
+  return { current, find, policy, paused };
 }

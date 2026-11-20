@@ -12,7 +12,8 @@ const MARKER = "error:";
  * OpenCode's free backup could answer and it didn't, so connecting an AI is the way on. `cli_exit`: the engine's program
  * quit or crashed before it replied; `cli_missing`: it could not be started at all. */
 export type FailedReplyReason = "signed_out" | "credits" | "usage_limit" | "rate_limit" | "overloaded" | "timeout" | "no_ai"
-  | "model_not_found" | "bad_request" | "context" | "session_lost" | "provider_down" | "cli_missing" | "cli_exit";
+  | "model_not_found" | "bad_request" | "context" | "session_lost" | "provider_down" | "cli_missing" | "cli_exit"
+  | "key_rejected" | "plan_limit" | "folder_gone";
 
 /** Why dusk bot stopped a browser run itself: `loop`, the same step did nothing three times; the others, a page said
  * so in words a retry cannot change. */
@@ -42,6 +43,8 @@ export interface FailedTurnTool {
   /** what stopped it, when the server could tell */
   reason?: FailedReplyReason;
   blocker?: BrowserBlocker;
+  /** a short code the server logged beside the real cause, for the person to quote to support: "D-7F3K" */
+  errorRef?: string;
 }
 
 /** What an echoed prompt reads as once it is taken out of an error. */
@@ -89,7 +92,7 @@ export function argumentTexts(value: unknown, depth = 6): string[] {
 /** The activity row a failed turn is stored as. */
 export function failedTurnTool(
   cause: string,
-  flags: { setup?: boolean; terminal?: boolean; claudeUpdate?: boolean; place?: PlaceRow; limitResetsAt?: number; partial?: boolean; owned?: boolean; reason?: FailedReplyReason; blocker?: BrowserBlocker } = {},
+  flags: { setup?: boolean; terminal?: boolean; claudeUpdate?: boolean; place?: PlaceRow; limitResetsAt?: number; partial?: boolean; owned?: boolean; reason?: FailedReplyReason; blocker?: BrowserBlocker; errorRef?: string } = {},
 ): FailedTurnTool {
   const clean = shortenHomePaths(plainComputerFailure(withoutEchoedPrompt(cause)));
   const words = clean.length > FAILED_TURN_MAX_CHARS ? `${clean.slice(0, FAILED_TURN_MAX_CHARS - 1)}…` : clean;
@@ -105,6 +108,7 @@ export function failedTurnTool(
     ...(flags.partial && flags.owned ? { owned: true } : {}),
     ...(flags.reason ? { reason: flags.reason } : {}),
     ...(flags.blocker ? { blocker: flags.blocker } : {}),
+    ...(flags.errorRef ? { errorRef: flags.errorRef } : {}),
   };
 }
 

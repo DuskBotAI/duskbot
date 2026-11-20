@@ -91,6 +91,7 @@ const rows = (count: number, from = 0): Row[] => Array.from({ length: count }, (
 const ROW = 50;
 class Scroller {
   rows = 0;
+  ids: string[] = [];
   extra = 0;
   scrollTop = 0;
   clientHeight = 400;
@@ -105,6 +106,20 @@ class Scroller {
   scrollTo(options: ScrollToOptions) {
     this.calls.push(options);
     this.scrollTop = Math.max(0, Math.min(options.top ?? this.scrollTop, this.bottom));
+  }
+  getBoundingClientRect() {
+    return { top: 0, bottom: this.clientHeight };
+  }
+  private row(index: number) {
+    const top = index * ROW - this.scrollTop;
+    return { dataset: { mid: this.ids[index] }, firstElementChild: null, getBoundingClientRect: () => ({ top, bottom: top + ROW, height: ROW, width: 1 }) };
+  }
+  querySelectorAll() {
+    return this.ids.map((_, index) => this.row(index));
+  }
+  querySelector(selector: string) {
+    const index = this.ids.indexOf(JSON.parse(selector.slice("[data-mid=".length, -1)) as string);
+    return index < 0 ? null : this.row(index);
   }
 }
 
@@ -126,6 +141,7 @@ function mount(initial: Partial<Props> = {}) {
     result.scrollRef.current = scroller as unknown as HTMLDivElement;
     result.transcriptRef.current = {} as HTMLDivElement;
     scroller.rows = result.windowedMessages.length;
+    scroller.ids = result.windowedMessages.map((row) => row.id);
     scroller.scrollTop = Math.min(scroller.scrollTop, scroller.bottom);
   };
   const flushFrames = () => {
@@ -236,13 +252,25 @@ describe("transcript viewport", () => {
     expect(view.current.following).toBe(false);
   });
 
+  it("leaves the bottom and pages back when the list is sent to its top with no finger on it, as a tap on the iPhone's status bar does", () => {
+    const view = mount({ messages: rows(2_000) });
+    expect(view.current.following).toBe(true);
+    const before = view.current.hiddenCount;
+    view.act(() => {
+      scroller.scrollTop = 0;
+      view.current.scrollHandlers.onScroll();
+    });
+    expect(view.current.following).toBe(false);
+    expect(view.current.hiddenCount).toBeLessThan(before);
+  });
+
   it("mounts only the last window of a long thread and re-tails it when another thread opens", () => {
     const view = mount({ messages: rows(300) });
     expect(view.current.windowedMessages).toHaveLength(120);
     expect(view.current.hiddenCount).toBe(180);
 
     view.act(() => view.current.showEarlier());
-    expect(view.current.hiddenCount).toBe(60);
+    expect(view.current.hiddenCount).toBe(120);
 
     view.rerender({ threadId: "other", messages: [{ id: "ask", role: "user" }, ...rows(299, 1_001)] });
     expect(view.current.transcriptKey).toBe("bot:other");
@@ -328,8 +356,19 @@ describe("transcript viewport", () => {
   it("slides back to the latest window when the reader returns to the bottom", () => {
     const view = mount({ messages: rows(300) });
     view.act(() => view.current.showEarlier());
+    expect(view.current.laterCount).toBe(60);
+    view.act(() => {
+      scroller.scrollTop = 1_000;
+      view.current.scrollHandlers.onScroll();
+    });
+    view.act(() => {
+      scroller.scrollTop = scroller.bottom;
+      view.current.scrollHandlers.onScroll();
+    });
+    expect(view.current.laterCount, "the window's end brings the newest rows back first").toBe(0);
+    expect(view.current.following).toBe(false);
     view.rerender({ messages: rows(301) });
-    expect(view.current.hiddenCount).toBe(60);
+    expect(view.current.hiddenCount).toBe(180);
 
     view.act(() => {
       scroller.scrollTop = scroller.bottom;
@@ -374,8 +413,8 @@ describe("transcript viewport", () => {
     const view = mount({ messages: rows(300) });
     scroller.scrollTop = 1_000;
     view.act(() => view.current.showEarlier());
-    expect(view.current.windowedMessages[0]?.id).toBe("m60");
-    expect(scroller.scrollTop).toBe(1_000 + 120 * ROW);
+    expect(view.current.windowedMessages[0]?.id).toBe("m120");
+    expect(scroller.scrollTop).toBe(1_000 + 60 * ROW);
     expect(view.current.following).toBe(false);
   });
 
@@ -427,20 +466,101 @@ describe("transcript viewport", () => {
     expect(view.current.following).toBe(false);
 
     view.act(() => view.current.showLater());
-    expect(view.current.laterCount).toBe(60);
+    expect(view.current.laterCount).toBe(120);
+    expect(view.current.windowedMessages).toHaveLength(120);
   });
 
-  it("keeps a search result's window when the reader scrolls to its end", () => {
+  it("brings the next rows in under a search result's window as the reader scrolls to its end, keeping their row", () => {
     store.state.focusMessage = { threadId: "thread", messageId: "m10", nonce: 1, consumed: false };
     const view = mount({ messages: rows(300) });
+    expect(view.current.laterCount).toBe(180);
+    view.act(() => {
+      scroller.scrollTop = scroller.bottom;
+      view.current.scrollHandlers.onScroll();
+    });
+    expect(view.current.following, "the end of a window is not the end of the chat").toBe(false);
+    expect(view.current.laterCount).toBe(120);
+    expect(view.current.windowedMessages[0]?.id).toBe("m60");
+    const shown = Math.floor(scroller.scrollTop / ROW);
+    expect(view.current.windowedMessages[shown]?.id, "the row under the reader stays put").toBe("m112");
+  });
+
+  it("keeps one window mounted however far the reader pages, either way", () => {
+    const view = mount({ messages: rows(2_000) });
+    const under = () => view.current.windowedMessages[Math.floor(scroller.scrollTop / ROW)]?.id;
+    for (let page = 0; page < 40; page++) {
+      view.act(() => {
+        scroller.scrollTop = 100;
+        view.current.scrollHandlers.onWheel({ deltaY: -40 } as never);
+      });
+      expect(view.current.windowedMessages.length).toBeLessThanOrEqual(120);
+    }
+    expect(view.current.hiddenCount).toBe(0);
+    expect(view.current.laterCount).toBe(1_880);
+    let previous = Number(under()?.slice(1));
+    for (let page = 0; page < 40; page++) {
+      view.act(() => {
+        scroller.scrollTop = scroller.bottom;
+        view.current.scrollHandlers.onScroll();
+      });
+      expect(view.current.windowedMessages.length).toBeLessThanOrEqual(120);
+      const now = Number(under()?.slice(1));
+      expect(now - previous, "each page lands just past the rows already read").toBeLessThanOrEqual(120);
+      previous = now;
+    }
+    expect(view.current.laterCount).toBe(0);
     view.act(() => {
       scroller.scrollTop = scroller.bottom;
       view.current.scrollHandlers.onScroll();
     });
     expect(view.current.following).toBe(true);
-    view.rerender({ messages: rows(301) });
+  });
+
+  it("lets the newest rows go when an older page from the server lands above a reader paging back", () => {
+    const view = mount({ messages: rows(200, 1_000), hasMore: true });
+    for (let page = 0; page < 3; page++) {
+      view.act(() => {
+        scroller.scrollTop = 100;
+        view.current.scrollHandlers.onWheel({ deltaY: -40 } as never);
+      });
+    }
+    expect(dispatched).toEqual([{ type: "loadOlderMessages", threadId: "thread" }]);
+    const top = view.current.windowedMessages[Math.floor(scroller.scrollTop / ROW)]?.id;
+    view.rerender({ messages: [...rows(200, 800), ...rows(200, 1_000)] });
+    expect(view.current.windowedMessages.length).toBe(120);
+    expect(view.current.windowedMessages[Math.floor(scroller.scrollTop / ROW)]?.id).toBe(top);
+  });
+
+  it("pages back through older pages from the server and wheels down to the newest row again", () => {
+    let loaded = rows(200, 1_800);
+    const view = mount({ messages: loaded, hasMore: true });
+    for (let page = 0; page < 60; page++) {
+      view.act(() => {
+        scroller.scrollTop = 100;
+        view.current.scrollHandlers.onWheel({ deltaY: -40 } as never);
+      });
+      if (dispatched.length > 0 && loaded[0]!.id !== "m0") {
+        dispatched = [];
+        store.state.loadingOlder = { thread: true };
+        view.rerender({});
+        const first = Number(loaded[0]!.id.slice(1));
+        loaded = [...rows(200, first - 200), ...loaded];
+        view.rerender({ messages: loaded, hasMore: first - 200 > 0 });
+        store.state.loadingOlder = {};
+        view.rerender({});
+      }
+      expect(view.current.windowedMessages.length).toBeLessThanOrEqual(120);
+    }
     expect(view.current.windowedMessages[0]?.id).toBe("m0");
-    expect(view.current.laterCount).toBe(181);
+    for (let page = 0; page < 60 && view.current.laterCount > 0; page++) {
+      view.act(() => {
+        scroller.scrollTop = scroller.bottom;
+        view.current.scrollHandlers.onWheel({ deltaY: 40 } as never);
+      });
+      expect(view.current.windowedMessages.length).toBeLessThanOrEqual(120);
+    }
+    expect(view.current.laterCount).toBe(0);
+    expect(view.current.windowedMessages.at(-1)?.id).toBe("m1999");
   });
 
   it("brings the person's own new message into view from a search result's window", () => {
@@ -503,10 +623,10 @@ describe("transcript viewport", () => {
     const view = mount({ messages: rows(300) });
     expect(view.current.hiddenCount).toBe(180);
     view.act(() => view.current.scrollHandlers.onWheel({ deltaY: -40 } as never));
-    expect(view.current.hiddenCount).toBe(60);
+    expect(view.current.hiddenCount).toBe(120);
     view.act(() => view.current.scrollHandlers.onTouchStart({ touches: [{ clientY: 100 }] } as never));
     view.act(() => view.current.scrollHandlers.onTouchMove({ touches: [{ clientY: 200 }] } as never));
-    expect(view.current.hiddenCount).toBe(0);
+    expect(view.current.hiddenCount).toBe(60);
   });
 
   it("loads an older page on an upward scroll when the whole thread so far is too short to scroll (#4365)", () => {
@@ -576,7 +696,7 @@ describe("transcript viewport", () => {
       view.current.scrollHandlers.onScroll();
     });
 
-    expect(view.current.hiddenCount).toBe(60);
+    expect(view.current.hiddenCount).toBe(120);
   });
 
   it("automatically loads older messages from server when at top of window and hasMore is true", () => {

@@ -19,6 +19,33 @@ every week, every hour, once) and keeps any other schedule as it is. Saved cron
 routines retain their own zone even on another computer. Editing just a name
 or instructions preserves the exact schedule.
 
+## Instead of checking often: an address or an email
+
+A schedule that keeps checking for something ("every 15 minutes, look for new orders") spends a run each time,
+even when nothing happened. Two ways to run a routine only when something does:
+
+- **Its address.** A routine's sheet has **Address · Get address**, which copies a private link; ask the bot
+  ("give the price watch an address") and it reads it with `trigger_info include_address`. Anything that POSTs JSON
+  or a form to it (an app's webhook, an iPhone Shortcut, Zapier) runs the routine now with the routine's own
+  instructions; what was posted reaches the run as outside data, never as instructions. A routine has one address;
+  deleting the routine deletes it. Limits are a webhook's: 256 KiB a request, 10 a minute, 3 unfinished runs, a repeat
+  of the same `Idempotency-Key` handled once. On dusk cloud and a self-hosted server with a public address it works
+  as is (a sleeping cloud wakes for it). On a desktop it is reachable from the internet while **Remote access** is on
+  (its managed route passes `/hooks/` to the receiver); with it off, only apps on that computer reach it.
+- **Its bot's email address.** Ask the bot ("when a receipt arrives from shop.example, log it"): it gets an address of
+  its own, `<name>-<code>@in.dusk.bot`, and routes `<name>-<code>+receipts@in.dusk.bot` to the routine with the
+  senders allowed to use it (`trigger action=email`). Mail from anyone else, or that failed DMARC or SPF and DKIM, is
+  dropped without a reply. The routine's sheet lists its addresses. The mail edge is `apps/cloudflare/inbound-mail`.
+
+## How much a routine uses
+
+A routine's sheet shows its runs and use for the last 7 and 30 days (dollars when its engine reports a price, tokens
+otherwise), the runs of its address included. Ask a bot "what is using my usage?" and it lists every automation it
+may answer for, most used first (`trigger_info action=usage`). When a routine suddenly takes a quarter or more of the
+day's use at three times its usual day (or, new, at more than 12 runs a day), its chat gets one notice, at most once
+a week; for an every-N-minutes routine the sheet then offers **Run less often**, which moves it to the next slower
+step (15, 30, 60 minutes, 2, 4, 8 hours, once a day).
+
 ## Off, on, and done
 
 The switch on a routine's row in its bot's panel pauses a schedule or a webhook
@@ -61,6 +88,14 @@ interval schedule. Cron fields describe calendar positions: `*/90` in the
 minutes field does not mean every 90 elapsed minutes. Holidays, external events,
 and conditions such as "after a payment arrives" are not calendar expressions;
 use an appropriate event/webhook workflow instead of a fake weekly schedule.
+
+## Test runs and what is running
+
+A bot that sets up a workflow tries it once with `trigger` `action: "run_now"`, `test: true`: a test run, told to send,
+post, book and pay nothing and to put what it would have done in its report (a connected app's send is refused
+outright). Its report lands in the chat like any run's. Asked what is running, a bot calls `trigger_info` `list`, which
+names its schedules, app events and webhooks with each one's last result, then its background jobs and its waits in
+every chat.
 
 ## Dates, clock changes and downtime
 

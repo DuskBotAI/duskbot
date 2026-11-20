@@ -1,11 +1,21 @@
 # Computer use & browser use in dusk bot
 
 Decision doc, 2026-08-12. How bots in dusk bot get local computer use and
-browser use. macOS and packaged Ubuntu x64 builds use an out-of-the-box,
+browser use. macOS, Windows x64 and packaged Ubuntu x64 builds use an out-of-the-box,
 release-pinned provider; source/dev Ubuntu may use a separately installed provider. Based
 on a survey of OSS chat-app MCP hosts, macOS control servers,
 browser-automation stacks, and the local `cua` / `axstream` code on this
 machine.
+
+## Where it works
+
+| Place | Provider | What the person does |
+| --- | --- | --- |
+| Mac desktop app | bundled `cua-driver` (embedded, TCC grants on dusk bot) | Allow Accessibility and Screen Recording once: onboarding offers it, and a bot on Auto or on This computer calls `request_screen_access` when a task needs the Mac's apps, which shows the guided dialog. Screen Recording takes effect after macOS reopens the app. |
+| Windows desktop app | bundled `cua-driver.exe` 0.28.2 plus its background build (`scripts/prepare-cua-win.mjs`, gated in the release) | Nothing: no OS permission; a bot on Auto uses the computer after the one-time "use your computer" question. |
+| Linux desktop app (Ubuntu x64 GNOME) | bundled `cua-driver` 0.19.3 | Turn it on in Settings > Computer, then pick This computer for the bot: Auto never lands on a Linux desktop. |
+| dusk cloud bot on the person's Mac | `mac_*` tools ([cloud-uses-mac.md](cloud-uses-mac.md)) | Turn on "Let my cloud bots use this Mac" in the Mac app. Commands, files, downloads and opening apps and links; no screen control. |
+| Built-in browser | the app's own Chromium | Nothing, on every engine with computer use. |
 
 ## TL;DR architecture
 

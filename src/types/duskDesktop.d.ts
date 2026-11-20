@@ -135,11 +135,15 @@ const __APP_VERSION__: string;
     keepAwake: boolean;
     /** a power assertion is held right now */
     hold: boolean;
-    /** "due" | "running" while held; "off" | "battery" | "idle" | "stopped" otherwise */
+    /** keep awake while plugged in, whenever a routine is enabled here */
+    pluggedIn?: boolean;
+    /** "due" | "running" | "plugged-in" while held; "off" | "battery" | "idle" | "stopped" otherwise */
     reason: string;
     /** the due routine's time, when the hold is for a due routine */
     at: number | null;
     onBattery: boolean;
+    /** when this computer last went to sleep, in this app run, with a routine enabled here and keep awake while plugged in off */
+    sleptAt?: number | null;
   }
   interface CloudMacBridge {
     state(): Promise<import("../../shared/cloud-mac").CloudMacState>;
@@ -153,6 +157,10 @@ const __APP_VERSION__: string;
     /** On: reading, saving and downloads stay inside the listed folders. */
     setLimitFolders(on: boolean): Promise<import("../../shared/cloud-mac").CloudMacState>;
     openLog(): Promise<void>;
+    /** "Let them use this Mac's screen": turning on asks on the Mac first. Absent on an older app. */
+    setScreen?(on: boolean): Promise<import("../../shared/cloud-mac").CloudMacState>;
+    /** Stops what a cloud bot does on the screen now and turns the screen off. */
+    stopScreen?(): Promise<import("../../shared/cloud-mac").CloudMacState>;
     onChange(listener: (state: import("../../shared/cloud-mac").CloudMacState) => void): () => void;
   }
   interface DesktopRemoteClientState {
@@ -350,6 +358,8 @@ const __APP_VERSION__: string;
       routines?: {
         wakeState(): Promise<DesktopRoutineWake>;
         keepAwake(enabled: boolean): Promise<DesktopRoutineWake>;
+        /** Hold this computer awake whenever a routine is enabled here, on AC power only. */
+        keepAwakePluggedIn?(enabled: boolean): Promise<DesktopRoutineWake>;
       };
       companionAccount?: {
         state(): Promise<CompanionAccountState>;

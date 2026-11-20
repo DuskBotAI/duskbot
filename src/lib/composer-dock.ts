@@ -14,6 +14,8 @@ export function transcriptEndPad(composerHeightPx: number): string {
 
 /** The custom property the scroller carries with the composer's height on every frame of its spring. */
 export const DOCK_VAR = "--composer-dock";
+/** Marks an element inside the scroller whose own styles read DOCK_VAR. */
+export const DOCK_PAD_ATTR = "data-dock-pad";
 
 /** transcriptEndPad that reads the live height from DOCK_VAR, falling back to the measured one. */
 export function followedEndPad(composerHeightPx: number): string {
@@ -31,22 +33,30 @@ export function useComposerDockPad(ref: RefObject<HTMLElement | null>, scroller?
   useLayoutEffect(() => {
     const el = ref.current;
     if (!el) return;
-    const apply = () => {
+    const apply = (mounting = false) => {
       const live = el.getBoundingClientRect().height;
       const view = scrollerRef.current?.();
       if (view) {
         // near the end counts: a banner that lands while the chat is still settling onto its last row must not cover it
         const atEnd = view.scrollTop >= view.scrollHeight - view.clientHeight - 24;
-        view.style.setProperty(DOCK_VAR, `${Math.max(0, Math.ceil(live))}px`);
+        const value = `${Math.max(0, Math.ceil(live))}px`;
+        // DOCK_VAR does not inherit (styles.css registers it): it is set on the scroller and on each element padded by
+        // it, so a frame of the composer's spring restyles those few, not every row under them
+        for (const target of [view, ...view.querySelectorAll<HTMLElement>(`[${DOCK_PAD_ATTR}]`)]) {
+          if (target.style.getPropertyValue(DOCK_VAR) !== value) target.style.setProperty(DOCK_VAR, value);
+        }
         if (atEnd) view.scrollTop = view.scrollHeight;
       }
+      // the pad reads DOCK_VAR already: a re-render here, in the mount's own commit, would build the whole chat twice
+      // before its first frame; the observer's first call a moment later hands react the height
+      if (mounting) return;
       // react keeps the height the pill is settling to, so it re-renders once instead of on every frame of the spring
       const pill = el.querySelector<HTMLElement>(".composer-pill");
       const settling = pill?.style.height ? parseFloat(pill.style.height) - pill.getBoundingClientRect().height : 0;
       setHeight(live + (Number.isFinite(settling) ? settling : 0));
     };
-    apply();
-    const observer = new ResizeObserver(apply);
+    apply(true);
+    const observer = new ResizeObserver(() => apply());
     observer.observe(el);
     return () => observer.disconnect();
   }, [ref]);

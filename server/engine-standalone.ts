@@ -286,6 +286,15 @@ function verifiedCurrent(engineDir: string, release: StandaloneRelease): Standal
   return { version: pointer.version, executablePath, binDir };
 }
 
+/** The app's own checked copy of this engine's program, or null when it is not installed here. */
+export function appStandaloneProgram(release: StandaloneRelease, baseDir = DATA_DIR): string | null {
+  try {
+    return verifiedCurrent(standaloneEngineDir(release.engine, baseDir), release)?.executablePath ?? null;
+  } catch {
+    return null;
+  }
+}
+
 /** At boot: the bin/ folder of each engine this app pins, once its program is checked, goes on PATH after everything else. */
 export function registerStandaloneBinDirs(baseDir = DATA_DIR, releases: readonly StandaloneRelease[] = []): void {
   // Never through a link: a linked folder could lead to the person's own files.

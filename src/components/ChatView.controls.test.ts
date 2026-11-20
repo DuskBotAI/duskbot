@@ -348,7 +348,7 @@ describe("thread control placement", () => {
       const row = renderToStaticMarkup(createElement(FailedTurnRow, { tool: update, engine }));
       expect(row).toContain(">Claude Code 2.1.268 does not support this model</span>");
       expect(row).not.toContain("isn&#x27;t signed in");
-      expect(activityPreview(update, engine)).toBe("Claude Code 2.1.268 does not support this model");
+      expect(activityPreview(update, engine), "a list says the card's plain line").toBe("This model needs a newer Claude Code. I can update Claude for you.");
     }
   });
   it("opens a failed turn with a technical cause on one plain line, the engine's words behind Copy details", () => {

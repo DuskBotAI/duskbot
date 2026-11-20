@@ -75,7 +75,7 @@ export interface RoomSpeakerLine {
  * and one phrase that names them ("Nova and Quill are typing…") or, past three, "Several bots are working…". A member
  * whose reply has landed but waits its turn (`typingIds`) still counts as typing until its bubble takes over. With the
  * speaker's reply `landed` and nobody else at work, the line is gone in that frame, with no exit left to play. */
-export function RoomWorkingLines({ group, members, workingIds, typingIds = [], speaker, slot, landed = false }: {
+export function RoomWorkingLines({ group, members, workingIds, typingIds = [], speaker, slot, landed = false, networkWait = false }: {
   group: Pick<Group, "id" | "turnStartedAt">;
   members: readonly Bot[];
   workingIds: readonly string[];
@@ -83,6 +83,8 @@ export function RoomWorkingLines({ group, members, workingIds, typingIds = [], s
   speaker: RoomSpeakerLine;
   slot: boolean;
   landed?: boolean;
+  /** The person's last message waits for the device's network: the line says so, and no bot is at work yet. */
+  networkWait?: boolean;
 }) {
   const speakerId = speaker.bot?.id;
   // the speaker's turn shows only while its own line would: its settled reply at the tail ends it before busy clears
@@ -107,6 +109,13 @@ export function RoomWorkingLines({ group, members, workingIds, typingIds = [], s
   const speakerTyping = speaker.markState === "streaming" || speaker.phase === TYPING_PHASE;
   const lives = useReplyLife(ordered.map((id) => ({ key: id, seed: `${group.id}:${group.turnStartedAt ?? ""}:${id}`, typing: typing.has(id) || (id === speakerId && speakerTyping) })));
   const stateOf = (bot: Bot): MarkState => lifeMarkState(typing.has(bot.id) ? "streaming" : bot.id === speakerId ? speaker.markState : "thinking", lives.get(bot.id));
+  if (networkWait) {
+    return (
+      <div className={slot ? "turn-status-slot h-9 shrink-0" : "contents"} data-room-working-lines="" data-room-working-count={0}>
+        <TurnPresence avatar={null} simple wordsAtOnce visible label={t("mobile.chat.waitingForConnection")} seed={`${group.id}:network`} since={null} />
+      </div>
+    );
+  }
   return (
     <div className={slot ? "turn-status-slot h-9 shrink-0" : "contents"} data-room-working-lines="" data-room-working-count={ordered.length}>
       {!(landed && ordered.length === 0) && <TurnPresence

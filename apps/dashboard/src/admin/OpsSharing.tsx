@@ -2,7 +2,7 @@ import { useAdmin } from "./api";
 import { percent } from "./kit";
 import { Empty, Panel } from "./Ops";
 import type { OpsSharingAnswer, OpsSharingWindow } from "./ops-types";
-import { Failed, Loading, n } from "./ui";
+import { Failed, Loading, PartialNote, n } from "./ui";
 
 function Stat({ label, value, sub }: { label: string; value: string; sub?: string }) {
   return (
@@ -24,6 +24,7 @@ export function OpsSharing() {
     <Panel id="ops-sharing" title="usage sharing" meta="desktop app, per install">
       {error && !data ? <Failed error={error} retry={reload} /> : !data ? (loading ? <Loading rows={1} /> : null) : data.optedIn + data.optedOut === 0 && !month?.enables && !month?.disables ? <Empty>no installs have reported yet.</Empty> : (
         <div className="grid grid-cols-4 gap-1 max-md:grid-cols-2">
+          {data.partialBefore ? <div className="col-span-full"><PartialNote before={data.partialBefore} /></div> : null}
           <Stat label="sharing now" value={n(data.optedIn)} sub="active in the last 30 days" />
           <Stat label="opted out" value={n(data.optedOut)} sub={data.outShare === null ? undefined : `${percent(data.outShare)} of installs`} />
           {week && <Stat label="last 7 days" value={`${n(week.enables)} on · ${n(week.disables)} off`} sub={placeLine(week)} />}

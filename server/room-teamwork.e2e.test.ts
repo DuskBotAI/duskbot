@@ -129,7 +129,7 @@ describe.skipIf(process.platform === "win32")("a room of three bots works a task
 
   it("a room with a long history still knows what was settled before the window", async () => {
     const routes = join(mkdtempSync(join(tmpdir(), "dusk-room-teamwork-")), "text-routes.json");
-    writeFileSync(routes, JSON.stringify({ "Current ask": "Current ask: name the project.\nExact details: the project codename is Bluebird." }));
+    writeFileSync(routes, JSON.stringify({ "Write a context checkpoint": "## Goal\nname the project.\n## Critical context\nExact details: the project codename is Bluebird." }));
     const r = await room((ids) => ({
       [ids.ada]: { reply: "Bluebird." },
       [ids.ben]: { reply: "unused" },
@@ -148,6 +148,8 @@ describe.skipIf(process.platform === "win32")("a room of three bots works a task
       expect(knows).toBe(true);
       expect(turn!.system).toContain("Exact details: the project codename is Bluebird.");
       expect(turn!.system).toContain("earlier messages in this room are older than the conversation you are shown");
+      const said = turn!.system.slice(turn!.system.indexOf("## What people in the room said, word for word"));
+      expect(said).toMatch(/^## What people in the room said[^\n]*\n- ".*Quick note for everyone: the project codename is Bluebird, keep it out of public posts\."/);
     } finally { await r.close(); }
   }, 180_000);
 

@@ -5,7 +5,7 @@ import { EMAIL_ASSETS, cloudNoticeEmail, emailConfig, promoEmail } from "./templ
 const cfg = emailConfig({}, { publicUrl: "https://preview.dusk.bot", pageBase: "/dashboard" });
 const all = samples(cfg);
 const hrefs = (html: string) => [...html.matchAll(/href="([^"]*)"/g)].map(match => match[1]!.replace(/&amp;/g, "&"));
-const BILLING = new Set(["05-payment-failed"]);
+const BILLING = new Set(["05-payment-failed", "05a-payment-reminder", "05b-payment-final", "05d-trial-unpaid"]);
 
 describe("account emails", () => {
   it.each(all.map(sample => [sample.id, sample.email] as const))("%s renders whole, in html and text", (_id, email) => {

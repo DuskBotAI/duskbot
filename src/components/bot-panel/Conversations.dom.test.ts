@@ -21,6 +21,7 @@ vi.mock("@/state/store", async (importOriginal) => {
 vi.mock("@/lib/use-media-query", async (importOriginal) => ({
   ...await importOriginal<typeof import("@/lib/use-media-query")>(),
   useMediaQuery: () => fixture.wide,
+  usePhoneLayout: () => !fixture.wide,
 }));
 
 const { BotConversations, CONVERSATIONS_SHOWN, forgetConversationLines } = await import("./Conversations");

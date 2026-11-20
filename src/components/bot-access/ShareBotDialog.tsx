@@ -6,6 +6,8 @@ import type { BotAccess, BotAccessLevel, GrantedLevel } from "../../../shared/bo
 import { botOwner } from "../../../shared/bot-owner";
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
+import { phoneApp } from "@/lib/store-app";
+import { wakeSystemControls } from "@/lib/system-control";
 import { useStore, type Bot } from "@/state/store";
 import { mayChangeOwner, ownerChanged, ownerOf, useTeamPeople, type TeamPeople, type TeamPerson } from "@/state/team-people";
 import { MENU_SHEET } from "../menu-recipe";
@@ -35,6 +37,13 @@ export function ShareBotDialog({ bot, teamName, onClose, onChanged, headerMenu }
   const owner = team ? ownerOf(bot, team) : null;
   const editable = canShare(bot);
   const handsOver = mayChangeOwner(bot, team);
+  const phone = phoneApp();
+
+  useEffect(() => {
+    if (!phone) return;
+    wakeSystemControls();
+    return () => wakeSystemControls();
+  }, [phone]);
 
   useEffect(() => {
     const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
@@ -75,10 +84,19 @@ export function ShareBotDialog({ bot, teamName, onClose, onChanged, headerMenu }
   const yourRow = !editable && team?.me && bot.yourAccess && bot.yourAccess !== "none"
     ? <PersonRow person={team.me} you data-share-yours trailing={null} /> : null;
 
+  const portalRoot = phone ? (document.querySelector?.(".dusk-mobile") ?? document.body) : document.body;
   return createPortal(
-    <div className="ui-dialog-scrim fixed inset-0 z-[60] flex items-center justify-center p-4" onMouseDown={(event) => {
-      if (event.target === event.currentTarget) onClose();
-    }}>
+    <div
+      data-phone-modal-layer={phone ? "" : undefined}
+      className={cn("ui-dialog-scrim fixed inset-0 flex items-center justify-center p-4", phone ? "z-[80]" : "z-[60]")}
+      style={phone ? { paddingTop: "max(var(--m-safe-top, 0px), 16px)", paddingBottom: "max(calc(var(--m-kb, 0px) + 12px), var(--m-safe-bottom, 0px), 16px)" } : undefined}
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+      onClick={(event) => {
+        if (phone && event.target === event.currentTarget) onClose();
+      }}
+    >
       <div ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="share-bot-title" tabIndex={-1} data-share-bot={bot.id}
         className="ui-dialog flex max-h-full w-full max-w-[480px] flex-col text-ink outline-none"
         onKeyDown={(event) => {
@@ -133,7 +151,7 @@ export function ShareBotDialog({ bot, teamName, onClose, onChanged, headerMenu }
         </>}
       </div>
     </div>,
-    document.body,
+    portalRoot,
   );
 }
 

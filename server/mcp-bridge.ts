@@ -7,6 +7,7 @@ import { textOnlyErrorResultLine } from "./mcp-error-result.ts";
 import { withNextStepLine } from "./tool-next-step.ts";
 import { createToolListNormalizer } from "./mcp-tool-schema.ts";
 import { toolSchemaProfileFromEnv } from "./tool-schema-profile.ts";
+import { ComputerPurchaseWatch } from "./computer-purchase.ts";
 
 export const BRIDGE_INACTIVITY_MS = 45_000;
 const PROBE_TIMEOUT_MS = 10_000;
@@ -352,7 +353,11 @@ export function runMcpBridge(options: BridgeOptions): void {
   const toolLists = createToolListNormalizer(toolSchemaProfileFromEnv(), (line) => process.stderr.write(`${options.label}: ${line}\n`));
   // Injected responses must never land inside one of the child's half-written frames.
   const rewrite = options.rewriteResponse ?? ((line: string) => line);
-  const respond = (line: string) => answer(withNextStepLine(textOnlyErrorResultLine(rewrite(toolLists.rewriteResponse(line)))));
+  const purchases = client ? new ComputerPurchaseWatch() : null;
+  const respond = (line: string) => {
+    if (purchases && line.includes('"result"')) { try { purchases.observe((JSON.parse(line) as { result?: unknown }).result); } catch {} }
+    answer(withNextStepLine(textOnlyErrorResultLine(rewrite(toolLists.rewriteResponse(line)))));
+  };
   const children = createChildCalls((line) => child.stdin.write(line + "\n"));
   const send = async (line: string) => {
     const frame = line.includes('"tools/call"') ? relayableCall(line) : null;
@@ -376,7 +381,7 @@ export function runMcpBridge(options: BridgeOptions): void {
   const intercept = createMcpBridgeInterceptor({
     answer,
     forward,
-    ...(client ? { gate: { check: (frame: unknown) => client.state(true, options.gate?.describe?.(frame)) } } : {}),
+    ...(client ? { gate: { check: (frame: unknown) => client.state(true, { ...options.gate?.describe?.(frame), ...purchases?.query(frame) }) } } : {}),
   });
   let pendingInput = Promise.resolve();
   const observed = createCallWatch(options.observe?.wants);

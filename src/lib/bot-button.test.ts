@@ -108,8 +108,8 @@ describe("a bot's own button", () => {
 
   it("is painted by an unlayered rule from the four properties botButtonStyle sets", () => {
     expect(rule(".bot-button")).toMatch(/background-color:\s*var\(--bot-button\);[\s\S]*color:\s*var\(--bot-button-ink\);/);
-    expect(rule(".bot-button:enabled:hover")).toContain("background-color: var(--bot-button-hover);");
-    expect(rule(".bot-button:enabled:active")).toContain("background-color: var(--bot-button-pressed);");
+    expect(rule(".bot-button:enabled:hover:where(:not(html[data-mobile-app] *))")).toContain("background-color: var(--bot-button-hover);");
+    expect(rule(".bot-button:enabled:active:where(:not(html[data-mobile-app] *))")).toContain("background-color: var(--bot-button-pressed);");
     expect(css).toMatch(/\[data-focus-nav\] :focus-visible[^{]*\{[^}]*background-image:[^}]*var\(--color-ink\) 10%/);
     expect(css).not.toMatch(/\.bot-button[^{]*:focus-visible/);
     expect(rule(".bot-button:disabled")).toMatch(/background-color:\s*var\(--color-raised-hover\);[\s\S]*color:\s*var\(--color-ink-secondary\);/);

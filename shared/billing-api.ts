@@ -156,6 +156,11 @@ export interface SubscriptionView {
   trialEndsAt?: number;
   /** a confirmed downgrade waiting for the next billing date */
   scheduledChange?: ScheduledChangeView;
+  /** payment_problem only: a charge failed, so its cloud is stopped; its data is deleted then unless a payment goes through
+   *  first, which brings it back */
+  fixBy?: number;
+  /** with fixBy: the charge that failed was the trial's first (upgrading brings the cloud back) */
+  trialUnpaid?: true;
 }
 
 export const LICENSE_STATUSES = ["active", "grace", "expired"] as const;
@@ -239,8 +244,11 @@ export interface InvoicePage { invoices: InvoiceView[]; nextCursor: string | nul
 /** "unused" and "switching" come from the dashboard's cancel flow; the desktop app sends the first six */
 export const CANCEL_ANSWERS = ["feature", "price", "setup", "broken", "later", "other", "unused", "switching"] as const;
 export type CancelAnswer = (typeof CANCEL_ANSWERS)[number];
-/** the desktop app's cancel sheet survey (electron/cloud-account.mjs cancelSurvey), as the dashboard sends it too */
-export interface CancelSurvey { answer: CancelAnswer; expected?: string; improve?: string }
+/** what the cancel flow put in front of the person for their reason: the stay-on discount, a cheaper plan, ways to fix it, a box to say what's missing, or nothing */
+export const RETENTION_OFFERS = ["discount", "downgrade", "help", "note", "none"] as const;
+export type RetentionOfferShown = (typeof RETENTION_OFFERS)[number];
+/** the desktop app's cancel sheet survey (electron/cloud-account.mjs cancelSurvey), as the dashboard sends it too; `outcome` is set by the service, never sent */
+export interface CancelSurvey { answer: CancelAnswer; expected?: string; improve?: string; offer?: RetentionOfferShown; outcome?: RetentionOutcome }
 
 /** the dashboard's cancel flow: the reason, the help offered for it, then the confirmation */
 export const RETENTION_STEPS = ["reason", "help", "confirm"] as const;
@@ -248,7 +256,10 @@ export type RetentionStep = (typeof RETENTION_STEPS)[number];
 /** what a step ended in: a step shown, a save (discount, a cheaper plan, help taken, kept as is) or the cancel */
 export const RETENTION_OUTCOMES = ["shown", "discount", "downgrade", "helped", "kept", "cancelled"] as const;
 export type RetentionOutcome = (typeof RETENTION_OUTCOMES)[number];
-export interface RetentionInput { reason: CancelAnswer; step: RetentionStep; outcome: RetentionOutcome }
+/** a step of the cancel flow; anything but `shown` is also kept with the reason, the offer and the person's note as cancel feedback */
+export interface RetentionInput { reason: CancelAnswer; step: RetentionStep; outcome: RetentionOutcome; offer?: RetentionOfferShown; note?: string }
+/** a cancel feedback row that came with a cancel, not a save; rows from before outcomes were kept all came with one */
+export const cancelledFeedback = (row: { outcome?: RetentionOutcome }) => row.outcome === undefined || row.outcome === "cancelled";
 export interface RetentionOffer { percent: number; cycles: number }
 /** the stay-on discount: `offer` while this account may still take it (once per account, monthly plans), `applied` once taken */
 export interface RetentionView { offer: RetentionOffer | null; applied: (RetentionOffer & { at: number }) | null }

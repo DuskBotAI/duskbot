@@ -1,16 +1,17 @@
 // What a room said before the lines a member's turn reads word for word: one rolling summary per conversation, written on
 // a quick model and carried forward as more lines fall out of the window, with the not-yet-summarized lines as excerpts.
-import { deterministicSummary, summaryPrompt } from "../compaction-summary.ts";
-import { boundedContextText, type ReplayEntry } from "../context-rebuild.ts";
+import { checkpointPrompt, checkpointText, deterministicSummary, helperCheckpoint } from "../compaction-summary.ts";
+import type { ReplayEntry } from "../context-rebuild.ts";
 import type { EarlierLine } from "./room-transcript.ts";
 
 /** Lines past the last summary that start writing the next one in the background. */
 export const ROOM_EARLIER_BATCH = 20;
 /** How long a turn waits for a room's first summary before it goes on with excerpts. */
 export const ROOM_EARLIER_FIRST_WAIT_MS = 20_000;
-const SUMMARY_BYTES = 4_000;
+const SUMMARY_BYTES = 7_500;
+const WORDS = { heading: "## What people in the room said, word for word", maxBytes: 2_400 };
 const EXCERPT_BYTES = 2_500;
-/** Room lines per summary call, under summaryPrompt's own cut; a longer stretch folds in several calls, oldest first. */
+/** Room lines per summary call, under checkpointPrompt's own cut; a longer stretch folds in several calls, oldest first. */
 const CHUNK_BYTES = 48_000;
 const MAX_CHUNKS = 8;
 
@@ -83,13 +84,14 @@ export function createRoomEarlier(deps: RoomEarlierDeps) {
     const fold = async () => {
       let summary = start;
       for (const chunk of summaryChunks(entries(earlier.lines(from)))) {
+        const previous = summary ? { id: "earlier-summary", summary } : undefined;
         const history: ReplayEntry[] = [
-          ...(summary ? [{ id: "earlier-summary", role: "assistant" as const, text: `Earlier summary of this room:\n${summary}` }] : []),
+          ...(previous ? [{ id: previous.id, role: "assistant" as const, text: `Earlier summary of this room:\n${summary}` }] : []),
           ...chunk,
         ];
-        const written = (await write(summaryPrompt(history), { signal: AbortSignal.timeout(deps.timeoutMs ?? 60_000) })).trim();
+        const written = (await write(checkpointPrompt(history), { signal: AbortSignal.timeout(deps.timeoutMs ?? 60_000) })).trim();
         if (!written) return;
-        summary = boundedContextText(written, SUMMARY_BYTES);
+        summary = checkpointText(helperCheckpoint(written), history, { previous, words: WORDS }, SUMMARY_BYTES);
       }
       if (summary) folded.set(threadId, { throughId, summary });
     };

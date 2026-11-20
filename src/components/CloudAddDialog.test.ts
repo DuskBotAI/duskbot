@@ -17,7 +17,9 @@ vi.mock("react", async original => ({ ...await original<typeof import("react")>(
 vi.mock("@/state/store", () => ({ useStore: () => ({ state: f.state, dispatch: f.dispatch }) }));
 vi.mock("@/lib/analytics", () => ({ track: vi.fn() }));
 vi.mock("./cloud-buy/AddCloudFlow", () => ({ AddCloudFlow: ({ source }: { source?: string }) => createElement("div", { "data-add-cloud-flow": source ?? "" }) }));
+import { AnimatePresence } from "motion/react";
 import { CloudAddDialog, CloudAddPanel, CloudAddSheet, type CloudAddActions, type CloudAddUi } from "./CloudAddDialog";
+import { DialogScrimLayer, DialogSheet } from "./ui/SheetMotion";
 import { ChooseScreen } from "./cloud-buy/ChooseScreen";
 import { cloudAddView, type CloudAddView } from "@/lib/cloud-plan";
 import { track } from "@/lib/analytics";
@@ -42,10 +44,13 @@ const acme = (machine: CloudTeam["machine"] = { status: "ready", origin: "https:
 const onTeam = (machine?: CloudTeam["machine"]): CloudAccountState => paid({ entitlement: { plan: "pro", tier: "team", status: "active", expiresAt: NOW + 30 * DAY, version: 2 }, teams: [acme(machine)] });
 
 type Node = ReactElement<Record<string, any>>;
+/** components with hooks of their own, which only a real render can call: their children are walked instead */
+const SEEN_THROUGH = new Set<unknown>([AnimatePresence, DialogScrimLayer, DialogSheet]);
 const nodes = (value: ReactNode): Node[] => {
   if (Array.isArray(value)) return value.flatMap(nodes);
   if (!isValidElement(value)) return [];
   const node = value as Node;
+  if (SEEN_THROUGH.has(node.type)) return [node, ...Children.toArray(node.props.children).flatMap(nodes)];
   if (typeof node.type === "function") return nodes((node.type as (props: unknown) => ReactNode)(node.props));
   return [node, ...Children.toArray(node.props.children).flatMap(nodes)];
 };

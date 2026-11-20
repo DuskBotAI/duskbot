@@ -5,7 +5,7 @@ export type PanelRole = "owner" | AdminRole;
 /** security invariant: the only admin requests a growth admin may make. reads of aggregate analytics and revenue, never cloud cost or
  *  cloud figures; every other route, and every change, is refused with 403, so a new route stays owner-only until it is added here */
 export const GROWTH_ROUTES: readonly RegExp[] = [
-  /^\/me$/, /^\/overview$/, /^\/web$/, /^\/web\/[a-z_]{1,30}$/, /^\/funnel$/, /^\/realtime$/, /^\/retention$/, /^\/waitlist$/, /^\/revenue$/,
+  /^\/me$/, /^\/overview$/, /^\/web$/, /^\/web\/[a-z_]{1,30}$/, /^\/funnel$/, /^\/realtime$/, /^\/retention$/, /^\/waitlist$/, /^\/revenue$/, /^\/subscribers$/, /^\/subscribers\/[A-Za-z0-9_-]{1,80}$/,
 ];
 export const growthMay = (method: string, route: string) => method === "GET" && GROWTH_ROUTES.some(pattern => pattern.test(route));
 

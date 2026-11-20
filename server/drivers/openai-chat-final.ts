@@ -37,10 +37,15 @@ export function unfinishedReply(reply: string, finishReason: string | null): Cha
 
 const contentFiltered = () => new ChatProtocolError("The provider's content filter blocked this reply (finish_reason: content_filter). Reword the request, or switch this bot to another model.", "finish_content_filter");
 
-/** the message to send once more for a reply with nothing in it, or null when this failure is not retried or already was */
-export function nudgeOnce(error: unknown, retried: boolean): string | null {
+const FINALIZE = "Your tools have finished and you wrote no reply. Without calling another tool, write your final answer now from what they returned.";
+const FINALIZE_FAILED = " A step failed: say plainly what failed, what you did not do, and what would get it done.";
+
+/** the message to send once more for a reply with nothing in it, or null when this failure is not retried or already was.
+ * After tools ran (`after`), it asks for the final answer from their results, never more work. */
+export function nudgeOnce(error: unknown, retried: boolean, after?: { toolsRan: number; failed: boolean }): string | null {
   if (retried || !(error instanceof ChatProtocolError) || !error.code || !RETRY_ONCE.has(error.code.replace(/^no_reply:/, ""))) return null;
-  return error.code === "tools_unavailable" ? NUDGE_NO_TOOLS : NUDGE;
+  if (error.code === "tools_unavailable") return NUDGE_NO_TOOLS;
+  return after?.toolsRan ? FINALIZE + (after.failed ? FINALIZE_FAILED : "") : NUDGE;
 }
 
 /** a protocol failure's code for the turn's runtime.error */

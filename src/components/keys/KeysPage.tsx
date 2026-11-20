@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
+import { AnimatePresence } from "motion/react";
 import { ChevronRight, Search } from "../../icons";
 import { useStore, type ConfigStatus } from "@/state/store";
 import { cn } from "@/lib/cn";
@@ -51,11 +52,11 @@ function PanelRow({ entry }: { entry: KeyEntry }) {
   return (
     <KeyPlainRow data-key-row={entry.id} titleId={titleId} mark={<KeyMarkIcon entry={entry} />} title={name} hint={hint}
       actions={<button type="button" data-key-open="" className={smallButtonCls} aria-label={`${action}: ${name}`} onClick={() => setOpen(true)}>{action}</button>}>
-      {open && (
-        <FormDialog data-panel-modal="key-panel" title={name} description={t(entry.purposeKey)} onClose={() => setOpen(false)}>
+      <AnimatePresence>{open && (
+        <FormDialog key="key-panel" data-panel-modal="key-panel" title={name} description={t(entry.purposeKey)} onClose={() => setOpen(false)}>
           <div data-key-dialog={entry.id} className="flex flex-col gap-2">{PANELS[entry.id]?.()}</div>
         </FormDialog>
-      )}
+      )}</AnimatePresence>
     </KeyPlainRow>
   );
 }

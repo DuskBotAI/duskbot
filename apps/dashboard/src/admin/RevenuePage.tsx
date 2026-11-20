@@ -17,8 +17,9 @@ import { AdminHeader, Failed, Loading, n, SearchBox } from "./ui";
 import { STATUS } from "./PersonBilling";
 import { InfraMargin } from "./InfraMargin";
 import { Fold } from "./Fold";
+import { TrialsSummary } from "./Subscribers";
 import { CustomerLink, ModeChip } from "./CustomerSheet";
-import type { BreakdownRow, CustomerRow, FeedItem, FeedKind, Health, MoneyMode, RevenueFunnelStep, RiskRow, SubscriptionReport } from "./revenue-types";
+import type { BreakdownRow, CustomerRow, FeedItem, FeedKind, Health, MoneyMode, Received, RevenueFunnelStep, RiskRow, SubscriptionReport } from "./revenue-types";
 
 const DAY = 86_400_000;
 const words = (value: string) => value.replace(/_/g, " ");
@@ -99,11 +100,29 @@ function Small({ label, value, note, money }: { label: string; value: string; no
   );
 }
 
-function Headline({ report }: { report: SubscriptionReport }) {
-  const h = report.headline, p = h.previous;
+function ReceivedChart({ received, days, onDays }: { received: Received; days: string; onDays: (days: string) => void }) {
   return (
-    <section className="grid grid-cols-4 gap-1.5 rounded-[24px] bg-card p-2 max-lg:grid-cols-2" aria-label="headline numbers">
-      <Metric label="mrr" value={usd(h.mrr, true)} money delta={<MoneyDelta now={h.mrr} before={p.mrr} />} />
+    <ChartCard title="received per day" action={<Segmented label="range" value={days} onChange={onDays} options={DAYS.map(([value, label]) => ({ value, label }))} />}>
+      <StackedBars starts={received.starts} size={DAY} height={160} format={(v) => usd(v, true)} stacks={[{ key: "received", label: "received", color: "var(--viz-new)", values: received.series }]} />
+      <p className="mt-2 text-12 text-ink-4">{n(received.payments)} payment{received.payments === 1 ? "" : "s"} in {rangeLabel(days)}{received.refundsCents ? `, ${usd(received.refundsCents, true)} refunded` : ""}. gross: before tax and processor fees.</p>
+    </ChartCard>
+  );
+}
+
+/** failed charges, kept out of mrr and shown beside it */
+function AtRisk({ cents, count }: { cents: number; count: number }) {
+  return <span className="ms-2 text-12 text-ink-3" title="failed charges, retried by billing, not counted in mrr">at risk {usd(cents, true)}/mo ({n(count)})</span>;
+}
+
+const rangeLabel = (days: string) => days === "365" ? "the last year" : `the last ${days} days`;
+
+function Headline({ report, days }: { report: SubscriptionReport; days: string }) {
+  const h = report.headline, p = h.previous, r = report.received;
+  return (
+    <section className={cx("grid gap-1.5 rounded-[24px] bg-card p-2 max-lg:grid-cols-2", r ? "grid-cols-5" : "grid-cols-4")} aria-label="headline numbers">
+      <Metric label="mrr" value={usd(h.mrr, true)} money delta={<><MoneyDelta now={h.mrr} before={p.mrr} />{h.atRisk && h.atRisk.customers > 0 && <AtRisk cents={h.atRisk.mrr} count={h.atRisk.customers} />}</>} />
+      {r && <Metric label="received" value={usd(r.cents, true)} money delta={<span className="text-12 text-ink-3">{rangeLabel(days)}, gross</span>}
+        hint="payments taken less refunds, before tax and before the processor's fees, which the billing records don't hold" />}
       <Metric label="net new this month" value={signed(h.netNewMrr)} delta={<MoneyDelta now={h.netNewMrr} before={p.netNewMrr} mode="usd" />} hint="new, expansion and comebacks, less contraction and churn, this month" />
       <Metric label="active customers" value={n(h.customers)} delta={<MoneyDelta now={h.customers} before={p.customers} />} />
       <Metric label="churn" value={rate(h.customerChurn)} delta={<MoneyDelta now={h.customerChurn} before={p.customerChurn} mode="points" invert />} hint="customers lost per month, over the last three full months" />
@@ -271,12 +290,12 @@ function Cash({ report }: { report: SubscriptionReport }) {
   );
 }
 
-const STAGE: Record<string, string> = { visit: "bg-wash-sky", signup: "bg-wash-lilac", checkout: "bg-wash-lemon", paid: "bg-wash-lime", retained: "bg-wash-lime" };
-/** visitor to paying customer to still paying a month later, for people first seen in the window */
+const STAGE: Record<string, string> = { visit: "bg-wash-sky", signup: "bg-wash-lilac", trial: "bg-wash-lemon", converted: "bg-wash-lime" };
+/** visitor to trial to a trial that went on to pay, for people first seen in the window */
 export function RevenueFunnel({ steps, compact }: { steps: RevenueFunnelStep[]; compact?: boolean }) {
   const first = Math.max(1, steps[0]?.count ?? 1);
   return (
-    <ol className="flex flex-col gap-1" aria-label="revenue funnel">
+    <ol className="flex flex-col gap-1" aria-label="trial funnel">
       {steps.map((step, i) => {
         const prev = steps[i - 1], share = step.count / first;
         const base = step.of ?? prev?.count ?? 0, kept = prev ? (base ? step.count / base : null) : null;
@@ -288,11 +307,11 @@ export function RevenueFunnel({ steps, compact }: { steps: RevenueFunnelStep[]; 
                 animate={{ clipPath: `inset(0% ${(100 - Math.max(1.5, share * 100)).toFixed(2)}% 0% 0% round 10px)` }} transition={{ type: "spring", visualDuration: 0.45, bounce: 0, delay: Math.min(0.3, i * 0.04) }} aria-hidden />
               <span className="relative flex items-baseline gap-2">
                 <Figure value={n(step.count)} className="!font-mono !text-15 !leading-6 !tracking-[-0.02em]" />
-                {step.of !== undefined && <span className="font-mono text-12 text-ink-3">of {n(step.of)} due</span>}
+                {step.of !== undefined && <span className="font-mono text-12 text-ink-3">of {n(step.of)} trials over</span>}
               </span>
             </span>
             <span className="flex justify-end">
-              {prev && <span className="inline-flex h-6 items-center whitespace-nowrap rounded-full bg-card px-2 font-mono text-12 text-ink-3 num" title={step.of !== undefined ? `${n(step.count)} of the ${n(step.of)} who paid at least a month ago` : `${n(step.count)} of ${n(prev.count)}`}>{kept === null ? "-" : percent(kept)}</span>}
+              {prev && <span className="inline-flex h-6 items-center whitespace-nowrap rounded-full bg-card px-2 font-mono text-12 text-ink-3 num" title={step.of !== undefined ? `${n(step.count)} of the ${n(step.of)} trials that are over went on to pay` : `${n(step.count)} of ${n(prev.count)}`}>{kept === null ? "-" : percent(kept)}</span>}
             </span>
           </li>
         );
@@ -596,6 +615,7 @@ export function RevenuePage() {
   return (
     <>
       <AdminHeader title="revenue" sub="mrr, churn and every customer, straight from the billing records." action={<div className="flex flex-wrap items-center gap-3"><MoneySwitch />{owner && data && <SyncButton sync={data.sync} onDone={reload} />}</div>} />
+      <TrialsSummary />
       {error && <Failed error={error} retry={reload} />}
       {!data && loading && <Loading rows={8} />}
       {data && (
@@ -605,7 +625,8 @@ export function RevenuePage() {
             <section className="rounded-[24px] bg-card"><SkyEmpty art="notebook" title={money === "live" ? "no live subscriptions yet." : money === "test" ? "no test subscriptions." : "no subscriptions yet."}>{money === "live" ? "test-mode payments never count here. switch to test to see them." : "the first paid plan lands here with mrr, churn, cohorts and every customer."}</SkyEmpty></section>
           ) : (
             <>
-              <Headline report={data} />
+              <Headline report={data} days={days} />
+              {data.received && <ReceivedChart received={data.received} days={days} onDays={setDays} />}
               <Growth report={data} />
               <Saves report={data} />
               {owner && <Customers customers={data.customers} />}
@@ -617,9 +638,9 @@ export function RevenuePage() {
               {!empty && <OtherNumbers report={data} />}
               {!empty && <div className="grid grid-cols-2 gap-4 max-lg:grid-cols-1"><Churn report={data} /><Dunning report={data} /><Breakdown breakdown={data.breakdown} /><Cash report={data} /></div>}
               <div className="grid grid-cols-2 gap-4 max-lg:grid-cols-1">
-                <Card title="revenue funnel" action={<Segmented label="people first seen in" value={days} onChange={setDays} options={DAYS.map(([value, label]) => ({ value, label }))} />}>
+                <Card title="trial funnel" action={<Segmented label="people first seen in" value={days} onChange={setDays} options={DAYS.map(([value, label]) => ({ value, label }))} />}>
                   <RevenueFunnel steps={data.funnel.steps} />
-                  <p className="mt-3 text-12 text-ink-4">people first seen in the last {days === "365" ? "year" : `${days} days`}; month 2 counts those who paid at least a month ago.</p>
+                  <p className="mt-3 text-12 text-ink-4">people first seen in the last {days === "365" ? "year" : `${days} days`}; converted counts trials that are over and went on to pay.</p>
                 </Card>
                 <Checkout checkout={data.checkout} />
               </div>
@@ -718,7 +739,7 @@ export function RevenueStrip({ days }: { days: number }) {
           <div className="mt-auto pt-4"><Sparkline values={data.months.map((row) => row.mrr)} color="var(--ink-4)" height={40} label="mrr over the last 12 months" /></div>
         </div>
         <div className="rounded-[18px] bg-pop p-3">
-          <div className="mb-2 flex items-center justify-between gap-2"><h3 className="text-13 font-medium text-ink">visitor to paying</h3><span className="t-meta">first seen in the last {data.funnel.days} days</span></div>
+          <div className="mb-2 flex items-center justify-between gap-2"><h3 className="text-13 font-medium text-ink">visitor to trial</h3><span className="t-meta">first seen in the last {data.funnel.days} days</span></div>
           <RevenueFunnel steps={data.funnel.steps} compact />
         </div>
       </div>

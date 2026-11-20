@@ -11,6 +11,7 @@ import { PASS } from "./table.ts";
 
 const WAITS = "/api/internal/waits";
 const CANCEL = "/api/internal/waits/cancel";
+const EVERY_CHAT = "/api/internal/waits/all";
 
 export const WAIT_MESSAGES = {
   notYours: "This conversation is not yours.",
@@ -29,6 +30,8 @@ export const WAIT_MESSAGES = {
 
 export interface WaitRequest {
   label: string; kind: WaitKind; url?: string; text?: string; path?: string; process?: string; bot?: string; followUp?: string; hours: number;
+  /** kind time: when, in epoch ms. */
+  at?: number;
 }
 
 const FIELD_KINDS = {
@@ -58,7 +61,7 @@ const absent = (value: unknown) => value === undefined || value === null;
 const joinWords = (words: readonly string[]) => (words.length < 2 ? words.join("") : `${words.slice(0, -1).join(", ")} and ${words.at(-1)}`);
 const iso = (ms: number) => new Date(ms).toISOString();
 
-export function parseWaitRequest(body: unknown, home: string): { ok: true; request: WaitRequest } | { ok: false; error: string } {
+export function parseWaitRequest(body: unknown, home: string, now = Date.now()): { ok: true; request: WaitRequest } | { ok: false; error: string } {
   const fail = (error: string) => ({ ok: false, error }) as const;
   if (!isRecord(body)) return fail("Send a JSON object.");
   const label = typeof body.label === "string" ? body.label.trim() : "";
@@ -71,6 +74,7 @@ export function parseWaitRequest(body: unknown, home: string): { ok: true; reque
   if (needed.some((field) => absent(body[field]))) return fail(`${kind} needs ${needed.join(" and ")}.`);
   const stray = FIELDS.find((field) => !needed.includes(field) && !absent(body[field]));
   if (stray) return fail(`${stray} applies only to ${joinWords(FIELD_KINDS[stray])}.`);
+  if (kind !== "time" && (!absent(body.at) || !absent(body.minutes))) return fail("at and minutes apply only to time.");
 
   const request: WaitRequest = { label, kind, hours: WAIT_HOURS.default };
   const size = (field: WaitField | "follow_up", max: number, trim = false) => {
@@ -113,12 +117,33 @@ export function parseWaitRequest(body: unknown, home: string): { ok: true; reque
     if (followUp === null) return lengthError("follow_up", 2000);
     request.followUp = followUp;
   }
-  if (!absent(body.hours)) {
+  if (kind === "time") {
+    const at = timeOf(body.at, body.minutes, now);
+    if (typeof at === "string") return fail(at);
+    request.at = at;
+  } else if (!absent(body.hours)) {
     const hours = body.hours;
     if (typeof hours !== "number" || !Number.isInteger(hours) || hours < 1 || hours > WAIT_HOURS.max) return fail(`hours is a whole number from 1 to ${WAIT_HOURS.max}.`);
     request.hours = hours;
   }
   return { ok: true, request };
+}
+
+const MAX_AHEAD_MS = WAIT_HOURS.max * 3_600_000;
+
+/** A time wait's moment from at (RFC3339 with an offset) or minutes from now; a sentence when it cannot be used. */
+function timeOf(at: unknown, minutes: unknown, now: number): number | string {
+  if (absent(at) === absent(minutes)) return "time needs at (an RFC3339 date-time with its offset) or minutes from now, not both.";
+  let when: number;
+  if (!absent(minutes)) {
+    if (typeof minutes !== "number" || !Number.isInteger(minutes) || minutes < 1) return "minutes is a whole number of at least 1.";
+    when = now + minutes * 60_000;
+  } else {
+    when = typeof at === "string" && /(?:Z|[+-]\d{2}:?\d{2})$/i.test(at.trim()) ? Date.parse(at.trim()) : Number.NaN;
+    if (!Number.isFinite(when)) return "at must be an RFC3339 date-time with its offset, such as 2026-11-21T09:00:00+05:30.";
+    if (when <= now) return `at is already past (it is ${iso(now)} now).`;
+  }
+  return when - now > MAX_AHEAD_MS ? `A time wait can be at most ${WAIT_HOURS.max} hours ahead; for later, use a one-time trigger.` : when;
 }
 
 export function waitSourceRefusal(turn: {
@@ -176,6 +201,12 @@ export function createWaitRoutes(deps: { waits: Pick<WaitManager, "create" | "li
       const mine = here();
       return void json(res, 200, { text: mine.length ? waitList(mine) : WAIT_MESSAGES.none });
     }
+    if (ctx.method === "GET" && ctx.path === EVERY_CHAT) {
+      // Security: a wait's label can say what the owner is watching in another chat; only the owner's own turn lists them.
+      if (ctx.sourceRefusal() !== null) return void json(res, 403, { error: WAIT_MESSAGES.notYours });
+      const mine = deps.waits.list(ctx.botId);
+      return void json(res, 200, { text: mine.length ? waitList(mine) : WAIT_MESSAGES.none });
+    }
     if (ctx.method !== "POST" || (ctx.path !== WAITS && ctx.path !== CANCEL)) return PASS;
 
     const refusal = ctx.sourceRefusal();
@@ -211,6 +242,8 @@ export function createWaitRoutes(deps: { waits: Pick<WaitManager, "create" | "li
       condition = { kind: "bot_idle", botId: peer.id, botName: peer.name };
     } else if (request.kind === "url_contains" || request.kind === "url_missing") {
       condition = { kind: request.kind, url: request.url!, text: request.text! };
+    } else if (request.kind === "time") {
+      condition = { kind: "time", at: request.at! };
     } else if (request.kind === "process_running" || request.kind === "process_gone") {
       condition = { kind: request.kind, process: request.process! };
     } else {
@@ -231,7 +264,9 @@ export function createWaitRoutes(deps: { waits: Pick<WaitManager, "create" | "li
     const then = request.followUp ? `, and you will then do what you wrote in follow_up${deps.cloudHome ? " in a run that reports in its own results chat, not this one" : ""}` : "";
     const every = WAIT_WAKE_MS / 60_000;
     const sleeps = deps.sleeps ? ` While My Cloud sleeps it wakes to check every ${every} minutes, so the message can come up to ${every} minutes late: tell the person that too.` : "";
-    const text = `Waiting for ${wait.label} (wait id ${wait.id}): plain checks, no AI, until ${iso(wait.expiresAt)}. When it happens a message lands in this chat${then}.${sleeps} Tell the person in one sentence; do not keep checking yourself.`;
+    const text = request.kind === "time"
+      ? `Set for ${iso(request.at!)} (wait id ${wait.id}): no AI runs before then. ${request.followUp ? `Then you come back${deps.cloudHome ? " in a run that reports in its own results chat" : " in this chat, with this conversation,"} and do what you wrote in follow_up.` : "Then a reminder lands in this chat."}${sleeps} Tell the person in one sentence; do not check in the meantime.`
+      : `Waiting for ${wait.label} (wait id ${wait.id}): plain checks, no AI, until ${iso(wait.expiresAt)}. When it happens a message lands in this chat${then}.${sleeps} Tell the person in one sentence; do not keep checking yourself.`;
     return void json(res, 201, { text: note ? `${text}\n\n${note}` : text });
   };
 }

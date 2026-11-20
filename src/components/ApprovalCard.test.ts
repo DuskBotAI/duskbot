@@ -270,6 +270,34 @@ describe("ApprovalCard learned skills", () => {
     expect(markup).not.toContain("Share with department");
   });
 
+  it("reads a skill the background review saved as one quiet line with Undo", () => {
+    const message: Message = {
+      id: "review-receipt",
+      role: "bot",
+      kind: "options",
+      at: 1,
+      card: {
+        title: 'Skill "invoice-export" enabled',
+        subtitle: "Exports invoices.",
+        options: [],
+        answered: "allow",
+        autoApplied: true,
+        requestId: "review-receipt",
+        tool: "stage_skill",
+        skillRequest: {
+          version: 1, requestId: "review-receipt", botId: "bot-1", threadId: "thread-1", stagedId: "staged-2",
+          action: "create", name: "invoice-export", gist: "Exports invoices.", warnings: [], createdAt: 1, learnedBy: "review",
+        },
+      },
+    };
+    const markup = renderToStaticMarkup(createElement(ApprovalCard, { message, threadId: "thread-1" }));
+    expect(markup).toContain("Saved how I did this as a skill:");
+    expect(markup).toContain(">invoice-export<");
+    expect(markup).toContain(">Undo<");
+    const undone = renderToStaticMarkup(createElement(ApprovalCard, { message: { ...message, card: { ...message.card!, undone: true } }, threadId: "thread-1" }));
+    expect(undone).not.toContain(">Undo<");
+  });
+
   it("maps create and update choices to approval while keeping refusals denied", () => {
     expect(skillRequestBehavior("enable")).toBe("allow");
     expect(skillRequestBehavior("update")).toBe("allow");
@@ -749,7 +777,8 @@ describe("one approval, one card", () => {
     const [pending] = pendingApprovals([command()]);
     const panel = renderToStaticMarkup(createElement(PendingApprovalPanel, { pending: pending!, count: 1, index: 0, botName: "Dev", more: "Cancel turn" }));
     const row = visibleRow(panel);
-    expect(row).toContain("Dev wants to run a command");
+    expect(row).toContain(">Dev</span>");
+    expect(row).toContain(">Wants to run a command</p>");
     expect(row).toMatch(/font-mono[^"]*"[^>]*>git status<\/div>/);
     expect(panel).toContain('aria-label="Pending approval"');
     expect(panel).not.toContain("Command approval requested");

@@ -1,6 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
+  GONE_CHECK_MS,
+  LIVE_EVENTS_KICK_AFTER_MS,
+  LIVE_EVENTS_OPEN_MS,
   LIVE_EVENTS_RESUME_SILENT_MS,
   LIVE_EVENTS_STALE_MS,
   isLivePing,
@@ -13,7 +16,7 @@ import {
   type LiveEventSourceLike,
   type LiveEventsPlatform,
 } from "./live-events";
-import { cloudAsleep, markCloudAwake, resetCloudPowerForTests } from "./cloud-power";
+import { cloudAsleep, cloudGone, markCloudAwake, markCloudGone, resetCloudPowerForTests } from "./cloud-power";
 import { resetTurnLive, turnLive } from "@/state/turn-status";
 
 class FakeTarget {
@@ -441,12 +444,113 @@ describe("a phone app back from the background", () => {
   });
 });
 
+describe("a dial left pending with no answer, as an iOS web view does after a resume or a network change", () => {
+  it("is dialed again when its hello does not come, each wait twice as long, and the hello ends it", () => {
+    const test = harness();
+    const onError = vi.fn();
+    const stop = openLiveEvents({ onFrame: vi.fn(), onError, onSnapshotRequired: async () => true, retryMinMs: 100, retryMaxMs: 100 }, test.platform);
+    vi.advanceTimersByTime(LIVE_EVENTS_OPEN_MS - 1);
+    expect(test.sources).toHaveLength(1);
+    vi.advanceTimersByTime(1);
+    expect(test.sources[0].close).toHaveBeenCalledOnce();
+    expect(onError).toHaveBeenCalledTimes(1);
+    vi.advanceTimersByTime(100);
+    expect(test.sources).toHaveLength(2);
+    vi.advanceTimersByTime(2 * LIVE_EVENTS_OPEN_MS - 1);
+    expect(test.sources).toHaveLength(2);
+    vi.advanceTimersByTime(1 + 100);
+    expect(test.sources).toHaveLength(3);
+    test.sources[2].open();
+    test.sources[2].message({ kind: "hello", cursor: "c:1", resumed: true });
+    vi.advanceTimersByTime(LIVE_EVENTS_STALE_MS - 1);
+    expect(test.sources).toHaveLength(3);
+    stop();
+  });
+
+  it("is dialed again at once when the place answers something else, once the dial has had a moment", () => {
+    const test = harness();
+    const onError = vi.fn();
+    const stop = openLiveEvents({ onFrame: vi.fn(), onError, onSnapshotRequired: async () => true }, test.platform);
+    test.sources[0].open();
+    test.sources[0].message({ kind: "hello", cursor: "c:1", resumed: true });
+    retryLiveEventsNow({ redial: true });
+    expect(test.sources).toHaveLength(2);
+    test.setNow(LIVE_EVENTS_KICK_AFTER_MS - 1);
+    retryLiveEventsNow();
+    expect(test.sources).toHaveLength(2);
+    test.setNow(LIVE_EVENTS_KICK_AFTER_MS);
+    retryLiveEventsNow();
+    expect(test.sources).toHaveLength(3);
+    expect(test.sources[1].close).toHaveBeenCalledOnce();
+    test.sources[2].message({ kind: "hello", cursor: "c:1", resumed: true });
+    test.setNow(10 * LIVE_EVENTS_KICK_AFTER_MS);
+    retryLiveEventsNow();
+    expect(test.sources).toHaveLength(3);
+    stop();
+  });
+});
+
+describe("a dusk cloud that was deleted", () => {
+  it("asks once per check window whether the place is gone, and stops dialing for good once it is", async () => {
+    const test = harness();
+    const onError = vi.fn();
+    let gone = false;
+    const placeGone = vi.fn(async () => gone);
+    const stop = openLiveEvents({ onFrame: vi.fn(), onError, onSnapshotRequired: async () => true, retryMinMs: 100, retryMaxMs: 100 }, { ...test.platform, placeGone });
+    test.sources[0].error();
+    expect(placeGone).toHaveBeenCalledTimes(1);
+    vi.advanceTimersByTime(100);
+    test.sources[1].error();
+    expect(placeGone).toHaveBeenCalledTimes(1);
+    gone = true;
+    test.setNow(GONE_CHECK_MS);
+    vi.advanceTimersByTime(100);
+    test.sources[2].error();
+    expect(placeGone).toHaveBeenCalledTimes(2);
+    await vi.waitFor(() => expect(cloudGone()).toBe(true));
+    const dialed = test.sources.length;
+    vi.advanceTimersByTime(10 * LIVE_EVENTS_STALE_MS);
+    retryLiveEventsNow({ redial: true });
+    test.windowTarget.emit("online");
+    test.windowTarget.emit("focus");
+    expect(test.sources).toHaveLength(dialed);
+    stop();
+  });
+
+  it("closes an open stream the moment the place is known to be gone", () => {
+    const test = harness();
+    const onError = vi.fn();
+    const stop = openLiveEvents({ onFrame: vi.fn(), onError, onSnapshotRequired: async () => true }, test.platform);
+    test.sources[0].open();
+    markCloudGone();
+    expect(test.sources[0].close).toHaveBeenCalledOnce();
+    expect(onError).toHaveBeenCalledOnce();
+    vi.advanceTimersByTime(10 * LIVE_EVENTS_STALE_MS);
+    expect(test.sources).toHaveLength(1);
+    stop();
+  });
+});
+
 describe("live event liveness predicates", () => {
   it("recognizes only ping frames and reconnects at the stale boundary", () => {
     expect(isLivePing({ kind: "ping" })).toBe(true);
     expect(isLivePing({ kind: "message" })).toBe(false);
     expect(shouldReconnectLiveEvents(0, LIVE_EVENTS_STALE_MS - 1)).toBe(false);
     expect(shouldReconnectLiveEvents(0, LIVE_EVENTS_STALE_MS)).toBe(true);
+    expect(shouldReconnectLiveEvents(10_000, 9_999)).toBe(true);
+  });
+});
+
+describe("a computer clock set back", () => {
+  it("still notices a stream that went silent, instead of waiting until the clock catches up", () => {
+    const test = harness({ now: 3_600_000 });
+    const stop = openLiveEvents({ onFrame: vi.fn(), onSnapshotRequired: async () => true, staleMs: 1_000 }, test.platform);
+    test.sources[0].open();
+    test.sources[0].message({ kind: "hello", cursor: "c:1", resumed: true });
+    test.setNow(0);
+    vi.advanceTimersByTime(600);
+    expect(test.sources).toHaveLength(2);
+    stop();
   });
 });
 

@@ -42,8 +42,8 @@ async function freePort(): Promise<number> {
   }
 }
 
-function launchFixture(): Promise<string> {
-  writeFileSync(join(work, "markers.json"), "{}");
+function launchFixture(replies: Record<string, string>): Promise<string> {
+  writeFileSync(join(work, "markers.json"), JSON.stringify(replies));
   writeFileSync(join(work, "tools.json"), "[]");
   const child = spawn(process.execPath, ["--experimental-strip-types", "scripts/control-dusk.ts", "launch"], {
     cwd: repoRoot,
@@ -171,10 +171,23 @@ function patchOwner(owner: Record<string, any>, threads: ReturnType<typeof scrip
   }
 }
 
+/** a made-up photo for a chat to show, at /api/stage-picture/<n> */
+export const stagePictureUrl = (n: number) => `/api/stage-picture/${n}`;
+function stagePicture(n: number): string {
+  const hue = (n * 47) % 360;
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="800"><defs><linearGradient id="g" x2="1" y2="1"><stop offset="0" stop-color="hsl(${hue} 70% 62%)"/><stop offset="1" stop-color="hsl(${(hue + 60) % 360} 60% 40%)"/></linearGradient></defs><rect width="1200" height="800" fill="url(#g)"/><circle cx="${300 + (n % 5) * 120}" cy="380" r="160" fill="rgb(255 255 255 / .35)"/></svg>`;
+}
+
 function startProxy(target: string, threads: () => ReturnType<typeof scripted> | null): Promise<number> {
   const upstream = new URL(target);
   const server = http.createServer((req, res) => {
     const path = req.url ?? "/";
+    const picture = /^\/api\/stage-picture\/(\d+)/.exec(path);
+    if (picture) {
+      res.writeHead(200, { "content-type": "image/svg+xml", "cache-control": "max-age=3600" });
+      res.end(stagePicture(Number(picture[1])));
+      return;
+    }
     const patch = req.method === "GET" && (/^\/api\/bots(\?|$)/.test(path) || path.startsWith("/api/transcripts?") || path.startsWith("/api/notifications") || path in CONNECTED);
     const headers = { ...req.headers, host: upstream.host, ...(patch ? { "accept-encoding": "identity" } : {}) };
     const forward = http.request({ host: upstream.hostname, port: upstream.port, path, method: req.method, headers }, (answer) => {
@@ -238,8 +251,10 @@ export const click = async (page: HeadlessPage, expression: string) => {
 export type Scheme = "light" | "dark";
 export type Stage = Awaited<ReturnType<typeof startStage>>;
 
-export async function startStage(serve: Serve = DEV_SERVER) {
-  const fixture = await launchFixture();
+/** `replies`: the fake engine answers a message holding one of these markers with its text, streamed at
+ * FAKE_CLAUDE_STREAM_CADENCE when that is set */
+export async function startStage(serve: Serve = DEV_SERVER, replies: Record<string, string> = {}) {
+  const fixture = await launchFixture(replies);
   console.log(`fixture ${fixture}`);
   const seeded = await seed(fixture);
   let threads: ReturnType<typeof scripted> | null = null;
@@ -253,7 +268,9 @@ export async function startStage(serve: Serve = DEV_SERVER) {
 
   const profile = mkdtempSync(join(tmpdir(), "dusk-store-chrome-"));
   const page = await openHeadlessChrome(profile);
-  await page.send("Emulation.setDeviceMetricsOverride", { width: 440, height: 956, deviceScaleFactor: 3, mobile: true });
+  // a Pixel 7 for an android run
+  const screen = process.env.DUSK_STAGE_PLATFORM === "android" ? { width: 412, height: 915, deviceScaleFactor: 2.625 } : { width: 440, height: 956, deviceScaleFactor: 3 };
+  await page.send("Emulation.setDeviceMetricsOverride", { ...screen, mobile: true });
   await page.send("Emulation.setTouchEmulationEnabled", { enabled: true });
   await page.send("Emulation.setFocusEmulationEnabled", { enabled: true });
   // the store build marks <html data-mobile-app="ios"> from the native shell, which hides screen view (4.2.7) and every
@@ -265,7 +282,7 @@ export async function startStage(serve: Serve = DEV_SERVER) {
   const open = async (scheme: Scheme, query = "", storage: Record<string, string> = { "dusk.mobile.introSeen": "1" }) => {
     await page.send("Page.navigate", { url: `${base}/?frame=1&scheme=${scheme}${query}` });
     await delay(1200);
-    await page.evaluate(`localStorage.clear(); for (const [k, v] of Object.entries(${js(storage)})) localStorage.setItem(k, v); location.reload()`);
+    await page.evaluate(`localStorage.clear(); sessionStorage.clear(); for (const [k, v] of Object.entries(${js(storage)})) localStorage.setItem(k, v); location.reload()`);
     await delay(2500);
   };
   const home = async (scheme: Scheme) => {

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from "react";
+import { AnimatePresence } from "motion/react";
 import { Hand, Loader2 } from "../../icons";
 
 import { resolveAddressBarInput } from "@/lib/browser-address";
@@ -6,6 +7,7 @@ import { browserStreamAccess, createPreviewStreamClient, type PreviewStreamClien
 import { createLiveStreamClient, type LiveResume } from "@/lib/browser-stream-v1";
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
+import { phoneApp } from "@/lib/store-app";
 import {
   blankPage, browserHeadline, closeLocalBrowser, keepView, keptKey, keptView, localBrowserFixture, useLocalBrowser,
 } from "@/lib/local-browser";
@@ -333,7 +335,8 @@ export function LocalBrowserClosed({ bot, pill, starting = false, onStart }: {
   bot: Bot; pill: RefObject<HTMLButtonElement | null>; starting?: boolean; onStart: () => void;
 }) {
   return (
-    <section data-local-browser="closed" aria-label={t("localBrowser.label", { name: bot.name })} className="flex transition-opacity duration-200 ease-out starting:opacity-0">
+    <section data-local-browser="closed" aria-label={t("localBrowser.label", { name: bot.name })} className={cn("flex transition-opacity duration-200 ease-out starting:opacity-0", phoneApp() && "flex-col items-center gap-4 px-6 pb-6 pt-10 text-center")}>
+      {phoneApp() && <p className="max-w-[300px] text-[15px] leading-[22px] text-ink-secondary">{t("localBrowser.explain", { name: bot.name })}</p>}
       <StartPill ref={pill} onStart={onStart} disabled={starting} />
     </section>
   );
@@ -416,8 +419,8 @@ export function LocalBrowserSection({ bot, after, askFirst = null }: {
       {live ? <LocalBrowserLive key={`${bot.id}\n${bot.threadId ?? ""}`} bot={bot} from={from} started={override?.kind === "started"} onClosed={ended("closed")} onEnded={ended("ended")} />
         : known || late || override ? <LocalBrowserClosed bot={bot} pill={pill} starting={checking} onStart={start} /> : null}
       <div ref={below} className="mt-3 empty:hidden">{(known || late) && !wide && after}</div>
-      {asking && askFirst && <MacPermissionsDialog bridge={askFirst} onClose={() => setAsking(false)} onAllowed={openBrowser}
-        relaunch={typeof window.duskDesktop?.relaunch === "function" ? () => void window.duskDesktop!.relaunch!() : null} />}
+      <AnimatePresence>{asking && askFirst && <MacPermissionsDialog key="mac-permissions-dialog" bridge={askFirst} onClose={() => setAsking(false)} onAllowed={openBrowser}
+        relaunch={typeof window.duskDesktop?.relaunch === "function" ? () => void window.duskDesktop!.relaunch!() : null} />}</AnimatePresence>
     </>
   );
 }

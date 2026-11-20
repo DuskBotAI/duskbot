@@ -1,0 +1,140 @@
+{
+  "path": "/integrations/reddit",
+  "type": "integration",
+  "title": "Reddit bot for finding mentions worth a human reply",
+  "nav": "reddit",
+  "h1": "a reddit bot that reads the thread before you reply",
+  "description": "Find product mentions in Reddit posts, read questions in context, and compare a draft with subreddit rules before you decide to join the conversation.",
+  "keyword": "reddit bot",
+  "keywords": [
+    "reddit ai assistant",
+    "reddit ai agent"
+  ],
+  "answer": "**the title mentions your product. the replies may already have solved the problem.** a reddit bot can search for posts, open the discussion and bring the unanswered question to your dusk chat. ask it to read the community rules before drafting a response. you decide whether joining that thread helps.",
+  "updated": "2026-11-20",
+  "review": {
+    "status": "approved",
+    "by": "lead agent, after four independent reviewers read every page against seo/facts (2026-11-20); every finding applied",
+    "at": "2026-11-20"
+  },
+  "voice": 2,
+  "tags": [
+    "communities",
+    "research",
+    "feedback"
+  ],
+  "connectors": [
+    "reddit"
+  ],
+  "related": [
+    "/routines/reddit-mentions-watch",
+    "/use-cases/customer-support-inbox",
+    "/integrations/slack"
+  ],
+  "art": {
+    "label": "Reddit",
+    "props": [
+      "p-bubbles"
+    ],
+    "bubble": "worth a reply"
+  },
+  "og_line": "bring the question back with its context.",
+  "app": {
+    "name": "Reddit",
+    "toolkit": "reddit",
+    "intro": "**start with what someone actually asked.** search returns posts. opening one gives the bot its discussion. finding a brand mention is a reason to read the thread, especially when the same word also names something else.",
+    "highlight": [
+      {
+        "slug": "REDDIT_SEARCH_ACROSS_SUBREDDITS",
+        "use": "find recent posts that use the product name"
+      },
+      {
+        "slug": "REDDIT_RETRIEVE_REDDIT_POST",
+        "use": "browse recent submissions from a particular subreddit"
+      },
+      {
+        "slug": "REDDIT_RETRIEVE_POST_COMMENTS",
+        "use": "read the original question and the visible replies together"
+      },
+      {
+        "slug": "REDDIT_EXPAND_MORE_COMMENTS",
+        "use": "retrieve additional replies under a collapsed branch when allowed"
+      },
+      {
+        "slug": "REDDIT_GET_SUBREDDIT_RULES",
+        "use": "read rules about links or promotion before preparing a draft"
+      },
+      {
+        "slug": "REDDIT_LIST_SUBREDDIT_POST_FLAIRS",
+        "use": "look up post flairs available to the connected account"
+      },
+      {
+        "slug": "REDDIT_POST_REDDIT_COMMENT",
+        "use": "publish the reviewed text as a reply to the chosen post or comment"
+      }
+    ],
+    "setup": "**give the bot your product's spelling and the communities you follow.** include a phrase that rules out a common false match. choose search, post listings, rules and comment reads for a research bot. it can leave every suggested response in your dusk chat."
+  },
+  "routines_intro": "**ask for a thread link beside each finding.** you should be able to open the conversation and see why the bot picked it. give it the relevant subreddit names and any draft you want reviewed.",
+  "routines": [
+    {
+      "name": "mentions that need help",
+      "message": "every weekday at 9, search recent reddit posts for my product name. read the visible replies on matching threads. bring me links to questions about using the product that still lack an answer. flag partial threads. skip name collisions and don't post.",
+      "when": "weekdays at 09:00",
+      "output": "support questions with the discussion attached"
+    },
+    {
+      "name": "questions behind a feature request",
+      "message": "every friday at noon, read this week's posts in <subreddit> about exports. look for the format people needed and the job they were doing. group similar requests here with links. keep a one-off request separate from a repeated one.",
+      "when": "fridays at 12:00",
+      "output": "a short research note with evidence for each grouping"
+    },
+    {
+      "name": "would this community accept the draft",
+      "message": "each thursday at 2, compare this draft with the written rules for <subreddit>: <paste the community post draft here>. quote any rule that affects the draft. list available post flairs that fit. if you see no draft, skip the run. leave publishing to me.",
+      "when": "thursdays at 14:00",
+      "output": "rules and flair choices for the person writing the post"
+    }
+  ],
+  "asks": "**a draft in dusk chat stays there until you choose to publish.** posting a reddit comment or sending a private message asks first by default. read the destination and text before approving.\n\ncareful with **Full access**: a bot there with no sending rule can send up to 25 a day without asking. give it **Ask every time**.",
+  "cannot": [
+    "**find every mention inside comments through post search.** search omits non-post matches. read comments on a known thread when that's where the discussion happened.",
+    "**expand every reply with read-only access.** dusk treats the comment expansion action as a change. report the gap if the initial thread contains more replies.",
+    "**promise that a posted reply stays visible.** a locked thread can reject a comment. moderation filters can hide it even after a successful submission."
+  ],
+  "sections": [
+    {
+      "h": "when to leave a thread alone",
+      "md": "**skip the bot if the goal is to drop the same pitch everywhere.** a support answer should address the question the author asked. if another reader already gave the fix, the most useful result may be a link for your help docs and no reply."
+    }
+  ],
+  "faq": [
+    {
+      "q": "can a reddit ai assistant look for my brand in real time?",
+      "a": "**the mentions routine searches on a schedule.** its results cover posts returned for your query. choose a time window that includes the interval since the last run."
+    },
+    {
+      "q": "why is the flair list empty?",
+      "a": "**the connected account may lack access to set a flair.** an empty list doesn't settle whether the community requires one. read the rules before preparing the post."
+    }
+  ],
+  "worked": {
+    "intro": "an example from a product team's morning review.",
+    "before": "ramona finds a post about exporting a parts list. the title mentions her tool. a reader already explained the pdf option.",
+    "after": "answered: how to export a pdf.\nstill open: can the machinist get editable rows? read the follow-up before drafting a reply."
+  },
+  "sources": [
+    {
+      "label": "dusk bot docs: connected apps",
+      "url": "/docs/files-and-apps"
+    },
+    {
+      "label": "dusk bot docs: routines",
+      "url": "/docs/routines"
+    },
+    {
+      "label": "dusk bot docs: sending permissions",
+      "url": "/docs/computer"
+    }
+  ]
+}

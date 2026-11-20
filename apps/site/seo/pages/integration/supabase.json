@@ -1,0 +1,132 @@
+{
+  "path": "/integrations/supabase",
+  "type": "integration",
+  "title": "Supabase AI assistant for migrations, backups and disk use",
+  "nav": "supabase",
+  "h1": "a supabase bot for the questions before a release",
+  "description": "Compare applied migrations across Supabase projects, inspect backups and flag high disk use. Give the release engineer a read-only brief.",
+  "keyword": "supabase bot",
+  "keywords": [
+    "supabase ai assistant",
+    "supabase ai agent"
+  ],
+  "answer": "**staging has the new column. does production have the migration that added it?** give a dusk bot the references for both supabase projects. it can compare applied migration versions, read backup records and report disk use. keep production read only. the resulting list tells the release engineer where to look before the rollout.",
+  "updated": "2026-11-20",
+  "review": {
+    "status": "approved",
+    "by": "lead agent, after four independent reviewers read every page against seo/facts (2026-11-20); every finding applied",
+    "at": "2026-11-20"
+  },
+  "voice": 2,
+  "tags": [
+    "database",
+    "migrations",
+    "operations"
+  ],
+  "connectors": [
+    "supabase"
+  ],
+  "related": [
+    "/integrations/sentry",
+    "/integrations/github",
+    "/use-cases/bug-triage"
+  ],
+  "art": {
+    "logo": "supabase",
+    "props": [
+      "s-server"
+    ],
+    "bubble": "did production get it"
+  },
+  "og_line": "read the migration history on both sides.",
+  "app": {
+    "name": "Supabase",
+    "toolkit": "supabase",
+    "intro": "**identify the project before interpreting its records.** a clean backup list from the wrong environment answers nothing. project details include the region and organization. confirm those once, then use each project's reference for the recurring reads.",
+    "highlight": [
+      {
+        "slug": "SUPABASE_GET_PROJECT",
+        "use": "identify the project and its region before comparing environments"
+      },
+      {
+        "slug": "SUPABASE_LIST_MIGRATION_HISTORY",
+        "use": "compare the applied migration versions on both projects"
+      },
+      {
+        "slug": "SUPABASE_GET_MIGRATION",
+        "use": "inspect a particular entry when one version needs explaining"
+      },
+      {
+        "slug": "SUPABASE_GET_BACKUP_SCHEDULE",
+        "use": "read the production backup schedule"
+      },
+      {
+        "slug": "SUPABASE_LIST_BACKUPS",
+        "use": "look for actual backup records covering the expected window"
+      },
+      {
+        "slug": "SUPABASE_GET_DISK_UTILIZATION",
+        "use": "bring back disk use for the project under review"
+      }
+    ],
+    "setup": "**label the two project references in chat.** connect supabase, pick the bot that handles release reviews and allow only the reads it needs. ask it to return each project's region beside its reference. correct a swapped label before the first scheduled comparison."
+  },
+  "routines_intro": "**use your own operating limits.** tell the bot when you expect a backup and the disk threshold your team acts on. make the unit explicit. a percentage and an amount of space need different comparisons.",
+  "routines": [
+    {
+      "name": "migration gap before rollout",
+      "message": "every weekday at 3, compare the applied migration versions in my staging and production projects. list versions unique to each side. for the newest difference, read its migration entry and summarize its purpose here. if the histories match, give me one line. don't run any sql.",
+      "when": "weekdays at 15:00",
+      "output": "versions to reconcile before rollout"
+    },
+    {
+      "name": "backup inventory",
+      "message": "each monday at 8, read production's backup schedule and backup list. compare the most recent expected backup with the available records. show the scheduled time and latest record time here. distinguish an empty list from an access error. don't attempt a restore.",
+      "when": "mondays at 08:00",
+      "output": "evidence for the operator who owns recovery"
+    },
+    {
+      "name": "disk headroom",
+      "message": "daily at 11, read disk use for my production project. compare it with <threshold, e.g. 80%>. bring me the value and the project reference if it crosses that line. if the units don't match, show what came back and ask which limit to use.",
+      "when": "daily at 11:00",
+      "output": "a threshold crossing tied to the right database"
+    }
+  ],
+  "asks": "**the release review needs no permission to apply a migration.** give the bot the exact reads above. applying migrations and restoring data change the database. a send approval won't stop those writes. keep both actions out of the release bot's permissions.",
+  "cannot": [
+    "**prove two schemas match from their migration lists.** those lists show the versions each project recorded. changes made outside migrations need a separate comparison.",
+    "**prove a restore will work by listing backups.** backup availability depends on the project's plan and setup. a recovery drill tests what a list can't.",
+    "**repair capacity by reporting disk use.** the disk action reads utilization. a person still has to choose what to retain or resize."
+  ],
+  "sections": [
+    {
+      "h": "who should own the release",
+      "md": "**keep the deployment in the team's release process.** if you need a migration applied exactly once in order, use that process. give the bot the narrower question that often holds a release up. which recorded version is missing from which environment?"
+    }
+  ],
+  "faq": [
+    {
+      "q": "does the migration comparison need access to customer rows?",
+      "a": "**no. compare the recorded versions by project reference.** the history and migration entry actions supply the release evidence. leave table reads out of this job."
+    },
+    {
+      "q": "why report a backup schedule and a backup record?",
+      "a": "**they answer different questions.** the schedule tells you when to expect a backup. the list shows what the project actually returns. investigate a gap before relying on that window."
+    }
+  ],
+  "worked": {
+    "intro": "a made-up staging and production comparison.",
+    "before": "owen expects the parcel status migration in both projects. staging lists version 202611180915. production's history ends with the previous version.",
+    "after": "staging only: 202611180915, adds parcel status.\nrelease question: should this version be in production yet?"
+  },
+  "sources": [
+    {
+      "label": "dusk bot docs: connected apps",
+      "url": "/docs/files-and-apps"
+    },
+    {
+      "label": "dusk bot docs: routines",
+      "url": "/docs/routines"
+    }
+  ]
+}

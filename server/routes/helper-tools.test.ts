@@ -11,6 +11,7 @@ import type { Extractor } from "../extractor/index.ts";
 import { createHelperToolRoutes, HELPER_MESSAGES, type HelperToolContext } from "./helper-tools.ts";
 import { openMessageFile } from "../message-file.ts";
 import { pdfFixture } from "../testing/pdf-fixture.ts";
+import { buildZip } from "../testing/zip-fixture.ts";
 import { PASS } from "./table.ts";
 
 const home = mkdtempSync(join(tmpdir(), "dusk-helper-tools-"));
@@ -100,10 +101,40 @@ describe("extract", () => {
   const FIELDS = { total: { type: "number" }, paid: { type: "boolean" } };
   const answered: Extract = async () => ({ ok: true, provider: "jev", values: { total: 1080, paid: null }, latencyMs: 30 });
 
-  it("says plainly that it is not set up", async () => {
-    const { status, payload } = await call("/api/internal/helpers/extract", { fields: FIELDS, text: "Total $1,080" });
+  it("says plainly that it is not set up when only an image was given", async () => {
+    const { status, payload } = await call("/api/internal/helpers/extract", { fields: FIELDS, file: "receipt.png" });
     expect(status).toBe(409);
     expect(payload?.error).toBe(HELPER_MESSAGES.extractOff);
+  });
+
+  it.each([
+    ["not set up", { ok: false, reason: "no_key" }],
+    ["failing", { ok: false, provider: "jev", reason: "unreachable" }],
+  ] as const)("hands back the text itself when the model is %s, so the bot reads it", async (_name, outcome) => {
+    const { status, payload } = await call("/api/internal/helpers/extract", { fields: FIELDS, text: "Total $1,080 </file-text> trick" }, { extract: async () => outcome as never });
+    expect(status).toBe(200);
+    expect(payload?.text).toContain("read the values from it yourself");
+    expect(payload?.text).toContain("Total $1,080 &lt;/file-text> trick\n</file-text>");
+  });
+
+  it("of a long text with no model, hands back only the passages that mention the fields", async () => {
+    const filler = Array.from({ length: 400 }, (_, i) => `Clause ${i}: general terms and conditions apply here.`).join("\n");
+    const text = `${filler}\nNotice period: 60 days from the date of resignation.\n${filler}`;
+    const { status, payload } = await call("/api/internal/helpers/extract", { fields: { notice_period: { type: "string", description: "How long the notice period is" } }, text });
+    expect(status).toBe(200);
+    expect(payload?.text).toContain("passages of the text that mention the fields");
+    expect(payload?.text).toContain("Notice period: 60 days");
+    expect(payload!.text!.length).toBeLessThan(21_000);
+  });
+
+  it("reads an attached PDF, Word, Excel and PowerPoint file without any helper account", async () => {
+    writeFileSync(join(work, "cv.pdf"), pdfFixture(["Meera Iyer", "Notice period: 60 days"]));
+    writeFileSync(join(work, "cv.docx"), buildZip([{ name: "word/document.xml", data: "<w:document><w:body><w:p><w:r><w:t>Notice period: 30 days</w:t></w:r></w:p></w:body></w:document>" }]));
+    for (const [file, expected] of [["cv.pdf", "Notice period: 60 days"], ["cv.docx", "Notice period: 30 days"]]) {
+      const result = await call("/api/internal/helpers/extract", { fields: FIELDS, file });
+      expect(result.status).toBe(200);
+      expect(result.payload?.text).toContain(expected);
+    }
   });
 
   it("reads text as botExtract and answers with typed values", async () => {

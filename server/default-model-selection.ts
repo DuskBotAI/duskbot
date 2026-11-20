@@ -18,6 +18,8 @@ export interface DefaultSelectionContext {
   refusal?: (instance: SelectableInstance) => string | undefined;
   /** What this AI's test message showed: true it answered, false it didn't, undefined not tested (server/tested-ai.ts). */
   answered?: (instance: SelectableInstance) => boolean | undefined;
+  /** The person picked `preferred` themselves: kept even on OpenCode's free backup once another AI is ready. */
+  preferredChosen?: boolean;
 }
 
 /** The shared ranking (shared/ai-ranking.ts), with an AI that answered its test ahead of one that didn't or wasn't tested.
@@ -75,7 +77,7 @@ export function selectDefaultModelSelection(
   preferred?: ModelSelection,
   context: DefaultSelectionContext = {},
 ): ModelSelection {
-  if (preferred && (preferred.instanceId || preferred.model) && !freeBackupOverConnected(instances, preferred, context)) {
+  if (preferred && (preferred.instanceId || preferred.model) && (context.preferredChosen || !freeBackupOverConnected(instances, preferred, context))) {
     const instance = instances.find((candidate) => candidate.instanceId === preferred.instanceId);
     if (
       instance?.snapshot.state !== "available" ||

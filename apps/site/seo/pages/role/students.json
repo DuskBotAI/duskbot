@@ -11,7 +11,7 @@
     "best ai agent for students"
   ],
   "answer": "**turn the notes you keep rereading into questions you can actually answer.** give the bot your reading list, lecture notes and current deadlines. get short reading sessions, flashcard drafts and a view of what's due next. dusk is free for personal use on your computer; ai costs stay separate. follow your course rules and keep assessed work yours.",
-  "updated": "2026-11-12",
+  "updated": "2026-11-20",
   "review": {
     "status": "approved",
     "by": "lead agent: independent reviewer pass against seo/facts (4 reviewers), every finding applied, automated gate",
@@ -101,7 +101,7 @@
     },
     {
       "q": "can i text the study bot from my phone?",
-      "a": "**yes, through a paired phone browser.** add it to your home screen if useful. it sends no notifications. bots on your computer answer only while it stays on with dusk running."
+      "a": "**yes. pair your phone before heading to class.** on iphone, get dusk from the app store for reply alerts. on android, open the paired browser to read replies. it sends no notifications. bots on your computer answer only while it stays on with dusk running."
     },
     {
       "q": "will it know all my assignment deadlines?",

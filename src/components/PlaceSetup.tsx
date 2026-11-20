@@ -171,6 +171,7 @@ export function InstallSetup({ way, title: named, onBack, onClose }: { way?: Lin
   const asked = useRef(false);
   // until the first line is asked for, a server linked before reads as "starting", never as this setup's "connected"
   const [making, setMaking] = useState(true);
+  const [home, setHome] = useState<{ id: string; name: string } | null>(null);
   // what the server asked for stays shown once it has linked (the ssh command)
   const lastAsk = useRef<VpsLinkAsk | null>(null);
   const alive = useRef(true);
@@ -187,9 +188,38 @@ export function InstallSetup({ way, title: named, onBack, onClose }: { way?: Lin
     asked.current = true;
     const underway = view.stage === "command" || view.stage === "installing" || (view.stage === "moving" && view.move?.status === "running");
     if (underway) { setMaking(false); return; }
-    void run(() => bridge.start()).finally(() => { if (alive.current) setMaking(false); });
+    void Promise.resolve().then(() => bridge.where()).catch(() => null).then((where) => {
+      if (!alive.current) return;
+      if (where?.place === "vps" && where.server) { setHome(where.server); setMaking(false); return; }
+      void run(() => bridge.start()).finally(() => { if (alive.current) setMaking(false); });
+    });
   }, [bridge, ready, view, run]);
   if (!bridge) return null;
+
+  if (home) {
+    const reconnect = () => {
+      setBusy(true);
+      setError("");
+      void (window.duskDesktop?.workspaces?.open?.(home.id) ?? Promise.reject(new Error("no place")))
+        .then(onClose, () => { if (alive.current) setError(t("placeSetup.openFailed", { name: home.name })); })
+        .finally(() => { if (alive.current) setBusy(false); });
+    };
+    const another = () => { setHome(null); setMaking(true); void run(() => bridge.start()).finally(() => { if (alive.current) setMaking(false); }); };
+    return <div className={onBack ? BODY : INLINE} data-install-phase="found">
+      {onBack && <BackLink label={t("rail.back")} onClick={onBack} />}
+      <div className="flex items-start gap-4">
+        <span className="place-mark grid size-12 shrink-0 place-items-center rounded-[12px] bg-ink/[0.04]"><PlaceArt name="server" size={33} /></span>
+        <Heading title={t("placeSetup.found.title", { name: home.name })} sub={t("placeSetup.found.body")} />
+      </div>
+      {error && <p role="alert" className="text-[13px] leading-[18px] text-danger">{error}</p>}
+      <div className="flex flex-wrap items-center gap-2">
+        <button type="button" data-autofocus="" data-setup-reconnect="" className="ui-button ui-button-primary" disabled={busy} onClick={reconnect}>
+          {busy && <Loader2 size={14} className="mr-2 animate-spin motion-reduce:animate-none" aria-hidden="true" />}{t("placeSetup.found.reconnect")}
+        </button>
+        <button type="button" data-setup-another="" className="ui-button" disabled={busy} onClick={another}>{t("placeSetup.found.another")}</button>
+      </div>
+    </div>;
+  }
 
   const shown: VpsLinkView = error ? { ...view, error } : view;
   const phase = making && !error ? "starting" : installPhase(shown, now);

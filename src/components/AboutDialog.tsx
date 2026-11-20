@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import { AnimatePresence } from "motion/react";
 import { createPortal } from "react-dom";
 
 import {
@@ -16,6 +17,7 @@ import { useOtherServerName } from "@/lib/other-server";
 import { copyText } from "@/lib/copy-text";
 import { formCloseCls, formSheetCls, mdSecondaryCls, rowHintCls, useDialogKeys } from "./ui/GrokDialog";
 import { Icon } from "./Icon";
+import { ScrimMotion, SheetMotion, useDialogMotion } from "./ui/SheetMotion";
 import { cn } from "@/lib/cn";
 
 /** The app's own version first; `server` (useOtherServerName: set only when the app's window shows another server) adds a
@@ -33,12 +35,13 @@ export function aboutVersionLines({ app, bundle, platform, server }: {
 
 /** Grok's About: the icon, the name and version, Copy version info, and a close at the corner. */
 export function AboutDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
-  return open ? <AboutSheet onClose={onClose} /> : null;
+  return <AnimatePresence>{open && <AboutSheet key="about" onClose={onClose} />}</AnimatePresence>;
 }
 
 function AboutSheet({ onClose }: { onClose: () => void }) {
   const sheet = useRef<HTMLDivElement>(null);
   const close = useDialogKeys(sheet, onClose);
+  const played = useDialogMotion();
   const server = useOtherServerName(true);
   const [copied, setCopied] = useState(false);
   const lines = aboutVersionLines({ app: window.duskDesktop?.app, bundle: appVersion(), platform: platformLabel(window.duskDesktop?.platform), server });
@@ -46,9 +49,10 @@ function AboutSheet({ onClose }: { onClose: () => void }) {
   const copy = () => void copyText([productName(), ...lines].join("\n")).then((result) => setCopied(result === "copied"));
 
   return createPortal(
-    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
-      <div aria-hidden="true" className="ui-dialog-scrim absolute inset-0" onMouseDown={() => close.current()} />
-      <div
+    <div {...played.layer} className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+      <ScrimMotion {...played.scrim} aria-hidden="true" className="ui-dialog-scrim absolute inset-0" onMouseDown={() => close.current()} />
+      <SheetMotion
+        {...played.sheet}
         ref={sheet}
         role="dialog"
         aria-modal="true"
@@ -75,7 +79,7 @@ function AboutSheet({ onClose }: { onClose: () => void }) {
         <button type="button" data-autofocus onClick={copy} className={cn(mdSecondaryCls, "mt-4")}>
           {copied ? t("about.copied") : t("about.copyVersion")}
         </button>
-      </div>
+      </SheetMotion>
     </div>,
     document.body,
   );

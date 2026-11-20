@@ -1,0 +1,76 @@
+{
+  "path": "/glossary/ai-routine",
+  "type": "glossary",
+  "title": "What is an AI routine? Give a repeat job a clear finish",
+  "nav": "ai routine",
+  "h1": "what is an ai routine?",
+  "description": "Turn a recurring question into an AI routine. Choose when it starts, what a useful answer looks like, and what silence should mean.",
+  "keyword": "ai routine",
+  "keywords": [
+    "what is an ai routine",
+    "scheduled ai routine"
+  ],
+  "answer": "**an ai routine is a job you describe once and have a bot repeat.** a time or an event starts it. the useful part is the judgment you want each time, like spotting a shortage before a class. tell the bot what deserves your attention and when it can stay quiet.",
+  "updated": "2026-11-20",
+  "review": {
+    "status": "approved",
+    "by": "lead agent, after four independent reviewers read every page against seo/facts (2026-11-20); every finding applied",
+    "at": "2026-11-20"
+  },
+  "tags": [
+    "routine",
+    "scheduling",
+    "glossary"
+  ],
+  "connectors": [],
+  "related": [
+    "/scheduled-ai-tasks",
+    "/glossary/background-agent",
+    "/glossary/always-on-ai-agent"
+  ],
+  "art": {
+    "props": [
+      "s-clock",
+      "s-notebook"
+    ],
+    "bubble": "enough clay for friday?"
+  },
+  "og_line": "give the repeat job a finish line.",
+  "definition": "an ai routine pairs a repeatable task with a time or event that tells the bot when to do it.",
+  "example": "**florence counts bags of clay on thursdays.** here's a sample routine for her studio.\n\n“every thursday at four, compare the clay count in the stock tab of the studio sheet with friday's class list in the same sheet. tell me here if we're short. if the count is over a week old, ask for a fresh count. otherwise, stay quiet if we have enough.”",
+  "sections": [
+    {
+      "h": "what makes silence useful?",
+      "md": "**missing information deserves its own answer.** an empty shelf and a blank entry mean different things. give the routine an old count on purpose for its first run. it should flag the date. if it reports plenty of clay, fix that instruction before relying on it."
+    },
+    {
+      "h": "set the rhythm in dusk bot",
+      "md": "**text the job to your bot and read the next run on its card.** the card lets you edit, pause or undo the routine. ask which time zone it uses if the hour looks odd.[^1][^2]\n\nopen automations to see the run history. if you expected a shortage report and got silence, first look for a run at the right time.[^1]"
+    },
+    {
+      "h": "when a reminder is enough",
+      "md": "**use a calendar reminder if all you need is a nudge to count the clay.** dusk bot earns its place when someone needs to compare the count with another piece of information. if nobody records stock, a routine has nothing reliable to compare."
+    }
+  ],
+  "faq": [
+    {
+      "q": "does a routine need a clock?",
+      "a": "no. an event in a connected app can start a dusk bot routine too. choose the event when the work has to follow a change.[^1]"
+    },
+    {
+      "q": "what do i do when the class takes a break?",
+      "a": "pause the routine on its card. when term starts again, review the next run and update the stock and class lists before you rely on another report.[^1]"
+    }
+  ],
+  "sources": [
+    {
+      "label": "dusk bot docs: routines",
+      "url": "/docs/routines"
+    },
+    {
+      "label": "dusk bot docs: troubleshooting",
+      "url": "/docs/troubleshooting"
+    }
+  ],
+  "voice": 2
+}

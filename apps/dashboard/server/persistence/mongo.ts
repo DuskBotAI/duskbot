@@ -1,15 +1,17 @@
 import { hostname } from "node:os";
 import { randomBytes } from "node:crypto";
-import { MongoClient, MongoServerError } from "mongodb";
+import { MongoClient } from "mongodb";
 import type { AnyBulkWriteOperation, Db, Document } from "mongodb";
 import { createDiffBackend } from "./diff-backend.ts";
 import type { LoadedData, WriteBatch } from "./diff-backend.ts";
 import { LOGS, STORE_LAYOUTS } from "./layouts.ts";
 import type { StoreLayout } from "./layouts.ts";
+import { acquireLease, LEASE_ID, LEASE_MS, type LeaseCollection } from "./lease.ts";
+
+export { holderGone } from "./lease.ts";
 
 type Row = Document & { _id: string };
-const LEASE_ID = "account-service";
-const LEASE_MS = 30_000, RENEW_MS = 10_000, ACQUIRE_WAIT_MS = 75_000;
+const RENEW_MS = 10_000, ACQUIRE_WAIT_MS = 75_000;
 /** the date copy of a layout's `expireAt` field that its ttl index watches; never part of a store's state */
 const EXPIRE_FIELD = "_expireAt";
 
@@ -36,15 +38,6 @@ async function load(db: Db, layouts: Record<string, StoreLayout>): Promise<Loade
   return { roots: new Map(roots.map(doc => [doc._id, doc])), rows: new Map(collections.map((name, index) => [name, rows[index]!.map(strip)])) };
 }
 
-/** A lease whose holder ran on `host` as a process that is gone. Another host's holder is never judged from here. */
-export function holderGone(holder: { host?: unknown; pid?: unknown }, host: string, alive = processAlive): boolean {
-  return holder.host === host && typeof holder.pid === "number" && Number.isInteger(holder.pid) && holder.pid > 0 && holder.pid !== process.pid && !alive(holder.pid);
-}
-
-function processAlive(pid: number): boolean {
-  try { process.kill(pid, 0); return true; } catch (error) { return (error as NodeJS.ErrnoException).code !== "ESRCH"; }
-}
-
 /**
  * The account service's state in MongoDB. One process writes at a time: it holds a lease in `locks` (renewed every
  * 10 s, 30 s long) and every write checks the lease inside its transaction, so a process that lost it can never write.
@@ -59,27 +52,11 @@ export async function openMongoBackend(options: { uri: string; db: string; layou
   if (!hello.setName) { await client.close(); throw new Error("MongoDB must run as a replica set (transactions): see docs/mongodb.md."); }
   const locks = db.collection<{ _id: string; owner: string; host: string; pid: number; expiresAt: Date }>("locks");
   const owner = `${hostname()}:${process.pid}:${randomBytes(6).toString("hex")}`;
-  const deadline = Date.now() + (options.acquireWaitMs ?? ACQUIRE_WAIT_MS);
-  for (;;) {
-    try {
-      await locks.updateOne({ _id: LEASE_ID, $or: [{ owner }, { expiresAt: { $lt: new Date() } }] },
-        { $set: { owner, host: hostname(), pid: process.pid, expiresAt: new Date(Date.now() + LEASE_MS) } }, { upsert: true });
-      break;
-    } catch (error) {
-      if (!(error instanceof MongoServerError && error.code === 11000)) { await client.close(); throw error; }
-      // a process on this host that died holding it (a start that crashed after taking it, a kill) is not waited out:
-      // every restart after such a crash waited its 30 s (2026-11-12)
-      const holder = await locks.findOne({ _id: LEASE_ID });
-      if (holder && holderGone(holder, hostname())) {
-        const taken = await locks.updateOne({ _id: LEASE_ID, owner: holder.owner },
-          { $set: { owner, host: hostname(), pid: process.pid, expiresAt: new Date(Date.now() + LEASE_MS) } });
-        if (taken.modifiedCount === 1) { log(`took the writer lease from process ${holder.pid}, which is no longer running`); break; }
-        continue;
-      }
-      if (Date.now() > deadline) { await client.close(); throw new Error("Another account service holds this database's writer lease."); }
-      log("another account service holds the writer lease; waiting");
-      await new Promise(resolve => setTimeout(resolve, 2000));
-    }
+  try {
+    await acquireLease(locks as unknown as LeaseCollection, { owner, waitMs: options.acquireWaitMs ?? ACQUIRE_WAIT_MS, log });
+  } catch (error) {
+    await client.close();
+    throw error;
   }
   let lost = false;
   const loseLease = () => {
@@ -132,10 +109,10 @@ export async function openMongoBackend(options: { uri: string; db: string; layou
     db,
     /** another database on the same connection, read only by this service (the site's waitlist) */
     sibling: (name: string) => client.db(name),
-    /** writes what is pending, gives the lease back and disconnects */
-    async close() {
+    /** writes what is pending (for up to `flushMs`), gives the lease back and disconnects */
+    async close(flushMs = 15_000) {
       clearInterval(renew);
-      try { await backend.flush(15_000); } catch { log("state was not fully written before shutdown"); }
+      try { await backend.flush(flushMs); } catch { log("state was not fully written before shutdown"); }
       await locks.deleteOne({ _id: LEASE_ID, owner }).catch(() => {});
       await client.close();
     },

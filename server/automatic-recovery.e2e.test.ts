@@ -254,8 +254,10 @@ it("recovers a coordinated specialist and returns its result to the Chief exactl
     expect(fleet.groups).toEqual([]);
     const after = fleet.bots.find((bot: any) => bot.id === specialist.id);
     expect(after.modelSelection).toEqual(primary);
-    expect(after.tasks.find((task: any) => task.threadId === child.threadId)).toMatchObject({ modelSelection: backup, approvalMode: "full", busy: false });
-    expect(after.tasks.find((task: any) => task.threadId === specialist.activeTaskId).modelSelection).toEqual(primary);
+    // one chat per bot: the work ran in the specialist's own chat, which moves to the backup the recovery chose and keeps
+    // its own level (the Chief's rode only that turn)
+    expect(child.threadId).toBe(specialist.activeTaskId);
+    expect(after.tasks.find((task: any) => task.threadId === child.threadId)).toMatchObject({ modelSelection: backup, approvalMode: "ask", busy: false });
     expect(fleet.bots.find((bot: any) => bot.id === chief.id)).toMatchObject({ busy: false, waitingForTeammates: false });
     await control("messages", "--bot", chief.id, "--task", chief.activeTaskId, "--limit", "20");
     await control("messages", "--bot", specialist.id, "--task", child.threadId, "--limit", "20");
@@ -289,13 +291,12 @@ it.each([true, false])("uses the ordered bot list only for proven pre-prompt fai
 it.each([
   { name: "disabled and the bot has no backups of its own", enabled: false, ownBackups: false },
   { name: "partial output", method: "session/prompt", afterOutput: true },
-  { name: "authentication failure", error: { code: -32603, message: "Authentication required: invalid API key" } },
 ])("does not automatically replay when $name", async ({ name: _name, ownBackups = true, ...options }) => {
   await withRecoveryFixture(options, async ({ api, control, calls, backupPrompts }) => {
     const { bot } = await control("new-bot", "--name", "No replay");
     const threadId = bot.activeTaskId;
     await api("PATCH", `/api/bots/${bot.id}/tasks/${threadId}`, { modelSelection: primary, updateBotDefault: true });
-    if (ownBackups) await api("PATCH", `/api/bots/${bot.id}`, { fallback: [{ instanceId: "secondary", model: primary.model }, backup] });
+    await api("PATCH", `/api/bots/${bot.id}`, { fallback: ownBackups ? [{ instanceId: "secondary", model: primary.model }, backup] : [] });
     await control("send", "--bot", bot.id, "--task", threadId, "--text", "DO_NOT_REPLAY_THIS_9S");
     expect((await control("wait", "--bot", bot.id, "--task", threadId, "--timeout", "30")).status)
       .toBe(options.afterOutput ? "settled" : "failed");

@@ -82,5 +82,8 @@ describe("a bot's computer that could not be reached, in a chat", () => {
     expect(note).toContain("no computer is mounted this turn");
     expect(note).not.toMatch(/docker|EOF|%2F/i);
     expect(computerSkippedNote("the VPS is down", true)).toContain("Team incidents report");
+    const gone = computerSkippedNote(RAW, false, true);
+    expect(gone).toContain("set it up again in Settings > Computers");
+    expect(gone).not.toMatch(/try again in a minute|docker|EOF/i);
   });
 });

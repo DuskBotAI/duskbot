@@ -1,20 +1,16 @@
-import { ArrowUpRight, KeyRound, Loader2, RefreshCw } from "../icons";
 import { useState } from "react";
 import { useStore } from "@/state/store";
-import { EngineGroupLabel } from "@/components/EngineGroupLabel";
-import { EngineSetup } from "@/components/EngineSetup";
-import { installsHere } from "@/state/engine-install";
-import { InstanceProviderMark } from "@/components/ProviderIcons";
 import { WindowDragStrip } from "@/components/DesktopCapabilities";
-import { splitEngineRail } from "@/lib/engine-rail";
 import { t } from "@/lib/i18n";
-import { productName } from "../lib/brand";
-import { openKeySettings } from "./keys/key-focus";
+import { AiCards } from "./onboarding/AiCards";
+import { ConnectAiDialog } from "./onboarding/ConnectAi";
+import { StepArt, StepFrame } from "./onboarding/FunnelSteps";
 
 export function NoEngines() {
-  const { state, dispatch, refreshInstances } = useStore();
+  const { refreshInstances } = useStore();
   const remoteClient = window.duskDesktop?.remoteClient?.active === true;
   const [rechecking, setRechecking] = useState(false);
+  const [more, setMore] = useState(false);
   const recheck = async () => {
     setRechecking(true);
     try {
@@ -41,74 +37,13 @@ export function NoEngines() {
     );
   }
 
-  const engines = state.instances
-    .filter((i) => i.install)
-    .sort((a, b) => {
-      const aHere = installsHere(a.install) ? 0 : 1;
-      const bHere = installsHere(b.install) ? 0 : 1;
-      return aHere - bHere;
-    });
-
   return (
-    <main className="relative flex h-full min-w-0 flex-1 flex-col overflow-y-auto bg-app">
+    <main data-no-engines="" className="relative flex h-full min-w-0 flex-1 flex-col overflow-y-auto bg-app">
       <WindowDragStrip />
-      <div className="mx-auto w-full max-w-[560px] px-6 py-12">
-        <h1 className="text-[20px] font-semibold text-ink">{t("noEngines.title")}</h1>
-        <p className="mt-1.5 text-[14px] leading-relaxed text-ink-secondary">
-          {t("noEngines.intro", { app: productName() })}
-        </p>
-
-        <div className="mt-6 flex flex-col gap-2.5">
-          {(() => {
-            const { subscription, api, custom } = splitEngineRail(engines);
-            const card = (instance: (typeof engines)[number]) => (
-              <div key={instance.instanceId} className="rounded-xl border border-transparent bg-card p-3.5">
-                <div className="flex items-center gap-2 text-[14px] font-medium text-ink">
-                  <InstanceProviderMark instance={instance} size={16} />
-                  {instance.displayName}
-                </div>
-                <EngineSetup
-                  instance={instance}
-                  intent={instance.access === "custom" ? "inject" : "cloud"}
-                  className="mt-0.5"
-                />
-              </div>
-            );
-            return (
-              <>
-                {subscription.length > 0 && <EngineGroupLabel className="px-1">{t("engines.cloud")}</EngineGroupLabel>}
-                {subscription.map(card)}
-                {api.length > 0 && window.duskDesktop?.remoteClient?.active !== true && (
-                  <button
-                    type="button"
-                    data-no-engines-api-keys
-                    onClick={() => dispatch(openKeySettings())}
-                    className="flex items-center gap-3 rounded-xl border border-transparent bg-card p-3.5 text-left hover:bg-control/40"
-                  >
-                    <KeyRound size={16} className="shrink-0 text-ink-secondary" />
-                    <span className="min-w-0 flex-1">
-                      <span className="block text-[14px] font-medium text-ink">{t("cloudSignIn.apiKey")}</span>
-                      <span className="block text-[12px] text-ink-secondary">{t("cloudSignIn.apiKeyHint")}</span>
-                    </span>
-                    <ArrowUpRight size={14} className="shrink-0 text-ink-secondary" />
-                  </button>
-                )}
-                {custom.length > 0 && <EngineGroupLabel className="px-1 pt-1">{t("engines.local")}</EngineGroupLabel>}
-                {custom.map(card)}
-              </>
-            );
-          })()}
-        </div>
-
-        <button
-          onClick={recheck}
-          disabled={rechecking}
-          className="mt-6 flex items-center gap-2 rounded-lg bg-raised px-3 py-2 text-[13px] text-ink hover:bg-raised-hover disabled:opacity-60"
-        >
-          {rechecking ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
-          {rechecking ? t("common.checking") : t("common.checkAgain")}
-        </button>
-      </div>
+      <StepFrame art={<StepArt art="plug" />} title={t("funnel.ai.title")} sub={t("funnel.ai.sub")} wide>
+        <AiCards tested={null} onMore={() => setMore(true)} />
+      </StepFrame>
+      {more && <ConnectAiDialog tested={null} directory onClose={() => setMore(false)} />}
     </main>
   );
 }

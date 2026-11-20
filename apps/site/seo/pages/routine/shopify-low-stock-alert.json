@@ -1,0 +1,91 @@
+{
+  "path": "/routines/shopify-low-stock-alert",
+  "type": "routine",
+  "title": "Shopify low-stock alert for one pickup location",
+  "nav": "shopify low-stock alert",
+  "h1": "flag low shopify stock where the order gets packed",
+  "description": "Find tracked Shopify items at or below your shelf minimum at one location. Get the SKU and available quantity before deciding what to count or reorder.",
+  "keyword": "shopify low stock alert",
+  "keywords": [
+    "shopify inventory alert by location",
+    "daily low stock report"
+  ],
+  "answer": "**find the shelf that needs a count before promising another pickup.** a shop can have plenty of stock across town and none where an order gets packed. this routine reads available quantities at one shopify location. your dusk chat gets the low items by sku, with zero and negative quantities first.",
+  "updated": "2026-11-20",
+  "review": {
+    "status": "approved",
+    "by": "lead agent, after four independent reviewers read every page against seo/facts (2026-11-20); every finding applied",
+    "at": "2026-11-20"
+  },
+  "voice": 2,
+  "tags": [
+    "routine",
+    "shopify",
+    "inventory",
+    "retail"
+  ],
+  "connectors": [
+    "shopify"
+  ],
+  "related": [
+    "/integrations/shopify",
+    "/for/ecommerce",
+    "/routines/stripe-failed-payments-check"
+  ],
+  "art": {
+    "logo": "shopify",
+    "label": "Shopify",
+    "props": [
+      "s-parcel",
+      "p-binoculars"
+    ],
+    "bubble": "two left here"
+  },
+  "og_line": "count the shelf that fills the order.",
+  "routine": {
+    "message": "daily at 7am local time, read shopify inventory levels for my pickup location (id 482). follow every page for that id. look up inventory item details to match quantities to skus.\n\nshow tracked items with five or fewer available units here, lowest first. include the location, sku and available quantity. use the item id if the sku is blank. skip untracked items. if a tracked quantity is unknown, flag it for a count.\n\nnever change stock, move inventory or place an order. stay quiet when the full location read finds no low or unknown tracked quantities. report an incomplete read with the location id.",
+    "when": "every day at 7am in the pickup location’s time zone",
+    "needs": "shopify inventory-level and inventory-item reads, a location id, and your own composio project key and shopify auth config. use your pickup location id in the message.",
+    "output": "alice booth’s pickup counter · location 482\nlinen-ink · -1 available · count first\ntin-small · 2 available\nitem 8914 · 4 available · no sku on record"
+  },
+  "knobs": [
+    "**set a floor per sku.** a box of gift wrap and a slow-selling vase need different minimums. give each exception its own number.",
+    "**pick a counting order.** put negative balances at the top so staff can compare them with the shelf.",
+    "**move the run before packing.** leave time to count stock before someone calls a customer about a missing item."
+  ],
+  "fails": [
+    "**an untracked item looks sold out.** shopify can return a null quantity for untracked inventory. skip it instead of turning the blank into zero.[^1]",
+    "**the last aisle never appears.** the location read returns one page at a time. follow the next page using the same location id.[^1]"
+  ],
+  "sections": [
+    {
+      "h": "when a low count deserves a purchase order",
+      "md": "**count a flagged item before buying more.** an available quantity tells you where to look. it doesn’t tell you whether a delivery is due tomorrow. compare the shelf count with your incoming orders before deciding how many to buy.\n\nif you need to prevent an oversell during checkout, use a stock control in the checkout process. a morning digest arrives too late for that decision."
+    }
+  ],
+  "faq": [
+    {
+      "q": "does a quantity of five trigger the alert?",
+      "a": "**yes, five qualifies.** the routine includes the floor itself. change the wording to “fewer than five” if five units still cover your busiest pickup day."
+    },
+    {
+      "q": "why does the bot need an inventory item read too?",
+      "a": "**the item id connects the balance to the sku.** keep that id in the report when a product has no sku. a similar product name can point staff to the wrong shelf.[^1]"
+    }
+  ],
+  "sources": [
+    {
+      "label": "composio: shopify actions",
+      "url": "https://docs.composio.dev/toolkits/shopify",
+      "checked": "2026-11-12"
+    },
+    {
+      "label": "dusk bot docs: routines",
+      "url": "/docs/routines"
+    },
+    {
+      "label": "dusk bot docs: connected apps",
+      "url": "/docs/files-and-apps"
+    }
+  ]
+}

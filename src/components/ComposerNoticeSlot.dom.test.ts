@@ -2,7 +2,7 @@
 import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { ComposerNoticeSlot } from "./ComposerNoticeSlot";
+import { ComposerNoticeSlot, NOTICE_MOTION } from "./ComposerNoticeSlot";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -48,7 +48,7 @@ describe("the cards above the composer", () => {
     expect(leaving!.getAttribute("aria-hidden")).toBe("true");
     const exit = cardRuns().at(-1)!;
     expect(exit.keyframes).toEqual([{ opacity: 1 }, { opacity: 0 }]);
-    expect(exit.options).toMatchObject({ duration: 140, easing: "cubic-bezier(0.22, 1, 0.36, 1)" });
+    expect(exit.options).toMatchObject({ duration: NOTICE_MOTION.fadeOutMs, easing: NOTICE_MOTION.ease });
     exit.onfinish!();
     expect(document.querySelector("[data-card]")).toBeNull();
   });

@@ -6,6 +6,7 @@ export declare function serverAnswersWithin(
   fetchImpl: typeof fetch,
   options: { withinMs: number; timeoutMs?: number; everyMs?: number; now?: () => number; sleep?: (ms: number) => Promise<void> },
 ): Promise<boolean>;
+export declare function serverLook(origin: string, fetchImpl: typeof fetch, timeoutMs?: number): Promise<"yes" | "no" | "gone">;
 export declare function serverAnswers(origin: string, fetchImpl: typeof fetch, timeoutMs?: number): Promise<boolean>;
 export declare function serverOpens(
   entry: { id: string; name: string; origin: string },

@@ -236,9 +236,10 @@ it("a blocked cloud computer is refused for a chat turn and a routine, and lifts
   expect(routine.words).toMatch(/Acme does not allow bots to use VPS computers/);
 
   await rules(null);
-  // with the rule lifted the turn goes on to the VPS, which this Cloud has not connected
-  const after = await dumped(owner, "computer allowed again", (text) => /The VPS computer is unavailable/.test(text));
+  // with the rule lifted the turn reaches for the VPS, which this Cloud has not connected, and goes on without it (6c14850881)
+  const after = await dumped(owner, "computer allowed again", () => existsSync(join(team.home, "dump.json")));
   expect(after.messages).not.toMatch(/Acme does not allow/);
+  expect(readFileSync(join(team.home, "dump.json"), "utf8")).toMatch(/no computer is mounted this turn/);
   expect((await team.as(owner, "PATCH", `/api/bots/${botId}`, { computer: null })).status).toBe(200);
 }, hostTimeout(180_000));
 

@@ -4,6 +4,6 @@ export interface ErrorReportsBridge { send(report: DesktopErrorReport): Promise<
 export interface AccountErrors {
   send(input: unknown): boolean;
   capture(error: unknown, source?: "desktop" | "desktop-main"): boolean;
-  watch(app: { on(event: string, listener: (...args: any[]) => void): unknown }, proc?: NodeJS.Process): void;
+  watch(app: { on(event: string, listener: (...args: any[]) => void): unknown }, proc?: NodeJS.Process, options?: { ending?: () => boolean; platform?: string }): void;
 }
 export declare function createAccountErrors(options: { origin: string; enabled: () => boolean; platform: string; release?: string; version: string; fetch?: typeof fetch; now?: () => number }): AccountErrors;

@@ -1,11 +1,12 @@
-import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import { Apple, ChevronLeft } from "../icons";
 import { QRCodeSVG } from "qrcode.react";
 
 import { universalPairLink, universalSignInLink, type MobileDevice, type MobilePairingRequest, type MobilePairingResponse } from "../../shared/mobile-link";
-import type { CloudPlanBridge } from "../../electron/cloud-account.mjs";
+import type { CloudPhoneSignIn, CloudPlanBridge } from "../../electron/cloud-account.mjs";
 import { companionBridge } from "@/lib/companion-bridge";
-import { relayBeforePairing } from "@/lib/phone-relay";
+import { desktopShowsOtherServer } from "@/lib/other-server";
+import { phoneRelayBridge, relayBeforePairing } from "@/lib/phone-relay";
 import { copyText, type CopyFeedback } from "@/lib/copy-text";
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
@@ -72,6 +73,21 @@ function cloudCodeBridge(cloudHome: boolean): (Required<Pick<CloudPlanBridge, "p
     : null;
 }
 
+type AccountBridge = Required<Pick<CloudPlanBridge, "phoneSignIn" | "signIn" | "signedIn">>;
+
+/** how long main renews a phone sign-in code without asking again (electron/cloud-plan-ipc.mjs PHONE_SIGN_IN_RENEW_MS, 75 min), less a margin */
+const SIGN_IN_QUIET_MS = 70 * 60_000;
+
+/** The desktop app's own dusk bot account, for its phone QR: the QR shows only once this computer is signed in, and
+ * carries a code that logs the phone in to the same account as it pairs. A browser tab, a remote server's page and an
+ * older app have none. */
+export function desktopAccountBridge(remote: boolean, cloudHome: boolean): AccountBridge | null {
+  if (remote || cloudHome || typeof window === "undefined" || desktopShowsOtherServer()) return null;
+  const bridge = window.duskDesktop?.cloudPlan;
+  return typeof bridge?.phoneSignIn === "function" && typeof bridge.signIn === "function" && typeof bridge.signedIn === "function"
+    ? { phoneSignIn: bridge.phoneSignIn.bind(bridge), signIn: bridge.signIn.bind(bridge), signedIn: bridge.signedIn.bind(bridge) } : null;
+}
+
 /** waits before each retry of a code that could not be made, while a connection or the account service comes back */
 export const MINT_RETRY_MS = [1_500, 4_000] as const;
 
@@ -79,12 +95,21 @@ export const MINT_RETRY_MS = [1_500, 4_000] as const;
 class EmailLogInInstead extends Error {}
 class SignedOutHere extends Error {}
 
+/** why no phone can reach this workspace: a server needs its setup command, this computer needs an account for the relay, or its phone access did not start */
+export type NoRoute = "server" | "sign-in" | "computer";
+
+export async function noRouteFix(remote: boolean): Promise<NoRoute> {
+  if (remote || typeof window === "undefined" || !window.duskDesktop || desktopShowsOtherServer()) return "server";
+  const relay = await phoneRelayBridge()?.state().catch(() => null);
+  return relay?.status === "signed-out" && typeof window.duskDesktop.cloudPlan?.signIn === "function" ? "sign-in" : "computer";
+}
+
 const pause = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const retryable = (cause: unknown) => !(cause instanceof EmailLogInInstead || cause instanceof SignedOutHere)
   && !(cause instanceof ApiError && cause.status >= 400 && cause.status < 500);
 
-export function MobilePairingCard({ remote, cloudHome = false, email, children }: {
+export function MobilePairingCard({ remote, cloudHome = false, email, direct, children }: {
   remote: boolean;
   /** a dusk cloud refuses phone codes (server/index.ts createMobileLink refusal): the iPhone app reaches it by signing in */
   cloudHome?: boolean;
@@ -92,6 +117,8 @@ export function MobilePairingCard({ remote, cloudHome = false, email, children }
   email?: string;
   /** lays the pieces out; null when this workspace may not link phones */
   children?: (phone: PhoneParts | null) => ReactNode;
+  /** the code at once, for either phone, with no linked phones or phone picker around it; Done after a link calls onDone */
+  direct?: { onDone(): void };
 }) {
   const [devices, setDevices] = useState<MobileDevice[] | null>(null);
   const [cloudSignIns, setCloudSignIns] = useState<PairedDevice[] | null>(null);
@@ -99,6 +126,17 @@ export function MobilePairingCard({ remote, cloudHome = false, email, children }
   signInsSeen.current = cloudSignIns;
   const [offer, setOffer] = useState<Offer | null>(null);
   const cloudCodes = cloudCodeBridge(cloudHome);
+  const desktopAccount = useMemo(() => desktopAccountBridge(remote, cloudHome), [remote, cloudHome]);
+  // null while asked; false shows only the sign-in card
+  const [deskSignedIn, setDeskSignedIn] = useState<boolean | null>(desktopAccount ? null : true);
+  // the account's presence check is asked once a panel open: "approved" renews quietly, "declined" never asks again
+  // until the person taps Include sign-in, so nothing (a poll, a refocus, a renewal) can bring the sheet back by itself
+  const approval = useRef<"unasked" | "approved" | "declined">("unasked");
+  const approvedAt = useRef(0);
+  const firstGrant = useRef<CloudPhoneSignIn | null>(null);
+  const [signInDeclined, setSignInDeclined] = useState(false);
+  const plainQr = useRef(false);
+  const [signInAsk, setSignInAsk] = useState(false);
   const codesInCloud = cloudCodes !== null;
   // the account's email, once a code named it: kept for the linked phones row after the code is gone
   const [accountEmail, setAccountEmail] = useState<string | null>(null);
@@ -113,7 +151,7 @@ export function MobilePairingCard({ remote, cloudHome = false, email, children }
   const [pairedName, setPairedName] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [signInFix, setSignInFix] = useState(false);
-  const [unreachable, setUnreachable] = useState(false);
+  const [unreachable, setUnreachable] = useState<NoRoute | null>(null);
   const [commandCopied, setCommandCopied] = useState(false);
   const [emailOnly, setEmailOnly] = useState(false);
   const [now, setNow] = useState(() => Date.now());
@@ -126,14 +164,14 @@ export function MobilePairingCard({ remote, cloudHome = false, email, children }
   const moved = useRef(false);
 
   // every link starts at the phone picker, whatever was picked before
-  const start = (): Flow => "platform";
+  const start = (): Flow => direct ? "link" : "platform";
 
   const loadDevices = useCallback(async (epoch: number) => {
     try {
       const body = await api<{ devices: MobileDevice[]; current: string | null }>("/api/mobile/devices");
       if (generation.current !== epoch) return;
       setDevices(body.devices);
-      if (!cloudHome) setFlow((at) => at === "loading" ? (body.devices.length ? "home" : start()) : at);
+      if (!cloudHome) setFlow((at) => at === "loading" ? (body.devices.length && !direct ? "home" : start()) : at);
       if (baseline.current) {
         const added = newDeviceSince(baseline.current, body.devices);
         if (added) {
@@ -164,7 +202,7 @@ export function MobilePairingCard({ remote, cloudHome = false, email, children }
       if (generation.current !== epoch) return;
       const phones = cloudPhones(Array.isArray(body?.sessions) ? body.sessions : [], typeof body?.current === "string" ? body.current : null);
       setCloudSignIns(phones);
-      setFlow((at) => at === "loading" ? (phones.length ? "home" : start()) : at);
+      setFlow((at) => at === "loading" ? (phones.length && !direct ? "home" : start()) : at);
       if (cloudBaseline.current) {
         const known = new Set(cloudBaseline.current);
         const added = phones.find((session) => !known.has(session.id));
@@ -202,8 +240,18 @@ export function MobilePairingCard({ remote, cloudHome = false, email, children }
 
   // the link screen makes its code as soon as it is up, the first time included
   useEffect(() => {
-    if (flow === "link" && ((codesInCloud && !emailOnly) || (!cloudHome && devices)) && !offer && !busy && pairedName === null && error === null) void create();
-  }, [flow, cloudHome, codesInCloud, devices, emailOnly]);
+    if (flow === "link" && deskSignedIn === true && !signInDeclined && ((codesInCloud && !emailOnly) || (!cloudHome && devices)) && !offer && !busy && pairedName === null && error === null) void create();
+  }, [flow, cloudHome, codesInCloud, devices, emailOnly, deskSignedIn, signInDeclined]);
+  const askSignedIn = useCallback(() => {
+    if (!desktopAccount) return;
+    void desktopAccount.signedIn().then((on) => setDeskSignedIn(on), () => setDeskSignedIn(true));
+  }, [desktopAccount]);
+  useEffect(() => {
+    if (!desktopAccount || flow !== "link") return;
+    askSignedIn();
+    window.addEventListener("focus", askSignedIn);
+    return () => window.removeEventListener("focus", askSignedIn);
+  }, [flow, askSignedIn, desktopAccount]);
 
   useEffect(() => {
     if (!offer) return;
@@ -256,8 +304,17 @@ export function MobilePairingCard({ remote, cloudHome = false, email, children }
     baseline.current = null;
     renewals.current = 0;
     try {
-      // a cloud's code is checked in the desktop app itself, before it is made
-      if ((!codesInCloud && !(await requireUserPresence())) || generation.current !== epoch) return;
+      // a cloud's code, and a signed-in desktop's QR with its account code, are checked in the desktop app itself: its
+      // presence check stands for the pairing too, so the person is asked once
+      if (desktopAccount && !plainQr.current) {
+        const grant: CloudPhoneSignIn = await desktopAccount.phoneSignIn(approval.current === "approved").catch(() => ({ outcome: "failed" as const }));
+        if (generation.current !== epoch) return;
+        if (grant.outcome === "canceled") { approval.current = "declined"; setSignInDeclined(true); return; }
+        if (grant.outcome === "signed-out") { setDeskSignedIn(false); return; }
+        approval.current = "approved";
+        approvedAt.current = Date.now();
+        firstGrant.current = grant;
+      } else if ((!codesInCloud && !(await requireUserPresence())) || generation.current !== epoch) return;
       const body = await mintWithRetries(epoch);
       if (!body || generation.current !== epoch) return;
       if (!codesInCloud) baseline.current = (devices ?? []).map((device) => device.id);
@@ -267,7 +324,9 @@ export function MobilePairingCard({ remote, cloudHome = false, email, children }
       if (generation.current !== epoch) return;
       if (cause instanceof EmailLogInInstead) { setEmailOnly(true); return; }
       setSignInFix(cause instanceof SignedOutHere && Boolean(cloudCodes?.signIn));
-      setUnreachable(!window.duskDesktop && cause instanceof ApiError && cause.body?.code === "unreachable");
+      const noRoute = cause instanceof ApiError && cause.body?.code === "unreachable" ? await noRouteFix(remote) : null;
+      if (generation.current !== epoch) return;
+      setUnreachable(noRoute);
       setError(friendlyError(cause, t("settings.mobile.error")));
       haptic("error");
     } finally {
@@ -298,7 +357,7 @@ export function MobilePairingCard({ remote, cloudHome = false, email, children }
       const result = await cloudCodes.phoneSignIn(renew);
       if (result.outcome === "code") {
         setAccountEmail(result.email);
-        return { qr: universalSignInLink(result.email, result.code, result.service), code: result.code, expiresAt: result.expiresAt, email: result.email };
+        return { qr: universalSignInLink(result.email, result.code, result.service, typeof location === "undefined" ? null : location.origin), code: result.code, expiresAt: result.expiresAt, email: result.email };
       }
       if (result.outcome === "canceled") return null;
       if (result.outcome === "signed-out") throw new SignedOutHere(t("settings.phone.cloudSignedOut"));
@@ -313,14 +372,32 @@ export function MobilePairingCard({ remote, cloudHome = false, email, children }
       } catch {}
       await relayBeforePairing();
     }
+    let signIn: { code: string; email: string; serviceOrigin?: string | null; expiresAt: number } | null = null;
+    if (desktopAccount && !plainQr.current) {
+      // a renewal reuses this panel's approval while main still takes it, and drops the sign-in part after that
+      const quiet = renew && approval.current === "approved" && Date.now() - approvedAt.current < SIGN_IN_QUIET_MS;
+      const grant = renew ? (quiet ? await desktopAccount.phoneSignIn(true).catch(() => null) : null) : firstGrant.current;
+      firstGrant.current = null;
+      // a service that makes no phone codes yet (or a failed one) still pairs; the phone then logs in on its own
+      if (grant?.outcome === "code") { signIn = { code: grant.code, email: grant.email, serviceOrigin: grant.service ?? null, expiresAt: grant.expiresAt }; setAccountEmail(grant.email); }
+    }
     const body = await api<MobilePairingResponse>("/api/mobile/pairing", { method: "POST", body: JSON.stringify(request) });
-    return { qr: universalPairLink(body.link, body.code), code: body.code, expiresAt: body.expiresAt };
+    return { qr: universalPairLink(body.link, body.code, signIn), code: body.code, expiresAt: signIn ? Math.min(body.expiresAt, signIn.expiresAt) : body.expiresAt, ...(signIn ? { email: signIn.email } : {}) };
   }
 
   function pick(next: PhoneKind) {
     if (next === "android" && !ANDROID_APP_OUT) return;
-    haptic("selection");
+    haptic("pick");
     setKind(next);
+    // signed out, the phone's card opens the app's own sign-in and goes on to its link page once that is done
+    if (desktopAccount && deskSignedIn !== true) {
+      void desktopAccount.signedIn().then(async (on) => {
+        if (!on) { setSignInAsk(true); await desktopAccount.signIn().catch(() => {}); on = await desktopAccount.signedIn().catch(() => false); setSignInAsk(false); }
+        setDeskSignedIn(on);
+        if (on) go("link");
+      }, () => go("link"));
+      return;
+    }
     go("link");
   }
 
@@ -396,10 +473,10 @@ export function MobilePairingCard({ remote, cloudHome = false, email, children }
     </a>
   );
 
-  const apkBadge = (
+  const apkBadge = (text = t("settings.phone.apk")) => (
     <a data-phone-apk="" href={ANDROID_APP_URL} target="_blank" rel="noreferrer" aria-label={t("settings.phone.apkLabel")}
       className="relative inline-flex h-8 shrink-0 items-center gap-1.5 rounded-[8px] bg-ink ps-3 pe-3 text-[13px] font-semibold leading-4 tracking-[-0.01em] text-app transition-opacity duration-150 ease-[ease] before:absolute before:-inset-y-1.5 before:inset-x-0 hover:opacity-85 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus motion-reduce:transition-none">
-      {t("settings.phone.apk")}
+      {text}
     </a>
   );
 
@@ -438,6 +515,7 @@ export function MobilePairingCard({ remote, cloudHome = false, email, children }
   const platformStep = (live: boolean) => (
     <div data-phone-choose="" className="flex flex-col items-center gap-6">
       {heading(live, t("settings.phone.whichTitle"), t(cloudHome ? "settings.phone.whichSubCloud" : "settings.phone.whichSub"))}
+      {signInAsk && <p role="status" data-phone-log-in-first="" className="m-0 text-center text-[14px] leading-5 text-ink">{t("settings.phone.logInToConnect")}</p>}
       <div className="grid w-full grid-cols-1 gap-3 sm:grid-cols-2">{phoneCard("ios")}{phoneCard("android")}</div>
     </div>
   );
@@ -453,7 +531,7 @@ export function MobilePairingCard({ remote, cloudHome = false, email, children }
 
   const steps = (second: ReactNode) => (failed && unreachable) ? null : (
     <ol data-phone-steps={kind} className="m-0 flex w-full list-none flex-col p-0 px-2">
-      {ios ? step(1, t("settings.phone.getIos"), appStoreBadge) : step(1, t("settings.phone.getAndroid"), apkBadge)}
+      {ios ? step(1, t("settings.phone.getIos"), appStoreBadge) : step(1, t("settings.phone.getAndroid"), apkBadge())}
       {step(2, second)}
     </ol>
   );
@@ -518,7 +596,11 @@ export function MobilePairingCard({ remote, cloudHome = false, email, children }
       </div>
     </div>
   );
-  const failedBlock = unreachable ? unreachableBlock : notice("error", error, t(signInFix ? "phone.relay.signInAction" : "settings.phone.tryAgain"), { "data-pairing-failed": "" }, "alert",
+  const signInForRelay = () => void window.duskDesktop?.cloudPlan?.signIn?.().then(() => create(true), () => {});
+  const failedBlock = unreachable === "server" ? unreachableBlock
+    : unreachable === "sign-in" ? notice("error", t("settings.phone.signInToPair"), t("phone.relay.signInAction"), { "data-pairing-failed": "" }, "alert", signInForRelay)
+    : unreachable === "computer" ? notice("error", t("settings.phone.computerUnreachable"), t("settings.phone.tryAgain"), { "data-pairing-failed": "" }, "alert")
+    : notice("error", error, t(signInFix ? "phone.relay.signInAction" : "settings.phone.tryAgain"), { "data-pairing-failed": "" }, "alert",
     signInFix ? () => void cloudCodes?.signIn?.().finally(() => setSignInFix(false)) : undefined);
   const expiredBlock = notice("expired", t("settings.mobile.expired"), t("settings.mobile.newCode"), { "data-phone-expired": "" }, "status");
 
@@ -533,29 +615,57 @@ export function MobilePairingCard({ remote, cloudHome = false, email, children }
     </div>
   );
 
-  const localLink = (live: boolean) => column(live, { "data-phone-link": "" }, t(ios ? "settings.phone.linkIos" : "settings.phone.linkAndroid"), t("settings.phone.whichSub"),
-    card(offerTile(t("settings.mobile.qr")), typed, codeActions, status(t("mobile.desktop.waiting"), countdown)),
-    t(ios ? "settings.phone.openIos" : "settings.phone.openAndroid"));
+  const signInDesktop = () => void desktopAccount?.signIn().then(askSignedIn, () => {});
+  const includeSignIn = () => { approval.current = "unasked"; plainQr.current = false; setSignInDeclined(false); void create(true); };
+  const withoutSignIn = () => { plainQr.current = true; setSignInDeclined(false); void create(true); };
+  const declinedCard = (
+    <div data-phone-card="" className="flex min-h-[384px] w-full flex-col items-center rounded-[24px] bg-ink/[0.035] p-6">
+      <div data-phone-sign-in-declined="" className="flex w-full flex-1 flex-col items-center justify-center gap-3 text-center">
+        <PlaceArt name="phone" size={44} />
+        <p role="status" className="m-0 max-w-[300px] text-pretty text-[14px] leading-5 text-ink-secondary">{t("settings.phone.signInDeclined")}</p>
+        <button type="button" data-phone-plain-qr="" onClick={withoutSignIn} className="ui-button ui-button-pill min-h-11">{t("settings.phone.plainQr")}</button>
+        <button type="button" data-phone-include-sign-in="" onClick={includeSignIn} className={quietButton}>{t("settings.phone.includeSignIn")}</button>
+      </div>
+    </div>
+  );
+  const signInCard = (
+    <div data-phone-card="" className="flex min-h-[384px] w-full flex-col items-center rounded-[24px] bg-ink/[0.035] p-6">
+      <div data-phone-sign-in-first="" className="flex w-full flex-1 flex-col items-center justify-center gap-3 text-center">
+        <PlaceArt name="phone" size={44} />
+        <p role="status" className="m-0 max-w-[300px] text-pretty text-[14px] leading-5 text-ink-secondary">{t("settings.phone.signInFirst")}</p>
+        <button type="button" data-phone-sign-in="" onClick={signInDesktop} className="ui-button ui-button-pill min-h-11">{t("phone.relay.signInAction")}</button>
+      </div>
+    </div>
+  );
+  const localParts = (): { sub: ReactNode; body: ReactNode } => deskSignedIn === false
+    ? { sub: t("settings.phone.signInFirstSub"), body: signInCard }
+    : { sub: signInEmail && desktopAccount && !plainQr.current ? <span data-phone-account-as="" className="break-all">{t("settings.phone.cloudAs", { email: signInEmail })}</span> : t("settings.phone.whichSub"),
+      body: signInDeclined ? declinedCard : card(offerTile(t("settings.mobile.qr")), typed, <>{codeActions}{desktopAccount && plainQr.current && <><span aria-hidden="true" className="text-[13px] text-ink-tertiary">·</span><button type="button" data-phone-include-sign-in="" onClick={includeSignIn} className={quietButton}>{t("settings.phone.includeSignIn")}</button></>}</>, status(t("mobile.desktop.waiting"), countdown)) };
+  const localLink = (live: boolean) => {
+    const { sub, body } = localParts();
+    return column(live, { "data-phone-link": "" }, t(ios ? "settings.phone.linkIos" : "settings.phone.linkAndroid"), sub, body, t(ios ? "settings.phone.openIos" : "settings.phone.openAndroid"));
+  };
 
   // a cloud from the desktop app: one qr and one letters-only code that log the phone in to the account, no email step
+  const cloudCodeCard = () => card(offerTile(t("settings.phone.cloudCodeQr")), typed, codeActions, status(t("settings.phone.waitingCloud"), countdown));
   const cloudCodeLink = (live: boolean) => column(live, { "data-phone-cloud": "", "data-phone-cloud-code": "" }, t(ios ? "settings.phone.cloudIos" : "settings.phone.cloudAndroid"),
     signInEmail && <span data-phone-cloud-as="" className="break-all">{t("settings.phone.cloudAs", { email: signInEmail })}</span>,
-    card(offerTile(t("settings.phone.cloudCodeQr")), typed, codeActions, status(t("settings.phone.waitingCloud"), countdown)),
-    t(ios ? "settings.phone.openIos" : "settings.phone.openAndroid"));
+    cloudCodeCard(), t(ios ? "settings.phone.openIos" : "settings.phone.openAndroid"));
 
   // a cloud in a browser tab or an older app: no code to make, the qr opens the app at its dusk cloud log in with the email filled in
+  const cloudEmailCard = () => card(qrTile(universalSignInLink(signInEmail), t("settings.phone.cloudQr")),
+    signInEmail
+      ? <span data-phone-cloud-sign-in="" className="max-w-[320px] break-all text-[14px] leading-5 text-ink-secondary">{t("settings.phone.logInWith")} <span className="font-medium text-ink">{signInEmail}</span></span>
+      : <span className="max-w-[300px] text-pretty text-[13px] leading-[18px] text-ink-secondary">{t("settings.phone.cloudScanAny")}</span>,
+    <span data-phone-camera-hint="" className="text-pretty text-[13px] leading-[18px] text-ink-tertiary">{t(ios ? "settings.phone.cameraIos" : "settings.phone.cameraAndroid")}</span>,
+    status(t("settings.phone.waitingCloud"), null));
   const cloudLink = (live: boolean) => codesInCloud && !emailOnly ? cloudCodeLink(live) : column(live, { "data-phone-cloud": "" }, t(ios ? "settings.phone.cloudIos" : "settings.phone.cloudAndroid"), undefined,
-    card(qrTile(universalSignInLink(signInEmail), t("settings.phone.cloudQr")),
-      signInEmail
-        ? <span data-phone-cloud-sign-in="" className="max-w-[320px] break-all text-[14px] leading-5 text-ink-secondary">{t("settings.phone.logInWith")} <span className="font-medium text-ink">{signInEmail}</span></span>
-        : <span className="max-w-[300px] text-pretty text-[13px] leading-[18px] text-ink-secondary">{t("settings.phone.cloudScanAny")}</span>,
-      null, status(t("settings.phone.waitingCloud"), null)),
-    t("settings.phone.logInStep"));
+    cloudEmailCard(), t("settings.phone.logInStep"));
 
   const doneStep = (live: boolean) => (
     <div role={live ? "status" : undefined} data-phone-linked="" className="flex flex-col items-center gap-6">
       {heading(live, cloudHome ? t("settings.phone.cloudLinked") : t("mobile.desktop.linked", { name: pairedName ?? "" }), t("mobile.desktop.linkedHint"), "connected")}
-      <button type="button" data-primary="" onClick={() => go("home")} className={PRIMARY}>{t("common.done")}</button>
+      <button type="button" data-primary="" onClick={() => (direct ? direct.onDone() : go("home"))} className={PRIMARY}>{t("common.done")}</button>
     </div>
   );
 
@@ -596,26 +706,56 @@ export function MobilePairingCard({ remote, cloudHome = false, email, children }
     </RowsCard>
   ) : null;
 
+  const styles = (
+  <style>{`
+    @keyframes phone-link-wait { 0%, 100% { opacity: 1; } 50% { opacity: .3; } }
+    .phone-link-wait { animation: phone-link-wait 1.6s ease-in-out infinite; }
+    @media (prefers-reduced-motion: reduce) { .phone-link-wait { animation-play-state: paused; } }
+    [data-reduced-motion="true"] .phone-link-wait { animation-play-state: paused; }
+    .phone-wipe { display: grid; }
+    .phone-wipe[data-wiping] { overflow: clip; }
+    .phone-wipe-layer { position: relative; z-index: 0; grid-area: 1 / 1; min-width: 0; background-color: var(--color-app); animation-duration: ${WIPE_MS}ms; animation-timing-function: var(--dusk-ease-out); }
+    .phone-wipe-layer[data-wipe-out] { pointer-events: none; animation-fill-mode: forwards; }
+    .phone-wipe-layer[data-wipe="push"]:not([data-wipe-out]) { z-index: 1; animation-name: dusk-wipe-push-in; }
+    .phone-wipe-layer[data-wipe="push"][data-wipe-out] { animation-name: dusk-wipe-push-out; }
+    .phone-wipe-layer[data-wipe="pop"]:not([data-wipe-out]) { animation-name: dusk-wipe-pop-in; }
+    .phone-wipe-layer[data-wipe="pop"][data-wipe-out] { z-index: 1; animation-name: dusk-wipe-pop-out; }
+    .phone-wipe-layer[data-wipe="fade"] { animation-duration: 150ms; }
+    .phone-wipe-layer[data-wipe="fade"]:not([data-wipe-out]) { z-index: 1; background-color: transparent; animation-name: dusk-fade-in; }
+    .phone-wipe-layer[data-wipe="fade"][data-wipe-out] { animation-name: dusk-fade-out; }
+  `}</style>
+  );
+  // the dialog's own description line: whose account the code logs in to, and so every place the phone gets
+  const directSub = () => {
+    const viaAccount = signInEmail && (cloudHome ? codesInCloud && !emailOnly : desktopAccount && !plainQr.current && deskSignedIn !== false);
+    if (viaAccount) return <span data-phone-account-as="" className="break-words">{t("sidebar.menu.connectPhone.everything", { email: signInEmail })}</span>;
+    return cloudHome ? (signInEmail ? t("settings.phone.cloudAs", { email: signInEmail }) : null) : localParts().sub;
+  };
+  const directSteps = (failed && unreachable) ? null : (
+    <ol data-phone-steps="any" className="m-0 mt-4 flex w-full list-none flex-col p-0 px-2">
+      {step(1, t("settings.phone.getIos"), <span className="flex shrink-0 items-center gap-2">{appStoreBadge}{apkBadge(t("settings.phone.android"))}</span>)}
+      {step(2, t(cloudHome && !(codesInCloud && !emailOnly) ? "settings.phone.logInStep" : "settings.phone.openIos"))}
+    </ol>
+  );
+  const directView = () => {
+    if (view === "done") return doneStep(true);
+    if (flow !== "link") return loadingStep;
+    const sub = directSub();
+    const body = cloudHome ? (codesInCloud && !emailOnly ? cloudCodeCard() : cloudEmailCard()) : localParts().body;
+    return (
+      <div data-phone-link="" data-phone-direct="" className="flex w-full flex-col">
+        {sub && <p className="m-0 mb-3 text-pretty text-[13px] leading-[18px] tracking-[-0.08px] text-ink/68">{sub}</p>}
+        {body}
+        {directSteps}
+      </div>
+    );
+  };
+
   const parts: PhoneParts = { top, stepping: view !== "home", phones };
+  if (direct) return <>{styles}{directView()}</>;
   return (
     <>
-      <style>{`
-        @keyframes phone-link-wait { 0%, 100% { opacity: 1; } 50% { opacity: .3; } }
-        .phone-link-wait { animation: phone-link-wait 1.6s ease-in-out infinite; }
-        @media (prefers-reduced-motion: reduce) { .phone-link-wait { animation-play-state: paused; } }
-        [data-reduced-motion="true"] .phone-link-wait { animation-play-state: paused; }
-        .phone-wipe { display: grid; }
-        .phone-wipe[data-wiping] { overflow: clip; }
-        .phone-wipe-layer { position: relative; z-index: 0; grid-area: 1 / 1; min-width: 0; background-color: var(--color-app); animation-duration: ${WIPE_MS}ms; animation-timing-function: var(--dusk-ease-out); }
-        .phone-wipe-layer[data-wipe-out] { pointer-events: none; animation-fill-mode: forwards; }
-        .phone-wipe-layer[data-wipe="push"]:not([data-wipe-out]) { z-index: 1; animation-name: dusk-wipe-push-in; }
-        .phone-wipe-layer[data-wipe="push"][data-wipe-out] { animation-name: dusk-wipe-push-out; }
-        .phone-wipe-layer[data-wipe="pop"]:not([data-wipe-out]) { animation-name: dusk-wipe-pop-in; }
-        .phone-wipe-layer[data-wipe="pop"][data-wipe-out] { z-index: 1; animation-name: dusk-wipe-pop-out; }
-        .phone-wipe-layer[data-wipe="fade"] { animation-duration: 150ms; }
-        .phone-wipe-layer[data-wipe="fade"]:not([data-wipe-out]) { z-index: 1; background-color: transparent; animation-name: dusk-fade-in; }
-        .phone-wipe-layer[data-wipe="fade"][data-wipe-out] { animation-name: dusk-fade-out; }
-      `}</style>
+      {styles}
       {children ? children(parts) : <div className="flex flex-col gap-5">{parts.top}{parts.phones}</div>}
     </>
   );
@@ -658,7 +798,7 @@ function PhoneWipe({ at, layer, onSwap }: { at: string; layer: (at: string, live
 
 function LinkAnother({ onClick }: { onClick: () => void }) {
   return (
-    <button type="button" data-phone-link-another="" onClick={() => { haptic("selection"); onClick(); }} className="ui-button ui-button-pill mobile-press min-h-11">
+    <button type="button" data-phone-link-another="" onClick={() => { haptic("pick"); onClick(); }} className="ui-button ui-button-pill mobile-press min-h-11">
       {t("mobile.desktop.linkAnother")}
     </button>
   );

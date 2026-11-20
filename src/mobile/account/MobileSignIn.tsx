@@ -42,7 +42,10 @@ export function MobileSignIn({ onSignedIn, initialEmail = "" }: { onSignedIn: ()
     void signIn.providers().then((list) => { if (alive) setProviders(list); }, () => { if (alive) setProviders([]); });
     return () => { alive = false; };
   }, [signIn]);
-  useEffect(() => { if (account?.account) onSignedIn(); }, [account?.account, onSignedIn]);
+  const signInsAtOpen = useRef(account?.signIns ?? 0);
+  const signIns = account?.signIns ?? 0;
+  const signedInHere = Boolean(account?.account) && signIns !== signInsAtOpen.current;
+  useEffect(() => { if (signedInHere) onSignedIn(); }, [signedInHere, signIns, onSignedIn]);
   useEffect(() => {
     if (!sent) return;
     field.current?.focus();

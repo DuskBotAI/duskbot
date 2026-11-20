@@ -11,7 +11,7 @@ const deliver = (name: string, path = `/store/${name}`) => ({ kind: "file" as co
 describe("files under a reply", () => {
   it("drops a file the text links inline, so it shows once", () => {
     const text = "Updated [DESIGN_SYSTEM.md](/work/DESIGN_SYSTEM.md) and [MEMORY.md](/work/MEMORY.md).";
-    expect(replyAttachmentGroup(text, [])).toEqual({ images: [], files: [], delivered: {} });
+    expect(replyAttachmentGroup(text, [])).toEqual({ images: [], pictures: [], files: [], delivered: {} });
   });
 
   it("lets an inline link stand for the same file delivered with attach_file", () => {

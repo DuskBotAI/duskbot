@@ -5,7 +5,7 @@ import type { PulseAnswer } from "../../../../shared/machine-pulse";
 import type { AccountDevice, AccountProfile, AuthProviders, BillingOverview, ChangeOffer, CheckoutAnswer, CheckoutRequest, CloudDesktop, DesktopId, EmailCodeStart, Identity, IdentityProvider, MachineSpec, NotificationPrefs, PlanCatalog, Selection, SlackWake } from "../data/contracts";
 import { trackOnboardingDone } from "./analytics";
 import { accountFromWire, billingFromWire, cartFromQuote, cartFromSelection, catalogFromWire, cloudFromWire, providersFromWire } from "../data/live";
-import { CSRF_HEADER, EMAIL_CODE_DIGITS, readCsrfCookie, type AccountAnswer, type AccountView, type BillingOverview as WireBillingOverview, type CancelAnswer, type Catalog, type ChangePreview, type CheckoutAnswer as WireCheckoutAnswer, type CloudDesktopView, type DeviceLookupAnswer, type EmailStartAnswer, type HandoffAnswer, type MeAnswer, type ProvidersAnswer, type Quote, type RetentionInput, type WebSignInAnswer } from "../data/wire";
+import { CSRF_HEADER, EMAIL_CODE_DIGITS, readCsrfCookie, type AccountAnswer, type AccountView, type BillingOverview as WireBillingOverview, type CancelAnswer, type CancelSurvey, type Catalog, type ChangePreview, type CheckoutAnswer as WireCheckoutAnswer, type CloudDesktopView, type DeviceLookupAnswer, type EmailStartAnswer, type HandoffAnswer, type MeAnswer, type ProvidersAnswer, type Quote, type RetentionInput, type WebSignInAnswer } from "../data/wire";
 
 export type Scenario = "signedout" | "new" | "mac" | "cloud" | "provisioning" | "managed";
 export interface Account { id: string; email: string; name?: string | null }
@@ -228,7 +228,9 @@ export const api = {
   retention: (input: RetentionInput) => send(FIXTURE ? "/v1/billing/retention" : `${subscriptionPath()}/retention`, "POST", input),
   /** the one-time stay-on discount on the plan's coming renewals */
   discount: (reason: CancelAnswer) => send(FIXTURE ? "/v1/billing/discount" : `${subscriptionPath()}/discount`, "POST", { reason }),
-  cancel: (answer: CancelAnswer | "") => send(FIXTURE ? "/v1/billing/cancel" : `${subscriptionPath()}/cancel`, "POST", answer === "" ? {} : { survey: { answer } }),
+  cancel: (survey: CancelSurvey | null) => send(FIXTURE ? "/v1/billing/cancel" : `${subscriptionPath()}/cancel`, "POST", survey ? { survey } : {}),
+  /** a plan set to end renews again */
+  keep: () => send(FIXTURE ? "/v1/billing/keep" : `${subscriptionPath()}/keep`, "POST", {}),
   clouds: async (): Promise<{ clouds: CloudDesktop[] }> => {
     if (FIXTURE) return call("/v1/clouds");
     const answer = await call<{ clouds: CloudDesktopView[] }>("/v1/clouds");

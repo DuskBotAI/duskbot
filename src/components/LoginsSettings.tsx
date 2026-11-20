@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, useSyncExternalStore, type FormEvent, type ReactNode } from "react";
+import { AnimatePresence } from "motion/react";
 import { ArtState } from "./ui/Art";
 import { Loader2 } from "../icons";
 
@@ -289,9 +290,9 @@ export function LoginsSettings() {
           </div>
         )}
       </section>
-      {openSecret && <SavedSecretDialog secret={openSecret} hint={secretHint(openSecret)} onClose={() => setOpenSecret(null)}
-        onRemove={async () => { await saved_secrets.remove(openSecret); setOpenSecret(null); }} />}
-      {adding && loginForm(t("settings.logins.add"), () => setAdding(false),
+      <AnimatePresence>{openSecret && <SavedSecretDialog key="saved-secret" secret={openSecret} hint={secretHint(openSecret)} onClose={() => setOpenSecret(null)}
+        onRemove={async () => { await saved_secrets.remove(openSecret); setOpenSecret(null); }} />}</AnimatePresence>
+      <AnimatePresence>{adding && loginForm(t("settings.logins.add"), () => setAdding(false),
         <LoginForm site={{ value: site, onChange: setSite }} compact submitLabel={t("settings.logins.save")} autoFocus
           onCancel={() => setAdding(false)}
           onSubmit={async (fields) => {
@@ -305,8 +306,8 @@ export function LoginsSettings() {
           <ExactHostChoice checked={addExact} onChange={setAddExact} label={t("settings.logins.exactHost")} />
           <LoginBotPicker value={addBots} onChange={setAddBots} bots={bots} />
         </LoginForm>,
-      )}
-      {editingLogin && loginForm(editingLogin.site, () => setEditing(null),
+      )}</AnimatePresence>
+      <AnimatePresence>{editingLogin && loginForm(editingLogin.site, () => setEditing(null),
         <>
           <LoginForm username={false} replacing compact submitLabel={t("settings.logins.saveChange")} autoFocus
             onCancel={() => setEditing(null)}
@@ -328,7 +329,7 @@ export function LoginsSettings() {
             </button>
           </div>
         </>,
-      )}
+      )}</AnimatePresence>
       <OnePasswordConnection status={onePassword} disabled={logins === null} bots={bots} botNames={botNames} openNonce={connectNonce}
         onChange={async (next) => { setOnePassword(next); await load(); }} />
     </>
@@ -415,7 +416,7 @@ function OnePasswordConnection({ status, disabled, bots, botNames, onChange, ope
     event.preventDefault();
     if (token.trim()) void run("connect", () => connectOnePassword(token.trim()));
   };
-  const tokenDialog = connecting && (
+  const tokenDialog = <AnimatePresence>{connecting && (
     <DialogPane.Provider value={false}>
       <GrokDialog data-panel-modal="onepassword" title={t("settings.logins.onePassword.title")} description={t("settings.w6c.logins.onePasswordGuide")} onClose={() => setConnecting(false)}>
         <form className="flex flex-col gap-3" onSubmit={connect}>
@@ -433,8 +434,8 @@ function OnePasswordConnection({ status, disabled, bots, botNames, onChange, ope
         </form>
       </GrokDialog>
     </DialogPane.Provider>
-  );
-  if (!status.connected) return tokenDialog || null;
+  )}</AnimatePresence>;
+  if (!status.connected) return tokenDialog;
   return (
     <SettingsGroup label={t("settings.logins.onePassword.title")} block="onepassword">
       <section aria-label={t("settings.logins.onePassword.title")} data-onepassword>

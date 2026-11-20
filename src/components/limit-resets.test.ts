@@ -31,6 +31,7 @@ vi.mock("@/lib/analytics", () => ({ track: vi.fn() }));
 
 const { setLocale } = await import("@/lib/i18n");
 const limits = await import("@/lib/limit-resets");
+const { setUsageDisplay } = await import("@/lib/usage-display");
 const { automationSentence, isDone, statusLine } = await import("@/lib/automations");
 const { UsageAlert, UsageBars } = await import("./EngineUsage");
 const { FailedTurnRow } = await import("./ChatView");
@@ -86,6 +87,7 @@ beforeEach(() => {
   limits.rememberLimits({ checkedAt: NOW, engines: [claude(92)] });
 });
 afterEach(() => {
+  setUsageDisplay("used");
   root?.unmount();
   root = null;
   document.body.innerHTML = "";
@@ -96,6 +98,8 @@ afterEach(() => {
 describe("the words", () => {
   it("say how full an engine is and when it resets", () => {
     expect(limits.limitLine(claude(92), NOW)).toBe("Claude: 92% used · Resets 3:40 PM");
+    expect(limits.limitLine(claude(92), NOW, " · ", "left")).toBe("Claude: 8% left · Resets 3:40 PM");
+    expect(limits.limitLine(claude(100, true), NOW, " · ", "left")).toBe("Claude: at its limit · Resets 3:40 PM");
     expect(limits.limitLine(claude(100, true), NOW)).toBe("Claude: at its limit · Resets 3:40 PM");
     expect(limits.nearLimitEngines([claude(89), { ...claude(90), engine: "codex" }]).map((limit) => limit.engine)).toEqual(["codex"]);
   });
@@ -191,7 +195,15 @@ describe("the bars", () => {
     hover(spot, "mouse");
     await wait(HOVER_MS);
     const card = document.querySelector<HTMLElement>("[data-usage-card]")!;
-    expect([...card.querySelectorAll("[data-usage-row]")].map((row) => row.textContent)).toEqual(["5-hour62% leftResets 3:40 PM", "Weekly20% leftResets Mon 9:00 AM"]);
+    const rows = () => [...card.querySelectorAll("[data-usage-row]")].map((row) => row.textContent);
+    const fills = () => [...card.querySelectorAll<HTMLElement>("[data-usage-row] [aria-hidden] > div")].map((fill) => fill.style.width);
+    expect(rows()).toEqual(["5-hour38% usedResets 3:40 PM", "Weekly80% usedResets Mon 9:00 AM"]);
+    expect(fills()).toEqual(["38%", "80%"]);
+    flushSync(() => setUsageDisplay("left"));
+    expect(rows()).toEqual(["5-hour62% leftResets 3:40 PM", "Weekly20% leftResets Mon 9:00 AM"]);
+    expect(fills()).toEqual(["62%", "20%"]);
+    expect(spot.querySelector(".sr-only")?.textContent).toBe("Claude: 20% left, resets 3:40 PM");
+    flushSync(() => setUsageDisplay("used"));
     expect(card.textContent).not.toContain("Check again");
     leave(spot);
     await wait(HOVER_MS);

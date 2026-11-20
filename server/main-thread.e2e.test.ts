@@ -91,13 +91,11 @@ it("stamps askedAt where a person writes, never for a routine, a webhook, start_
     await replied(bot.id, webhookThread, "Webhook handled.");
 
     await cli("send", "--bot", teammate.id, "--task", teammate.activeTaskId, "--text", "Hand this to Asker.");
-    const handoff = await thread(bot.id, "Take this over.");
-    await replied(bot.id, handoff.threadId, "Hand-off done.");
+    // one chat per bot: the hand-off lands in the bot's own chat, and still stamps nothing there
+    await replied(bot.id, first, "Hand-off done.");
     await idle(teammate.id);
-    const handed = (await api("GET", `/api/threads/${handoff.threadId}/messages?limit=50`)).messages as any[];
+    const handed = (await api("GET", `/api/threads/${first}/messages?limit=50`)).messages as any[];
     expect(handed.some((message) => message.from?.botId === teammate.id && message.roomRequest?.phase === "request" && String(message.text).includes("Take this over."))).toBe(true);
-    expect(handed.filter((message) => message.role === "user")).toEqual([]);
-    expect(handoff.openedBy).toMatchObject({ botId: teammate.id });
 
     expect(stamps(bot.id)).toEqual(asked);
     const after = await wire(bot.id);
@@ -132,8 +130,7 @@ it("moves no main thread for a teammate's work or results; results are news wher
     await cli("send", "--bot", asker.id, "--task", asker.activeTaskId, "--text", "Open a side job that asks Teammate.");
     const side = await thread(asker.id, "Side job");
     await replied(asker.id, side.threadId, "Side job done: the books balance.");
-    const work = (await tasks(teammate.id)).find((task) => task.openedBy?.kind === "work");
-    expect(await said(work.threadId)).toContain("The books balance.");
+    expect(await said(teammate.activeTaskId)).toContain("The books balance.");
     await idle(teammate.id);
 
     await cli("send", "--bot", teammate.id, "--task", teammate.activeTaskId, "--text", "Reconcile the invoices.");

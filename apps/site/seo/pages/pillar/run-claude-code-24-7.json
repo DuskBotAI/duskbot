@@ -14,7 +14,7 @@
     "claude code background agent"
   ],
   "answer": "**the 7am brief won't arrive from a laptop that went to sleep at midnight.** a dusk bot using claude code needs an awake computer and open app. your server or dusk cloud keeps it available overnight, within ai limits and any human questions. as of 12 november 2026, anthropic also offers cloud sessions and scheduled tasks. compare those before buying another host.",
-  "updated": "2026-11-12",
+  "updated": "2026-11-20",
   "review": {
     "status": "approved",
     "by": "lead agent: read against seo/facts, automated gate, independent fact-check pass",
@@ -118,7 +118,7 @@
     },
     {
       "q": "can i answer an overnight approval from my phone?",
-      "a": "**yes, through a paired phone.** a laptop pairing needs the laptop on. cloud pairing works with it off. today's phone browser sends no notifications, so open it to check.[^4][^6]"
+      "a": "**yes, through a paired phone.** a laptop pairing needs the laptop on. cloud pairing works with it off. dusk's iphone app notifies you of replies. on android, open the paired browser to see them.[^4][^6]"
     }
   ],
   "sources": [

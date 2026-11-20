@@ -1,36 +1,21 @@
 import { t } from "@/lib/i18n";
-import { GrokDialog, listCardCls, rowHintCls, rowTitleCls } from "./ui/GrokDialog";
+import { MobilePairingCard } from "./MobilePairingCard";
+import { GrokDialog } from "./ui/GrokDialog";
 
-export interface PhoneAppConnect {
-  key: string;
-  subtitle: string;
-  onSelect: () => void;
-}
-
-/** Where to connect the phone, when there is more than one place: one row each, as the menu lists them. */
-export function PhoneAppDialog({ open, onClose, connect = [] }: { open: boolean; onClose: () => void; connect?: PhoneAppConnect[] }) {
+/** Connect your phone: one QR at once, for this place and, through the account it signs the phone in to, every other
+ * place the person has. The phone asks which one to open. */
+export function PhoneAppDialog({ open, onClose, remote, cloudHome, email }: {
+  open: boolean;
+  onClose: () => void;
+  /** the window shows another server's page: its own pairing code */
+  remote: boolean;
+  cloudHome: boolean;
+  email?: string;
+}) {
   if (!open) return null;
   return (
-    <GrokDialog data-panel-modal="phone" title={t("sidebar.menu.connectPhone")} description={t("settings.phone.pair.hint")} onClose={onClose}>
-      {connect.length ? (
-        <div className={listCardCls}>
-          {connect.map((destination) => (
-            <button
-              key={destination.key}
-              type="button"
-              data-phone-app-connect={destination.key}
-              onClick={() => {
-                onClose();
-                destination.onSelect();
-              }}
-              className="mx-1.5 flex min-h-12 cursor-pointer flex-col items-start justify-center rounded-[10px] px-2 py-2 text-start outline-none transition-[background-color] duration-[120ms] ease-[ease] hover:bg-ink/5 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-focus"
-            >
-              <span className={rowTitleCls}>{t("sidebar.menu.connectPhone")}</span>
-              <span className={rowHintCls}>{destination.subtitle}</span>
-            </button>
-          ))}
-        </div>
-      ) : null}
+    <GrokDialog data-panel-modal="phone" title={t("sidebar.menu.connectPhone")} width={480} onClose={onClose}>
+      <MobilePairingCard remote={remote} cloudHome={cloudHome} email={email} direct={{ onDone: onClose }} />
     </GrokDialog>
   );
 }

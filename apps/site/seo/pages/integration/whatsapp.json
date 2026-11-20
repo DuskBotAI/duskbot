@@ -99,7 +99,7 @@
   "sections": [
     {
       "h": "texting your bots is a separate connection",
-      "md": "**text your own bots through dusk phone pairing.** scan the code on an iphone or android phone. store apps are on their way; today's version opens in your phone browser.[^4]\n\nif a customer answer needs [hubspot](/integrations/hubspot) records or a [shopify](/integrations/shopify) order, connect that app separately.\n\nuse the order record for shipment status. the message history alone can't tell you the parcel shipped."
+      "md": "**text your own bots through dusk phone pairing.** on iphone, pair the app from the app store to get reply notifications. on android, scan the pairing code and use the browser until dusk arrives on google play.[^4]\n\nif a customer answer needs [hubspot](/integrations/hubspot) records or a [shopify](/integrations/shopify) order, connect that app separately.\n\nuse the order record for shipment status. the message history alone can't tell you the parcel shipped."
     },
     {
       "h": "give the reply a source it can point to",
@@ -113,7 +113,7 @@
     },
     {
       "q": "can i text my bots from my phone?",
-      "a": "**yes, use dusk phone pairing.** scan the code and use the browser version until store apps arrive. pairing to your computer needs that computer on with dusk running."
+      "a": "**yes, use dusk phone pairing.** scan the code to pair the iphone app or the android browser. pairing to your computer needs that computer on with dusk running."
     },
     {
       "q": "will it automatically answer customers?",
@@ -144,7 +144,7 @@
     "openclaw whatsapp",
     "ai assistant whatsapp"
   ],
-  "updated": "2026-11-12",
+  "updated": "2026-11-20",
   "review": {
     "status": "approved",
     "by": "lead agent: independent reviewer pass against seo/facts (4 reviewers), every finding applied, automated gate",

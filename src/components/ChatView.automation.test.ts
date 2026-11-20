@@ -76,6 +76,17 @@ afterAll(() => {
 });
 
 describe("an automation's line in the chat", () => {
+  it("never shows a run's silence token, flagged or not", async () => {
+    await draw(transcript([
+      { id: "q1", parentId: "m2", role: "bot", kind: "text", text: "NOTHING NEW", at: at(3), quietRun: true },
+      { id: "q2", parentId: "q1", role: "bot", kind: "text", text: "**Nothing new.**", at: at(4) },
+      { id: "q3", parentId: "q2", role: "bot", kind: "text", text: "There is nothing new from Acme, but Bob wrote.", at: at(5) },
+    ]));
+    expect(document.querySelector('[data-mid="q1"]')).toBeNull();
+    expect(document.querySelector('[data-mid="q2"]')).toBeNull();
+    expect(document.querySelector('[data-mid="q3"]')?.textContent).toContain("Bob wrote");
+  });
+
   it("is the bot's own message, with no caption above it", async () => {
     await draw(transcript([
       { id: "r1", parentId: "m2", role: "bot", kind: "text", text: "Acme replied about the order.", at: at(3), automation: line("run-1") },

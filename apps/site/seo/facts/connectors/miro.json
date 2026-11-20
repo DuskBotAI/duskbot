@@ -1,0 +1,3585 @@
+{
+  "toolkit": "miro",
+  "name": "Miro",
+  "version": "20261113_00",
+  "description": "Miro is a collaborative online whiteboard enabling teams to brainstorm ideas, design wireframes, plan workflows, and manage projects visually",
+  "managed_sign_in": true,
+  "auth": [
+    "OAuth2"
+  ],
+  "tools_count": 89,
+  "triggers_count": 0,
+  "tools": [
+    {
+      "name": "Attach Tag To Item",
+      "slug": "MIRO_ATTACH_TAG_TO_ITEM",
+      "kind": "write",
+      "description": "Tool to attach an existing tag to a specific item on a Miro board. Use when you need to associate a tag with an item after confirming the board, item, and tag IDs. Note that card and sticky note items can have up to 8 tags.",
+      "inputs": [
+        {
+          "name": "tag_id",
+          "type": "string",
+          "required": true,
+          "about": "Unique identifier of the tag to attach to the item."
+        },
+        {
+          "name": "item_id",
+          "type": "string",
+          "required": true,
+          "about": "Unique identifier of the item to attach the tag to. Card and sticky note items can have up to 8 tags."
+        },
+        {
+          "name": "board_id",
+          "type": "string",
+          "required": true,
+          "about": "Unique identifier of the board containing the item."
+        }
+      ],
+      "scopes": [
+        "boards:write"
+      ],
+      "tags": [
+        "important",
+        "openWorldHint",
+        "Tags",
+        "updateHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Copy Board",
+      "slug": "MIRO_COPY_BOARD",
+      "kind": "write",
+      "description": "Create a copy of an existing Miro board, optionally changing its name, description, policies, or destination team. Returns the new board, leaving the source board unchanged.",
+      "inputs": [
+        {
+          "name": "name",
+          "type": "string",
+          "required": false,
+          "about": "Name for the new board. Omit to use Miro's default (Untitled)."
+        },
+        {
+          "name": "policy",
+          "type": "object",
+          "required": false,
+          "about": "Permissions and sharing policies for the new board."
+        },
+        {
+          "name": "team_id",
+          "type": "string",
+          "required": false,
+          "about": "ID of the team where the copied board must be placed."
+        },
+        {
+          "name": "copy_from",
+          "type": "string",
+          "required": true,
+          "about": "ID of the existing board to copy."
+        },
+        {
+          "name": "description",
+          "type": "string",
+          "required": false,
+          "about": "Description of the new board."
+        }
+      ],
+      "scopes": [
+        "boards:write"
+      ],
+      "tags": [
+        "createHint",
+        "openWorldHint",
+        "Boards"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Create App Card Item",
+      "slug": "MIRO_CREATE_APP_CARD_ITEM",
+      "kind": "write",
+      "description": "Creates an app card on a Miro board, with optional custom preview fields. The returned card ID is at the top level of the response.",
+      "inputs": [
+        {
+          "name": "data",
+          "type": "object",
+          "required": true,
+          "about": "Payload data for the app card"
+        },
+        {
+          "name": "style",
+          "type": "object",
+          "required": false,
+          "about": "Styling options for an app card item."
+        },
+        {
+          "name": "parent",
+          "type": "object",
+          "required": false,
+          "about": "Parent frame reference for nesting an app card item."
+        },
+        {
+          "name": "board_id",
+          "type": "string",
+          "required": true,
+          "about": "ID of the board to add the app card to"
+        },
+        {
+          "name": "geometry",
+          "type": "object",
+          "required": false,
+          "about": "Geometrical dimensions for an app card item."
+        },
+        {
+          "name": "position",
+          "type": "object",
+          "required": false,
+          "about": "Board position for an app card item."
+        }
+      ],
+      "scopes": [
+        "boards:write"
+      ],
+      "tags": [
+        "openWorldHint",
+        "Items",
+        "createHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Create Board",
+      "slug": "MIRO_CREATE_BOARD",
+      "kind": "write",
+      "description": "Tool to create a new board. Use when you need to set up a board with a specific name, description, and policies. Example: \"Create a new board named Project Plan\". If workspace board quota is reached, returns HTTP 400; use MIRO_GET_BOARDS to reuse an existing board instead.",
+      "inputs": [
+        {
+          "name": "name",
+          "type": "string",
+          "required": true,
+          "about": "Name for the board, length between 1 and 60 characters."
+        },
+        {
+          "name": "policy",
+          "type": "object",
+          "required": false,
+          "about": "Defines permissions and sharing policies for the board. Accepts specific enum values only; invalid values return HTTP 400 with error code 2.0703. Valid `sharingPolicy` values include `private`, `view`, `comment`, `edit`, `team_access`."
+        },
+        {
+          "name": "teamId",
+          "type": "string",
+          "required": false,
+          "about": "Unique identifier (ID) of the team where the board will be created."
+        },
+        {
+          "name": "projectId",
+          "type": "string",
+          "required": false,
+          "about": "Unique identifier (ID) of the project (space) to which the board belongs."
+        },
+        {
+          "name": "description",
+          "type": "string",
+          "required": false,
+          "about": "Description of the board, length between 0 and 300 characters."
+        }
+      ],
+      "scopes": [
+        "boards:write"
+      ],
+      "tags": [
+        "important",
+        "createHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Create Card Item",
+      "slug": "MIRO_CREATE_CARD_ITEM",
+      "kind": "write",
+      "description": "Tool to create a card item on a Miro board. Use when you need to add task cards with titles, descriptions, due dates, and assignees.",
+      "inputs": [
+        {
+          "name": "data",
+          "type": "object",
+          "required": false,
+          "about": "Core data for a card item."
+        },
+        {
+          "name": "style",
+          "type": "object",
+          "required": false,
+          "about": "Styling options for a card item."
+        },
+        {
+          "name": "parent",
+          "type": "object",
+          "required": false,
+          "about": "Parent item reference for nesting a card."
+        },
+        {
+          "name": "board_id",
+          "type": "string",
+          "required": true,
+          "about": "Unique identifier of the board where the card will be created"
+        },
+        {
+          "name": "geometry",
+          "type": "object",
+          "required": false,
+          "about": "Geometrical dimensions for a card item."
+        },
+        {
+          "name": "position",
+          "type": "object",
+          "required": false,
+          "about": "Board position for a card item."
+        }
+      ],
+      "scopes": [
+        "boards:write"
+      ],
+      "tags": [
+        "important",
+        "openWorldHint",
+        "Items",
+        "createHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Create Connector",
+      "slug": "MIRO_CREATE_CONNECTOR",
+      "kind": "write",
+      "description": "Tool to create a connector (edge/arrow) that links two existing board items. Use after creating or locating the two endpoint items (shapes/cards/stickies) to establish visual relationships in flowcharts and diagrams. Both start and end items must be specified; connectors cannot be created with loose endpoints.",
+      "inputs": [
+        {
+          "name": "shape",
+          "type": "string",
+          "required": true,
+          "about": "Shape/style of the connector line."
+        },
+        {
+          "name": "style",
+          "type": "object",
+          "required": false,
+          "about": "Visual styling properties for the connector line and caption."
+        },
+        {
+          "name": "endItem",
+          "type": "object",
+          "required": true,
+          "about": "Defines the ending point of the connector. Must specify either snapTo or position."
+        },
+        {
+          "name": "board_id",
+          "type": "string",
+          "required": true,
+          "about": "Unique identifier of the board where the connector will be created."
+        },
+        {
+          "name": "captions",
+          "type": "array",
+          "required": false,
+          "about": "Array of caption objects to display text along the connector."
+        },
+        {
+          "name": "startItem",
+          "type": "object",
+          "required": true,
+          "about": "Defines the starting point of the connector. Must specify either snapTo or position."
+        }
+      ],
+      "scopes": [
+        "boards:write"
+      ],
+      "tags": [
+        "important",
+        "openWorldHint",
+        "Connector Management",
+        "createHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Create Doc Format Item",
+      "slug": "MIRO_CREATE_DOC_FORMAT_ITEM",
+      "kind": "write",
+      "description": "Create a structured Markdown doc on a Miro board.",
+      "inputs": [
+        {
+          "name": "parent",
+          "type": "object",
+          "required": false,
+          "about": "Parent frame for the doc."
+        },
+        {
+          "name": "content",
+          "type": "string",
+          "required": true,
+          "about": "Markdown content for the doc."
+        },
+        {
+          "name": "board_id",
+          "type": "string",
+          "required": true,
+          "about": "Unique identifier of the board where the doc will be created."
+        },
+        {
+          "name": "position",
+          "type": "object",
+          "required": false,
+          "about": "Position for the doc on the board."
+        },
+        {
+          "name": "content_version",
+          "type": "integer",
+          "required": false,
+          "about": "Optional numeric content version. Miro's live API rejects the documented string type."
+        }
+      ],
+      "scopes": [
+        "boards:write"
+      ],
+      "tags": [
+        "important",
+        "openWorldHint",
+        "Items",
+        "createHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Create Document Item",
+      "slug": "MIRO_CREATE_DOCUMENT_ITEM",
+      "kind": "write",
+      "description": "Tool to create a document item on a Miro board by providing a URL to the document. Use when you need to attach a document (PDF, DOC, etc.) to a board from a publicly accessible URL.",
+      "inputs": [
+        {
+          "name": "data",
+          "type": "object",
+          "required": true,
+          "about": "Contains the document URL and optional title."
+        },
+        {
+          "name": "parent",
+          "type": "object",
+          "required": false,
+          "about": "Parent element reference for hierarchical positioning."
+        },
+        {
+          "name": "board_id",
+          "type": "string",
+          "required": true,
+          "about": "The unique identifier of the board where the document will be created."
+        },
+        {
+          "name": "geometry",
+          "type": "object",
+          "required": false,
+          "about": "Geometric properties with fixed aspect ratio for the document item."
+        },
+        {
+          "name": "position",
+          "type": "object",
+          "required": false,
+          "about": "Positioning information for the document item on the board."
+        }
+      ],
+      "scopes": [
+        "boards:write"
+      ],
+      "tags": [
+        "important",
+        "openWorldHint",
+        "Items",
+        "createHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Create Document Item Using File From Device",
+      "slug": "MIRO_CREATE_DOCUMENT_ITEM_USING_FILE_FROM_DEVICE",
+      "kind": "write",
+      "description": "Create a document item on a Miro board by uploading a document file, with optional title, position, geometry, and parent frame.",
+      "inputs": [
+        {
+          "name": "data",
+          "type": "object",
+          "required": false,
+          "about": "Data containing document metadata like title."
+        },
+        {
+          "name": "parent",
+          "type": "object",
+          "required": false,
+          "about": "Parent frame information for the item."
+        },
+        {
+          "name": "board_id",
+          "type": "string",
+          "required": true,
+          "about": "Unique identifier (ID) of the board where you want to create the item."
+        },
+        {
+          "name": "geometry",
+          "type": "object",
+          "required": false,
+          "about": "Geometrical information about the item."
+        },
+        {
+          "name": "position",
+          "type": "object",
+          "required": false,
+          "about": "Position information for the document item on the board."
+        },
+        {
+          "name": "resource",
+          "type": "object",
+          "required": true,
+          "about": "Document file to upload. Maximum file size: 6 MB. Supported format: PDF."
+        }
+      ],
+      "scopes": [
+        "boards:write"
+      ],
+      "tags": [
+        "openWorldHint",
+        "Items",
+        "createHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Create Embed Item",
+      "slug": "MIRO_CREATE_EMBED_ITEM",
+      "kind": "write",
+      "description": "Tool to create an embed item on a Miro board by providing a URL to embed content (YouTube videos, websites, etc.). Use when you need to add embedded content from external sources to a board.",
+      "inputs": [
+        {
+          "name": "data",
+          "type": "object",
+          "required": true,
+          "about": "Contains information about the embed URL."
+        },
+        {
+          "name": "parent",
+          "type": "object",
+          "required": false,
+          "about": "Parent element reference for hierarchical positioning."
+        },
+        {
+          "name": "board_id",
+          "type": "string",
+          "required": true,
+          "about": "Unique identifier (ID) of the board where you want to create the item."
+        },
+        {
+          "name": "geometry",
+          "type": "object",
+          "required": false,
+          "about": "Geometrical information about the embed item."
+        },
+        {
+          "name": "position",
+          "type": "object",
+          "required": false,
+          "about": "Positioning information for the embed item on the board."
+        }
+      ],
+      "scopes": [
+        "boards:write"
+      ],
+      "tags": [
+        "openWorldHint",
+        "Items",
+        "createHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Create Frame Item",
+      "slug": "MIRO_CREATE_FRAME_ITEM",
+      "kind": "write",
+      "description": "Tool to add a frame item to a Miro board. Use frames to group and organize diagram regions (e.g., swimlanes, sections, slides).",
+      "inputs": [
+        {
+          "name": "data",
+          "type": "object",
+          "required": true,
+          "about": "Contains frame-specific properties like title and format. This field is required."
+        },
+        {
+          "name": "style",
+          "type": "object",
+          "required": false,
+          "about": "Styling options for a frame item."
+        },
+        {
+          "name": "parent",
+          "type": "object",
+          "required": false,
+          "about": "Parent item reference for nesting a frame."
+        },
+        {
+          "name": "board_id",
+          "type": "string",
+          "required": true,
+          "about": "Unique identifier of the board where the frame will be added"
+        },
+        {
+          "name": "geometry",
+          "type": "object",
+          "required": false,
+          "about": "Geometrical dimensions for a frame item."
+        },
+        {
+          "name": "position",
+          "type": "object",
+          "required": false,
+          "about": "Board position for a frame item."
+        }
+      ],
+      "scopes": [
+        "boards:write"
+      ],
+      "tags": [
+        "openWorldHint",
+        "Items",
+        "createHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Create Frame (Deprecated)",
+      "slug": "MIRO_CREATE_FRAME_ITEM2",
+      "kind": "write",
+      "description": "DEPRECATED: Use MIRO_CREATE_FRAME_ITEM instead. Tool to create a frame on a Miro board. Use when you need to group and organize content into sections or containers.",
+      "inputs": [
+        {
+          "name": "data",
+          "type": "object",
+          "required": true,
+          "about": "Contains frame item data, such as the title, frame type, or frame format."
+        },
+        {
+          "name": "style",
+          "type": "object",
+          "required": false,
+          "about": "Styling options for a frame item."
+        },
+        {
+          "name": "board_id",
+          "type": "string",
+          "required": true,
+          "about": "Unique identifier (ID) of the board where you want to create a frame."
+        },
+        {
+          "name": "geometry",
+          "type": "object",
+          "required": false,
+          "about": "Geometrical dimensions for a frame item."
+        },
+        {
+          "name": "position",
+          "type": "object",
+          "required": false,
+          "about": "Board position for a frame item."
+        }
+      ],
+      "scopes": [
+        "boards:write"
+      ],
+      "tags": [
+        "important",
+        "deprecated",
+        "createHint"
+      ],
+      "deprecated": true
+    },
+    {
+      "name": "Create Group",
+      "slug": "MIRO_CREATE_GROUP",
+      "kind": "write",
+      "description": "Tool to create a group on a Miro board by grouping multiple items together. Use when you need to organize related board items (shapes, sticky notes, cards, etc.) into a single logical group.",
+      "inputs": [
+        {
+          "name": "data",
+          "type": "object",
+          "required": true,
+          "about": "Contains the data with item IDs to be grouped."
+        },
+        {
+          "name": "board_id",
+          "type": "string",
+          "required": true,
+          "about": "Unique identifier (ID) of the board where the group will be created."
+        }
+      ],
+      "scopes": [
+        "boards:write"
+      ],
+      "tags": [
+        "openWorldHint",
+        "Items",
+        "createHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Create Image Item from URL",
+      "slug": "MIRO_CREATE_IMAGE_ITEM_FROM_URL",
+      "kind": "write",
+      "description": "Creates an image item on a Miro board by providing a URL to a publicly accessible image. This action adds images from external URLs rather than uploading files from local storage. Use this action when you have an image hosted online (e.g., on a CDN, image hosting service, or public URL) and want to add it to a Miro board without downloading and re-uploading the file.",
+      "inputs": [
+        {
+          "name": "data",
+          "type": "object",
+          "required": true,
+          "about": "Contains the image URL and optional title."
+        },
+        {
+          "name": "parent",
+          "type": "object",
+          "required": false,
+          "about": "Parent item reference for nesting an image."
+        },
+        {
+          "name": "board_id",
+          "type": "string",
+          "required": true,
+          "about": "Unique identifier (ID) of the board where you want to create the image item."
+        },
+        {
+          "name": "geometry",
+          "type": "object",
+          "required": false,
+          "about": "Geometrical dimensions for an image item."
+        },
+        {
+          "name": "position",
+          "type": "object",
+          "required": false,
+          "about": "Board position for an image item."
+        }
+      ],
+      "scopes": [
+        "boards:write"
+      ],
+      "tags": [
+        "important",
+        "createHint",
+        "openWorldHint",
+        "Items"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Create Image Item Using Local File",
+      "slug": "MIRO_CREATE_IMAGE_ITEM_USING_LOCAL_FILE",
+      "kind": "write",
+      "description": "Tool to create an image item on a Miro board by uploading a local image file. Use when you need to add an image from the user's device to a board, rather than referencing an external URL.",
+      "inputs": [
+        {
+          "name": "data",
+          "type": "object",
+          "required": false,
+          "about": "Core data for an image item."
+        },
+        {
+          "name": "parent",
+          "type": "object",
+          "required": false,
+          "about": "Parent item reference for nesting an image."
+        },
+        {
+          "name": "board_id",
+          "type": "string",
+          "required": true,
+          "about": "Unique identifier (ID) of the board where you want to create the image item."
+        },
+        {
+          "name": "geometry",
+          "type": "object",
+          "required": false,
+          "about": "Geometrical dimensions for an image item."
+        },
+        {
+          "name": "position",
+          "type": "object",
+          "required": false,
+          "about": "Board position for an image item."
+        },
+        {
+          "name": "resource",
+          "type": "object",
+          "required": true,
+          "about": "Image file to upload. Supported formats: PNG, JPG, JPEG, GIF, SVG, etc."
+        }
+      ],
+      "scopes": [
+        "boards:write"
+      ],
+      "tags": [
+        "important",
+        "openWorldHint",
+        "Items",
+        "createHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Create Items in Bulk",
+      "slug": "MIRO_CREATE_ITEMS_IN_BULK",
+      "kind": "write",
+      "description": "Tool to create multiple items on a Miro board in a single request. Use when you need to add 1-20 items (text, sticky notes, shapes, cards, frames, etc.) efficiently. Items are created atomically in one API call.",
+      "inputs": [
+        {
+          "name": "items",
+          "type": "array",
+          "required": true,
+          "about": "List of items to create. You can create 1 to 20 items per request."
+        },
+        {
+          "name": "board_id",
+          "type": "string",
+          "required": true,
+          "about": "Unique identifier of the board where items will be created."
+        }
+      ],
+      "scopes": [
+        "boards:write"
+      ],
+      "tags": [
+        "important",
+        "openWorldHint",
+        "Items",
+        "createHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Create Mind Map Node (Experimental)",
+      "slug": "MIRO_CREATE_MINDMAP_NODE_EXPERIMENTAL",
+      "kind": "write",
+      "description": "Tool to create a mind map node on a Miro board. Use when building mind maps or organizing ideas visually in a hierarchical structure. This is an experimental endpoint.",
+      "inputs": [
+        {
+          "name": "data",
+          "type": "object",
+          "required": true,
+          "about": "Core mind map node data including the node view with content."
+        },
+        {
+          "name": "board_id",
+          "type": "string",
+          "required": true,
+          "about": "Unique identifier (ID) of the board where you want to create the mind map node."
+        },
+        {
+          "name": "geometry",
+          "type": "object",
+          "required": false,
+          "about": "Geometry for the mind map node."
+        },
+        {
+          "name": "position",
+          "type": "object",
+          "required": false,
+          "about": "Position for the mind map node on the board."
+        }
+      ],
+      "scopes": [
+        "boards:write"
+      ],
+      "tags": [
+        "openWorldHint",
+        "experimental",
+        "mindmap",
+        "createHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Create Shape Item (Deprecated)",
+      "slug": "MIRO_CREATE_SHAPE_ITEM",
+      "kind": "write",
+      "description": "DEPRECATED: Use MIRO_MIRO_CREATE_SHAPE_ITEM2 instead. Tool to create a native Miro shape item (diagram node) on a board. Use when building diagrams, flowcharts, or architecture diagrams with shapes that can then be connected via MIRO_CREATE_CONNECTOR.",
+      "inputs": [
+        {
+          "name": "data",
+          "type": "object",
+          "required": true,
+          "about": "Core shape data including content text and shape type."
+        },
+        {
+          "name": "style",
+          "type": "object",
+          "required": false,
+          "about": "Styling options for a shape item."
+        },
+        {
+          "name": "parent",
+          "type": "object",
+          "required": false,
+          "about": "Parent item reference for nesting a shape."
+        },
+        {
+          "name": "board_id",
+          "type": "string",
+          "required": true,
+          "about": "Unique identifier of the board where the shape will be created."
+        },
+        {
+          "name": "geometry",
+          "type": "object",
+          "required": false,
+          "about": "Geometrical dimensions for a shape item."
+        },
+        {
+          "name": "position",
+          "type": "object",
+          "required": false,
+          "about": "Board position for a shape item."
+        }
+      ],
+      "scopes": [
+        "boards:write"
+      ],
+      "tags": [
+        "openWorldHint",
+        "Items",
+        "deprecated",
+        "createHint"
+      ],
+      "deprecated": true
+    },
+    {
+      "name": "Create Shape Item",
+      "slug": "MIRO_CREATE_SHAPE_ITEM2",
+      "kind": "write",
+      "description": "Tool to create a shape item on a Miro board. Use when you need to add shapes (basic or flowchart) to a board with specific styling and positioning.",
+      "inputs": [
+        {
+          "name": "data",
+          "type": "object",
+          "required": false,
+          "about": "Core data for a shape item."
+        },
+        {
+          "name": "style",
+          "type": "object",
+          "required": false,
+          "about": "Styling options for a shape item."
+        },
+        {
+          "name": "parent",
+          "type": "object",
+          "required": false,
+          "about": "Parent frame information for the shape item."
+        },
+        {
+          "name": "board_id",
+          "type": "string",
+          "required": true,
+          "about": "Unique identifier (ID) of the board where you want to create the item."
+        },
+        {
+          "name": "geometry",
+          "type": "object",
+          "required": false,
+          "about": "Geometrical information about the shape item."
+        },
+        {
+          "name": "position",
+          "type": "object",
+          "required": false,
+          "about": "Position information for the shape item."
+        }
+      ],
+      "scopes": [
+        "boards:write"
+      ],
+      "tags": [
+        "openWorldHint",
+        "Items",
+        "createHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Create Sticky Note Item",
+      "slug": "MIRO_CREATE_STICKY_NOTE_ITEM",
+      "kind": "write",
+      "description": "Tool to create a sticky note item on a Miro board. Use when you need to add a new sticky note with customizable content, color, shape, and position.",
+      "inputs": [
+        {
+          "name": "data",
+          "type": "object",
+          "required": false,
+          "about": "Contains sticky note item data, such as the content or shape of the sticky note."
+        },
+        {
+          "name": "style",
+          "type": "object",
+          "required": false,
+          "about": "Contains information about the style of a sticky note item, such as the fill color or text alignment."
+        },
+        {
+          "name": "parent",
+          "type": "object",
+          "required": false,
+          "about": "Contains information about the parent frame for the item."
+        },
+        {
+          "name": "board_id",
+          "type": "string",
+          "required": true,
+          "about": "Unique identifier (ID) of the board where you want to create the item."
+        },
+        {
+          "name": "geometry",
+          "type": "object",
+          "required": false,
+          "about": "Contains geometrical information about the item. You can set either the width or height. You cannot set both the width and height at the same time."
+        },
+        {
+          "name": "position",
+          "type": "object",
+          "required": false,
+          "about": "Contains information about the item's position on the board, such as its x coordinate, y coordinate, and the origin of the x and y coordinates."
+        }
+      ],
+      "scopes": [
+        "boards:write"
+      ],
+      "tags": [
+        "important",
+        "openWorldHint",
+        "Items",
+        "createHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Create Tag",
+      "slug": "MIRO_CREATE_TAG",
+      "kind": "write",
+      "description": "Tool to create a new tag on a Miro board. Use when you need to add a new tag with a specific title and color to categorize board items.",
+      "inputs": [
+        {
+          "name": "title",
+          "type": "string",
+          "required": true,
+          "about": "Text of the tag. Case-sensitive. Must be unique within the board."
+        },
+        {
+          "name": "boardId",
+          "type": "string",
+          "required": true,
+          "about": "Unique identifier (ID) of the board where you want to create the tag."
+        },
+        {
+          "name": "fillColor",
+          "type": "string",
+          "required": false,
+          "about": "Fill color for the tag. Choose from predefined color options. Defaults to 'red' if not specified."
+        }
+      ],
+      "scopes": [
+        "boards:write"
+      ],
+      "tags": [
+        "important",
+        "openWorldHint",
+        "Tags",
+        "createHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Create Text Item",
+      "slug": "MIRO_CREATE_TEXT_ITEM",
+      "kind": "write",
+      "description": "Tool to create a text item on a Miro board. Use when you need to add text content to a board, such as labels, notes, or annotations.",
+      "inputs": [
+        {
+          "name": "data",
+          "type": "object",
+          "required": true,
+          "about": "Contains text item data, such as the content."
+        },
+        {
+          "name": "style",
+          "type": "object",
+          "required": false,
+          "about": "Styling options for a text item."
+        },
+        {
+          "name": "parent",
+          "type": "object",
+          "required": false,
+          "about": "Parent item reference for nesting a text item."
+        },
+        {
+          "name": "board_id",
+          "type": "string",
+          "required": true,
+          "about": "Unique identifier (ID) of the board where you want to create the item."
+        },
+        {
+          "name": "geometry",
+          "type": "object",
+          "required": false,
+          "about": "Geometrical dimensions for a text item."
+        },
+        {
+          "name": "position",
+          "type": "object",
+          "required": false,
+          "about": "Board position for a text item."
+        }
+      ],
+      "scopes": [
+        "boards:write"
+      ],
+      "tags": [
+        "important",
+        "openWorldHint",
+        "Items",
+        "createHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Delete App Card Item",
+      "slug": "MIRO_DELETE_APP_CARD_ITEM",
+      "kind": "write",
+      "description": "Tool to delete an app card item from a board. Use when you need to remove an app card item created by your app after it is no longer needed.",
+      "inputs": [
+        {
+          "name": "item_id",
+          "type": "string",
+          "required": true,
+          "about": "Unique identifier of the app card item to delete."
+        },
+        {
+          "name": "board_id",
+          "type": "string",
+          "required": true,
+          "about": "Unique identifier of the board containing the app card item."
+        }
+      ],
+      "scopes": [
+        "boards:write"
+      ],
+      "tags": [
+        "important",
+        "openWorldHint",
+        "destructiveHint",
+        "idempotentHint",
+        "Items"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Delete Board",
+      "slug": "MIRO_DELETE_BOARD",
+      "kind": "write",
+      "description": "Delete a Miro board. On paid plans, deleted boards go to Trash and can be restored via the Miro UI within 90 days after deletion.",
+      "inputs": [
+        {
+          "name": "board_id",
+          "type": "string",
+          "required": true,
+          "about": "Unique identifier of the board to delete."
+        }
+      ],
+      "scopes": [
+        "boards:write"
+      ],
+      "tags": [
+        "destructiveHint",
+        "openWorldHint",
+        "Boards"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Delete Card Item",
+      "slug": "MIRO_DELETE_CARD_ITEM",
+      "kind": "write",
+      "description": "Tool to delete a card item from a board. Use when you need to remove a card item from a Miro board after it is no longer needed.",
+      "inputs": [
+        {
+          "name": "item_id",
+          "type": "string",
+          "required": true,
+          "about": "Unique identifier (ID) of the item that you want to delete."
+        },
+        {
+          "name": "board_id",
+          "type": "string",
+          "required": true,
+          "about": "Unique identifier (ID) of the board from which you want to delete the item."
+        }
+      ],
+      "scopes": [
+        "boards:write"
+      ],
+      "tags": [
+        "openWorldHint",
+        "destructiveHint",
+        "idempotentHint",
+        "Items"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Delete Connector",
+      "slug": "MIRO_DELETE_CONNECTOR",
+      "kind": "write",
+      "description": "Tool to delete a specific connector from a board. Use when you need to remove a connector (edge/arrow) between board items after confirming its board and connector IDs.",
+      "inputs": [
+        {
+          "name": "board_id",
+          "type": "string",
+          "required": true,
+          "about": "Unique identifier (ID) of the board from which you want to delete the connector."
+        },
+        {
+          "name": "connector_id",
+          "type": "string",
+          "required": true,
+          "about": "Unique identifier (ID) of the connector that you want to delete."
+        }
+      ],
+      "scopes": [
+        "boards:write"
+      ],
+      "tags": [
+        "openWorldHint",
+        "destructiveHint",
+        "idempotentHint",
+        "Connector Management"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Delete Doc Format Item",
+      "slug": "MIRO_DELETE_DOC_FORMAT_ITEM",
+      "kind": "write",
+      "description": "Delete a structured Miro doc format item from a board.",
+      "inputs": [
+        {
+          "name": "item_id",
+          "type": "string",
+          "required": true,
+          "about": "Unique identifier of the doc format item to delete."
+        },
+        {
+          "name": "board_id",
+          "type": "string",
+          "required": true,
+          "about": "Unique identifier of the board containing the doc."
+        }
+      ],
+      "scopes": [
+        "boards:write"
+      ],
+      "tags": [
+        "destructiveHint",
+        "openWorldHint",
+        "Items"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Delete Document Item",
+      "slug": "MIRO_DELETE_DOCUMENT_ITEM",
+      "kind": "write",
+      "description": "Tool to delete a document item from a board. Use when you need to remove a document item (e.g., PDF or image) that is no longer relevant. Example: \"Delete the document item with ID 'item456' from board 'board123'.\"",
+      "inputs": [
+        {
+          "name": "item_id",
+          "type": "string",
+          "required": true,
+          "about": "Unique identifier of the document item to delete."
+        },
+        {
+          "name": "board_id",
+          "type": "string",
+          "required": true,
+          "about": "Unique identifier of the board containing the document item."
+        }
+      ],
+      "scopes": [
+        "boards:write"
+      ],
+      "tags": [
+        "openWorldHint",
+        "destructiveHint",
+        "idempotentHint",
+        "Items"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Delete Embed Item",
+      "slug": "MIRO_DELETE_EMBED_ITEM",
+      "kind": "write",
+      "description": "Tool to delete an embed item from a board. Use when you need to remove an embedded content item (e.g., YouTube video, website) that is no longer needed.",
+      "inputs": [
+        {
+          "name": "item_id",
+          "type": "string",
+          "required": true,
+          "about": "Unique identifier (ID) of the item that you want to delete."
+        },
+        {
+          "name": "board_id",
+          "type": "string",
+          "required": true,
+          "about": "Unique identifier (ID) of the board from which you want to delete the item."
+        }
+      ],
+      "scopes": [
+        "boards:write"
+      ],
+      "tags": [
+        "openWorldHint",
+        "destructiveHint",
+        "idempotentHint",
+        "Items"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Delete Frame Item",
+      "slug": "MIRO_DELETE_FRAME_ITEM",
+      "kind": "write",
+      "description": "Tool to delete a frame item from a Miro board. Use when you need to remove a frame that groups or organizes content on the board.",
+      "inputs": [
+        {
+          "name": "item_id",
+          "type": "string",
+          "required": true,
+          "about": "Unique identifier (ID) of the frame that you want to delete."
+        },
+        {
+          "name": "board_id",
+          "type": "string",
+          "required": true,
+          "about": "Unique identifier (ID) of the board from which you want to delete the frame."
+        }
+      ],
+      "scopes": [
+        "boards:write"
+      ],
+      "tags": [
+        "important",
+        "destructiveHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Delete Group",
+      "slug": "MIRO_DELETE_GROUP",
+      "kind": "write",
+      "description": "Tool to delete a group from a board. Use when you need to remove a group and optionally its items.",
+      "inputs": [
+        {
+          "name": "board_id",
+          "type": "string",
+          "required": true,
+          "about": "Unique identifier (ID) of the board."
+        },
+        {
+          "name": "group_id",
+          "type": "string",
+          "required": true,
+          "about": "Unique identifier (ID) of the group."
+        },
+        {
+          "name": "delete_items",
+          "type": "boolean",
+          "required": true,
+          "about": "Indicates whether the items should be removed. Set to `true` to delete items in the group."
+        }
+      ],
+      "scopes": [
+        "boards:write"
+      ],
+      "tags": [
+        "openWorldHint",
+        "destructiveHint",
+        "idempotentHint",
+        "Items"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Delete Image Item",
+      "slug": "MIRO_DELETE_IMAGE_ITEM",
+      "kind": "write",
+      "description": "Tool to delete an image item from a board. Use when you need to remove an image that is no longer needed.",
+      "inputs": [
+        {
+          "name": "item_id",
+          "type": "string",
+          "required": true,
+          "about": "Unique identifier (ID) of the item that you want to delete."
+        },
+        {
+          "name": "board_id",
+          "type": "string",
+          "required": true,
+          "about": "Unique identifier (ID) of the board from which you want to delete the item."
+        }
+      ],
+      "scopes": [
+        "boards:write"
+      ],
+      "tags": [
+        "openWorldHint",
+        "destructiveHint",
+        "idempotentHint",
+        "Items"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Delete Item",
+      "slug": "MIRO_DELETE_ITEM",
+      "kind": "write",
+      "description": "Tool to delete a specific item from a board. Use when you need to remove an item (e.g., shape, sticky note) after confirming its board and item IDs.",
+      "inputs": [
+        {
+          "name": "item_id",
+          "type": "string",
+          "required": true,
+          "about": "Unique identifier of the item to delete."
+        },
+        {
+          "name": "board_id",
+          "type": "string",
+          "required": true,
+          "about": "Unique identifier of the board containing the item."
+        }
+      ],
+      "scopes": [
+        "boards:write"
+      ],
+      "tags": [
+        "openWorldHint",
+        "destructiveHint",
+        "idempotentHint",
+        "Items"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Delete Mind Map Node (Experimental)",
+      "slug": "MIRO_DELETE_MINDMAP_NODE_EXPERIMENTAL",
+      "kind": "write",
+      "description": "Tool to delete a mind map node from a board. Use when you need to remove a mind map node after confirming its board and item IDs. This is an experimental endpoint.",
+      "inputs": [
+        {
+          "name": "item_id",
+          "type": "string",
+          "required": true,
+          "about": "Unique identifier (ID) of the mind map node that you want to delete."
+        },
+        {
+          "name": "board_id",
+          "type": "string",
+          "required": true,
+          "about": "Unique identifier (ID) of the board from which you want to delete the mind map node."
+        }
+      ],
+      "scopes": [
+        "boards:write"
+      ],
+      "tags": [
+        "openWorldHint",
+        "destructiveHint",
+        "idempotentHint",
+        "experimental",
+        "mindmap"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Delete Shape Item",
+      "slug": "MIRO_DELETE_SHAPE_ITEM",
+      "kind": "write",
+      "description": "Tool to delete a shape item from a board. Use when you need to remove a specific shape that is no longer needed after confirming its board and item IDs.",
+      "inputs": [
+        {
+          "name": "item_id",
+          "type": "string",
+          "required": true,
+          "about": "Unique identifier (ID) of the item that you want to delete."
+        },
+        {
+          "name": "board_id",
+          "type": "string",
+          "required": true,
+          "about": "Unique identifier (ID) of the board from which you want to delete the item."
+        }
+      ],
+      "scopes": [
+        "boards:write"
+      ],
+      "tags": [
+        "important",
+        "openWorldHint",
+        "destructiveHint",
+        "idempotentHint",
+        "Items"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Delete Sticky Note Item",
+      "slug": "MIRO_DELETE_STICKY_NOTE_ITEM",
+      "kind": "write",
+      "description": "Tool to delete a sticky note item from a board. Use when you need to remove a sticky note that is no longer needed.",
+      "inputs": [
+        {
+          "name": "item_id",
+          "type": "string",
+          "required": true,
+          "about": "Unique identifier (ID) of the item that you want to delete."
+        },
+        {
+          "name": "board_id",
+          "type": "string",
+          "required": true,
+          "about": "Unique identifier (ID) of the board from which you want to delete the item."
+        }
+      ],
+      "scopes": [
+        "boards:write"
+      ],
+      "tags": [
+        "openWorldHint",
+        "destructiveHint",
+        "idempotentHint",
+        "Items"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Delete Tag",
+      "slug": "MIRO_DELETE_TAG",
+      "kind": "write",
+      "description": "Tool to delete a specific tag from a board. Use when you need to remove a tag after confirming its board and tag IDs.",
+      "inputs": [
+        {
+          "name": "tag_id",
+          "type": "string",
+          "required": true,
+          "about": "Unique identifier (ID) of the tag that you want to delete."
+        },
+        {
+          "name": "board_id",
+          "type": "string",
+          "required": true,
+          "about": "Unique identifier (ID) of the board where you want to delete a specific tag."
+        }
+      ],
+      "scopes": [
+        "boards:write"
+      ],
+      "tags": [
+        "openWorldHint",
+        "destructiveHint",
+        "idempotentHint",
+        "Tags"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Delete Text Item",
+      "slug": "MIRO_DELETE_TEXT_ITEM",
+      "kind": "write",
+      "description": "Tool to delete a text item from a board. Use when you need to remove a text item after confirming its board and item IDs.",
+      "inputs": [
+        {
+          "name": "item_id",
+          "type": "string",
+          "required": true,
+          "about": "Unique identifier (ID) of the item that you want to delete."
+        },
+        {
+          "name": "board_id",
+          "type": "string",
+          "required": true,
+          "about": "Unique identifier (ID) of the board from which you want to delete the item."
+        }
+      ],
+      "scopes": [
+        "boards:write"
+      ],
+      "tags": [
+        "important",
+        "openWorldHint",
+        "destructiveHint",
+        "idempotentHint",
+        "Items"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Download Document Resource",
+      "slug": "MIRO_DOWNLOAD_DOCUMENT_RESOURCE",
+      "kind": "read",
+      "description": "Retrieve signed URL metadata for a Miro document resource.",
+      "inputs": [
+        {
+          "name": "board_id",
+          "type": "string",
+          "required": true,
+          "about": "Board ID containing the document resource."
+        },
+        {
+          "name": "resource_id",
+          "type": "string",
+          "required": true,
+          "about": "Resource ID from documentUrl; this is not the document item ID."
+        }
+      ],
+      "scopes": [
+        "boards:read"
+      ],
+      "tags": [
+        "readOnlyHint",
+        "openWorldHint",
+        "Items"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Download Image Resource",
+      "slug": "MIRO_DOWNLOAD_IMAGE_RESOURCE",
+      "kind": "read",
+      "description": "Retrieve a Miro image resource as signed URL metadata or a downloaded file.",
+      "inputs": [
+        {
+          "name": "format",
+          "type": "string",
+          "required": false,
+          "about": "Image representation to retrieve."
+        },
+        {
+          "name": "board_id",
+          "type": "string",
+          "required": true,
+          "about": "Board ID containing the image resource."
+        },
+        {
+          "name": "redirect",
+          "type": "boolean",
+          "required": false,
+          "about": "When false, return short-lived signed URL metadata; when true, follow the provider redirect and return a downloadable file."
+        },
+        {
+          "name": "resource_id",
+          "type": "string",
+          "required": true,
+          "about": "Resource ID from the imageUrl returned by an image item action; this is not the image item ID."
+        }
+      ],
+      "scopes": [
+        "boards:read"
+      ],
+      "tags": [
+        "readOnlyHint",
+        "openWorldHint",
+        "Items"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get All Groups",
+      "slug": "MIRO_GET_ALL_GROUPS",
+      "kind": "read",
+      "description": "Tool to retrieve all groups on a Miro board with cursor-based pagination. Use when you need to list all groups and their associated items on a board.",
+      "inputs": [
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "about": "The maximum number of groups to return at one time. Default is 10, minimum is 10, maximum is 50."
+        },
+        {
+          "name": "cursor",
+          "type": "string",
+          "required": false,
+          "about": "Cursor for pagination. Use the cursor value from a previous response to retrieve the next page of results."
+        },
+        {
+          "name": "board_id",
+          "type": "string",
+          "required": true,
+          "about": "Unique identifier (ID) of the board."
+        }
+      ],
+      "scopes": [
+        "boards:read"
+      ],
+      "tags": [
+        "openWorldHint",
+        "readOnlyHint",
+        "Items"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get App Card Item 2",
+      "slug": "MIRO_GET_APP_CARD_ITEM2",
+      "kind": "read",
+      "description": "Tool to retrieve a specific app card item by its ID from a Miro board. Use when you need to get the details of an existing app card item.",
+      "inputs": [
+        {
+          "name": "item_id",
+          "type": "string",
+          "required": true,
+          "about": "Unique identifier (ID) of the item that you want to retrieve."
+        },
+        {
+          "name": "board_id",
+          "type": "string",
+          "required": true,
+          "about": "Unique identifier (ID) of the board from which you want to retrieve a specific item."
+        }
+      ],
+      "scopes": [
+        "boards:read"
+      ],
+      "tags": [
+        "openWorldHint",
+        "readOnlyHint",
+        "Items"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get Board (Deprecated)",
+      "slug": "MIRO_GET_BOARD",
+      "kind": "read",
+      "description": "DEPRECATED: Use MIRO_GET_SPECIFIC_BOARD instead. Tool to retrieve details of a specific board. Use when you have a board ID and need to fetch its metadata.",
+      "inputs": [
+        {
+          "name": "board_id",
+          "type": "string",
+          "required": true,
+          "about": "Unique identifier of the board to retrieve"
+        }
+      ],
+      "scopes": [
+        "boards:read"
+      ],
+      "tags": [
+        "important",
+        "openWorldHint",
+        "readOnlyHint",
+        "Boards",
+        "deprecated"
+      ],
+      "deprecated": true
+    },
+    {
+      "name": "Get Board Items",
+      "slug": "MIRO_GET_BOARD_ITEMS",
+      "kind": "read",
+      "description": "Tool to list items on a Miro board (shapes, stickies, cards, etc.) with pagination. Use when you need to page through board elements for analytics or reporting. Re-fetch before bulk updates to avoid stale item IDs.",
+      "inputs": [
+        {
+          "name": "type",
+          "type": "string",
+          "required": false,
+          "about": "Filter by item type. Note: 'connector' is not supported; use the separate Get Connectors action instead."
+        },
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "about": "Maximum number of items to return per page (10-50)"
+        },
+        {
+          "name": "cursor",
+          "type": "string",
+          "required": false,
+          "about": "Cursor for paginating results; use the value from a prior response. Loop: pass the cursor from each response into the next call; stop when cursor is null (all items retrieved)."
+        },
+        {
+          "name": "board_id",
+          "type": "string",
+          "required": true,
+          "about": "Unique identifier of the board to retrieve items from"
+        }
+      ],
+      "scopes": [
+        "boards:read"
+      ],
+      "tags": [
+        "openWorldHint",
+        "readOnlyHint",
+        "Items"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get Board Members",
+      "slug": "MIRO_GET_BOARD_MEMBERS",
+      "kind": "read",
+      "description": "Tool to retrieve a list of members for a board. Use when you need to list all users with access to a board after confirming its ID. Results are scoped to the authenticated user's permissions; members or boards inaccessible to that user will not appear in the response.",
+      "inputs": [
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "about": "Number of results per page (max 50)."
+        },
+        {
+          "name": "cursor",
+          "type": "string",
+          "required": false,
+          "about": "Cursor for pagination, used to retrieve subsequent pages."
+        },
+        {
+          "name": "board_id",
+          "type": "string",
+          "required": true,
+          "about": "Unique identifier of the board."
+        }
+      ],
+      "scopes": [
+        "boards:read"
+      ],
+      "tags": [
+        "important",
+        "openWorldHint",
+        "readOnlyHint",
+        "Board Members"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get Boards (Deprecated)",
+      "slug": "MIRO_GET_BOARDS",
+      "kind": "read",
+      "description": "DEPRECATED: Use MIRO_MIRO_GET_BOARDS2 instead. Tool to retrieve accessible boards with optional filters. Use when you need to list or search boards by team, project, owner, or keywords. Only boards accessible to the authenticated user are returned.",
+      "inputs": [
+        {
+          "name": "sort",
+          "type": "string",
+          "required": false,
+          "about": "Sort order of the results."
+        },
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "about": "Number of boards to return per page (1-50). Values above 50 cause a 400 error."
+        },
+        {
+          "name": "owner",
+          "type": "string",
+          "required": false,
+          "about": "Filter boards by owner user ID."
+        },
+        {
+          "name": "query",
+          "type": "string",
+          "required": false,
+          "about": "Search query to filter boards by name."
+        },
+        {
+          "name": "offset",
+          "type": "integer",
+          "required": false,
+          "about": "Offset for pagination. Increment by `limit` value until results are exhausted to retrieve all pages."
+        },
+        {
+          "name": "team_id",
+          "type": "string",
+          "required": false,
+          "about": "Filter boards by team ID."
+        },
+        {
+          "name": "project_id",
+          "type": "string",
+          "required": false,
+          "about": "Filter boards by project (space) ID."
+        }
+      ],
+      "scopes": [
+        "boards:read"
+      ],
+      "tags": [
+        "important",
+        "openWorldHint",
+        "readOnlyHint",
+        "Boards",
+        "deprecated"
+      ],
+      "deprecated": true
+    },
+    {
+      "name": "Get Boards V2",
+      "slug": "MIRO_GET_BOARDS2",
+      "kind": "read",
+      "description": "Tool to retrieve accessible boards with optional filters. Use when you need to list or search boards by team, project, owner, or keywords with full pagination support.",
+      "inputs": [
+        {
+          "name": "sort",
+          "type": "string",
+          "required": false,
+          "about": "Sort order in which you want to view the result set. Options `last_created` and `alphabetically` are applicable only when you search for boards by team. Values: `default`, `last_modified`, `last_opened`, `last_created`, `alphabetically`. Default: `default` (If `team_id` is present, `last_created`. O"
+        },
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "about": "Maximum number of boards to retrieve (1-50). Default: 20"
+        },
+        {
+          "name": "owner",
+          "type": "string",
+          "required": false,
+          "about": "Retrieves a list of boards that belong to a specific owner ID. You must pass the owner ID (for example, 3074457353169356300), not the owner name. You can use the 'owner' parameter with the `query` parameter to narrow down the board search results. Note that if you pass the `team_id` in the same requ"
+        },
+        {
+          "name": "query",
+          "type": "string",
+          "required": false,
+          "about": "Retrieves a list of boards that contain the query string provided in the board name or board description. You can use the `query` parameter with the owner parameter to narrow down the board search results."
+        },
+        {
+          "name": "offset",
+          "type": "integer",
+          "required": false,
+          "about": "Zero-based offset of the first item in the collection. Default: 0"
+        },
+        {
+          "name": "team_id",
+          "type": "string",
+          "required": false,
+          "about": "The team_id for which you want to retrieve the list of boards. If this parameter is sent in the request, the `query` and `owner` parameters are ignored."
+        },
+        {
+          "name": "project_id",
+          "type": "string",
+          "required": false,
+          "about": "The `project_id` for which you want to retrieve the list of boards. If this parameter is sent in the request, the `query` and `owner` parameters are ignored."
+        }
+      ],
+      "scopes": [
+        "boards:read"
+      ],
+      "tags": [
+        "important",
+        "openWorldHint",
+        "readOnlyHint",
+        "Boards"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get Card Item",
+      "slug": "MIRO_GET_CARD_ITEM",
+      "kind": "read",
+      "description": "Tool to retrieve a specific card item from a Miro board. Use when you need to fetch details of an existing card item by its ID.",
+      "inputs": [
+        {
+          "name": "item_id",
+          "type": "string",
+          "required": true,
+          "about": "Unique identifier (ID) of the item that you want to retrieve."
+        },
+        {
+          "name": "board_id",
+          "type": "string",
+          "required": true,
+          "about": "Unique identifier (ID) of the board from which you want to retrieve a specific item."
+        }
+      ],
+      "scopes": [
+        "boards:read"
+      ],
+      "tags": [
+        "openWorldHint",
+        "readOnlyHint",
+        "Items"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get Connector",
+      "slug": "MIRO_GET_CONNECTOR",
+      "kind": "read",
+      "description": "Tool to retrieve a specific connector by its ID. Use when you need details about an existing connector on a board.",
+      "inputs": [
+        {
+          "name": "board_id",
+          "type": "string",
+          "required": true,
+          "about": "Unique identifier (ID) of the board from which you want to retrieve a specific connector."
+        },
+        {
+          "name": "connector_id",
+          "type": "string",
+          "required": true,
+          "about": "Unique identifier (ID) of the connector that you want to retrieve."
+        }
+      ],
+      "scopes": [
+        "boards:read"
+      ],
+      "tags": [
+        "openWorldHint",
+        "readOnlyHint",
+        "Connector Management"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get Connectors",
+      "slug": "MIRO_GET_CONNECTORS",
+      "kind": "read",
+      "description": "Tool to retrieve a list of connectors on a board. Use after confirming the board ID and when you need to page through connector items.",
+      "inputs": [
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "about": "Maximum number of results to return per call (10 to 50). Defaults to 10."
+        },
+        {
+          "name": "cursor",
+          "type": "string",
+          "required": false,
+          "about": "Cursor for pagination to retrieve the next page of connectors. Pass the cursor returned by the previous response to fetch the next page; when the response returns a null cursor, all pages have been retrieved."
+        },
+        {
+          "name": "board_id",
+          "type": "string",
+          "required": true,
+          "about": "Unique identifier of the board to retrieve connectors from."
+        }
+      ],
+      "scopes": [
+        "boards:read"
+      ],
+      "tags": [
+        "openWorldHint",
+        "readOnlyHint",
+        "Connector Management"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get Doc Format Item",
+      "slug": "MIRO_GET_DOC_FORMAT_ITEM",
+      "kind": "read",
+      "description": "Retrieve a structured Miro doc as Markdown or HTML.",
+      "inputs": [
+        {
+          "name": "item_id",
+          "type": "string",
+          "required": true,
+          "about": "Unique identifier of the doc format item to retrieve."
+        },
+        {
+          "name": "board_id",
+          "type": "string",
+          "required": true,
+          "about": "Unique identifier of the board containing the doc."
+        },
+        {
+          "name": "text_content_type",
+          "type": "string",
+          "required": false,
+          "about": "Representation in which Miro should return the doc content."
+        }
+      ],
+      "scopes": [
+        "boards:read"
+      ],
+      "tags": [
+        "readOnlyHint",
+        "openWorldHint",
+        "Items"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get Document Item",
+      "slug": "MIRO_GET_DOCUMENT_ITEM",
+      "kind": "read",
+      "description": "Tool to retrieve a specific document item from a Miro board by its ID. Use when you need to get details about an existing document item.",
+      "inputs": [
+        {
+          "name": "item_id",
+          "type": "string",
+          "required": true,
+          "about": "Unique identifier (ID) of the item that you want to retrieve."
+        },
+        {
+          "name": "board_id",
+          "type": "string",
+          "required": true,
+          "about": "Unique identifier (ID) of the board from which you want to retrieve a specific item."
+        }
+      ],
+      "scopes": [
+        "boards:read"
+      ],
+      "tags": [
+        "openWorldHint",
+        "readOnlyHint",
+        "Items"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get Embed Item",
+      "slug": "MIRO_GET_EMBED_ITEM",
+      "kind": "read",
+      "description": "Tool to retrieve a specific embed item from a board by its ID. Use when you need details of an existing embedded content item.",
+      "inputs": [
+        {
+          "name": "item_id",
+          "type": "string",
+          "required": true,
+          "about": "Unique identifier (ID) of the item that you want to retrieve."
+        },
+        {
+          "name": "board_id",
+          "type": "string",
+          "required": true,
+          "about": "Unique identifier (ID) of the board from which you want to retrieve a specific item."
+        }
+      ],
+      "scopes": [
+        "boards:read"
+      ],
+      "tags": [
+        "openWorldHint",
+        "readOnlyHint",
+        "Items"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get Frame Item",
+      "slug": "MIRO_GET_FRAME_ITEM",
+      "kind": "read",
+      "description": "Tool to retrieve a specific frame item from a Miro board. Use when you need to fetch details of an existing frame by its ID.",
+      "inputs": [
+        {
+          "name": "item_id",
+          "type": "string",
+          "required": true,
+          "about": "Unique identifier (ID) of the frame that you want to retrieve."
+        },
+        {
+          "name": "board_id",
+          "type": "string",
+          "required": true,
+          "about": "Unique identifier (ID) of the board that contains the frame that you want to retrieve"
+        }
+      ],
+      "scopes": [
+        "boards:read"
+      ],
+      "tags": [
+        "important",
+        "openWorldHint",
+        "readOnlyHint",
+        "Items"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get Group By ID",
+      "slug": "MIRO_GET_GROUP_BY_ID",
+      "kind": "read",
+      "description": "Tool to retrieve a specific group by its ID. Use when you need to get details about a group on a Miro board.",
+      "inputs": [
+        {
+          "name": "board_id",
+          "type": "string",
+          "required": true,
+          "about": "Unique identifier (ID) of the board."
+        },
+        {
+          "name": "group_id",
+          "type": "string",
+          "required": true,
+          "about": "Unique identifier (ID) of the group."
+        }
+      ],
+      "scopes": [
+        "boards:read"
+      ],
+      "tags": [
+        "openWorldHint",
+        "readOnlyHint",
+        "Items"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get Image Item",
+      "slug": "MIRO_GET_IMAGE_ITEM",
+      "kind": "read",
+      "description": "Tool to retrieve a specific image item from a board. Use when you need to get details about an existing image item.",
+      "inputs": [
+        {
+          "name": "item_id",
+          "type": "string",
+          "required": true,
+          "about": "Unique identifier (ID) of the item that you want to retrieve."
+        },
+        {
+          "name": "board_id",
+          "type": "string",
+          "required": true,
+          "about": "Unique identifier (ID) of the board from which you want to retrieve a specific item."
+        }
+      ],
+      "scopes": [
+        "boards:read"
+      ],
+      "tags": [
+        "openWorldHint",
+        "readOnlyHint",
+        "Items"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get Items by Group ID",
+      "slug": "MIRO_GET_ITEMS_BY_GROUP_ID",
+      "kind": "read",
+      "description": "Tool to retrieve items of a specific group by its ID on a Miro board. Use when you need to fetch all items belonging to a particular group.",
+      "inputs": [
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "about": "The maximum number of items to return at one time. Default is 10, minimum is 10, maximum is 50."
+        },
+        {
+          "name": "cursor",
+          "type": "string",
+          "required": false,
+          "about": "Cursor for paginating results; use the value from a prior response."
+        },
+        {
+          "name": "board_id",
+          "type": "string",
+          "required": true,
+          "about": "Unique identifier (ID) of the board."
+        },
+        {
+          "name": "group_item_id",
+          "type": "string",
+          "required": true,
+          "about": "The ID of the group item to retrieve."
+        }
+      ],
+      "scopes": [
+        "boards:read"
+      ],
+      "tags": [
+        "openWorldHint",
+        "readOnlyHint",
+        "Items"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get Items Within Frame",
+      "slug": "MIRO_GET_ITEMS_WITHIN_FRAME",
+      "kind": "read",
+      "description": "Get items within a specific frame on a Miro board. Retrieves child items contained within a frame by filtering with parent_item_id parameter. Use this action when you need to list all items (shapes, sticky notes, cards, etc.) that are nested inside a specific frame. This is useful for analyzing or processing frame contents.",
+      "inputs": [
+        {
+          "name": "type",
+          "type": "string",
+          "required": false,
+          "about": "Enum for board item types."
+        },
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "about": "Maximum number of items to return per page (minimum 1)"
+        },
+        {
+          "name": "cursor",
+          "type": "string",
+          "required": false,
+          "about": "Cursor for paginating results; use the value from a prior response"
+        },
+        {
+          "name": "board_id",
+          "type": "string",
+          "required": true,
+          "about": "Unique identifier of the board containing the frame"
+        },
+        {
+          "name": "parent_item_id",
+          "type": "string",
+          "required": true,
+          "about": "ID of the frame (parent item) for which to retrieve child items"
+        }
+      ],
+      "scopes": [
+        "boards:read"
+      ],
+      "tags": [
+        "readOnlyHint",
+        "openWorldHint",
+        "Items"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get Item Tags",
+      "slug": "MIRO_GET_ITEM_TAGS",
+      "kind": "read",
+      "description": "Tool to retrieve tags attached to a specific item on a Miro board. Use when you need to get the tags associated with a particular item.",
+      "inputs": [
+        {
+          "name": "item_id",
+          "type": "string",
+          "required": true,
+          "about": "Unique identifier of the item to retrieve tags from."
+        },
+        {
+          "name": "board_id",
+          "type": "string",
+          "required": true,
+          "about": "Unique identifier of the board containing the item."
+        }
+      ],
+      "scopes": [
+        "boards:read"
+      ],
+      "tags": [
+        "openWorldHint",
+        "readOnlyHint",
+        "Tags"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get Mind Map Node",
+      "slug": "MIRO_GET_MINDMAP_NODE_EXPERIMENTAL",
+      "kind": "read",
+      "description": "Tool to retrieve a specific mind map node from a board. Use when you need to get details about a mind map node by its ID.",
+      "inputs": [
+        {
+          "name": "item_id",
+          "type": "string",
+          "required": true,
+          "about": "Unique identifier (ID) of the mind map node that you want to retrieve."
+        },
+        {
+          "name": "board_id",
+          "type": "string",
+          "required": true,
+          "about": "Unique identifier (ID) of the board from which you want to retrieve a mind map node."
+        }
+      ],
+      "scopes": [
+        "boards:read"
+      ],
+      "tags": [
+        "openWorldHint",
+        "readOnlyHint",
+        "experimental",
+        "mindmap"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get Mind Map Nodes (Experimental)",
+      "slug": "MIRO_GET_MINDMAP_NODES_EXPERIMENTAL",
+      "kind": "read",
+      "description": "Tool to retrieve mind map nodes from a Miro board. Use when you need to access the structure and content of mind maps on a board.",
+      "inputs": [
+        {
+          "name": "limit",
+          "type": "string",
+          "required": false,
+          "about": "Maximum number of results returned."
+        },
+        {
+          "name": "cursor",
+          "type": "string",
+          "required": false,
+          "about": "Points to the next portion of the results set. Use the cursor value from a previous response to retrieve the next page."
+        },
+        {
+          "name": "board_id",
+          "type": "string",
+          "required": true,
+          "about": "Unique identifier (ID) of the board from which you want to retrieve mind map nodes."
+        }
+      ],
+      "scopes": [
+        "boards:read"
+      ],
+      "tags": [
+        "openWorldHint",
+        "readOnlyHint",
+        "experimental",
+        "mindmap"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get oEmbed Data",
+      "slug": "MIRO_GET_OEMBED",
+      "kind": "read",
+      "description": "Tool to retrieve oEmbed data for a Miro board. Use when you need to generate embeddable HTML code for a board or get board metadata in oEmbed format.",
+      "inputs": [
+        {
+          "name": "url",
+          "type": "string",
+          "required": true,
+          "about": "The URL pointing to the Miro board resource to return as oEmbed data. Must be a valid Miro board URL (e.g., https://miro.com/app/board/uXjVJ_fzYUs=)."
+        },
+        {
+          "name": "format",
+          "type": "string",
+          "required": false,
+          "about": "Specifies the return format of the response. Only 'json' is supported. Defaults to 'json' if not specified."
+        },
+        {
+          "name": "maxwidth",
+          "type": "integer",
+          "required": false,
+          "about": "The maximum width available to the embed, in pixels. The oEmbed response will respect this constraint."
+        },
+        {
+          "name": "referrer",
+          "type": "string",
+          "required": false,
+          "about": "The URL pointing to the source of the request. Used to track where the embed will be displayed."
+        },
+        {
+          "name": "maxheight",
+          "type": "integer",
+          "required": false,
+          "about": "The maximum height available to the embed, in pixels. The oEmbed response will respect this constraint."
+        }
+      ],
+      "scopes": "$undefined",
+      "tags": [
+        "openWorldHint",
+        "readOnlyHint",
+        "Items"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get Shape Item",
+      "slug": "MIRO_GET_SHAPE_ITEM",
+      "kind": "read",
+      "description": "Tool to retrieve a specific shape item from a Miro board by its ID. Use when you need to get details of an existing shape item.",
+      "inputs": [
+        {
+          "name": "item_id",
+          "type": "string",
+          "required": true,
+          "about": "Unique identifier (ID) of the item that you want to retrieve."
+        },
+        {
+          "name": "board_id",
+          "type": "string",
+          "required": true,
+          "about": "Unique identifier (ID) of the board from which you want to retrieve a specific item."
+        }
+      ],
+      "scopes": [
+        "boards:read"
+      ],
+      "tags": [
+        "openWorldHint",
+        "readOnlyHint",
+        "Items"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get Specific Board",
+      "slug": "MIRO_GET_SPECIFIC_BOARD",
+      "kind": "read",
+      "description": "Tool to retrieve detailed information about a specific board by its ID. Use when you need to fetch complete metadata including team, permissions, owner, and modification details for a board.",
+      "inputs": [
+        {
+          "name": "board_id",
+          "type": "string",
+          "required": true,
+          "about": "Unique identifier (ID) of the board that you want to retrieve."
+        }
+      ],
+      "scopes": [
+        "boards:read"
+      ],
+      "tags": [
+        "openWorldHint",
+        "readOnlyHint",
+        "Boards"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get Specific Board Member",
+      "slug": "MIRO_GET_SPECIFIC_BOARD_MEMBER",
+      "kind": "read",
+      "description": "Tool to retrieve details of a specific board member. Use when you have a board ID and board member ID and need to get that member's role and information.",
+      "inputs": [
+        {
+          "name": "board_id",
+          "type": "string",
+          "required": true,
+          "about": "Unique identifier (ID) of the board to which the board member belongs."
+        },
+        {
+          "name": "board_member_id",
+          "type": "string",
+          "required": true,
+          "about": "Unique identifier (ID) of the board member whose role you want to retrieve."
+        }
+      ],
+      "scopes": [
+        "boards:read"
+      ],
+      "tags": [
+        "openWorldHint",
+        "readOnlyHint",
+        "Board Members"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get Specific Item",
+      "slug": "MIRO_GET_SPECIFIC_ITEM",
+      "kind": "read",
+      "description": "Tool to retrieve a specific item from a Miro board by its ID. Use when you need details about a particular board item (sticky note, shape, card, frame, etc.).",
+      "inputs": [
+        {
+          "name": "item_id",
+          "type": "string",
+          "required": true,
+          "about": "Unique identifier (ID) of the item that you want to retrieve."
+        },
+        {
+          "name": "board_id",
+          "type": "string",
+          "required": true,
+          "about": "Unique identifier (ID) of the board from which you want to retrieve a specific item."
+        }
+      ],
+      "scopes": [
+        "boards:read"
+      ],
+      "tags": [
+        "openWorldHint",
+        "readOnlyHint",
+        "Items"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get Sticky Note Item",
+      "slug": "MIRO_GET_STICKY_NOTE_ITEM",
+      "kind": "read",
+      "description": "Tool to retrieve a specific sticky note item from a board by its ID. Use when you need to get the details of an existing sticky note item.",
+      "inputs": [
+        {
+          "name": "item_id",
+          "type": "string",
+          "required": true,
+          "about": "Unique identifier (ID) of the item that you want to retrieve."
+        },
+        {
+          "name": "board_id",
+          "type": "string",
+          "required": true,
+          "about": "Unique identifier (ID) of the board from which you want to retrieve a specific item."
+        }
+      ],
+      "scopes": [
+        "boards:read"
+      ],
+      "tags": [
+        "openWorldHint",
+        "readOnlyHint",
+        "Items"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get Tag",
+      "slug": "MIRO_GET_TAG",
+      "kind": "read",
+      "description": "Tool to retrieve details of a specific tag on a board. Use when you have a board ID and tag ID and need its metadata.",
+      "inputs": [
+        {
+          "name": "tag_id",
+          "type": "string",
+          "required": true,
+          "about": "Unique identifier of the tag to retrieve."
+        },
+        {
+          "name": "board_id",
+          "type": "string",
+          "required": true,
+          "about": "Unique identifier of the board where the tag resides."
+        }
+      ],
+      "scopes": [
+        "boards:write"
+      ],
+      "tags": [
+        "important",
+        "openWorldHint",
+        "readOnlyHint",
+        "Tags"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get Text Item",
+      "slug": "MIRO_GET_TEXT_ITEM",
+      "kind": "read",
+      "description": "Tool to retrieve a specific text item from a Miro board by its ID. Use when you need to get the details of an existing text item.",
+      "inputs": [
+        {
+          "name": "item_id",
+          "type": "string",
+          "required": true,
+          "about": "Unique identifier (ID) of the item that you want to retrieve."
+        },
+        {
+          "name": "board_id",
+          "type": "string",
+          "required": true,
+          "about": "Unique identifier (ID) of the board from which you want to retrieve a specific item."
+        }
+      ],
+      "scopes": [
+        "boards:read"
+      ],
+      "tags": [
+        "openWorldHint",
+        "readOnlyHint",
+        "Items"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "List Board Tags",
+      "slug": "MIRO_LIST_BOARD_TAGS",
+      "kind": "read",
+      "description": "Tool to list all tags on a Miro board. Use when you need to discover tag IDs, titles, or colors before performing tag operations.",
+      "inputs": [
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "about": "Maximum number of tags to return per page (min 1)."
+        },
+        {
+          "name": "cursor",
+          "type": "string",
+          "required": false,
+          "about": "Cursor for paginating results; use the value from a prior response."
+        },
+        {
+          "name": "board_id",
+          "type": "string",
+          "required": true,
+          "about": "Unique identifier of the board to retrieve tags from."
+        }
+      ],
+      "scopes": [
+        "boards:read"
+      ],
+      "tags": [
+        "openWorldHint",
+        "readOnlyHint",
+        "Tags"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get Organization Context",
+      "slug": "MIRO_LIST_ORGANIZATIONS",
+      "kind": "read",
+      "description": "Retrieves the organization associated with the current access token. Note: Miro's API does not have an endpoint to list all organizations a user has access to. This action uses the /v1/oauth-token endpoint to return the single organization context associated with the authenticated token, along with team and user information. For Enterprise users who need to work with organizations, use organization-specific endpoints like MIRO_GET_ORGANIZATION_MEMBERS which require an org_id parameter.",
+      "inputs": [
+        {
+          "name": "0",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "1",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "2",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "3",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "4",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "5",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "6",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "7",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "8",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "9",
+          "type": "",
+          "required": false,
+          "about": ""
+        }
+      ],
+      "scopes": "$undefined",
+      "tags": [
+        "important",
+        "openWorldHint",
+        "readOnlyHint",
+        "Organizations"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Remove Board Member",
+      "slug": "MIRO_REMOVE_BOARD_MEMBER",
+      "kind": "write",
+      "description": "Remove a member's direct board membership. Team or public access may remain; this does not guarantee that the member loses all access to the board.",
+      "inputs": [
+        {
+          "name": "board_id",
+          "type": "string",
+          "required": true,
+          "about": "Unique identifier of the board to remove the member from."
+        },
+        {
+          "name": "board_member_id",
+          "type": "string",
+          "required": true,
+          "about": "Unique identifier of the board member to remove."
+        }
+      ],
+      "scopes": [
+        "boards:write"
+      ],
+      "tags": [
+        "destructiveHint",
+        "openWorldHint",
+        "Boards"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Remove Tag From Item",
+      "slug": "MIRO_REMOVE_TAG_FROM_ITEM",
+      "kind": "write",
+      "description": "Requests removal of a tag from a specified item on a Miro board. The request targets the item itself and may delete the item rather than only remove its tag.",
+      "inputs": [
+        {
+          "name": "tag_id",
+          "type": "string",
+          "required": true,
+          "about": "Unique identifier of the tag to remove from the item."
+        },
+        {
+          "name": "item_id",
+          "type": "string",
+          "required": true,
+          "about": "Unique identifier of the item to remove the tag from."
+        },
+        {
+          "name": "board_id",
+          "type": "string",
+          "required": true,
+          "about": "Unique identifier of the board containing the item."
+        }
+      ],
+      "scopes": [
+        "boards:write"
+      ],
+      "tags": [
+        "important",
+        "updateHint",
+        "idempotentHint",
+        "openWorldHint",
+        "Tags"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Share Board",
+      "slug": "MIRO_SHARE_BOARD",
+      "kind": "send",
+      "description": "Tool to share a board by inviting users via email. Use when you need to grant access to a board by sending email invitations to new members. You can invite up to 20 users per call and assign them roles (viewer, commenter, editor, coowner, or owner).",
+      "inputs": [
+        {
+          "name": "role",
+          "type": "string",
+          "required": false,
+          "about": "Role of the board members being invited. Options: viewer (view only), commenter (view and comment), editor (view, comment, and edit), coowner (full access except changing owner), or owner (full access including changing owner). Note: Inviting users with role 'owner' has the same effect as 'coowner'."
+        },
+        {
+          "name": "emails",
+          "type": "array",
+          "required": true,
+          "about": "Email addresses of the users you want to invite to the board. You can invite up to 20 members per call."
+        },
+        {
+          "name": "message",
+          "type": "string",
+          "required": false,
+          "about": "Optional message that will be sent in the invitation email to the invited users."
+        },
+        {
+          "name": "board_id",
+          "type": "string",
+          "required": true,
+          "about": "Unique identifier (ID) of the board to which you want to invite members."
+        }
+      ],
+      "scopes": [
+        "boards:write"
+      ],
+      "tags": [
+        "openWorldHint",
+        "Boards",
+        "updateHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Update App Card Item 2",
+      "slug": "MIRO_UPDATE_APP_CARD_ITEM2",
+      "kind": "write",
+      "description": "Tool to update an app card item on a Miro board. Use when you need to modify properties of an existing app card such as title, description, status, style, position, or geometry.",
+      "inputs": [
+        {
+          "name": "data",
+          "type": "object",
+          "required": false,
+          "about": "Core data for an app card item."
+        },
+        {
+          "name": "style",
+          "type": "object",
+          "required": false,
+          "about": "Styling information for an app card item."
+        },
+        {
+          "name": "parent",
+          "type": "object",
+          "required": false,
+          "about": "Parent frame information for an app card item."
+        },
+        {
+          "name": "item_id",
+          "type": "string",
+          "required": true,
+          "about": "Unique identifier (ID) of the item that you want to update."
+        },
+        {
+          "name": "board_id",
+          "type": "string",
+          "required": true,
+          "about": "Unique identifier (ID) of the board where you want to update the item."
+        },
+        {
+          "name": "geometry",
+          "type": "object",
+          "required": false,
+          "about": "Geometrical information about an app card item."
+        },
+        {
+          "name": "position",
+          "type": "object",
+          "required": false,
+          "about": "Position information for an app card item."
+        }
+      ],
+      "scopes": [
+        "boards:write"
+      ],
+      "tags": [
+        "openWorldHint",
+        "updateHint",
+        "Items"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Update Board",
+      "slug": "MIRO_UPDATE_BOARD",
+      "kind": "write",
+      "description": "Tool to update properties of a specific board. Use when you have a board ID and need to modify its name, description, or permissions policy. Use after confirming the board exists.",
+      "inputs": [
+        {
+          "name": "name",
+          "type": "string",
+          "required": false,
+          "about": "New name for the board (1-60 characters)"
+        },
+        {
+          "name": "policy",
+          "type": "object",
+          "required": false,
+          "about": "Defines permissions and sharing policies for the board Contains `sharingPolicy` subfield accepting specific enum values (e.g., `private`, `view`, `comment`, `edit`); invalid values return 400."
+        },
+        {
+          "name": "teamId",
+          "type": "string",
+          "required": false,
+          "about": "ID of the team where the board should be placed"
+        },
+        {
+          "name": "boardId",
+          "type": "string",
+          "required": true,
+          "about": "Unique identifier (ID) of the board to update"
+        },
+        {
+          "name": "projectId",
+          "type": "string",
+          "required": false,
+          "about": "ID of the project (space) to which the board should be added"
+        },
+        {
+          "name": "description",
+          "type": "string",
+          "required": false,
+          "about": "New description for the board (up to 300 characters)"
+        }
+      ],
+      "scopes": [
+        "boards:write"
+      ],
+      "tags": [
+        "openWorldHint",
+        "updateHint",
+        "Boards"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Update Board Member",
+      "slug": "MIRO_UPDATE_BOARD_MEMBER",
+      "kind": "write",
+      "description": "Updates a specific board member's role using the board and member IDs. If no role is supplied, the request sets it to commenter.",
+      "inputs": [
+        {
+          "name": "role",
+          "type": "string",
+          "required": false,
+          "about": "Role of the board member. Can be viewer (view only), commenter (view and comment), editor (view, comment, and edit), coowner (full access except changing owner), or owner (full access including changing owner)."
+        },
+        {
+          "name": "board_id",
+          "type": "string",
+          "required": true,
+          "about": "Unique identifier (ID) of the board for which you want to update the role of the board member."
+        },
+        {
+          "name": "board_member_id",
+          "type": "string",
+          "required": true,
+          "about": "Unique identifier (ID) of the board member whose role you want to update."
+        }
+      ],
+      "scopes": [
+        "boards:write"
+      ],
+      "tags": [
+        "openWorldHint",
+        "updateHint",
+        "Board Members"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Update Card Item",
+      "slug": "MIRO_UPDATE_CARD_ITEM",
+      "kind": "write",
+      "description": "Tool to update a card item on a Miro board. Use when you need to modify properties of an existing card item such as title, description, due date, assignee, style, position, or geometry.",
+      "inputs": [
+        {
+          "name": "data",
+          "type": "object",
+          "required": false,
+          "about": "Contains card item data to update, such as the title, description, due date, or assignee ID."
+        },
+        {
+          "name": "style",
+          "type": "object",
+          "required": false,
+          "about": "Contains information about the style of a card item to update, such as the card theme."
+        },
+        {
+          "name": "parent",
+          "type": "object",
+          "required": false,
+          "about": "Contains information about the parent frame for the item."
+        },
+        {
+          "name": "item_id",
+          "type": "string",
+          "required": true,
+          "about": "Unique identifier (ID) of the item that you want to update."
+        },
+        {
+          "name": "board_id",
+          "type": "string",
+          "required": true,
+          "about": "Unique identifier (ID) of the board where you want to update the item."
+        },
+        {
+          "name": "geometry",
+          "type": "object",
+          "required": false,
+          "about": "Contains geometrical information to update about the item, such as its width or height."
+        },
+        {
+          "name": "position",
+          "type": "object",
+          "required": false,
+          "about": "Contains position information to update for the item on the board."
+        }
+      ],
+      "scopes": [
+        "boards:write"
+      ],
+      "tags": [
+        "openWorldHint",
+        "updateHint",
+        "Items"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Update Connector",
+      "slug": "MIRO_UPDATE_CONNECTOR",
+      "kind": "write",
+      "description": "Tool to update an existing connector on a Miro board. Use when you need to modify connector properties such as shape, style, captions, or endpoint attachments. Only provided fields will be updated.",
+      "inputs": [
+        {
+          "name": "shape",
+          "type": "string",
+          "required": false,
+          "about": "The path type of the connector line, defines curvature. Default: curved."
+        },
+        {
+          "name": "style",
+          "type": "object",
+          "required": false,
+          "about": "Visual styling properties for the connector line and caption."
+        },
+        {
+          "name": "endItem",
+          "type": "object",
+          "required": false,
+          "about": "Defines the starting or ending point of a connector."
+        },
+        {
+          "name": "board_id",
+          "type": "string",
+          "required": true,
+          "about": "Unique identifier (ID) of the board for which you want to update the connector."
+        },
+        {
+          "name": "captions",
+          "type": "array",
+          "required": false,
+          "about": "Blocks of text you want to display on the connector. Maximum 20 captions allowed."
+        },
+        {
+          "name": "startItem",
+          "type": "object",
+          "required": false,
+          "about": "Defines the starting or ending point of a connector."
+        },
+        {
+          "name": "connector_id",
+          "type": "string",
+          "required": true,
+          "about": "Unique identifier (ID) of the connector that you want to update."
+        }
+      ],
+      "scopes": [
+        "boards:write"
+      ],
+      "tags": [
+        "openWorldHint",
+        "updateHint",
+        "Connector Management"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Update Document Item",
+      "slug": "MIRO_UPDATE_DOCUMENT_ITEM",
+      "kind": "write",
+      "description": "Tool to update a document item on a Miro board. Use when you need to modify properties of an existing document item such as URL, title, position, or geometry.",
+      "inputs": [
+        {
+          "name": "data",
+          "type": "object",
+          "required": false,
+          "about": "Data for document URL information."
+        },
+        {
+          "name": "parent",
+          "type": "object",
+          "required": false,
+          "about": "Parent element reference for hierarchical positioning."
+        },
+        {
+          "name": "item_id",
+          "type": "string",
+          "required": true,
+          "about": "Unique identifier (ID) of the item that you want to update."
+        },
+        {
+          "name": "board_id",
+          "type": "string",
+          "required": true,
+          "about": "Unique identifier (ID) of the board where you want to update the item."
+        },
+        {
+          "name": "geometry",
+          "type": "object",
+          "required": false,
+          "about": "Geometric properties for the document item. You can set either width or height, not both."
+        },
+        {
+          "name": "position",
+          "type": "object",
+          "required": false,
+          "about": "Positioning information for the document item on the board."
+        }
+      ],
+      "scopes": [
+        "boards:write"
+      ],
+      "tags": [
+        "openWorldHint",
+        "updateHint",
+        "Items"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Update Embed Item",
+      "slug": "MIRO_UPDATE_EMBED_ITEM",
+      "kind": "write",
+      "description": "Tool to update an embed item on a board. Use when you need to modify properties of an existing embedded content item such as position, display mode, or URL.",
+      "inputs": [
+        {
+          "name": "data",
+          "type": "object",
+          "required": false,
+          "about": "Data fields for updating the embed item."
+        },
+        {
+          "name": "parent",
+          "type": "object",
+          "required": false,
+          "about": "Contains information about the parent frame for the item."
+        },
+        {
+          "name": "item_id",
+          "type": "string",
+          "required": true,
+          "about": "Unique identifier (ID) of the item that you want to update."
+        },
+        {
+          "name": "board_id",
+          "type": "string",
+          "required": true,
+          "about": "Unique identifier (ID) of the board where you want to update the item."
+        },
+        {
+          "name": "geometry",
+          "type": "object",
+          "required": false,
+          "about": "Contains geometrical information about the item. You can set either width or height, but not both at the same time."
+        },
+        {
+          "name": "position",
+          "type": "object",
+          "required": false,
+          "about": "Contains information about the item's position on the board."
+        }
+      ],
+      "scopes": [
+        "boards:write"
+      ],
+      "tags": [
+        "important",
+        "openWorldHint",
+        "updateHint",
+        "Items"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Update Frame Item",
+      "slug": "MIRO_UPDATE_FRAME_ITEM",
+      "kind": "write",
+      "description": "Tool to update a frame item on a Miro board. Use when you need to modify properties of an existing frame such as title, position, size, or styling. Include only fields to change.",
+      "inputs": [
+        {
+          "name": "data",
+          "type": "object",
+          "required": false,
+          "about": "Core data for updating a frame item."
+        },
+        {
+          "name": "style",
+          "type": "object",
+          "required": false,
+          "about": "Styling options for updating a frame item."
+        },
+        {
+          "name": "item_id",
+          "type": "string",
+          "required": true,
+          "about": "Unique identifier (ID) of the frame that you want to update."
+        },
+        {
+          "name": "board_id",
+          "type": "string",
+          "required": true,
+          "about": "Unique identifier (ID) of the board where you want to update the frame."
+        },
+        {
+          "name": "geometry",
+          "type": "object",
+          "required": false,
+          "about": "Geometrical dimensions for updating a frame item."
+        },
+        {
+          "name": "position",
+          "type": "object",
+          "required": false,
+          "about": "Board position for updating a frame item."
+        }
+      ],
+      "scopes": [
+        "boards:write"
+      ],
+      "tags": [
+        "openWorldHint",
+        "updateHint",
+        "Items"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Update Group",
+      "slug": "MIRO_UPDATE_GROUP",
+      "kind": "write",
+      "description": "Tool to update a group on a Miro board with new items. Use when you need to change which items belong to an existing group.",
+      "inputs": [
+        {
+          "name": "data",
+          "type": "object",
+          "required": true,
+          "about": "Contains the data with item IDs to be included in the group."
+        },
+        {
+          "name": "board_id",
+          "type": "string",
+          "required": true,
+          "about": "Unique identifier (ID) of the board."
+        },
+        {
+          "name": "group_id",
+          "type": "string",
+          "required": true,
+          "about": "Unique identifier (ID) of the group to update."
+        }
+      ],
+      "scopes": [
+        "boards:write"
+      ],
+      "tags": [
+        "openWorldHint",
+        "updateHint",
+        "Items"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Update Image Item",
+      "slug": "MIRO_UPDATE_IMAGE_ITEM",
+      "kind": "write",
+      "description": "Tool to update an existing image item on a board. Use when you need to modify properties of an existing image item such as title, URL, position, or geometry.",
+      "inputs": [
+        {
+          "name": "data",
+          "type": "object",
+          "required": false,
+          "about": "Data fields to update for the image item."
+        },
+        {
+          "name": "parent",
+          "type": "object",
+          "required": false,
+          "about": "Contains information about the parent frame for the item."
+        },
+        {
+          "name": "item_id",
+          "type": "string",
+          "required": true,
+          "about": "Unique identifier (ID) of the item that you want to update."
+        },
+        {
+          "name": "board_id",
+          "type": "string",
+          "required": true,
+          "about": "Unique identifier (ID) of the board where you want to update the item."
+        },
+        {
+          "name": "geometry",
+          "type": "object",
+          "required": false,
+          "about": "Contains geometrical information about the item. You can set either the width or height, you cannot set both at the same time."
+        },
+        {
+          "name": "position",
+          "type": "object",
+          "required": false,
+          "about": "Contains information about the item's position on the board."
+        }
+      ],
+      "scopes": [
+        "boards:write"
+      ],
+      "tags": [
+        "openWorldHint",
+        "updateHint",
+        "Items"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Update Item Position or Parent",
+      "slug": "MIRO_UPDATE_ITEM_POSITION_OR_PARENT",
+      "kind": "write",
+      "description": "Tool to update an item's position or parent frame on a Miro board. Use when you need to move an item to a new location or assign it to a different parent frame.",
+      "inputs": [
+        {
+          "name": "parent",
+          "type": "object",
+          "required": false,
+          "about": "Parent frame information for updating an item on the board."
+        },
+        {
+          "name": "item_id",
+          "type": "string",
+          "required": true,
+          "about": "Unique identifier (ID) of the item that you want to update."
+        },
+        {
+          "name": "board_id",
+          "type": "string",
+          "required": true,
+          "about": "Unique identifier (ID) of the board where you want to update the item."
+        },
+        {
+          "name": "position",
+          "type": "object",
+          "required": false,
+          "about": "Position information for updating an item on the board."
+        }
+      ],
+      "scopes": [
+        "boards:write"
+      ],
+      "tags": [
+        "openWorldHint",
+        "updateHint",
+        "Items"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Update Shape Item",
+      "slug": "MIRO_UPDATE_SHAPE_ITEM",
+      "kind": "write",
+      "description": "Tool to update an existing shape item on a Miro board. Use when you need to modify properties of a shape such as content, style, position, geometry, or parent. Include only the fields you want to change.",
+      "inputs": [
+        {
+          "name": "data",
+          "type": "object",
+          "required": false,
+          "about": "Core data for updating a shape item."
+        },
+        {
+          "name": "style",
+          "type": "object",
+          "required": false,
+          "about": "Styling options for updating a shape item."
+        },
+        {
+          "name": "parent",
+          "type": "object",
+          "required": false,
+          "about": "Parent item reference for updating a shape's nesting."
+        },
+        {
+          "name": "item_id",
+          "type": "string",
+          "required": true,
+          "about": "Unique identifier of the shape item to update."
+        },
+        {
+          "name": "board_id",
+          "type": "string",
+          "required": true,
+          "about": "Unique identifier of the board containing the shape item."
+        },
+        {
+          "name": "geometry",
+          "type": "object",
+          "required": false,
+          "about": "Geometrical dimensions for updating a shape item."
+        },
+        {
+          "name": "position",
+          "type": "object",
+          "required": false,
+          "about": "Board position for updating a shape item."
+        }
+      ],
+      "scopes": [
+        "boards:write"
+      ],
+      "tags": [
+        "openWorldHint",
+        "updateHint",
+        "Items"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Update Sticky Note Item",
+      "slug": "MIRO_UPDATE_STICKY_NOTE_ITEM",
+      "kind": "write",
+      "description": "Tool to update a sticky note item on a Miro board. Use when you need to modify the content, style, position, geometry, or parent of an existing sticky note.",
+      "inputs": [
+        {
+          "name": "data",
+          "type": "object",
+          "required": false,
+          "about": "Contains sticky note item data, such as the content or shape of the sticky note."
+        },
+        {
+          "name": "style",
+          "type": "object",
+          "required": false,
+          "about": "Contains information about the style of a sticky note item, such as the fill color or text alignment."
+        },
+        {
+          "name": "parent",
+          "type": "object",
+          "required": false,
+          "about": "Contains information about the parent frame for the item."
+        },
+        {
+          "name": "item_id",
+          "type": "string",
+          "required": true,
+          "about": "Unique identifier (ID) of the item that you want to update."
+        },
+        {
+          "name": "board_id",
+          "type": "string",
+          "required": true,
+          "about": "Unique identifier (ID) of the board where you want to update the item."
+        },
+        {
+          "name": "geometry",
+          "type": "object",
+          "required": false,
+          "about": "Contains geometrical information about the item. You can set either the width or height. You cannot set both the width and height at the same time."
+        },
+        {
+          "name": "position",
+          "type": "object",
+          "required": false,
+          "about": "Contains information about the item's position on the board, such as its x coordinate, y coordinate."
+        }
+      ],
+      "scopes": [
+        "boards:write"
+      ],
+      "tags": [
+        "openWorldHint",
+        "updateHint",
+        "Items"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Update Tag",
+      "slug": "MIRO_UPDATE_TAG",
+      "kind": "write",
+      "description": "Tool to update a tag on a board. Use when you need to modify a tag's title or color. At least one field (title or fillColor) should be provided to update.",
+      "inputs": [
+        {
+          "name": "title",
+          "type": "string",
+          "required": false,
+          "about": "Text of the tag. Case-sensitive. Must be unique within the board."
+        },
+        {
+          "name": "tag_id",
+          "type": "string",
+          "required": true,
+          "about": "Unique identifier (ID) of the tag that you want to update."
+        },
+        {
+          "name": "board_id",
+          "type": "string",
+          "required": true,
+          "about": "Unique identifier (ID) of the board where you want to update a specific tag."
+        },
+        {
+          "name": "fillColor",
+          "type": "string",
+          "required": false,
+          "about": "Fill color for the tag. Choose from predefined color options."
+        }
+      ],
+      "scopes": [
+        "boards:write"
+      ],
+      "tags": [
+        "important",
+        "openWorldHint",
+        "updateHint",
+        "Tags"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Update Text Item",
+      "slug": "MIRO_UPDATE_TEXT_ITEM",
+      "kind": "write",
+      "description": "Tool to update a text item on a Miro board. Use when you need to modify the content, style, position, or other properties of an existing text item.",
+      "inputs": [
+        {
+          "name": "data",
+          "type": "object",
+          "required": false,
+          "about": "Contains text item data to update."
+        },
+        {
+          "name": "style",
+          "type": "object",
+          "required": false,
+          "about": "Contains information about the style of a text item to update."
+        },
+        {
+          "name": "parent",
+          "type": "object",
+          "required": false,
+          "about": "Contains information about the parent frame for the item."
+        },
+        {
+          "name": "item_id",
+          "type": "string",
+          "required": true,
+          "about": "Unique identifier (ID) of the item that you want to update."
+        },
+        {
+          "name": "board_id",
+          "type": "string",
+          "required": true,
+          "about": "Unique identifier (ID) of the board where you want to update the item."
+        },
+        {
+          "name": "geometry",
+          "type": "object",
+          "required": false,
+          "about": "Contains geometrical information about the item to update."
+        },
+        {
+          "name": "position",
+          "type": "object",
+          "required": false,
+          "about": "Contains information about the item's position on the board to update."
+        }
+      ],
+      "scopes": [
+        "boards:write"
+      ],
+      "tags": [
+        "openWorldHint",
+        "updateHint",
+        "Items"
+      ],
+      "deprecated": false
+    }
+  ],
+  "triggers": [],
+  "source": "https://docs.composio.dev/toolkits/miro",
+  "fetched_at": "2026-11-20"
+}

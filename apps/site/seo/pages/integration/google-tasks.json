@@ -1,0 +1,136 @@
+{
+  "path": "/integrations/google-tasks",
+  "type": "integration",
+  "title": "Google Tasks bot for overdue work and unfinished errands",
+  "nav": "google tasks",
+  "h1": "see which google tasks still need a decision",
+  "description": "Review overdue tasks across lists, put errands in one place and recover completed work for a timesheet. Keep dates and task order under your control.",
+  "keyword": "google tasks bot",
+  "keywords": [
+    "google tasks ai assistant",
+    "google tasks ai agent"
+  ],
+  "answer": "**decide what to do with the overdue tasks you keep carrying forward.** a google tasks bot in dusk can read across your lists and bring back each task with its notes and original list. ask for a shortlist to work through today. leave every due date in place until you choose what moves.",
+  "updated": "2026-11-20",
+  "review": {
+    "status": "approved",
+    "by": "lead agent, after four independent reviewers read every page against seo/facts (2026-11-20); every finding applied",
+    "at": "2026-11-20"
+  },
+  "voice": 2,
+  "tags": [
+    "personal tasks",
+    "due dates",
+    "errands"
+  ],
+  "connectors": [
+    "googletasks"
+  ],
+  "related": [
+    "/routines/todoist-evening-plan",
+    "/integrations/google-calendar",
+    "/integrations/asana"
+  ],
+  "art": {
+    "label": "Google Tasks",
+    "props": [
+      "p-bag"
+    ],
+    "bubble": "what can wait"
+  },
+  "og_line": "plan the day without rewriting due dates.",
+  "app": {
+    "name": "Google Tasks",
+    "toolkit": "googletasks",
+    "intro": "**keep the list name beside every task.** two tasks called “pick up keys” may belong to different jobs. the cross-list action returns the list id and title. the single-task lookup uses both ids to reopen exactly the task you mean.",
+    "highlight": [
+      {
+        "slug": "GOOGLETASKS_LIST_TASK_LISTS",
+        "use": "find the work and personal lists even when their titles look alike"
+      },
+      {
+        "slug": "GOOGLETASKS_LIST_ALL_TASKS",
+        "use": "collect open work across lists and keep each task’s source"
+      },
+      {
+        "slug": "GOOGLETASKS_LIST_TASKS",
+        "use": "filter one list by due dates or completion dates"
+      },
+      {
+        "slug": "GOOGLETASKS_GET_TASK",
+        "use": "refresh a task before relying on its latest notes"
+      },
+      {
+        "slug": "GOOGLETASKS_PATCH_TASK",
+        "use": "change just the due date you agreed to move"
+      },
+      {
+        "slug": "GOOGLETASKS_MOVE_TASK",
+        "use": "move an errand to another list or position it under a parent"
+      },
+      {
+        "slug": "GOOGLETASKS_INSERT_TASK",
+        "use": "add a new follow-up to the intended list"
+      }
+    ],
+    "setup": "**connect the google account that holds your lists.** let your planning bot read google tasks. ask it to show your list titles, then name the ones that belong in the daily review. keep a client list out of the errands routine if the two share a name."
+  },
+  "routines_intro": "**choose the moment you usually reopen the list.** these messages build a plan from the tasks you already wrote. change the list names in the bot’s job to match yours.",
+  "routines": [
+    {
+      "name": "decide on overdue work",
+      "message": "each weekday at 8, read incomplete tasks due before today from my work lists. group them by original due date. include the task notes if they name someone waiting. give me the three oldest first in this chat. leave every due date alone.",
+      "when": "weekdays at 8 am",
+      "output": "overdue decisions with the original deadlines intact"
+    },
+    {
+      "name": "errands to take along",
+      "message": "every saturday at 10, read my home and errands lists. find unfinished tasks whose title or notes name a pickup, return or drop-off. group them by the place actually named. put tasks without a place together here. do not move them between lists.",
+      "when": "saturdays at 10 am",
+      "output": "one errand list for the trip, grouped by place"
+    },
+    {
+      "name": "completed work for my timesheet",
+      "message": "every friday at 4, list tasks i completed on my client lists since monday. include completed and hidden tasks. group the titles by client list and completion day here. copy any duration i wrote in the notes. leave hours blank everywhere else.",
+      "when": "fridays at 4 pm",
+      "output": "a timesheet aid with only the hours you recorded"
+    }
+  ],
+  "asks": "**review a proposed move before handing over the task list.** moving tasks, changing dates and inserting tasks are writes. they can run without asking. keep planning read only. for an editing routine, write “ask me before you change anything” and have it name the task and destination.",
+  "cannot": [
+    "**store a due hour with the insert action.** google tasks keeps the date and discards the time. a run at ten does not give the task a ten o’clock due time.",
+    "**open a task by its id alone.** the single-task action also requires its list id.",
+    "**assume the cross-list result covers everything.** it defaults to 1,000 tasks and indicates when it cuts off results. narrow the lists or adjust the limit before calling the review complete."
+  ],
+  "sections": [
+    {
+      "h": "when to keep the pencil yourself",
+      "md": "**change a single obvious date in google tasks.** a chat adds a step when you already know the task and its new deadline. use dusk when the next decision depends on notes and due dates spread across several lists."
+    }
+  ],
+  "faq": [
+    {
+      "q": "can a google tasks ai assistant reorder my list?",
+      "a": "**yes, with the move action enabled.** give the destination list or the sibling it should follow. ask for a proposed order in chat first."
+    },
+    {
+      "q": "will repeating a request to add a task create a duplicate?",
+      "a": "**it can.** if the first insert gave an unclear result, have the bot read the destination list. confirm whether the task already exists before trying again."
+    }
+  ],
+  "worked": {
+    "intro": "a fictional example.",
+    "before": "frank meyer has “return sample” on his home list and “return lamp” on his errands list. only the lamp task names a shop.",
+    "after": "trip list: take the lamp to the lighting shop. the sample still needs a destination. both tasks keep their original lists and dates."
+  },
+  "sources": [
+    {
+      "label": "dusk bot docs: files and apps",
+      "url": "/docs/files-and-apps"
+    },
+    {
+      "label": "dusk bot docs: routines",
+      "url": "/docs/routines"
+    }
+  ]
+}

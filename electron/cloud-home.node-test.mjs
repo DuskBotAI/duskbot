@@ -208,7 +208,7 @@ test("main lists the machine from verified states only, and connects without a d
     persistEnvironments: next => { persisted.push(next); context.environmentsState = next; },
     navigateMainWindow: url => navigated.push(url), withCloudHome, withoutOldCloudHome, homeLook, withActive: environments.withActive, cloudLook: { pending: () => look },
     randomUUID: () => "cloud-home-id", slog: () => {}, Date: { now: () => NOW }, AbortSignal: { timeout: ms => ({ timeoutMs: ms }) },
-    session: { defaultSession: { fetch: async (url, init) => { probes.push([url, init.credentials, init.signal.timeoutMs]); return { ok: false, json: async () => ({}) }; } } },
+    cloudFetch: async (url, init) => { probes.push([url, init.credentials, init.signal.timeoutMs]); return { ok: false, json: async () => ({}) }; },
     dialog: { showMessageBox: async () => { dialogs.push(1); return { response: 1 }; } },
     ensureCloudAccount: () => client,
   });
@@ -441,7 +441,7 @@ test("the Server menu opens My Cloud through the Cloud's own connection, never a
     homeWindow: { cloudOrigin: () => null, asking: () => false }, showHome: async (options) => { calls.push(options ? `home:${JSON.stringify(options)}` : "home"); },
     homePlaces: { remember: (place) => calls.push(`remember:${JSON.stringify(place)}`) },
     runningDataDir: "/data", desktopDataDir: () => "/data", localRuntimeStarting: null,
-    handSaved, serverOpens: async (place) => { calls.push(`look:${place.id}`); return answers; }, session: { defaultSession: { fetch: async () => null } }, dialog: {},
+    handSaved, serverOpens: async (place) => { calls.push(`look:${place.id}`); return answers; }, cloudFetch: async () => null, dialog: {},
     // the first-pick mark main keeps beside switchEnvironment (47ad2f03a)
     placesChosenStore: () => ({ choose() {} }), jsonFile: () => ({}), path: { join: (...parts) => parts.join("/") }, app: { getPath: () => "/data" },
     workspaceSwitch: { around: (action) => { covered += 1; return action(); } },

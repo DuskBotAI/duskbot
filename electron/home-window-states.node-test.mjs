@@ -169,3 +169,15 @@ test("one welcome only: My Cloud opened from this computer goes to the route tha
   await phone.home.openCloud("phone");
   assert.equal(phone.went.at(-1)?.[0], `${CLOUD}/?desktop-settings=phone`, "the phone pairing keeps its own page");
 });
+
+test("a Cloud the edge says was deleted is its own screen, said once: nothing dials it again, and Remove from list where the Admin allows it", async () => {
+  const w = world({ state: { ...connected(), clouds: [{ ...CLIENT_A, removable: true }] }, client: { health: 410 } });
+  await w.home.show({ place: { cloud: "c-a" } });
+  assert.deepEqual(w.home.view(), { screen: "gone", name: "Client A", removable: true });
+  assert.deepEqual(w.went.at(-1), [`${LOCAL}${HOME_SCREEN_PATH}`, null]);
+  assert.equal(w.timers.length, 0, "nothing looks again");
+  const asked = w.fetched.length;
+  await w.later(10 * 60_000);
+  assert.equal(w.fetched.length, asked);
+  assert.equal(w.ownPairs.length, 0, "never paired with");
+});

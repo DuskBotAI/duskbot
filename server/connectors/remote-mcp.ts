@@ -72,6 +72,7 @@ const OAUTH: readonly Row[] = [
   ["upstash", "Upstash", "https://mcp.upstash.com/mcp", "upstash.com", "developer database", "Redis, QStash and vector databases"],
   ["clerk", "Clerk", "https://mcp.clerk.com/mcp", "clerk.com", "developer", "Users, organizations and sessions in Clerk"],
   ["tavily", "Tavily", "https://mcp.tavily.com/mcp", "tavily.com", "search", "Web search and extraction for agents"],
+  ["aimlapi", "AI/ML API", "https://mcp.aimlapi.com/mcp", "aimlapi.com", "search data scraping", "Search, scraping, SEO data and models in one account"],
   ["dodopayments", "Dodo Payments", "https://mcp.dodopayments.com/mcp", "dodopayments.com", "payments", "Payments, subscriptions and customers"],
   ["morningstar", "Morningstar", "https://mcp.morningstar.com/mcp", "morningstar.com", "finance research", "Fund, stock and market research"],
 ];

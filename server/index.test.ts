@@ -3355,12 +3355,16 @@ describe("harness HTTP API", () => {
       rmSync(fakeClaudeDump, { force: true });
       const missingPromptBaseline = claudePrompts().length;
       expect((await api("POST", `/api/bots/${botIds[0]}/messages`, { text: "do not create a replacement" })).status).toBe(202);
-      await expect.poll(async () => JSON.stringify((await api("GET", "/api/bots?messages=30")).body.bots.find(
-        (bot: { id: string }) => bot.id === botIds[0],
-      )), { timeout: 5_000 }).toMatch(/No dusk bot container exists for this bot on the VPS/);
+      await expect.poll(() => claudePrompts().length, { timeout: 5_000 }).toBe(missingPromptBaseline + 1);
+      const withoutComputer = await readJsonFileWhenReady<ComputerDump>(fakeClaudeDump);
+      expect(withoutComputer.mcpConfig.mcpServers.computer).toBeUndefined();
+      expect(JSON.stringify(withoutComputer)).toMatch(/your computer isn't set up and the person can set it up again in Settings > Computers/);
+      expect(JSON.stringify(withoutComputer)).not.toMatch(/try again in a minute/);
+      expect((await api("POST", `/api/bots/${botIds[0]}/interrupt`, {})).status).toBe(200);
       await idle(botIds[0]);
-      expect(claudePrompts()).toHaveLength(missingPromptBaseline);
-      expect(existsSync(fakeClaudeDump)).toBe(false);
+      const missingThread = JSON.stringify((await api("GET", "/api/bots?messages=30")).body.bots.find((bot: { id: string }) => bot.id === botIds[0]).messages);
+      expect(missingThread).not.toMatch(/No dusk bot container|docker|VPS/);
+      expect(claudePrompts()).toHaveLength(missingPromptBaseline + 1);
       expect(readFileSync(fakeDockerLog, "utf8").slice(missingOffset)).not.toMatch(/ (?:run|start|create|build|pull)(?: |$)/m);
     } finally {
       rmSync(fakeSharedVpsFixture, { force: true });
@@ -4653,7 +4657,8 @@ describe("harness HTTP API", () => {
     })).body.bot;
     try {
       const cases: Array<{ body: unknown; error: RegExp }> = [
-        { body: { instanceId: "missing", model: "anything" }, error: /instance .* unavailable/i },
+        { body: { instanceId: "missing", model: "anything" }, error: /instance "missing" is unavailable; no instance offers "anything"/i },
+        { body: { instanceId: "missing", model: selection.model }, error: new RegExp(`is offered by instance "${selection.instanceId}"`) },
         { body: { ...selection, model: `${selection.model}-not-offered` }, error: /not offered/i },
         { body: { ...selection, effort: "turbo" }, error: /not recognized/i },
         { body: { ...selection, effort: "none" }, error: /not offered/i },
@@ -8724,7 +8729,7 @@ describe("harness HTTP API", () => {
   it("keeps skill authoring on by default and persists an explicit opt-out", async () => {
     const before = await api("GET", "/api/config");
     expect(before.status).toBe(200);
-    expect(before.body.features).toEqual({ browser: false, skillAuthoring: true, skillReview: false, skillReviewSteps: 10, skillsLibrary: false, shareLearnedSkills: "off", showToolCalls: false, claudeUserMcp: false, claudeUserSkills: false, autoRecall: true, roomMemoryCapture: false, parallelRoomJobs: false, llmThreadTitles: true, quickUpdates: true });
+    expect(before.body.features).toEqual({ browser: false, skillAuthoring: true, skillReview: true, skillReviewSteps: 10, skillsLibrary: false, shareLearnedSkills: "off", showToolCalls: false, claudeUserMcp: false, claudeUserSkills: false, autoRecall: true, roomMemoryCapture: false, parallelRoomJobs: false, llmThreadTitles: true, quickUpdates: true, suggestions: true });
     const untouched = JSON.parse(readFileSync(join(home, ".duskbot", "config.json"), "utf8"));
     expect(untouched.features?.skillAuthoring).toBeUndefined();
     expect(untouched.features?.skillReview).toBeUndefined();
@@ -8733,7 +8738,7 @@ describe("harness HTTP API", () => {
       features: { skillAuthoring: false },
     });
     expect(saved.status).toBe(200);
-    expect(saved.body.features).toEqual({ browser: false, skillAuthoring: false, skillReview: false, skillReviewSteps: 10, skillsLibrary: false, shareLearnedSkills: "off", showToolCalls: false, claudeUserMcp: false, claudeUserSkills: false, autoRecall: true, roomMemoryCapture: false, parallelRoomJobs: false, llmThreadTitles: true, quickUpdates: true });
+    expect(saved.body.features).toEqual({ browser: false, skillAuthoring: false, skillReview: true, skillReviewSteps: 10, skillsLibrary: false, shareLearnedSkills: "off", showToolCalls: false, claudeUserMcp: false, claudeUserSkills: false, autoRecall: true, roomMemoryCapture: false, parallelRoomJobs: false, llmThreadTitles: true, quickUpdates: true, suggestions: true });
 
     const disk = JSON.parse(readFileSync(join(home, ".duskbot", "config.json"), "utf8"));
     // Earlier browser coverage may have persisted its own toggle: opting out must preserve sibling settings.
@@ -8741,7 +8746,7 @@ describe("harness HTTP API", () => {
 
     const tools = await api("PATCH", "/api/config", { features: { showToolCalls: true } });
     expect(tools.status).toBe(200);
-    expect(tools.body.features).toEqual({ browser: false, skillAuthoring: false, skillReview: false, skillReviewSteps: 10, skillsLibrary: false, shareLearnedSkills: "off", showToolCalls: false, claudeUserMcp: false, claudeUserSkills: false, autoRecall: true, roomMemoryCapture: false, parallelRoomJobs: false, llmThreadTitles: true, quickUpdates: true });
+    expect(tools.body.features).toEqual({ browser: false, skillAuthoring: false, skillReview: true, skillReviewSteps: 10, skillsLibrary: false, shareLearnedSkills: "off", showToolCalls: false, claudeUserMcp: false, claudeUserSkills: false, autoRecall: true, roomMemoryCapture: false, parallelRoomJobs: false, llmThreadTitles: true, quickUpdates: true, suggestions: true });
 
     const bot = (await api("POST", "/api/bots", {})).body.bot;
     try {

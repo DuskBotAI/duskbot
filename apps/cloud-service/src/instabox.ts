@@ -280,6 +280,21 @@ export function createInstaboxProvider(options: InstaboxProviderOptions): Machin
     for (const value of data?.snapshots ?? []) { const snap = snapshotOf(value); if (snap?.name === name) return snap; }
     return null;
   }
+  /** InstaBox (seen 2026-11-20) lists a stopped machine's new snapshot only minutes after the save was asked for, and its
+   *  answer may be an operation rather than the snapshot */
+  async function snapshotSaved(name: string, answer: Record<string, any> | null, end: number) {
+    const operationId = typeof answer?.id === "string" && OPERATION_ID.test(answer.id) ? answer.id : null;
+    for (;;) {
+      const snap = await snapshotNamed(name);
+      if (snap) return snap;
+      if (operationId) {
+        const op = await call("GET", `/v1/operations/${operationId}`, { missingOk: true });
+        if (op?.state === "failed") throw new InstaboxError(409, "snapshot_failed");
+      }
+      if (Date.now() > end) throw new RetryableCloudError("InstaBox snapshot not found after saving it.");
+      await sleep(pollMs);
+    }
+  }
 
   const provider: MachineProvider = {
     name: "managed",
@@ -429,6 +444,7 @@ export function createInstaboxProvider(options: InstaboxProviderOptions): Machin
       if (!SNAPSHOT_NAME.test(name)) throw new Error("Invalid InstaBox snapshot name.");
       let m = await get(serverId);
       if (!m) return null;
+      const end = Date.now() + settleMs * 5;
       let snap = await snapshotNamed(name);
       if (!snap) {
         // a paused machine can be neither saved nor stopped: resumed first; a stopped one saves at once, with nothing copied
@@ -438,15 +454,14 @@ export function createInstaboxProvider(options: InstaboxProviderOptions): Machin
           await call("POST", `/v1/machines/${serverId}/stop`, { body: {}, idempotent: true });
           await settle(serverId, x => x.state === "stopped");
         }
-        try { snap = snapshotOf(await call("POST", `/v1/machines/${serverId}/snapshots`, { body: { name, description: "dusk bot: a home kept after its plan ended" }, idempotent: `dusk-snap-${name}` })); }
+        let answer: Record<string, any> | null = null;
+        try { answer = await call("POST", `/v1/machines/${serverId}/snapshots`, { body: { name, description: "dusk bot: a home kept after its plan ended" }, idempotent: `dusk-snap-${name}` }); }
         catch (error) {
-          // a lost answer retried: the name is taken by the snapshot the first request made
-          if (!(error instanceof InstaboxError && error.status === 409)) throw error;
-          snap = await snapshotNamed(name);
+          // a lost or timed-out answer, or the name taken by the first request: the save may still be running
+          if (!(error instanceof RetryableCloudError || error instanceof InstaboxError && error.status === 409)) throw error;
         }
-        if (!snap) throw new RetryableCloudError("InstaBox snapshot not found after saving it.");
+        snap = snapshotOf(answer) ?? await snapshotSaved(name, answer, end);
       }
-      const end = Date.now() + settleMs * 5;
       while (snap.status === "pending") {
         if (Date.now() > end) throw new RetryableCloudError("InstaBox snapshot still saving.");
         await sleep(pollMs);

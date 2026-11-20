@@ -57,6 +57,7 @@ Use only mapped, tested commands:
 - [Profile proposal and credential-card lifecycle](proposal-cards.md)
 - [Full Access without duplicate approvals](full-access.md)
 - [Gmail draft creation, send approval and revision](gmail-drafts.md)
+- [Purchases, email review and product cards](purchases.md)
 - [Exact command allowlist UI and saved rules](command-allowlist.md)
 - [The safety floor: a never-list no grant can allow](safety-floor.md)
 - [Peer approval denial, expiry, and cancellation](peer-approvals.md)

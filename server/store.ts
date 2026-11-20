@@ -1488,7 +1488,8 @@ export class Store {
   deleteBot(id: string, setupRequest?: TeamSetupRequest): boolean {
     const bot = this.bot(id);
     if (!bot) return false;
-    if (bot.defaultBot) throw Object.assign(new Error(defaultBotRefusal(bot.name)), { status: 409 });
+    const kept = defaultBotRefusal(bot, this.bots);
+    if (kept) throw Object.assign(new Error(kept), { status: 409 });
     let nextBots = this.bots.filter((b) => b.id !== id);
     if (setupRequest) {
       const chief = this.bot(setupRequest.botId);

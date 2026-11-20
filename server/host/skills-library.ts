@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { join } from "node:path";
 
-import { skillCalls, skillCommandTurnText } from "../../shared/skill-command.ts";
+import { skillCalls, skillCommandTurnText, type SkillReading } from "../../shared/skill-command.ts";
 import type { SkillRequestCardData, SkillShareRecord } from "../../shared/skill-request.ts";
 import { narrowestAudience, intersectAudience } from "../bot-visibility.ts";
 import { DATA_DIR, type AppConfig } from "../config.ts";
@@ -25,11 +25,11 @@ import {
   updateSharedLearnedSkill,
   type ShareBot,
 } from "../skill-share.ts";
-import { enabledSkillFiles, listSkills, readSkillFile, resolveBotSkills, skillsSystemPrompt, type SkillListing } from "../skills.ts";
+import { enabledSkillFiles, listSkills, readSkillFile, readSkillReferences, resolveBotSkills, skillsSystemPrompt, type SkillListing } from "../skills.ts";
 import type { BotRecord, Message, Store } from "../store.ts";
 import { claudeUserSkillsEnabled } from "../turn-settings.ts";
 import { typedWords } from "../typed-sends.ts";
-import { TASK_WORKSPACES_DIR } from "../workspace.ts";
+import { supportsWorkspaceFiles, TASK_WORKSPACES_DIR } from "../workspace.ts";
 
 type ReceiptArgs = {
   botId: string;
@@ -147,6 +147,8 @@ export function createSkillsLibraryHost(deps: SkillsLibraryHostDeps) {
     return engine ? nativeSkills(engine, { claudeUserSkills: claudeUserSkillsEnabled(cfg), cwd: threadFolder(bot, threadId) }) : [];
   };
 
+  const readingFor = (instance: TurnInstance | undefined): SkillReading => (instance && !supportsWorkspaceFiles(instance.driverKind) ? "tool" : "files");
+
   const editable = (botId: string, name: string): boolean =>
     mode() !== "off" && sharedSkillEditable(botId, store.bot(botId)?.assignedSkills, name);
 
@@ -252,8 +254,26 @@ export function createSkillsLibraryHost(deps: SkillsLibraryHostDeps) {
      * this computer, each with a budget of its own. */
     skillsIndex(bot: BotRecord, threadId: string | undefined, instance?: TurnInstance): string {
       const assigned = threadId === undefined ? (skillsLibraryEnabled(cfg) ? bot.assignedSkills ?? [] : undefined) : conversationSkills(bot, threadId);
-      return skillsSystemPrompt(bot.id, assigned, threadId === undefined ? undefined : conversationStartedAt(threadId)) +
-        importedSkillsPrompt(importsFor(bot, assigned, instance));
+      const reading = readingFor(instance);
+      return skillsSystemPrompt(bot.id, assigned, threadId === undefined ? undefined : conversationStartedAt(threadId), reading) +
+        importedSkillsPrompt(importsFor(bot, assigned, instance), reading);
+    },
+
+    /** read_skill: an enabled skill's SKILL.md and the names of its other files, or one of those files. Read-only, and only
+     * the skills this bot's index can list. */
+    readForTool(bot: BotRecord, threadId: string, name: string, file?: string): { text: string; isError?: true } {
+      const enabled = listBotSkills(bot, threadId).filter((skill) => skill.enabled);
+      if (!enabled.some((skill) => skill.name === name)) {
+        return { text: `No enabled skill named "${name}". Enabled: ${enabled.map((skill) => skill.name).join(", ") || "none"}.`, isError: true };
+      }
+      const references = readSkillReferences(bot.id, name) ?? [];
+      if (file) {
+        const found = references.find((reference) => reference.path === file);
+        return found ? { text: found.content } : { text: `"${name}" has no file "${file}". Its files: SKILL.md${references.map((reference) => `, ${reference.path}`).join("")}.`, isError: true };
+      }
+      const body = readBotSkillFile(bot, name);
+      if (body === null) return { text: `The skill "${name}" could not be read.`, isError: true };
+      return { text: references.length ? `${body}\n\nOther files in this skill (read one with read_skill and file): ${references.map((reference) => reference.path).join(", ")}` : body };
     },
 
     /** The imported skills a turn links into its task folder: the same ones its index lists. */
@@ -279,7 +299,7 @@ export function createSkillsLibraryHost(deps: SkillsLibraryHostDeps) {
           .filter((skill) => !skill.enabled).map((skill) => skill.name));
         add(nativesFor(bot, threadId, instance).filter((skill) => !switched.has(skill.name)));
       }
-      return skillCommandTurnText(text, files, typed, ownStart);
+      return skillCommandTurnText(text, files, typed, ownStart, readingFor(instance) === "tool");
     },
 
     shareNote(bot: BotRecord, threadId: string, enabled: boolean): TurnShareNote {
@@ -314,14 +334,6 @@ export function createSkillsLibraryHost(deps: SkillsLibraryHostDeps) {
       editable(botId, name) ? readSkillLibraryIndex()[name]?.sha256 ?? null : null,
 
     editable,
-
-    applyReviewUpdate(bot: BotRecord, threadId: string, change: { name: string; skillMd: string; gist: string; baseSha256?: string }, direct: DirectApply):
-      { ok: true } | { ok: false; error: string } {
-      const updated = applySharedUpdate(bot, threadId, {
-        name: change.name, skillMd: change.skillMd, gist: change.gist || undefined, expectSha256: change.baseSha256,
-      }, direct);
-      return "error" in updated ? { ok: false, error: updated.error } : { ok: true };
-    },
 
     harnessUpdate(from: BotRecord, threadId: string, name: string, skillMd: string, gist: unknown, baseRevision: unknown, direct: DirectApply | null):
       [status: number, body: Record<string, unknown>] {

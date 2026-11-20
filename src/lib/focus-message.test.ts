@@ -1,11 +1,15 @@
 import type { EffectCallback } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const fixture = vi.hoisted(() => ({ effect: null as EffectCallback | null, text: "", dispatch: vi.fn() }));
+const fixture = vi.hoisted(() => ({ effect: null as EffectCallback | null, text: "", dispatch: vi.fn(), api: vi.fn(), bots: [] as unknown[] }));
 vi.mock("react", () => ({ useEffect: (effect: EffectCallback) => { fixture.effect = effect; } }));
 vi.mock("@/state/store", () => ({
-  api: vi.fn(),
-  useStore: () => ({ state: { focusMessage: { threadId: "thread", messageId: "message", matchText: fixture.text, nonce: 1, consumed: false } }, dispatch: fixture.dispatch }),
+  api: (...args: unknown[]) => fixture.api(...args),
+  MESSAGE_PAGE_SIZE: 200,
+  useStore: () => ({
+    state: { focusMessage: { threadId: "thread", messageId: "message", matchText: fixture.text, nonce: 1, consumed: false }, bots: fixture.bots, groups: [], transcriptGeneration: { thread: 2 } },
+    dispatch: fixture.dispatch,
+  }),
 }));
 
 import { useFocusMessage } from "./focus-message";
@@ -17,6 +21,8 @@ let target: { scrollIntoView: ReturnType<typeof vi.fn>; classList: { add: Return
 beforeEach(() => {
   vi.useFakeTimers();
   fixture.dispatch.mockClear();
+  fixture.api.mockReset();
+  fixture.bots = [];
   ranges = [];
   highlights = new Map();
   const node = { data: "alpha\nbeta a.b", length: 14 };
@@ -63,5 +69,19 @@ describe("search match highlighting", () => {
     expect(ranges).toMatchObject([{ start, end }]);
     expect(highlights.has("search-result-text")).toBe(true);
     expect(requestAnimationFrame).toHaveBeenCalledOnce();
+  });
+});
+
+describe("focusing a message older than the loaded rows", () => {
+  it("loads earlier pages until the message is there, then scrolls to it", async () => {
+    const older = { id: "message", role: "user", kind: "text", at: 1 };
+    fixture.bots = [{ id: "b", threadId: "thread", hasMore: true, messages: [{ id: "newest", role: "bot", kind: "text", at: 2 }] }];
+    fixture.api.mockResolvedValue({ messages: [older], hasMore: false });
+    focus("");
+    expect(target.scrollIntoView).not.toHaveBeenCalled();
+    await vi.runAllTimersAsync();
+    expect(fixture.api).toHaveBeenCalledWith("/api/threads/thread/messages?limit=200&before=newest");
+    expect(fixture.dispatch).toHaveBeenCalledWith({ type: "olderMessages", threadId: "thread", generation: 2, messages: [older], hasMore: false });
+    expect(target.scrollIntoView).toHaveBeenCalledOnce();
   });
 });

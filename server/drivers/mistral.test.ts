@@ -18,6 +18,13 @@ describe("Mistral provider", () => {
     expect(MistralDriver.decodeConfig({ url: "http://127.0.0.1:1234/v1/" }).url).toBe("http://127.0.0.1:1234/v1");
   });
 
+  it("uses this computer, its cloud computer and the built-in browser", async () => {
+    const instance = await create();
+    expect(instance.adapter.capabilities).toMatchObject({ computerMcp: true, localComputerMcp: true, browserMcp: true });
+    expect((await create({ tools: false })).adapter.capabilities.localComputerMcp).toBe(false);
+    await instance.dispose();
+  });
+
   it("does not contact the provider without a key", async () => {
     vi.stubEnv("MISTRAL_API_KEY", "");
     const fetcher = vi.fn(); vi.stubGlobal("fetch", fetcher);

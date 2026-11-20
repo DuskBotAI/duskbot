@@ -1,0 +1,3228 @@
+{
+  "toolkit": "confluence",
+  "name": "Confluence",
+  "version": "20261116_01",
+  "description": "A tool for team collaboration and knowledge management.",
+  "managed_sign_in": true,
+  "auth": [
+    "OAuth2",
+    "API Key",
+    "S2S_OAUTH2"
+  ],
+  "tools_count": 75,
+  "triggers_count": 23,
+  "tools": [
+    {
+      "name": "Add Content Label",
+      "slug": "CONFLUENCE_ADD_CONTENT_LABEL",
+      "kind": "write",
+      "description": "Tool to add labels to a piece of content. Use after obtaining the content ID to tag pages or blog posts with metadata labels.",
+      "inputs": [
+        {
+          "name": "id",
+          "type": "string",
+          "required": true,
+          "about": "Identifier of the Confluence content (page or blog post) to label."
+        },
+        {
+          "name": "labels",
+          "type": "array",
+          "required": true,
+          "about": "List of labels to add to the content. Each element must be an object with `prefix` (one of `global`, `team`, or `my`) and `name` (lowercase alphanumeric/hyphenated string) fields — e.g., `{'prefix': 'global', 'name': 'my-label'}`. Passing plain strings or omitting `prefix` causes schema validation e"
+        }
+      ],
+      "scopes": [
+        "write:confluence-content"
+      ],
+      "tags": [
+        "openWorldHint",
+        "important",
+        "Labels",
+        "updateHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "CQL Search",
+      "slug": "CONFLUENCE_CQL_SEARCH",
+      "kind": "write",
+      "description": "Searches for content in Confluence using Confluence Query Language (CQL). CQL is a powerful query language that allows you to search across all Confluence content with advanced filtering capabilities including: - Full-text search: `text ~ \"search term\"` - searches within page content - Title search: `title ~ \"meeting notes\"` - searches page titles - Label filtering: `label = \"important\"` - filters by labels - Space filtering: `space = DEV` - limits search to specific spaces - Type filtering: `type = page` or `type = blogpost` - filters by content type - Creator filtering: `creator = currentUser()` - filters by content creator - Date filtering: `lastModified > now(\"-7d\")` - filters by modification date - Combined queries: `text ~ \"api\" AND space = DOCS AND type = page` This action uses the Confluence REST API v1 search endpoint which fully supports CQL.",
+      "inputs": [
+        {
+          "name": "cql",
+          "type": "string",
+          "required": true,
+          "about": "Confluence Query Language (CQL) query for searching content. CQL allows searching by content text, title, labels, creator, type, space, and more. Examples: 'text ~ \"search term\"' (full-text search), 'label = \"important\"' (search by label), 'type = page AND space = DEV' (pages in DEV space), 'creator"
+        },
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "about": "Maximum number of results to return (max 250, but may be limited to 25-50 when using body expansions)"
+        },
+        {
+          "name": "start",
+          "type": "integer",
+          "required": false,
+          "about": "Starting index for pagination (0-based)"
+        },
+        {
+          "name": "expand",
+          "type": "string",
+          "required": false,
+          "about": "Comma-separated list of properties to expand in the response. Common values: 'content.space', 'content.version', 'content.body.storage', 'content.body.view'. Note: Using body expansions may limit results to 25-50."
+        },
+        {
+          "name": "excerpt",
+          "type": "string",
+          "required": false,
+          "about": "The type of excerpt to return. Default is 'highlight'."
+        },
+        {
+          "name": "includeArchivedSpaces",
+          "type": "boolean",
+          "required": false,
+          "about": "Whether to include results from archived spaces"
+        }
+      ],
+      "scopes": [
+        "search:confluence",
+        "read:content-details:confluence"
+      ],
+      "tags": [
+        "readOnlyHint",
+        "idempotentHint",
+        "openWorldHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Create Blogpost",
+      "slug": "CONFLUENCE_CREATE_BLOGPOST",
+      "kind": "write",
+      "description": "Creates a Confluence blog post in a specified space, either published or as a draft. The response includes the post ID and may include links to the post.",
+      "inputs": [
+        {
+          "name": "body",
+          "type": "object",
+          "required": true,
+          "about": "Content body of the blog post. Must be a dict with `representation` set to `'storage'` and `value` containing valid Confluence storage format markup (XML-based). Raw markdown or plain strings will cause validation errors."
+        },
+        {
+          "name": "title",
+          "type": "string",
+          "required": true,
+          "about": "The title of the new blog post."
+        },
+        {
+          "name": "status",
+          "type": "string",
+          "required": true,
+          "about": "Status of the blog post. Use `'current'` to publish immediately (publicly visible) or `'draft'` to save as private draft."
+        },
+        {
+          "name": "spaceId",
+          "type": "string",
+          "required": true,
+          "about": "ID of the space where the blog post will be created."
+        }
+      ],
+      "scopes": [
+        "write:page:confluence"
+      ],
+      "tags": [
+        "openWorldHint",
+        "important",
+        "Blogs",
+        "createHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Create Blogpost Property",
+      "slug": "CONFLUENCE_CREATE_BLOGPOST_PROPERTY",
+      "kind": "write",
+      "description": "Tool to create a property on a specified blog post. Use when you need to add custom metadata to a blog post. Creates a new property with a key-value pair on a specified Confluence blog post. This allows users to add custom metadata relevant to the blog post.",
+      "inputs": [
+        {
+          "name": "id",
+          "type": "string",
+          "required": true,
+          "about": "Identifier of the Confluence blog post to add the property to."
+        },
+        {
+          "name": "key",
+          "type": "string",
+          "required": true,
+          "about": "Unique key for the blog post property."
+        },
+        {
+          "name": "value",
+          "type": "string",
+          "required": true,
+          "about": "JSON string representing the value of the blog post property."
+        }
+      ],
+      "scopes": [
+        "read:page:confluence",
+        "write:page:confluence"
+      ],
+      "tags": [
+        "openWorldHint",
+        "Blogs",
+        "Properties",
+        "createHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Create Whiteboard Property",
+      "slug": "CONFLUENCE_CREATE_CONTENT_PROPERTY_FOR_WHITEBOARD",
+      "kind": "write",
+      "description": "Tool to create a new content property on a whiteboard. Use when you need to attach custom metadata to a Confluence whiteboard.",
+      "inputs": [
+        {
+          "name": "key",
+          "type": "string",
+          "required": true,
+          "about": "Key/name of the property to create."
+        },
+        {
+          "name": "value",
+          "type": "string",
+          "required": true,
+          "about": "JSON string representing the value of the content property."
+        },
+        {
+          "name": "whiteboard_id",
+          "type": "string",
+          "required": true,
+          "about": "ID of the whiteboard to add the property to."
+        }
+      ],
+      "scopes": [
+        "read:whiteboard:confluence",
+        "write:whiteboard:confluence"
+      ],
+      "tags": [
+        "openWorldHint",
+        "whiteboards",
+        "properties",
+        "createHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Create Folder",
+      "slug": "CONFLUENCE_CREATE_FOLDER",
+      "kind": "write",
+      "description": "Create a folder in a Confluence space content tree.",
+      "inputs": [
+        {
+          "name": "title",
+          "type": "string",
+          "required": false,
+          "about": "Title of the folder. Omit to let Confluence choose its default."
+        },
+        {
+          "name": "spaceId",
+          "type": "string",
+          "required": true,
+          "about": "ID of the space where the folder will be created."
+        },
+        {
+          "name": "parentId",
+          "type": "string",
+          "required": false,
+          "about": "ID of the parent content under which to create the folder."
+        }
+      ],
+      "scopes": [
+        "write:folder:confluence"
+      ],
+      "tags": [
+        "openWorldHint",
+        "important",
+        "content",
+        "createHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Create Footer Comment",
+      "slug": "CONFLUENCE_CREATE_FOOTER_COMMENT",
+      "kind": "send",
+      "description": "Create a footer comment on a Confluence page, blog post, attachment, or custom content, or reply to an existing footer comment without editing the page body.",
+      "inputs": [
+        {
+          "name": "body",
+          "type": "object",
+          "required": true,
+          "about": "The body content of the comment with representation format and value."
+        },
+        {
+          "name": "pageId",
+          "type": "string",
+          "required": false,
+          "about": "ID of the page to comment on. Provide one of: pageId, blogPostId, attachmentId, or customContentId."
+        },
+        {
+          "name": "blogPostId",
+          "type": "string",
+          "required": false,
+          "about": "ID of the blog post to comment on. Provide one of: pageId, blogPostId, attachmentId, or customContentId."
+        },
+        {
+          "name": "attachmentId",
+          "type": "string",
+          "required": false,
+          "about": "ID of the attachment to comment on. Provide one of: pageId, blogPostId, attachmentId, or customContentId."
+        },
+        {
+          "name": "customContentId",
+          "type": "string",
+          "required": false,
+          "about": "ID of the custom content to comment on. Provide one of: pageId, blogPostId, attachmentId, or customContentId."
+        },
+        {
+          "name": "parentCommentId",
+          "type": "string",
+          "required": false,
+          "about": "ID of the parent comment. Provide this to create a reply to an existing comment."
+        }
+      ],
+      "scopes": [
+        "write:comment:confluence"
+      ],
+      "tags": [
+        "openWorldHint",
+        "important",
+        "comments",
+        "createHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Create Inline Comment",
+      "slug": "CONFLUENCE_CREATE_INLINE_COMMENT",
+      "kind": "send",
+      "description": "Create an inline comment on selected text in a Confluence page or blog post, or reply to an existing inline comment. Top-level comments require selection properties; replies require a parent comment and comment body.",
+      "inputs": [
+        {
+          "name": "body",
+          "type": "object",
+          "required": true,
+          "about": "The body content of the comment with representation format and value."
+        },
+        {
+          "name": "pageId",
+          "type": "string",
+          "required": false,
+          "about": "ID of the page to create an inline comment on. Provide one of: pageId, blogPostId, or parentCommentId."
+        },
+        {
+          "name": "blogPostId",
+          "type": "string",
+          "required": false,
+          "about": "ID of the blog post to create an inline comment on. Provide one of: pageId, blogPostId, or parentCommentId."
+        },
+        {
+          "name": "parentCommentId",
+          "type": "string",
+          "required": false,
+          "about": "ID of the parent comment to reply to. Provide this to create a reply to an existing inline comment."
+        },
+        {
+          "name": "inlineCommentProperties",
+          "type": "object",
+          "required": false,
+          "about": "Properties that determine which text the inline comment is attached to.\nRequired for top-level inline comments (not replies)."
+        }
+      ],
+      "scopes": [
+        "write:comment:confluence"
+      ],
+      "tags": [
+        "createHint",
+        "openWorldHint",
+        "important",
+        "comments"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Create Page",
+      "slug": "CONFLUENCE_CREATE_PAGE",
+      "kind": "write",
+      "description": "Tool to create a new Confluence page in a specified space. Use when you need to create new documentation or content.",
+      "inputs": [
+        {
+          "name": "body",
+          "type": "object",
+          "required": false,
+          "about": "Wrapper for page body content."
+        },
+        {
+          "name": "title",
+          "type": "string",
+          "required": true,
+          "about": "Title of the new page. Title uniqueness is scoped per parent: duplicates are allowed under different parents but not under the same parent."
+        },
+        {
+          "name": "spaceId",
+          "type": "string",
+          "required": true,
+          "about": "ID or key of the space where the page will be created. Can be a numeric space ID (e.g., '12345678') or a space key (e.g., 'DOCS', 'TEAM'). Space keys are automatically converted to IDs."
+        },
+        {
+          "name": "parentId",
+          "type": "string",
+          "required": false,
+          "about": "ID of the parent page. If omitted, the Confluence API will automatically place the page under the space's homepage. Provide this to create the page as a child of a specific page. Must be a numeric page ID only — page titles and page keys are not accepted and will cause errors. Obtain numeric IDs via"
+        }
+      ],
+      "scopes": [
+        "read:space:confluence",
+        "write:page:confluence"
+      ],
+      "tags": [
+        "openWorldHint",
+        "important",
+        "content",
+        "createHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Create Page Property",
+      "slug": "CONFLUENCE_CREATE_PAGE_PROPERTY",
+      "kind": "write",
+      "description": "Tool to create a property on a Confluence page. Use when you need to add custom metadata or settings to a page.",
+      "inputs": [
+        {
+          "name": "key",
+          "type": "string",
+          "required": true,
+          "about": "Key/name of the property to create."
+        },
+        {
+          "name": "value",
+          "type": "string",
+          "required": true,
+          "about": "Value of the property as a JSON string. Can represent any JSON type (string, number, object, array)."
+        },
+        {
+          "name": "page_id",
+          "type": "string",
+          "required": true,
+          "about": "ID of the page to create a property for."
+        }
+      ],
+      "scopes": [
+        "read:page:confluence",
+        "write:page:confluence"
+      ],
+      "tags": [
+        "openWorldHint",
+        "important",
+        "properties",
+        "createHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Create Private Space",
+      "slug": "CONFLUENCE_CREATE_PRIVATE_SPACE",
+      "kind": "write",
+      "description": "Tool to create a private Confluence space. Use when you need an isolated workspace viewable only by its creator.",
+      "inputs": [
+        {
+          "name": "key",
+          "type": "string",
+          "required": true,
+          "about": "A unique key for the private space; must be unique and <=255 characters. Must be alphanumeric only (no hyphens, underscores, or spaces)."
+        },
+        {
+          "name": "name",
+          "type": "string",
+          "required": true,
+          "about": "The name of the private space, visible only to its creator."
+        },
+        {
+          "name": "description",
+          "type": "object",
+          "required": false,
+          "about": "Container for the plain-text description."
+        }
+      ],
+      "scopes": [
+        "write:confluence-space",
+        "read:space-details:confluence",
+        "write:space:confluence",
+        "write:space.permission:confluence"
+      ],
+      "tags": [
+        "openWorldHint",
+        "important",
+        "Spaces",
+        "createHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Create Space",
+      "slug": "CONFLUENCE_CREATE_SPACE",
+      "kind": "write",
+      "description": "Create a new Confluence space with a key and name, optionally specifying its type, description, and metadata.",
+      "inputs": [
+        {
+          "name": "key",
+          "type": "string",
+          "required": true,
+          "about": "A unique key for the space. Must be alphanumeric characters only (letters and numbers), up to 255 characters. Underscores and hyphens are not allowed."
+        },
+        {
+          "name": "name",
+          "type": "string",
+          "required": true,
+          "about": "Human-readable name for the space."
+        },
+        {
+          "name": "type",
+          "type": "string",
+          "required": false,
+          "about": "Type of the space, either 'global' or 'personal'."
+        },
+        {
+          "name": "metadata",
+          "type": "string",
+          "required": false,
+          "about": "Optional metadata for the space as a JSON string."
+        },
+        {
+          "name": "description",
+          "type": "object",
+          "required": false,
+          "about": "Description object for a Confluence space."
+        }
+      ],
+      "scopes": [
+        "write:confluence-space"
+      ],
+      "tags": [
+        "openWorldHint",
+        "important",
+        "Spaces",
+        "createHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Create Space Property",
+      "slug": "CONFLUENCE_CREATE_SPACE_PROPERTY",
+      "kind": "write",
+      "description": "Tool to create a new property on a Confluence space. Use after confirming the space ID when adding custom metadata.",
+      "inputs": [
+        {
+          "name": "key",
+          "type": "string",
+          "required": true,
+          "about": "Unique key for the space property."
+        },
+        {
+          "name": "value",
+          "type": "string",
+          "required": true,
+          "about": "JSON string representing the value of the space property."
+        },
+        {
+          "name": "spaceId",
+          "type": "string",
+          "required": true,
+          "about": "ID of the space to add the property to."
+        },
+        {
+          "name": "version",
+          "type": "object",
+          "required": false,
+          "about": "Optional version metadata for the new property."
+        }
+      ],
+      "scopes": [
+        "read:space:confluence",
+        "write:space:confluence"
+      ],
+      "tags": [
+        "openWorldHint",
+        "Spaces",
+        "createHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Create Whiteboard",
+      "slug": "CONFLUENCE_CREATE_WHITEBOARD",
+      "kind": "write",
+      "description": "Tool to create a new Confluence whiteboard. Use when you need to start a collaborative whiteboard session.",
+      "inputs": [
+        {
+          "name": "title",
+          "type": "string",
+          "required": false,
+          "about": "Title of the whiteboard."
+        },
+        {
+          "name": "spaceId",
+          "type": "string",
+          "required": true,
+          "about": "ID of the space where the whiteboard will be created."
+        },
+        {
+          "name": "parentId",
+          "type": "string",
+          "required": false,
+          "about": "ID of the parent content under which the whiteboard will be created."
+        }
+      ],
+      "scopes": [
+        "write:whiteboard:confluence"
+      ],
+      "tags": [
+        "openWorldHint",
+        "Whiteboards",
+        "createHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Delete Blog Post",
+      "slug": "CONFLUENCE_DELETE_BLOGPOST",
+      "kind": "write",
+      "description": "Deletes a Confluence blog post by ID. Use this action when you need to remove a blog post from a Confluence space. This action is irreversible — the blog post cannot be recovered once deleted (especially if purge=true). In move or migration workflows, confirm all target blog posts were successfully created before deleting source blog posts — partial creation failures combined with deletion result in unrecoverable data loss.",
+      "inputs": [
+        {
+          "name": "id",
+          "type": "string",
+          "required": true,
+          "about": "ID of the blog post to delete."
+        },
+        {
+          "name": "purge",
+          "type": "boolean",
+          "required": false,
+          "about": "When set to true, permanently removes the blog post instead of moving it to trash. Use with extreme caution as this is irreversible."
+        }
+      ],
+      "scopes": [
+        "delete:page:confluence"
+      ],
+      "tags": [
+        "important",
+        "destructiveHint",
+        "idempotentHint",
+        "openWorldHint",
+        "Blogposts"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Delete Blogpost Property",
+      "slug": "CONFLUENCE_DELETE_BLOGPOST_PROPERTY",
+      "kind": "write",
+      "description": "Tool to delete a blog post property. Use when you need to remove custom metadata from a specified blog post.",
+      "inputs": [
+        {
+          "name": "id",
+          "type": "string",
+          "required": true,
+          "about": "ID of the Confluence blog post containing the property."
+        },
+        {
+          "name": "propertyId",
+          "type": "string",
+          "required": true,
+          "about": "Numeric ID of the blog post property to delete. Not the property key — the v2 path segment is the integer property id (use CONFLUENCE_GET_CONTENT_PROPERTIES_FOR_BLOG_POST to resolve a key to its id)."
+        }
+      ],
+      "scopes": [
+        "read:page:confluence",
+        "write:page:confluence"
+      ],
+      "tags": [
+        "destructiveHint",
+        "idempotentHint",
+        "openWorldHint",
+        "Blogs",
+        "Properties"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Delete Page Content Property",
+      "slug": "CONFLUENCE_DELETE_CONTENT_PROPERTY_FOR_PAGE_BY_ID",
+      "kind": "write",
+      "description": "Tool to delete a content property from a page by property ID. Use when you need to remove custom metadata from a page for cleanup or auditing. This action deletes a specified content property from a Confluence page using its page ID and property ID. It is useful for removing outdated or unnecessary metadata.",
+      "inputs": [
+        {
+          "name": "pageId",
+          "type": "string",
+          "required": true,
+          "about": "ID of the Confluence page from which to delete the property."
+        },
+        {
+          "name": "propertyId",
+          "type": "string",
+          "required": true,
+          "about": "Numeric ID of the content property to delete from the page. Not the property key — the v2 path segment is the integer property id (use CONFLUENCE_GET_CONTENT_PROPERTIES_FOR_PAGE to resolve a key to its id)."
+        }
+      ],
+      "scopes": [
+        "read:page:confluence",
+        "write:page:confluence"
+      ],
+      "tags": [
+        "destructiveHint",
+        "idempotentHint",
+        "openWorldHint",
+        "Content Properties"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Delete Whiteboard Content Property",
+      "slug": "CONFLUENCE_DELETE_CONTENT_PROPERTY_FOR_WHITEBOARD_BY_ID",
+      "kind": "write",
+      "description": "Tool to delete a content property from a whiteboard by property ID. Use when you need to remove custom metadata from a whiteboard.",
+      "inputs": [
+        {
+          "name": "propertyId",
+          "type": "string",
+          "required": true,
+          "about": "The ID of the property to delete from the whiteboard. Numeric property id as a string (the v2 path segment is numeric; a key string is rejected)."
+        },
+        {
+          "name": "whiteboardId",
+          "type": "string",
+          "required": true,
+          "about": "ID of the whiteboard from which to delete the property."
+        }
+      ],
+      "scopes": [
+        "read:whiteboard:confluence",
+        "write:whiteboard:confluence"
+      ],
+      "tags": [
+        "destructiveHint",
+        "idempotentHint",
+        "openWorldHint",
+        "Whiteboards",
+        "Properties"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Delete Page",
+      "slug": "CONFLUENCE_DELETE_PAGE",
+      "kind": "write",
+      "description": "Tool to delete a Confluence page. Use with caution as this permanently removes the page and its content with no recovery option. In move or migration workflows, confirm all target pages were successfully created before deleting source pages — partial creation failures combined with deletion result in unrecoverable data loss.",
+      "inputs": [
+        {
+          "name": "id",
+          "type": "string",
+          "required": true,
+          "about": "ID of the page to delete."
+        }
+      ],
+      "scopes": [
+        "delete:page:confluence"
+      ],
+      "tags": [
+        "openWorldHint",
+        "important",
+        "content",
+        "destructiveHint",
+        "idempotentHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Delete Space",
+      "slug": "CONFLUENCE_DELETE_SPACE",
+      "kind": "write",
+      "description": "Tool to delete a Confluence space by its key. Use when you need to permanently remove a space. Deletion runs as an asynchronous long-running task; this action waits (briefly) for it to finish and reports whether it actually completed.",
+      "inputs": [
+        {
+          "name": "space_key",
+          "type": "string",
+          "required": true,
+          "about": "Key of the space to delete."
+        }
+      ],
+      "scopes": [
+        "write:confluence-space",
+        "read:content.metadata:confluence",
+        "delete:space:confluence"
+      ],
+      "tags": [
+        "destructiveHint",
+        "idempotentHint",
+        "openWorldHint",
+        "Spaces"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Delete Space Property",
+      "slug": "CONFLUENCE_DELETE_SPACE_PROPERTY",
+      "kind": "write",
+      "description": "Tool to delete a space property. Use when you need to remove a property from a Confluence space after review.",
+      "inputs": [
+        {
+          "name": "propertyId",
+          "type": "string",
+          "required": true,
+          "about": "The ID of the space property to delete. Numeric property id as a string (the v2 path segment is numeric; a key string is rejected)."
+        },
+        {
+          "name": "spaceIdOrKey",
+          "type": "string",
+          "required": true,
+          "about": "The numeric Long ID of the space containing the property. Must be a numeric space ID, not a space key or UUID."
+        }
+      ],
+      "scopes": [
+        "read:space:confluence",
+        "write:space:confluence"
+      ],
+      "tags": [
+        "destructiveHint",
+        "idempotentHint",
+        "openWorldHint",
+        "Spaces"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Download Attachment",
+      "slug": "CONFLUENCE_DOWNLOAD_ATTACHMENT",
+      "kind": "read",
+      "description": "Downloads an attachment from a Confluence page and returns a downloadable file. Use this when you need to share the attachment with users who don't have Confluence access. First use get_attachments to list attachments and get the attachment ID.",
+      "inputs": [
+        {
+          "name": "pageId",
+          "type": "string",
+          "required": true,
+          "about": "ID of the Confluence page that contains the attachment."
+        },
+        {
+          "name": "attachmentId",
+          "type": "string",
+          "required": true,
+          "about": "ID of the attachment to download (e.g., 'att65825')."
+        }
+      ],
+      "scopes": [
+        "read:attachment:confluence"
+      ],
+      "tags": [
+        "readOnlyHint",
+        "idempotentHint",
+        "openWorldHint",
+        "important"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Find Text Selections",
+      "slug": "CONFLUENCE_FIND_TEXT_SELECTIONS",
+      "kind": "read",
+      "description": "Find text occurrences in a Confluence page's extracted plain text to help with inline comment creation. Returns matching text, character offsets and surrounding context, up to the requested result limit; the reported match count is the number returned.",
+      "inputs": [
+        {
+          "name": "page_id",
+          "type": "string",
+          "required": true,
+          "about": "Numeric ID of the Confluence page to search within."
+        },
+        {
+          "name": "max_results",
+          "type": "integer",
+          "required": false,
+          "about": "Maximum number of text occurrences to return (default: 25, max: 100)."
+        },
+        {
+          "name": "search_text",
+          "type": "string",
+          "required": true,
+          "about": "Text string to find in the page content. Search is case-sensitive by default unless case_insensitive is set to true."
+        },
+        {
+          "name": "context_chars",
+          "type": "integer",
+          "required": false,
+          "about": "Number of characters to include before and after each match for context (default: 100, max: 500)."
+        },
+        {
+          "name": "case_insensitive",
+          "type": "boolean",
+          "required": false,
+          "about": "Whether to perform case-insensitive search (default: false)."
+        }
+      ],
+      "scopes": [
+        "read:page:confluence"
+      ],
+      "tags": [
+        "readOnlyHint",
+        "idempotentHint",
+        "openWorldHint",
+        "Pages"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get Attachment Labels",
+      "slug": "CONFLUENCE_GET_ATTACHMENT_LABELS",
+      "kind": "read",
+      "description": "Tool to list labels on an attachment. Use after confirming the attachment ID to fetch its labels.",
+      "inputs": [
+        {
+          "name": "id",
+          "type": "string",
+          "required": true,
+          "about": "Identifier of the Confluence attachment to retrieve labels for."
+        },
+        {
+          "name": "sort",
+          "type": "string",
+          "required": false,
+          "about": "Sort the result by a particular field."
+        },
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "about": "Maximum number of labels to return per page (1-250)."
+        },
+        {
+          "name": "cursor",
+          "type": "string",
+          "required": false,
+          "about": "Opaque cursor for pagination. Returned in the Link response header for fetching the next page."
+        },
+        {
+          "name": "prefix",
+          "type": "string",
+          "required": false,
+          "about": "Filter labels by their prefix."
+        }
+      ],
+      "scopes": [
+        "read:attachment:confluence"
+      ],
+      "tags": [
+        "readOnlyHint",
+        "idempotentHint",
+        "openWorldHint",
+        "important",
+        "Attachments"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get Attachments",
+      "slug": "CONFLUENCE_GET_ATTACHMENTS",
+      "kind": "read",
+      "description": "Tool to retrieve attachments of a Confluence page. Use after confirming page ID to list its attachments (supports pagination).",
+      "inputs": [
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "about": "Maximum number of attachments to return per page. Confluence caps at 200."
+        },
+        {
+          "name": "cursor",
+          "type": "string",
+          "required": false,
+          "about": "Opaque pagination cursor. Use the 'next' link from a previous response to continue. Iterate until no 'next' link is returned to avoid silently missing pages."
+        },
+        {
+          "name": "pageId",
+          "type": "string",
+          "required": true,
+          "about": "ID of the Confluence page whose attachments will be retrieved."
+        },
+        {
+          "name": "mediaType",
+          "type": "string",
+          "required": false,
+          "about": "Filter attachments by MIME type (e.g., 'image/png', 'application/pdf')."
+        }
+      ],
+      "scopes": [
+        "read:attachment:confluence"
+      ],
+      "tags": [
+        "readOnlyHint",
+        "idempotentHint",
+        "openWorldHint",
+        "important"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get Audit Logs",
+      "slug": "CONFLUENCE_GET_AUDIT_LOGS",
+      "kind": "read",
+      "description": "Tool to retrieve Confluence audit records. Use when you need to fetch and filter audit logs for compliance or troubleshooting.",
+      "inputs": [
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "about": "Maximum number of audit records to return per page."
+        },
+        {
+          "name": "start",
+          "type": "integer",
+          "required": false,
+          "about": "Zero-based index of the first audit record to return (pagination offset)."
+        },
+        {
+          "name": "endDate",
+          "type": "integer",
+          "required": false,
+          "about": "End of the audit record timestamp range (epoch time in milliseconds)."
+        },
+        {
+          "name": "startDate",
+          "type": "integer",
+          "required": false,
+          "about": "Start of the audit record timestamp range (epoch time in milliseconds)."
+        },
+        {
+          "name": "searchString",
+          "type": "string",
+          "required": false,
+          "about": "Free-text search to filter audit records by summary or category."
+        }
+      ],
+      "scopes": [
+        "read:audit-log:confluence"
+      ],
+      "tags": [
+        "readOnlyHint",
+        "idempotentHint",
+        "openWorldHint",
+        "Audit Logs",
+        "important"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get Blogpost by ID",
+      "slug": "CONFLUENCE_GET_BLOGPOST_BY_ID",
+      "kind": "read",
+      "description": "Tool to retrieve a specific Confluence blog post by its ID. Use when you have a blog post ID and need detailed metadata and content.",
+      "inputs": [
+        {
+          "name": "id",
+          "type": "string",
+          "required": true,
+          "about": "Unique identifier of the Confluence blog post to retrieve."
+        }
+      ],
+      "scopes": [
+        "read:page:confluence"
+      ],
+      "tags": [
+        "readOnlyHint",
+        "idempotentHint",
+        "openWorldHint",
+        "Blogposts",
+        "important"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get Blogpost Labels",
+      "slug": "CONFLUENCE_GET_BLOGPOST_LABELS",
+      "kind": "read",
+      "description": "Tool to retrieve labels of a specific Confluence blog post by ID. Use after obtaining the blog post ID to list its labels.",
+      "inputs": [
+        {
+          "name": "id",
+          "type": "string",
+          "required": true,
+          "about": "Identifier of the Confluence blog post to retrieve labels for."
+        },
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "about": "Maximum number of labels to return per page."
+        },
+        {
+          "name": "cursor",
+          "type": "string",
+          "required": false,
+          "about": "Opaque pagination cursor. Use the 'next' link from a previous response to continue. Iterate until no 'next' link is returned to avoid silently missing pages."
+        }
+      ],
+      "scopes": [
+        "read:page:confluence"
+      ],
+      "tags": [
+        "readOnlyHint",
+        "idempotentHint",
+        "openWorldHint",
+        "important",
+        "Blogs"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get Blogpost Like Count",
+      "slug": "CONFLUENCE_GET_BLOGPOST_LIKE_COUNT",
+      "kind": "read",
+      "description": "Tool to get like count for a Confluence blog post. Use after confirming the blog post ID to retrieve total likes.",
+      "inputs": [
+        {
+          "name": "id",
+          "type": "string",
+          "required": true,
+          "about": "Identifier of the Confluence blog post to retrieve like count for."
+        }
+      ],
+      "scopes": [
+        "read:page:confluence"
+      ],
+      "tags": [
+        "readOnlyHint",
+        "idempotentHint",
+        "openWorldHint",
+        "important",
+        "Blogs"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get Blogpost Operations",
+      "slug": "CONFLUENCE_GET_BLOGPOST_OPERATIONS",
+      "kind": "read",
+      "description": "Tool to retrieve permitted operations for a Confluence blog post. Use after confirming the blog post ID to see allowed actions.",
+      "inputs": [
+        {
+          "name": "id",
+          "type": "string",
+          "required": true,
+          "about": "Identifier of the Confluence blog post to query operations for."
+        }
+      ],
+      "scopes": [
+        "read:page:confluence"
+      ],
+      "tags": [
+        "readOnlyHint",
+        "idempotentHint",
+        "openWorldHint",
+        "Blog Posts"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get Blog Posts",
+      "slug": "CONFLUENCE_GET_BLOG_POSTS",
+      "kind": "read",
+      "description": "Tool to retrieve a list of blog posts. Use when you need a paginated list of Confluence blog posts.",
+      "inputs": [
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "about": "Maximum number of items to return per page."
+        },
+        {
+          "name": "cursor",
+          "type": "string",
+          "required": false,
+          "about": "Opaque pagination cursor for fetching the next page of results."
+        }
+      ],
+      "scopes": [
+        "read:page:confluence"
+      ],
+      "tags": [
+        "readOnlyHint",
+        "idempotentHint",
+        "openWorldHint",
+        "important",
+        "Blogs"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get Blog Posts For Label",
+      "slug": "CONFLUENCE_GET_BLOG_POSTS_FOR_LABEL",
+      "kind": "read",
+      "description": "Lists a page of Confluence blog posts associated with a specified label ID. Supports cursor pagination.",
+      "inputs": [
+        {
+          "name": "id",
+          "type": "string",
+          "required": true,
+          "about": "ID of the label to retrieve blog posts for."
+        },
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "about": "Maximum number of items to return per page."
+        },
+        {
+          "name": "cursor",
+          "type": "string",
+          "required": false,
+          "about": "Opaque pagination cursor for fetching the next page of results."
+        }
+      ],
+      "scopes": [
+        "read:page:confluence"
+      ],
+      "tags": [
+        "readOnlyHint",
+        "idempotentHint",
+        "openWorldHint",
+        "important",
+        "Blogs"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get Blogpost Version Details",
+      "slug": "CONFLUENCE_GET_BLOGPOST_VERSION_DETAILS",
+      "kind": "read",
+      "description": "Tool to retrieve details for a specific version of a blog post. Use when you have a blogpostId and versionNumber and need detailed metadata for that version.",
+      "inputs": [
+        {
+          "name": "blogpostId",
+          "type": "string",
+          "required": true,
+          "about": "Unique identifier of the Confluence blog post."
+        },
+        {
+          "name": "versionNumber",
+          "type": "integer",
+          "required": true,
+          "about": "Version number of the blog post to retrieve."
+        }
+      ],
+      "scopes": [
+        "read:page:confluence"
+      ],
+      "tags": [
+        "readOnlyHint",
+        "idempotentHint",
+        "openWorldHint",
+        "important",
+        "Blogs"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get Blogpost Versions",
+      "slug": "CONFLUENCE_GET_BLOGPOST_VERSIONS",
+      "kind": "read",
+      "description": "Retrieve a page of versions for a specific Confluence blog post, including version numbers. Follow the pagination cursor to list further versions.",
+      "inputs": [
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "about": "Maximum number of version items to return per page."
+        },
+        {
+          "name": "cursor",
+          "type": "string",
+          "required": false,
+          "about": "Cursor for pagination. Use value from previous response to fetch next page."
+        },
+        {
+          "name": "blogpostId",
+          "type": "string",
+          "required": true,
+          "about": "The unique identifier of the Confluence blog post."
+        }
+      ],
+      "scopes": [
+        "read:page:confluence"
+      ],
+      "tags": [
+        "readOnlyHint",
+        "idempotentHint",
+        "openWorldHint",
+        "important",
+        "Blogs"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get Child Pages",
+      "slug": "CONFLUENCE_GET_CHILD_PAGES",
+      "kind": "read",
+      "description": "Tool to list all direct child pages of a given Confluence page. Use when you have a parent page ID and need to discover its direct descendants. Response nests child page data under `data.data.results`; unwrap this before iterating. Paginate using `_links.next` cursor until no further results to avoid missing children.",
+      "inputs": [
+        {
+          "name": "id",
+          "type": "string",
+          "required": true,
+          "about": "ID of the Confluence page to retrieve child pages for. Returned child page IDs may be non-numeric strings; do not assume integer format when storing or passing to subsequent calls."
+        },
+        {
+          "name": "sort",
+          "type": "string",
+          "required": false,
+          "about": "Sort order options for child pages."
+        },
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "about": "Maximum number of items to return per page. Maximum cap is 100. Paginate until `_links.next` is absent to ensure all children are retrieved."
+        },
+        {
+          "name": "cursor",
+          "type": "string",
+          "required": false,
+          "about": "Cursor for pagination. Use the cursor from the previous response's _links.next to get the next page of results."
+        }
+      ],
+      "scopes": [
+        "read:page:confluence"
+      ],
+      "tags": [
+        "readOnlyHint",
+        "idempotentHint",
+        "openWorldHint",
+        "important",
+        "Page Management"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get Blog Post Content Properties",
+      "slug": "CONFLUENCE_GET_CONTENT_PROPERTIES_FOR_BLOG_POST",
+      "kind": "read",
+      "description": "Retrieve a page of content properties on a specific Confluence blog post. Follow the pagination cursor to list further metadata properties.",
+      "inputs": [
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "about": "Maximum number of properties to return per page."
+        },
+        {
+          "name": "cursor",
+          "type": "string",
+          "required": false,
+          "about": "Opaque pagination cursor. Use the 'next' link from a previous response to continue. Iterate until no 'next' link is returned to avoid silently missing pages."
+        },
+        {
+          "name": "blogpost_id",
+          "type": "string",
+          "required": true,
+          "about": "Identifier of the Confluence blog post to retrieve properties for."
+        }
+      ],
+      "scopes": [
+        "read:page:confluence"
+      ],
+      "tags": [
+        "readOnlyHint",
+        "idempotentHint",
+        "openWorldHint",
+        "BlogPosts",
+        "Properties"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get Page Content Properties",
+      "slug": "CONFLUENCE_GET_CONTENT_PROPERTIES_FOR_PAGE",
+      "kind": "read",
+      "description": "Retrieve a page of content properties on a specific Confluence page. A cursor can be supplied to request another page.",
+      "inputs": [
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "about": "Maximum number of properties to return per page (max 200)."
+        },
+        {
+          "name": "cursor",
+          "type": "string",
+          "required": false,
+          "about": "Opaque pagination cursor for fetching the next page of results."
+        },
+        {
+          "name": "page_id",
+          "type": "string",
+          "required": true,
+          "about": "Identifier of the Confluence page to retrieve properties for."
+        }
+      ],
+      "scopes": [
+        "read:page:confluence"
+      ],
+      "tags": [
+        "readOnlyHint",
+        "idempotentHint",
+        "openWorldHint",
+        "Pages",
+        "Properties"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get Content Restrictions",
+      "slug": "CONFLUENCE_GET_CONTENT_RESTRICTIONS",
+      "kind": "read",
+      "description": "Tool to retrieve restrictions on a Confluence content item. Use when you need to see who can view or edit a page or blog post.",
+      "inputs": [
+        {
+          "name": "id",
+          "type": "string",
+          "required": true,
+          "about": "ID of the content to retrieve restrictions for."
+        },
+        {
+          "name": "expand",
+          "type": "array",
+          "required": false,
+          "about": "Comma-separated properties to expand in the response, e.g., ['restrictables.operation', 'user']"
+        }
+      ],
+      "scopes": [
+        "read:confluence-content.all",
+        "read:content-details:confluence"
+      ],
+      "tags": [
+        "readOnlyHint",
+        "idempotentHint",
+        "openWorldHint",
+        "content"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get Current User",
+      "slug": "CONFLUENCE_GET_CURRENT_USER",
+      "kind": "read",
+      "description": "Tool to get information about the currently authenticated user — always scoped to the account tied to the configured connection, not arbitrary users. Use CONFLUENCE_SEARCH_USERS to look up other users. Response contains nested metadata; key fields include accountId, displayName, and email for use in downstream logic.",
+      "inputs": [
+        {
+          "name": "0",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "1",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "2",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "3",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "4",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "5",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "6",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "7",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "8",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "9",
+          "type": "",
+          "required": false,
+          "about": ""
+        }
+      ],
+      "scopes": [
+        "read:confluence-user"
+      ],
+      "tags": [
+        "readOnlyHint",
+        "idempotentHint",
+        "openWorldHint",
+        "user"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get Folder by ID",
+      "slug": "CONFLUENCE_GET_FOLDER_BY_ID",
+      "kind": "read",
+      "description": "Retrieve a Confluence content-tree folder by its numeric ID.",
+      "inputs": [
+        {
+          "name": "id",
+          "type": "string",
+          "required": true,
+          "about": "Numeric ID of the Confluence folder to retrieve."
+        },
+        {
+          "name": "include_operations",
+          "type": "boolean",
+          "required": false,
+          "about": "Include operations permitted on the folder."
+        },
+        {
+          "name": "include_properties",
+          "type": "boolean",
+          "required": false,
+          "about": "Include content properties associated with the folder."
+        },
+        {
+          "name": "include_collaborators",
+          "type": "boolean",
+          "required": false,
+          "about": "Include collaborators on the folder."
+        },
+        {
+          "name": "include_direct_children",
+          "type": "boolean",
+          "required": false,
+          "about": "Include the folder's direct children."
+        }
+      ],
+      "scopes": [
+        "read:folder:confluence"
+      ],
+      "tags": [
+        "readOnlyHint",
+        "idempotentHint",
+        "openWorldHint",
+        "important"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get Inline Comments for Blog Post",
+      "slug": "CONFLUENCE_GET_INLINE_COMMENTS_FOR_BLOG_POST",
+      "kind": "read",
+      "description": "Tool to retrieve inline comments for a Confluence blog post. Use when you need inline comment details by blog post ID.",
+      "inputs": [
+        {
+          "name": "id",
+          "type": "string",
+          "required": true,
+          "about": "Unique identifier of the blog post to retrieve inline comments for."
+        },
+        {
+          "name": "sort",
+          "type": "string",
+          "required": false,
+          "about": "Sort order for results. Use '-' prefix for descending order."
+        },
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "about": "Maximum number of inline comments to return per page (default 25, max 250)."
+        },
+        {
+          "name": "cursor",
+          "type": "string",
+          "required": false,
+          "about": "Cursor for pagination. Use the cursor from _links.next in the previous response to get the next page."
+        },
+        {
+          "name": "body_format",
+          "type": "string",
+          "required": false,
+          "about": "The content format type for the comment body. Valid values: storage, atlas_doc_format."
+        }
+      ],
+      "scopes": [
+        "read:comment:confluence"
+      ],
+      "tags": [
+        "readOnlyHint",
+        "idempotentHint",
+        "openWorldHint",
+        "comments"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get Labels",
+      "slug": "CONFLUENCE_GET_LABELS",
+      "kind": "read",
+      "description": "Tool to retrieve all labels in a Confluence site; use for label discovery when you need to list or page through labels. For label-based filtering, use CONFLUENCE_GET_LABELS_FOR_PAGE or CONFLUENCE_GET_LABELS_FOR_SPACE_CONTENT instead.",
+      "inputs": [
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "about": "Maximum number of labels to return per page."
+        },
+        {
+          "name": "cursor",
+          "type": "string",
+          "required": false,
+          "about": "Opaque pagination cursor. Use the 'next' link from a previous response to continue. Iterate until no 'next' link is returned to avoid silently missing pages."
+        }
+      ],
+      "scopes": [
+        "read:label:confluence"
+      ],
+      "tags": [
+        "readOnlyHint",
+        "idempotentHint",
+        "openWorldHint",
+        "Labels",
+        "important"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get Page Labels",
+      "slug": "CONFLUENCE_GET_LABELS_FOR_PAGE",
+      "kind": "read",
+      "description": "Tool to retrieve labels of a specific Confluence page by ID. Labels are returned in `data.results[*].name` and are not available in CONFLUENCE_GET_PAGES responses. Use after obtaining the page ID to list its labels. Paginate with `cursor` (plus `limit`): pass the token from `data._links.next` as `cursor` to fetch subsequent pages so no labels are missed when the count exceeds 25.",
+      "inputs": [
+        {
+          "name": "id",
+          "type": "string",
+          "required": true,
+          "about": "Identifier of the Confluence page to retrieve labels for."
+        },
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "about": "Maximum number of labels to return per page."
+        },
+        {
+          "name": "cursor",
+          "type": "string",
+          "required": false,
+          "about": "Opaque pagination cursor. Use the 'next' link from a previous response to continue. Iterate until no 'next' link is returned to avoid silently missing pages."
+        }
+      ],
+      "scopes": [
+        "read:page:confluence"
+      ],
+      "tags": [
+        "readOnlyHint",
+        "idempotentHint",
+        "openWorldHint",
+        "Labels",
+        "important",
+        "Pages"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get Labels for Space",
+      "slug": "CONFLUENCE_GET_LABELS_FOR_SPACE",
+      "kind": "read",
+      "description": "Tool to list labels on a space. Use when you need to retrieve labels for a specific space.",
+      "inputs": [
+        {
+          "name": "id",
+          "type": "string",
+          "required": true,
+          "about": "ID of the space to retrieve labels for (numeric space ID)."
+        },
+        {
+          "name": "sort",
+          "type": "string",
+          "required": false,
+          "about": "Sort order for results. Use '-' prefix for descending order."
+        },
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "about": "Maximum number of labels to return per page (default 25, max 250)."
+        },
+        {
+          "name": "cursor",
+          "type": "string",
+          "required": false,
+          "about": "Cursor for pagination. Use the cursor from the previous response to get the next page."
+        },
+        {
+          "name": "prefix",
+          "type": "string",
+          "required": false,
+          "about": "Filter labels by prefix."
+        }
+      ],
+      "scopes": [
+        "read:space:confluence"
+      ],
+      "tags": [
+        "readOnlyHint",
+        "idempotentHint",
+        "openWorldHint",
+        "important",
+        "Labels"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get Labels for Space Content",
+      "slug": "CONFLUENCE_GET_LABELS_FOR_SPACE_CONTENT",
+      "kind": "read",
+      "description": "Tool to list labels on all content in a space. Use when you need to retrieve or filter content labels by space, with pagination and optional prefix filtering. For label discovery across a space before per-page filtering, use this tool first, then CONFLUENCE_GET_LABELS_FOR_PAGE; CONFLUENCE_SEARCH_CONTENT does not filter by labels.",
+      "inputs": [
+        {
+          "name": "id",
+          "type": "string",
+          "required": true,
+          "about": "The ID of the space to list content labels for."
+        },
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "about": "Maximum number of labels to return per page."
+        },
+        {
+          "name": "cursor",
+          "type": "string",
+          "required": false,
+          "about": "Opaque pagination cursor. Use the 'next' link from a previous response to continue. Iterate until no 'next' link is returned to avoid silently missing pages."
+        },
+        {
+          "name": "prefix",
+          "type": "string",
+          "required": false,
+          "about": "Filter labels by this prefix (e.g., 'global', 'page-')."
+        }
+      ],
+      "scopes": [
+        "read:space:confluence"
+      ],
+      "tags": [
+        "readOnlyHint",
+        "idempotentHint",
+        "openWorldHint",
+        "Labels",
+        "important"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get Page Ancestors",
+      "slug": "CONFLUENCE_GET_PAGE_ANCESTORS",
+      "kind": "read",
+      "description": "Retrieve ancestors of a Confluence page by ID, with an optional limit on the number returned.",
+      "inputs": [
+        {
+          "name": "id",
+          "type": "string",
+          "required": true,
+          "about": "ID of the Confluence page to retrieve ancestors for."
+        },
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "about": "Maximum number of ancestors to return (v2 default 25, max 250). The ancestors endpoint takes `limit` only — it has no cursor parameter."
+        }
+      ],
+      "scopes": [
+        "read:content.metadata:confluence"
+      ],
+      "tags": [
+        "readOnlyHint",
+        "idempotentHint",
+        "openWorldHint",
+        "Pages"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get Page by ID",
+      "slug": "CONFLUENCE_GET_PAGE_BY_ID",
+      "kind": "read",
+      "description": "Retrieve a Confluence page by ID, including metadata and, when returned, its body in storage format. A draft or specific version can be requested.",
+      "inputs": [
+        {
+          "name": "id",
+          "type": "string",
+          "required": true,
+          "about": "Numeric Long ID of the Confluence page to retrieve. Must be a numeric long value, not a UUID or string identifier. Accepts both 'id' and 'page_id' parameter names for compatibility."
+        },
+        {
+          "name": "draft",
+          "type": "boolean",
+          "required": false,
+          "about": "Whether to return the draft version (default: false)."
+        },
+        {
+          "name": "version",
+          "type": "integer",
+          "required": false,
+          "about": "Specific page version to retrieve (default: latest)."
+        }
+      ],
+      "scopes": [
+        "read:page:confluence"
+      ],
+      "tags": [
+        "readOnlyHint",
+        "idempotentHint",
+        "openWorldHint",
+        "important"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get Page Footer Comments",
+      "slug": "CONFLUENCE_GET_PAGE_FOOTER_COMMENTS",
+      "kind": "read",
+      "description": "Tool to retrieve footer (non-inline) comments for a Confluence page. Use when you need to collect review feedback left as standard page comments.",
+      "inputs": [
+        {
+          "name": "id",
+          "type": "string",
+          "required": true,
+          "about": "Unique identifier of the page to retrieve footer comments for."
+        },
+        {
+          "name": "sort",
+          "type": "string",
+          "required": false,
+          "about": "Sort order for results. Use '-' prefix for descending order."
+        },
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "about": "Maximum number of footer comments to return per page (default 50, max 250)."
+        },
+        {
+          "name": "cursor",
+          "type": "string",
+          "required": false,
+          "about": "Cursor for pagination. Use the cursor from _links.next in the previous response to get the next page."
+        },
+        {
+          "name": "status",
+          "type": "array",
+          "required": false,
+          "about": "Filter comments by status. Can include multiple statuses."
+        },
+        {
+          "name": "body_format",
+          "type": "string",
+          "required": false,
+          "about": "The content format type for the comment body. Valid values: storage, atlas_doc_format."
+        }
+      ],
+      "scopes": [
+        "read:comment:confluence"
+      ],
+      "tags": [
+        "readOnlyHint",
+        "idempotentHint",
+        "openWorldHint",
+        "comments"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get Page Inline Comments",
+      "slug": "CONFLUENCE_GET_PAGE_INLINE_COMMENTS",
+      "kind": "read",
+      "description": "Tool to retrieve inline comments for a Confluence page. Use when you need inline comment details by page ID.",
+      "inputs": [
+        {
+          "name": "id",
+          "type": "string",
+          "required": true,
+          "about": "Numeric ID of the page to retrieve inline comments for."
+        },
+        {
+          "name": "sort",
+          "type": "string",
+          "required": false,
+          "about": "Sort order for results. Use '-' prefix for descending order."
+        },
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "about": "Maximum number of inline comments to return per page (default 25, max 250)."
+        },
+        {
+          "name": "cursor",
+          "type": "string",
+          "required": false,
+          "about": "Cursor for pagination. Use the cursor from _links.next in the previous response to get the next page."
+        },
+        {
+          "name": "status",
+          "type": "array",
+          "required": false,
+          "about": "Filter comments by status. Pass an array of status values."
+        },
+        {
+          "name": "body_format",
+          "type": "string",
+          "required": false,
+          "about": "The content format type for the comment body. Valid values: storage, atlas_doc_format."
+        },
+        {
+          "name": "resolution_status",
+          "type": "array",
+          "required": false,
+          "about": "Filter comments by resolution status. Pass an array of resolution status values (e.g., 'open', 'resolved')."
+        }
+      ],
+      "scopes": [
+        "read:comment:confluence"
+      ],
+      "tags": [
+        "readOnlyHint",
+        "idempotentHint",
+        "openWorldHint",
+        "comments"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get Page Like Count",
+      "slug": "CONFLUENCE_GET_PAGE_LIKE_COUNT",
+      "kind": "read",
+      "description": "Tool to get like count for a Confluence page. Use after confirming the page ID to retrieve total likes.",
+      "inputs": [
+        {
+          "name": "id",
+          "type": "string",
+          "required": true,
+          "about": "Identifier of the Confluence page to retrieve like count for."
+        }
+      ],
+      "scopes": [
+        "read:page:confluence"
+      ],
+      "tags": [
+        "readOnlyHint",
+        "idempotentHint",
+        "openWorldHint",
+        "important",
+        "Pages"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get Pages",
+      "slug": "CONFLUENCE_GET_PAGES",
+      "kind": "read",
+      "description": "Tool to retrieve a paginated list of Confluence pages. Results are permission-scoped to the authenticated user; empty results may reflect access restrictions. Omitting filters like spaceId or status can return unexpectedly broad result sets. Labels are not included in results; use CONFLUENCE_GET_LABELS_FOR_PAGE for label data. Timestamps are ISO 8601 UTC strings.",
+      "inputs": [
+        {
+          "name": "sort",
+          "type": "string",
+          "required": false,
+          "about": "Sort order for Confluence pages using AbstractPageSortOrder enum values."
+        },
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "about": "Maximum number of pages to return per page. Confluence caps at 250."
+        },
+        {
+          "name": "title",
+          "type": "string",
+          "required": false,
+          "about": "Filter by page title (exact match)."
+        },
+        {
+          "name": "cursor",
+          "type": "string",
+          "required": false,
+          "about": "Opaque pagination cursor. Use the 'next' link from a previous response to continue. Iterate until no 'next' link is returned to avoid silently missing pages."
+        },
+        {
+          "name": "status",
+          "type": "",
+          "required": false,
+          "about": "Filter by page status. Allowed values: current, archived, deleted, trashed."
+        },
+        {
+          "name": "subtype",
+          "type": "string",
+          "required": false,
+          "about": "Filter by page subtype. Valid values: live, page."
+        },
+        {
+          "name": "space_id",
+          "type": "",
+          "required": false,
+          "about": "Filter by space ID(s). Provide a single ID or a list of IDs."
+        },
+        {
+          "name": "body_format",
+          "type": "string",
+          "required": false,
+          "about": "Body representation to include in results. Allowed values: 'storage' (storage format) or 'atlas_doc_format' (Atlas document format). The value 'view' is not supported."
+        }
+      ],
+      "scopes": [
+        "read:page:confluence"
+      ],
+      "tags": [
+        "readOnlyHint",
+        "idempotentHint",
+        "openWorldHint",
+        "important"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get Page Versions",
+      "slug": "CONFLUENCE_GET_PAGE_VERSIONS",
+      "kind": "read",
+      "description": "Retrieve a paginated version history for a specific Confluence page. Follow the cursor to audit the full history or find the latest version before updating the page.",
+      "inputs": [
+        {
+          "name": "id",
+          "type": "string",
+          "required": true,
+          "about": "The unique identifier of the Confluence page. String format; differs from the numeric long expected by CONFLUENCE_GET_PAGE_BY_ID."
+        },
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "about": "Maximum number of versions to return per page (pagination limit). Older versions are silently omitted if pagination is not followed; iterate with the cursor and limit to retrieve full history."
+        },
+        {
+          "name": "cursor",
+          "type": "string",
+          "required": false,
+          "about": "Opaque pagination cursor. Use the 'next' link from a previous response to continue. Iterate until no 'next' link is returned to avoid silently missing pages."
+        }
+      ],
+      "scopes": [
+        "read:page:confluence"
+      ],
+      "tags": [
+        "readOnlyHint",
+        "idempotentHint",
+        "openWorldHint",
+        "important",
+        "Page Management"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get Space by ID",
+      "slug": "CONFLUENCE_GET_SPACE_BY_ID",
+      "kind": "read",
+      "description": "Tool to retrieve a Confluence space by its ID. Use when you need detailed metadata of a specific space. Space names are non-unique; use the numeric spaceId or spaceKey from the response for stable identification in downstream operations such as CONFLUENCE_GET_SPACE_PROPERTIES, CONFLUENCE_GET_LABELS_FOR_SPACE, CONFLUENCE_GET_SPACE_CONTENTS, and CONFLUENCE_CREATE_BLOGPOST.",
+      "inputs": [
+        {
+          "name": "id",
+          "type": "string",
+          "required": true,
+          "about": "The numeric space ID (e.g., '557060'). This is NOT the space key (e.g., 'GTS'). Use CONFLUENCE_GET_SPACES to find a space's numeric ID from its key."
+        }
+      ],
+      "scopes": [
+        "read:space:confluence"
+      ],
+      "tags": [
+        "readOnlyHint",
+        "idempotentHint",
+        "openWorldHint",
+        "important"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get Space Contents",
+      "slug": "CONFLUENCE_GET_SPACE_CONTENTS",
+      "kind": "read",
+      "description": "Retrieve a paginated list of pages or blogposts in a Confluence space identified by its key. Results are permission-scoped; follow the next cursor to retrieve further content.",
+      "inputs": [
+        {
+          "name": "type",
+          "type": "string",
+          "required": false,
+          "about": "Type of content to return: 'page' or 'blogpost' (defaults to pages). Attachments are not space-scopable in v2 — use CONFLUENCE_GET_ATTACHMENTS per page instead."
+        },
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "about": "Maximum number of items to return per page."
+        },
+        {
+          "name": "cursor",
+          "type": "string",
+          "required": false,
+          "about": "Opaque pagination cursor. Use the 'next' link from a previous response to continue. Iterate until no 'next' link is returned to avoid silently missing content."
+        },
+        {
+          "name": "status",
+          "type": "string",
+          "required": false,
+          "about": "Status of the content to return. Allowed values depend on `type`: pages accept current/archived/deleted/trashed; blogposts accept current/deleted/trashed (no 'archived')."
+        },
+        {
+          "name": "spaceKey",
+          "type": "string",
+          "required": true,
+          "about": "Key of the space to retrieve content from."
+        }
+      ],
+      "scopes": [
+        "read:page:confluence",
+        "read:space:confluence"
+      ],
+      "tags": [
+        "readOnlyHint",
+        "idempotentHint",
+        "openWorldHint",
+        "important"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get Space Properties",
+      "slug": "CONFLUENCE_GET_SPACE_PROPERTIES",
+      "kind": "read",
+      "description": "Tool to get properties of a Confluence space. Use when you need to retrieve custom metadata or settings stored as space properties.",
+      "inputs": [
+        {
+          "name": "id",
+          "type": "string",
+          "required": true,
+          "about": "ID of the space to get properties for."
+        },
+        {
+          "name": "key",
+          "type": "array",
+          "required": false,
+          "about": "Filter by property key(s). If not provided, returns all properties."
+        },
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "about": "Maximum number of properties to return per page. Confluence caps at 200."
+        },
+        {
+          "name": "cursor",
+          "type": "string",
+          "required": false,
+          "about": "Opaque pagination cursor. Use the 'next' link from a previous response to continue. Iterate until no 'next' link is returned to avoid silently missing pages."
+        }
+      ],
+      "scopes": [
+        "read:space:confluence"
+      ],
+      "tags": [
+        "readOnlyHint",
+        "idempotentHint",
+        "openWorldHint",
+        "properties"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get Spaces",
+      "slug": "CONFLUENCE_GET_SPACES",
+      "kind": "read",
+      "description": "Tool to retrieve a paginated list of Confluence spaces with optional filtering. Paginate with `cursor`: pass the token from `data._links.next` (or the full next URL) as `cursor` to fetch the next page, and stop when no `_links.next` is returned. Results are scoped to spaces visible to the authenticated user; absent spaces may be restricted rather than nonexistent. Use `spaceKey` or numeric space ID (not display name) for stable identification in downstream calls. Combined filters apply as AND logic — relax filters before concluding a space is missing.",
+      "inputs": [
+        {
+          "name": "type",
+          "type": "string",
+          "required": false,
+          "about": "Type of space: 'global' or 'personal'."
+        },
+        {
+          "name": "label",
+          "type": "array",
+          "required": false,
+          "about": "Filter by labels; spaces must have at least one of these labels."
+        },
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "about": "Maximum number of spaces to return per page. Confluence caps at 200."
+        },
+        {
+          "name": "cursor",
+          "type": "string",
+          "required": false,
+          "about": "Opaque pagination cursor. Use the 'next' link from a previous response to continue. Iterate until no 'next' link is returned to avoid silently missing pages."
+        },
+        {
+          "name": "expand",
+          "type": "array",
+          "required": false,
+          "about": "Properties to expand in response (e.g., 'description', 'icon', 'metadata')."
+        },
+        {
+          "name": "status",
+          "type": "string",
+          "required": false,
+          "about": "Status of space: 'current' (active) or 'archived'."
+        },
+        {
+          "name": "spaceKey",
+          "type": "array",
+          "required": false,
+          "about": "Filter by space key(s); accepts one or more space keys. Accepts canonical space keys only, not display names; if only a display name is known, list all spaces and filter client-side."
+        }
+      ],
+      "scopes": [
+        "read:space:confluence"
+      ],
+      "tags": [
+        "readOnlyHint",
+        "idempotentHint",
+        "openWorldHint",
+        "important"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get Tasks",
+      "slug": "CONFLUENCE_GET_TASKS",
+      "kind": "read",
+      "description": "List Confluence tasks (action items), with filters for assignee, creator, space, page, blog post and status. Returns pagination links for retrieving further results.",
+      "inputs": [
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "about": "Maximum number of tasks to return per page. Confluence caps at 250."
+        },
+        {
+          "name": "cursor",
+          "type": "string",
+          "required": false,
+          "about": "Opaque pagination cursor. Use the 'next' link from a previous response to continue."
+        },
+        {
+          "name": "status",
+          "type": "string",
+          "required": false,
+          "about": "Filter tasks by status (e.g., 'complete', 'incomplete')."
+        },
+        {
+          "name": "page_id",
+          "type": "",
+          "required": false,
+          "about": "Filter by page ID(s). Provide a single ID or a list of IDs."
+        },
+        {
+          "name": "task_id",
+          "type": "",
+          "required": false,
+          "about": "Filter by specific task ID(s). Provide a single ID or a list of IDs."
+        },
+        {
+          "name": "space_id",
+          "type": "",
+          "required": false,
+          "about": "Filter by space ID(s). Provide a single ID or a list of IDs."
+        },
+        {
+          "name": "created_by",
+          "type": "",
+          "required": false,
+          "about": "Filter by task creator(s). Provide Atlassian account ID(s)."
+        },
+        {
+          "name": "assigned_to",
+          "type": "",
+          "required": false,
+          "about": "Filter by task assignee(s). Provide Atlassian account ID(s)."
+        },
+        {
+          "name": "blogpost_id",
+          "type": "",
+          "required": false,
+          "about": "Filter by blog post ID(s). Provide a single ID or a list of IDs."
+        },
+        {
+          "name": "body_format",
+          "type": "string",
+          "required": false,
+          "about": "Body representation to include in task results. Allowed values: 'storage' (storage format) or 'atlas_doc_format' (Atlas document format)."
+        },
+        {
+          "name": "completed_by",
+          "type": "",
+          "required": false,
+          "about": "Filter by who completed the task(s). Provide Atlassian account ID(s)."
+        },
+        {
+          "name": "include_blank_tasks",
+          "type": "boolean",
+          "required": false,
+          "about": "Whether to include tasks that have no content or are blank."
+        }
+      ],
+      "scopes": [
+        "read:task:confluence"
+      ],
+      "tags": [
+        "important",
+        "openWorldHint",
+        "readOnlyHint",
+        "idempotentHint",
+        "content"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get Anonymous User",
+      "slug": "CONFLUENCE_GET_USER_ANONYMOUS",
+      "kind": "read",
+      "description": "Tool to retrieve information about the anonymous user. Use when you need to obtain guest user details before unauthenticated interactions.",
+      "inputs": [
+        {
+          "name": "0",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "1",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "2",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "3",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "4",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "5",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "6",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "7",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "8",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "9",
+          "type": "",
+          "required": false,
+          "about": ""
+        }
+      ],
+      "scopes": [
+        "read:confluence-user",
+        "read:user:confluence"
+      ],
+      "tags": [
+        "readOnlyHint",
+        "idempotentHint",
+        "openWorldHint",
+        "user"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "List Spaces",
+      "slug": "CONFLUENCE_LIST_SPACES",
+      "kind": "read",
+      "description": "Retrieves a paginated list of Confluence spaces visible to the authenticated user. Use when you need to discover available spaces or iterate through all spaces in an instance. Results are scoped to spaces the user has permission to view; missing spaces may be restricted rather than nonexistent. Paginate by using the cursor from the '_links.next' field in the response until no next link is returned.",
+      "inputs": [
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "about": "Maximum number of spaces to return per page. Confluence caps at 250."
+        },
+        {
+          "name": "cursor",
+          "type": "string",
+          "required": false,
+          "about": "Opaque pagination cursor from a previous response. Use the cursor from the '_links.next' field to get the next page of results."
+        }
+      ],
+      "scopes": [
+        "read:space:confluence"
+      ],
+      "tags": [
+        "important",
+        "readOnlyHint",
+        "idempotentHint",
+        "openWorldHint",
+        "Spaces"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Move Page",
+      "slug": "CONFLUENCE_MOVE_PAGE",
+      "kind": "write",
+      "description": "Move a page before or after a sibling, or append it beneath a target page.",
+      "inputs": [
+        {
+          "name": "pageId",
+          "type": "string",
+          "required": true,
+          "about": "ID of the page to move."
+        },
+        {
+          "name": "position",
+          "type": "string",
+          "required": true,
+          "about": "Where to move the page: 'before' or 'after' places it beside the target sibling; 'append' makes it a child of the target page. Avoid 'before' and 'after' when the target is a top-level page because the moved page will not appear in the page tree."
+        },
+        {
+          "name": "targetId",
+          "type": "string",
+          "required": true,
+          "about": "ID of the target page."
+        }
+      ],
+      "scopes": [
+        "write:page:confluence"
+      ],
+      "tags": [
+        "openWorldHint",
+        "important",
+        "content",
+        "updateHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Search Content",
+      "slug": "CONFLUENCE_SEARCH_CONTENT",
+      "kind": "read",
+      "description": "Search one batch of Confluence pages by title, ranking matches locally; follow the next cursor to search further batches. Space filtering may fall back to an unfiltered search, and page-fetch errors return empty results; results omit full page bodies.",
+      "inputs": [
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "about": "Maximum number of matching pages to return from this API page"
+        },
+        {
+          "name": "query",
+          "type": "string",
+          "required": true,
+          "about": "Search query to find matching pages. The search will look for this text in page titles with intelligent matching including: (1) Exact phrase matches (highest priority), (2) All words present anywhere in title (medium priority), (3) Partial word matches (lowest priority). Search is case-insensitive a"
+        },
+        {
+          "name": "start",
+          "type": "integer",
+          "required": false,
+          "about": "Starting index within the current API page"
+        },
+        {
+          "name": "cursor",
+          "type": "string",
+          "required": false,
+          "about": "Opaque pagination cursor. Use the 'next' link from a previous response to continue."
+        },
+        {
+          "name": "expand",
+          "type": "string",
+          "required": false,
+          "about": "Comma-separated list of properties to expand in the response"
+        },
+        {
+          "name": "spaceKey",
+          "type": "string",
+          "required": false,
+          "about": "Limit search to a specific space by space key (will be added to CQL query) Results are not strictly scoped to this space; inspect spaceId in returned results to confirm scope."
+        }
+      ],
+      "scopes": [
+        "read:page:confluence"
+      ],
+      "tags": [
+        "readOnlyHint",
+        "idempotentHint",
+        "openWorldHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Search Pages",
+      "slug": "CONFLUENCE_SEARCH_PAGES",
+      "kind": "read",
+      "description": "Searches for pages in Confluence using filters like title, space, and status. Returns a paginated list of pages matching the specified criteria. Use this action when you need to find specific pages by title or filter pages within a particular space. For full-text content search, use CONFLUENCE_SEARCH_CONTENT instead. For advanced CQL-based queries, use CONFLUENCE_CQL_SEARCH.",
+      "inputs": [
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "about": "Maximum number of pages to return. Confluence limits the maximum to 250 pages per request. Use cursor-based pagination to retrieve additional results."
+        },
+        {
+          "name": "title",
+          "type": "string",
+          "required": false,
+          "about": "Filter pages by title. Performs exact match filtering on page titles. Use this to find pages with a specific title string. For fuzzy or text-based search, use CONFLUENCE_SEARCH_CONTENT or CONFLUENCE_CQL_SEARCH instead."
+        },
+        {
+          "name": "cursor",
+          "type": "string",
+          "required": false,
+          "about": "Pagination cursor for retrieving subsequent pages of results. Use the 'next' link from the previous response to continue pagination. Omit this parameter for the first request."
+        },
+        {
+          "name": "status",
+          "type": "string",
+          "required": false,
+          "about": "Filter pages by status. Use 'current' for published pages, 'archived' for archived pages, 'deleted' for deleted pages, or 'trashed' for trashed pages. Comma-separated values are supported for multiple statuses."
+        },
+        {
+          "name": "space_id",
+          "type": "string",
+          "required": false,
+          "about": "Filter pages by space ID. Only returns pages from the specified space. Use CONFLUENCE_GET_SPACES to retrieve available space IDs."
+        },
+        {
+          "name": "body_format",
+          "type": "string",
+          "required": false,
+          "about": "Include page body content in the specified format. Use 'storage' for XHTML storage format or 'atlas_doc_format' for Atlassian Document Format (ADF). Omit to exclude body content from results for faster responses."
+        }
+      ],
+      "scopes": [
+        "read:page:confluence"
+      ],
+      "tags": [
+        "important",
+        "readOnlyHint",
+        "idempotentHint",
+        "openWorldHint",
+        "Pages"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Search Spaces",
+      "slug": "CONFLUENCE_SEARCH_SPACES",
+      "kind": "read",
+      "description": "Search Confluence spaces by partial name or key and filter by key, type, status, or labels. Text matching is applied to each fetched page, so an empty page can still have a next cursor; continue pagination to find further matches.",
+      "inputs": [
+        {
+          "name": "type",
+          "type": "string",
+          "required": false,
+          "about": "Type of space: 'global' or 'personal'."
+        },
+        {
+          "name": "label",
+          "type": "array",
+          "required": false,
+          "about": "Filter by labels; spaces must have at least one of these labels."
+        },
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "about": "Maximum number of spaces to return per page. Confluence caps at 200."
+        },
+        {
+          "name": "query",
+          "type": "string",
+          "required": false,
+          "about": "Text query to search for in space names or keys. Performs case-insensitive partial matching."
+        },
+        {
+          "name": "cursor",
+          "type": "string",
+          "required": false,
+          "about": "Opaque pagination cursor. Use the 'next' link from a previous response to continue. Iterate until no 'next' link is returned to avoid silently missing pages."
+        },
+        {
+          "name": "expand",
+          "type": "array",
+          "required": false,
+          "about": "Properties to expand in response (e.g., 'description', 'icon', 'metadata')."
+        },
+        {
+          "name": "status",
+          "type": "string",
+          "required": false,
+          "about": "Status of space: 'current' (active) or 'archived'."
+        },
+        {
+          "name": "spaceKey",
+          "type": "array",
+          "required": false,
+          "about": "Filter by space key(s); accepts one or more space keys. Accepts canonical space keys only, not display names."
+        }
+      ],
+      "scopes": [
+        "read:space:confluence"
+      ],
+      "tags": [
+        "important",
+        "readOnlyHint",
+        "idempotentHint",
+        "openWorldHint",
+        "Spaces"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Search Users",
+      "slug": "CONFLUENCE_SEARCH_USERS",
+      "kind": "read",
+      "description": "Search Confluence users, optionally filtering by account ID, with offset pagination.",
+      "inputs": [
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "about": "Maximum number of users per result to return"
+        },
+        {
+          "name": "start",
+          "type": "integer",
+          "required": false,
+          "about": "Zero-based index of the first user to return (pagination offset). This v1 /search/user endpoint uses start/limit offset paging, not a cursor."
+        },
+        {
+          "name": "accountId",
+          "type": "string",
+          "required": false,
+          "about": "Filter by user account ID"
+        }
+      ],
+      "scopes": [
+        "read:content-details:confluence"
+      ],
+      "tags": [
+        "readOnlyHint",
+        "idempotentHint",
+        "openWorldHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Update Blogpost",
+      "slug": "CONFLUENCE_UPDATE_BLOGPOST",
+      "kind": "write",
+      "description": "Updates a Confluence blog post's title and body using a new version number. Both title and body must be supplied; if status is omitted, the request sets it to current.",
+      "inputs": [
+        {
+          "name": "id",
+          "type": "string",
+          "required": true,
+          "about": "ID of the blog post to update."
+        },
+        {
+          "name": "body",
+          "type": "object",
+          "required": true,
+          "about": "New content for the blog post body. Provide the body in storage format."
+        },
+        {
+          "name": "title",
+          "type": "string",
+          "required": true,
+          "about": "New title for the blog post."
+        },
+        {
+          "name": "status",
+          "type": "string",
+          "required": false,
+          "about": "Status of the blog post. Defaults to 'current' if not provided."
+        },
+        {
+          "name": "spaceId",
+          "type": "string",
+          "required": true,
+          "about": "ID of the space containing the blog post."
+        },
+        {
+          "name": "version",
+          "type": "object",
+          "required": true,
+          "about": "Version object containing the new version number and optional metadata."
+        }
+      ],
+      "scopes": [
+        "write:page:confluence"
+      ],
+      "tags": [
+        "updateHint",
+        "openWorldHint",
+        "important",
+        "Blogs"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Update Blogpost Property",
+      "slug": "CONFLUENCE_UPDATE_BLOGPOST_PROPERTY",
+      "kind": "write",
+      "description": "Tool to update a property of a specified blog post. Use when you need to modify custom metadata on a blog post.",
+      "inputs": [
+        {
+          "name": "id",
+          "type": "string",
+          "required": true,
+          "about": "ID of the Confluence blog post to update."
+        },
+        {
+          "name": "value",
+          "type": "string",
+          "required": true,
+          "about": "New JSON string value for the specified property."
+        },
+        {
+          "name": "propertyId",
+          "type": "string",
+          "required": true,
+          "about": "Numeric ID of the blog post property to update. Not the property key — the v2 path segment is the integer property id (use CONFLUENCE_GET_CONTENT_PROPERTIES_FOR_BLOG_POST to resolve a key to its id)."
+        }
+      ],
+      "scopes": [
+        "read:page:confluence",
+        "write:page:confluence"
+      ],
+      "tags": [
+        "updateHint",
+        "openWorldHint",
+        "Blogs",
+        "Content Properties"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Update Page Content Property",
+      "slug": "CONFLUENCE_UPDATE_CONTENT_PROPERTY_FOR_PAGE_BY_ID",
+      "kind": "write",
+      "description": "Tool to update a content property on a Confluence page. Use when you need to modify an existing metadata property by its ID.",
+      "inputs": [
+        {
+          "name": "value",
+          "type": "string",
+          "required": true,
+          "about": "New JSON string value for the specified property."
+        },
+        {
+          "name": "pageId",
+          "type": "string",
+          "required": true,
+          "about": "ID of the Confluence page to update the property on."
+        },
+        {
+          "name": "propertyId",
+          "type": "string",
+          "required": true,
+          "about": "Numeric ID of the content property to update on the page. Not the property key — the v2 path segment is the integer property id (use CONFLUENCE_GET_CONTENT_PROPERTIES_FOR_PAGE to resolve a key to its id)."
+        }
+      ],
+      "scopes": [
+        "read:page:confluence",
+        "write:page:confluence"
+      ],
+      "tags": [
+        "updateHint",
+        "openWorldHint",
+        "Pages",
+        "Properties"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Update Whiteboard Content Property",
+      "slug": "CONFLUENCE_UPDATE_CONTENT_PROPERTY_FOR_WHITEBOARD_BY_ID",
+      "kind": "write",
+      "description": "Tool to update a content property on a whiteboard. Use when you need to modify metadata on a Confluence whiteboard.",
+      "inputs": [
+        {
+          "name": "value",
+          "type": "string",
+          "required": true,
+          "about": "New JSON string value for the specified content property."
+        },
+        {
+          "name": "propertyId",
+          "type": "string",
+          "required": true,
+          "about": "ID of the content property to update on the whiteboard. Numeric property id as a string (the v2 path segment is numeric; a key string is rejected)."
+        },
+        {
+          "name": "whiteboardId",
+          "type": "string",
+          "required": true,
+          "about": "ID of the Confluence whiteboard containing the property to update."
+        }
+      ],
+      "scopes": [
+        "read:whiteboard:confluence",
+        "write:whiteboard:confluence"
+      ],
+      "tags": [
+        "updateHint",
+        "openWorldHint",
+        "Whiteboards",
+        "Properties"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Update Page",
+      "slug": "CONFLUENCE_UPDATE_PAGE",
+      "kind": "write",
+      "description": "Tool to update an existing Confluence page, replacing the entire page content. Use when you need to modify existing documentation or content.",
+      "inputs": [
+        {
+          "name": "id",
+          "type": "string",
+          "required": true,
+          "about": "ID of the page to update. Must be a string; convert from numeric IDs returned by CONFLUENCE_GET_PAGE_BY_ID before passing."
+        },
+        {
+          "name": "body",
+          "type": "object",
+          "required": true,
+          "about": "Updated content body of the page. Requires 'value' (the content in the specified format) and 'representation' (either 'storage' for Confluence storage format/XHTML, or 'atlas_doc_format' for Atlassian Document Format/ADF). Replaces the entire page content — always send complete desired content. Prov"
+        },
+        {
+          "name": "title",
+          "type": "string",
+          "required": true,
+          "about": "Updated title of the page. IMPORTANT: Confluence enforces unique page titles within each space. If you change the title to one that already exists in the same space, the update will fail with a 'page with this title already exists' error. To avoid this, either keep the existing title, choose a uniqu"
+        },
+        {
+          "name": "spaceId",
+          "type": "string",
+          "required": false,
+          "about": "ID of the space containing the page. Optional if the page's space doesn't need to be changed."
+        },
+        {
+          "name": "version",
+          "type": "object",
+          "required": true,
+          "about": "Version information for the update. Must include `number` set to exactly current_version + 1. Fetch the current version via CONFLUENCE_GET_PAGE_BY_ID before updating. On a 409 conflict, refetch the latest version and retry."
+        }
+      ],
+      "scopes": [
+        "read:page:confluence",
+        "write:page:confluence"
+      ],
+      "tags": [
+        "openWorldHint",
+        "important",
+        "content",
+        "updateHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Update Space Property",
+      "slug": "CONFLUENCE_UPDATE_SPACE_PROPERTY",
+      "kind": "write",
+      "description": "Update the value of an existing Confluence space property to modify custom metadata stored on the space. Supply numeric space and property IDs and the new value as a valid JSON string.",
+      "inputs": [
+        {
+          "name": "value",
+          "type": "string",
+          "required": true,
+          "about": "New JSON string value for the specified space property."
+        },
+        {
+          "name": "spaceId",
+          "type": "string",
+          "required": true,
+          "about": "The numeric ID of the space the property belongs to (a numeric v2 path segment; a space key or UUID is rejected)."
+        },
+        {
+          "name": "propertyId",
+          "type": "string",
+          "required": true,
+          "about": "The ID of the space property to update. Numeric property id as a string (the v2 path segment is numeric; a key string is rejected)."
+        }
+      ],
+      "scopes": [
+        "read:space:confluence",
+        "write:space:confluence"
+      ],
+      "tags": [
+        "updateHint",
+        "openWorldHint",
+        "Spaces",
+        "Space Properties"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Update Task",
+      "slug": "CONFLUENCE_UPDATE_TASK",
+      "kind": "write",
+      "description": "Tool to update a Confluence task status. Use when you need to mark tasks as complete or incomplete in workflows or dashboards.",
+      "inputs": [
+        {
+          "name": "id",
+          "type": "string",
+          "required": true,
+          "about": "ID of the task to update."
+        },
+        {
+          "name": "status",
+          "type": "string",
+          "required": true,
+          "about": "Status of the task."
+        },
+        {
+          "name": "body_format",
+          "type": "string",
+          "required": false,
+          "about": "Optional body format for the response."
+        }
+      ],
+      "scopes": [
+        "write:task:confluence"
+      ],
+      "tags": [
+        "important",
+        "openWorldHint",
+        "updateHint",
+        "idempotentHint",
+        "task"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Upload Attachment",
+      "slug": "CONFLUENCE_UPLOAD_ATTACHMENT",
+      "kind": "write",
+      "description": "Create a new attachment; fails when the same filename already exists. Use UPLOAD_OR_REPLACE_ATTACHMENT to create a new version instead.",
+      "inputs": [
+        {
+          "name": "file",
+          "type": "object",
+          "required": true,
+          "about": "File to attach to the Confluence content."
+        },
+        {
+          "name": "status",
+          "type": "string",
+          "required": false,
+          "about": "Content status to attach the file to. Omit to use Confluence's default."
+        },
+        {
+          "name": "comment",
+          "type": "string",
+          "required": false,
+          "about": "Optional comment describing this attachment upload."
+        },
+        {
+          "name": "contentId",
+          "type": "string",
+          "required": true,
+          "about": "ID of the page or other Confluence content receiving the attachment."
+        },
+        {
+          "name": "minorEdit",
+          "type": "boolean",
+          "required": false,
+          "about": "Whether Confluence should treat the upload as a minor edit."
+        }
+      ],
+      "scopes": [
+        "write:confluence-file"
+      ],
+      "tags": [
+        "openWorldHint",
+        "important",
+        "attachments",
+        "createHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Upload or Replace Attachment",
+      "slug": "CONFLUENCE_UPLOAD_OR_REPLACE_ATTACHMENT",
+      "kind": "write",
+      "description": "Uploads an attachment or creates a new version when its filename exists.",
+      "inputs": [
+        {
+          "name": "file",
+          "type": "object",
+          "required": true,
+          "about": "File to create or version by filename."
+        },
+        {
+          "name": "status",
+          "type": "string",
+          "required": false,
+          "about": "Content status to target. Omit to use Confluence's default."
+        },
+        {
+          "name": "comment",
+          "type": "string",
+          "required": false,
+          "about": "Attachment version comment."
+        },
+        {
+          "name": "contentId",
+          "type": "string",
+          "required": true,
+          "about": "ID of the page or other content receiving the attachment."
+        },
+        {
+          "name": "minorEdit",
+          "type": "boolean",
+          "required": false,
+          "about": "Whether the upload is a minor edit."
+        }
+      ],
+      "scopes": [
+        "write:confluence-file"
+      ],
+      "tags": [
+        "openWorldHint",
+        "important",
+        "attachments",
+        "createHint",
+        "updateHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Validate Credential",
+      "slug": "CONFLUENCE_VALIDATE_CREDENTIAL",
+      "kind": "write",
+      "description": "Validates Confluence credentials by attempting to retrieve the current authenticated user's information. Use this action when you need to verify that API credentials are valid and the connection is properly authenticated before performing other operations. Returns validation status along with basic user details if successful.",
+      "inputs": [
+        {
+          "name": "0",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "1",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "2",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "3",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "4",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "5",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "6",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "7",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "8",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "9",
+          "type": "",
+          "required": false,
+          "about": ""
+        }
+      ],
+      "scopes": [
+        "read:confluence-user",
+        "read:content-details:confluence"
+      ],
+      "tags": [
+        "important",
+        "readOnlyHint",
+        "idempotentHint",
+        "openWorldHint",
+        "user"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Who Am I",
+      "slug": "CONFLUENCE_WHO_AM_I",
+      "kind": "write",
+      "description": "Return connection identity information. For bearer connections, list accessible Atlassian sites; for API-key connections, return the current user's identity and the configured site URL.",
+      "inputs": [
+        {
+          "name": "0",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "1",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "2",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "3",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "4",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "5",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "6",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "7",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "8",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "9",
+          "type": "",
+          "required": false,
+          "about": ""
+        }
+      ],
+      "scopes": "$undefined",
+      "tags": [
+        "important",
+        "readOnlyHint",
+        "idempotentHint",
+        "auth"
+      ],
+      "deprecated": false
+    }
+  ],
+  "triggers": [],
+  "source": "https://docs.composio.dev/toolkits/confluence",
+  "fetched_at": "2026-11-20"
+}

@@ -8,11 +8,15 @@ import {
   COSTLY_SHARE,
   FREQUENT_RUNS_PER_DAY,
   MAX_CAP_USD,
+  SPIKE_FACTOR,
+  SPIKE_MIN_RUNS,
+  SPIKE_SHARE,
   type BatteryReport,
   type BatteryRow,
   type DailyUsageReport,
   type RoutineForecast,
   type SpendCapInput,
+  type UsagePeriod,
 } from "../shared/spend.ts";
 import { writeFileAtomic } from "./atomic.ts";
 import { nextOccurrence, type RoutineSchedule } from "./routine-schedules.ts";
@@ -21,6 +25,8 @@ import { clampDays, clampOffset, dailyStart, dailyUsage } from "./usage-daily.ts
 
 const DAY_MS = 24 * 60 * 60_000;
 export const WEEK_MS = 7 * DAY_MS;
+const MONTH_MS = 30 * DAY_MS;
+const MONTH_FRESH_MS = 60_000;
 const FORECAST_RUNS = 5;
 const USUAL_RUNS = 3;
 const RUN_COSTS_SHOWN = 20;
@@ -54,11 +60,33 @@ export interface CapHit {
   spentUsd: number;
 }
 
+/** A routine took a large share of the last day's use, well above its usual day: told once a week at most. */
+export interface SpikeHit {
+  routineId: string;
+  botId: string;
+  name: string;
+  runs: number;
+  /** Of everything used in the last day, 0 to 1. */
+  share: number;
+}
+
 export interface SpendDeps {
   dataDir: string;
   now?: () => number;
   /** Once per crossing: a booked turn took a bot or routine to its cap. */
   onHit?: (hit: CapHit) => void;
+  onSpike?: (hit: SpikeHit) => void;
+}
+
+function periodOf(entries: readonly Entry[]): UsagePeriod {
+  const runs = new Set<string>();
+  let usd = 0, tokens = 0;
+  for (const entry of entries) {
+    if (entry.runId) runs.add(entry.runId);
+    usd += entry.usd;
+    tokens += entry.tokens;
+  }
+  return { runs: runs.size, usd, tokens };
 }
 
 export interface ForecastRoutine {
@@ -135,6 +163,46 @@ export function createSpend(deps: SpendDeps) {
     return entries;
   }
 
+  let month: { at: number; entries: Entry[] } | null = null;
+  function monthWindow(): Entry[] {
+    const at = now();
+    if (!month || at - month.at > MONTH_FRESH_MS) {
+      month = { at, entries: readUsage(deps.dataDir, { from: new Date(at - MONTH_MS), to: new Date(at) }).map(entryOf) };
+    }
+    return month.entries;
+  }
+
+  /** Use is dollars while anything in the week has a price, else tokens, as the battery reads it. */
+  function spikeOf(routineId: string): { runs: number; share: number } | null {
+    const rows = window();
+    const dayStart = now() - DAY_MS;
+    const priced = rows.some((entry) => entry.usd > 0);
+    const amount = (list: readonly Entry[]) => list.reduce((sum, entry) => sum + (priced ? entry.usd : entry.tokens), 0);
+    const mine = rows.filter((entry) => entry.routineId === routineId);
+    const today = mine.filter((entry) => entry.at >= dayStart);
+    const runs = new Set(today.map((entry) => entry.runId).filter(Boolean)).size;
+    if (runs < SPIKE_MIN_RUNS) return null;
+    const day = amount(today);
+    const all = amount(rows.filter((entry) => entry.at >= dayStart));
+    const share = all > 0 ? day / all : 0;
+    if (share < SPIKE_SHARE) return null;
+    const usualDay = amount(mine.filter((entry) => entry.at < dayStart)) / 6;
+    if (usualDay > 0 ? day < SPIKE_FACTOR * usualDay : runs < FREQUENT_RUNS_PER_DAY) return null;
+    return { runs, share };
+  }
+
+  function checkSpike(entry: Entry): void {
+    if (!entry.routineId) return;
+    const key = `spike:${entry.routineId}`;
+    const told = caps.told[key];
+    if (told !== undefined && now() - told < WEEK_MS) return;
+    const spike = spikeOf(entry.routineId);
+    if (!spike) return;
+    caps.told[key] = now();
+    save();
+    deps.onSpike?.({ routineId: entry.routineId, botId: entry.botId, name: entry.routineName ?? entry.routineId, ...spike });
+  }
+
   const of = (kind: "bot" | "routine", id: string) => window().filter((entry) => (kind === "bot" ? entry.botId : entry.routineId) === id);
   const spent = (kind: "bot" | "routine", id: string) => of(kind, id).reduce((sum, entry) => sum + entry.usd, 0);
   const capOf = (kind: "bot" | "routine", id: string): number | undefined => (kind === "bot" ? caps.bots : caps.routines)[id];
@@ -167,6 +235,8 @@ export function createSpend(deps: SpendDeps) {
       window().push(entry);
       check("bot", entry.botId, entry.botId, entry.botName);
       if (entry.routineId) check("routine", entry.routineId, entry.botId, entry.routineName ?? entry.routineId);
+      checkSpike(entry);
+      month?.entries.push(entry);
       return entry;
     },
 
@@ -246,9 +316,11 @@ export function createSpend(deps: SpendDeps) {
       return dailyUsage(rows, { now: at, days, offsetMinutes, botName: input.bot });
     },
 
-    forecast(routine: ForecastRoutine): RoutineForecast {
+    /** `also`: the ids its runs are booked under besides its own, such as its address's. */
+    forecast(routine: ForecastRoutine, also: readonly string[] = []): RoutineForecast {
       const rows = window();
-      const mine = rows.filter((entry) => entry.routineId === routine.id);
+      const ids = new Set([routine.id, ...also]);
+      const mine = rows.filter((entry) => entry.routineId !== undefined && ids.has(entry.routineId));
       const byRun = new Map<string, { usd: number; at: number }>();
       for (const entry of mine) {
         if (!entry.runId) continue;
@@ -274,11 +346,32 @@ export function createSpend(deps: SpendDeps) {
         warnings: [
           ...(perWeek !== null && perWeek > FREQUENT_RUNS_PER_DAY * 7 ? ["frequent" as const] : []),
           ...(shareOfWeek !== null && shareOfWeek > COSTLY_SHARE ? ["costly" as const] : []),
+          ...(spikeOf(routine.id) ? ["spike" as const] : []),
         ],
         runCosts: Object.fromEntries(recent.slice(0, RUN_COSTS_SHOWN).map(([id, run]) => [id, run.usd])),
         ...(capUsd !== undefined ? { capUsd } : {}),
         spentUsd,
+        usage: { week: periodOf(mine), month: periodOf(monthWindow().filter((entry) => entry.routineId !== undefined && ids.has(entry.routineId))) },
       };
+    },
+
+    /** Every routine that used anything in the last 30 days, with its 7- and 30-day runs and use, most first. */
+    routineUsage(): Array<{ routineId: string; botId: string; name: string; week: UsagePeriod; month: UsagePeriod }> {
+      const weekStart = now() - WEEK_MS;
+      const groups = new Map<string, Entry[]>();
+      for (const entry of monthWindow()) {
+        if (!entry.routineId) continue;
+        const list = groups.get(entry.routineId) ?? [];
+        list.push(entry);
+        groups.set(entry.routineId, list);
+      }
+      return [...groups.entries()].map(([routineId, entries]) => ({
+        routineId,
+        botId: entries.at(-1)!.botId,
+        name: entries.at(-1)!.routineName ?? routineId,
+        week: periodOf(entries.filter((entry) => entry.at >= weekStart)),
+        month: periodOf(entries),
+      })).sort((a, b) => b.month.usd - a.month.usd || b.month.tokens - a.month.tokens);
     },
   };
 }

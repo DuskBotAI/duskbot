@@ -86,6 +86,8 @@ describe("Simple mode's working line", () => {
   it("says which outside service the bot is working in", () => {
     expect(toolService("mcp__notion__search")).toBe("Notion");
     expect(toolService("mcp__composio__GMAIL_SEND_EMAIL")).toBe("Gmail");
+    expect(toolService("mcp__github__create_pull_request"), "a known app keeps its own spelling").toBe("GitHub");
+    expect(toolService("mcp__composio__HUBSPOT_SEARCH")).toBe("HubSpot");
     expect(toolService("mcp__dusk__ask_user")).toBeNull();
     expect(toolService("Bash")).toBeNull();
     expect(friendlyNowPhrases(null, running("mcp__notion__search")).phrases).toEqual(["Working in Notion"]);

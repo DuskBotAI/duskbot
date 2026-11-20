@@ -1,4 +1,5 @@
 import { useState, useSyncExternalStore } from "react";
+import { AnimatePresence } from "motion/react";
 import { t } from "@/lib/i18n";
 import { listenLiveFrames } from "@/lib/live-events";
 import { macPermissionsBridge } from "@/lib/mac-permissions";
@@ -62,8 +63,8 @@ export function ScreenAccessCard({ onDismiss }: { onDismiss: () => void }) {
     <div className="mb-2 w-full px-5" data-screen-access="">
       <ChatErrorCard tone="info" icon="offline" title={t("screenAccess.title")} onDismiss={onDismiss}
         actions={bridge && <button type="button" data-screen-access-allow="" onClick={() => setAsking(true)} className={CARD_ACTION}>{t("screenAccess.allow")}</button>} />
-      {asking && bridge && <MacPermissionsDialog bridge={bridge} onClose={() => { setAsking(false); recheck(); }} onAllowed={recheck}
-        relaunch={typeof window.duskDesktop?.relaunch === "function" ? () => void window.duskDesktop!.relaunch!() : null} />}
+      <AnimatePresence>{asking && bridge && <MacPermissionsDialog key="mac-permissions-dialog" bridge={bridge} onClose={() => { setAsking(false); recheck(); }} onAllowed={recheck}
+        relaunch={typeof window.duskDesktop?.relaunch === "function" ? () => void window.duskDesktop!.relaunch!() : null} />}</AnimatePresence>
     </div>
   );
 }

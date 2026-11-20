@@ -14,10 +14,11 @@ export function perDay(days: string[], rows: Iterable<{ day: string; count: numb
   return days.map(day => by.get(day) ?? 0);
 }
 
-export const PAID_STATUSES = ["active", "payment_problem", "cancelled"] as const;
+/** a failed charge is not paying, though it is retried */
+export const PAID_STATUSES = ["active", "cancelled"] as const;
 export const isPaying = (sub: Pick<StoredSubscription, "status">) => (PAID_STATUSES as readonly string[]).includes(sub.status);
 /** a subscription that was ever paid for (or granted): anything past pending, or ended after a period ran */
-export const wasPaid = (sub: Pick<StoredSubscription, "status" | "currentPeriodStart">) => isPaying(sub) || (sub.status === "ended" && sub.currentPeriodStart !== null);
+export const wasPaid = (sub: Pick<StoredSubscription, "status" | "currentPeriodStart">) => isPaying(sub) || sub.status === "payment_problem" || (sub.status === "ended" && sub.currentPeriodStart !== null);
 export const choseCloud = (checkout: Pick<StoredCheckout, "kind" | "cart">) => checkout.kind === "cart" && !!checkout.cart && checkout.cart.desktop.kind !== "none";
 
 export function workspaceTurns(ws: Pick<StoredWorkspace, "report">, sinceDay?: string): number {

@@ -6,12 +6,17 @@ interface CardKind {
 }
 export interface CardResponse {
   behavior: "allow" | "deny" | "answer";
+  /** "Allow for this task": the rest of the task stops asking for the same reason. */
+  always?: true;
   message?: string;
   dismiss?: boolean;
 }
 
+export const ALLOW_FOR_TASK = "Allow for this task";
+
 export function answerResponse(card: CardKind, answer: string): CardResponse {
   if (!card.tool) return { behavior: "answer", message: answer };
+  if (answer === ALLOW_FOR_TASK) return { behavior: "allow", always: true };
   return { behavior: answer === "Deny" ? "deny" : "allow" };
 }
 

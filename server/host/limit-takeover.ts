@@ -60,6 +60,8 @@ export interface LimitTakeoverDeps {
   /** The backups a signed-out AI's turns (and a turn its provider failed) go to, as for a turn its AI never started: the bot's own list, or the
    * installation's one backup while Automatic recovery is on. `chosen` when not given. */
   signedOutChosen?(botId: string): ModelSelection[];
+  /** The AIs that carry on for a bot that chose no backup at all, best first (server/automatic-recovery.ts). */
+  automatic?(botId: string, from: ModelSelection, engines: readonly TakeoverEngine[]): ModelSelection[];
   engineName(instanceId: string): string;
   tell(bot: Bot, text: string): void;
   /** A conversation moved off a limited or signed-out AI: it goes back once that ends. */
@@ -209,7 +211,8 @@ export function createLimitTakeover(deps: LimitTakeoverDeps) {
     // like a sign-out, a provider's hiccup never reaches the installation backup while Automatic recovery is off
     const startup = scope === "signed-out" || scope === "provider";
     for (const selection of startup ? deps.signedOutChosen?.(botId) ?? deps.chosen(botId) : deps.chosen(botId)) add(selection);
-    // A provider's hiccup moves a turn only to a backup the person chose.
+    if (!out.length) for (const selection of deps.automatic?.(botId, from, engines) ?? []) add(selection);
+    // A provider's hiccup moves a turn only to a backup the person chose, or one of their own AIs when they chose none.
     if (scope === "signed-out" || scope === "provider") return out;
     if ((deps.limitMode?.(botId) ?? "wait") === "free") { const pick = freeSelection(from, scope, approval); if (pick) add(pick); }
     return out;

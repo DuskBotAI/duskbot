@@ -103,3 +103,39 @@ export function settleAsk(run: RoutineRun, event: Resolved | undefined, now: num
 export function activeMs(run: Pick<RoutineRun, "startedAt" | "waitedMs" | "asked">, now: number): number {
   return now - (run.startedAt ?? now) - (run.waitedMs ?? 0) - (run.asked ? Math.max(0, now - run.asked.since) : 0);
 }
+
+/** How long a run waits on a question nobody answers before it stops. */
+export const QUESTION_WAIT_MS = 24 * 60 * 60_000;
+
+/** The person wrote in the run's chat: their words answer its questions, while an approval still waits for its card. */
+export function answeredInChat(run: RoutineRun, now: number): boolean {
+  const ask = run.asked;
+  if (!ask) return false;
+  const all = [ask, ...ask.pending ?? []];
+  const approvals = all.filter((candidate) => candidate.approval);
+  if (approvals.length === all.length) return false;
+  if (!approvals.length) {
+    run.waitedMs = (run.waitedMs ?? 0) + Math.max(0, now - ask.since);
+    delete run.asked;
+    return true;
+  }
+  const [next, ...pending] = approvals;
+  run.asked = { ...next!, since: ask.since, ...(pending.length ? { pending } : {}) };
+  if (!pending.length) delete run.asked.pending;
+  return true;
+}
+
+/** Why the run stops when the question it waits on went unanswered for QUESTION_WAIT_MS. */
+export function unansweredQuestion(run: Pick<RoutineRun, "asked">, now: number): string | null {
+  const ask = run.asked;
+  return ask && !ask.approval && now - ask.since >= QUESTION_WAIT_MS ? `Stopped: nobody answered the question “${plain(ask.subject, 120)}”` : null;
+}
+
+/** Why a started run stops now: a question nobody answered, or its run limit. */
+export function stopDue(run: RoutineRun, now: number): { detail: string; status: "stopped" | "limit-reached" } | null {
+  if (run.status !== "running" && run.status !== "waiting") return null;
+  const unanswered = run.status === "waiting" ? unansweredQuestion(run, now) : null;
+  if (unanswered) return { detail: unanswered, status: "stopped" };
+  return run.startedAt != null && run.timeoutMinutes != null && activeMs(run, now) >= run.timeoutMinutes * 60_000
+    ? { detail: `Stopped after reaching the ${run.timeoutMinutes}-minute run limit`, status: "limit-reached" } : null;
+}

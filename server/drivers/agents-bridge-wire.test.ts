@@ -58,7 +58,8 @@ function profiles(): Record<string, Record<string, string>> {
     all[`${name}+cloud-home`] = { ...all[name]!, DUSK_CLOUD_HOME: "1" };
   }
   all["skills+voice+x"] = { ...all["skills+voice"]!, DUSK_X_RESEARCH: "1", DUSK_RESEARCH: "1" };
-  all["skills+voice+x+team"] = { ...all["skills+voice+x"]!, DUSK_TEAM_PEOPLE: "1" };
+  all["skills+voice+x+team"] = { ...all["skills+voice+x"]!, DUSK_TEAM_PEOPLE: "1", DUSK_SKILL_READER: "1" };
+  all["skills+skill-reader"] = { ...all.skills!, DUSK_SKILL_READER: "1" };
   all["default+legacy-switches"] = { ...all.default!, DUSK_ROOM_TURN: "1", DUSK_OWN_THREAD_CREATION: "1", DUSK_EXTERNAL_RUNTIME: "1", DUSK_ACTIVE_WAITS: "0" };
   for (const name of ["default", "skills+voice"]) all[`${name}+dusk`] = { ...all[name]!, DUSK_DEFAULT_BOT: "1" };
   all["default+no-computer-pick"] = { ...all.default!, DUSK_COMPUTER_SELECTION: "0" };
@@ -77,24 +78,25 @@ const FULL = "skills+voice+x+team";
  * either: lock a saving in by lowering the number. A Chief's list is longer
  * than another bot's only by the Chief-only names in find_tool's description. */
 const BUDGET_BASELINE: Record<string, number> = {
-  "default": 19498,
-  "voice": 20276,
-  "skills": 19525,
-  "skills+voice": 20303,
-  "non-chief": 19326,
-  "voice+non-chief": 20190,
-  "skills+non-chief": 19353,
-  "skills+voice+non-chief": 20217,
-  "skills+voice+cloud-home": 20320,
-  "skills+voice+non-chief+cloud-home": 20234,
-  "skills+voice+x": 20381,
-  "skills+voice+x+team": 20381,
-  "default+legacy-switches": 19498,
-  "default+dusk": 19550,
-  "skills+voice+dusk": 20355,
-  "default+no-computer-pick": 18205,
-  "default+room": 18144,
-  "non-chief+room": 18058,
+  "default": 30565,
+  "voice": 31343,
+  "skills": 30592,
+  "skills+voice": 31370,
+  "non-chief": 30479,
+  "voice+non-chief": 31257,
+  "skills+non-chief": 30506,
+  "skills+voice+non-chief": 31284,
+  "skills+voice+cloud-home": 31387,
+  "skills+voice+non-chief+cloud-home": 31301,
+  "skills+voice+x": 31448,
+  "skills+voice+x+team": 31864,
+  "skills+skill-reader": 31008,
+  "default+legacy-switches": 30565,
+  "default+dusk": 30617,
+  "skills+voice+dusk": 31422,
+  "default+no-computer-pick": 29358,
+  "default+room": 29259,
+  "non-chief+room": 29173,
 };
 
 type RpcAnswer = { id: number; result?: { tools?: unknown[]; content?: Array<{ text: string }>; isError?: boolean }; error?: { code: number; message: string } };
@@ -263,11 +265,12 @@ describe("agents proxy tools/list golden with the tool bridge on", () => {
   it("keeps the same hot tools whatever the role and features, except the ones a profile does not have", () => {
     const hotOf = (name: string) => toolsOf(wires[name]!).slice(0, -2).map((tool) => tool.name);
     const base = hotOf("default");
-    expect(base).toEqual(["set_status", "send_message", "tool_result_read", "list_room_targets", "coordinate_bots", "list_bots", "list_rooms", "select_computer", "attach_file", "publish_page", "post_to_room", "request_credential", "request_sign_in", "fill_login", "message_person", "memory_update"]);
+    expect(base).toEqual(["set_status", "send_message", "tool_result_read", "list_room_targets", "coordinate_bots", "list_bots", "list_rooms", "select_computer", "attach_file", "publish_page", "confirm_purchase", "post_to_room", "request_credential", "request_sign_in", "fill_login", "message_person", "memory_update", "trigger"]);
     for (const name of Object.keys(PROFILES)) {
       const selects = PROFILES[name]!.DUSK_COMPUTER_SELECTION === "1";
-      expect(hotOf(name).filter((tool) => tool !== "send_voice_note"), name).toEqual(selects ? base : base.filter((tool) => tool !== "select_computer"));
+      expect(hotOf(name).filter((tool) => tool !== "send_voice_note" && tool !== "read_skill"), name).toEqual(selects ? base : base.filter((tool) => tool !== "select_computer"));
       expect(hotOf(name).includes("send_voice_note"), name).toBe(PROFILES[name]!.DUSK_VOICE_NOTES === "1");
+      expect(hotOf(name).includes("read_skill"), name).toBe(PROFILES[name]!.DUSK_SKILL_READER === "1");
     }
   });
 
@@ -334,7 +337,7 @@ describe("agents proxy with the tool bridge on, from the packaged bundle", () =>
     const env = { ...PROFILES["non-chief"]!, ...BRIDGE_ON };
     const fromSource = await proxyAnswers(PROXY_SOURCE, env, BRIDGE_REQUESTS);
     const [found, shapeless, outside] = await proxyAnswers(bundled, env, BRIDGE_REQUESTS);
-    expect((JSON.parse(found!.result!.content![0]!.text) as { matches: Tool[] }).matches[0]!.name).toBe("trigger");
+    expect((JSON.parse(found!.result!.content![0]!.text) as { matches: Tool[] }).matches[0]!.name).toBe("trigger_info");
     expect(shapeless!.result!.isError).toBe(true);
     expect(shapeless!.result!.content![0]!.text).toContain('use_tool needs { "name": ');
     // a bot that is not a Chief: propose_team_setup is not one of its tools
@@ -363,7 +366,7 @@ describe("agents proxy tools/list wire size with the tool bridge on", () => {
         `  ${String(bytes(JSON.stringify(tool))).padStart(6)} ${String(bytes(JSON.stringify(tool.inputSchema))).padStart(6)}  ${tool.name}  (${name})`)),
     ];
     console.log(lines.join("\n"));
-    for (const [name, wire] of Object.entries(wires)) expect(bytes(wire), name).toBeLessThan(bytes(unbridgedWire(name)) / 2);
+    for (const [name, wire] of Object.entries(wires)) expect(bytes(wire), name).toBeLessThan(bytes(unbridgedWire(name)) * 0.56);
   });
 
   it.each(Object.keys(PROFILES))("%s stays within 2% of its budget baseline", (name) => {

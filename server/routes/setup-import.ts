@@ -1,7 +1,8 @@
 import { z } from "zod";
 
 import { claudeUserMcpEnabled, DATA_DIR, type AppConfig } from "../config.ts";
-import { lookForBots } from "../bot-move-local.ts";
+import { channelLinks, lookForBots } from "../bot-move-local.ts";
+import type { MessengerStatus } from "../../shared/messengers.ts";
 import { lookForGrokBot, lookForNotes, removeOldCursorSignIn } from "../grok-local.ts";
 import { applySetupImport, detectSetup, thisMachine, type SetupHost, type SetupMachine } from "../setup-import.ts";
 import { SETUP_SOURCES } from "../../shared/setup-import.ts";
@@ -22,6 +23,8 @@ export interface SetupImportRouteDeps {
   /** The computer whose files are read; tests point it at a fixture home. */
   machine?: () => SetupMachine;
   dataDir?: string;
+  /** Connects a moved bot to the Telegram or Discord bot it answered on before, keeping who was let in there. */
+  connectChannel?(botId: string, platform: "telegram" | "discord", token: string, allowed: string[]): Promise<MessengerStatus>;
 }
 
 export const SETUP_IMPORT_PATH = "/api/setup-import";
@@ -29,6 +32,9 @@ export const GROK_LOOK_PATH = "/api/setup-import/grok";
 export const BOTS_LOOK_PATH = "/api/setup-import/bots";
 /** The notes file another AI saved to Downloads after the prompt was copied (`?since=` its time, in ms). */
 export const NOTES_LOOK_PATH = "/api/setup-import/notes";
+/** POST { ref, botId }: the moved bot answers again on the chat apps its old app answered on. */
+export const CHANNELS_CARRY_PATH = "/api/setup-import/channels";
+const carrySchema = z.strictObject({ ref: z.string().min(3).max(4096), botId: z.string().regex(/^[\w-]{1,128}$/) });
 const LOCAL_ONLY = "Only the desktop app on the computer running dusk bot can bring in that computer's skills and tools.";
 const SOURCES = SETUP_SOURCES;
 const requestSchema = z.object({
@@ -57,6 +63,26 @@ export function createSetupImportRoutes(deps: SetupImportRouteDeps): RouteHandle
       const since = Number(new URL(req.url ?? "", "http://local").searchParams.get("since"));
       if (!Number.isFinite(since) || since <= 0) return json(res, 400, { error: "since must be a time in ms" });
       return json(res, 200, { files: lookForNotes(machine(), since) });
+    }
+    if (path === CHANNELS_CARRY_PATH) {
+      if (method !== "POST") return json(res, 405, { error: "method not allowed" });
+      if (!deps.local || auth.kind !== "loopback" || auth.trust === "service") return json(res, 403, { error: LOCAL_ONLY });
+      const parsed = carrySchema.safeParse(await readBody(req, 8192));
+      if (!parsed.success || !deps.connectChannel || !deps.botExists?.(parsed.data.botId)) return json(res, 400, { error: "send { ref, botId } for a bot that moved in" });
+      const { ref, botId } = parsed.data;
+      const here = machine();
+      const found = lookForBots(here, { dataDir: deps.dataDir ?? DATA_DIR }).apps.some((app) => app.bots.some((bot) => bot.channelRef === ref));
+      if (!found) return json(res, 404, { error: "That app's chat apps are no longer there." });
+      const results = [];
+      for (const link of channelLinks(here, ref)) {
+        try {
+          const status = await deps.connectChannel(botId, link.platform, link.token, link.allowed);
+          results.push({ platform: link.platform, ok: true, handle: status.handle, ...(status.pairUrl ? { pairUrl: status.pairUrl } : {}), ...(status.pairCode ? { pairCode: status.pairCode } : {}) });
+        } catch (error) {
+          results.push({ platform: link.platform, ok: false, error: error instanceof Error ? error.message : "It could not be connected." });
+        }
+      }
+      return json(res, 200, { channels: results });
     }
     if (path === GROK_LOOK_PATH || path === BOTS_LOOK_PATH) {
       if (method !== "GET") return json(res, 405, { error: "method not allowed" });

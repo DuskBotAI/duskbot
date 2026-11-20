@@ -90,7 +90,7 @@ describe("lazy host claim and pin on use (issue #1650)", () => {
         HOME: home, USERPROFILE: home, DUSK_DATA_DIR: data,
         APPDATA: join(home, "appdata"), LOCALAPPDATA: join(home, "localappdata"),
         TEMP: home, TMP: home, TMPDIR: home,
-        DUSK_PORT: String(port), DUSK_WEBHOOK_PORT: String(port + 1), DUSK_STATIC_DIR: ui, DUSK_TEST_VM_STATE: stateFile,
+        DUSK_PORT: String(port), DUSK_WEBHOOK_PORT: String(port + 1), DUSK_STATIC_DIR: ui, DUSK_TEST_VM_STATE: stateFile, DUSK_TEST_SEALED_PATH: "1",
         DUSK_USER_DATA: join(home, "user-data"), DUSK_TEST_DESKTOP_CUA_CONNECTION: join(home, "user-data", "cua-connection.json"),
         DUSK_COMPUTER_CALL_WAIT_MS: String(CALL_WAIT_MS),
         DUSK_COMPUTER_CALL_ACT_WITHIN_MS: String(ACT_WITHIN_MS), ...env,

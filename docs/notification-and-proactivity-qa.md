@@ -3,8 +3,9 @@
 dusk bot treats **proactivity as an explicit trigger**, not as a hidden
 heartbeat. A bot may continue within an active task through Auto mode, may be
 started by a Routine or Webhook, and may coordinate peers when its engine and
-profile allow that. This change does not add background polling that invents
-work or sends messages without one of those configured paths.
+profile allow that. The one exception is **Suggestions** (`docs/suggestions.md`):
+a capped, quiet-hours-aware pass of the proactive bot that may post one offer,
+and starts work only when the person taps Do it.
 
 ## Notification policy
 
@@ -40,6 +41,7 @@ alone cannot provide closed-app delivery.
 | Real failed routine emits one `routine-failed` notification and no duplicate `done` | `server/notification-wiring.test.ts` |
 | iOS target parsing and detached-task decision | `ios/Tests/CompanionCoreTests/DecodingTests.swift` |
 | Paired-device route policy remains default-deny | `apps/companion/test/routes.test.ts` |
+| Suggestions: schedule, cap, quiet hours, delivery, Do it, learning | `server/host/offers.test.ts` |
 
 ## Manual release pass
 

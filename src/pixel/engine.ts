@@ -129,7 +129,8 @@ export function createPixel(el: HTMLElement, o: PixelOptions): PixelBot {
   cv.width = W; cv.height = H; cv.setAttribute("aria-hidden", "true");
   const box = o.size ?? G * s, inset = Math.round((box - G * s) / 2);
   cv.style.cssText = `position:absolute;left:${inset - px * s}px;top:${inset - pt * s}px;width:${W * s}px;height:${H * s}px;image-rendering:pixelated;pointer-events:none`;
-  if (getComputedStyle(el).position == "static") el.style.position = "relative";
+  // an inline position needs no computed one: reading it forces the whole page's style
+  if ((el.style.position || getComputedStyle(el).position) == "static") el.style.position = "relative";
   el.appendChild(cv);
   const ctx = cv.getContext("2d");
   const img = ctx?.createImageData(W, H), buf = img ? new Uint32Array(img.data.buffer) : new Uint32Array(W * H);

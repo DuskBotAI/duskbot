@@ -1,5 +1,6 @@
 // Updates a running managed home can't be broken by (shared/update-guard.ts). The newest release this service offers
-// (DUSK_MANAGED_HOME_RELEASE_FILE, read again when it changes, else the package it was started with) is installed only
+// (DUSK_MANAGED_HOME_RELEASE_FILE, read again when it changes, else the package it was started with; a release file that
+// lists cloud ids is offered to those clouds only, the rest keep the package the service started with) is installed only
 // when its signature verifies, it is newer than what the home runs, at or above the signed floor and not blocked, and
 // only while the home is idle: no turn, routine run, upload or backup. The home self-tests on the new version
 // (server/update-state.ts); a failed self-test, or the next two runs failing in a row, rolls it back to the version
@@ -13,7 +14,7 @@ import type { MachineImage, MachineProvider } from "./provider.ts";
 import { verifyRelease, type ReleaseKey } from "./release-signing.ts";
 
 /** a home package on offer: its signature names its version; an unsigned one (loopback and the e2e harness only) may say it */
-export interface HomeRelease { sha256: string; url?: string; file?: string; signature?: string; version?: string }
+export interface HomeRelease { sha256: string; url?: string; file?: string; signature?: string; version?: string; clouds?: readonly string[] }
 export interface HomeUpdateState { guard: UpdateRecord; refused: string | null; stuck: boolean; retryAt: number | null }
 
 /** how long a new version gets to answer and pass its self-test */
@@ -21,7 +22,8 @@ export const SELF_TEST_WAIT_MS = 5 * 60_000;
 const INSTALL_RETRY_MS = 60 * 60_000;
 const SHA256 = /^[a-f0-9]{64}$/;
 
-/** DUSK_MANAGED_HOME_RELEASE_FILE: `{ sha256, signature, url | file }`, read again whenever it changes */
+/** DUSK_MANAGED_HOME_RELEASE_FILE: `{ sha256, signature, url | file, clouds? }`, read again whenever it changes; `clouds`
+ * (cloud ids) limits the offer to those clouds, for a canary, and an empty or missing list offers it to every cloud */
 export function createReleaseFile(file: string | null | undefined): () => HomeRelease | null {
   let held: { mtime: number; value: HomeRelease | null } | null = null;
   return () => {
@@ -34,7 +36,8 @@ export function createReleaseFile(file: string | null | undefined): () => HomeRe
         const raw = JSON.parse(readFileSync(file, "utf8")) as Record<string, unknown>;
         if (typeof raw.sha256 === "string" && SHA256.test(raw.sha256) && (typeof raw.url === "string" || typeof raw.file === "string")) {
           value = { sha256: raw.sha256, ...(typeof raw.url === "string" ? { url: raw.url } : { file: raw.file as string }),
-            ...(typeof raw.signature === "string" ? { signature: raw.signature } : {}), ...(typeof raw.version === "string" ? { version: raw.version } : {}) };
+            ...(typeof raw.signature === "string" ? { signature: raw.signature } : {}), ...(typeof raw.version === "string" ? { version: raw.version } : {}),
+            ...(Array.isArray(raw.clouds) && raw.clouds.length ? { clouds: raw.clouds.filter((id): id is string => typeof id === "string") } : {}) };
         }
       } catch { value = held?.value ?? null; }
       held = { mtime, value };
@@ -42,6 +45,8 @@ export function createReleaseFile(file: string | null | undefined): () => HomeRe
     return held.value;
   };
 }
+
+export const offeredTo = (release: HomeRelease, cloudId: string) => !release.clouds?.length || release.clouds.includes(cloudId);
 
 export interface HomeUpdateDeps {
   provider: MachineProvider;
@@ -139,7 +144,7 @@ export function createHomeUpdates(deps: HomeUpdateDeps) {
       return true;
     }
     if (u.guard.trial || !x.busy) return false;
-    const pkg = deps.releases().find((p): p is HomeRelease => p !== null);
+    const pkg = deps.releases().find((p): p is HomeRelease => p !== null && offeredTo(p, c.id));
     if (!pkg || pkg.sha256 === c.managed.installed) return false;
     const version = versionOf(pkg), offer = version ? { version, sha256: pkg.sha256 } : null;
     const why = offer ? refusal(u.guard, offer) : "invalid";

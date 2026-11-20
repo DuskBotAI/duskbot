@@ -53,15 +53,22 @@ const ENTRY_POINTS = [
   "permission-proxy.ts",
   "connector-proxy.ts",
   "mcp-gate.ts",
+  "dry-run-mcp.ts",
+  "host-shell-mcp.ts",
   "mcp-remote-proxy.ts",
   "harness-mcp-proxy.ts",
   "drivers/agents-proxy.ts",
   "drivers/dweb-proxy.ts",
   "drivers/phone-proxy.ts",
+  // the built-in voice's ONNX Runtime, apart from the harness
+  "local-voice/voice-worker.ts",
   // the bot box (server/bot-box): the in-box bridge, the probe the self-check runs inside a box, and the check by hand
   "bot-box/box-bridge.ts",
   "bot-box/box-probe.ts",
   "bot-box/box-check.ts",
+  // background jobs (server/jobs): the notify helper and the Telegram watcher run as programs of their own
+  "jobs/dusk-notify.ts",
+  "jobs/telegram-watch.ts",
 ];
 
 /** The values of the env names shared/native-connectors.json lists, the ones this build's environment has. */

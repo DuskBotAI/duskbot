@@ -1,0 +1,90 @@
+{
+  "path": "/routines/calendly-booking-prep",
+  "type": "routine",
+  "title": "Prep for a Calendly booking with the invitee’s own answers",
+  "nav": "calendly booking prep",
+  "h1": "turn a calendly booking into an opening question",
+  "description": "Read the intake answer before an intro call. This Calendly routine brings the booked time, one thing to prepare and a useful opening question to your chat.",
+  "keyword": "calendly booking prep routine",
+  "keywords": [
+    "calendly meeting prep",
+    "calendly invitee answers",
+    "prepare for a booked call"
+  ],
+  "answer": "**skip the opening question your guest already answered when they booked.** before your first intro call, have a bot read the booking and the invitee details in calendly. you get their stated goal, something to bring and a question that takes the conversation one step further.",
+  "updated": "2026-11-20",
+  "review": {
+    "status": "approved",
+    "by": "lead agent, after four independent reviewers read every page against seo/facts (2026-11-20); every finding applied",
+    "at": "2026-11-20"
+  },
+  "voice": 2,
+  "tags": [
+    "meetings",
+    "calendly",
+    "intake"
+  ],
+  "connectors": [
+    "calendly"
+  ],
+  "related": [
+    "/integrations/calendly",
+    "/use-cases/client-onboarding",
+    "/routines/meeting-prep-brief"
+  ],
+  "art": {
+    "label": "Calendly",
+    "props": [
+      "s-notebook",
+      "s-clock"
+    ],
+    "bubble": "bring the sample"
+  },
+  "og_line": "start where the booking form left off.",
+  "routine": {
+    "message": "every day at 7 am local time, list my active calendly bookings from now until midnight. use only my one-on-one event type called \"intro call\".\n\nread the active invitee details for each booking. bring the time, name and stated reason for booking back to this chat. suggest one thing to bring and one opening question. if the invitee left no reason, say so and ask what they want to cover.\n\nskip cancelled bookings. never change a booking or contact a guest. stay quiet if the list loads and no intro calls qualify. if invitee details won't load, flag that beside the time.",
+    "when": "daily at 7 am in the host’s time zone, for intro calls still ahead today",
+    "needs": "calendly read only for your scheduled events and their invitees[^3]. use your own event type name in the message.",
+    "output": "10:30 am · iris bell · intro call\nbooking answer: wants to import a supplier list and keep the existing item codes.\nbring: a sample import with an item-code column.\nopen with: do any suppliers use the same code for different items?"
+  },
+  "knobs": [
+    "**pick the event by name.** use the exact booking type clients choose. leave office hours and group sessions out.",
+    "**keep the guest’s words.** ask for a short excerpt if a paraphrase loses the technical detail.",
+    "**move prep earlier.** for breakfast calls, schedule the routine the evening before and change the window to tomorrow."
+  ],
+  "fails": [
+    "**a guest appears twice after rescheduling.** read the current event and invitee status. keep only the active booking.",
+    "**the brief invents a job title.** omit job titles unless the invitee actually gave one. a company email address tells you too little."
+  ],
+  "sections": [
+    {
+      "h": "use the intake answer to choose what to bring",
+      "md": "**a specific request earns a specific prop.** if someone mentions item codes, bring a sample row with a code in it. leave the full product tour for another day.\n\nif guests only pick a time and never answer intake questions, the booking itself may be all the prep you need."
+    }
+  ],
+  "faq": [
+    {
+      "q": "what if a call lands after the morning run?",
+      "a": "**ask for that booking in chat.** the morning list reflects what calendly held at 7 am. a later booking needs a fresh read."
+    },
+    {
+      "q": "can i leave phone numbers out of the brief?",
+      "a": "**yes.** ask for the guest’s name, time and goal only. there is no reason to copy their contact details into the prep note."
+    }
+  ],
+  "sources": [
+    {
+      "label": "dusk bot docs: routines",
+      "url": "/docs/routines"
+    },
+    {
+      "label": "dusk bot docs: files and apps",
+      "url": "/docs/files-and-apps"
+    },
+    {
+      "label": "composio: calendly actions",
+      "url": "https://docs.composio.dev/toolkits/calendly",
+      "checked": "2026-11-20"
+    }
+  ]
+}

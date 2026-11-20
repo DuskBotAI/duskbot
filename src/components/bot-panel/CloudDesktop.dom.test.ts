@@ -91,7 +91,7 @@ describe("the cloud desktop row", () => {
     button("Move bots")!.click();
     await settle();
     expect(bridges.cloudSendPage.setKeepHere).toHaveBeenCalledWith(false);
-    expect(document.body.querySelector("[role='alertdialog']")).toBeNull();
+    expect([...document.body.querySelectorAll("[role='alertdialog']")].filter((el) => !el.closest("[data-leaving]")), "the confirm has closed").toEqual([]);
     expect(fixture.dispatch).not.toHaveBeenCalled();
   });
 

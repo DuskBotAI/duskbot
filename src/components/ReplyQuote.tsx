@@ -1,10 +1,11 @@
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 
 import { Reply, TextQuote, X } from "../icons";
 
 import { cn } from "@/lib/cn";
 import { peerLine } from "@/lib/peer-message";
-import { replyAuthor, replySnippet } from "@/lib/replies";
+import { useQuotedMessage } from "@/lib/quoted-messages";
+import { replyAuthor, replySnippet, replyThumbnail } from "@/lib/replies";
 import { splitSelectionQuote } from "@/lib/selection-quote";
 import { t } from "@/lib/i18n";
 import type { Message } from "@/state/store";
@@ -26,6 +27,7 @@ export function ReplyQuote({
   const body = (
     <>
       <Reply size={compact ? 14 : 15} strokeWidth={1.5} aria-hidden="true" className="shrink-0 rtl:-scale-x-100" />
+      <ReplyThumbnail message={message} />
       <span className="sr-only">{t("chat.reply.replyingTo", { name })}: </span>
       <span aria-hidden="true" className="shrink-0 font-medium text-ink">{name}</span>
       <span dir="auto" className="min-w-0 flex-1 truncate">{replySnippet(peerLine(message)?.body ?? message.text ?? "")}</span>
@@ -52,6 +54,31 @@ export function ReplyQuote({
   );
 }
 
+/** A sent reply's quote, found however far back the quoted message is from the rows this client holds. */
+export function ThreadReplyQuote({ threadId, replyToId, loaded, fallbackName, onJump }: {
+  threadId: string;
+  replyToId: string;
+  loaded: Message | undefined;
+  fallbackName?: string;
+  onJump: (target: Message) => void;
+}) {
+  const target = useQuotedMessage(threadId, replyToId, loaded);
+  if (!target) return null;
+  return (
+    <div className="mb-2">
+      <ReplyQuote message={target} fallbackName={fallbackName} compact onJump={() => onJump(target)} />
+    </div>
+  );
+}
+
+function ReplyThumbnail({ message }: { message: Message }) {
+  const thumbnail = replyThumbnail(message);
+  const [failed, setFailed] = useState<string | null>(null);
+  if (!thumbnail || failed === thumbnail) return null;
+  return <img src={thumbnail} alt="" data-reply-thumbnail="" loading="lazy" draggable={false} onError={() => setFailed(thumbnail)}
+    className="-my-0.5 size-6 shrink-0 rounded-md bg-inset object-cover" />;
+}
+
 export function ComposerReplyStrip({
   message,
   fallbackName,
@@ -72,6 +99,7 @@ export function ComposerReplyStrip({
       className="mb-1 flex min-w-0 items-center gap-2 rounded-2xl bg-ink/[0.06] py-1.5 ps-3 pe-1.5 text-[13px] leading-5 text-ink-secondary"
     >
       <Reply size={15} strokeWidth={1.5} aria-hidden="true" className="shrink-0 rtl:-scale-x-100" />
+      <ReplyThumbnail message={message} />
       <span className="sr-only">{who}: </span>
       <span dir="auto" className="min-w-0 flex-1 truncate">{excerpt}</span>
       {onClear && (

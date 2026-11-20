@@ -110,7 +110,7 @@ it("shows a second member himself, never the owner's server-wide profile, in his
 it("moves the server's profile to the member whose address it names when she signs in, and clears it", async () => {
   ada = (await team.pair(ADA)).token!;
   expect(await you(ada)).toEqual({ name: "Ada Lovelace", email: ADA.email, aboutMe: "I run Acme and like tea.", avatarUrl: ADA_PHOTO });
-  expect(serverProfile()).toEqual({ name: "", email: "", aboutMe: "", avatarUrl: "" });
+  expect(serverProfile()).toEqual({ name: "", email: "", aboutMe: "", avatarUrl: "", accountName: "" });
   expect(await you(bob)).toEqual({ name: "", email: BOB.email, aboutMe: "Bob does the books." });
   // A restart keeps hers and brings nothing back.
   await team.relaunch();
@@ -124,7 +124,7 @@ it("lets Bob's Settings → Profile change only Bob's, whichever route his app s
   expect(saved.status, JSON.stringify(saved.body)).toBe(200);
   expect(saved.body.profile).toEqual({ name: "Bob Builder", email: BOB.email, aboutMe: "Bob does the books.", avatarUrl: "/api/attachments/bob-photo.png" });
   expect(await you(ada)).toEqual({ name: "Ada Lovelace", email: ADA.email, aboutMe: "I run Acme and like tea.", avatarUrl: ADA_PHOTO });
-  expect(serverProfile()).toEqual({ name: "", email: "", aboutMe: "", avatarUrl: "" });
+  expect(serverProfile()).toEqual({ name: "", email: "", aboutMe: "", avatarUrl: "", accountName: "" });
   // The app's own route, with the About you beside it; what Ada's stream then gets is still hers.
   const adaFrames = await configFrames(ada, async () => {
     expect((await team.as(bob, "PUT", "/api/me", { name: "Bob Builder", aboutMe: "Bob does payroll." })).status).toBe(200);

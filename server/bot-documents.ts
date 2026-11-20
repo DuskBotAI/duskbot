@@ -39,6 +39,8 @@ function view(stored: StoredDocument): DocumentWithContent {
   };
 }
 
+export const MANUAL_REFUSAL = "This is the person's manual: you read it and follow it, and only they change it. Tell them what you would change and why; they edit it in your Files.";
+
 export class BotDocuments {
   private readonly dir: string;
   private readonly now: () => number;
@@ -97,7 +99,7 @@ export class BotDocuments {
     return stored ? view(stored) : null;
   }
 
-  create(botId: string, input: { title: unknown; kind: unknown; content: unknown }, by: DocumentAuthor): DocumentResult {
+  create(botId: string, input: { title: unknown; kind: unknown; content: unknown; manual?: boolean }, by: DocumentAuthor): DocumentResult {
     if (!this.folder(botId)) return fail(404, "No such bot.");
     const title = cleanTitle(input.title);
     if (!title) return fail(400, `title is a short name for the document, at most ${DOCUMENT_TITLE_MAX} characters.`);
@@ -110,7 +112,7 @@ export class BotDocuments {
     const content = input.content as string;
     const stored: StoredDocument = {
       id: `d_${randomBytes(6).toString("hex")}`, botId, title, kind, ...documentShape(kind, content),
-      createdAt: at, updatedAt: at, version: 1, by, content, history: [],
+      createdAt: at, updatedAt: at, version: 1, by, content, history: [], ...(input.manual === true ? { manual: true as const } : {}),
     };
     this.write(stored);
     return { ok: true, document: view(stored) };
@@ -121,6 +123,8 @@ export class BotDocuments {
   update(botId: string, id: string, change: { title?: unknown; content?: unknown; expectedVersion?: unknown }, by: DocumentAuthor): DocumentResult {
     const stored = this.read(botId, id);
     if (!stored) return fail(404, "No such document. list_documents shows the ones this bot keeps.");
+    // Security: a manual is the person's rules for the bot; a bot (or a page it read) must never rewrite them.
+    if (stored.manual && by !== "person") return fail(409, MANUAL_REFUSAL);
     if (typeof change.expectedVersion === "number" && change.expectedVersion !== stored.version) {
       return fail(409, "This document changed since it was opened.");
     }

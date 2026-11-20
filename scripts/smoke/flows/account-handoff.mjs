@@ -250,7 +250,7 @@ await runFlow(flow, async () => {
       if (await flow.evaluate(`[...document.querySelectorAll("[role=dialog]")].some((d) => d.getClientRects().length && !d.querySelector("[data-welcome]") && !d.matches("[data-welcome]") && !d.closest("[data-welcome]"))`)) { await flow.escape(); pressed.push("escape"); await sleep(1000); continue; }
       const did = await flow.evaluate(`(() => {
         const shown = (sel) => [...document.querySelectorAll(sel)].filter((e) => e.getClientRects().length && !e.disabled);
-        const mac = shown("[data-funnel-place=mac]")[0]; if (mac) { mac.click(); return "this mac"; }
+        const free = shown("[data-funnel-free]")[0]; if (free) { free.click(); return "free models"; }
         for (const word of ["start with the free model", "set up later", "skip", "continue", "not now", "done"]) { const b = shown("button").find((e) => e.innerText.trim().toLowerCase() === word); if (b) { b.click(); return word; } }
         return null; })()`).catch(() => null);
       if (did) pressed.push(did);

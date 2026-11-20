@@ -128,6 +128,28 @@ enum PhoneActionInbox {
     }
 }
 
+/// The Live Activity's close button: that thread's activity leaves the Lock Screen, the Dynamic Island and a paired Mac's
+/// menu bar now, without opening the app.
+struct CloseTurnActivityIntent: LiveActivityIntent {
+    static var title: LocalizedStringResource = "Close"
+    static var isDiscoverable = false
+
+    @Parameter(title: "Conversation") var threadId: String
+
+    init() {}
+
+    init(threadId: String) {
+        self.threadId = threadId
+    }
+
+    func perform() async throws -> some IntentResult {
+        for activity in Activity<DuskTurnAttributes>.activities where activity.attributes.threadId == threadId {
+            await activity.end(nil, dismissalPolicy: .immediate)
+        }
+        return .result()
+    }
+}
+
 /// Approve on the Live Activity. Runs in the app (a LiveActivityIntent does), after Face ID, and opens the chat.
 struct ApproveAskIntent: LiveActivityIntent {
     static var title: LocalizedStringResource = "Approve"

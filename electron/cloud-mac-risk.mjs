@@ -8,6 +8,32 @@
 export const CLOUD_MAC_MODES = Object.freeze(["auto", "ask", "never"]);
 export const isCloudMacMode = (value) => CLOUD_MAC_MODES.includes(value);
 const READS = new Set(["mac_read_file", "mac_list"]);
+/** The computer-control driver's tools that only look at the screen (a mac_screen job's `name`). */
+export const SCREEN_READS = Object.freeze(["list_apps", "list_windows", "get_window_state", "get_accessibility_tree", "get_desktop_state",
+  "get_screen_size", "get_cursor_position", "verify_state"]);
+const SCREEN_RISKS = { kill_app: "stops other programs", clipboard_read: "reads the clipboard, which can hold passwords" };
+/** Screen actions that click, type or press keys in a window: in a sensitive app they ask first. */
+export const SCREEN_INPUTS = Object.freeze(["click", "double_click", "right_click", "drag", "type_text", "press_key", "hotkey", "set_value", "invoke_menu"]);
+/** Apps that run commands, change the system or hold passwords, by name or bundle id. */
+const SENSITIVE_APP = /\b(terminal|iterm2?|ghostty|warp|alacritty|kitty|wezterm|hyper|tabby|script ?editor\d?|scripteditor2?|automator|shortcuts|system ?(settings|preferences)|systempreferences|keychain ?access|keychainaccess|disk ?utility|diskutility|1password|bitwarden|lastpass|dashlane|keepassxc?|enpass|keeper|passwords|powershell|pwsh|cmd(\.exe)?|command prompt|windows ?terminal|windowsterminal|regedit)\b/i;
+export const sensitiveApp = (value) => typeof value === "string" && SENSITIVE_APP.test(value);
+/** Web browsers, the Chromium dusk bot drives included, by name or bundle id: what they show is the web. dusk bot's own
+ * window is not one. */
+const BROWSER_APP = /\b(safari|google chrome|chrome|chromium|arc|firefox|microsoft edge|edge|brave( browser)?|opera|vivaldi|orion|zen|com\.apple\.safari|com\.google\.chrome|company\.thebrowser|org\.mozilla\.firefox|com\.microsoft\.edgemac|com\.brave\.browser)\b/i;
+export const browserApp = (value) => typeof value === "string" && BROWSER_APP.test(value);
+/** Screen reads that return what a window shows. */
+export const SCREEN_PAGE_READS = Object.freeze(["get_window_state", "get_accessibility_tree", "get_desktop_state", "verify_state"]);
+
+/** Whether this screen read brought in outside content: a browser window's page, the whole desktop, or a window the Mac
+ * could not name. `target` as in screenRisk. */
+export function screenReadOutside(name, target) {
+  if (!SCREEN_PAGE_READS.includes(name)) return false;
+  if (name === "get_desktop_state") return true;
+  return !target || target.app === null || browserApp(target.app);
+}
+const SENSITIVE_REASON = "works in an app that can run commands, change the system or hold passwords";
+/** Outside content read earlier in the turn (a page, an email, a message): its instructions may be steering the bot. */
+export const OUTSIDE_REASON = "follows content from outside (a web page, an email or a message) read in this turn";
 /** The reason "Ask before every action" gives for an action no rule calls risky. */
 export const EVERY_ACTION = "asks before every action";
 
@@ -27,6 +53,8 @@ const COMMAND_RULES = [
   [/(^|[\s;&|(`])(open\s+)?[^\s;&|]*Downloads\/[^\s;&|]*\.(pkg|mpkg|command|tool|sh)\b/, "runs a downloaded installer or script"],
   [/(^|[\s;&|(`])(kill|killall|pkill)(\s|$)/, "stops other programs"],
   [/\bsecurity\s+(find-(generic|internet)-password|dump-keychain|export|unlock-keychain)\b|Keychains\//, "reads saved passwords"],
+  [/(^|[\s;&|(`])security\s+[a-z]/, "uses the keychain"],
+  [/Login[\\\s_]*Data|Cookies|Web[\\\s_]*Data|Local[\\\s_]*State|key4\.db|logins\.json|cookies\.sqlite|Keychain|\.keychain(-db)?\b|1Password|Bitwarden/i, "reads saved passwords or cookies"],
   [/(~|\$HOME|\$\{HOME\}|\/Users\/[^/\s]+)\/\.(ssh|aws|gnupg|kube|docker\/config\.json|netrc|npmrc|pypirc|config\/gh)\b|\bid_(rsa|ed25519|ecdsa|dsa)\b|(^|[\s/'"])\.env(\.\w+)?(\s|$|['"])/, "reads keys or secrets"],
   [/\bgh\s+auth\s+token\b|\b(gcloud|aws)\s+(auth\s+print-access-token|configure\s+get)/, "reads keys or secrets"],
   [/\bgit\s+push\b[^;&|]*(\s--force(-with-lease)?\b|\s-f\b|\s\+\S|\s--delete\b|\s--mirror\b)/, "rewrites or deletes history on a remote"],
@@ -82,6 +110,7 @@ export function macActionRisk(tool, args, home) {
       return commandRisk(a.command);
     case "mac_read_file":
     case "mac_list":
+    case "mac_send_file":
       return SECRET_PATH.test(expand(a.path ?? "~", home)) ? "reads keys or secrets" : null;
     case "mac_write_file":
       return writeRisk(expand(a.path, home), home);
@@ -96,18 +125,35 @@ export function macActionRisk(tool, args, home) {
         if (scheme !== "https:" && scheme !== "http:" && scheme !== "mailto:") return "opens a link that starts another app or a setting";
         return PAYMENT.test(target) ? "opens a payment or checkout page" : null;
       }
-      if (/^(Terminal|iTerm|Script Editor|Automator|System (Settings|Preferences)|Keychain Access|Disk Utility)$/i.test(String(a.app ?? target))) return "opens a tool that can change the system";
+      if (sensitiveApp(String(a.app ?? target))) return "opens a tool that can change the system";
       return OPENS_CODE.test(target) && /[/.]/.test(target) ? "opens an installer, app or script" : null;
     }
+    case "mac_screen":
+      return screenRisk(a);
     default:
       return "is not a known Mac action";
   }
 }
 
+/** `target`: the app the Mac found behind an input action's pid ({ app: null } when it could not name one); only the
+ * Mac knows it, so the cloud's own check skips it and the Mac asks for a card when it matters. */
+function screenRisk({ name, arguments: call, target }) {
+  if (Object.hasOwn(SCREEN_RISKS, name)) return SCREEN_RISKS[name];
+  const args = call && typeof call === "object" ? call : {};
+  if (name === "launch_app") return Object.values(args).flat().some(sensitiveApp) ? SENSITIVE_REASON : null;
+  if (!SCREEN_INPUTS.includes(name) || !target) return null;
+  if (target.app === null) return "acts on a window this Mac could not name";
+  return sensitiveApp(target.app) ? SENSITIVE_REASON : null;
+}
+
+/** Ordinary looks: they never need a card for following outside content. */
+export const isMacRead = (tool, args) => READS.has(tool) || (tool === "mac_screen" && SCREEN_READS.includes(args?.name));
+const isRead = isMacRead;
+
 /** Whether this action needs the person's Allow first in `mode`; null when it may run, else the reason to show. */
 export function macApprovalReason(mode, tool, args, home) {
   if (mode === "never") return null;
   const risk = macActionRisk(tool, args, home);
-  if (mode === "ask") return READS.has(tool) && !risk ? null : risk ?? EVERY_ACTION;
+  if (mode === "ask") return isRead(tool, args) && !risk ? null : risk ?? EVERY_ACTION;
   return risk;
 }

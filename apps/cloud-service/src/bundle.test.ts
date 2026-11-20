@@ -13,6 +13,7 @@ const volume = (prefix: string, extra: Array<{ name: string; data: string }> = [
   { name: `${prefix}.openmausbot/mcp-oauth.json`, data: "{\"token\":\"secret\"}" },
   { name: `${prefix}.openmausbot/agent-browser-profiles/b1/Default/Cookies`, data: "cookie" },
   { name: `${prefix}.openmausbot/dashboard-link.json`, data: "{}" },
+  { name: `${prefix}.openmausbot/phone-relay.json`, data: "{}" },
   { name: `${prefix}.openmausbot/tmp/x`, data: "scratch" },
   { name: `${prefix}.claude/.credentials.json`, data: "engine" },
   ...extra,
@@ -24,7 +25,7 @@ it("sorts a volume into the layers of home-data.md and hashes every file", () =>
     expect(m.files.map(f => [f.path, f.layer])).toEqual(expect.arrayContaining([
       [".omb-cloud-home.json", "marker"], [".openmausbot/bots.json", "identity"], [".openmausbot/messages.db", "chats"], [".openmausbot/workspaces/b1/MEMORY.md", "memory"],
       [".openmausbot/routines.json", "routines"], [".openmausbot/mcp-oauth.json", "credentials"], [".openmausbot/agent-browser-profiles/b1/Default/Cookies", "browser"],
-      [".openmausbot/dashboard-link.json", "machine"], [".openmausbot/tmp/x", "disposable"], [".claude/.credentials.json", "engines"],
+      [".openmausbot/dashboard-link.json", "machine"], [".openmausbot/phone-relay.json", "machine"], [".openmausbot/tmp/x", "disposable"], [".claude/.credentials.json", "engines"],
     ]));
     expect(m.layers.browser).toEqual({ files: 1, bytes: 6 });
     expect(m.files.every(f => /^[a-f0-9]{64}$/.test(f.sha256))).toBe(true);

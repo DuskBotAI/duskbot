@@ -58,9 +58,9 @@ yes, between your computer, a cloud and a server, with their chats, memory and r
 
 ## the project
 
-### is dusk bot open source?
+### where does dusk bot come from?
 
-no. it's source-available under the polyform noncommercial license: free for personal and other noncommercial use, and you can change it and pass it on for noncommercial purposes as long as the license and its required notice go with it. work use needs a separate license. see the [license](/license).
+it's a fork of [openmausbot](https://github.com/milind-soni/OpenMausBot) by milind soni and its contributors, built on a lot since. the code is public and source-available under the polyform noncommercial license: free for personal and other noncommercial use, and you can change it and pass it on for noncommercial purposes as long as the license and its required notice go with it. work use needs a separate license. see the [license](/license).
 
 ### how do i report a security problem?
 

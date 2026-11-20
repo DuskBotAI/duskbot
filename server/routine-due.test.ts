@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { nextDueOf, schedulerDueOf, wakeHoldOf } from "./routine-due.ts";
+import { enabledHereOf, nextDueOf, schedulerDueOf, wakeHoldOf } from "./routine-due.ts";
 
 const MINUTE = 60_000;
 const NOW = Date.UTC(2026, 9, 24, 9, 0);
@@ -73,5 +73,18 @@ describe("schedulerDueOf: when this process's scheduler next has work", () => {
     expect(schedulerDueOf([], [run({ startedAt: NOW - 10 * MINUTE, timeoutMinutes: 30 })], NOW, NOW)).toBe(NOW + 20 * MINUTE);
     expect(schedulerDueOf([], [run({ status: "waiting", startedAt: NOW - 10 * MINUTE, waitedMs: 5 * MINUTE, timeoutMinutes: 30 })], NOW, NOW)).toBe(NOW + 25 * MINUTE);
     expect(schedulerDueOf([], [run({ startedAt: NOW - 40 * MINUTE, timeoutMinutes: 30 })], NOW, NOW)).toBe(NOW);
+  });
+});
+
+describe("enabledHereOf: the routines the desktop's keep-awake while plugged in waits on", () => {
+  it("counts enabled routines on this machine, not paused, held or cloud ones", () => {
+    expect(enabledHereOf([])).toBe(0);
+    expect(enabledHereOf([
+      { enabled: true, runOn: "maus" },
+      { enabled: true, runOn: "maus" },
+      { enabled: false, runOn: "maus" },
+      { enabled: true, runOn: "cloud" },
+      { enabled: true, runOn: "maus", heldFor: "limit" as never },
+    ])).toBe(2);
   });
 });

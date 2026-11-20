@@ -205,6 +205,46 @@ posixOnly("who may answer a card on a shared workspace", () => {
     expect((await decision(requestId, "user-approved"))?.actor).toMatchObject({ kind: "session", email: ADA });
   }, 90_000);
 
+  it("lets only the member a hand-off acts for, or an admin, answer its card in the teammate's own chat", async () => {
+    const opener = await makeBot("Hander");
+    const helper = await makeBot("Own chat");
+    // each hand-off comes from a live turn of Ada's request to the opener, which holds on its own card
+    const handOff = async (title: string) => {
+      const source = await cardFrom(opener, opener.threadId, ADA);
+      const minted = await fetch(`${BASE}/api/testing/internal-capability`, {
+        method: "POST", headers: { "content-type": "application/json", "x-dusk-test-capability": CAPABILITY_KEY },
+        body: JSON.stringify({ botId: opener.id, threadId: opener.threadId }),
+      });
+      const { token } = await minted.json() as { token: string };
+      const sent = await fetch(`${BASE}/api/internal/threads`, {
+        method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
+        body: JSON.stringify({ toBotId: helper.id, title, message: `${title}: run it` }),
+      });
+      const body = await sent.json() as { receipts: Array<{ threadId: string }> };
+      expect(sent.status, JSON.stringify(body)).toBe(200);
+      expect(body.receipts[0]!.threadId, "the work lands in the teammate's own chat").toBe(helper.threadId);
+      expect((await api("POST", `/api/threads/${opener.threadId}/respond`, { requestId: source, behavior: "allow" }, ADA)).status).toBe(200);
+    };
+    const asked = async () => (await openCard(helper.threadId)).card.requestId as string;
+    const respond = (requestId: string, as: string) => api("POST", `/api/threads/${helper.threadId}/respond`, { requestId, behavior: "allow" }, as);
+
+    await handOff("First job");
+    const first = await asked();
+    const refused = await respond(first, BOB);
+    expect(refused.status).toBe(403);
+    expect(refused.body.error).toMatch(refusal);
+    expect((await respond(first, BOSS)).status).toBe(200);
+    expect((await decision(first, "user-approved"))?.actor).toMatchObject({ kind: "session", email: BOSS });
+
+    // an admin's answer in that chat does not open the next card to everyone
+    await handOff("Second job");
+    const second = await asked();
+    expect(second).not.toBe(first);
+    expect((await respond(second, BOB)).status).toBe(403);
+    expect((await respond(second, ADA)).status).toBe(200);
+    expect((await decision(second, "user-approved"))?.actor).toMatchObject({ kind: "session", email: ADA });
+  }, 120_000);
+
   it("lets only who may answer in a member's chat answer the copy of a run's card there", async () => {
     const bot = await makeBot("Reported");
     const task = await api("POST", `/api/bots/${bot.id}/tasks`, { title: "Bob's chat" }, BOB);

@@ -115,3 +115,23 @@ describe("the deeper usage answer", () => {
     expect(row("app_place")).toMatchObject({ reached: 1, medianMs: 2000 });
   });
 });
+
+describe("tool failures", () => {
+  it("counts turns, calls and people per tool and class, with bad arguments last, next to turns from older workspaces", async () => {
+    const store = memoryUsageStore(() => NOW);
+    const usage = createUsage({ store, now: () => NOW, optedOut: () => false });
+    const clicked = { toolFailures: [{ tool: "computer.click", error: "timeout" as const, count: 2 }, { tool: "computer.click", error: "schema_invalid" as const, count: 5 }] };
+    await usage.ingest("acct_a", "ws_1", { turns: [turn({ tools: ["computer"], ...clicked }), turn({ tools: ["computer"], ...clicked }), turn({ tools: ["browser"], failedTools: ["browser"] })], runs: [] });
+    await usage.ingest("acct_b", "ws_2", { turns: [turn({ tools: ["browser"], toolFailures: [{ tool: "browser.navigate", error: "bot_wall", count: 1 }] })], runs: [] });
+    await usage.ingest("acct_c", "ws_3", { turns: [turn({ tools: ["computer"], toolFailures: [{ tool: "computer.click", error: "timeout", count: 1 }] })], runs: [] });
+    const days = [dayOf(NOW)], daily = new Map((await store.daily(days[0]!, days[0]!)).map(row => [row.day, row.c]));
+    const m = moreOf({ days, daily, people: await store.people(days[0]!, days[0]!), snapshots: [], routines: [], from: NOW - DAY, to: NOW + DAY, now: NOW, accounts: [], events: [],
+      billing: { checkouts: [], subscriptions: [], feedback: [] } });
+    expect(m.reliability.toolFailures).toEqual([
+      { tool: "computer.click", error: "timeout", turns: 3, calls: 5, people: 2 },
+      { tool: "browser.navigate", error: "bot_wall", turns: 1, calls: 1, people: 1 },
+      { tool: "computer.click", error: "schema_invalid", turns: 2, calls: 10, people: 1 },
+    ]);
+    expect(m.reliability.toolErrors.find(row => row.kind === "tool" && row.key === "browser")).toMatchObject({ errors: 1 });
+  });
+});

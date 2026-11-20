@@ -137,7 +137,11 @@ export class ProviderAuthSessions {
     flow.busy = true;
     try {
       let done: void | { location?: string };
-      try { done = await flow.instance.completeAuthentication(flowId, callbackUrl); } catch (error) { this.tell(instanceId, flowId, "failed", error); throw error; }
+      try { done = await flow.instance.completeAuthentication(flowId, callbackUrl); } catch (error) {
+        // a paste turned away before use (400) leaves the sign-in open for another
+        if ((error as { status?: number }).status !== 400) this.tell(instanceId, flowId, "failed", error);
+        throw error;
+      }
       if (this.flows.get(instanceId) === flow) this.flows.delete(instanceId);
       this.signedIn(instanceId);
       this.tell(instanceId, flowId, "succeeded");

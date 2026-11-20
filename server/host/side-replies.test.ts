@@ -17,10 +17,11 @@ const toolStart = (title: string, input: unknown, id = title) =>
   event({ type: "item.started", itemType: "tool", itemId: id, title, input: JSON.stringify(input), step: toolStep({ title, input: JSON.stringify(input) }) });
 
 const decision = (kind: string, reply: string) => JSON.stringify({ kind, reply });
+const said = (text: string) => event({ type: "item.completed", itemType: "assistant_text", itemId: `t${Math.random()}`, text });
 
 /** A fake engine turn: running until stopped or completed, taking steers only while `steers` is on. */
-function setup(options: { reply?: string | (() => Promise<string>); steers?: boolean; steerOutcome?: SteerOutcome; writer?: boolean; checklist?: Checklist | null; timeoutMs?: number } = {}) {
-  const turn = { running: true, steered: [] as string[], queued: [] as string[], stopped: 0, redirected: [] as string[] };
+function setup(options: { reply?: string | (() => Promise<string>); steers?: boolean; steerOutcome?: SteerOutcome; writer?: boolean; checklist?: Checklist | null; timeoutMs?: number; pauses?: boolean; fresh?: boolean; now?: () => number } = {}) {
+  const turn = { running: true, steered: [] as string[], queued: [] as string[], stopped: 0, redirected: [] as string[], paused: [] as string[] };
   const posts: string[] = [];
   const prompts: string[] = [];
   const fallbacks: string[] = [];
@@ -50,8 +51,15 @@ function setup(options: { reply?: string | (() => Promise<string>); steers?: boo
     redirect: async (_request, prompt) => { turn.redirected.push(prompt); turn.running = false; },
     post: (_threadId, text) => { posts.push(text); },
     fallback: async (request) => { fallbacks.push(request.text); },
+    ...(options.pauses ? { pause: async (_request: SideRequest, prompt: string) => { turn.paused.push(prompt); turn.running = false; } } : {}),
     timeoutMs: options.timeoutMs,
+    ...(options.now ? { now: options.now } : {}),
   });
+  // a turn that has already said something, unless the test is about one that just started
+  if (!options.fresh) {
+    replies.onEvent(event({ type: "turn.started" }));
+    replies.onEvent(said("On it, comparing fares now."));
+  }
   let n = 0;
   const send = (text: string) => {
     const id = `p${++n}`;
@@ -171,6 +179,100 @@ describe("side reply routing", () => {
     expect(turn.stopped).toBe(0);
   });
 
+  it("takes a separate new ask on beside the running task, which keeps going", async () => {
+    const { turn, posts, send } = setup({ reply: decision("task", "Sure, I'll find a hotel in Panjim too while the flights search runs.") });
+    expect(await send("also find me a hotel in Panjim for those dates")).toBe("added");
+    expect(turn).toMatchObject({ running: true, stopped: 0, redirected: [], queued: [] });
+    expect(turn.steered).toHaveLength(1);
+    expect(turn.steered[0]).toContain("Person: also find me a hotel in Panjim for those dates");
+    expect(turn.steered[0]).toContain("separate new task");
+    expect(turn.steered[0]).toContain("which ask it finishes");
+    expect(posts).toEqual(["Sure, I'll find a hotel in Panjim too while the flights search runs."]);
+  });
+
+  it("queues a separate ask first for the next turn when the engine cannot take it now, saying it starts after", async () => {
+    const { turn, send, prompts } = setup({ steers: false, reply: decision("task", "Sure, I'll make the deck as soon as the flights are done.") });
+    expect(await send("and make me a 3 slide deck about our pet food brand")).toBe("added-next");
+    expect(turn.steered).toEqual([]);
+    expect(turn.queued).toHaveLength(1);
+    expect(turn.queued[0]).toContain("separate task");
+    expect(turn.running).toBe(true);
+    expect(prompts[0]).toContain("It starts as soon as the task in progress is done");
+  });
+
+  it("tells the next responder which separate asks the task has taken on, so a third ask or a question sees both", async () => {
+    let calls = 0;
+    const { replies, send, prompts, turn } = setup({ reply: async () => (++calls === 1 ? decision("task", "Sure, hotels too.") : decision("answer", "Both are still running.")) });
+    replies.onEvent(event({ type: "turn.started" }));
+    replies.onEvent(said("On it."));
+    expect(await send("also find me a hotel in Panjim")).toBe("added");
+    expect(await send("how is it going?")).toBe("answered");
+    expect(prompts[1]).toContain("Also asked during this task, being done alongside it:\n- also find me a hotel in Panjim");
+    expect(prompts[0]).not.toContain("Also asked during this task");
+    expect(prompts[0]).toContain("You do it alongside the task in progress");
+    expect(turn.running).toBe(true);
+  });
+
+  it("never lets a new request read as a question, nor as a redirect unless the task is dropped", () => {
+    const prompt = sideReplyPrompt({ name: "Pepper", task: { ask: "x", minutes: 2, steps: [], said: [] }, recent: [], message: "what's the weather in Goa?", notesNow: true });
+    expect(prompt).toContain("Never pick answer for a request to find, make, check or do something, or for a question about something outside this task that needs looking up");
+    expect(prompt).toContain("A new request that does not drop the task is task, not redirect.");
+    expect(parseSideDecision('{"kind":"task","reply":"Sure, on it alongside."}')).toEqual({ kind: "task", reply: "Sure, on it alongside." });
+  });
+
+  it("pauses a turn whose engine cannot take input mid-turn so a correction reaches the work now, not after the task", async () => {
+    const { turn, posts, send, prompts } = setup({ steers: false, pauses: true, reply: decision("steer", "Got it, direct flights only.") });
+    expect(await send("only direct flights please")).toBe("paused");
+    expect(turn.paused).toHaveLength(1);
+    expect(turn.paused[0]).toContain("Person: only direct flights please");
+    expect(turn.paused[0]).toContain("carry on with what is left of it");
+    expect(turn.queued).toEqual([]);
+    expect(posts).toEqual(["Got it, direct flights only."]);
+    expect(prompts[0]).toContain("It reaches the work right away.");
+  });
+
+  it("pauses such a turn for a separate ask too, so both are worked on now", async () => {
+    const { turn, send, prompts } = setup({ steers: false, pauses: true, reply: decision("task", "Sure, hotels too, alongside the flights.") });
+    expect(await send("also find me a hotel in Panjim")).toBe("paused");
+    expect(turn.paused[0]).toContain("separate task");
+    expect(prompts[0]).toContain("You do it alongside the task in progress");
+  });
+
+  it("folds a burst into the turn it just started: no quick reply and no responder call, one answer for both", async () => {
+    const { turn, posts, send, writer } = setup({ fresh: true });
+    expect(await send("find me cheap flights to Goa")).toBe("folded");
+    expect(writer).not.toHaveBeenCalled();
+    expect(posts).toEqual([]);
+    expect(turn.steered).toHaveLength(1);
+    expect(turn.steered[0]).toContain("Person: find me cheap flights to Goa");
+    expect(turn.steered[0]).toContain("right after their message before it, \"find me the three cheapest flights to Goa next week\"");
+    expect(turn.steered[0]).toContain("answer them together, once");
+  });
+
+  it("folds a burst on an engine that cannot steer by pausing the silent turn and running both together", async () => {
+    const { turn, posts, send } = setup({ fresh: true, steers: false, pauses: true });
+    expect(await send("find me cheap flights to Goa")).toBe("folded");
+    expect(posts).toEqual([]);
+    expect(turn.paused).toHaveLength(1);
+    expect(turn.paused[0]).toContain("answer them together, once");
+  });
+
+  it("does not fold into a turn that has worked a while, even a silent one", async () => {
+    let at = 1_000_000;
+    const { replies, send, writer } = setup({ fresh: true, now: () => at });
+    replies.onEvent(event({ type: "turn.started" }));
+    at += 31_000;
+    expect(await send("are you doing this yourself?")).toBe("answered");
+    expect(writer).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not fold into a turn that has started a step", async () => {
+    const { replies, send } = setup({ fresh: true });
+    replies.onEvent(event({ type: "turn.started" }));
+    replies.onEvent(toolStart("WebSearch", { query: "Goa flights" }));
+    expect(await send("are you doing this yourself?")).toBe("answered");
+  });
+
   it("redirects: queues the new ask first and stops the running turn", async () => {
     const { turn, posts, send } = setup({ reply: decision("redirect", "Sure, switching to trains instead.") });
     expect(await send("drop the flights, look at trains instead")).toBe("redirected");
@@ -221,6 +323,7 @@ describe("side reply routing", () => {
   it("writes one reply per message, and nothing more when the main turn finishes", async () => {
     const { replies, posts, send, turn } = setup();
     replies.onEvent(event({ type: "turn.started" }));
+    replies.onEvent(said("On it."));
     await send("are you doing this yourself?");
     replies.onEvent(event({ type: "item.completed", itemType: "assistant_text", text: "Here are the three cheapest flights." }));
     replies.onEvent(event({ type: "turn.completed", ok: true }));

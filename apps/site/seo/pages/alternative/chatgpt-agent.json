@@ -12,7 +12,7 @@
     "openai operator alternative"
   ],
   "answer": "**try work before you leave chatgpt over agent mode.** as of 12 november 2026, openai says agent is no longer available.[^1] work handles longer, multi-step tasks and finished deliverables instead. it can also run locally through the desktop app. dusk suits you if separate bots, their own memory and different ai choices matter more than staying inside chatgpt.",
-  "updated": "2026-11-12",
+  "updated": "2026-11-20",
   "review": {
     "status": "approved",
     "by": "lead agent: independent reviewer pass against seo/facts (4 reviewers), every finding applied, automated gate",
@@ -127,7 +127,7 @@
         "label": "phone access",
         "cells": [
           "ios and android, plus web access",
-          "pair an iphone or android; browser version today, store apps on the way"
+          "pair the iphone app from the app store or use the browser on android until the google play release"
         ],
         "src": [
           3,

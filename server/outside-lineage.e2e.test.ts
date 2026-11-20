@@ -381,7 +381,11 @@ describe("a Team Cloud", () => {
     const sendId = () => `outside-skill-${randomBytes(8).toString("hex")}`;
     expect((await team.as(ada, "POST", `/api/bots/${scout.id}/messages`, { text: "person-skill please run /weekly-digest now", threadId: person, sendId: sendId() })).status).toBe(202);
     expect(JSON.stringify((await turnWith("person-skill")).prompt)).toContain(RAN);
-    expect((await internal(scout.id, person, "/api/internal/coordinate-bots", { botIds: [mate.id], message: "/weekly-digest brief-skill, then /weekly-digest again", reply: "none" })).status).toBe(200);
+    // passing the person's own ask on is sent back once (34ff48ebdc); the second try goes through
+    const brief = { botIds: [mate.id], message: "/weekly-digest brief-skill, then /weekly-digest again", reply: "none" };
+    expect((await internal(scout.id, person, "/api/internal/coordinate-bots", brief)).status).toBe(409);
+    const handed = await internal(scout.id, person, "/api/internal/coordinate-bots", brief);
+    expect(handed.status, JSON.stringify(handed.body)).toBe(200);
     expect(JSON.stringify((await turnWith("brief-skill")).prompt)).not.toContain(RAN);
     await finish(scout.id, mate.id);
     const relayedIn = (await team.as(ada, "POST", `/api/bots/${scout.id}/tasks`, { title: "Relayed" })).body.task.threadId as string;

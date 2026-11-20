@@ -9,7 +9,7 @@ describe("toolDetailPreview", () => {
     expect(preview).toContain("echo hello");
     expect(preview).toContain("hello");
     for (const secret of ["short", "session=private", "Bearer secret", "private-base64"]) expect(preview).not.toContain(secret);
-    expect(preview).toContain("[redacted]");
+    expect(preview).toMatch(/«redacted \d+ chars»/);
     expect(preview).toContain("[binary content omitted]");
   });
   it("redacts before shortening and bounds recursive or oversized payloads", () => {

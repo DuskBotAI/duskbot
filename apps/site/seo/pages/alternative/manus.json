@@ -14,7 +14,7 @@
     "manus ai vs claude"
   ],
   "answer": "**need a finished deck, or a bot that knows next week's job?** manus bundles cloud tasks, models and credits. dusk keeps ongoing bots on the ai you choose, with your provider billing usage.[^1][^2][^3]\n\nas of 12 november 2026, manus is independent again after the meta deal unwound. old meta-owned descriptions miss the second half.[^10]",
-  "updated": "2026-11-12",
+  "updated": "2026-11-20",
   "review": {
     "status": "approved",
     "by": "lead agent: read against seo/facts, automated gate, independent fact-check pass",
@@ -138,7 +138,7 @@
         "label": "getting into chat",
         "cells": [
           "web without installing; desktop and phone apps, slack, telegram",
-          "desktop app and phone browser paired to your computer or cloud"
+          "desktop app; iphone app or android browser paired to your computer or cloud"
         ],
         "src": [
           7,

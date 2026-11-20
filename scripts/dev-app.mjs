@@ -15,6 +15,8 @@ const env = { ...process.env, DUSK_DEV_OWN_SERVER: "1", ELECTRON_START_URL: proc
 // it never blocks on the sign-in gate. DUSK_CLOUD_ORIGIN or DUSK_CLOUD_STAGING given by hand win.
 if (!env.DUSK_CLOUD_ORIGIN && env.DUSK_CLOUD_STAGING !== "1") env.DUSK_CLOUD_ORIGIN = "https://preview.dusk.bot";
 env.DUSK_ALLOW_SIGNED_OUT ??= "1";
+// the dev app pairs phones like the packaged app: typed codes go through the default relay
+env.DUSK_MOBILE_RELAY ??= "default";
 // the dev app reports its usage to preview (tagged +dev), so the owner's own testing shows in the admin; DUSK_ANALYTICS=0 stops it
 if (env.DUSK_CLOUD_ORIGIN === "https://preview.dusk.bot") env.DUSK_ANALYTICS ??= "1";
 delete env.ELECTRON_RUN_AS_NODE;

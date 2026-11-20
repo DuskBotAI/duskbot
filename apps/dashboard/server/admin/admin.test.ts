@@ -281,6 +281,50 @@ describe("admin panel api", () => {
     expect((await (await call("/v1/admin/revenue?mode=all", { cookie: admin })).json() as { customers: unknown[] }).customers).toHaveLength(1);
     expect(app.auth.accountByEmail("smoke@example.com")).toBeTruthy();
   });
+  it("keeps harness events off the events page and counts only app activity as using the app", async () => {
+    const admin = await login(ADMIN);
+    await login("pat.real@gmail.com");
+    const pat = app.auth.accountByEmail("pat.real@gmail.com")!.id;
+    const hide = { "x-dusk-admin-tests": "" };
+    for (let i = 0; i < 6; i++) await sink.insert({ id: `qa${i}`, name: "app_open", at: time - 1000 + i, accountId: null, props: { kind: "desktop" }, ctx: { install: `app:qatest_${i}` } });
+    await sink.insert({ id: "real1", name: "app_open", at: time - 5000, accountId: pat, props: { kind: "desktop" }, ctx: { install: "app:real" } });
+    const events = await (await call("/v1/admin/events?name=app_open&limit=3", { cookie: admin, headers: hide })).json() as { events: Array<{ id: string }> };
+    expect(events.events.map(event => event.id)).toEqual(["real1"]);
+    const shown = await (await call("/v1/admin/events?name=app_open&limit=3", { cookie: admin })).json() as { events: Array<{ id: string }> };
+    expect(shown.events).toHaveLength(3);
+    const overview = await (await call("/v1/admin/overview?days=7", { cookie: admin, headers: hide })).json() as { totals: { appWau: number } };
+    expect(overview.totals.appWau).toBe(1);
+    expect(overview.totals).not.toHaveProperty("wau");
+  });
+  it("says when a read hit its event limit, and starts the experience chart at the first whole day it holds", async () => {
+    const admin = await login(ADMIN);
+    sink.scanLimit = 3;
+    for (let d = 0; d < 5; d++) await sink.insert({ id: `open${d}`, name: "app_open", at: time - d * DAY, accountId: null, props: { kind: "desktop" }, ctx: { install: "app:real1" } });
+    const cut = time - 2 * DAY;
+    const experience = await (await call(`/v1/admin/experience?from=${time - 10 * DAY}&to=${time}`, { cookie: admin })).json() as { partialBefore: number | null; days: string[] };
+    expect(experience.partialBefore).toBe(cut);
+    expect(experience.days[0]).toBe("2026-11-11");
+    const sharing = await (await call("/v1/admin/ops/sharing", { cookie: admin })).json() as { partialBefore: number | null };
+    expect(sharing.partialBefore).toBe(cut);
+    sink.scanLimit = 100;
+    const whole = await (await call(`/v1/admin/experience?from=${time - 10 * DAY}&to=${time + 1}`, { cookie: admin })).json() as { partialBefore: number | null; days: string[] };
+    expect(whole.partialBefore).toBeNull();
+    expect(whole.days[0]).toBe("2026-11-02");
+  });
+  it("keeps active today to the filtered people, and says how many accounts turned analytics off", async () => {
+    const admin = await login(ADMIN);
+    await login("smoke@example.com");
+    await login("pat.real@gmail.com");
+    await login("sam.real@gmail.com");
+    app.analytics.setOptOut(app.auth.accountByEmail("sam.real@gmail.com")!.id, true);
+    const hide = { "x-dusk-admin-tests": "" };
+    const overview = await (await call("/v1/admin/overview?days=7", { cookie: admin, headers: hide })).json() as { totals: { accounts: number; activeToday: number; untracked: number | null } };
+    expect(overview.totals).toMatchObject({ accounts: 2, activeToday: 2, untracked: 1 });
+    const events = await (await call("/v1/admin/events", { cookie: admin, headers: hide })).json() as { untracked: number | null };
+    expect(events.untracked).toBe(1);
+    const shown = await (await call("/v1/admin/overview?days=7", { cookie: admin })).json() as { totals: { activeToday: number } };
+    expect(shown.totals.activeToday).toBe(4);
+  });
   it("exports the waitlist as CSV with formula cells neutralised, and audits the export", async () => {
     const admin = await login(ADMIN);
     const res = await call("/v1/admin/waitlist.csv", { cookie: admin });

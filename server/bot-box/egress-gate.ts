@@ -6,7 +6,7 @@ import { createServer, request as httpRequest, type ClientRequest, type Incoming
 import { connect, type Socket } from "node:net";
 import type { Duplex } from "node:stream";
 
-import { resolveTarget, type ResolvedAddress } from "../browser/egress/gate.ts";
+import { FAMILY_ATTEMPT_MS, resolveTarget, type ResolvedAddress } from "../browser/egress/gate.ts";
 import { refusalFor, type EgressRules } from "../browser/egress/policy.ts";
 
 export interface EgressGateOptions {
@@ -68,6 +68,8 @@ export function openBoxEgressGate(options: EgressGateOptions): Promise<BoxEgress
   };
   const pinnedLookup = (addresses: ResolvedAddress[]) => (_host: string, lookupOptions: { all?: boolean }, callback: (...args: any[]) => void) =>
     lookupOptions.all ? callback(null, addresses) : callback(null, addresses[0]!.address, addresses[0]!.family);
+  const dial = (target: { host: string; port: number }, addresses: ResolvedAddress[]): Socket =>
+    connect({ host: target.host, port: target.port, autoSelectFamily: true, autoSelectFamilyAttemptTimeout: FAMILY_ATTEMPT_MS, lookup: pinnedLookup(addresses) as never });
 
   const server: Server = createServer(async (req: IncomingMessage, res: ServerResponse) => {
     track(req.socket);
@@ -88,7 +90,7 @@ export function openBoxEgressGate(options: EgressGateOptions): Promise<BoxEgress
     for (const [name, value] of Object.entries(req.headers)) if (value !== undefined && !HOP_BY_HOP.has(name)) headers[name] = value;
     const upstream = track(httpRequest({
       host: target.host, port: target.port, method: req.method, path: `${url.pathname}${url.search}`, headers,
-      lookup: pinnedLookup(verdict.addresses) as never,
+      createConnection: () => dial(target, verdict.addresses),
     }, (answer) => {
       res.writeHead(answer.statusCode ?? 502, answer.headers);
       answer.pipe(res);
@@ -105,7 +107,7 @@ export function openBoxEgressGate(options: EgressGateOptions): Promise<BoxEgress
     if (client.destroyed) return;
     if ("refused" in verdict) { client.end(`HTTP/1.1 403 Forbidden\r\nX-Dusk-Blocked: ${verdict.refused}\r\nConnection: close\r\n\r\n`); return; }
     if ("unresolved" in verdict) { client.end("HTTP/1.1 502 Bad Gateway\r\nConnection: close\r\n\r\n"); return; }
-    const upstream = track(connect({ host: target.host, port: target.port, autoSelectFamily: true, lookup: pinnedLookup(verdict.addresses) as never }));
+    const upstream = track(dial(target, verdict.addresses));
     let connected = false;
     upstream.once("connect", () => {
       connected = true;

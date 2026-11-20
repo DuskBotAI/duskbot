@@ -4,7 +4,7 @@ import { ChevronDown, ChevronUp, Search, SquarePen } from "../../icons";
 import { cn } from "@/lib/cn";
 import { llmThreadTitlesEnabled } from "@/lib/feature-flags";
 import { activeLocale, t } from "@/lib/i18n";
-import { SIDEBAR_INLINE, useMediaQuery } from "@/lib/use-media-query";
+import { usePhoneLayout } from "@/lib/use-media-query";
 import { api, currentTaskBot, openBotThread, useStore, visibleMessages, type Bot, type Message } from "@/state/store";
 import { lastLine } from "../sidebar-preview";
 import { isArchived, orderedThreadList, SidebarThreadRow, stampClock, threadRecency, threadRowActions, useRelativeNow } from "../SidebarThreadRow";
@@ -56,7 +56,7 @@ export function forgetConversationLines(): void {
 export function BotConversations({ bot }: { bot: Bot }) {
   const { state, dispatch } = useStore();
   const now = useRelativeNow();
-  const phone = !useMediaQuery(SIDEBAR_INLINE, true);
+  const phone = usePhoneLayout();
   const [query, setQuery] = useState("");
   const [searching, setSearching] = useState(false);
   const [expanded, setExpanded] = useState(false);

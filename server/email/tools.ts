@@ -28,7 +28,8 @@ export const EMAIL_TOOLS = [
     { account: ACCOUNT, mailbox: MAILBOX, uid: { type: "integer", minimum: 1 }, save_attachments: { type: "boolean" } }, ["uid"], READ),
   tool("EMAIL_SEND_MESSAGE", "Send a message from the person's own address, with a copy in its Sent folder. reply_to_uid answers a message in the same mailbox so it threads.",
     { account: ACCOUNT, to: ADDRESSES("Who it goes to."), cc: ADDRESSES("Copy."), bcc: ADDRESSES("Blind copy."), subject: { type: "string", maxLength: 500, pattern: "^[^\\r\\n]*$" }, text: { type: "string", minLength: 1, maxLength: 200_000 },
-      mailbox: MAILBOX, reply_to_uid: { type: "integer", minimum: 1 } }, ["to", "subject", "text"], { readOnlyHint: false, destructiveHint: true, openWorldHint: true }),
+      mailbox: MAILBOX, reply_to_uid: { type: "integer", minimum: 1 },
+      attachments: { type: "array", maxItems: 5, items: { type: "string", maxLength: 1024 }, description: "Paths of files you made: list_documents with export_as gives one." } }, ["to", "subject", "text"], { readOnlyHint: false, destructiveHint: true, openWorldHint: true }),
 ] as const;
 
 export type EmailTool = (typeof EMAIL_TOOLS)[number];

@@ -8,6 +8,7 @@ import { compileToolSchema, schemaProblems } from "../mcp-schema-validator.ts";
 export const MAC_EXEC_DEFAULT_SECONDS = 120;
 export const MAC_EXEC_MAX_SECONDS = 600;
 export const MAC_WRITE_MAX_CHARS = 1_000_000;
+export const MAC_SEND_MAX_BYTES = 8 * 1024 * 1024;
 
 const PATH = (description: string) => ({ type: "string", minLength: 1, maxLength: 2048, description });
 
@@ -55,6 +56,9 @@ const tools: MacTool[] = [
     url: { type: "string", minLength: 8, maxLength: 4096, pattern: "^https?://", description: "The https (or http) link." },
     to: PATH("Where on the Mac: a folder (ending in /) or a file path; ~ starts at the home folder. Default ~/Downloads/."),
   }, ["url"]),
+  tool("mac_send_file", `Bring a file from the Mac into your own files, any kind (a PDF, a photo, a document), up to ${MAC_SEND_MAX_BYTES / 1024 / 1024} MB. Returns where it was saved; attach it to send it to the person in this chat.`, {
+    path: PATH("File path on the Mac; ~ and relative paths start at the home folder."),
+  }, ["path"]),
 ];
 
 
@@ -81,11 +85,12 @@ export function macJobTimeoutMs(name: MacToolName, args: Record<string, unknown>
     const seconds = typeof args.timeoutSeconds === "number" ? args.timeoutSeconds : MAC_EXEC_DEFAULT_SECONDS;
     return (seconds + 30) * 1000;
   }
-  return name === "mac_save_from_cloud" || name === "mac_download" ? 10 * 60_000 : 60_000;
+  return name === "mac_save_from_cloud" || name === "mac_download" || name === "mac_send_file" ? 10 * 60_000 : 60_000;
 }
 
 export interface MacToolResult {
   content: Array<{ type: "text"; text: string } | { type: "image"; data: string; mimeType: string }>;
+  structuredContent?: Record<string, unknown>;
   isError?: boolean;
 }
 

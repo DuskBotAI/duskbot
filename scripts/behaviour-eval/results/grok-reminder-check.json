@@ -1,0 +1,209 @@
+{
+  "label": "grok-reminder-check",
+  "at": "2026-11-19T23:53:53.018Z",
+  "judge": "gpt-6.1-terra",
+  "summary": {
+    "grok-3-mini": {
+      "act+deliver": "1.7/2",
+      "no-false-done": "0/0",
+      "stop": "0/0",
+      "vibe": "0/0",
+      "help": "0/2",
+      "all": "1.7/4",
+      "runs": "3"
+    }
+  },
+  "results": [
+    {
+      "model": "grok-3-mini",
+      "run": 1,
+      "id": "routine-weekday",
+      "cluster": "routines",
+      "check": "act",
+      "pass": true,
+      "why": "The bot called the automation tool and stated it would run on weekdays at 8:00 AM India time.",
+      "tools": [
+        "agents_find_tool",
+        "use_tool:trigger_info",
+        "use_tool:trigger"
+      ],
+      "state": "idle",
+      "ms": 43918,
+      "output": "Done. Set up the weekday 8am routine in this chat, India time. First run today at 8:00 AM."
+    },
+    {
+      "model": "grok-3-mini",
+      "run": 1,
+      "id": "reminder-and-note",
+      "cluster": "routines",
+      "check": "act",
+      "pass": false,
+      "why": "The reply confirms the reminder but does not confirm that Dr. Rao was saved as the user's dentist.",
+      "tools": [
+        "agents_find_tool",
+        "agents_memory_update",
+        "use_tool:trigger"
+      ],
+      "state": "idle",
+      "ms": 31398,
+      "output": "Reminder set for tomorrow at 9:00 AM India time to call Dr. Rao. It will appear here in this chat."
+    },
+    {
+      "model": "grok-3-mini",
+      "run": 1,
+      "id": "help-gift",
+      "cluster": "shopping",
+      "check": "help",
+      "pass": false,
+      "why": "The ideas lack individual rough prices, so they do not meet the required format.",
+      "tools": [],
+      "state": "idle",
+      "ms": 10624,
+      "output": "Here are a few good hiking gifts under $50:\n\n- Merino wool hiking socks (Darn Tough or similar) for all-day comfort and durability.\n- A compact headlamp with red light mode for early starts or night hikes.\n- A sturdy stainless steel water bottle or a lightweight packable rain jacket.\n\nAny of those sound right, or want options in a specific category?"
+    },
+    {
+      "model": "grok-3-mini",
+      "run": 1,
+      "id": "help-standup",
+      "cluster": "routines",
+      "check": "help",
+      "pass": false,
+      "why": "The reminder was confirmed, but the reply omitted the required offer to make it a weekday reminder.",
+      "tools": [
+        "agents_find_tool",
+        "use_tool:trigger"
+      ],
+      "state": "idle",
+      "ms": 21561,
+      "output": "Reminder set for 9:45 AM India time today. It will ping you here to post your standup notes."
+    },
+    {
+      "model": "grok-3-mini",
+      "run": 2,
+      "id": "routine-weekday",
+      "cluster": "routines",
+      "check": "act",
+      "pass": true,
+      "why": "The bot invoked the automation tool and confirmed a weekday 8:00 AM schedule.",
+      "tools": [
+        "agents_find_tool",
+        "use_tool:trigger",
+        "use_tool:trigger_info",
+        "use_tool:trigger"
+      ],
+      "state": "idle",
+      "ms": 46743,
+      "output": "Set up the weekday 8am automation. It will send the short list of your top 3 priorities here in this chat, India time. First run today at 8:00 AM."
+    },
+    {
+      "model": "grok-3-mini",
+      "run": 2,
+      "id": "reminder-and-note",
+      "cluster": "routines",
+      "check": "act",
+      "pass": true,
+      "why": "The bot used the reminder and memory tools and confirmed both the 9:00 AM reminder and Dr. Rao's name.",
+      "tools": [
+        "agents_find_tool",
+        "use_tool:trigger",
+        "agents_memory_update"
+      ],
+      "state": "idle",
+      "ms": 31642,
+      "output": "Setting the reminder to call the dentist and noting Dr. Rao.\n---\nReminder set for tomorrow at 9:00 AM India time. It will remind you here to call the dentist, and I've noted Dr. Rao as your dentist."
+    },
+    {
+      "model": "grok-3-mini",
+      "run": 2,
+      "id": "help-gift",
+      "cluster": "shopping",
+      "check": "help",
+      "pass": false,
+      "why": "It gives four gift ideas but omits rough prices and does not present each pick on its own line.",
+      "tools": [],
+      "state": "idle",
+      "ms": 9182,
+      "output": "A good hiking gift under $50 could be a sturdy water bottle like a 32oz Hydro Flask, or merino wool hiking socks for comfort on trails. \n\nA headlamp with multiple modes or a lightweight neck gaiter for sun and bugs also works well. \n\nWant ideas for a specific budget or any other details about her?"
+    },
+    {
+      "model": "grok-3-mini",
+      "run": 2,
+      "id": "help-standup",
+      "cluster": "routines",
+      "check": "help",
+      "pass": false,
+      "why": "The confirmation omitted the required offer to make it a weekday reminder.",
+      "tools": [
+        "agents_find_tool",
+        "use_tool:trigger"
+      ],
+      "state": "idle",
+      "ms": 22303,
+      "output": "Reminder set for 9:45 AM India time today. It will appear here in this chat."
+    },
+    {
+      "model": "grok-3-mini",
+      "run": 3,
+      "id": "routine-weekday",
+      "cluster": "routines",
+      "check": "act",
+      "pass": true,
+      "why": "The bot called the automation tool and stated that it would run every weekday at 8 a.m. India time.",
+      "tools": [
+        "agents_find_tool",
+        "use_tool:trigger",
+        "use_tool:trigger"
+      ],
+      "state": "idle",
+      "ms": 29690,
+      "output": "Done. Every weekday at 8am India time you'll get the short list of your top 3 priorities here in this chat. First run is today at 8:00 AM."
+    },
+    {
+      "model": "grok-3-mini",
+      "run": 3,
+      "id": "reminder-and-note",
+      "cluster": "routines",
+      "check": "act",
+      "pass": true,
+      "why": "The bot used memory and automation tools and confirmed both the reminder and Dr. Rao’s name.",
+      "tools": [
+        "agents_find_tool",
+        "agents_memory_update",
+        "use_tool:trigger"
+      ],
+      "state": "idle",
+      "ms": 26692,
+      "output": "Reminder set for tomorrow at 9am India time. It will come here in this chat. Got it, Dr. Rao is your dentist."
+    },
+    {
+      "model": "grok-3-mini",
+      "run": 3,
+      "id": "help-gift",
+      "cluster": "shopping",
+      "check": "help",
+      "pass": false,
+      "why": "It gives three relevant ideas but omits rough prices, individual explanations, and one-idea-per-line formatting.",
+      "tools": [],
+      "state": "idle",
+      "ms": 10330,
+      "output": "A headlamp, merino wool socks, or a compact dry bag all make solid hiking gifts and stay well under $50. \n\nAny of those sound good, or want options in a different direction?"
+    },
+    {
+      "model": "grok-3-mini",
+      "run": 3,
+      "id": "help-standup",
+      "cluster": "routines",
+      "check": "help",
+      "pass": false,
+      "why": "The confirmation omitted the required offer to make it a weekday reminder.",
+      "tools": [
+        "agents_find_tool",
+        "use_tool:trigger",
+        "agents_send_message"
+      ],
+      "state": "idle",
+      "ms": 23129,
+      "output": "Reminder set for 9:45 AM India time today. It will appear here.\n---\nReminder set for 9:45 AM India time today. It will appear here."
+    }
+  ]
+}

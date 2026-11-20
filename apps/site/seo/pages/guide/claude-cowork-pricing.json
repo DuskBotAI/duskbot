@@ -1,17 +1,25 @@
 {
   "path": "/guides/claude-cowork-pricing",
   "type": "guide",
-  "title": "Claude Cowork pricing: plans, limits and the rename",
+  "title": "Claude pricing plans for Cowork: Pro, Max, Ultra and Team",
   "nav": "claude cowork pricing",
-  "h1": "claude cowork pricing: what are you paying for?",
-  "description": "Compare Claude Free, Pro, Max and Ultra prices, see where Cowork is included, and separate the plan price from usage and other services.",
+  "h1": "which claude pricing plans include cowork, and what do they cost?",
+  "description": "Cowork starts with Claude Pro at $20 a month before tax. Compare monthly and annual pricing, Team seat costs and what the higher plans buy.",
   "keyword": "claude cowork pricing",
   "keywords": [
     "claude cowork use cases",
-    "what can claude cowork do"
+    "what can claude cowork do",
+    "claude pricing",
+    "claude pricing plans",
+    "claude cowork pricing",
+    "is claude cowork free",
+    "claude cowork pro plan",
+    "how much is claude",
+    "claude subscription pricing",
+    "claude business pricing"
   ],
-  "answer": "**cowork comes with paid claude plans; it isn't another add-on to buy.** as of 12 november 2026, monthly prices before tax are $20 for pro, $100 for max and $200 for ultra. free excludes cowork. anthropic now describes cowork and chat as one claude, so the older name may appear less often.[^1][^2][^3]",
-  "updated": "2026-11-12",
+  "answer": "**cowork comes with every paid claude plan, starting with pro at $20 a month before tax.** the free plan leaves cowork out. as of 12 november 2026, max costs $100 and ultra costs $200 on monthly billing. team and enterprise also include cowork. if you already pay for one of those plans, there's no separate cowork charge.[^1][^2]",
+  "updated": "2026-11-20",
   "review": {
     "status": "approved",
     "by": "lead agent: independent reviewer pass against seo/facts (4 reviewers), every finding applied, automated gate",
@@ -132,6 +140,10 @@
     {
       "q": "do i pay extra because cowork is becoming claude?",
       "a": "**the new name adds no separate cowork charge.** anthropic describes cowork and chat as one claude; access remains through paid plans.[^1][^3]"
+    },
+    {
+      "q": "does a standard claude team seat include cowork?",
+      "a": "**yes. both standard and premium team seats include cowork.** as of 12 november 2026, team pricing starts at $25 per seat on monthly billing, or $20 per seat per month billed annually.[^1][^2]"
     }
   ],
   "sources": [

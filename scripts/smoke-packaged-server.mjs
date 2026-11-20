@@ -3,13 +3,14 @@
 // walking up to ./node_modules.
 import { execFile, spawn } from "node:child_process";
 import assert from "node:assert/strict";
-import { cpSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
-import { dirname, isAbsolute, join, resolve } from "node:path";
+import { delimiter, dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs, promisify } from "node:util";
 import { browserBundlePaths, browserBundleSpec } from "../server/browser-bundle-release.ts";
+import { REAL_ENGINES } from "../server/engine-guard.ts";
 import { pdfFixture } from "../server/testing/pdf-fixture.ts";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -65,8 +66,11 @@ try {
   throw error;
 }
 
+const pathWithoutEngines = (path) => path.split(delimiter).filter((folder) => folder && ![...REAL_ENGINES].some((name) =>
+  ["", ".exe", ".cmd"].some((ext) => existsSync(join(folder, name + ext))))).join(delimiter);
 const fixtureEnv = {
-  ...(process.env.PATH ? { PATH: process.env.PATH } : {}),
+  ...(process.env.PATH ? { PATH: pathWithoutEngines(process.env.PATH) } : {}),
+  DUSK_TEST_SEALED_PATH: "1",
   ...(process.env.SystemRoot ? { SystemRoot: process.env.SystemRoot } : {}),
   HOME: home,
   USERPROFILE: home,

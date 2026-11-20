@@ -114,18 +114,18 @@ export function introChips(input: IntroFacts): IntroChip[] {
   ];
 }
 
-export type IntroAsk = "inbox" | "inboxNow" | "day" | "today" | "week";
+export type IntroAsk = "inboxSummary" | "today" | "week" | "price" | "research";
 
 const MAIL = new Set(["gmail", "outlook"]), CALENDAR = new Set(["googlecalendar", "outlook"]);
 
-/** The three first jobs offered under Dusk's look around, fitted to what is connected (app slugs): a connected inbox or
- * calendar gets a job it can do now, otherwise the job that sets it up. The week needs nothing connected. */
+/** The three first jobs on Dusk's starter card, each one real job one bot can finish in the first chat: a connected inbox
+ * or calendar first, then jobs that need nothing connected. */
 export function introAsks(apps: readonly string[]): IntroAsk[] {
   return [
-    apps.some((app) => CALENDAR.has(app)) ? "today" : "day",
-    apps.some((app) => MAIL.has(app)) ? "inboxNow" : "inbox",
-    "week",
-  ];
+    ...(apps.some((app) => MAIL.has(app)) ? ["inboxSummary" as const] : []),
+    ...(apps.some((app) => CALENDAR.has(app)) ? ["today" as const] : []),
+    "week" as const, "price" as const, "research" as const,
+  ].slice(0, 3);
 }
 
 /** The first jobs show while any AI answers, OpenCode's free backup included (most new people start on it); none while

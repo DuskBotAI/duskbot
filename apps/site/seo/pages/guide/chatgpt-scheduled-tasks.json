@@ -1,19 +1,25 @@
 {
   "path": "/guides/chatgpt-scheduled-tasks",
   "type": "guide",
-  "title": "ChatGPT scheduled tasks: current limits and 25 ideas",
+  "title": "ChatGPT scheduled tasks: limits by plan and 25 ideas",
   "nav": "chatgpt scheduled tasks",
-  "h1": "chatgpt scheduled tasks: 25 ideas you might keep",
-  "description": "Find the current ChatGPT task limit for each plan, understand event triggers and timing, and choose from 25 small prompts to adapt.",
+  "h1": "chatgpt scheduled tasks: how many can you run on each plan?",
+  "description": "Find your ChatGPT task limit, see which plans support exact times or app events, and pick from 25 scheduled task ideas for work, study and home.",
   "keyword": "chatgpt scheduled tasks",
   "keywords": [
     "chatgpt scheduled tasks ideas",
     "chatgpt scheduled tasks limit",
     "chatgpt scheduled tasks not working",
-    "chatgpt scheduled tasks alternative"
+    "chatgpt scheduled tasks alternative",
+    "chatgpt scheduled tasks",
+    "chatgpt tasks",
+    "chatgpt task limit",
+    "scheduled tasks chatgpt",
+    "gpt scheduled tasks",
+    "chatgpt schedules"
   ],
-  "answer": "**wake up to a useful nudge instead of another reminder you ignore.** as of 12 november 2026, chatgpt supports one-time schedules, repeat jobs, change monitoring and supported events. plans allow three to fifteen active tasks. free tasks run at most once a day, in a flexible window. exact times and hourly schedules need a paid plan. choose a result worth reading.",
-  "updated": "2026-11-12",
+  "answer": "**chatgpt allows 3 active scheduled tasks on free or go and 5 on plus. business and edu allow 10 each, pro and enterprise 15 each.** those are openai's limits as of 12 november 2026. on free, each task can run once a day in a flexible window. hourly schedules and exact times need a paid plan.[^1]",
+  "updated": "2026-11-20",
   "review": {
     "status": "approved",
     "by": "lead agent: independent reviewer pass against seo/facts (4 reviewers), every finding applied, automated gate",
@@ -73,6 +79,10 @@
     {
       "q": "does the free plan support chatgpt scheduled tasks?",
       "a": "**yes, with flexible daily timing.** as of 12 november 2026, free allows three active tasks, at most once daily. exact times and hourly schedules need payment. free and go lack event triggers.[^1]"
+    },
+    {
+      "q": "can i schedule a chatgpt task from a shared link?",
+      "a": "**a shared link won't schedule a task that runs only on your computer.** open scheduled in your own account to manage your tasks. if the desktop app doesn't show it, use chatgpt on the web.[^1]"
     }
   ],
   "sources": [

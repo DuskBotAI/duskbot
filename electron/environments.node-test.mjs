@@ -429,7 +429,7 @@ test("once My Cloud is home the switcher lists whole places only: My Cloud first
     { id: "l", kind: "local", name: "Lab", dataDir: "/lab" }], activeId: "c" };
   const switched = [], forgot = [];
   const items = env.workspaceMenuTemplate(state, { onSwitch: (id) => switched.push(id), onConnect() {}, onForget: (id) => forgot.push(id), onAddCloud() {}, places: "x", copyToCloud: { label: "Send" }, homeOrigin: home });
-  assert.deepEqual(items.map((item) => [item.label, item.checked]), [["dusk cloud", true], ["Office", false], [undefined, undefined], ["Add dusk cloud…", undefined]]);
+  assert.deepEqual(items.map((item) => [item.label, item.checked]), [["dusk cloud", true], ["Office", false]]);
   items[1].click();
   assert.deepEqual(switched, ["o"]);
   const away = env.workspaceMenuTemplate({ ...state, activeId: "o" }, { onSwitch() {}, onConnect() {}, onForget: (id) => forgot.push(id), homeOrigin: home });
@@ -539,4 +539,10 @@ test("a pasted link to this app's own server is told apart from an SSH tunnel to
   assert.equal(env.isThisAppsServer("http://localhost:8799", 8799), true);
   assert.equal(env.isThisAppsServer("http://127.0.0.1:8790", 8799), false);
   assert.equal(env.isThisAppsServer("https://bots.company.com:8799", 8799), false);
+});
+
+test("a person who already has dusk cloud is never offered Add dusk cloud…", () => {
+  const state = { environments: [{ id: "cloud", name: "My Cloud", origin: "https://dusk-u-1.fly.dev" }], activeId: "local" };
+  const items = env.workspaceMenuTemplate(state, { onSwitch() {}, onConnect() {}, onForget() {}, onAddCloud() {}, myCloudId: "cloud" });
+  assert.equal(items.some(item => item.id === "workspace-add-cloud"), false);
 });

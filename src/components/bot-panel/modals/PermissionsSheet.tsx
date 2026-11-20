@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { AnimatePresence } from "motion/react";
 
 import { approvalModeOptionsFor, approvalModeSelectionRequiresLocalDesktop, shownApprovalMode } from "@/lib/approval-mode-options";
 import { t } from "@/lib/i18n";
@@ -140,7 +141,7 @@ function Sending({ bot, fullAccess, onChange }: { bot: Bot; fullAccess: boolean;
           onClick={() => setEditing(true)}
         />
       )}
-      {editing && <DailyCapDialog cap={policy.dailyCap} onClose={() => setEditing(false)} onSave={(dailyCap) => { onChange({ policy: policy.policy, dailyCap }); setEditing(false); }} />}
+      <AnimatePresence>{editing && <DailyCapDialog key="daily-cap-dialog" cap={policy.dailyCap} onClose={() => setEditing(false)} onSave={(dailyCap) => { onChange({ policy: policy.policy, dailyCap }); setEditing(false); }} />}</AnimatePresence>
     </Card>
   );
 }

@@ -8,12 +8,13 @@ import { appEventCatalog, appLabel } from "./app-event-catalog.ts";
 import { brokerClient, type AppTriggerBroker, type BrokerAccess } from "./app-trigger-broker.ts";
 import { AppTriggerRequestService, type AppTriggerRequestStore } from "./app-trigger-requests.ts";
 import { AppTriggerError, AppTriggerManager, type AppTriggerPatch } from "./app-triggers.ts";
-import type { RosterMember } from "./peer-roster.ts";
+import { canManage, type RosterMember } from "./peer-roster.ts";
 import type { RequestAuth } from "./request-auth.ts";
 import type { RoutineManager } from "./routines.ts";
 import { PASS, type RouteContext, type RouteHandler } from "./routes/table.ts";
+import { routineUsageReport, type UsageReportInput } from "./routine-usage-report.ts";
 import { listTriggers, triggerTarget } from "./trigger-tools.ts";
-import { addressFor } from "./webhook-address.ts";
+import { addressFor, addressRefusal, routineAddress } from "./webhook-address.ts";
 import type { WebhookManager } from "./webhooks.ts";
 
 type Bot = RosterMember & {
@@ -39,6 +40,10 @@ export interface AppTriggerHostDeps {
   emit: (frame: Record<string, unknown>) => void;
   audit: (row: { threadId: string; requestId: string; botId: string; botName: string; tool: string; summary: string }) => void;
   broker?: AppTriggerBroker;
+  /** Every bot, for the usage a bot may report: its own and those it manages. */
+  bots?: () => readonly Bot[];
+  /** Each automation's runs and use over 7 and 30 days, from the usage ledger. */
+  routineUsage?: () => UsageReportInput["rows"];
 }
 
 export interface InternalTriggerContext {
@@ -163,8 +168,24 @@ export function createAppTriggerHost(deps: AppTriggerHostDeps) {
 
   /** The bot's side: trigger_info list and events, for the bot whose turn holds the capability. */
   const internalRoutes = (context: InternalTriggerContext): RouteHandler => async ({ res, url, path, method, json }: RouteContext) => {
-    if (method !== "GET" || (path !== "/api/internal/triggers" && path !== "/api/internal/trigger-events")) return PASS;
+    if (method !== "GET" || (path !== "/api/internal/triggers" && path !== "/api/internal/trigger-events" && path !== "/api/internal/trigger-usage")) return PASS;
     if (!context.ownsThread(context.from.id, context.threadId)) return json(res, 403, { error: "source conversation does not belong to sender" });
+    if (path === "/api/internal/trigger-usage") {
+      if (context.guestDriven || context.outsideDriven()) return json(res, 403, { error: "Only the person's own conversation reads what automations used. Tell them to ask there." });
+      const bots = new Map([context.from, ...(deps.bots?.() ?? []).filter((bot) => bot.id !== context.from.id && canManage(context.from, bot))].map((bot) => [bot.id, bot.name]));
+      const routines = deps.routines().listRoutines().filter((routine) => bots.has(routine.botId));
+      const hooks = deps.webhooks.list().filter((hook) => bots.has(hook.botId));
+      return json(res, 200, routineUsageReport({
+        rows: deps.routineUsage?.() ?? [],
+        bots,
+        automations: [
+          ...routines.map((routine) => ({ id: routine.id, name: routine.name, kind: "schedule" as const, ...(routine.schedule.type === "interval" ? { everyMinutes: routine.schedule.everyMinutes } : {}) })),
+          ...hooks.filter((hook) => !hook.routineId).map((hook) => ({ id: hook.id, name: hook.name, kind: "webhook" as const })),
+          ...manager.list().filter((trigger) => bots.has(trigger.botId)).map((trigger) => ({ id: trigger.id, name: trigger.name, kind: "app_event" as const })),
+        ],
+        runsRoutine: new Map(hooks.filter((hook) => hook.routineId).map((hook) => [hook.id, hook.routineId!])),
+      }));
+    }
     if (path === "/api/internal/trigger-events") {
       if (context.guestDriven) return json(res, 403, { error: GUEST_REFUSAL });
       try {
@@ -182,10 +203,22 @@ export function createAppTriggerHost(deps: AppTriggerHostDeps) {
     });
     const shown = listing.trigger;
     if (url.searchParams.get("includeAddress") !== "1" || !shown) return json(res, 200, listing);
-    if (shown.kind !== "webhook") return json(res, 200, { ...listing, trigger: { ...shown, addressRefused: "Only an automation another app sends to (a webhook) has an address." } });
+    if (shown.kind === "app_event") return json(res, 200, { ...listing, trigger: { ...shown, addressRefused: "An app-event automation has no address; a webhook or a routine does." } });
     const owner = deps.store.bot(ownerId);
-    const address = owner ? addressFor({ from: context.from, owner, guestDriven: context.guestDriven, outsideDriven: context.outsideDriven() }, deps.webhooks, shown.id, deps.webhookBase()) : {};
-    return json(res, 200, { ...listing, trigger: { ...shown, ...address } });
+    if (!owner) return json(res, 200, listing);
+    const ask = { from: context.from, owner, guestDriven: context.guestDriven, outsideDriven: context.outsideDriven() };
+    if (shown.kind === "schedule") {
+      const refused = addressRefusal(ask);
+      if (refused) return json(res, 200, { ...listing, trigger: { ...shown, addressRefused: refused } });
+      let hookId: string;
+      try {
+        hookId = routineAddress(deps.webhooks, shown.id, ownerId, shown.name);
+      } catch (error) {
+        return json(res, status(error), { error: error instanceof Error ? error.message : String(error) });
+      }
+      return json(res, 200, { ...listing, trigger: { ...shown, ...addressFor(ask, deps.webhooks, hookId, deps.webhookBase()) } });
+    }
+    return json(res, 200, { ...listing, trigger: { ...shown, ...addressFor(ask, deps.webhooks, shown.id, deps.webhookBase()) } });
   };
 
   /** trigger create (when=app_event) and every change to one: applies at once and leaves the receipt card. */

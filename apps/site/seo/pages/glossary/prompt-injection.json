@@ -1,0 +1,77 @@
+{
+  "path": "/glossary/prompt-injection",
+  "type": "glossary",
+  "title": "What is prompt injection? When an email tries to give orders",
+  "nav": "prompt injection",
+  "h1": "what is prompt injection?",
+  "description": "Recognize when outside text tries to redirect an AI agent. Follow a delivery-email example and see how read-only access and send approvals limit the damage.",
+  "keyword": "prompt injection",
+  "keywords": [
+    "what is prompt injection",
+    "indirect prompt injection in ai agents"
+  ],
+  "answer": "**prompt injection happens when someone puts instructions into text an ai reads to steer it away from your task.** an email you asked it to summarize can tell it to do something else. if the bot mistakes that request for yours, it might give a false answer or act with your permissions.",
+  "updated": "2026-11-20",
+  "review": {
+    "status": "approved",
+    "by": "lead agent, after four independent reviewers read every page against seo/facts (2026-11-20); every finding applied",
+    "at": "2026-11-20"
+  },
+  "tags": [
+    "security",
+    "permissions",
+    "approvals",
+    "glossary"
+  ],
+  "connectors": [],
+  "related": [
+    "/glossary/human-in-the-loop",
+    "/guides/is-it-safe-to-let-ai-control-your-computer",
+    "/glossary/browser-agent"
+  ],
+  "art": {
+    "props": [
+      "s-mailbox",
+      "p-shield"
+    ],
+    "bubble": "who asked for that?"
+  },
+  "og_line": "an email cannot give itself permission.",
+  "definition": "prompt injection is an attempt to make an ai follow instructions from someone who has no authority over its task.",
+  "example": "**loretta wants the delivery window from a warehouse email.** in this example, the email also asks her assistant to send back the staff rota. a useful answer gives the delivery window and flags the unrelated request. the warehouse can request the rota. only loretta can decide to share it.",
+  "sections": [
+    {
+      "h": "look for the change of job",
+      "md": "**compare the request with what you actually asked.** finding a delivery time takes no staff records. an official-looking signature adds no authority. the same problem can crop up in a web page that a bot reads for you.\n\noutside text can also distort a summary without asking for a send. for an important delivery, compare the time in the answer with the original line."
+    },
+    {
+      "h": "limit what the bot can do in dusk bot",
+      "md": "**give a bot that reads mail read only access to the connected app.** dusk bot blocks actions that would change things through that connection. leave unrelated apps off for that bot.[^1]\n\nsends through connected apps ask first by default. if a request arrives, compare the recipient and the material with your original task. deny a send you never requested.[^1][^2]\n\ncareful with **Full access**: a bot there with no sending rule can send up to 25 a day without asking. give it **Ask every time**."
+    },
+    {
+      "h": "when to open the message yourself",
+      "md": "**read the original yourself if you need to rule out a misleading summary.** dusk bot's send controls give you a decision about an outgoing action. they cannot tell you whether the delivery time in a reply is true."
+    }
+  ],
+  "faq": [
+    {
+      "q": "does the instruction have to be hidden?",
+      "a": "no. a perfectly visible request can mislead an agent. the question is who authorized the work, even when the wording seems ordinary."
+    },
+    {
+      "q": "what does indirect prompt injection mean?",
+      "a": "the instruction reaches the agent through something it reads, such as a web page or an attachment. you can encounter it while asking a perfectly ordinary question."
+    }
+  ],
+  "sources": [
+    {
+      "label": "dusk bot docs: files and apps",
+      "url": "/docs/files-and-apps"
+    },
+    {
+      "label": "dusk bot docs: sending and approvals",
+      "url": "/docs/computer"
+    }
+  ],
+  "voice": 2
+}

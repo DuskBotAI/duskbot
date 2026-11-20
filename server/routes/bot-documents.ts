@@ -1,10 +1,13 @@
 // The bot's documents over HTTP: the internal call behind create_document, update_document and list_documents (after
 // index.ts checks the capability bearer, so a bot only ever reaches its own), and the panel's routes for the person.
+import { mkdirSync, writeFileSync } from "node:fs";
 import type { ServerResponse } from "node:http";
+import { join } from "node:path";
 
 import { redactSecretsInText } from "../../shared/redact.ts";
-import { DOCUMENT_MAX_BYTES, documentCard, type ChatDocumentCard, type DocumentMeta } from "../../shared/documents.ts";
+import { DOCUMENT_MAX_BYTES, documentCard, type ChatDocumentCard, type DocumentMeta, type DocumentWithContent } from "../../shared/documents.ts";
 import type { BotDocuments, DocumentResult } from "../bot-documents.ts";
+import { EXPORT_FORMATS, exportFileName, isExportFormat, renderDocument } from "../doc-render/index.ts";
 import type { json as sendJson } from "../harness/http.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 
@@ -18,6 +21,8 @@ export interface DocumentRouteDeps {
   bot(id: string): unknown;
   /** Puts the card in the conversation the call came from; the message id, or null when there is none to post in. */
   post(botId: string, threadId: string, text: string, card: ChatDocumentCard): string | null;
+  /** Where a document exported as a file is written: a folder of the bot's own that attach_file and mail can send from. */
+  exportDir?(botId: string): string;
 }
 
 export interface DocumentInternalContext {
@@ -38,7 +43,7 @@ function cardText(card: ChatDocumentCard): string {
 
 function listLine(meta: DocumentMeta): string {
   const shape = meta.kind === "sheet" ? `, ${meta.rows} rows x ${meta.columns} columns` : `, ${meta.bytes} bytes`;
-  return `${meta.id} | ${meta.kind} | ${meta.title} | v${meta.version}${shape} | updated ${new Date(meta.updatedAt).toISOString()}${meta.by === "person" ? " by the person" : ""}`;
+  return `${meta.id} | ${meta.kind} | ${meta.title} | v${meta.version}${shape} | updated ${new Date(meta.updatedAt).toISOString()}${meta.by === "person" ? " by the person" : ""}${meta.manual ? " | the person's manual: read it, never change it" : ""}`;
 }
 
 /** Text a bot wrote goes through the same secret masking as its messages; `masked` says whether anything changed. */
@@ -63,6 +68,7 @@ export function createDocumentRoutes(deps: DocumentRouteDeps) {
       if (typeof body.id === "string") {
         const document = documents.get(ctx.botId, body.id);
         if (!document) return refuse("No such document. Call list_documents without an id to see the ones you keep.", 404);
+        if (body.export_as !== undefined) return exportFile(ctx, document, body.export_as);
         return void ctx.json(ctx.res, 200, { text: `${listLine(document)}\n--- content ---\n${document.content}` });
       }
       const all = documents.list(ctx.botId);
@@ -76,7 +82,7 @@ export function createDocumentRoutes(deps: DocumentRouteDeps) {
     const content = masked(body.content);
     let result: DocumentResult;
     if (body.action === "create") {
-      result = documents.create(ctx.botId, { title: title.value, kind: body.kind, content: content.value }, "bot");
+      result = documents.create(ctx.botId, { title: title.value, kind: body.kind, content: content.value, manual: body.manual === true }, "bot");
     } else {
       if (typeof body.id !== "string") return refuse("id is the document's id, from create_document or list_documents.");
       if (body.title === undefined && body.content === undefined) return refuse("Send content (the whole new text), title, or both.");
@@ -98,6 +104,18 @@ export function createDocumentRoutes(deps: DocumentRouteDeps) {
       ...(messageId ? { messageId } : {}),
     });
   };
+
+  function exportFile(ctx: DocumentInternalContext, document: DocumentWithContent, format: unknown): void {
+    if (!isExportFormat(format)) return void ctx.json(ctx.res, 400, { error: `export_as is one of ${EXPORT_FORMATS.join(", ")}.` });
+    if (!deps.exportDir) return void ctx.json(ctx.res, 409, { error: "Files can't be made here." });
+    const made = renderDocument(document, format);
+    if ("error" in made) return void ctx.json(ctx.res, 400, { error: made.error });
+    const dir = deps.exportDir(ctx.botId);
+    mkdirSync(dir, { recursive: true, mode: 0o700 });
+    const path = join(dir, exportFileName(document.title, made.extension));
+    writeFileSync(path, made.bytes, { mode: 0o600 });
+    return void ctx.json(ctx.res, 200, { path, text: `Made ${path} (${made.bytes.length} bytes) from "${document.title}" version ${document.version}. To show it here, attach_file with that path; to send it, pass the path as an attachment of the email.` });
+  }
 
   const routes: RouteHandler = async ({ req, res, path, method, json, readBody }) => {
     const match = /^\/api\/bots\/([\w-]+)\/documents(?:\/(d_[0-9a-f]{12})(\/restore)?)?$/.exec(path);

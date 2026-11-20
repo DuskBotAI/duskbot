@@ -55,6 +55,8 @@ export function createCloudSignedRoutes(deps: {
   entitlement?: Pick<CloudEntitlement, "accept" | "gate"> | null;
   /** AI sign-ins the Admin held while this Cloud was being made; absent on a server that is not a Cloud home. */
   aiSignIns?: ((items: CloudAiSignIn[]) => Promise<void>) | null;
+  /** The link grant the Admin sends beside an entitlement: this Cloud's phone relay makes its tunnel with it. */
+  linkGrant?: ((grant: unknown) => void) | null;
   now?: () => number;
 }) {
   const pairing = createCloudPairing({ secret: deps.secret, sessions: deps.sessions, team: deps.team ?? null, now: deps.now });
@@ -174,6 +176,7 @@ export function createCloudSignedRoutes(deps: {
       let parsed: unknown;
       try { parsed = JSON.parse(body.toString("utf8")); } catch { json(res, 400, { error: "invalid_body" }); return true; }
       const accepted = entitlement.accept((parsed as { token?: unknown } | null)?.token);
+      if (accepted.ok) deps.linkGrant?.((parsed as { linkGrant?: unknown }).linkGrant);
       json(res, accepted.ok ? 200 : 400, accepted.ok ? { ok: true, expiresAt: accepted.claims.exp } : { error: accepted.error });
       return true;
     }

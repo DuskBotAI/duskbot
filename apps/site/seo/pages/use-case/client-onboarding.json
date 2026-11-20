@@ -1,0 +1,136 @@
+{
+  "path": "/use-cases/client-onboarding",
+  "type": "use-case",
+  "title": "Turn client intake into a kickoff brief with clear gaps",
+  "nav": "client onboarding",
+  "h1": "prepare a client onboarding brief before kickoff",
+  "description": "Compare a Typeform intake with the agreed scope in Google Docs. Walk into kickoff with deliverables, open decisions and one question for each gap.",
+  "keyword": "ai client onboarding",
+  "keywords": [
+    "client intake to kickoff brief",
+    "client onboarding assistant"
+  ],
+  "answer": "**catch the extra deliverable before it lands on the kickoff agenda as a promise.** a bot can compare a client's intake answers with the agreed scope in google docs. have it prepare a brief that distinguishes what the client bought, what they want and what someone still needs to decide.",
+  "updated": "2026-11-20",
+  "review": {
+    "status": "approved",
+    "by": "lead agent, after four independent reviewers read every page against seo/facts (2026-11-20); every finding applied",
+    "at": "2026-11-20"
+  },
+  "voice": 2,
+  "tags": [
+    "clients",
+    "onboarding",
+    "intake"
+  ],
+  "connectors": [
+    "typeform",
+    "googledocs",
+    "googlesheets"
+  ],
+  "related": [
+    "/routines/typeform-new-responses-summary",
+    "/routines/calendly-booking-prep",
+    "/for/small-business-owners",
+    "/use-cases/meeting-notes"
+  ],
+  "art": {
+    "props": [
+      "p-briefcase",
+      "s-map"
+    ],
+    "bubble": "what blocks kickoff?"
+  },
+  "og_line": "bring the scope and the gaps to kickoff.",
+  "routine": {
+    "intro": "**pair the intake response with the agreed scope yourself.** give the bot both references for the same engagement.",
+    "message": "on weekdays at 3 pm, read the google sheet “kickoff register”. for each row marked ready today, use its typeform response reference and agreed google doc link. compare requested deliverables, dates, approval contacts and assets. for each item show what the scope says and what the client answered.\n\nput requests outside the agreement under 'discuss scope'. turn missing inputs into questions for kickoff. separate facts from proposed next steps. if the client or project details disagree, stop before combining anything. keep the brief in this chat. don't contact the client, invite anyone or grant access.",
+    "when": "weekdays at 3 pm for the engagement pairs you named",
+    "needs": "read only typeform, google docs and google sheets connections, a response reference and the agreed scope doc. replace the kickoff sheet name with yours.",
+    "output": "example kickoff brief for darlene\nagreed | a printed drinks menu, one size. client also wants a window poster.\ndiscuss scope | is the poster a separate quote?\nready | menu copy received in intake.\nblocked | no print dimensions. ask who has the printer's final spec."
+  },
+  "sections": [
+    {
+      "h": "start with what the client already told you",
+      "md": "**avoid making the client answer the same question twice.** read the intake alongside the agreement. accept a clear answer and record where it came from. when the form asks for a launch date, keep the client's hoped-for date separate from the delivery date you agreed."
+    },
+    {
+      "h": "assemble a brief for one engagement",
+      "md": "**tie both sources to the same piece of work.**\n\n1. find the completed response on the named typeform and match its reference.[^1]\n2. read the agreed scope doc by id in google docs.[^2] confirm its project name before comparing.\n3. group the findings by what can start, what is missing and what needs a commercial decision. put the exact question beside each gap."
+    },
+    {
+      "h": "let the account owner set expectations",
+      "md": "**ask the question before promising to do the work.** a wish in an intake form doesn't change the agreement. the account owner settles scope, dates and who can approve a proof. bring the brief to kickoff and write down those decisions there.\n\nif you need signed acceptance or a client portal, use your existing contract or onboarding system for that part."
+    }
+  ],
+  "safeguards": [
+    "keep the apps read only. changes to the agreement belong with the account owner.",
+    "use a separate brief for each engagement. leave access credentials out of both the form and the brief.",
+    "a connected-app send asks first by default, including a client invitation.[^5]"
+  ],
+  "worked": {
+    "intro": "an invented menu design kickoff",
+    "before": "darlene asks for a menu and a matching poster in the intake form. the agreed scope covers the menu. neither source gives final dimensions.",
+    "after": "the designer can start on the menu copy. the owner brings a poster pricing question to kickoff and asks for the printer's dimensions before laying out the page."
+  },
+  "saves": {
+    "estimate": "around 9 minutes per kickoff if these times match yours",
+    "formula": "16 minutes comparing intake and scope by hand\n- 7 minutes pairing sources and correcting the brief\n= 9 minutes per kickoff",
+    "assumptions": [
+      "time briefs of similar size and complexity",
+      "include opening the agreed version and resolving a bad source match",
+      "exclude the kickoff call itself from both timings"
+    ]
+  },
+  "mistakes": [
+    {
+      "mistake": "treating the person who filled out the form as the approver",
+      "fix": "ask who can sign off. an assistant can complete intake on someone else's behalf."
+    },
+    {
+      "mistake": "reusing the last contract from the same client",
+      "fix": "name the doc for this engagement. recurring clients can have several agreements in force."
+    }
+  ],
+  "quick": {
+    "steps": [
+      "pick one completed intake and its scope doc",
+      "ask for one confirmed deliverable and one question",
+      "open both sources beside the brief and trace the answer"
+    ]
+  },
+  "faq": [
+    {
+      "q": "what if the client just submitted the form?",
+      "a": "recent typeform responses can take up to 30 minutes to appear through the connector.[^1] ask again later before asking the client to repeat intake."
+    },
+    {
+      "q": "does a missing asset have to block the whole kickoff?",
+      "a": "tie the missing asset to the work that depends on it. the team might be able to review copy while it waits for a print-ready logo."
+    }
+  ],
+  "sources": [
+    {
+      "label": "composio: typeform actions",
+      "url": "https://docs.composio.dev/toolkits/typeform",
+      "checked": "2026-11-20"
+    },
+    {
+      "label": "composio: google docs actions",
+      "url": "https://docs.composio.dev/toolkits/googledocs",
+      "checked": "2026-11-20"
+    },
+    {
+      "label": "dusk bot docs: files and connected apps",
+      "url": "/docs/files-and-apps"
+    },
+    {
+      "label": "dusk bot docs: routines",
+      "url": "/docs/routines"
+    },
+    {
+      "label": "dusk bot docs: a bot’s computer",
+      "url": "/docs/computer"
+    }
+  ]
+}

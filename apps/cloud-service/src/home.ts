@@ -31,6 +31,13 @@ export const INSTABOX_HOME_VOLUME = "data";
 /** entries of /data that are the platform's (the machine user's home, TMPDIR, its own state, swap) or a step's scratch:
  *  never in a backup, never replaced by a restore */
 export const PLATFORM_ENTRIES = ["home", "tmp", "workspace", "config", "state", "swapfile", "lost+found", ".instabox*", ".omb-restore.*", ".omb-old.*"] as const;
+const BROWSER_PROFILE_CACHES = ["Cache", "Code Cache", "GPUCache", "GrShaderCache", "ShaderCache", "GraphiteDawnCache", "DawnGraphiteCache", "DawnWebGPUCache",
+  "Service Worker/CacheStorage", "Service Worker/ScriptCache", "component_crx_cache", "optimization_guide_model_store"];
+/** caches under /data that their owner fills again on demand (package managers, the server's scratch, Chromium's caches
+ *  inside a profile, never its cookies or storage): never in a backup. tar and find match `*` across `/` here */
+export const BACKUP_CACHES = [".npm", ".cache/pip", ".cache/uv", ".cache/node-gyp", ".cache/yarn", ".cache/pnpm", ".bun/install/cache", ".local/share/pnpm/store",
+  ...["tmp", ".tmp", "cache", ".cache"].map(e => `${CLOUD_HOME.dataName}/${e}`),
+  ...BROWSER_PROFILE_CACHES.map(e => `${CLOUD_HOME.dataName}/agent-browser-profiles/*/${e}`)] as const;
 // the launcher runs only root's code (codeTrustProblem); the whole Node distribution, npm with it: the server installs
 // engine CLIs with npm into its own data folder (engine-install.ts)
 const ROOT = CLOUD_HOME.root, APP = `${ROOT}/app`, BIN = `${ROOT}/bin`, NODE_DIR = `${ROOT}/node`;
@@ -51,7 +58,8 @@ const DB_COPY = `const { DatabaseSync, backup } = require("node:sqlite");
 const db = new DatabaseSync(process.argv[1], { readOnly: true });
 backup(db, process.argv[2]).then(() => { db.close(); }, () => { db.close(); process.exit(1); });`;
 const platformCase = PLATFORM_ENTRIES.join("|");
-const excludes = PLATFORM_ENTRIES.map(e => `--exclude='data/${e}'`).join(" ");
+const skipped = [...PLATFORM_ENTRIES, ...BACKUP_CACHES];
+const excludes = skipped.map(e => `--exclude='data/${e}'`).join(" ");
 
 /** what a machine needs to become this cloud's home: its env (the bootstrap secret among it), its dashboard link, its id */
 export function bootContent(input: HomeBootInput): { v: 1; env: Record<string, string>; link: DashboardLink; machine: string } {
@@ -386,7 +394,7 @@ case "\${1:-}" in
       install -d "$dbs/$(dirname "$db")"
       ${HOME_NODE_BIN} -e ${shellQuote(DB_COPY)} "/$db" "$dbs/$db" 2>/dev/null || cp -p "/$db" "$dbs/$db"
       chown --reference="/$db" "$dbs/$db"
-    done < <(cd / && find data ${PLATFORM_ENTRIES.map(e => `-path 'data/${e}' -prune -o`).join(" ")} -type f -name '*.db' -print0)
+    done < <(cd / && find data ${skipped.map(e => `-path 'data/${e}' -prune -o`).join(" ")} -type f -name '*.db' -print0)
     code=0; tar -C / --numeric-owner -cf "$part" ${excludes} --exclude='*.db' --exclude='*.db-wal' --exclude='*.db-shm' --exclude='*.db-journal' data || code=$?
     # 1: a file changed while it was read (the home runs); anything more is a failure
     [ "$code" -le 1 ] || { rm -rf "$dbs" "$part"; echo "snapshot failed"; exit 3; }

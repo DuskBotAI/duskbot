@@ -29,12 +29,19 @@ export interface RevenueFunnelStep { id: string; label: string; count: number; o
 
 export interface Headline {
   mrr: number; arr: number; netNewMrr: number; customers: number; arpu: number | null; customerChurn: number | null;
+  /** failed charges: left out of mrr and customers; absent from an older service */
+  atRisk?: { mrr: number; customers: number };
   revenueChurn: number | null; netRevenueChurn: number | null; nrr: number | null; grr: number | null; ltv: number | null; ltvRealised: number | null;
   previous: { mrr: number; netNewMrr: number; customers: number; arpu: number | null; customerChurn: number | null; ltv: number | null };
 }
 
+/** money taken in the page's range: payments before tax less refunds, before processor fees; a value per day */
+export interface Received { cents: number; refundsCents: number; payments: number; starts: number[]; series: number[] }
+
 export interface SubscriptionReport {
   now: number; currency: string; headline: Headline; months: MonthRow[];
+  /** absent from an older service */
+  received?: Received;
   status: { active: number; trialing: number; pastDue: number; onHold: number; cancelScheduled: number; comped: number; churned: number };
   cohorts: { payment: CohortRow[]; signup: CohortRow[] };
   dunning: { failed: number; recovered: number; lost: number; open: number; rate: number | null; recoveredMrr: number; months: Array<{ start: number; failed: number; recovered: number }> };

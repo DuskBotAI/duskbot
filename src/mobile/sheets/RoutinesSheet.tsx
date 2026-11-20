@@ -1,6 +1,5 @@
 import { noteRoutineRun } from "@/lib/product-analytics";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ChevronRight } from "../../icons";
 import { BotAvatar } from "@/components/Avatar";
 import { WorkingDots } from "@/components/WorkingIndicator";
 import { t } from "@/lib/i18n";
@@ -85,7 +84,7 @@ export function RoutinesSheet({ sheet, open, onClose, onOpenChat }: SheetPagePro
   const title = selected?.name ?? (bot ? t("mobile.routines.botTitle", { name: bot.name }) : t("mobile.routines.title"));
   return (
     <Sheet open={open} onClose={onClose} full title={title} back={selected ? back : undefined}>
-      <div className="px-3 pt-2">
+      <div className="px-4 pt-2">
         {error && (selected || !loadFailed || routines.length > 0) && <p role="alert" className="px-3 py-3 text-[15px] text-danger">{error}</p>}
         {!selected && loadFailed && routines.length === 0 && !loading && <EmptyState tone="error" art="clock" title={t("mobile.routines.loadErrorTitle")} body={t("mobile.routines.loadErrorBody")} action={{ label: t("mobile.routines.retry"), onClick: () => void load() }} className="pt-16" />}
         {selected ? (
@@ -100,7 +99,7 @@ export function RoutinesSheet({ sheet, open, onClose, onOpenChat }: SheetPagePro
             </section>
           </div>
         ) : (loading || state.routinesLoadState === "loading" && !error) && !routines.length ? <div role="status" aria-label={t("mobile.routines.loading")}>{[0, 1, 2].map((key) => <div key={key} aria-hidden className="flex min-h-[84px] items-center gap-3 px-3 py-3"><span className="size-9 shrink-0 rounded-full bg-ink/[0.06]" /><span className="flex-1 space-y-2"><span className="block h-4 w-2/5 rounded-full bg-ink/[0.06]" /><span className="block h-3 w-3/5 rounded-full bg-ink/[0.05]" /></span></div>)}</div> : routines.length ? (
-          <ul>{routines.map((routine) => {
+          <ul data-settings-card="" className="flex flex-col gap-[2px] overflow-hidden rounded-[16px] [&>*]:bg-menu [&_.mobile-row]:rounded-none">{routines.map((routine) => {
             const owner = state.bots.find((entry) => entry.id === routine.botId);
             return <li key={routine.id} aria-busy={busy.includes(routine.id)}>
               <SwipeRow actions={[{ label: armed === routine.id ? t("mobile.routines.confirmDelete") : t("mobile.routines.delete"), danger: true, onPress: () => void work(routine, "delete") }]}>
@@ -108,9 +107,8 @@ export function RoutinesSheet({ sheet, open, onClose, onOpenChat }: SheetPagePro
                   <button type="button" onClick={() => { setSelectedId(routine.id); setError(null); setNotice(false); setArmed(null); }} className="mobile-row flex min-h-[84px] min-w-0 flex-1 items-center gap-3 rounded-2xl px-3 py-3 text-left">
                     {owner && <BotAvatar bot={owner} size={36} animated={false} label="" />}
                     <span className="min-w-0 flex-1"><span className="block truncate text-[16px] font-semibold text-ink">{routine.name}</span><span className="mt-0.5 block text-[14px] text-ink-secondary">{upperFirst(scheduleLabel(routine.schedule))}</span><span className="block text-[14px] text-ink-secondary">{routineNextLabel(routine)}</span></span>
-                    <ChevronRight aria-hidden size={16} className="shrink-0 text-ink-tertiary" />
                   </button>
-                  <div className="w-[68px] shrink-0 [&_button>span:first-child]:sr-only [&_button]:justify-center [&_button]:gap-0 [&_button]:px-2"><SettingsSwitch label={t("mobile.routines.enable", { name: routine.name })} checked={routine.enabled} onChange={() => { if (!pending.current.has(routine.id)) { haptic("selection"); void work(routine, "toggle"); } }} /></div>
+                  <div className="w-[68px] shrink-0 [&_button>span:first-child]:sr-only [&_button]:justify-center [&_button]:gap-0 [&_button]:px-2"><SettingsSwitch label={t("mobile.routines.enable", { name: routine.name })} checked={routine.enabled} onChange={() => { if (!pending.current.has(routine.id)) { haptic("toggle"); void work(routine, "toggle"); } }} /></div>
                 </div>
               </SwipeRow>
             </li>;

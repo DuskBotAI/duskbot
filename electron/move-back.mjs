@@ -18,6 +18,7 @@ const SERVER_REFUSALS = {
   not_own: (name) => `${name} has other people on it, so its bots can't come to this computer.`,
   other_server: (name) => `The server at ${name}'s address is another one now, so nothing comes from it.`,
 };
+const timedOut = (error) => ["TimeoutError", "AbortError"].includes(error?.name) || /aborted due to timeout|operation was aborted/i.test(String(error?.message ?? ""));
 const refused = (code, name) => Object.assign(new Error(SERVER_REFUSALS[code](name)), { code });
 
 /**
@@ -130,7 +131,9 @@ export function createMoveBack(deps) {
       await deps.restoreFile(entry);
     } catch (error) {
       if (paused) await paused.thaw().catch((thawError) => log(`move back: the server stays paused (${thawError?.message ?? thawError})`));
-      const message = typeof error?.message === "string" && error.message.trim() && error.message.length < 300 ? error.message.trim() : "Your bots could not come back. They are still on your server.";
+      const message = timedOut(error) ? `${current?.name ?? "Your server"} took too long to answer. Your bots are still there. Try again.`
+        : typeof error?.message === "string" && error.message.trim() && error.message.length < 300 && !/^\w*Error\b|ECONN|fetch failed/.test(error.message) ? error.message.trim()
+          : "Your bots could not come back. They are still on your server.";
       set({ status: "failed", error: message });
       throw Object.assign(new Error(message), { cause: error });
     }

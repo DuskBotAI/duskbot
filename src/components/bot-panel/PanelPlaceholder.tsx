@@ -22,7 +22,7 @@ export function PanelPlaceholder({ onClose }: { onClose: () => void }) {
         <span aria-hidden="true" className="pointer-events-none absolute inset-y-0 left-0 z-10 w-[0.5px] bg-edge max-md:hidden" />
         <div className="relative flex h-[60px] shrink-0 items-center gap-2 p-3">
           <span className="ms-auto" />
-          <button type="button" onClick={onClose} aria-label={t("botPanel.close")} title={t("botPanel.close")} className={roundButtonCls}>
+          <button type="button" onClick={onClose} aria-label={t("botPanel.closePanel")} title={t("botPanel.closePanel")} className={roundButtonCls}>
             <Icon name="close" size={16} />
           </button>
         </div>

@@ -77,4 +77,67 @@ reply latency.
 - Scrolling a 2,000-message chat back to its start mounts 1,000 rows and 70,000 DOM nodes; the longest task (412 ms) is
   one older page landing. Mounting a landed page in steps, as an opened chat's first paint already does, or windowing
   the rows above the viewport, would cut it.
-- Live engine runs through the local gateway were not measured here.
+
+## Real engines through the local gateway
+
+`scripts/bench-engines.ts` runs the packaged server on its own data folder with each real engine pointed at the local
+gateway (`127.0.0.1:8317`) through a timing proxy, every engine on `gpt-6.2-sol` (Claude Code's requests are answered by
+it too: the gateway's Claude sign-in was not usable), and each engine CLI wrapped to stamp its own hops. Cold = a new
+chat's first message (the engine process starts), warm = the next messages in the same chat. Quick questions
+("What is 18% of 2,450?", "Is 91 a prime number?"), 5 runs each plus the new chat's first; medians in seconds after
+send, measured 2026-11-20 on the M5 Pro.
+
+```sh
+pnpm build:server
+node --experimental-strip-types scripts/bench-engines.ts --runs 5 --trace --json out.ndjson
+node --experimental-strip-types scripts/bench-engines.ts --engines claude --mode warm --effort low   # pin an effort
+node --experimental-strip-types scripts/bench-engines.ts --set work --mode warm                     # acks on work asks
+```
+
+| engine | turn | first model request | first words (bubble) | done, before -> after |
+|---|---|---|---|---|
+| Claude Code 2.1.314 | cold | 0.89 -> 0.60 | 3.73 -> 4.08 | 4.16 -> 4.72 |
+| Claude Code 2.1.314 | warm | 0.02 -> 0.03 | 6.53 -> 3.48 (gateway, see below) | 7.00 -> 4.53 |
+| Codex 0.170 | cold | 0.17 -> 0.20 | 2.79 -> 9.49 | 3.08 -> 10.76 |
+| Codex 0.170 | warm | 0.03 -> 0.02 | 3.23 -> 3.67 | 3.47 -> 3.99 |
+| Grok Build 1.0.44 | cold | 0.46 -> 0.48 | 3.84 -> 4.32 | 4.39 -> 5.15 |
+| Grok Build 1.0.44 | warm | 0.06 -> 0.06 | 4.48 -> 7.05 | 5.29 -> 9.76 |
+| OpenCode 1.19.3 | cold | 1.30 -> 0.53 | 7.08 -> 5.05 | 7.30 -> 5.62 |
+| OpenCode 1.19.3 | warm | 0.03 | 4.33 -> 4.01 | 4.56 -> 5.06 |
+| openai-compat | cold | 0.02 -> 0.02 | 3.32 -> 3.16 | 3.32 -> 3.32 |
+| openai-compat | warm | 0.02 -> 0.01 | 7.29 -> 4.01 | 7.29 -> 4.01 |
+
+Only Claude Code changed between the two runs, and every move here is the gateway, Claude Code's too (the same Codex turn took 2.7 s in one
+run and 9.4 s in the next). The model's own time to first text is 1.8-2.5 s for `gpt-6.2-sol` even on a 2 kB prompt
+and grows by about 0.5-1 s at the 100-120 kB a turn sends; reasoning effort changed nothing on its responses
+API. Everything before the model is small: the server answers the send in under 20 ms, a warm engine sends its request
+15-60 ms after the send, and the bubble shows 50 ms after the engine's first text.
+
+| commit | change | measured |
+|---|---|---|
+| quick questions run at low effort | Claude Code sent `effort: high` with adaptive thinking on every turn; a default bot's short question with no picked effort now runs at low effort, set on the live process (`apply_flag_settings`, 2.1.288+) so it keeps the warm process and its cache | no gain measurable on `gpt-6.2-sol`: interleaved on one process (6 quick questions each, same minutes) first text is 3.45 s at high, 3.54 s at low and 3.33 s with thinking off (`set_max_thinking_tokens` 0). The 6.53 -> 3.48 s above was the gateway between runs. Switching effort between turns costs nothing measurable (first model request 30-60 ms on a warm process, quick and work asks alternating) |
+
+Work asks ("Look up today's weather in Tokyo and Paris...", `--set work --mode warm`, 5 runs, the same build): the
+first message is the engine's own opening line on Claude Code (4.4 s) and Codex (3.0 s); on the openai-compat path it
+is the harness's ack, written by 2.7 s but held to 7.0 s, because that path never reports reasoning and the ack waits
+for a tool to start or for the engine to show it is thinking (`server/turn-beats.ts`). Results land at 21.3 s (Claude
+Code), 18.0 s (Codex) and 22.9 s (openai-compat), each after 4 model calls.
+
+### Where the rest goes
+
+- **Engine start on a new chat (or after 10 idle minutes):** send -> first model request is 0.6-0.9 s for Claude
+  Code (binary load about 0.3 s, its own start 0.22 s, MCP servers connect in the background in 50-100 ms), 0.45 s for
+  Grok Build, 0.5-1.3 s for OpenCode (its `initialize` 0.48 s and `session/new` 0.77 s), 0.17 s for Codex and nothing
+  for the openai-compat path. Starting the engine when the person starts typing would hide it.
+- **Prompt size:** 100-120 kB per turn on the CLI engines (about 25-29k tokens: system prompt and tool schemas), 65 kB
+  on openai-compat. Codex reads 20.8k of 21k tokens from the cache on a warm turn.
+- **Model round trips:** a reminder on the openai-compat path took 4 model calls (about 20k tokens each, 83k in all,
+  11-21 s): a `find_tool` detour, `trigger_info` first (the trigger tool's description asks for it on relative dates,
+  though the turn's clock line has the time and zone) and a re-read after create. The detour exists only because a
+  gateway on 127.0.0.1 counts as a local model, which turns the tool bridge on; a hosted API lists every tool.
+- **Acks on the openai-compat path:** posting a work ask's ready ack at `ACK_IDLE_MS` (4 s) without the thinking
+  signal would bring its first message from 7.0 s to about 4 s, near Grok's 3 s.
+- **Cloud and phone:** not run here (no cloud test account in this session). A suspended dusk cloud resumes in about
+  2.4 s plus the home's own answer (`apps/cloud-service/src/instabox.ts`), and the app's focus ping never wakes it, so the first send after a sleep waits for that;
+  a warm request to the relay from this Mac is 0.22-0.26 s (TLS connect 0.4-0.6 s), so the phone adds about 0.5 s
+  (the send up, the first frame down) to the numbers above.

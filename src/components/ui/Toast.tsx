@@ -1,8 +1,12 @@
-import { useEffect, useRef, useState, type FocusEvent, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type FocusEvent, type ReactNode, type RefObject } from "react";
 import { createPortal } from "react-dom";
 
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
+import { cssCurve, desktopMotion } from "@/lib/desktop-motion";
+import { motionReduced, playGhostExit } from "@/lib/ghost-exit";
+import { pacedMs } from "@/lib/motion-speed";
+import { PHONE_FEEL } from "@/mobile/phone-feel";
 import { Icon } from "../Icon";
 import { smallButtonCls } from "./GrokDialog";
 
@@ -41,11 +45,13 @@ export function Toast({ text, tone = "done", action, onDone, timeoutMs, classNam
       left.current = Math.max(0, left.current - (Date.now() - started));
     };
   }, [ms, text, held]);
+  const node = useRef<HTMLDivElement>(null);
+  useToastLeave(node);
   const release = (event: FocusEvent<HTMLDivElement>) => {
     if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setHeld(false);
   };
   const toast = (
-    <div {...rest} role={error ? "alert" : "status"} aria-live={error ? "assertive" : "polite"} data-kind={tone} className={cn("ui-toast", className)}
+    <div ref={node} {...rest} role={error ? "alert" : "status"} aria-live={error ? "assertive" : "polite"} data-kind={tone} className={cn("ui-toast", className)}
       onPointerEnter={() => setHeld(true)} onPointerLeave={() => setHeld(false)} onFocus={() => setHeld(true)} onBlur={release}>
       <span aria-hidden="true" className={cn("inline-flex shrink-0", error ? "text-danger" : "text-ink-secondary")}>
         <Icon name={error ? "exclamation-circle" : "check"} size={13} />
@@ -58,4 +64,29 @@ export function Toast({ text, tone = "done", action, onDone, timeoutMs, classNam
     </div>
   );
   return typeof document === "undefined" || !document.body ? toast : createPortal(toast, document.body);
+}
+
+/** The toast leaves the way it came, from wherever it is, as it unmounts: on the desktop at a pick with a toast motion,
+ * on the phone as its feel has toasts leave. */
+function useToastLeave(node: RefObject<HTMLDivElement | null>) {
+  const held = useRef<HTMLDivElement | null>(null);
+  useLayoutEffect(() => { held.current = node.current; });
+  useLayoutEffect(() => () => {
+    if (motionReduced()) return;
+    const exit = toastExit();
+    if (!exit) return;
+    playGhostExit(held.current, document.body, (ghost) => [ghost.animate(
+      [{ opacity: 1, translate: "0 0", scale: "1" }, { opacity: 0, translate: `0 ${exit.y}`, scale: String(exit.scale) }],
+      { duration: exit.ms, easing: cssCurve(null), fill: "forwards" },
+    )]);
+  }, []);
+}
+
+function toastExit(): { ms: number; y: string; scale: number } | null {
+  if (document.documentElement.dataset.mobileApp) {
+    const { from, outMs } = PHONE_FEEL.toast;
+    return { ms: outMs, y: from === "self" ? "100%" : `${from}px`, scale: 1 };
+  }
+  const spec = desktopMotion().toast;
+  return spec ? { ms: pacedMs(spec.leaveMs), y: spec.leaveY, scale: spec.leaveScale } : null;
 }

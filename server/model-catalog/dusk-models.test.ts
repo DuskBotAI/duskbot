@@ -121,6 +121,14 @@ describe("parseDuskModels", () => {
     expect(parsed.engines.codex!.models).toContainEqual({ id: "gpt-6.2-astra", label: "GPT-6.2 Astra", add: true });
     for (const key of ["codex", "claude", "grok"]) expect(parsed.engines[key]!.models.length).toBeGreaterThan(0);
   });
+  it("the bundled copy offers Claude Fable 5.2 on a Claude Code list that predates it, ahead of Fable 5.1", () => {
+    const parsed = parseDuskModels(JSON.parse(readFileSync(join(import.meta.dirname, "dusk-models.json"), "utf8")))!;
+    const older = { default: "claude-sonnet-5", options: [{ id: "claude-fable-5-1", label: "Claude Fable 5.1" }, { id: "claude-sonnet-5", label: "Claude Sonnet 5" }] };
+    expect(curateModelCatalog(older, parsed.engines.claude).options.slice(0, 2)).toEqual([
+      { id: "claude-fable-5-2", label: "Claude Fable 5.2", contextWindow: 1_000_000 },
+      { id: "claude-fable-5-1", label: "Claude Fable 5.1" },
+    ]);
+  });
 });
 
 describe("DuskModelCatalog", () => {

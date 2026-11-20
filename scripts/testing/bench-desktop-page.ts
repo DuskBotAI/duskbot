@@ -220,7 +220,8 @@ export const FRAMES_STOP = `(() => {
   b.recording = false;
   const el = window.__benchScroller;
   return { frames: b.frames.slice(1), longTasks: b.longTasks.slice(b.longTasksAtStart), rows: document.querySelectorAll("[data-mid]").length,
-    nodes: document.getElementsByTagName("*").length, top: el ? el.scrollTop : null, height: el ? el.scrollHeight : null };
+    nodes: document.getElementsByTagName("*").length, top: el ? el.scrollTop : null, height: el ? el.scrollHeight : null,
+    firstRow: document.querySelector("[data-mid]")?.getAttribute("data-mid"), lastRow: [...document.querySelectorAll("[data-mid]")].at(-1)?.getAttribute("data-mid") };
 })()`;
 /** Clicks a sidebar row and resolves, in the page, on the first frame after \`ready\` holds: the switch as a person sees it. */
 export const switchExpression = (botId: string, ready: string) => `new Promise((resolve) => {

@@ -68,6 +68,31 @@ export function createDelegatedLevel(deps: DelegatedLevelDeps) {
     });
   }
 
+  const riding = new Map<string, { generation: string; from: Hop }>();
+  const announced = new Set<string>();
+
+  /** A teammate's own chat keeps its own level: a Chief's level rides only the turn that runs the hand-off (`from`, the
+   * sender's node), and says so once per piece of work (`workId`) it raises. A turn with no hand-off ends the ride. */
+  function handOffTurn(target: BotRecord, threadId: string, generation: string, from: Hop | undefined, workId?: string): void {
+    if (!from) { riding.delete(threadId); return; }
+    riding.set(threadId, { generation, from });
+    const own = deps.turnLevel(store.projectBotForTask(target.id, threadId) ?? target, true, threadId);
+    const passed = handedDown(from, target, own);
+    const sender = store.bot(from.botId);
+    if (!passed || !sender || (workId && announced.has(workId))) return;
+    if (workId) { if (announced.size >= 10_000) announced.clear(); announced.add(workId); }
+    const name = NAMES[passed.level] ?? passed.level;
+    const via = passed.chief.id === sender.id ? "" : `from ${passed.chief.name}, `;
+    store.appendMessage(threadId, { role: "bot", kind: "activity", tool: { name: `${name}: handed on by ${sender.name}, ${via}a Chief of Staff on ${name}`, ok: true } });
+  }
+
+  /** The level `own` becomes for the turn `generation` in `threadId`: raised only while that turn runs a Chief's hand-off. */
+  function ridingLevel(bot: BotRecord, threadId: string, generation: string | undefined, own: ApprovalMode): ApprovalMode {
+    const ride = riding.get(threadId);
+    if (!ride || ride.generation !== generation || deps.guestDriven(threadId)) return own;
+    return handedDown(ride.from, bot, own)?.level ?? own;
+  }
+
   /** A room thread is shared, so a Chief's level rides the hand-off (`source`, the requester's node) and never lands on it. */
   function roomTurn(bot: BotRecord, threadId: string, source: Hop | undefined): ApprovalMode {
     if (deps.guestDriven(threadId)) return "ask";
@@ -86,5 +111,5 @@ export function createDelegatedLevel(deps: DelegatedLevelDeps) {
     return { level, ...(passed?.level === level ? { chief: passed.chiefMode } : {}), driverKind: deps.driverKind(running) };
   }
 
-  return { apply, roomTurn, levelOf };
+  return { apply, handOffTurn, ridingLevel, roomTurn, levelOf };
 }

@@ -1,6 +1,7 @@
 import { useEffect, useRef, type KeyboardEvent } from "react";
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
+import { upperFirst } from "@/lib/lower-first";
 import { MAUS_COLOR_LABEL, PICKER_COLORS, colorSwatch, rowsOfFive, type MausState } from "@/lib/mascot";
 import type { Bot } from "@/state/store";
 import { DEFAULT_BOT_BODY, wearsBody, type BotBodyId } from "../../../shared/bot-body";
@@ -40,7 +41,7 @@ export function AvatarEditorCard({ bot, onPatch, onClose }: {
         type="button"
         disabled={busy}
         aria-pressed={chosen}
-        aria-label={`${id} character shape`}
+        aria-label={t("botPanel.avatar.shapeNamed", { name: upperFirst(id) })}
         title={id}
         onClick={() => pickMascot({ mascotBody: id })}
         className="group/shape relative flex size-12 cursor-pointer items-center justify-center disabled:opacity-50"
@@ -84,7 +85,7 @@ export function AvatarEditorCard({ bot, onPatch, onClose }: {
                   type="button"
                   disabled={busy}
                   aria-pressed={bot.color === color}
-                  aria-label={`${t(MAUS_COLOR_LABEL[color])} character color`}
+                  aria-label={t("botPanel.avatar.colorNamed", { color: t(MAUS_COLOR_LABEL[color]) })}
                   title={t(MAUS_COLOR_LABEL[color])}
                   onClick={() => pickMascot({ color })}
                   className="flex size-8 cursor-pointer items-center justify-center rounded-full border border-transparent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus disabled:opacity-50"

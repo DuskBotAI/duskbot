@@ -14,7 +14,7 @@
     "openclaw safe alternative"
   ],
   "answer": "love the idea of openclaw but not the upkeep? you have three ways out. run another open-source agent yourself (hermes agent). text a hosted assistant and install nothing (poke, genspark claw). or use an app with a small team of bots that can move to a hosted computer later (dusk bot). the right one depends on how much you want to own and look after.",
-  "updated": "2026-11-12",
+  "updated": "2026-11-20",
   "review": {
     "status": "approved",
     "by": "lead agent, against omb-ref/seo-research/facts-competitors.json (checked 2026-11-12) and dusk bot docs",
@@ -183,7 +183,7 @@
           "desktop app, terminal, telegram, discord, slack, whatsapp, signal, email",
           "whatsapp, slack, teams, telegram and more, plus its own email address",
           "imessage, telegram, whatsapp, rcs",
-          "its own desktop app and a phone app (store apps on the way; browser version today)"
+          "its own desktop and iphone apps; android uses a paired browser until the google play release"
         ],
         "src": [
           1,

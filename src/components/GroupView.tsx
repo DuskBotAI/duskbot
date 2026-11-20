@@ -1,5 +1,8 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { PHONE_LAYOUT, useMediaQuery } from "@/lib/use-media-query";
+import { AnimatePresence } from "motion/react";
+import { usePhoneLayout } from "@/lib/use-media-query";
+import { waitsForNetwork } from "@/state/network-wait";
+import { useOffline } from "@/mobile/network";
 import { splitReplyBlocks } from "@/lib/formatted-reply";
 import { activeLocale, t } from "@/lib/i18n";
 import { useReactor } from "@/lib/cloud-guest";
@@ -55,10 +58,11 @@ import { botEngine, failedTurnCause } from "@/lib/failed-turn";
 import { RoomComposer } from "./bot-access/RoomComposer";
 import { ChatErrorBanner, ChatNotice } from "./ChatErrorBanner"; import { ComposerNoticeSlot } from "./ComposerNoticeSlot";
 import { FailedReplyCard, FoldedNoticesContext, foldedNoticeIds, useTrailingRows } from "./FailedReplyCard";
+import { TranscriptCardSlot } from "./TranscriptCardSlot";
 import { RoomContextWarnings } from "./ContextWarning";
 import { ChatFindBar } from "./ChatFindBar";
 import { botTextForDisplay, isPureLeakedBotText } from "../../shared/system-message-guard.ts";
-import { QuotedText, ReplyQuote } from "./ReplyQuote";
+import { QuotedText, ThreadReplyQuote } from "./ReplyQuote";
 import { ConnectorCard } from "./ConnectorCard";
 import { SecretRequestCard } from "./SecretRequestCard";
 import { SignInRequestCard } from "./SignInRequestCard";
@@ -202,6 +206,7 @@ function RoomTextMessage({
   const replyGroup = useMemo(() => !user && botText.trim() ? replyAttachmentGroup(botText, m.attachments) : null, [user, botText, m.attachments]);
   const blocks = useMemo(() => !user && botText.trim() ? splitReplyBlocks(botText) : null, [user, botText]);
   const tabled = Boolean(blocks?.some((block) => block.kind === "table"));
+  const bubbleGroup = Boolean(tabled || (!user && !m.text?.trim() && !m.replyToId && m.attachments?.length) || (mediaRow && !display.trim() && !m.replyToId));
   const botActions = !user && (
     <MessageActions side="bot" forceOpen={speaking} menu={botMenu}>
       <ReplyAction onReply={() => onReply(m)} />
@@ -230,30 +235,26 @@ function RoomTextMessage({
             !tabled && joinedCorners(user ? "end" : "start", join),
             bigEmoji && !tabled
               ? EMOJI_ONLY_TEXT
-              : tabled || (!user && !m.text?.trim() && !m.replyToId && m.attachments?.length) || (mediaRow && !display.trim() && !m.replyToId)
+              : bubbleGroup
               ? "text-ink"
               : user
                 ? cn("chat-text whitespace-pre-wrap [overflow-wrap:anywhere] text-ink", SIMPLE_USER_BUBBLE)
                 : SIMPLE_BOT_BUBBLE,
           )}
+          data-emoji-only={bigEmoji && !tabled ? "" : undefined}
+          data-bubble-group={bubbleGroup ? "" : undefined}
           data-quotable={user ? undefined : ""}
           data-sending={user && m.id.startsWith("optimistic-") ? t("chat.sending") : undefined}
         >
-          {m.replyToId && (() => {
-            const target = transcript.find((candidate) => candidate.id === m.replyToId);
-            return target ? (
-              <div className="mb-2">
-                <ReplyQuote
-                  message={target}
-                  fallbackName={t("room.fallbackBot")}
-                  compact
-                  onJump={() =>
-                    dispatch({ type: "focusMessage", threadId: group.threadId, messageId: target.id })
-                  }
-                />
-              </div>
-            ) : null;
-          })()}
+          {m.replyToId && (
+            <ThreadReplyQuote
+              threadId={group.threadId}
+              replyToId={m.replyToId}
+              loaded={transcript.find((candidate) => candidate.id === m.replyToId)}
+              fallbackName={t("room.fallbackBot")}
+              onJump={(target) => dispatch({ type: "focusMessage", threadId: group.threadId, messageId: target.id })}
+            />
+          )}
           {user ? (
             <>
               {attachments && !mediaRow && <AttachmentGallery media={m.media} images={attachments.images} files={attachments.files} message={{ threadId: group.threadId, messageId: m.id }} eager={eager} className={!attachments.display ? "mb-0" : undefined} />}
@@ -290,7 +291,7 @@ function RoomTextMessage({
               ) : botText ? (
                 <ChatMarkdown text={botText} mentionPeers={peers} everyone={!group.dm} mentionPerson={{ profileName: state.config?.profile?.name }} message={{ threadId: group.threadId, messageId: m.id }} delivered={replyGroup?.delivered} />
               ) : null}
-              {replyGroup && <AttachmentGallery media={m.media} images={replyGroup.images} files={replyGroup.files} message={{ threadId: group.threadId, messageId: m.id }} eager={eager} beneath />}
+              {replyGroup && <AttachmentGallery media={m.media} images={replyGroup.pictures} files={replyGroup.files} message={{ threadId: group.threadId, messageId: m.id }} eager={eager} beneath />}
             </MessageBoundary>
           )}
         </div>
@@ -888,7 +889,7 @@ export function GroupView({ group: room }: { group: Group }) {
   const threadWorking = roomThreadWorking(group, group.threadId);
   const setupPending = !remoteClient && roomNeedsSetup(group);
   // on a phone the setup form is the whole screen until it is saved or skipped: a locked field below it reads as part of it
-  const phone = useMediaQuery(PHONE_LAYOUT);
+  const phone = usePhoneLayout();
   const simpleHeader = simpleRoomHeader({ remoteClient, group, setupPending });
 
   const lastGroupMessage = group.messages.at(-1);
@@ -908,6 +909,7 @@ export function GroupView({ group: room }: { group: Group }) {
     };
   }, [group.messages, threadWorking, group.name, speaker?.name]);
   const presenceSpeaker = speaker ?? awaited ?? members[0];
+  const networkWait = waitsForNetwork(group.messages, useOffline());
   // a member's wait for its first reply is no phrase for the line: the line already says it is at work
   const lastForLine = useMemo(() => group.messages.findLast((m) => !m.tool?.rescue), [group.messages]);
   const now = useTurnNow(
@@ -973,9 +975,9 @@ export function GroupView({ group: room }: { group: Group }) {
 
   return (
     <main className="relative flex h-full min-w-0 flex-1 flex-col bg-app">
-      {membersOpen && !remoteClient && !group.dm && (
-        <ManageMembersPanel group={group} onClose={closeMembers} triggerRef={membersTriggerRef} />
-      )}
+      <AnimatePresence>{membersOpen && !remoteClient && !group.dm && (
+        <ManageMembersPanel key="manage-members-panel" group={group} onClose={closeMembers} triggerRef={membersTriggerRef} />
+      )}</AnimatePresence>
       <GlassScrollFrame className="flex-1 [--glass-tint:var(--color-app)]">
       {/* z-[25]: above the room set-up card (z-20). */}
       <GlassBar edge="top" fade={!remoteClient} className="z-[25]">
@@ -1054,6 +1056,7 @@ export function GroupView({ group: room }: { group: Group }) {
           ref={transcriptRef}
           data-simple-rows=""
           className="glass-scroller-content chat-column relative flex w-full flex-col gap-4 rounded-[18px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+          data-dock-pad=""
           style={{ paddingBottom: `calc(${composerDock.pad} + ${SIMPLE_TRAILING_GAP + USAGE_ROW_GAP - (statusSlot ? SIMPLE_STATUS_SLOT : 0)}px)` }}
           tabIndex={0}
           role="log"
@@ -1110,6 +1113,7 @@ export function GroupView({ group: room }: { group: Group }) {
             </div>
           )}
           <RoomWorkingLines
+            key={`working:${group.threadId}`}
             group={group}
             members={members}
             workingIds={workingIds}
@@ -1117,8 +1121,9 @@ export function GroupView({ group: room }: { group: Group }) {
             speaker={{ bot: presenceSpeaker, visible: presenceVisible, markState: statusMarkState, phrases: now.phrases, phase: now.phase, since: speaker ? group.turnStartedAt ?? null : null }}
             slot={statusSlot}
             landed={Boolean(landed.reply)}
+            networkWait={networkWait}
           />
-          {(trailing?.failures.length || trailing?.notices.length || setupPending || group.dm) && <div data-failed-reply-row="" className="empty:hidden [&>[data-failed-reply]]:mb-0 [&>[data-failed-reply]]:px-0"><FailedReplyCard rows={trailing} group threadId={group.threadId} onRetry={retry} /></div>}
+          <TranscriptCardSlot key={`card:${group.threadId}`}>{Boolean(trailing?.failures.length || trailing?.notices.length || setupPending || group.dm) && <FailedReplyCard rows={trailing} group threadId={group.threadId} onRetry={retry} />}</TranscriptCardSlot>
         </div>
         </div>
         )}

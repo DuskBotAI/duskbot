@@ -3,7 +3,8 @@ import { createPortal } from "react-dom";
 import { AnimatePresence, motion } from "motion/react";
 import { cn } from "@/lib/cn";
 import { haptic } from "./haptics";
-import { dismiss, feel, holdPress, prefersReducedMotion, springEasing } from "./motion";
+import { closesOnBack } from "./Sheet";
+import { ease, feel, holdPress, prefersReducedMotion, springEasing } from "./motion";
 
 export interface ContextAction {
   key: string;
@@ -71,7 +72,7 @@ export function useLongPress(ref: RefObject<HTMLElement | null>, onOpen: (rect: 
       timer = 0;
       fired = true;
       lift();
-      haptic("medium");
+      haptic("hold");
       latest.current(el.getBoundingClientRect());
     };
     const onTouchStart = (event: TouchEvent) => {
@@ -101,7 +102,7 @@ export function useLongPress(ref: RefObject<HTMLElement | null>, onOpen: (rect: 
     const onContextMenu = (event: MouseEvent) => {
       event.preventDefault();
       if (timer || fired) return;
-      haptic("medium");
+      haptic("hold");
       latest.current(el.getBoundingClientRect());
     };
     const onKeyDown = (event: KeyboardEvent) => {
@@ -217,10 +218,11 @@ export function ContextMenu({ open, anchor, preview, actions, label, onClose, re
     (menuRef.current?.parentElement?.querySelector<HTMLButtonElement>("[role='toolbar'] button, [role='menu'] button:not(:disabled)"))?.focus({ preventScroll: true });
     const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") { event.preventDefault(); onClose(); } };
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    const unback = closesOnBack(onClose);
+    return () => { window.removeEventListener("keydown", onKey); unback(); };
   }, [open, onClose, layout]);
 
-  const fadeOut = { duration: feel.exit.fade, ease: dismiss.ease };
+  const fadeOut = { duration: feel.exit.fade, ease: ease.out };
   const item = {
     off: { opacity: 0, y: reduced ? 0 : 6 },
     on: { opacity: 1, y: 0, transition: { duration: feel.enter.fade, ease: [0.22, 1, 0.36, 1] as const } },
@@ -233,7 +235,7 @@ export function ContextMenu({ open, anchor, preview, actions, label, onClose, re
   return createPortal(
     <AnimatePresence onExitComplete={reveal}>
       {open && anchor && layout && (
-        <div className="dusk-mobile-overlay fixed inset-0 z-50" key="context">
+        <div className="dusk-mobile-overlay fixed inset-0 z-[75]" key="context">
           <motion.div
             aria-hidden
             className="absolute inset-0 bg-[rgb(23_24_26/0.22)] [-webkit-backdrop-filter:blur(8px)] [backdrop-filter:blur(8px)]"
@@ -277,7 +279,7 @@ export function ContextMenu({ open, anchor, preview, actions, label, onClose, re
                     aria-label={reaction.label}
                     aria-pressed={reaction.selected}
                     variants={glyph}
-                    onClick={() => { haptic("selection"); onClose(); onReact?.(reaction.key); }}
+                    onClick={() => { haptic("pick"); onClose(); onReact?.(reaction.key); }}
                     className={cn("flex size-11 items-center justify-center rounded-full text-[26px] leading-none", reaction.selected && "bg-ink/[0.08]")}
                   >
                     <span aria-hidden>{reaction.glyph}</span>
@@ -290,7 +292,7 @@ export function ContextMenu({ open, anchor, preview, actions, label, onClose, re
             ref={menuRef}
             role="menu"
             aria-label={label}
-            className="absolute overflow-hidden rounded-[16px] bg-menu py-1.5 shadow-[0_12px_40px_-8px_rgb(10_10_12/0.30)]"
+            className="mobile-glass absolute overflow-hidden rounded-[16px] bg-menu py-1.5 shadow-[0_12px_40px_-8px_rgb(10_10_12/0.30)]"
             style={{ left: layout.menuLeft, top: layout.menuTop, width: MENU_W, transformOrigin: `${layout.end ? "right" : "left"} ${layout.above ? "bottom" : "top"}` }}
             initial={{ opacity: 0, scale: reduced ? 1 : 0.9, y: reduced ? 0 : layout.above ? 6 : -6 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
@@ -305,7 +307,7 @@ export function ContextMenu({ open, anchor, preview, actions, label, onClose, re
                   role="menuitem"
                   variants={item}
                   disabled={action.disabled}
-                  onClick={() => { haptic("selection"); onClose(); action.onSelect(); }}
+                  onClick={() => { haptic("pick"); onClose(); action.onSelect(); }}
                   className={cn(
                     "mobile-row flex h-[46px] w-full items-center gap-3 px-4 text-left text-[16px] disabled:opacity-40",
                     action.danger ? "text-danger" : "text-ink",

@@ -213,6 +213,23 @@ describe("reaction chips under a message", () => {
     expect(chips().map((chip) => chip.classList.contains("animate-pop-in"))).toEqual([true, false, false]);
   });
 
+  it.each([false, true])("shows a bot's reaction on the person's message with the bot's name, for no one to tap off (float %s)", async (float) => {
+    const thanks: Message = { id: "m2", at: 2, role: "user", kind: "text", text: "thank you!!", reactions: [
+      { emoji: "❤️", by: "bot:b1", name: "Scout (old name)", at: 1 },
+      { emoji: "😂", by: "bot:b2", name: "Otter", at: 1 },
+      { emoji: "😂", by: "user", at: 1 },
+    ] };
+    const bots = [{ id: "b1", name: "Scout" }] as unknown as Parameters<typeof ReactionChips>[0]["bots"];
+    await render(createElement(ReactionChips, { threadId: "t1", message: thanks, bots, align: "end", float }));
+    expect(chips().map((chip) => [chip.tagName, chip.getAttribute("aria-label"), chip.getAttribute("aria-pressed")])).toEqual([
+      ["SPAN", "Heart: Scout", null],
+      ["BUTTON", "Laughing: Otter, You", "true"],
+    ]);
+    await click(chips()[0]!);
+    expect(fixture.api).not.toHaveBeenCalled();
+    expect(patched()).toEqual([]);
+  });
+
   it("draws nothing for a message nobody reacted to", async () => {
     await render(createElement(ReactionChips, { threadId: "t1", message: ASKED }));
     expect(host.innerHTML).toBe("");

@@ -1,4 +1,4 @@
-// The phone apps people already have (iPhone 1.2, Android 1.2.1: their own connection code, scripts/testing/shipped-phone.ts)
+// The phone apps people already have (iPhone 1.2, Android 1.2.1, 1.2.3 and 1.2.4: their own connection code, scripts/testing/shipped-phone.ts)
 // against this tree's desktop side: an isolated harness in desktop mode, the desktop's phone relay supervisor
 // (electron/phone-relay.mjs, with the link agent's hub), a link service and the companion sidecar's handler. Pairing by
 // QR and typed code, bots, a message and its streamed reply, then the relay down, a link node restart, a harness
@@ -11,21 +11,24 @@
 // runs the pairing, chat, hub-down fallback and removal through the production link node (https://link.dusk.bot) with a
 // test account on the preview account service (phone-e2e@qa.dusk.test: never mailed, its code read from the preview
 // test mailbox), and ends the tunnel it made.
-import { execFileSync, spawn, type ChildProcess } from "node:child_process";
+import { execFile, execFileSync, spawn, type ChildProcess } from "node:child_process";
 import { generateKeyPairSync, randomBytes, randomUUID, sign } from "node:crypto";
-import { mkdirSync, mkdtempSync, openSync, closeSync, rmSync } from "node:fs";
-import { createServer, type Server } from "node:http";
-import { createServer as createTcpServer, type Socket } from "node:net";
+import { mkdirSync, mkdtempSync, openSync, closeSync, rmSync, writeFileSync } from "node:fs";
+import { createServer, request as httpRequest, type Server } from "node:http";
+import { connect, createServer as createTcpServer, type Socket } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { createMobileSessions } from "../apps/companion/src/mobile.ts";
 import { createProxyHandler } from "../apps/companion/src/proxy.ts";
 import { createLinkService } from "../apps/link-service/src/app.mjs";
-import { createPhoneRelay, PHONE_RELAY_BASE } from "../electron/phone-relay.mjs";
+import { createPhoneRelay, createRelayTunnel, PHONE_RELAY_BASE } from "../electron/phone-relay.mjs";
+import { createPhoneHub, x25519Pair } from "../apps/link-service/agent.mjs";
 import { universalPairLink, type MobilePairingResponse } from "../shared/mobile-link.ts";
 import { smokeAccount } from "./smoke/account.mjs";
+import { cloudPairingSignature, cloudRequestSignature } from "../server/cloud-home.ts";
+import { generateEntitlementSigner, signEntitlement } from "../shared/entitlement.ts";
 import { waitForExit } from "../server/testing/cleanup.ts";
 import { launchVerificationServer, verificationServerArgs, verificationServerEnvironment, type VerificationServer } from "./control-dusk.ts";
 import { fakePlatform, loadShippedPhone, SHIPPED_PHONES, type FakePlatform, type PhoneRecord, type PhoneTransport, type ShippedPhone } from "./testing/shipped-phone.ts";
@@ -35,6 +38,7 @@ const LINK = join(ROOT, "apps", "link-service");
 const OWNER = randomBytes(32).toString("base64url");
 const ACCT = "0123456789abcdef0123456789abcdef";
 const PROD = process.argv.includes("--prod");
+const CLOUD_HOST = "dusk-t-0123456789ab.fly.dev";
 
 const results: Array<{ step: string; ok: boolean; detail?: string }> = [];
 function check(step: string, ok: boolean, detail?: string) {
@@ -89,18 +93,18 @@ async function linkNode(dataDir: string, keys: Array<{ kid: string; x: string }>
   };
 }
 
-/** the isolated harness in desktop mode, restartable on the same folder and port */
-async function harness() {
-  const parentEnv = { ...process.env, DUSK_TEST_DESKTOP_OWNER_TOKEN: OWNER };
+/** the isolated harness, in desktop mode or as a server of your own runs it, restartable on the same folder and port */
+async function harness(desktop = true) {
+  const parentEnv = desktop ? { ...process.env, DUSK_TEST_DESKTOP_OWNER_TOKEN: OWNER } : { ...process.env };
   // the launcher's own setup calls go as the desktop app's window would; nothing else runs while it does
   const realFetch = globalThis.fetch;
-  globalThis.fetch = (input, init = {}) => realFetch(input, { ...init, headers: { ...Object.fromEntries(new Headers(init.headers)), "x-dusk-desktop-owner": OWNER } });
+  if (desktop) globalThis.fetch = (input, init = {}) => realFetch(input, { ...init, headers: { ...Object.fromEntries(new Headers(init.headers)), "x-dusk-desktop-owner": OWNER } });
   let fixture: VerificationServer;
   try { fixture = await launchVerificationServer(parentEnv); } finally { globalThis.fetch = realFetch; }
   const url = fixture.info.url, port = Number(new URL(url).port), dataDir = fixture.info.dataDir;
   let child: ChildProcess = fixture.child;
   return {
-    url, port,
+    url, port, dataDir,
     async stop() { await waitForExit(child, { signal: "SIGTERM" }); },
     async start() {
       const env = verificationServerEnvironment(parentEnv, dataDir, port);
@@ -113,9 +117,10 @@ async function harness() {
   };
 }
 
-async function owner(base: string, method: string, path: string, body?: unknown) {
+/** the owner's own call: as the desktop app on a computer, as its command line (loopback) on a server of your own */
+async function owner(base: string, method: string, path: string, body?: unknown, as: "desktop" | "cli" = "desktop") {
   const response = await fetch(`${base}${path}`, {
-    method, headers: { "x-dusk-desktop-owner": OWNER, ...(body === undefined ? {} : { "content-type": "application/json" }) },
+    method, headers: { ...(as === "desktop" ? { "x-dusk-desktop-owner": OWNER } : { "x-dusk-cli": "1" }), ...(body === undefined ? {} : { "content-type": "application/json" }) },
     body: body === undefined ? undefined : JSON.stringify(body), signal: AbortSignal.timeout(30_000),
   });
   return { status: response.status, body: await response.json().catch(() => null) as any };
@@ -176,6 +181,24 @@ async function silentAddress() {
   const port = await new Promise<number>((resolve) => server.listen(0, "127.0.0.1", () => resolve((server.address() as { port: number }).port)));
   return { url: `http://127.0.0.1:${port}`, close: () => { for (const socket of held) socket.destroy(); return new Promise((resolve) => server.close(resolve)); } };
 }
+/** a slow mobile link in front of `target`: every chunk each way arrives `ms` late, in order */
+async function slowLink(target: string, ms: number) {
+  const to = new URL(target);
+  const held = new Set<Socket>();
+  const late = (from: Socket, into: Socket) => {
+    let last = 0;
+    from.on("data", (chunk) => { last = Math.max(Date.now() + ms, last); setTimeout(() => { if (!into.destroyed) into.write(chunk); }, last - Date.now()); });
+    from.on("end", () => setTimeout(() => into.end(), Math.max(0, last - Date.now())));
+  };
+  const server = createTcpServer((socket) => {
+    const upstream = connect(Number(to.port), to.hostname);
+    for (const one of [socket, upstream]) { held.add(one); one.on("error", () => { socket.destroy(); upstream.destroy(); }); one.on("close", () => held.delete(one)); }
+    late(socket, upstream);
+    late(upstream, socket);
+  });
+  const port = await new Promise<number>((resolve) => server.listen(0, "127.0.0.1", () => resolve((server.address() as { port: number }).port)));
+  return { url: `http://127.0.0.1:${port}`, close: () => { for (const socket of held) socket.destroy(); return new Promise((resolve) => server.close(resolve)); } };
+}
 const routeOf = (outcome: Awaited<ReturnType<typeof launch>>) => (typeof outcome === "string" ? outcome : outcome.kind === "relay" ? "relay" : `bearer ${outcome.origin}`);
 const closeRoute = (outcome: Awaited<ReturnType<typeof launch>>) => { if (typeof outcome !== "string" && outcome.kind === "relay") outcome.channel.close(); };
 
@@ -195,13 +218,124 @@ async function chat(label: string, transport: PhoneTransport, botId: string) {
   stream.close();
 }
 
+/** a Cloud home as its launcher starts it (server/cloud-home-start.ts), on loopback with its edge's headers left out */
+async function cloudPlace(scratch: string, cleanups: Array<() => unknown>, linkBase: string, grant: () => string, phoneBuild: ShippedPhone) {
+  if (!phoneBuild.learnRoutes || !phoneBuild.relaySecrets) return;
+  const home = join(scratch, "cloud"), dataDir = join(home, ".duskbot");
+  mkdirSync(dataDir, { recursive: true });
+  // the fake engine only: never the person's own Claude sign-in, which the real CLI finds whatever HOME says
+  const cli = join(home, "fixture-claude.mjs");
+  writeFileSync(cli, `#!/usr/bin/env node\nif (process.argv[2] === "auth") { console.log(JSON.stringify({ loggedIn: true, email: "person@example.test" })); process.exit(0); }\nawait import(${JSON.stringify(pathToFileURL(join(ROOT, "server", "testing", "fake-claude-cli.ts")).href)});\n`, { mode: 0o755 });
+  writeFileSync(join(dataDir, "config.json"), JSON.stringify({ instances: {
+    ...Object.fromEntries(["codex", "cursor", "githubCopilot", "openaiCompat", "qwen", "hermes", "pi"].map((id) => [id, { driver: "not-a-real-driver" }])),
+    claude: { driver: "claudeAgent", displayName: "Claude", config: { cli } },
+  } }));
+  const secret = randomBytes(32).toString("base64url"), dev = generateEntitlementSigner("e2e-cloud");
+  const freePort = async () => { const probe = createServer(); const free = await listen(probe); await shut(probe); return free; };
+  const port = await freePort(), webhookPort = await freePort();
+  const url = `http://127.0.0.1:${port}`;
+  let said = "", child: ChildProcess | null = null;
+  /** the home on a machine: a move or a restore starts the same data folder on another one */
+  const startHome = async (machineId: string) => {
+    child = spawn(process.execPath, [join(ROOT, "server", "index.ts")], {
+      cwd: ROOT, stdio: ["ignore", "pipe", "pipe"],
+      env: { PATH: process.env.PATH, HOME: home, DUSK_DATA_DIR: dataDir, DUSK_PORT: String(port), DUSK_WEBHOOK_PORT: String(webhookPort), DUSK_NO_TEST_BOTS: "1",
+        DUSK_CLOUD_ROLE: "home", DUSK_CLOUD_MACHINE_ID: machineId, DUSK_CLOUD_ADMIN_URL: "https://cloud.example.test", DUSK_CLOUD_BOOTSTRAP_SECRET: secret,
+        DUSK_PUBLIC_URL: `https://${CLOUD_HOST}`, DUSK_LINK_BASE: linkBase, DUSK_ENTITLEMENT_DEV_KEYS: `${dev.publicKey.kid}:${dev.publicKey.x}` },
+    });
+    for (const out of [child.stdout, child.stderr]) out?.on("data", (chunk) => { said = (said + String(chunk)).slice(-4000); });
+    return Boolean(await until(() => fetch(`${url}/api/health`).then((res) => res.ok, () => false), 30_000));
+  };
+  cleanups.push(() => (child ? waitForExit(child, { signal: "SIGTERM" }) : undefined));
+  const up = await startHome(`c${"3".repeat(24)}`);
+  if (!check("a dusk cloud home starts", up, up ? undefined : said.slice(-1500))) return;
+  const signed = async (path: string, body: unknown, pairing = false) => {
+    const text = JSON.stringify(body), timestamp = String(Math.floor(Date.now() / 1000)), nonce = randomBytes(16).toString("base64url");
+    const signature = pairing ? cloudPairingSignature(secret, timestamp, nonce, text) : cloudRequestSignature(secret, timestamp, nonce, "POST", path, text);
+    const response = await fetch(`${url}${path}`, { method: "POST", body: text, headers: { "content-type": "application/json", "x-dusk-cloud-timestamp": timestamp, "x-dusk-cloud-nonce": nonce, "x-dusk-cloud-signature": `v1=${signature}` } });
+    return { status: response.status, body: await response.json().catch(() => null) as any };
+  };
+  const entitle = (machineId: string) => {
+    const now = Date.now();
+    const entitlement = signEntitlement({ aud: ["home", "app"], cloud: machineId, acct: "a", tier: "pro", features: ["cloud"], iat: now, exp: now + 3_600_000 }, dev.signer);
+    return signed("/api/cloud/entitlement", { v: 1, token: entitlement, linkGrant: grant() });
+  };
+  const pushed = await entitle(`c${"3".repeat(24)}`);
+  check("the account service's entitlement push carries the link grant", pushed.status === 200, `${pushed.status} ${JSON.stringify(pushed.body)}`);
+  // the cloud's edge: what reaches its https address arrives at the home as the edge sends it
+  const edge = createServer((req, res) => {
+    const upstream = httpRequest({ host: "127.0.0.1", port, method: req.method, path: req.url, headers: { ...req.headers, host: CLOUD_HOST, "x-forwarded-for": "203.0.113.9", "x-forwarded-proto": "https" } }, (answer) => {
+      res.writeHead(answer.statusCode ?? 502, answer.headers);
+      answer.pipe(res);
+    });
+    upstream.on("error", () => { if (!res.headersSent) res.writeHead(502); res.end(); });
+    res.on("close", () => upstream.destroy());
+    req.pipe(upstream);
+  });
+  const edgeUrl = `http://127.0.0.1:${await listen(edge)}`;
+  cleanups.push(() => shut(edge));
+  const signIn = async (label: string) => {
+    const code = (await signed("/api/cloud/pairing", { label, ttlSeconds: 300 }, true)).body?.code as string;
+    return (await fetch(`${url}/api/auth/pair`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ code }) }).then((res) => res.json())).token as string;
+  };
+  const ownerToken = await signIn("dusk bot app (Cloud)");
+  const made = await fetch(`${url}/api/bots`, { method: "POST", headers: { authorization: `Bearer ${ownerToken}`, "content-type": "application/json" }, body: JSON.stringify({ name: "Probe", modelSelection: { instanceId: "claude", model: "claude-sonnet-5" } }) }).then((res) => res.json()) as { bot?: { id: string } };
+  const botId = made.bot?.id ?? "";
+
+  const platform = fakePlatform("ios", "iPhone next (dusk cloud)");
+  const token = await signIn("iPhone next (dusk cloud)");
+  let record: PhoneRecord = { id: randomUUID(), environmentId: "cloud", label: "My Cloud", transport: "https", via: [{ kind: "https", url: edgeUrl }], sessionRef: "", ...({ origin: edgeUrl } as object) } as PhoneRecord;
+  const phone: Phone = { name: "iPhone next (dusk cloud)", shipped: phoneBuild, platform, record, token };
+  const first = await launch(phone);
+  check("iPhone next (dusk cloud): opens on the cloud's https address first", routeOf(first) === `bearer ${edgeUrl}`, routeOf(first));
+  if (typeof first === "string") return;
+  const ask = (async (path: string, init: RequestInit = {}) => fetch(`${edgeUrl}${path}`, { ...init, headers: { ...Object.fromEntries(new Headers(init.headers)), authorization: `Bearer ${token}` } })) as typeof fetch;
+  const opened = await until(async () => {
+    let healed: PhoneRecord | null = null;
+    await phoneBuild.learnRoutes!(record, first, async (_id, via, relay) => { if (relay) healed = { ...record, via, relay, ...(via?.some((one) => one.kind === "relay") ? {} : { relayLate: true as const }) }; }, ask, () => phoneBuild.relaySecrets!(platform, record.id));
+    return healed as PhoneRecord | null;
+  }, 30_000);
+  if (!check("iPhone next (dusk cloud): opens its own relay channel on the cloud's relay", Boolean(opened?.relay?.agentPub), JSON.stringify(opened?.relay ?? null))) return;
+  record = opened!;
+  await expectCloud({ ...phone, record }, "with its https address answering, still opens on it first", (route) => route === `bearer ${edgeUrl}`);
+  const out = await silentAddress();
+  cleanups.push(() => out.close());
+  await expectCloud({ ...phone, record: { ...record, via: [{ kind: "https", url: out.url }] } }, "https address out: reaches the cloud through its relay and chats", (route) => route === "relay", botId);
+
+  // the cloud moves to another machine (or is restored there): its relay file stays with the old machine, so the new one
+  // makes its own tunnel from the next entitlement push, and the phone repairs its route on its next https connect
+  await waitForExit(child!, { signal: "SIGTERM" });
+  const moved = await startHome(`c${"4".repeat(24)}`);
+  if (!check("the cloud's home starts on another machine", moved, moved ? undefined : said.slice(-1500))) return;
+  check("the next entitlement push reaches the moved home", (await entitle(`c${"4".repeat(24)}`)).status === 200);
+  const again = await launch({ ...phone, record });
+  check("iPhone next (dusk cloud): after the move, opens on the https address", routeOf(again) === `bearer ${edgeUrl}`, routeOf(again));
+  if (typeof again === "string") return;
+  const repaired = await until(async () => {
+    let healed: PhoneRecord | null = null;
+    await phoneBuild.learnRoutes!(record, again, async (_id, via, relay) => { if (relay) healed = { ...record, via, relay }; }, ask, () => phoneBuild.relaySecrets!(platform, record.id));
+    return healed as PhoneRecord | null;
+  }, 30_000);
+  closeRoute(again);
+  check("iPhone next (dusk cloud): learns the moved home's relay key", Boolean(repaired && repaired.relay?.agentPub !== record.relay?.agentPub), JSON.stringify(repaired?.relay ?? null));
+  if (repaired) await expectCloud({ ...phone, record: { ...repaired, via: [{ kind: "https", url: out.url }] } }, "after the move, https address out: reaches the moved cloud through its new tunnel and chats", (route) => route === "relay", botId);
+}
+
+async function expectCloud(phone: Phone, label: string, want: (route: string) => boolean, botId?: string) {
+  const outcome = await launch(phone);
+  const ok = check(`${phone.name}: ${label}`, want(routeOf(outcome)), `${routeOf(outcome)} in ${walked.get(phone.name)}ms`);
+  if (ok && botId && typeof outcome !== "string") await chat(phone.name, outcome, botId);
+  closeRoute(outcome);
+}
+
 async function main() {
   const scratch = mkdtempSync(join(tmpdir(), "phone-shipped-e2e-"));
   const cleanups: Array<() => unknown> = [() => rmSync(scratch, { recursive: true, force: true })];
   try {
     const head = execFileSync("git", ["rev-parse", "--short", "HEAD"], { cwd: ROOT, encoding: "utf8" }).trim();
-    const builds = { ios: await loadShippedPhone(ROOT, SHIPPED_PHONES.ios, join(scratch, "phones")), android: await loadShippedPhone(ROOT, SHIPPED_PHONES.android, join(scratch, "phones")), next: await loadShippedPhone(ROOT, head, join(scratch, "phones")) };
-    check("load the shipped phone code (iPhone 1.2 and Android 1.2.1) and the next build's", true, `${SHIPPED_PHONES.ios}, ${SHIPPED_PHONES.android}, ${head}`);
+    const builds = { ios: await loadShippedPhone(ROOT, SHIPPED_PHONES.ios, join(scratch, "phones")), android: await loadShippedPhone(ROOT, SHIPPED_PHONES.android, join(scratch, "phones")), next: await loadShippedPhone(ROOT, head, join(scratch, "phones")),
+      "1.2.3": await loadShippedPhone(ROOT, SHIPPED_PHONES.android123, join(scratch, "phones")), "1.2.4": await loadShippedPhone(ROOT, SHIPPED_PHONES.android124, join(scratch, "phones")) };
+    check("load the shipped phone code (iPhone 1.2, Android 1.2.1, 1.2.3 and 1.2.4) and the next build's", true, `${SHIPPED_PHONES.ios}, ${SHIPPED_PHONES.android}, ${SHIPPED_PHONES.android123}, ${SHIPPED_PHONES.android124}, ${head}`);
 
     const desk = await harness();
     cleanups.push(() => desk.close());
@@ -253,14 +387,14 @@ async function main() {
       check(`the production tunnel ${made.id} is ended`, ended === 200 && after === 404, `DELETE ${ended}, then ${after}`);
     });
 
-    const pair = async (name: string, kind: "ios" | "android", how: "qr" | "code", expect: "relay" | "companion", build: "shipped" | "next" = "shipped"): Promise<Phone | null> => {
+    const pair = async (name: string, kind: "ios" | "android", how: "qr" | "code", expect: "relay" | "companion", build: "shipped" | "next" | "1.2.3" | "1.2.4" = "shipped"): Promise<Phone | null> => {
       if (expect === "relay") await relay.ready(15_000);
       const offer = await owner(desk.url, "POST", "/api/mobile/pairing", { companion: [{ url: companion, kind: "lan", priority: 0 }] });
       const body = offer.body as MobilePairingResponse;
       const kinds = offer.status === 200 ? body.payload.via.map((one) => one.kind).join(",") : `${offer.status} ${JSON.stringify(offer.body)}`;
       check(`${name}: the desktop's code carries ${expect === "relay" ? "relay first, then Wi-Fi" : "Wi-Fi only"}`, offer.status === 200 && kinds === (expect === "relay" ? "relay,companion" : "companion"), kinds);
       if (offer.status !== 200) return null;
-      const shipped = build === "next" ? builds.next : builds[kind], platform = fakePlatform(kind, name);
+      const shipped = build === "shipped" ? builds[kind] : builds[build], platform = build === "1.2.3" || build === "1.2.4" ? fakePlatform(kind, name, build) : fakePlatform(kind, name);
       let payload: unknown;
       if (how === "qr") payload = shipped.readScanned(universalPairLink(body.link, body.code))?.payload;
       else payload = await shipped.resolveTypedCode(body.code!, link.base()).catch((error: Error) => { check(`${name}: typed code resolves`, false, error.message); return null; });
@@ -269,7 +403,7 @@ async function main() {
       if (!paired) return null;
       await shipped.createConnectionStore(platform).save(paired.record, paired.token);
       // the next build pairs over the Wi-Fi address when it answers first, and still takes its relay channel
-      const over = build === "next" && expect === "relay" ? ["relay", "companion"].includes(paired.record.transport) : paired.record.transport === expect;
+      const over = build !== "shipped" && expect === "relay" ? ["relay", "companion"].includes(paired.record.transport) : paired.record.transport === expect;
       check(`${name}: pairs by ${how} over ${paired.record.transport}`, over && (expect !== "relay" || Boolean(paired.record.relay?.agentPub)), `${paired.record.transport}, device ${paired.record.deviceId}`);
       return { name, shipped, platform, record: paired.record, token: paired.token };
     };
@@ -295,7 +429,11 @@ async function main() {
     check("the desktop lists both phones, each on the relay", devices.body?.devices?.filter((device: { relay: boolean }) => device.relay).length === 2, `${devices.body?.devices?.length}`);
     // the next build: Wi-Fi first where it answers, the relay raced right behind
     const nextPhone = PROD ? null : await pair("iPhone next", "ios", "qr", "relay", "next");
-    if (nextPhone) await expectRoute(nextPhone, "opens and chats", connected, true);
+    const nextTyped = PROD ? null : await pair("Android next", "android", "code", "relay", "next");
+    // the Android builds after 1.2.1, which race Wi-Fi beside the relay like the next build
+    const releases = PROD ? [] : [await pair("Android 1.2.3", "android", "code", "relay", "1.2.3"), await pair("Android 1.2.4", "android", "qr", "relay", "1.2.4")];
+    const later = [nextPhone, nextTyped, ...releases].filter((phone): phone is Phone => Boolean(phone));
+    for (const phone of later) await expectRoute(phone, "opens and chats", connected, true);
 
     if (PROD) {
       // the computer's hub down (the app quit or asleep) while link.dusk.bot stays up: the phones' frames wait unread
@@ -314,11 +452,24 @@ async function main() {
       return;
     }
 
+    // a slow mobile link to the relay (every chunk 400 ms late each way): the phones still open and chat over it
+    const slow = await slowLink(link.base(), Number(process.env.E2E_SLOW_MS ?? 400));
+    cleanups.push(() => slow.close());
+    const overSlowLink = (phone: Phone): Phone => ({ ...phone, record: { ...phone.record, ...(phone.record.relay ? { relay: { ...phone.record.relay, base: slow.url } } : {}), via: (phone.record.via ?? []).flatMap((route) => route.kind === "relay" ? [{ ...route, base: slow.url }] : []) } });
+    for (const phone of [iphone, android, ...later]) await expectRoute(overSlowLink(phone), "a slow link to the relay: opens on it and chats", onRelay, true);
+    // this computer's own link to the relay is slow too: a phone pairing now still gets the relay
+    const onTunnel = (base: string) => { const saved = kept.get("e2e") as { tunnel: { base: string } }; kept.set("e2e", { ...saved, tunnel: { ...saved.tunnel, base } }); relay.stop(); relay = deskRelay(); relay.start(); };
+    onTunnel(slow.url);
+    const slowPair = await pair("Android 1.2.1 (slow computer link)", "android", "qr", "relay");
+    if (slowPair) await expectRoute(slowPair, "paired over a slow computer link: opens on the relay and chats", onRelay, true);
+    onTunnel(link.base());
+    if (slowPair) await owner(desk.url, "DELETE", `/api/mobile/devices/${slowPair.record.deviceId}`);
+
     // the Mac's Wi-Fi address changed: each phone still holds the old one, which takes the connection and never answers
     const old = await silentAddress();
     cleanups.push(() => old.close());
     const withOldAddress = (phone: Phone): Phone => ({ ...phone, record: { ...phone.record, via: (phone.record.via ?? []).flatMap((route) => route.kind === "companion" ? [{ ...route, url: old.url }, route] : [route]) } });
-    for (const phone of [iphone, android, ...(nextPhone ? [nextPhone] : [])]) await expectRoute(withOldAddress(phone), "the Mac's old Wi-Fi address goes silent: still opens at once", connected);
+    for (const phone of [iphone, android, ...later]) await expectRoute(withOldAddress(phone), "the Mac's old Wi-Fi address goes silent: still opens at once", connected);
 
     // the desktop app restarts (an update): the same tunnel and keys come back and so do the phones
     const before = tunnel()?.id;
@@ -334,13 +485,14 @@ async function main() {
     await expectRoute(iphone, "relay down: falls back to Wi-Fi and is not unpaired", onCompanion, true);
     await expectRoute(android, "relay down: falls back to Wi-Fi and is not unpaired", onCompanion);
     check("the companion now knows both relay-paired phones", mobile.has(iphone.token) && mobile.has(android.token));
-    if (nextPhone) await expectRoute(nextPhone, "relay down: on Wi-Fi", onCompanion, true);
+    for (const phone of later) await expectRoute(phone, "relay down: on Wi-Fi", onCompanion, true);
     // relay down and the old Wi-Fi address first: the shipped builds wait out the silent one, the next build does not
     await expectRoute(withOldAddress(iphone), "relay down, old Wi-Fi address first: reaches the new one", onCompanion);
-    if (nextPhone) await expectRoute(withOldAddress(nextPhone), "relay down, old Wi-Fi address first: reaches the new one", onCompanion);
+    for (const phone of later) await expectRoute(withOldAddress(phone), "relay down, old Wi-Fi address first: reaches the new one", onCompanion);
 
     // a phone pairing while the relay is down gets the Wi-Fi route alone
     const wifiOnly = await pair("Android 1.2.1 (Wi-Fi only)", "android", "qr", "companion");
+    const healing = PROD ? null : await pair("iPhone next (Wi-Fi only)", "ios", "qr", "companion", "next");
 
     // the link node restarts on its saved state
     await link.start();
@@ -348,16 +500,35 @@ async function main() {
     check("iPhone 1.2: back on the relay after the link node restarts", Boolean(back), `${walked.get("iPhone 1.2")}ms for the last walk`);
     await expectRoute(android, "back on the relay after the link node restarts", onRelay);
 
+    // the next build paired while the relay was down: its next connect over Wi-Fi opens its own relay channel, so with
+    // the Wi-Fi gone it reaches the computer through the relay, never pairing again
+    if (healing?.shipped.learnRoutes && healing.shipped.relaySecrets) {
+      const overWifi = await launch(healing);
+      if (typeof overWifi !== "string") {
+        const ask = (async (path: string, init: RequestInit = {}) => {
+          const body = typeof init.body === "string" ? JSON.parse(init.body) : undefined;
+          return phoneRequest(overWifi, init.method ?? "GET", String(path), body);
+        }) as typeof fetch;
+        let healed: PhoneRecord | null = null;
+        await healing.shipped.learnRoutes(healing.record, overWifi, async (_id, via, relay) => { if (relay) healed = { ...healing.record, via, relay, ...(via?.some((route) => route.kind === "relay") ? {} : { relayLate: true as const }) }; },
+          ask, () => healing.shipped.relaySecrets!(healing.platform, healing.record.id));
+        closeRoute(overWifi);
+        const record = healed as PhoneRecord | null;
+        check("iPhone next (Wi-Fi only): opens its own relay channel on its next connect", Boolean(record?.relay?.agentPub), JSON.stringify(record?.relay ?? null));
+        if (record) await expectRoute({ ...healing, record: { ...record, via: [] } }, "Wi-Fi gone: reaches the computer through the relay it opened, not paired again", onRelay, true);
+      } else check("iPhone next (Wi-Fi only): opens on Wi-Fi", false, overWifi);
+    }
+
     // the harness restarts: unreachable meanwhile, never unpaired, and the same session works after
     await desk.stop();
     await expectRoute(iphone, "harness down: unreachable, still paired", (route) => route === "unreachable");
-    if (nextPhone) await expectRoute(nextPhone, "harness down: unreachable, still paired", (route) => route === "unreachable");
+    for (const phone of later) await expectRoute(phone, "harness down: unreachable, still paired", (route) => route === "unreachable");
     await expectRoute(android, "harness down: unreachable, still paired", (route) => route === "unreachable");
     check("the harness starts again on the same workspace", await desk.start());
     const afterRestart = await until(async () => (await launch(iphone).then((outcome) => { const route = routeOf(outcome); closeRoute(outcome); return route === "relay"; })), 60_000);
     check("iPhone 1.2: back on the relay with its same session after the harness restart", Boolean(afterRestart));
     await expectRoute(android, "back after the harness restart, and chats", onRelay, true);
-    if (nextPhone) await expectRoute(nextPhone, "back after the harness restart, and chats", connected, true);
+    for (const phone of later) await expectRoute(phone, "back after the harness restart, and chats", connected, true);
 
     // the tunnel dropped by the link service (the sweep of a computer that was off): Wi-Fi meanwhile, then the same
     // phones on a new tunnel with the same channels and keys
@@ -371,16 +542,17 @@ async function main() {
     await expectRoute(android, "on the relay again through the new tunnel", onRelay);
 
     // removed on the desktop: the phone hears it (relay channel gone) and unpairs
+    if (healing) await owner(desk.url, "DELETE", `/api/mobile/devices/${healing.record.deviceId}`);
     if (wifiOnly) {
       await expectRoute(wifiOnly, "Wi-Fi-only phone opens on Wi-Fi and chats", onCompanion, true);
       const removed = await owner(desk.url, "DELETE", `/api/mobile/devices/${wifiOnly.record.deviceId}`);
       check("the desktop removes the Wi-Fi-only phone", removed.status === 200, `${removed.status}`);
       await expectRoute(wifiOnly, "removed on the desktop: unpairs over Wi-Fi", (route) => route === "refused");
     }
-    if (nextPhone) {
-      const gone = await owner(desk.url, "DELETE", `/api/mobile/devices/${nextPhone.record.deviceId}`);
-      check("the desktop removes the next build's iPhone", gone.status === 200, `${gone.status}`);
-      await expectRoute(nextPhone, "removed on the desktop: unpairs", (route) => route === "refused");
+    for (const phone of later) {
+      const gone = await owner(desk.url, "DELETE", `/api/mobile/devices/${phone.record.deviceId}`);
+      check(`the desktop removes ${phone.name}`, gone.status === 200, `${gone.status}`);
+      await expectRoute(phone, "removed on the desktop: unpairs", (route) => route === "refused");
     }
     const removed = await owner(desk.url, "DELETE", `/api/mobile/devices/${iphone.record.deviceId}`);
     check("the desktop removes the iPhone", removed.status === 200, `${removed.status}`);
@@ -398,6 +570,79 @@ async function main() {
     const left = await owner(desk.url, "GET", "/api/mobile/devices");
     check("the desktop lists no phones", Array.isArray(left.body?.devices) && left.body.devices.length === 0, `${left.body?.devices?.length}`);
     await expectRoute(android, "after removing itself it opens on pairing", (route) => route === "refused");
+
+    // a server of your own: its harness as a server (no desktop app), the link agent's phone hub beside it on its own
+    // tunnel, as a VPS install runs them; the phones pair by QR and typed code and live through what a server goes through
+    const vps = await harness(false);
+    cleanups.push(() => vps.close());
+    const vpsBot = (await owner(vps.url, "POST", "/api/bots", { name: "Probe" }, "cli")).body?.bot?.id as string;
+    const vpsTunnel = await createRelayTunnel({ base: link.base(), grant: (await linkGrant())!, label: "E2E server phones" });
+    const vpsKeys = x25519Pair();
+    const vpsHub = () => { const hub = createPhoneHub({ base: vpsTunnel.base, id: vpsTunnel.id, token: vpsTunnel.token, keys: vpsKeys, server: { host: "127.0.0.1", port: vps.port }, proxy: null, log: () => {} }); void hub.run().catch(() => {}); return hub; };
+    let agentHub = vpsHub();
+    cleanups.push(() => agentHub.stop());
+    const pairServer = async (name: string, kind: "ios" | "android", how: "qr" | "code", build: keyof typeof builds): Promise<Phone | null> => {
+      const offer = await until(async () => { const one = await owner(vps.url, "POST", "/api/mobile/pairing", {}, "cli"); return one.body?.payload?.via?.some((route: { kind: string }) => route.kind === "relay") ? one : null; }, 30_000);
+      const body = offer?.body as MobilePairingResponse | undefined;
+      if (!check(`${name}: the server's code carries the relay`, Boolean(body), body ? body.payload.via.map((one) => one.kind).join(",") : "no relay")) return null;
+      const shipped = builds[build], platform = fakePlatform(kind, name, build === "1.2.3" || build === "1.2.4" ? build : undefined);
+      const payload = how === "qr" ? shipped.readScanned(universalPairLink(body!.link, body!.code))?.payload : await shipped.resolveTypedCode(body!.code!, link.base()).catch(() => null);
+      const paired = payload ? await shipped.redeemPairing(payload, platform).catch(() => null) : null;
+      if (!check(`${name}: pairs with the server by ${how} over the relay`, paired?.record.transport === "relay" && Boolean(paired.record.relay?.agentPub), paired?.record.transport ?? "failed")) return null;
+      await shipped.createConnectionStore(platform).save(paired!.record, paired!.token);
+      return { name, shipped, platform, record: paired!.record, token: paired!.token };
+    };
+    const onServer = (await Promise.all([
+      pairServer("iPhone 1.2 (own server)", "ios", "qr", "ios"),
+      pairServer("Android 1.2.4 (own server)", "android", "code", "1.2.4"),
+      pairServer("iPhone next (own server)", "ios", "qr", "next"),
+    ])).filter((phone): phone is Phone => Boolean(phone));
+    const serverRoute = async (phone: Phone, label: string, want: (route: string) => boolean, chatWith = false) => {
+      const outcome = await launch(phone);
+      const ok = check(`${phone.name}: ${label}`, want(routeOf(outcome)), `${routeOf(outcome)} in ${walked.get(phone.name)}ms`);
+      if (ok && chatWith && typeof outcome !== "string") await chat(phone.name, outcome, vpsBot);
+      closeRoute(outcome);
+    };
+    // the server's own `duskbot pair`, as its owner runs it over ssh: the phone app's code over the relay, typed in the app
+    const printed = await new Promise<string>((resolve) => execFile(process.execPath, ["--experimental-strip-types", join(ROOT, "server", "duskbot.ts"), "pair", "--port", String(vps.port)],
+      { cwd: ROOT, env: { ...process.env, DUSK_DATA_DIR: vps.dataDir }, timeout: 60_000 }, (_error, stdout) => resolve(String(stdout))));
+    const cliCode = /type this code in the app:\s+([A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4})/.exec(printed)?.[1] ?? null;
+    if (check("`duskbot pair` on the server prints the phone app's code over the relay", Boolean(cliCode), cliCode ? undefined : printed.slice(0, 300))) {
+      const shipped = builds["1.2.4"], platform = fakePlatform("android", "Android 1.2.4 (duskbot pair)", "1.2.4");
+      const payload = await shipped.resolveTypedCode(cliCode!, link.base()).catch(() => null);
+      const paired = payload ? await shipped.redeemPairing(payload, platform).catch(() => null) : null;
+      if (check("Android 1.2.4: pairs with the code `duskbot pair` printed", paired?.record.transport === "relay", paired?.record.transport ?? "failed")) {
+        await shipped.createConnectionStore(platform).save(paired!.record, paired!.token);
+        onServer.push({ name: "Android 1.2.4 (duskbot pair)", shipped, platform, record: paired!.record, token: paired!.token });
+      }
+    }
+    for (const phone of onServer) await serverRoute(phone, "opens on the relay and chats", onRelay, true);
+    // the link agent restarts (its self-update) on the same tunnel and keys
+    agentHub.stop();
+    agentHub = vpsHub();
+    for (const phone of onServer) {
+      const back = await until(async () => { const outcome = await launch(phone); closeRoute(outcome); return routeOf(outcome) === "relay"; }, 60_000);
+      check(`${phone.name}: back on the relay after the link agent restarts`, Boolean(back));
+    }
+    // the server updates: its harness restarts, phones wait as unreachable, never unpaired, and chat after
+    await vps.stop();
+    for (const phone of onServer) await serverRoute(phone, "server restarting: unreachable, still paired", (route) => route === "unreachable");
+    check("the server starts again on the same workspace", await vps.start());
+    for (const phone of onServer) {
+      await until(async () => { const outcome = await launch(phone); closeRoute(outcome); return routeOf(outcome) === "relay"; }, 60_000);
+      await serverRoute(phone, "back after the server's update, and chats", onRelay, true);
+    }
+    // removed on the server: each phone hears it over the relay and unpairs
+    for (const phone of onServer) {
+      const gone = await owner(vps.url, "DELETE", `/api/mobile/devices/${phone.record.deviceId}`, undefined, "cli");
+      check(`the server removes ${phone.name}`, gone.status === 200, `${gone.status}`);
+      await serverRoute(phone, "removed on the server: unpairs", (route) => route === "refused");
+    }
+
+    // a dusk cloud: its home makes its own relay tunnel with the link grant the account service sends beside its
+    // entitlement; a phone signed in with the account keeps the cloud's https address first and opens a relay channel
+    // on its next connect, so with the https address out it still reaches the cloud through the relay
+    if (builds.next) await cloudPlace(scratch, cleanups, link.base(), () => signer.grant(), builds.next);
   } finally {
     for (const cleanup of cleanups.reverse()) { try { await cleanup(); } catch { /* best effort */ } }
   }

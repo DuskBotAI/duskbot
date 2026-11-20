@@ -1,0 +1,3402 @@
+{
+  "toolkit": "todoist",
+  "name": "Todoist",
+  "version": "20261116_00",
+  "description": "Todoist is a task management tool allowing users to create to-do lists, set deadlines, and collaborate on projects with reminders and cross-platform syncing",
+  "managed_sign_in": true,
+  "auth": [
+    "OAuth2"
+  ],
+  "tools_count": 84,
+  "triggers_count": 1,
+  "tools": [
+    {
+      "name": "Add Workspace",
+      "slug": "TODOIST_ADD_WORKSPACE",
+      "kind": "write",
+      "description": "Tool to create a new workspace in Todoist. Use when you need a separate workspace to organize projects. Generates UUID and temp_id automatically.",
+      "inputs": [
+        {
+          "name": "icon",
+          "type": "string",
+          "required": false,
+          "about": "Icon for the workspace (optional)."
+        },
+        {
+          "name": "name",
+          "type": "string",
+          "required": true,
+          "about": "Name of the new workspace."
+        },
+        {
+          "name": "uuid",
+          "type": "string",
+          "required": false,
+          "about": "UUID for this command for idempotency. If omitted, a new UUID is generated."
+        },
+        {
+          "name": "color",
+          "type": "integer",
+          "required": false,
+          "about": "Color ID for the workspace (optional)."
+        },
+        {
+          "name": "temp_id",
+          "type": "string",
+          "required": false,
+          "about": "Temporary identifier to map the command to the created resource. If omitted, a new UUID is generated."
+        }
+      ],
+      "scopes": [
+        "data:read",
+        "data:read_write",
+        "data:delete"
+      ],
+      "tags": [
+        "important",
+        "openWorldHint",
+        "createHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Archive Project (API v1)",
+      "slug": "TODOIST_ARCHIVE_PROJECT2",
+      "kind": "write",
+      "description": "Tool to archive a project using Todoist API v1. For personal projects, archives it for the initiating user. For workspace projects, archives it for all workspace users.",
+      "inputs": [
+        {
+          "name": "project_id",
+          "type": "string",
+          "required": true,
+          "about": "String ID of the project to archive."
+        }
+      ],
+      "scopes": [
+        "data:read_write"
+      ],
+      "tags": [
+        "important",
+        "updateHint",
+        "idempotentHint",
+        "openWorldHint",
+        "projects"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Bulk Create Tasks",
+      "slug": "TODOIST_BULK_CREATE_TASKS",
+      "kind": "write",
+      "description": "Create multiple Todoist tasks in one Sync batch request. Individual commands can fail even when others succeed; inspect sync_status for each command's result.",
+      "inputs": [
+        {
+          "name": "tasks",
+          "type": "array",
+          "required": true,
+          "about": "Array of task specifications to create. Each task must have at minimum a 'content' field."
+        }
+      ],
+      "scopes": [
+        "data:read_write",
+        "task:add"
+      ],
+      "tags": [
+        "important",
+        "openWorldHint",
+        "batch",
+        "createHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Close Task (Deprecated)",
+      "slug": "TODOIST_CLOSE_TASK",
+      "kind": "write",
+      "description": "DEPRECATED: Use TODOIST_CLOSE_TASK_V1 instead. This tool marks an existing task as completed in Todoist. It requires the `task_id` of the task to be closed. Closing an already-completed task returns an error; check task state first if idempotent behavior is needed.",
+      "inputs": [
+        {
+          "name": "task_id",
+          "type": "string",
+          "required": true,
+          "about": "The ID of the task to close (alphanumeric format from unified API v1). Verify the ID belongs to the intended task before calling, as completing the wrong task cannot be undone easily; use TODOIST_GET_ALL_TASKS or TODOIST_GET_TASK to confirm identity."
+        }
+      ],
+      "scopes": [
+        "data:read_write"
+      ],
+      "tags": [
+        "updateHint",
+        "important",
+        "openWorldHint",
+        "tasks",
+        "deprecated"
+      ],
+      "deprecated": true
+    },
+    {
+      "name": "Close Task (API v1)",
+      "slug": "TODOIST_CLOSE_TASK_V1",
+      "kind": "write",
+      "description": "Tool to close (complete) a task in Todoist using API v1. Use when you need to mark a task as complete using the v1 endpoint.",
+      "inputs": [
+        {
+          "name": "task_id",
+          "type": "string",
+          "required": true,
+          "about": "String ID of the task to close. Regular tasks are marked complete and moved to history along with their subtasks. Tasks with recurring due dates are scheduled to their next occurrence."
+        }
+      ],
+      "scopes": [
+        "data:read_write"
+      ],
+      "tags": [
+        "important",
+        "openWorldHint",
+        "tasks",
+        "updateHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Create Comment (API v1)",
+      "slug": "TODOIST_CREATE_COMMENT_V1",
+      "kind": "send",
+      "description": "Tool to create a new comment on a project or task using Todoist API v1. Use when you need to add a note to a specific task or project. IMPORTANT: You must provide EXACTLY ONE of task_id or project_id - these parameters are mutually exclusive. - To comment on a task, provide task_id (and omit project_id) - To comment on a project, provide project_id (and omit task_id) - Providing both task_id AND project_id will cause an error.",
+      "inputs": [
+        {
+          "name": "content",
+          "type": "string",
+          "required": true,
+          "about": "The content of the comment. Must be between 1 and 15000 characters."
+        },
+        {
+          "name": "task_id",
+          "type": "",
+          "required": false,
+          "about": "The ID of the task to attach the comment to. IMPORTANT: Provide EITHER task_id OR project_id, but NOT BOTH. These parameters are mutually exclusive."
+        },
+        {
+          "name": "attachment",
+          "type": "object",
+          "required": false,
+          "about": "Attachment metadata for comments in API v1."
+        },
+        {
+          "name": "project_id",
+          "type": "",
+          "required": false,
+          "about": "The ID of the project to attach the comment to. IMPORTANT: Provide EITHER project_id OR task_id, but NOT BOTH. These parameters are mutually exclusive."
+        },
+        {
+          "name": "uids_to_notify",
+          "type": "array",
+          "required": false,
+          "about": "Optional list of user IDs to notify about this comment."
+        }
+      ],
+      "scopes": [
+        "data:read_write"
+      ],
+      "tags": [
+        "important",
+        "openWorldHint",
+        "comments",
+        "createHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Create Label (Deprecated)",
+      "slug": "TODOIST_CREATE_LABEL",
+      "kind": "write",
+      "description": "DEPRECATED: Use TODOIST_CREATE_LABEL_V1 instead. Creates a new label.",
+      "inputs": [
+        {
+          "name": "name",
+          "type": "string",
+          "required": true,
+          "about": "Name of the label. Must be a non-empty string."
+        },
+        {
+          "name": "color",
+          "type": "integer",
+          "required": false,
+          "about": "Color of the label. See https://developer.todoist.com/guides/#colors for available colors. Only supported integer codes from that reference are valid; arbitrary integers cause validation errors."
+        },
+        {
+          "name": "order",
+          "type": "integer",
+          "required": false,
+          "about": "The order of the label in the list."
+        },
+        {
+          "name": "is_favorite",
+          "type": "boolean",
+          "required": false,
+          "about": "Whether the label is a favorite."
+        }
+      ],
+      "scopes": "$undefined",
+      "tags": [
+        "important",
+        "openWorldHint",
+        "deprecated",
+        "createHint"
+      ],
+      "deprecated": true
+    },
+    {
+      "name": "Create Label (API v1)",
+      "slug": "TODOIST_CREATE_LABEL_V1",
+      "kind": "write",
+      "description": "Tool to create a new personal label using API v1. Use when you need to add a new label to organize tasks.",
+      "inputs": [
+        {
+          "name": "name",
+          "type": "string",
+          "required": true,
+          "about": "Name of the new label. Must be between 1 and 128 characters."
+        },
+        {
+          "name": "color",
+          "type": "",
+          "required": false,
+          "about": "Label color. Can be a color name (e.g., 'blue', 'red') or a color code (integer). Defaults to 'charcoal' if not specified."
+        },
+        {
+          "name": "order",
+          "type": "integer",
+          "required": false,
+          "about": "Position of the new label in the label list. Used by clients to sort labels."
+        },
+        {
+          "name": "is_favorite",
+          "type": "boolean",
+          "required": false,
+          "about": "Whether the label is marked as a favorite. Defaults to false if not specified."
+        }
+      ],
+      "scopes": [
+        "data:read_write"
+      ],
+      "tags": [
+        "important",
+        "openWorldHint",
+        "labels",
+        "createHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Create Project (Deprecated)",
+      "slug": "TODOIST_CREATE_PROJECT",
+      "kind": "write",
+      "description": "Creates a new Todoist project. This action is deprecated; use the returned project ID for subsequent operations to avoid ambiguous name matches.",
+      "inputs": [
+        {
+          "name": "name",
+          "type": "string",
+          "required": true,
+          "about": "Name of the project. Must be non-empty; empty values cause validation failures."
+        },
+        {
+          "name": "color",
+          "type": "string",
+          "required": false,
+          "about": "Enum for project colors. Names are based on Todoist's standard palette."
+        },
+        {
+          "name": "favorite",
+          "type": "boolean",
+          "required": false,
+          "about": "Whether the project should be marked as a favorite."
+        },
+        {
+          "name": "parent_id",
+          "type": "string",
+          "required": false,
+          "about": "ID of the parent project to create a sub-project. If not set, it's a top-level project. Must reference an existing project ID; an incorrect value buries the project deep in the hierarchy."
+        },
+        {
+          "name": "view_style",
+          "type": "string",
+          "required": false,
+          "about": "Enum for project view styles."
+        }
+      ],
+      "scopes": "$undefined",
+      "tags": [
+        "important",
+        "openWorldHint",
+        "deprecated",
+        "createHint"
+      ],
+      "deprecated": true
+    },
+    {
+      "name": "Create Project (API v1)",
+      "slug": "TODOIST_CREATE_PROJECT2",
+      "kind": "write",
+      "description": "Tool to create a new project in Todoist using the unified API v1. Use when you need to create a new project with specific parameters like name, color, or parent project.",
+      "inputs": [
+        {
+          "name": "name",
+          "type": "string",
+          "required": true,
+          "about": "The project name. This is the only required field."
+        },
+        {
+          "name": "color",
+          "type": "",
+          "required": false,
+          "about": "Project color. Can be either a color name (e.g., 'berry_red', 'blue') or a numeric color code. Default is 'charcoal'."
+        },
+        {
+          "name": "parent_id",
+          "type": "",
+          "required": false,
+          "about": "Parent project ID. If provided, creates this project as a sub-project. Can be either a string or integer ID."
+        },
+        {
+          "name": "view_style",
+          "type": "string",
+          "required": false,
+          "about": "View style of the project. Can be 'list' or 'board'."
+        },
+        {
+          "name": "description",
+          "type": "string",
+          "required": false,
+          "about": "Description of the project. Optional field."
+        },
+        {
+          "name": "is_favorite",
+          "type": "boolean",
+          "required": false,
+          "about": "Whether the project is a favorite for the user. Default is false."
+        },
+        {
+          "name": "workspace_id",
+          "type": "integer",
+          "required": false,
+          "about": "Workspace ID. If provided, creates a workspace project instead of a personal project."
+        }
+      ],
+      "scopes": [
+        "data:read_write"
+      ],
+      "tags": [
+        "important",
+        "openWorldHint",
+        "projects",
+        "createHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Create Section (Deprecated)",
+      "slug": "TODOIST_CREATE_SECTION",
+      "kind": "write",
+      "description": "DEPRECATED: Use TODOIST_CREATE_SECTION_V1 instead. Tool to create a new section within a specific project. Use when you need to group tasks under a new heading in a project.",
+      "inputs": [
+        {
+          "name": "name",
+          "type": "string",
+          "required": true,
+          "about": "Name of the new section. This will be the section heading in the project."
+        },
+        {
+          "name": "order",
+          "type": "integer",
+          "required": false,
+          "about": "Position of the new section in the project. Lower values appear first. If not specified, the section will be added to the end."
+        },
+        {
+          "name": "project_id",
+          "type": "string",
+          "required": true,
+          "about": "ID of the project to add the section to."
+        }
+      ],
+      "scopes": [
+        "data:read_write"
+      ],
+      "tags": [
+        "important",
+        "openWorldHint",
+        "deprecated",
+        "createHint"
+      ],
+      "deprecated": true
+    },
+    {
+      "name": "Create Section (API v1)",
+      "slug": "TODOIST_CREATE_SECTION_V1",
+      "kind": "write",
+      "description": "Tool to create a new section within a project using API v1. Use when you need to organize tasks under a new heading in a project.",
+      "inputs": [
+        {
+          "name": "name",
+          "type": "string",
+          "required": true,
+          "about": "Name of the new section. This will be the section heading in the project."
+        },
+        {
+          "name": "order",
+          "type": "integer",
+          "required": false,
+          "about": "Position of the new section in the project. Lower values appear first. If not specified, the section will be added to the end."
+        },
+        {
+          "name": "project_id",
+          "type": "string",
+          "required": true,
+          "about": "ID of the project to add the section to. Must be a new-format alphanumeric string ID. Legacy numeric project IDs are not supported by the v1 API."
+        }
+      ],
+      "scopes": [
+        "data:read_write"
+      ],
+      "tags": [
+        "important",
+        "openWorldHint",
+        "sections",
+        "createHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Create task",
+      "slug": "TODOIST_CREATE_TASK",
+      "kind": "write",
+      "description": "Create a Todoist task with content, due dates, priority and other details in a project or section, or as a subtask. Project, section and parent task IDs consisting only of digits are rejected.",
+      "inputs": [
+        {
+          "name": "order",
+          "type": "integer",
+          "required": false,
+          "about": "Non-zero integer value used to sort tasks under the same parent."
+        },
+        {
+          "name": "labels",
+          "type": "array",
+          "required": false,
+          "about": "The task's labels (list of names for personal/shared labels). Labels must already exist in Todoist; referencing non-existent labels may fail silently."
+        },
+        {
+          "name": "content",
+          "type": "string",
+          "required": true,
+          "about": "Task content/title. Can contain markdown-formatted text and hyperlinks. Do NOT include due dates or times in this field - use due_string instead."
+        },
+        {
+          "name": "due_date",
+          "type": "string",
+          "required": false,
+          "about": "Specific date in YYYY-MM-DD format relative to user's timezone. Use this for exact dates without time. For natural language dates, use due_string instead. Only one due_* field can be used at a time (except due_lang). Cannot express recurrence; one-off tasks only. Use due_string (e.g., 'every Friday'"
+        },
+        {
+          "name": "due_lang",
+          "type": "string",
+          "required": false,
+          "about": "2-letter ISO 639-1 language code for parsing due_string. Required when due_string is in a language other than English. Supported codes: da (Danish), de (German), en (English), es (Spanish), fi (Finnish), fr (French), it (Italian), ja (Japanese), ko (Korean), nb (Norwegian), nl (Dutch), pl (Polish), "
+        },
+        {
+          "name": "duration",
+          "type": "integer",
+          "required": false,
+          "about": "Task duration amount as a positive integer. Must be used together with duration_unit. Use this field for task duration instead of embedding 'for X minutes' in due_string. Example: for a 15-minute task, set duration=15 and duration_unit='minute'."
+        },
+        {
+          "name": "priority",
+          "type": "integer",
+          "required": false,
+          "about": "Task priority from 1 (normal) to 4 (urgent)."
+        },
+        {
+          "name": "parent_id",
+          "type": "string",
+          "required": false,
+          "about": "Parent task ID for creating subtasks. Use IDs from TODOIST_GET_ALL_TASKS or TODOIST_GET_ACTIVE_TASK."
+        },
+        {
+          "name": "due_string",
+          "type": "string",
+          "required": false,
+          "about": "Human-defined due date in arbitrary format. Accepts natural language expressions like 'tomorrow', 'next Monday at 3pm', 'in 2 hours', 'every Friday'. Also accepts formatted dates like 'Jan 21, 2026' or ISO dates like '2026-01-21'. Value is interpreted using local time. IMPORTANT: If the due string i"
+        },
+        {
+          "name": "project_id",
+          "type": "string",
+          "required": false,
+          "about": "Project ID where the task will be created. Use IDs from TODOIST_GET_ALL_PROJECTS or TODOIST_CREATE_PROJECT. If not set, task is added to the user's Inbox. Project names are not unique; always use numeric IDs."
+        },
+        {
+          "name": "section_id",
+          "type": "string",
+          "required": false,
+          "about": "Section ID to put task into. Use IDs from TODOIST_GET_ALL_SECTIONS."
+        },
+        {
+          "name": "assignee_id",
+          "type": "string",
+          "required": false,
+          "about": "The responsible user ID for shared tasks (numeric format)."
+        },
+        {
+          "name": "description",
+          "type": "string",
+          "required": false,
+          "about": "Additional notes or details about the task. Can contain markdown-formatted text and hyperlinks. IMPORTANT: Do NOT include due dates, times, or scheduling information here - use the due_string field for natural language dates (e.g., 'tomorrow at 2pm') or due_date/due_datetime for specific dates."
+        },
+        {
+          "name": "due_datetime",
+          "type": "string",
+          "required": false,
+          "about": "Specific date and time in RFC3339 format in UTC. Use this for exact date and time. Only one due_* field can be used at a time (except due_lang). Cannot express recurrence; one-off tasks only. Use due_string for recurring schedules."
+        },
+        {
+          "name": "duration_unit",
+          "type": "string",
+          "required": false,
+          "about": "Units for task duration in Todoist."
+        }
+      ],
+      "scopes": [
+        "task:add"
+      ],
+      "tags": [
+        "important",
+        "openWorldHint",
+        "createHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Delete Comment",
+      "slug": "TODOIST_DELETE_COMMENT",
+      "kind": "write",
+      "description": "Tool to delete a specific comment from Todoist by its ID. Use when you need to permanently remove a comment.",
+      "inputs": [
+        {
+          "name": "comment_id",
+          "type": "string",
+          "required": true,
+          "about": "The ID of the comment to delete. Todoist supports alphanumeric comment IDs (e.g., '6fvWm92qwCcwhq7W')."
+        }
+      ],
+      "scopes": [
+        "data:delete"
+      ],
+      "tags": [
+        "important",
+        "destructiveHint",
+        "idempotentHint",
+        "openWorldHint",
+        "comments"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Delete Label (V1)",
+      "slug": "TODOIST_DELETE_LABEL_V1",
+      "kind": "write",
+      "description": "Deletes a personal label by numeric ID using API v1. All instances of the label will be removed from tasks.",
+      "inputs": [
+        {
+          "name": "label_id",
+          "type": "string",
+          "required": true,
+          "about": "The ID of the personal label to delete. All instances of the label will be removed from tasks."
+        }
+      ],
+      "scopes": [
+        "data:delete"
+      ],
+      "tags": [
+        "important",
+        "destructiveHint",
+        "idempotentHint",
+        "openWorldHint",
+        "labels"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Delete Project (API v1)",
+      "slug": "TODOIST_DELETE_PROJECT2",
+      "kind": "write",
+      "description": "Tool to delete a project and all of its sections and tasks using Todoist API v1. Use when you need to permanently remove a project by its ID.",
+      "inputs": [
+        {
+          "name": "project_id",
+          "type": "string",
+          "required": true,
+          "about": "The ID of the project to delete. Can be numeric or alphanumeric format."
+        }
+      ],
+      "scopes": [
+        "project:delete",
+        "data:delete"
+      ],
+      "tags": [
+        "important",
+        "destructiveHint",
+        "idempotentHint",
+        "openWorldHint",
+        "projects"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Delete Section (v1)",
+      "slug": "TODOIST_DELETE_SECTION2",
+      "kind": "write",
+      "description": "Tool to delete a section and all tasks within it. Use when you need to permanently remove a section by its ID.",
+      "inputs": [
+        {
+          "name": "section_id",
+          "type": "string",
+          "required": true,
+          "about": "ID of the section to delete. This will delete the section and all tasks within it."
+        }
+      ],
+      "scopes": [
+        "data:delete"
+      ],
+      "tags": [
+        "important",
+        "destructiveHint",
+        "idempotentHint",
+        "openWorldHint",
+        "sections"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Delete Task",
+      "slug": "TODOIST_DELETE_TASK",
+      "kind": "write",
+      "description": "Tool to delete a specific task from Todoist. Permanently removes the task and all its subtasks with no recycle bin or undo option. Confirm with the user before executing, especially for bulk deletions.",
+      "inputs": [
+        {
+          "name": "task_id",
+          "type": "string",
+          "required": true,
+          "about": "The ID of the task to delete. Todoist supports both numeric IDs (e.g., '2995104339') and alphanumeric IDs (e.g., '6X4Vw2Hfmg73Q2XR')."
+        }
+      ],
+      "scopes": [
+        "data:delete"
+      ],
+      "tags": [
+        "destructiveHint",
+        "important",
+        "openWorldHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Delete Task (API v1)",
+      "slug": "TODOIST_DELETE_TASK_V1",
+      "kind": "write",
+      "description": "DEPRECATED: Use TODOIST_DELETE_TASK instead. Tool to delete a specific task from Todoist using API v1. Use when you need to permanently remove a task by its ID.",
+      "inputs": [
+        {
+          "name": "task_id",
+          "type": "string",
+          "required": true,
+          "about": "The ID of the task to delete. Todoist supports both numeric IDs (e.g., '2995104339') and alphanumeric IDs (e.g., '6fvWm74vJ773g5p4')."
+        }
+      ],
+      "scopes": [
+        "data:delete"
+      ],
+      "tags": [
+        "important",
+        "destructiveHint",
+        "idempotentHint",
+        "openWorldHint",
+        "tasks",
+        "deprecated"
+      ],
+      "deprecated": true
+    },
+    {
+      "name": "Delete Upload",
+      "slug": "TODOIST_DELETE_UPLOAD",
+      "kind": "write",
+      "description": "Tool to delete an uploaded file from Todoist. Use when you need to remove a file that was previously uploaded.",
+      "inputs": [
+        {
+          "name": "file_url",
+          "type": "string",
+          "required": true,
+          "about": "The URL of the file to delete. This should be the full URL of the file as returned when it was uploaded (e.g., 'https://files.todoist.com/...')."
+        }
+      ],
+      "scopes": [
+        "data:delete"
+      ],
+      "tags": [
+        "important",
+        "destructiveHint",
+        "idempotentHint",
+        "openWorldHint",
+        "files"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Export Template As File",
+      "slug": "TODOIST_EXPORT_TEMPLATE_AS_FILE",
+      "kind": "write",
+      "description": "Tool to export a Todoist project as a CSV template file. Use when you need to download a project template as a file for backup or sharing.",
+      "inputs": [
+        {
+          "name": "project_id",
+          "type": "string",
+          "required": true,
+          "about": "The ID of the project to export as a template CSV file (alphanumeric V2 format, not numeric V1 IDs). Use TODOIST_GET_ALL_PROJECTS to get valid project IDs."
+        },
+        {
+          "name": "use_relative_dates",
+          "type": "boolean",
+          "required": false,
+          "about": "Whether to use relative dates in the template (e.g., 'tomorrow' instead of specific dates). Defaults to true."
+        }
+      ],
+      "scopes": [
+        "data:read",
+        "data:read_write"
+      ],
+      "tags": [
+        "readOnlyHint",
+        "openWorldHint",
+        "templates"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Export Template As URL",
+      "slug": "TODOIST_EXPORT_TEMPLATE_AS_URL",
+      "kind": "write",
+      "description": "Tool to export a Todoist project as a shareable template URL. Use when you need to share a project structure or create copies from a template.",
+      "inputs": [
+        {
+          "name": "project_id",
+          "type": "string",
+          "required": true,
+          "about": "The ID of the project to export as a template (alphanumeric V2 format, not numeric V1 IDs). Use TODOIST_GET_ALL_PROJECTS to get valid project IDs."
+        },
+        {
+          "name": "use_relative_dates",
+          "type": "boolean",
+          "required": false,
+          "about": "Whether to use relative dates in the template (e.g., 'tomorrow' instead of specific dates). Defaults to true."
+        }
+      ],
+      "scopes": [
+        "data:read"
+      ],
+      "tags": [
+        "important",
+        "readOnlyHint",
+        "openWorldHint",
+        "templates"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Filter Tasks",
+      "slug": "TODOIST_FILTER_TASKS",
+      "kind": "write",
+      "description": "Tool to get all tasks matching the filter. Use when you need to retrieve tasks based on specific filter criteria. This is a paginated endpoint using cursor-based pagination.",
+      "inputs": [
+        {
+          "name": "lang",
+          "type": "string",
+          "required": false,
+          "about": "IETF language tag defining what language filter is written in, if differs from default English."
+        },
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "about": "The number of objects to return in a page (1-200). Default is 50."
+        },
+        {
+          "name": "query",
+          "type": "string",
+          "required": true,
+          "about": "Filter tasks using Todoist filter syntax. Terms must be valid keywords or reference existing entities in the user's account. Comma operator (,) is NOT supported. **CRITICAL: Multiple filter conditions MUST be joined with explicit logical operators (&, |, !). Space-separated filters are INVALID and w"
+        },
+        {
+          "name": "cursor",
+          "type": "string",
+          "required": false,
+          "about": "Cursor for pagination. Provide the next_cursor value from previous response to get next page."
+        }
+      ],
+      "scopes": [
+        "data:read",
+        "data:read_write"
+      ],
+      "tags": [
+        "important",
+        "readOnlyHint",
+        "openWorldHint",
+        "tasks"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get All Comments",
+      "slug": "TODOIST_GET_ALL_COMMENTS",
+      "kind": "read",
+      "description": "Retrieve comments for a specific Todoist task or project, providing exactly one of task_id or project_id. Returns one page in comments; use limit to set the page size and pass next_cursor as cursor with the same target for further pages.",
+      "inputs": [
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "about": "Number of comments per page (1-200). Omit to use Todoist's default of 50."
+        },
+        {
+          "name": "cursor",
+          "type": "string",
+          "required": false,
+          "about": "Opaque next_cursor from the previous page. Keep the same task_id or project_id when requesting subsequent pages."
+        },
+        {
+          "name": "task_id",
+          "type": "string",
+          "required": false,
+          "about": "The ID of the task for which to retrieve comments. Mutually exclusive with project_id - provide only one, not both."
+        },
+        {
+          "name": "project_id",
+          "type": "string",
+          "required": false,
+          "about": "The ID of the project for which to retrieve comments. Mutually exclusive with task_id - provide only one, not both."
+        },
+        {
+          "name": "public_key",
+          "type": "string",
+          "required": false,
+          "about": "Public project access key, if accessing comments on a public project. Reuse it on subsequent pages."
+        }
+      ],
+      "scopes": [
+        "data:read",
+        "data:read_write"
+      ],
+      "tags": [
+        "comments",
+        "important",
+        "openWorldHint",
+        "readOnlyHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get all projects",
+      "slug": "TODOIST_GET_ALL_PROJECTS",
+      "kind": "read",
+      "description": "Get a page of active projects from a user's Todoist account. Returns projects with their id, name, color, parent, sharing status and inbox_project flag, plus a next cursor for pagination.",
+      "inputs": [
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "about": "The number of projects to return per page. Defaults to server default if not provided."
+        },
+        {
+          "name": "cursor",
+          "type": "string",
+          "required": false,
+          "about": "Pagination cursor from a previous response. Use the next_cursor value to fetch the next page of results."
+        }
+      ],
+      "scopes": [
+        "data:read"
+      ],
+      "tags": [
+        "important",
+        "openWorldHint",
+        "readOnlyHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get All Tasks",
+      "slug": "TODOIST_GET_ALL_TASKS",
+      "kind": "read",
+      "description": "Fetches all INCOMPLETE tasks from Todoist and returns their details. Supports cursor-based pagination. IMPORTANT LIMITATIONS: - This endpoint only returns active (incomplete) tasks - Cannot retrieve completed tasks - use a different endpoint for that - Filter queries using 'completed', '!completed', or 'completed after' will fail - Project/label references must use ACTUAL EXISTING names from the user's account - Arbitrary text in filters causes 400 errors - use 'search: keyword' for text search Common use cases: - Get all tasks: no filter - Get today's tasks: filter=\"today\" - Get overdue tasks: filter=\"overdue\" - Get tasks from specific project: filter=\"#ProjectName\" (project must exist) - Get high priority tasks: filter=\"p1\" - Search task content: filter=\"search: keyword\" - Paginate results: use limit and cursor parameters",
+      "inputs": [
+        {
+          "name": "ids",
+          "type": "array",
+          "required": false,
+          "about": "List of task IDs to retrieve (alphanumeric string IDs)."
+        },
+        {
+          "name": "lang",
+          "type": "string",
+          "required": false,
+          "about": "Language code for parsing date/times in queries."
+        },
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "about": "The number of tasks to return per page. Default is 50."
+        },
+        {
+          "name": "cursor",
+          "type": "string",
+          "required": false,
+          "about": "Cursor for pagination. Provide the next_cursor value from previous response to get next page."
+        },
+        {
+          "name": "filter",
+          "type": "string",
+          "required": false,
+          "about": "Filter tasks using Todoist filter syntax. This endpoint only returns INCOMPLETE tasks. Terms must be valid keywords or reference existing entities; arbitrary text causes 400 errors. Supported filters: predefined keywords ('today', 'overdue', 'no due date', etc.), priority ('p1'-'p4'), projects ('#Na"
+        }
+      ],
+      "scopes": "$undefined",
+      "tags": [
+        "important",
+        "openWorldHint",
+        "readOnlyHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get Backups",
+      "slug": "TODOIST_GET_BACKUPS",
+      "kind": "read",
+      "description": "List available Todoist backup archives for the user, returning archive metadata rather than live task or project data. An empty list does not establish why backups are unavailable.",
+      "inputs": [
+        {
+          "name": "0",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "1",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "2",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "3",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "4",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "5",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "6",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "7",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "8",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "9",
+          "type": "",
+          "required": false,
+          "about": ""
+        }
+      ],
+      "scopes": [
+        "backups:read"
+      ],
+      "tags": [
+        "important",
+        "openWorldHint",
+        "readOnlyHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get Comment (V1)",
+      "slug": "TODOIST_GET_COMMENT_V1",
+      "kind": "read",
+      "description": "Tool to retrieve a single comment by ID using the v1 API. Use when you need to fetch details of a specific comment.",
+      "inputs": [
+        {
+          "name": "comment_id",
+          "type": "string",
+          "required": true,
+          "about": "String ID of the comment to retrieve."
+        }
+      ],
+      "scopes": [
+        "data:read",
+        "data:read_write"
+      ],
+      "tags": [
+        "readOnlyHint",
+        "openWorldHint",
+        "comments"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get Completed Tasks By Completion Date",
+      "slug": "TODOIST_GET_COMPLETED_TASKS_BY_COMPLETION_DATE",
+      "kind": "read",
+      "description": "Tool to retrieve completed tasks within a specified completion date window. Use when you need to fetch historical completed tasks for reporting, audits, or weekly summaries. The API restricts the completion-date range to approximately 3 months between since and until parameters.",
+      "inputs": [
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "about": "Maximum number of tasks to return per page. Optional parameter. API default is 50."
+        },
+        {
+          "name": "since",
+          "type": "string",
+          "required": true,
+          "about": "Start date for filtering completed tasks in RFC3339 format (e.g., '2024-01-01T00:00:00Z'). Must be before 'until'. Maximum range between 'since' and 'until' is 3 months (~92 days)."
+        },
+        {
+          "name": "until",
+          "type": "string",
+          "required": true,
+          "about": "End date for filtering completed tasks in RFC3339 format (e.g., '2024-01-31T23:59:59Z'). Must be after 'since'. Maximum range between 'since' and 'until' is 3 months (~92 days)."
+        },
+        {
+          "name": "cursor",
+          "type": "string",
+          "required": false,
+          "about": "Pagination cursor from previous response to fetch next page of results. Optional parameter."
+        },
+        {
+          "name": "parent_id",
+          "type": "string",
+          "required": false,
+          "about": "Parent task ID in v2 alphanumeric format (e.g., '6fr9mHQJG3HV7gC4') to filter completed subtasks. Use IDs from TODOIST_GET_ALL_TASKS. Numeric v1 IDs are deprecated."
+        },
+        {
+          "name": "project_id",
+          "type": "string",
+          "required": false,
+          "about": "Project ID in v2 alphanumeric format (e.g., '6fm7pCWp5Q3hhwHW'). Use IDs from TODOIST_GET_ALL_PROJECTS. Numeric v1 IDs are deprecated."
+        },
+        {
+          "name": "section_id",
+          "type": "string",
+          "required": false,
+          "about": "Section ID in v2 alphanumeric format (e.g., '6fm7pCWp5Q3hhwHW'). Use IDs from TODOIST_GET_ALL_SECTIONS. Numeric v1 IDs are deprecated."
+        },
+        {
+          "name": "filter_lang",
+          "type": "string",
+          "required": false,
+          "about": "Language code for parsing filter_query. Optional parameter."
+        },
+        {
+          "name": "filter_query",
+          "type": "string",
+          "required": false,
+          "about": "Filter query string using Todoist's filter syntax to further refine results. Optional parameter."
+        },
+        {
+          "name": "workspace_id",
+          "type": "string",
+          "required": false,
+          "about": "Workspace ID in v2 alphanumeric format (e.g., '6XvwwRvRfmCjM5PW'). Use IDs from TODOIST_GET_ALL_PROJECTS or similar actions. Numeric v1 IDs are deprecated."
+        }
+      ],
+      "scopes": [
+        "data:read"
+      ],
+      "tags": [
+        "important",
+        "openWorldHint",
+        "readOnlyHint",
+        "tasks"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get ID Mappings",
+      "slug": "TODOIST_GET_ID_MAPPINGS",
+      "kind": "read",
+      "description": "Tool to translate IDs between Todoist API v1 and v2. Use when you need to convert IDs between API versions for sections, tasks, comments, reminders, location_reminders, or projects.",
+      "inputs": [
+        {
+          "name": "obj_ids",
+          "type": "string",
+          "required": true,
+          "about": "A comma-separated list of IDs to translate. When V1 IDs are provided, the function returns corresponding V2 IDs if they exist, and vice versa. Example: '6fmCXMqW3X96q47W,6fp4f67Gvc2qvjW4'"
+        },
+        {
+          "name": "obj_name",
+          "type": "string",
+          "required": true,
+          "about": "The type of object to map. Must be one of: sections, tasks, comments, reminders, location_reminders, projects. IDs are not unique across object types."
+        }
+      ],
+      "scopes": [
+        "data:read",
+        "data:read_write"
+      ],
+      "tags": [
+        "readOnlyHint",
+        "openWorldHint",
+        "id_mappings"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get Personal Label",
+      "slug": "TODOIST_GET_PERSONAL_LABEL",
+      "kind": "read",
+      "description": "Tool to retrieve a personal label by its ID. Use when you need to fetch details about a specific personal label.",
+      "inputs": [
+        {
+          "name": "label_id",
+          "type": "string",
+          "required": true,
+          "about": "The ID of the personal label to retrieve."
+        }
+      ],
+      "scopes": [
+        "data:read"
+      ],
+      "tags": [
+        "important",
+        "openWorldHint",
+        "readOnlyHint",
+        "labels"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get Productivity Stats",
+      "slug": "TODOIST_GET_PRODUCTIVITY_STATS",
+      "kind": "read",
+      "description": "Tool to retrieve comprehensive productivity statistics for the authenticated user. Use when you need detailed completion data, karma scores, streaks, or goal tracking information for productivity reports and analysis.",
+      "inputs": [
+        {
+          "name": "0",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "1",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "2",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "3",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "4",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "5",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "6",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "7",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "8",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "9",
+          "type": "",
+          "required": false,
+          "about": ""
+        }
+      ],
+      "scopes": [
+        "data:read"
+      ],
+      "tags": [
+        "important",
+        "readOnlyHint",
+        "openWorldHint",
+        "productivity"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get Project (API v1)",
+      "slug": "TODOIST_GET_PROJECT",
+      "kind": "read",
+      "description": "Tool to retrieve a specific project by its ID using Todoist API v1. Use when you have a project ID and need its metadata before display or update. Verify project_id matches the intended project before destructive operations — similar project names can cause mistakes; use TODOIST_GET_ALL_PROJECTS to resolve ambiguous names to IDs first.",
+      "inputs": [
+        {
+          "name": "project_id",
+          "type": "string",
+          "required": true,
+          "about": "The ID of the project to retrieve."
+        }
+      ],
+      "scopes": [
+        "data:read"
+      ],
+      "tags": [
+        "important",
+        "projects",
+        "readOnlyHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get Full Project Data",
+      "slug": "TODOIST_GET_PROJECT_FULL",
+      "kind": "read",
+      "description": "Tool to retrieve full project data including all sections, tasks, and collaborators. Use when you need comprehensive project information beyond basic metadata.",
+      "inputs": [
+        {
+          "name": "project_id",
+          "type": "string",
+          "required": true,
+          "about": "The ID of the project to retrieve (v2 format string ID required)."
+        }
+      ],
+      "scopes": [
+        "data:read",
+        "data:read_write"
+      ],
+      "tags": [
+        "important",
+        "readOnlyHint",
+        "openWorldHint",
+        "projects"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get Project Permissions",
+      "slug": "TODOIST_GET_PROJECT_PERMISSIONS",
+      "kind": "read",
+      "description": "Tool to retrieve all available roles and their associated actions in Todoist projects. Use when you need to understand what permissions different roles have in projects.",
+      "inputs": [
+        {
+          "name": "0",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "1",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "2",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "3",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "4",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "5",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "6",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "7",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "8",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "9",
+          "type": "",
+          "required": false,
+          "about": ""
+        }
+      ],
+      "scopes": [
+        "data:read",
+        "data:read_write"
+      ],
+      "tags": [
+        "readOnlyHint",
+        "openWorldHint",
+        "permissions"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get Section (v1 API)",
+      "slug": "TODOIST_GET_SECTION_V1",
+      "kind": "read",
+      "description": "Tool to retrieve a specific section by its ID using Todoist v1 API. Use when you need section metadata from the v1 endpoint.",
+      "inputs": [
+        {
+          "name": "public_key",
+          "type": "string",
+          "required": false,
+          "about": "Optional public key parameter for the request"
+        },
+        {
+          "name": "section_id",
+          "type": "string",
+          "required": true,
+          "about": "String ID of the section"
+        }
+      ],
+      "scopes": [
+        "data:read",
+        "data:read_write"
+      ],
+      "tags": [
+        "readOnlyHint",
+        "openWorldHint",
+        "sections"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get Special Backups",
+      "slug": "TODOIST_GET_SPECIAL_BACKUPS",
+      "kind": "read",
+      "description": "List special backup archives for the authenticated user's projects. An empty backup list can also indicate that the backup endpoint returned HTTP 404, so it does not by itself establish that no archives exist.",
+      "inputs": [
+        {
+          "name": "0",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "1",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "2",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "3",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "4",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "5",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "6",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "7",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "8",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "9",
+          "type": "",
+          "required": false,
+          "about": ""
+        }
+      ],
+      "scopes": [
+        "backups:read"
+      ],
+      "tags": [
+        "important",
+        "backups",
+        "readOnlyHint",
+        "todoist"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get Task (Deprecated)",
+      "slug": "TODOIST_GET_TASK",
+      "kind": "read",
+      "description": "Retrieve a specific Todoist task by ID for processing or display; this tool is deprecated. Comments and attachments with additional context require separate API calls.",
+      "inputs": [
+        {
+          "name": "task_id",
+          "type": "string",
+          "required": true,
+          "about": "The ID of the task to retrieve. Source from a recent TODOIST_GET_ALL_TASKS call to avoid stale IDs. Use this tool to confirm task identity before destructive operations (delete, close)."
+        }
+      ],
+      "scopes": [
+        "data:read"
+      ],
+      "tags": [
+        "important",
+        "tasks",
+        "readOnlyHint",
+        "deprecated"
+      ],
+      "deprecated": true
+    },
+    {
+      "name": "Get Task (API v1)",
+      "slug": "TODOIST_GET_TASK2",
+      "kind": "read",
+      "description": "Tool to retrieve a single active (non-completed) task by ID using API v1. Use when you need to fetch task details from the v1 endpoint.",
+      "inputs": [
+        {
+          "name": "task_id",
+          "type": "string",
+          "required": true,
+          "about": "String ID of the task to retrieve."
+        },
+        {
+          "name": "public_key",
+          "type": "string",
+          "required": false,
+          "about": "Optional public key for accessing shared tasks."
+        }
+      ],
+      "scopes": [
+        "data:read"
+      ],
+      "tags": [
+        "readOnlyHint",
+        "openWorldHint",
+        "tasks"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get User",
+      "slug": "TODOIST_GET_USER",
+      "kind": "read",
+      "description": "Tool to retrieve information about the currently authenticated user. Use when you need user details like email, name, preferences, karma, or subscription status.",
+      "inputs": [
+        {
+          "name": "0",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "1",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "2",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "3",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "4",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "5",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "6",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "7",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "8",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "9",
+          "type": "",
+          "required": false,
+          "about": ""
+        }
+      ],
+      "scopes": [
+        "data:read",
+        "data:read_write"
+      ],
+      "tags": [
+        "important",
+        "readOnlyHint",
+        "openWorldHint",
+        "user"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get Workspace Plan Details",
+      "slug": "TODOIST_GET_WORKSPACE_PLAN_DETAILS",
+      "kind": "read",
+      "description": "Tool to retrieve details about a workspace's current plan and usage. Use when you need information about subscription status, member count, project limits, pricing, or trial status for a specific workspace.",
+      "inputs": [
+        {
+          "name": "workspace_id",
+          "type": "integer",
+          "required": true,
+          "about": "ID of the workspace to retrieve plan details for."
+        }
+      ],
+      "scopes": [
+        "data:read",
+        "data:read_write"
+      ],
+      "tags": [
+        "readOnlyHint",
+        "openWorldHint",
+        "workspace",
+        "billing"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Import Template Into Project By ID",
+      "slug": "TODOIST_IMPORT_TEMPLATE_INTO_PROJECT_BY_ID",
+      "kind": "write",
+      "description": "Tool to import a template from Todoist's template gallery into an existing project. Use when you need to add structured tasks and sections from a pre-made template to an existing project.",
+      "inputs": [
+        {
+          "name": "locale",
+          "type": "string",
+          "required": false,
+          "about": "Language locale for the template content. Defaults to 'en'."
+        },
+        {
+          "name": "project_id",
+          "type": "",
+          "required": true,
+          "about": "The ID of the existing project to import the template into (can be string or integer format). Use TODOIST_GET_ALL_PROJECTS to get valid project IDs."
+        },
+        {
+          "name": "template_id",
+          "type": "string",
+          "required": true,
+          "about": "The template identifier from Todoist's template gallery (e.g., 'project-tracker', 'gtd-weekly-review', 'meal-planning'). These IDs can be found by browsing todoist.com/templates."
+        }
+      ],
+      "scopes": [
+        "data:read_write"
+      ],
+      "tags": [
+        "openWorldHint",
+        "templates",
+        "createHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Import Template Into Project From File",
+      "slug": "TODOIST_IMPORT_TEMPLATE_INTO_PROJECT_FROM_FILE",
+      "kind": "write",
+      "description": "Tool to import a CSV template into an existing Todoist project from a file. Use when you need to bulk-create tasks, sections, and notes from a template file.",
+      "inputs": [
+        {
+          "name": "file",
+          "type": "object",
+          "required": true,
+          "about": "The template file to upload and import. TYPE values must be lowercase: 'task', 'section', or 'note'."
+        },
+        {
+          "name": "project_id",
+          "type": "",
+          "required": true,
+          "about": "The ID of the project to import the template into. Can be either an alphanumeric V2 format (e.g., '6fvWmP68Wchcr6RJ') or numeric V1 format. Use TODOIST_GET_ALL_PROJECTS to get valid project IDs."
+        }
+      ],
+      "scopes": [
+        "data:read_write"
+      ],
+      "tags": [
+        "openWorldHint",
+        "bulk",
+        "createHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Invite Project Collaborator",
+      "slug": "TODOIST_INVITE_PROJECT_COLLABORATOR",
+      "kind": "send",
+      "description": "Tool to invite a collaborator to a Todoist project by email. Use when the user asks to share, invite someone to, or add a collaborator to a project. For workspace or team projects, you can optionally specify a role. If the role is omitted, the workspace default role is used. For invite-only workspace projects, the caller may need admin or owner permissions; otherwise the API may return a forbidden error.",
+      "inputs": [
+        {
+          "name": "role",
+          "type": "string",
+          "required": false,
+          "about": "Role to assign to the collaborator in workspace/team projects. Only used for workspace projects. If omitted, the workspace default role will be applied. For personal projects, this parameter is ignored."
+        },
+        {
+          "name": "email",
+          "type": "string",
+          "required": true,
+          "about": "Email address of the person to invite as a collaborator."
+        },
+        {
+          "name": "project_id",
+          "type": "string",
+          "required": true,
+          "about": "ID of the project to share. Use TODOIST_GET_ALL_PROJECTS or TODOIST_GET_PROJECT to retrieve valid project IDs."
+        }
+      ],
+      "scopes": [
+        "data:read_write"
+      ],
+      "tags": [
+        "important",
+        "openWorldHint",
+        "collaborators",
+        "updateHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "List Activities",
+      "slug": "TODOIST_LIST_ACTIVITIES",
+      "kind": "read",
+      "description": "Tool to get activity logs from Todoist. Returns a paginated list of activity events for the user. Events can be filtered by object type (project, item, note), event type, and other criteria. Uses cursor-based pagination for efficient navigation through results.",
+      "inputs": [
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "about": "Maximum number of activity logs to return per page."
+        },
+        {
+          "name": "cursor",
+          "type": "string",
+          "required": false,
+          "about": "Pagination cursor for fetching the next page of results. Use the value returned in the next_cursor field from a previous response."
+        },
+        {
+          "name": "date_to",
+          "type": "string",
+          "required": false,
+          "about": "Filter activities to only those that occurred before this date (exclusive upper bound). Must be in ISO 8601 format (e.g. '2026-02-01T00:00:00Z'). When specified, overrides the default pagination behavior and allows custom date ranges."
+        },
+        {
+          "name": "date_from",
+          "type": "string",
+          "required": false,
+          "about": "Filter activities to only those that occurred on or after this date. Must be in ISO 8601 format (e.g. '2026-01-01T00:00:00Z'). When specified, overrides the default pagination behavior and allows custom date ranges."
+        },
+        {
+          "name": "object_id",
+          "type": "string",
+          "required": false,
+          "about": "The ID of the specific object to get activities for. Must be used together with object_type. For example, to get activities for a specific task, set object_type=item and object_id=<task_id>."
+        },
+        {
+          "name": "event_type",
+          "type": "string",
+          "required": false,
+          "about": "Filter by a simple event type (e.g., \"added\", \"deleted\", \"completed\"). Returns events of this type across ALL object types that support it. For more precise filtering by both object type and event type, use object_event_types instead."
+        },
+        {
+          "name": "object_type",
+          "type": "string",
+          "required": false,
+          "about": "The type of object to filter activities by. Must be one of \"project\", \"item\" (task), or \"note\" (comment). When specified with object_id, returns activities for that specific object."
+        },
+        {
+          "name": "initiator_id",
+          "type": "string",
+          "required": false,
+          "about": "Filter activities to only those initiated by the specified user ID(s). Accepts either a single user ID or a list of user IDs. Useful for shared projects to see who made which changes."
+        },
+        {
+          "name": "workspace_id",
+          "type": "string",
+          "required": false,
+          "about": "Filter activities to only those belonging to the specified workspace(s). Accepts either a single workspace ID or a list of workspace IDs."
+        },
+        {
+          "name": "annotate_notes",
+          "type": "boolean",
+          "required": false,
+          "about": "When true, includes additional information about comments in the extra_data field, such as the content of the comment."
+        },
+        {
+          "name": "parent_item_id",
+          "type": "string",
+          "required": false,
+          "about": "Filter activities to only those belonging to the specified task. Returns activities for the task itself and all its comments."
+        },
+        {
+          "name": "annotate_parents",
+          "type": "boolean",
+          "required": false,
+          "about": "When true, includes additional information about parent objects in the extra_data field, such as the name of the parent project or task."
+        },
+        {
+          "name": "ensure_last_state",
+          "type": "boolean",
+          "required": false,
+          "about": "Deprecated - This parameter has no implementation and will be removed in a future version."
+        },
+        {
+          "name": "initiator_id_null",
+          "type": "string",
+          "required": false,
+          "about": "Filter by whether the activity has an initiator. When true, returns only activities with no initiator (your own activities). When false, returns only activities initiated by collaborators."
+        },
+        {
+          "name": "parent_project_id",
+          "type": "string",
+          "required": false,
+          "about": "Filter activities to only those belonging to the specified project. Returns activities for the project itself and all its tasks and comments."
+        },
+        {
+          "name": "object_event_types",
+          "type": "string",
+          "required": false,
+          "about": "Advanced filtering for specific object type and event type combinations. Format: [\"object_type:event_type\"]. Examples: [\"item:deleted\"] for deleted tasks, [\"item:\"] for all task events, [\":deleted\"] for all delete events across all types, [\"item:deleted\", \"note:added\"] for multiple filters. Valid ev"
+        },
+        {
+          "name": "include_child_objects",
+          "type": "boolean",
+          "required": false,
+          "about": "When true and object_id is specified, also include activities for all child objects. For example, when filtering by a project, also include activities for all its tasks and comments."
+        },
+        {
+          "name": "include_parent_object",
+          "type": "boolean",
+          "required": false,
+          "about": "When true and object_id is specified, also include activities for the parent object. For example, when filtering by a specific task, also include activities for its parent project."
+        }
+      ],
+      "scopes": [
+        "data:read",
+        "data:read_write"
+      ],
+      "tags": [
+        "readOnlyHint",
+        "openWorldHint",
+        "productivity"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "List All Workspace Invitations",
+      "slug": "TODOIST_LIST_ALL_INVITATIONS_WORKSPACES",
+      "kind": "read",
+      "description": "Tool to return a list containing details of all pending invitations to a workspace. Use when you need to view all pending workspace invitations. This list is not paginated, and all workspace members can access it.",
+      "inputs": [
+        {
+          "name": "workspace_id",
+          "type": "integer",
+          "required": true,
+          "about": "ID of the workspace to list invitations for. This parameter is required."
+        }
+      ],
+      "scopes": [
+        "data:read",
+        "data:read_write"
+      ],
+      "tags": [
+        "readOnlyHint",
+        "openWorldHint",
+        "invitations"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "List Archived Projects",
+      "slug": "TODOIST_LIST_ARCHIVED_PROJECTS",
+      "kind": "read",
+      "description": "Tool to get all archived projects from Todoist. Use when you need to retrieve archived projects with pagination support.",
+      "inputs": [
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "about": "The number of projects to return in a single page. Defaults to 50 if not specified."
+        },
+        {
+          "name": "cursor",
+          "type": "string",
+          "required": false,
+          "about": "Pagination cursor for fetching the next page of results. Use the 'next_cursor' from the previous response."
+        }
+      ],
+      "scopes": [
+        "data:read",
+        "data:read_write"
+      ],
+      "tags": [
+        "readOnlyHint",
+        "openWorldHint",
+        "archived"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "List Archived Sections",
+      "slug": "TODOIST_LIST_ARCHIVED_SECTIONS",
+      "kind": "read",
+      "description": "Retrieve archived sections for a specific Todoist project. The response may indicate that more results are available.",
+      "inputs": [
+        {
+          "name": "project_id",
+          "type": "string",
+          "required": true,
+          "about": "The ID of the project to get archived sections from. This must be a v1 project ID."
+        }
+      ],
+      "scopes": [
+        "data:read",
+        "data:read_write"
+      ],
+      "tags": [
+        "readOnlyHint",
+        "openWorldHint",
+        "archived"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "List Archived Workspace Projects",
+      "slug": "TODOIST_LIST_ARCHIVED_WORKSPACE_PROJECTS",
+      "kind": "read",
+      "description": "Tool to list all archived projects in a workspace. Archived projects are excluded from TODOIST_GET_ALL_PROJECTS; combine both tools when a complete project list is needed. Use when you need to retrieve archived workspace projects with optional filters or pagination.",
+      "inputs": [
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "about": "Limit the number of returned projects."
+        },
+        {
+          "name": "since",
+          "type": "string",
+          "required": false,
+          "about": "Return archived projects updated after this datetime (ISO 8601)."
+        },
+        {
+          "name": "until",
+          "type": "string",
+          "required": false,
+          "about": "Return archived projects updated before this datetime (ISO 8601)."
+        },
+        {
+          "name": "offset",
+          "type": "integer",
+          "required": false,
+          "about": "Offset for pagination."
+        },
+        {
+          "name": "project_ids",
+          "type": "array",
+          "required": false,
+          "about": "List of project IDs to filter the results."
+        }
+      ],
+      "scopes": [
+        "data:read"
+      ],
+      "tags": [
+        "important",
+        "openWorldHint",
+        "readOnlyHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "List Completed Tasks",
+      "slug": "TODOIST_LIST_COMPLETED_TASKS",
+      "kind": "read",
+      "description": "Tool to retrieve all completed tasks with optional project filtering. Use when you need to fetch completed tasks without date range restrictions. Note: This action uses an undocumented Todoist API endpoint (/api/v1/tasks/completed). The endpoint is not officially documented but is confirmed to work based on runtime testing. The response schemas are based on actual API responses.",
+      "inputs": [
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "about": "Maximum number of tasks to return per page. Optional parameter."
+        },
+        {
+          "name": "cursor",
+          "type": "string",
+          "required": false,
+          "about": "Pagination cursor from previous response to fetch next page of results. Optional parameter."
+        },
+        {
+          "name": "project_id",
+          "type": "string",
+          "required": false,
+          "about": "Filter completed tasks by project ID. Optional parameter."
+        }
+      ],
+      "scopes": [
+        "data:read",
+        "data:read_write"
+      ],
+      "tags": [
+        "important",
+        "readOnlyHint",
+        "openWorldHint",
+        "tasks"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "List Completed Tasks By Due Date",
+      "slug": "TODOIST_LIST_COMPLETED_TASKS_BY_DUE_DATE",
+      "kind": "read",
+      "description": "Tool to retrieve completed tasks within a specified due date range (up to 6 weeks). Use when you need to fetch completed tasks filtered by their original due dates rather than completion dates.",
+      "inputs": [
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "about": "Maximum number of tasks to return per page. Optional parameter. API default is 50."
+        },
+        {
+          "name": "since",
+          "type": "string",
+          "required": true,
+          "about": "Start date for filtering completed tasks by due date in YYYY-MM-DD format. Must be before 'until'. Maximum range between 'since' and 'until' is 6 weeks (42 days)."
+        },
+        {
+          "name": "until",
+          "type": "string",
+          "required": true,
+          "about": "End date for filtering completed tasks by due date in YYYY-MM-DD format. Must be after 'since'. Maximum range between 'since' and 'until' is 6 weeks (42 days)."
+        },
+        {
+          "name": "cursor",
+          "type": "string",
+          "required": false,
+          "about": "Pagination cursor from previous response to fetch next page of results. Optional parameter."
+        },
+        {
+          "name": "parent_id",
+          "type": "string",
+          "required": false,
+          "about": "Filter tasks by parent task ID to get completed subtasks of a specific parent. Optional parameter."
+        },
+        {
+          "name": "project_id",
+          "type": "string",
+          "required": false,
+          "about": "Filter tasks by project ID to get completed tasks within a specific project. Optional parameter."
+        },
+        {
+          "name": "section_id",
+          "type": "string",
+          "required": false,
+          "about": "Filter tasks by section ID to get completed tasks within a specific section. Optional parameter."
+        },
+        {
+          "name": "filter_lang",
+          "type": "string",
+          "required": false,
+          "about": "Language code for parsing filter_query. Optional parameter."
+        },
+        {
+          "name": "filter_query",
+          "type": "string",
+          "required": false,
+          "about": "Filter query string using Todoist's filter syntax to further refine results. Supports many Todoist filters like priority (p1-p4), labels (@labelname), and search queries. Optional parameter."
+        },
+        {
+          "name": "workspace_id",
+          "type": "string",
+          "required": false,
+          "about": "Filter tasks by workspace ID to get all completed tasks from projects the user has joined in that workspace. Optional parameter."
+        }
+      ],
+      "scopes": [
+        "data:read"
+      ],
+      "tags": [
+        "readOnlyHint",
+        "openWorldHint",
+        "tasks"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "List Filters",
+      "slug": "TODOIST_LIST_FILTERS",
+      "kind": "read",
+      "description": "Tool to list all filters for the authenticated user. Use when you need to retrieve the current set of custom filters.",
+      "inputs": [
+        {
+          "name": "sync_token",
+          "type": "string",
+          "required": false,
+          "about": "Token for incremental sync. Use '*' for full sync."
+        }
+      ],
+      "scopes": [
+        "data:read",
+        "data:read_write",
+        "data:delete"
+      ],
+      "tags": [
+        "important",
+        "openWorldHint",
+        "readOnlyHint",
+        "todoist"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "List Joinable Workspaces",
+      "slug": "TODOIST_LIST_JOINABLE_WORKSPACES",
+      "kind": "read",
+      "description": "Tool to get workspaces the user can join. Use when you need to discover available workspaces that the authenticated user can join.",
+      "inputs": [
+        {
+          "name": "0",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "1",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "2",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "3",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "4",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "5",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "6",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "7",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "8",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "9",
+          "type": "",
+          "required": false,
+          "about": ""
+        }
+      ],
+      "scopes": [
+        "data:read"
+      ],
+      "tags": [
+        "readOnlyHint",
+        "openWorldHint",
+        "workspace"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "List Labels",
+      "slug": "TODOIST_LIST_LABELS",
+      "kind": "read",
+      "description": "Tool to get all user labels with pagination support. Use when you need to retrieve labels from the user's Todoist account.",
+      "inputs": [
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "about": "The number of objects to return in a page. Default is 50."
+        },
+        {
+          "name": "cursor",
+          "type": "string",
+          "required": false,
+          "about": "Cursor for pagination. Use the next_cursor value from the previous response to get the next page of results."
+        }
+      ],
+      "scopes": [
+        "data:read",
+        "data:read_write"
+      ],
+      "tags": [
+        "important",
+        "readOnlyHint",
+        "openWorldHint",
+        "labels"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "List Pending Workspace Invitations",
+      "slug": "TODOIST_LIST_PENDING_WORKSPACE_INVITATIONS",
+      "kind": "read",
+      "description": "List pending invitations for a Todoist workspace to check which email invites are awaiting acceptance. An empty list does not necessarily mean there are no pending invitations; it can also indicate that the workspace was not found or that invitation data was absent from the response.",
+      "inputs": [
+        {
+          "name": "workspace_id",
+          "type": "string",
+          "required": true,
+          "about": "ID of the workspace to list pending invitations for."
+        }
+      ],
+      "scopes": [
+        "data:read"
+      ],
+      "tags": [
+        "invitations",
+        "workspace",
+        "readOnlyHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "List Project Collaborators",
+      "slug": "TODOIST_LIST_PROJECT_COLLABORATORS",
+      "kind": "read",
+      "description": "Tool to get all collaborators for a given project with cursor-based pagination. Use when you need to retrieve the list of people who have access to a specific project.",
+      "inputs": [
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "about": "The number of objects to return in a page. Default is 50 if not specified."
+        },
+        {
+          "name": "cursor",
+          "type": "string",
+          "required": false,
+          "about": "Pagination cursor to fetch the next page of results. Obtained from previous response's next_cursor field."
+        },
+        {
+          "name": "project_id",
+          "type": "string",
+          "required": true,
+          "about": "String ID of the project"
+        },
+        {
+          "name": "public_key",
+          "type": "string",
+          "required": false,
+          "about": "Public key for accessing public projects"
+        }
+      ],
+      "scopes": [
+        "data:read",
+        "data:read_write"
+      ],
+      "tags": [
+        "important",
+        "readOnlyHint",
+        "openWorldHint",
+        "collaborators"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "List Sections",
+      "slug": "TODOIST_LIST_SECTIONS",
+      "kind": "read",
+      "description": "Tool to get all active sections for the user, with optional filtering by project. Supports cursor-based pagination to handle large result sets.",
+      "inputs": [
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "about": "The number of objects to return in a page. Default is 50."
+        },
+        {
+          "name": "cursor",
+          "type": "string",
+          "required": false,
+          "about": "Pagination cursor for fetching the next page of results. Use the next_cursor value from a previous response."
+        },
+        {
+          "name": "project_id",
+          "type": "string",
+          "required": false,
+          "about": "String ID of the project to get sections from. If omitted or null, get sections from all projects."
+        }
+      ],
+      "scopes": [
+        "data:read",
+        "data:read_write"
+      ],
+      "tags": [
+        "important",
+        "readOnlyHint",
+        "openWorldHint",
+        "sections"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "List Shared Labels",
+      "slug": "TODOIST_LIST_SHARED_LABELS",
+      "kind": "read",
+      "description": "Tool to retrieve shared label names from active tasks with pagination support. Use when you need to list labels across the workspace with optional filtering of personal labels.",
+      "inputs": [
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "about": "The number of label names to return in a single page. Defaults to 50 if not specified."
+        },
+        {
+          "name": "cursor",
+          "type": "string",
+          "required": false,
+          "about": "Pagination cursor from a previous response. Use to fetch the next page of results."
+        },
+        {
+          "name": "omit_personal",
+          "type": "boolean",
+          "required": false,
+          "about": "If true, excludes personal labels from the results and returns only shared workspace labels."
+        }
+      ],
+      "scopes": [
+        "data:read"
+      ],
+      "tags": [
+        "readOnlyHint",
+        "openWorldHint",
+        "labels"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "List Workspace Active Projects",
+      "slug": "TODOIST_LIST_WORKSPACE_ACTIVE_PROJECTS",
+      "kind": "read",
+      "description": "List a page of active projects in a workspace, including visible projects not yet joined, with cursor pagination. Guests see only joined projects and must supply a workspace ID.",
+      "inputs": [
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "about": "Maximum number of projects to return per request. Defaults to 100 if not specified."
+        },
+        {
+          "name": "cursor",
+          "type": "string",
+          "required": false,
+          "about": "Pagination cursor for fetching the next page of results."
+        },
+        {
+          "name": "workspace_id",
+          "type": "",
+          "required": false,
+          "about": "ID of the workspace to list active projects for. If omitted, the action auto-resolves to the user's workspace when they belong to exactly one. Users in multiple workspaces must pass an explicit workspace_id; an error listing the candidates is returned otherwise. Workspaces are a Todoist Business/Tea"
+        }
+      ],
+      "scopes": [
+        "data:read",
+        "data:read_write"
+      ],
+      "tags": [
+        "important",
+        "readOnlyHint",
+        "openWorldHint",
+        "workspace"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "List Workspace Archived Projects",
+      "slug": "TODOIST_LIST_WORKSPACE_ARCHIVED_PROJECTS",
+      "kind": "read",
+      "description": "Tool to get archived projects in a workspace. Use when you need to retrieve a list of archived projects for a specific workspace with optional pagination.",
+      "inputs": [
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "about": "Maximum number of projects to return per page. Defaults to 100 if not specified. Optional query parameter."
+        },
+        {
+          "name": "cursor",
+          "type": "string",
+          "required": false,
+          "about": "Cursor for pagination to fetch the next page of results. Optional query parameter."
+        },
+        {
+          "name": "workspace_id",
+          "type": "",
+          "required": false,
+          "about": "The workspace ID to retrieve archived projects from. If omitted, the action auto-resolves to the user's workspace when they belong to exactly one. Users in multiple workspaces must pass an explicit workspace_id; an error listing the candidates is returned otherwise. Workspaces are a Todoist Business"
+        }
+      ],
+      "scopes": [
+        "data:read",
+        "data:read_write"
+      ],
+      "tags": [
+        "readOnlyHint",
+        "openWorldHint",
+        "archived"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "List Workspace Invitations",
+      "slug": "TODOIST_LIST_WORKSPACE_INVITATIONS",
+      "kind": "read",
+      "description": "Tool to list user emails with pending invitations to a workspace. Use when you need to check which email invites are still pending. The list is not paginated and accessible by all workspace members.",
+      "inputs": [
+        {
+          "name": "workspace_id",
+          "type": "integer",
+          "required": true,
+          "about": "ID of the workspace to list pending invitations for. All workspace members can access this list."
+        }
+      ],
+      "scopes": [
+        "data:read",
+        "data:read_write"
+      ],
+      "tags": [
+        "readOnlyHint",
+        "openWorldHint",
+        "invitations"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "List Workspace Users",
+      "slug": "TODOIST_LIST_WORKSPACE_USERS",
+      "kind": "read",
+      "description": "Tool to list users in workspace(s). Use when you need to retrieve workspace members. Returns users from a specific workspace if workspace_id is provided, otherwise returns users from all workspaces the authenticated user is part of. Not accessible by guests.",
+      "inputs": [
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "about": "Maximum number of workspace users to return per request. Default is 100."
+        },
+        {
+          "name": "cursor",
+          "type": "string",
+          "required": false,
+          "about": "Pagination cursor for retrieving the next set of results. Use the next_cursor value from a previous response."
+        },
+        {
+          "name": "workspace_id",
+          "type": "string",
+          "required": false,
+          "about": "ID of the workspace to list users for. If not provided, returns users from all workspaces the authenticated user is part of."
+        }
+      ],
+      "scopes": [
+        "data:read",
+        "data:read_write"
+      ],
+      "tags": [
+        "readOnlyHint",
+        "openWorldHint",
+        "users"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Move Task",
+      "slug": "TODOIST_MOVE_TASK",
+      "kind": "write",
+      "description": "Move a task to another project, section, or parent task using a Sync API command. A success result can be returned without explicit confirmation that the command succeeded.",
+      "inputs": [
+        {
+          "name": "task_id",
+          "type": "string",
+          "required": true,
+          "about": "The ID of the task to move."
+        },
+        {
+          "name": "parent_id",
+          "type": "string",
+          "required": false,
+          "about": "Parent task ID to move the task under (re-parent as subtask). Mutually exclusive with project_id and section_id - only one can be provided."
+        },
+        {
+          "name": "project_id",
+          "type": "string",
+          "required": false,
+          "about": "Project ID to move the task to. Mutually exclusive with section_id and parent_id - only one can be provided."
+        },
+        {
+          "name": "section_id",
+          "type": "string",
+          "required": false,
+          "about": "Section ID to move the task to. Mutually exclusive with project_id and parent_id - only one can be provided."
+        }
+      ],
+      "scopes": [
+        "data:read_write"
+      ],
+      "tags": [
+        "important",
+        "openWorldHint",
+        "updateHint",
+        "idempotentHint",
+        "tasks"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Move Task (REST API)",
+      "slug": "TODOIST_MOVE_TASK_REST_API",
+      "kind": "write",
+      "description": "Tool to move a task to another project, section, or parent task using the REST API. Use when you need to relocate a task while preserving its identity and metadata.",
+      "inputs": [
+        {
+          "name": "task_id",
+          "type": "string",
+          "required": true,
+          "about": "ID of the task to move. Must be in Todoist API v1 format (base32-encoded alphanumeric string)."
+        },
+        {
+          "name": "parent_id",
+          "type": "string",
+          "required": false,
+          "about": "ID of the parent task to move the task under. Must be in Todoist API v1 format (base32-encoded alphanumeric string). At least one of project_id, section_id, or parent_id is required."
+        },
+        {
+          "name": "project_id",
+          "type": "string",
+          "required": false,
+          "about": "ID of the project to move the task to. Must be in Todoist API v1 format (base32-encoded alphanumeric string). At least one of project_id, section_id, or parent_id is required."
+        },
+        {
+          "name": "section_id",
+          "type": "string",
+          "required": false,
+          "about": "ID of the section to move the task to. Must be in Todoist API v1 format (base32-encoded alphanumeric string). At least one of project_id, section_id, or parent_id is required."
+        }
+      ],
+      "scopes": [
+        "data:read_write"
+      ],
+      "tags": [
+        "updateHint",
+        "openWorldHint",
+        "tasks"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Quick Add Task",
+      "slug": "TODOIST_QUICK_ADD_TASK",
+      "kind": "write",
+      "description": "Tool to add tasks using natural language parsing similar to the official Todoist clients. Use when you want to create a task quickly with natural language that includes dates, projects, labels, priority, and other task attributes in a single text string.",
+      "inputs": [
+        {
+          "name": "meta",
+          "type": "boolean",
+          "required": false,
+          "about": "When enabled, returns additional metadata about the parsing. Defaults to False."
+        },
+        {
+          "name": "note",
+          "type": "string",
+          "required": false,
+          "about": "Additional note or description for the task. This is separate from the task text."
+        },
+        {
+          "name": "text",
+          "type": "string",
+          "required": true,
+          "about": "Natural language task text that will be parsed. Can include: due date in free form text (e.g., 'tomorrow', 'next Monday at 3pm'), project name starting with '#' (e.g., '#ProjectName'), label starting with '@' (e.g., '@urgent'), assignee starting with '+' (e.g., '+john@example.com'), priority (e.g., "
+        },
+        {
+          "name": "reminder",
+          "type": "string",
+          "required": false,
+          "about": "Reminder date in free form text. Examples: 'in 30 minutes', 'tomorrow at 9am', '1 hour before'."
+        },
+        {
+          "name": "auto_reminder",
+          "type": "boolean",
+          "required": false,
+          "about": "When enabled, a default reminder will be added to the task if it has a due date with time set. Defaults to False."
+        }
+      ],
+      "scopes": [
+        "data:read"
+      ],
+      "tags": [
+        "important",
+        "openWorldHint",
+        "tasks",
+        "createHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Remove Shared Label (API v1)",
+      "slug": "TODOIST_REMOVE_SHARED_LABEL_V1",
+      "kind": "write",
+      "description": "Tool to remove a shared label from all active tasks using API v1. Use when you need to remove a shared label created by a collaborator from your account.",
+      "inputs": [
+        {
+          "name": "name",
+          "type": "string",
+          "required": true,
+          "about": "The name of the shared label to remove from all active tasks."
+        }
+      ],
+      "scopes": [
+        "data:delete"
+      ],
+      "tags": [
+        "updateHint",
+        "openWorldHint",
+        "labels"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Rename Shared Labels (API v1)",
+      "slug": "TODOIST_RENAME_SHARED_LABELS_V1",
+      "kind": "write",
+      "description": "Tool to rename a shared label across all active tasks using API v1. Use when you need to change the name of a shared label.",
+      "inputs": [
+        {
+          "name": "name",
+          "type": "string",
+          "required": true,
+          "about": "The current name of the shared label to rename."
+        },
+        {
+          "name": "new_name",
+          "type": "string",
+          "required": true,
+          "about": "The new name for the shared label."
+        }
+      ],
+      "scopes": [
+        "data:read_write"
+      ],
+      "tags": [
+        "updateHint",
+        "openWorldHint",
+        "labels"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Reopen Task (API v1)",
+      "slug": "TODOIST_REOPEN_TASK2",
+      "kind": "write",
+      "description": "Tool to reopen a completed task in Todoist using API v1. Use when you need to restore a previously completed task. Any ancestor tasks or sections will also be marked as uncomplete and restored from history.",
+      "inputs": [
+        {
+          "name": "task_id",
+          "type": "string",
+          "required": true,
+          "about": "The ID of the task to reopen. Todoist supports both numeric IDs (e.g., '2995104339') and alphanumeric IDs (e.g., '6fmCXPVrjPvHggWW')."
+        }
+      ],
+      "scopes": [
+        "data:read_write"
+      ],
+      "tags": [
+        "important",
+        "idempotentHint",
+        "openWorldHint",
+        "tasks",
+        "updateHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Reorder Tasks",
+      "slug": "TODOIST_REORDER_TASKS",
+      "kind": "write",
+      "description": "Reorder tasks in bulk by submitting their child_order positions through the Sync API item_reorder command. Check the returned sync_status for the command result, which may indicate an error.",
+      "inputs": [
+        {
+          "name": "items",
+          "type": "array",
+          "required": true,
+          "about": "Array of task IDs with their new child_order positions. Each task will be assigned the specified order among its siblings."
+        }
+      ],
+      "scopes": [
+        "data:read_write"
+      ],
+      "tags": [
+        "important",
+        "openWorldHint",
+        "updateHint",
+        "idempotentHint",
+        "batch"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Search Labels",
+      "slug": "TODOIST_SEARCH_LABELS",
+      "kind": "read",
+      "description": "Tool to search user labels by name with case-insensitive matching. Use when you need to find specific labels by name pattern.",
+      "inputs": [
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "about": "The number of objects to return in a page. Defaults to 50 if not specified."
+        },
+        {
+          "name": "query",
+          "type": "string",
+          "required": true,
+          "about": "Search query to match label names. Matching is case-insensitive. Queries are matched literally unless `*` (wildcard) is included. Use `\\*` for literal asterisk and `\\\\` for literal backslash."
+        },
+        {
+          "name": "cursor",
+          "type": "string",
+          "required": false,
+          "about": "Cursor for pagination. Use the next_cursor value from a previous response to fetch the next page."
+        }
+      ],
+      "scopes": [
+        "data:read",
+        "data:read_write"
+      ],
+      "tags": [
+        "readOnlyHint",
+        "openWorldHint",
+        "labels"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Search Projects",
+      "slug": "TODOIST_SEARCH_PROJECTS",
+      "kind": "read",
+      "description": "Search active user projects by name with support for wildcards and pagination. Use when you need to find projects matching a specific name pattern.",
+      "inputs": [
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "about": "The number of projects to return per page. If not specified, defaults to 50. Maximum value may be limited by the API."
+        },
+        {
+          "name": "query",
+          "type": "string",
+          "required": true,
+          "about": "Search query to match project names. Matching is case-insensitive. Queries are matched literally unless `*` (wildcard) is included. Use `\\*` for literal asterisk and `\\\\` for literal backslash. Example: '*' matches all projects, 'Work*' matches projects starting with 'Work'."
+        },
+        {
+          "name": "cursor",
+          "type": "string",
+          "required": false,
+          "about": "Pagination cursor for fetching the next page of results. Provide the 'next_cursor' value from a previous response to get the next page. Leave empty for the first page."
+        }
+      ],
+      "scopes": [
+        "data:read",
+        "data:read_write"
+      ],
+      "tags": [
+        "important",
+        "readOnlyHint",
+        "openWorldHint",
+        "projects"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Search Sections",
+      "slug": "TODOIST_SEARCH_SECTIONS",
+      "kind": "read",
+      "description": "Tool to search active sections by name, optionally filtered by project. Use when you need to find sections matching a specific name pattern across all projects or within a specific project. Supports pagination for large result sets.",
+      "inputs": [
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "about": "The number of objects to return in a page. Default is 50."
+        },
+        {
+          "name": "query",
+          "type": "string",
+          "required": true,
+          "about": "Search query to match section names. Matching is case-insensitive. Queries are matched literally unless `*` (wildcard) is included. Use `\\*` for literal asterisk and `\\\\` for literal backslash."
+        },
+        {
+          "name": "cursor",
+          "type": "string",
+          "required": false,
+          "about": "Cursor for pagination. Use the next_cursor value from a previous response to fetch the next page."
+        },
+        {
+          "name": "project_id",
+          "type": "string",
+          "required": false,
+          "about": "String ID of the project to search sections from. If omitted or null, search sections from all projects."
+        }
+      ],
+      "scopes": [
+        "data:read"
+      ],
+      "tags": [
+        "important",
+        "readOnlyHint",
+        "openWorldHint",
+        "sections"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Todoist Sync",
+      "slug": "TODOIST_SYNC",
+      "kind": "write",
+      "description": "Tool to sync data with Todoist server, supporting both read and write operations. This is the central endpoint used by Todoist apps for all data synchronization. Use this action to: - Read multiple resource types in a single request (projects, tasks, labels, etc.) - Perform batch write operations (create/update/delete up to 100 resources at once) - Implement efficient incremental sync using sync tokens - Execute complex multi-step operations in a single atomic request For read-only operations, pass sync_token and resource_types. For write operations, include commands array with the operations to execute. Commands support batching up to 100 operations per request.",
+      "inputs": [
+        {
+          "name": "commands",
+          "type": "array",
+          "required": false,
+          "about": "Array of write commands to execute. Supports batching up to 100 commands. Each command modifies resources (add/update/delete). Commands are executed sequentially. Use temp_id in commands to reference newly created resources within the same batch. Common command types: item_add, item_update, item_del"
+        },
+        {
+          "name": "sync_token",
+          "type": "string",
+          "required": true,
+          "about": "Synchronization token marking the point in time of the last sync. Use '*' for full sync (retrieves all active data). For incremental sync, use the sync_token returned from the previous sync response. This enables efficient delta updates."
+        },
+        {
+          "name": "resource_types",
+          "type": "array",
+          "required": false,
+          "about": "Array of resource types to retrieve. Use ['all'] to fetch all resources. Specific types: 'projects', 'items', 'sections', 'labels', 'filters', 'reminders', 'notes', 'collaborators', 'user', 'live_notifications', 'user_settings', etc. Only returned resources will be included in the response."
+        }
+      ],
+      "scopes": [
+        "data:read_write",
+        "data:delete",
+        "project:delete"
+      ],
+      "tags": [
+        "openWorldHint",
+        "batch",
+        "destructiveHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Unarchive Project (API v1)",
+      "slug": "TODOIST_UNARCHIVE_PROJECT2",
+      "kind": "write",
+      "description": "Tool to unarchive a previously archived Todoist project using API v1. Use when you need to reactivate an archived project, making it visible again for the initiating user (personal projects) or all workspace users (workspace projects).",
+      "inputs": [
+        {
+          "name": "project_id",
+          "type": "string",
+          "required": true,
+          "about": "The ID of the project to unarchive. Must be a valid project ID string."
+        }
+      ],
+      "scopes": [
+        "data:read_write"
+      ],
+      "tags": [
+        "important",
+        "updateHint",
+        "idempotentHint",
+        "openWorldHint",
+        "projects"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Update Comment (v1)",
+      "slug": "TODOIST_UPDATE_COMMENT2",
+      "kind": "write",
+      "description": "Tool to update a comment by ID and return its content via v1 API. Use when you need to modify an existing comment's text using the v1 API endpoint.",
+      "inputs": [
+        {
+          "name": "content",
+          "type": "string",
+          "required": true,
+          "about": "New content for the comment. If null or an empty string, no update is performed."
+        },
+        {
+          "name": "comment_id",
+          "type": "string",
+          "required": true,
+          "about": "String ID of the comment to update."
+        }
+      ],
+      "scopes": [
+        "data:read_write"
+      ],
+      "tags": [
+        "updateHint",
+        "openWorldHint",
+        "comments"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Update Label (API v1)",
+      "slug": "TODOIST_UPDATE_LABEL_V1_SECOND",
+      "kind": "write",
+      "description": "Tool to update an existing label using API v1. Use when you need to modify a label's name, color, order, or favorite status.",
+      "inputs": [
+        {
+          "name": "name",
+          "type": "string",
+          "required": false,
+          "about": "Updated label name. Must be between 1 and 128 characters if provided. Passing null or omitting this field will leave it unchanged."
+        },
+        {
+          "name": "color",
+          "type": "",
+          "required": false,
+          "about": "Label color. Can be a color name (e.g., 'blue', 'red') or a color code (integer). Passing null or omitting this field will leave it unchanged."
+        },
+        {
+          "name": "order",
+          "type": "integer",
+          "required": false,
+          "about": "Position of the label in the label list. Used by clients to sort labels. Passing null or omitting this field will leave it unchanged."
+        },
+        {
+          "name": "label_id",
+          "type": "string",
+          "required": true,
+          "about": "The ID of the label to update."
+        },
+        {
+          "name": "is_favorite",
+          "type": "boolean",
+          "required": false,
+          "about": "Whether the label is marked as a favorite. Passing null or omitting this field will leave it unchanged."
+        }
+      ],
+      "scopes": [
+        "data:read_write"
+      ],
+      "tags": [
+        "updateHint",
+        "openWorldHint",
+        "labels"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Update Notification Setting",
+      "slug": "TODOIST_UPDATE_NOTIFICATION_SETTING",
+      "kind": "write",
+      "description": "Tool to update notification settings for the current user. Use when you need to enable or disable notifications for specific event types and channels.",
+      "inputs": [
+        {
+          "name": "token",
+          "type": "string",
+          "required": false,
+          "about": "Optional token parameter for push notifications."
+        },
+        {
+          "name": "service",
+          "type": "string",
+          "required": true,
+          "about": "The communication channel for this notification. Must be either 'email' or 'push'."
+        },
+        {
+          "name": "dont_notify",
+          "type": "boolean",
+          "required": true,
+          "about": "Whether to disable notifications for this type and service. Set to true to turn off notifications, false to enable them."
+        },
+        {
+          "name": "notification_type",
+          "type": "string",
+          "required": true,
+          "about": "The type of notification being configured. Must be one of the predefined notification types."
+        }
+      ],
+      "scopes": [
+        "data:read_write"
+      ],
+      "tags": [
+        "updateHint",
+        "openWorldHint",
+        "notifications"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Update Project (Deprecated)",
+      "slug": "TODOIST_UPDATE_PROJECT",
+      "kind": "write",
+      "description": "DEPRECATED: Use TODOIST_TODOIST_UPDATE_PROJECT2 instead. Tool to update a project's properties including name, color, favorite status, and view style. Use when you need to modify project settings after reviewing its current configuration.",
+      "inputs": [
+        {
+          "name": "name",
+          "type": "string",
+          "required": false,
+          "about": "New name for the project. At least one of name, color, is_favorite, or view_style must be provided."
+        },
+        {
+          "name": "color",
+          "type": "string",
+          "required": false,
+          "about": "Enum for project colors. Names are based on Todoist's standard palette."
+        },
+        {
+          "name": "project_id",
+          "type": "string",
+          "required": true,
+          "about": "The ID of the project to update."
+        },
+        {
+          "name": "view_style",
+          "type": "string",
+          "required": false,
+          "about": "Enum for project view styles."
+        },
+        {
+          "name": "is_favorite",
+          "type": "boolean",
+          "required": false,
+          "about": "Whether the project should be marked as a favorite. At least one of name, color, is_favorite, or view_style must be provided."
+        }
+      ],
+      "scopes": [
+        "data:read_write"
+      ],
+      "tags": [
+        "important",
+        "openWorldHint",
+        "deprecated",
+        "updateHint"
+      ],
+      "deprecated": true
+    },
+    {
+      "name": "Update Project (API v1)",
+      "slug": "TODOIST_UPDATE_PROJECT2",
+      "kind": "write",
+      "description": "Tool to update a project's properties using Todoist API v1. Use when you need to modify project settings like name, description, favorite status, color, or view style.",
+      "inputs": [
+        {
+          "name": "name",
+          "type": "string",
+          "required": false,
+          "about": "Updated project name. Passing null or omitting this field will leave it unchanged."
+        },
+        {
+          "name": "color",
+          "type": "",
+          "required": false,
+          "about": "Updated project color. Passing null or omitting this field will leave it unchanged."
+        },
+        {
+          "name": "project_id",
+          "type": "string",
+          "required": true,
+          "about": "String ID of the project to update (v1 format)."
+        },
+        {
+          "name": "view_style",
+          "type": "string",
+          "required": false,
+          "about": "Updated project view style (e.g., 'list' or 'board'). Passing null or omitting this field will leave it unchanged."
+        },
+        {
+          "name": "description",
+          "type": "string",
+          "required": false,
+          "about": "Updated project description. Passing null or omitting this field will leave it unchanged."
+        },
+        {
+          "name": "is_favorite",
+          "type": "boolean",
+          "required": false,
+          "about": "Whether the project is marked as a favorite. Passing null or omitting this field will leave it unchanged."
+        }
+      ],
+      "scopes": [
+        "data:read_write"
+      ],
+      "tags": [
+        "important",
+        "updateHint",
+        "openWorldHint",
+        "projects"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Update Section (Deprecated)",
+      "slug": "TODOIST_UPDATE_SECTION",
+      "kind": "write",
+      "description": "DEPRECATED: Use TODOIST_TODOIST_UPDATE_SECTION2 instead. Tool to update a specific section's name. Use when you need to rename a section after confirming its ID.",
+      "inputs": [
+        {
+          "name": "name",
+          "type": "string",
+          "required": false,
+          "about": "New name for the section. Omit or pass null to leave unchanged."
+        },
+        {
+          "name": "section_id",
+          "type": "string",
+          "required": true,
+          "about": "The ID of the section to update. This should be a numeric string from the 'id' field of section objects."
+        }
+      ],
+      "scopes": [
+        "data:read_write"
+      ],
+      "tags": [
+        "sections",
+        "deprecated",
+        "updateHint"
+      ],
+      "deprecated": true
+    },
+    {
+      "name": "Update Section (v1)",
+      "slug": "TODOIST_UPDATE_SECTION2",
+      "kind": "write",
+      "description": "Tool to update an existing section by its ID using Todoist v1 API. Use when you need to rename a section.",
+      "inputs": [
+        {
+          "name": "name",
+          "type": "string",
+          "required": false,
+          "about": "Updated section name. Passing null or omitting this field will leave it unchanged."
+        },
+        {
+          "name": "section_id",
+          "type": "string",
+          "required": true,
+          "about": "String ID of the section to update"
+        }
+      ],
+      "scopes": [
+        "data:read_write"
+      ],
+      "tags": [
+        "updateHint",
+        "openWorldHint",
+        "sections"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Update Task",
+      "slug": "TODOIST_UPDATE_TASK",
+      "kind": "write",
+      "description": "Tool to update an existing task's properties. Cannot change a task's project; to move a task, use TODOIST_CREATE_TASK then TODOIST_DELETE_TASK. Use when you need to modify a task's details after confirming its ID and new values.",
+      "inputs": [
+        {
+          "name": "labels",
+          "type": "array",
+          "required": false,
+          "about": "List of label names to assign to the task. Replaces the entire existing labels list — omit a label only if intentionally removing it. Labels must already exist in Todoist; non-existent names fail silently."
+        },
+        {
+          "name": "content",
+          "type": "string",
+          "required": false,
+          "about": "New content for the task."
+        },
+        {
+          "name": "task_id",
+          "type": "string",
+          "required": true,
+          "about": "The ID of the task to update."
+        },
+        {
+          "name": "due_date",
+          "type": "string",
+          "required": false,
+          "about": "Due date in YYYY-MM-DD format."
+        },
+        {
+          "name": "due_lang",
+          "type": "string",
+          "required": false,
+          "about": "Language code for parsing `due_string`, e.g., 'en'."
+        },
+        {
+          "name": "duration",
+          "type": "integer",
+          "required": false,
+          "about": "Positive integer for task duration amount (how long the task takes). Must be used together with duration_unit. This is separate from due date - use due_string/due_date/due_datetime for when the task is due."
+        },
+        {
+          "name": "priority",
+          "type": "integer",
+          "required": false,
+          "about": "Task priority from 1 (normal) to 4 (urgent)."
+        },
+        {
+          "name": "due_string",
+          "type": "string",
+          "required": false,
+          "about": "Human-readable due date string for natural language date parsing. Examples: 'tomorrow', 'next Monday', 'Jan 15 at 3pm', 'in 2 days'. Duration syntax like 'for X minutes' is automatically extracted and converted to the duration/duration_unit fields. Provide exactly one of due_string, due_date, or due"
+        },
+        {
+          "name": "assignee_id",
+          "type": "string",
+          "required": false,
+          "about": "User ID to assign the task to."
+        },
+        {
+          "name": "description",
+          "type": "string",
+          "required": false,
+          "about": "New description for the task."
+        },
+        {
+          "name": "due_datetime",
+          "type": "string",
+          "required": false,
+          "about": "Due date and time in RFC3339 format."
+        },
+        {
+          "name": "deadline_date",
+          "type": "string",
+          "required": false,
+          "about": "Deadline date in YYYY-MM-DD format (premium feature)."
+        },
+        {
+          "name": "duration_unit",
+          "type": "string",
+          "required": false,
+          "about": "Units for task duration in Todoist."
+        }
+      ],
+      "scopes": [
+        "data:read_write"
+      ],
+      "tags": [
+        "important",
+        "openWorldHint",
+        "tasks",
+        "updateHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Update Workspace Logo",
+      "slug": "TODOIST_UPDATE_WORKSPACE_LOGO",
+      "kind": "write",
+      "description": "Tool to upload an image as the workspace logo or delete the existing logo. Use when you need to set or remove a workspace's branding image.",
+      "inputs": [
+        {
+          "name": "file",
+          "type": "object",
+          "required": false,
+          "about": "Image file to upload as workspace logo. Required when delete is false or not provided. Supported formats: PNG, JPEG, JPG."
+        },
+        {
+          "name": "delete",
+          "type": "boolean",
+          "required": false,
+          "about": "If set to true, removes the workspace logo completely. When true, the file parameter is not required."
+        },
+        {
+          "name": "workspace_id",
+          "type": "integer",
+          "required": true,
+          "about": "The ID of the workspace to update the logo for."
+        }
+      ],
+      "scopes": [
+        "data:read_write"
+      ],
+      "tags": [
+        "updateHint",
+        "openWorldHint",
+        "workspace"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Upload File",
+      "slug": "TODOIST_UPLOAD_FILE",
+      "kind": "write",
+      "description": "Tool to upload a file to Todoist. Use when you need to attach files to tasks or projects. The uploaded file can be later attached to comments or tasks using the returned file_url.",
+      "inputs": [
+        {
+          "name": "file",
+          "type": "object",
+          "required": true,
+          "about": "File to upload to Todoist."
+        },
+        {
+          "name": "project_id",
+          "type": "string",
+          "required": false,
+          "about": "The ID of the project to associate the uploaded file with. If not provided, the file will be uploaded without project association."
+        }
+      ],
+      "scopes": [
+        "data:read"
+      ],
+      "tags": [
+        "important",
+        "openWorldHint",
+        "files",
+        "createHint"
+      ],
+      "deprecated": false
+    }
+  ],
+  "triggers": [],
+  "source": "https://docs.composio.dev/toolkits/todoist",
+  "fetched_at": "2026-11-20"
+}

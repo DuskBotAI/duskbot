@@ -59,7 +59,6 @@ const render = (props: Parameters<typeof Composer>[0]) => flushSync(() => root.r
 const plus = () => container.querySelector<HTMLElement>("[data-composer-plus]")?.closest("button") ?? null;
 const menu = () => document.body.querySelector<HTMLElement>("[data-composer-menu]");
 const popover = () => document.body.querySelector<HTMLElement>('[data-sidebar-popover-menu="anchored"]');
-const item = (key: string) => document.body.querySelector<HTMLButtonElement>(`[data-menu-key="${key}"]`);
 const click = (element: Element | null) => {
   if (!element) throw new Error("nothing to click");
   flushSync(() => (element as HTMLElement).click());
@@ -74,11 +73,6 @@ function expectBotButton(button: HTMLElement | null, color: Bot["color"]) {
   expect(button?.style.getPropertyValue("--bot-button-pressed")).toBe(tone.pressed);
 }
 const sendButton = () => container.querySelector<HTMLButtonElement>('button[aria-label="Send message"]');
-
-function openPlus() {
-  click(plus());
-  expect(menu()).not.toBeNull();
-}
 
 beforeEach(() => {
   fixture.agentsMcp = true;
@@ -124,17 +118,16 @@ describe("the Simple composer in a bot chat", () => {
       expect(mic.style.backgroundColor).not.toBe("");
       expect(mic.className.split(" ")).toEqual(expect.arrayContaining(["size-7", "rounded-full", "composer-press"]));
       expect(container.querySelector("[data-composer-actions]")!.lastElementChild).toBe(mic);
-      openPlus();
-      expect([...menu()!.querySelectorAll("[data-menu-key]")].map((row) => row.getAttribute("data-menu-key"))).toEqual(["attach", "teach"]);
     } finally {
       vi.stubEnv("VITE_DUSK_LIVE_CALL", "1");
       vi.stubEnv("VITE_DUSK_VOICE_CALL", "");
     }
   });
 
-  it("is one pill: a round + with three rows, the field, and one round button in the bot's tone", () => {
+  it("is one pill: a round + that attaches files, the field, and one round button in the bot's tone", () => {
     render({ bot });
-    expect(plus()?.getAttribute("aria-label")).toBe("Add");
+    expect(plus()?.getAttribute("aria-label")).toBe("Attach files");
+    expect(plus()?.getAttribute("aria-haspopup")).toBeNull();
     const pill = container.querySelector('[data-tour="composer"]')!.className.split(" ");
     expect(pill).toEqual(expect.arrayContaining(["composer-pill", "rounded-[22px]", "bg-composer", "px-[9px]", "pt-[7px]", "pb-[9px]", "inset-ring-[0.5px]", "inset-ring-ink/[0.12]",
       "hover:inset-ring-ink/[0.24]", "focus-within:inset-ring-ink/[0.24]", "data-[drag-over]:inset-ring-accent"]));
@@ -147,20 +140,18 @@ describe("the Simple composer in a bot chat", () => {
     expect(container.querySelector("[data-approval-chip]")).toBeNull();
     const tone = botButtonTone("purple");
     expect(fixture.call).toMatchObject({ bot: { id: "atlas" }, placement: "composer", fill: `var(--grok-cta, ${tone.fill})`, ink: tone.ink });
-    openPlus();
-    expect([...menu()!.querySelectorAll("[data-menu-key]")].map((row) => row.getAttribute("data-menu-key"))).toEqual(["attach", "teach"]);
-    expect([...menu()!.querySelectorAll("[data-menu-key]")].map((row) => row.querySelector(".truncate")!.textContent)).toEqual(["Attach files", "Teach a task"]);
-    const row = menu()!.querySelector("[data-menu-key='attach']")!.className.split(" ");
-    expect(row).toEqual(expect.arrayContaining(["h-8", "gap-1.5", "px-2", "rounded-[10px]", "text-[14px]"]));
-    expect(menu()!.className.split(" ")).toEqual(expect.arrayContaining(["popover-surface", "rounded-[16px]", "p-1.5", "w-max", "min-w-[200px]", "max-w-[280px]"]));
   });
 
-  it("starts a /learn draft from Teach a task, ahead of anything already typed", () => {
-    restoreComposerDraft(`bot:${bot.id}:${bot.threadId}`, { text: "how I file expenses", attachments: [] });
+  it("keeps the + to uploads: Teach a task and Work until done stay out of it, /learn and /goal stay typed commands", () => {
     render({ bot });
-    openPlus();
-    click(item("teach"));
-    expect(container.querySelector("textarea")!.value).toBe("/learn how I file expenses");
+    expect(menu()).toBeNull();
+    const field = container.querySelector("textarea")!;
+    flushSync(() => {
+      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!.call(field, "/");
+      field.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    expect(document.body.textContent).toContain("/learn");
+    expect(document.body.textContent).toContain("/goal");
   });
 
   it("opens the file picker straight from the + when attaching is its only row", () => {
@@ -200,10 +191,9 @@ describe("the Simple composer in a bot chat", () => {
   it("attaches through the same file picker as the paperclip", () => {
     const picker = vi.spyOn(HTMLInputElement.prototype, "click").mockImplementation(() => {});
     render({ bot });
-    openPlus();
-    click(item("attach"));
+    click(plus());
     expect(picker).toHaveBeenCalledOnce();
-    expect(plus()?.getAttribute("aria-expanded")).toBe("false");
+    expect(menu()).toBeNull();
   });
 
   it("turns its round button into Send while there is text, in the bot's colour", () => {
@@ -254,6 +244,18 @@ describe("the Simple composer in a bot chat", () => {
       expect(sendButton()).toBeNull();
     } finally {
       vi.useRealTimers();
+    }
+  });
+
+  it("holds no Send for a message sent with no network: it waits in its own bubble and the field is free at once", () => {
+    const online = vi.spyOn(navigator, "onLine", "get").mockReturnValue(false);
+    try {
+      restoreComposerDraft(`bot:${bot.id}:${bot.threadId}`, { text: "hello", attachments: [] });
+      render({ bot });
+      click(sendButton());
+      expect(sendButton()).toBeNull();
+    } finally {
+      online.mockRestore();
     }
   });
 
@@ -325,7 +327,7 @@ describe("the composer after Set me up", () => {
 });
 
 describe("the Simple composer in a group chat", () => {
-  it("offers Finish together in the + menu and keeps its chip in view while it is on", () => {
+  it("turns a typed /goal into Finish together and keeps its chip in view while it is on", () => {
     render({ group: room, members: [bot, peer] });
     expect(container.querySelector("[data-goal-chip]")).toBeNull();
     expect(container.querySelector("textarea")!.getAttribute("placeholder")).toBe("Message Launch planning");
@@ -337,14 +339,15 @@ describe("the Simple composer in a group chat", () => {
     expect(send.style.color).toBe("var(--color-accent-ink)");
     restoreComposerDraft(`group:${room.id}:${room.threadId}`, { text: "", attachments: [] });
     render({ group: room, members: [bot, peer] });
-    openPlus();
-    expect([...menu()!.querySelectorAll("[data-menu-key]")].map((row) => row.getAttribute("data-menu-key"))).toEqual(["attach", "goal", "teach"]);
-    click(item("goal"));
+    expect(plus()?.getAttribute("aria-label")).toBe("Attach files");
+    const field = container.querySelector("textarea")!;
+    flushSync(() => {
+      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!.call(field, "/goal ");
+      field.dispatchEvent(new Event("input", { bubbles: true }));
+    });
     const chip = container.querySelector("[data-goal-chip]");
     expect(chip?.getAttribute("aria-label")).toBe("Turn off finish together");
     expect(container.querySelector("textarea")!.getAttribute("placeholder")).toContain("finish together");
-    openPlus();
-    expect(item("goal")!.querySelector(".gi-check")).not.toBeNull();
     click(chip);
     expect(container.querySelector("[data-goal-chip]")).toBeNull();
   });
@@ -355,20 +358,6 @@ describe("the Simple composer in a group chat", () => {
   });
 });
 
-describe("Teach a task in the +", () => {
-  it("is left out when skill authoring is off", () => {
-    fixture.config = { features: { skillAuthoring: false } };
-    render({ bot });
-    // with attaching its only row, the + is the file picker itself
-    expect(container.querySelector('button[aria-label="Attach files"]')).not.toBeNull();
-  });
-
-  it("is left out when the bot's engine can't run agents", () => {
-    fixture.agentsMcp = false;
-    render({ bot });
-    expect(container.querySelector('button[aria-label="Attach files"]')).not.toBeNull();
-  });
-});
 
 describe("the composer", () => {
   describe("with a message longer than one line", () => {

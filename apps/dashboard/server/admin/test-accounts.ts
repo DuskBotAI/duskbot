@@ -41,10 +41,10 @@ export function withoutBilling<T extends object>(state: T, hidden: ReadonlySet<s
 }
 
 /** a harness's app install or workspace (the QA runs report as app:qatest_*), never a person's */
-const TEST_INSTALL = /^(?:app:)?(?:qatest|qa|smoke|e2e)[_-]/i;
+export const TEST_INSTALL = /^(?:app:)?(?:qatest|qa|smoke|e2e)[_-]/i;
 export const isTestInstall = (id: unknown) => typeof id === "string" && TEST_INSTALL.test(id);
 /** a build nobody downloads: 0.0.0 is the unreleased version, with or without a -test or -e2e tag */
-const DEV_BUILD = /^0\.0\.0(?:$|[-+])/;
+export const DEV_BUILD = /^0\.0\.0(?:$|[-+])/;
 export const isDevBuild = (version: unknown) => typeof version === "string" && DEV_BUILD.test(version);
 
 /** an analytics event a test made: a hidden account's, a harness install's, or a dev build's */

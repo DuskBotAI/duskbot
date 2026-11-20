@@ -1,0 +1,91 @@
+{
+  "path": "/routines/trello-overdue-cards",
+  "type": "routine",
+  "title": "Trello overdue cards to bring to your morning standup",
+  "nav": "trello overdue cards",
+  "h1": "pull overdue trello cards into the morning standup",
+  "description": "Read one Trello board before standup. See overdue cards with unfinished due dates, their lists and members, and leave finished work out of the discussion.",
+  "keyword": "trello overdue cards",
+  "keywords": [
+    "trello overdue cards by board",
+    "trello standup routine"
+  ],
+  "answer": "**bring the overdue card to standup with the name of someone who can explain it.** this routine reads one trello board before the meeting. it skips finished due dates, archived cards and the lists your team treats as done. cards with no member get their own spot in dusk chat.",
+  "updated": "2026-11-20",
+  "review": {
+    "status": "approved",
+    "by": "lead agent, after four independent reviewers read every page against seo/facts (2026-11-20); every finding applied",
+    "at": "2026-11-20"
+  },
+  "voice": 2,
+  "tags": [
+    "routine",
+    "trello",
+    "deadlines",
+    "standup"
+  ],
+  "connectors": [
+    "trello"
+  ],
+  "related": [
+    "/integrations/trello",
+    "/routines/linear-sprint-recap",
+    "/routines/weekly-calendar-preview"
+  ],
+  "art": {
+    "logo": "trello",
+    "props": [
+      "s-clock",
+      "s-signpost"
+    ],
+    "bubble": "who can unblock this"
+  },
+  "og_line": "give an overdue card a place in standup.",
+  "routine": {
+    "message": "every weekday at 9:15am, read the open lists and open cards on my trello board at https://trello.com/b/n7w3p8kc. the finished lists are \"packed\" and \"collected\". take cards with a due time before this run and an incomplete due date. exclude archived cards and lists, and skip the finished lists.\n\nreturn the card title and link, list, due time and card members here. put cards without members first, then the rest by earliest due time. don't choose a lead when several members share a card.\n\nnever move a card, change a deadline or mark work complete. if the board read cuts off, tell me. otherwise stay quiet when nothing qualifies.",
+    "when": "weekdays at 9:15am, with overdue measured at run time in your team’s time zone",
+    "needs": "trello read only, the board link, its list names and card fields including due status and members. replace the board link and finished list names with yours.",
+    "output": "unassigned · print collection slips · packing · due mon 16:00 · trello.com/c/m7k2p4az\nfelix wood · proof the care label · artwork · due tue 17:00 · trello.com/c/v5h8n2bx"
+  },
+  "knobs": [
+    "**allow a grace period.** change “before this run” to “at least one full day late” for a board with flexible deadlines.",
+    "**name every finished list.** include lists like “handed to courier” if the team considers its job done there.",
+    "**keep the meeting short.** show the earliest overdue card per list and give the count of other late cards behind it."
+  ],
+  "fails": [
+    "**a finished card sticks around.** the team may move it without marking its due date complete. compare the list name with the routine’s exclusions.",
+    "**tomorrow’s work shows up today.** ask for the full due time and time zone. compare timestamps before shortening them for the digest.",
+    "**the list misses an old card.** reading only recently edited cards drops untouched work. use the board’s open cards without a recent-activity cutoff.[^1]"
+  ],
+  "sections": [
+    {
+      "h": "a late card is a question for the meeting",
+      "md": "**ask what the card needs before changing its date.** the link lets someone open the brief while the team is together. an unassigned card might need a volunteer. a late proof might need a decision from the person who requested it.\n\nif your board barely uses due dates, dusk bot will miss most of your stuck work here. review the active list together instead."
+    }
+  ],
+  "faq": [
+    {
+      "q": "do cards due later today show up?",
+      "a": "**they stay off the list until the due time passes.** if you want advance notice, add a separate “due before tomorrow’s standup” group."
+    },
+    {
+      "q": "does it include overdue items inside a card’s checklist?",
+      "a": "**this routine uses the card’s own due date.** it doesn’t inspect checklist items. give work its own dated card if you want it discussed here."
+    }
+  ],
+  "sources": [
+    {
+      "label": "composio: trello actions",
+      "url": "https://docs.composio.dev/toolkits/trello",
+      "checked": "2026-11-20"
+    },
+    {
+      "label": "dusk bot docs: routines",
+      "url": "/docs/routines"
+    },
+    {
+      "label": "dusk bot docs: connected apps",
+      "url": "/docs/files-and-apps"
+    }
+  ]
+}

@@ -9,13 +9,16 @@ import { noteKeyAccepted, noteKeyRejected } from "../key-rejections.ts";
 import type { OutboundCounts } from "../outbound-counts.ts";
 import { loadPlanUsage, planAccountsFromInstances } from "../plan-usage.ts";
 import { tregProviderApi } from "../included-services.ts";
-import { checkProviderKey, PROVIDER_KEY_KINDS, providerBaseUrl, type ProviderKeyKind } from "../provider-key-check.ts";
+import { PROVIDER_KEY_KINDS, providerBaseUrl, type ProviderKeyKind } from "../provider-key-check.ts";
+import { verifyProviderKey } from "../key-check.ts";
 import { checkTregKey } from "../research.ts";
 import type { Store } from "../store.ts";
 import { readThreadEvents } from "../thread-events.ts";
 import { parseUsageRange } from "../usage-ledger.ts";
 import type { ConfigStatus } from "./config.ts";
 import type { RequestAuth } from "../request-auth.ts";
+import type { CardSealer } from "../card-seal.ts";
+import { unsealFields } from "../sealed-fields.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 
 export interface StatusRouteDeps {
@@ -32,6 +35,8 @@ export interface StatusRouteDeps {
   browserPart?: { pending(): boolean; retry(): void };
   /** On a Team Cloud: false for someone else's private chat, whose words never reach this session's lists. */
   threadShown?(auth: RequestAuth): (threadId: string) => boolean;
+  /** Opens a key sent to POST /api/keys/test sealed for this server; without it only this computer's own app may send one. */
+  sealer?: CardSealer;
 }
 
 type InstallDeps = Pick<StatusRouteDeps, "browserEngineInstall" | "browserEngineInstallError" | "broadcast" | "configStatus" | "browserPart">;
@@ -70,6 +75,8 @@ export function browserNeedsAutoInstall(input: {
 function readable(rows: DecisionRow[], shown: (threadId: string) => boolean): DecisionRow[] {
   return rows.map((row) => shown(row.threadId) ? row : { ...row, threadId: "", summary: undefined, rule: undefined, requestId: undefined });
 }
+
+const MODEL_ID = /^[\w./:@+-]{1,200}$/;
 
 export function createStatusRoutes(deps: StatusRouteDeps): RouteHandler {
   const {
@@ -127,8 +134,19 @@ export function createStatusRoutes(deps: StatusRouteDeps): RouteHandler {
 
     // One read-only request from this server; the verdict never carries the key.
     if (method === "POST" && path === "/api/keys/test") {
-      const body = await readBody(req, 8192);
-      const provider = body?.provider;
+      const raw = await readBody(req, 8192);
+      const provider = raw?.provider;
+      let body = raw;
+      if (raw && typeof raw === "object" && !Array.isArray(raw)) {
+        if (!deps.sealer && (raw.sealed !== undefined || (auth.kind !== "loopback" && typeof raw.key === "string" && raw.key))) {
+          return json(res, 400, { error: "Save the key first, then check it." });
+        }
+        if (deps.sealer) {
+          const opened = await unsealFields(raw, { auth, sealer: deps.sealer, purpose: "key.test", target: [String(provider ?? "")], fields: ["key"] });
+          if (!opened.ok) return json(res, opened.status, opened.body);
+          body = opened.body;
+        }
+      }
       if (provider === "treg") {
         if (body?.key !== undefined && typeof body.key !== "string") return json(res, 400, { error: "key must be a string" });
         const key = typeof body?.key === "string" ? body.key.trim() : cfg.treg?.key?.trim() || "";
@@ -148,12 +166,17 @@ export function createStatusRoutes(deps: StatusRouteDeps): RouteHandler {
       const key = typeof body?.key === "string" ? body.key.trim() : saved?.key?.trim() || "";
       if (!key) return json(res, 400, { error: "No key to test. Paste one or save one first." });
       if (key.length > 512) return json(res, 400, { error: "That does not look like an API key." });
+      if (body?.url !== undefined && (typeof body.url !== "string" || body.url.length > 512)) return json(res, 400, { error: "url must be an address" });
+      if (body?.model !== undefined && (typeof body.model !== "string" || !MODEL_ID.test(body.model.trim()))) {
+        return json(res, 400, { error: "That does not look like a model id." });
+      }
       const url = typeof body?.url === "string" && body.url.trim() ? body.url.trim() : (saved && "url" in saved ? saved.url : undefined);
+      const model = typeof body?.model === "string" ? body.model.trim() : saved && "model" in saved ? saved.model?.trim() || undefined : undefined;
       res.setHeader("cache-control", "no-store");
-      const verdict = await checkProviderKey({ provider: kind, key, url });
+      const verdict = await verifyProviderKey({ provider: kind, key, url, ...(model ? { model } : {}) });
       if (kind !== "anthropic") {
         const base = providerBaseUrl(kind, url);
-        if (verdict.ok) noteKeyAccepted(base, key);
+        if (verdict.ok || verdict.reason === "credits" || verdict.reason === "model") noteKeyAccepted(base, key);
         else if (verdict.reason === "rejected") noteKeyRejected(base, key);
       }
       return json(res, 200, verdict);

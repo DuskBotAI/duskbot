@@ -10,7 +10,7 @@ interface Rate { n: number; of: number }
 interface Cohort { start: number; size: number; d1: Rate | null; d7: Rate | null; d30: Rate | null; weekly: Array<number | null> }
 interface PowerUser {
   id: string; email: string; name: string | null; avatarUrl?: string; avatar?: string; activeDays: number; opens: number;
-  sent: number; replies: number; features: number; lastAt: number; customer: boolean;
+  sent: number; replies: number; features: number; lastAt: number; customer: boolean; trial?: boolean;
 }
 interface RetentionAnswer { now: number; cohorts: Cohort[]; power: PowerUser[] }
 
@@ -66,7 +66,7 @@ export function RetentionPage({ tabs }: { tabs?: ReactNode }) {
                           <Avatar seed={user.id} size={24} customer={user.customer} account={user} />
                           <div className="min-w-0 max-w-[280px]">
                             <Link to={`/admin/users/${encodeURIComponent(user.id)}`} className="text-link block truncate rounded-[6px] text-14">{user.email}</Link>
-                            <span className="block truncate text-12 text-ink-3">{user.name ?? <Nil />}</span>
+                            <span className="block truncate text-12 text-ink-3">{user.trial && <span className="me-1.5 rounded-full bg-wash-sky px-1.5 text-ink">trial</span>}{user.name ?? <Nil />}</span>
                           </div>
                         </div>
                       </Td>

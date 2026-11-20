@@ -53,7 +53,7 @@
         "label": "conversation surface",
         "cells": [
           "apple messages, telegram, whatsapp and rcs",
-          "own desktop app and paired phone browser; store apps are on the way"
+          "own desktop and iphone apps; android pairs through a browser"
         ],
         "src": [
           2,
@@ -133,7 +133,7 @@
   "sections": [
     {
       "h": "use the conversation you will come back to",
-      "md": "**if you want a familiar contact, poke fits that habit.** it directly supports existing messaging apps.[^2] a separate bot workspace adds little if you only want a quick question or reminder. [assistants you text](/alternatives/ai-assistant-you-text) compares that choice.\n\ndusk pairing opens a phone browser you can add to your home screen. it has no notifications today. store apps are still on the way.[^6]\n\nif you depend on a ping to notice completed work, take that limit seriously."
+      "md": "**if you want a familiar contact, poke fits that habit.** it directly supports existing messaging apps.[^2] a separate bot workspace adds little if you only want a quick question or reminder. [assistants you text](/alternatives/ai-assistant-you-text) compares that choice.\n\ndusk's iphone app is in the app store. it alerts you when a bot replies, asks a question or needs approval. on android, open the paired browser to see replies. it sends no notifications while you wait for the google play app.[^6]"
     },
     {
       "h": "a paired phone does not move the bot",
@@ -219,7 +219,7 @@
     "poke ai pricing",
     "poke ai alternatives"
   ],
-  "updated": "2026-11-12",
+  "updated": "2026-11-20",
   "review": {
     "status": "approved",
     "by": "lead agent: independent reviewer pass against seo/facts (4 reviewers), every finding applied, automated gate",
@@ -254,8 +254,8 @@
         "poke or dusk paired to dusk cloud"
       ],
       [
-        "notifications from dusk's phone browser today",
-        "that browser version does not send them"
+        "a notification when your dusk bot replies",
+        "use the iphone app; on android, open the paired browser to see the reply"
       ]
     ]
   },

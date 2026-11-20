@@ -4,7 +4,7 @@ import type { Message } from "../store.ts";
 import { createPersonStop, type PersonStopDeps, type TypedStop } from "./person-stop.ts";
 
 function world(over: { working?: string[]; asking?: boolean; threads?: string[] } = {}) {
-  const rows: Partial<Message>[] = [], stopped: string[] = [];
+  const rows: Partial<Message>[] = [], stopped: string[] = [], dropped: string[] = [], workersStopped: string[] = [];
   const stop = createPersonStop({
     store: {
       appendMessage: (_threadId: string, row: Partial<Message>) => { rows.push(row); return row as Message; },
@@ -14,9 +14,10 @@ function world(over: { working?: string[]; asking?: boolean; threads?: string[] 
     routines: () => null, handoffs: () => ({ stoppedByPerson: () => {} }) as never, interruptDirectThread: async (_botId, threadId) => { stopped.push(threadId); },
     clearUnattended: () => {}, markStopped: () => {}, stopGoal: () => {},
     working: (_botId, threadId) => (over.working ?? []).includes(threadId), asking: () => over.asking === true, language: () => undefined,
+    dropAsks: (threadId) => { dropped.push(threadId); }, stopWorkers: async (_botId, threadId) => { workersStopped.push(threadId); },
   });
   const send = (text: string, input: Partial<TypedStop> = {}) => stop.stopOnTypedCommand({ botId: "b", threadId: "t", text, trigger: { kind: "user" } as TypedStop["trigger"], personPresent: true, fromApp: false, busy: false, row: {}, ...input });
-  return { send, rows, stopped };
+  return { send, rows, stopped, dropped, workersStopped, stop };
 }
 
 describe("a typed stop", () => {
@@ -92,5 +93,21 @@ describe("Stop on a turn waiting for its AI's limit to reset", () => {
     expect(await stop.stopOnTypedCommand({ botId: "b", threadId: "t", text: "stop", trigger: { kind: "user" } as TypedStop["trigger"], personPresent: true, fromApp: false, busy: false, row: {} }))
       .toMatchObject({ ok: true });
     expect(held.size).toBe(0);
+  });
+});
+
+describe("Stop means stop everything the request started", () => {
+  it("drops the chat's open asks and stops the workers the request started, along with the turn", async () => {
+    const w = world({ working: ["t"] });
+    await w.send("stop", { busy: true });
+    expect(w.stopped).toEqual(["t"]);
+    expect(w.dropped).toEqual(["t"]);
+    expect(w.workersStopped).toEqual(["t"]);
+  });
+
+  it("a stop with nothing running drops and stops nothing", async () => {
+    const w = world();
+    await w.send("stop");
+    expect([...w.dropped, ...w.workersStopped]).toEqual([]);
   });
 });

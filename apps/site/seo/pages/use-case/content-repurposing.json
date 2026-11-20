@@ -1,0 +1,128 @@
+{
+  "path": "/use-cases/content-repurposing",
+  "type": "use-case",
+  "title": "Repurpose one expert article into useful shorter drafts",
+  "nav": "content repurposing",
+  "h1": "repurpose an article without losing the advice",
+  "description": "Turn an approved Google Doc into a counter card and a short FAQ. Keep the source passage, caveats and editorial decisions beside each draft.",
+  "keyword": "ai content repurposing",
+  "keywords": [
+    "repurpose an article with ai",
+    "turn an article into an faq"
+  ],
+  "answer": "**the line you cut for space might be the one that keeps a reader from ruining a jacket.** hand a bot one approved article and two reader questions. ask it to turn the article into a counter card and a short faq. keep the source passage beside each draft so an editor can spot a missing exception.",
+  "updated": "2026-11-20",
+  "review": {
+    "status": "approved",
+    "by": "lead agent, after four independent reviewers read every page against seo/facts (2026-11-20); every finding applied",
+    "at": "2026-11-20"
+  },
+  "voice": 2,
+  "tags": [
+    "content",
+    "editing",
+    "drafts"
+  ],
+  "connectors": [
+    "googledocs"
+  ],
+  "related": [
+    "/use-cases/newsletter",
+    "/use-cases/social-media-posting",
+    "/integrations/google-docs"
+  ],
+  "art": {
+    "props": [
+      "p-newspaper",
+      "s-palette"
+    ],
+    "bubble": "keep the exception"
+  },
+  "og_line": "shorter copy can still keep the caveat.",
+  "routine": {
+    "intro": "**choose pieces that readers use in different places.** name the source doc and who will read each piece.",
+    "message": "every other thursday at 11, read the approved copy at https://docs.google.com/document/d/1t8k4f7q5y2w6b9n3s8j4c7v2g5p9r3m8x6z4a7h2d5/edit. use only that doc. draft a counter card for a reader about to do the job and an faq answer for someone deciding whether to try it. for the card, answer “what do i check before washing this jacket?” for the faq, answer “can i wash the liner with the shell?” give each piece one job and a clear next step.\n\nunder each draft, list the source heading and the qualification you kept. if a short format can't fit a necessary exception, drop the advice from that format. leave both drafts here for editing. publish nothing.",
+    "when": "alternate thursdays at 11 am after editorial sign-off",
+    "needs": "a google doc with approved copy, read only access and two reader questions. replace the doc link and both reader questions.",
+    "output": "example from sheila's jacket care article\ncounter card | before you wash: read the sewn-in care label. remove the liner only if it detaches.\nfaq | can the liner go in with the shell? follow each piece's own label. the lining may need different care.\nsource | 'before washing', paragraphs 1 and 2"
+  },
+  "sections": [
+    {
+      "h": "choose the moment someone needs the advice",
+      "md": "**a person at the counter has a different question from someone browsing at home.** the first needs a short sequence. the second might need to know whether the advice applies at all. write those two questions before asking for shorter copy."
+    },
+    {
+      "h": "keep a trail back to the original",
+      "md": "**make the source easy to find during editing.**\n\n1. read the approved google doc by id.[^1] choose a heading that answers the reader's question.\n2. pull out the instruction and its conditions. keep words such as “only”, “unless” and “after” where they affect meaning.\n3. draft for the available space. include the source heading in a separate editor's note."
+    },
+    {
+      "h": "let an editor cut the weak version",
+      "md": "**try using the short piece without the article.** could a reader tell when to stop? does the next step still make sense? if the answer depends on a missing diagram, refer readers to the full article or drop the piece.\n\nif your problem is an empty source article, interview the expert first. dusk bot has nothing solid to adapt yet."
+    }
+  ],
+  "safeguards": [
+    "give google docs read only access. the approved article stays available to compare against the drafts.",
+    "reuse material you have permission to adapt. keep any required credit on the short version.",
+    "connected-app publishing asks first by default. drafting the copy in chat needs no publishing account.[^4]"
+  ],
+  "worked": {
+    "intro": "an invented editing decision at a clothing repair counter",
+    "before": "sheila's article says the lining comes out on some jackets. an early counter card tells everyone to pull out the liner.",
+    "after": "the card now says to remove a detachable liner only. the faq gives the longer explanation about separate care labels. both point the editor back to the same paragraph."
+  },
+  "saves": {
+    "estimate": "roughly 14 minutes for a pair of drafts under these assumptions",
+    "formula": "24 minutes adapting both pieces by hand\n- 10 minutes briefing, tracing and editing the drafts\n= 14 minutes per pair",
+    "assumptions": [
+      "time a pair based on an article you know well",
+      "include the work of putting omitted context back",
+      "compare versions that meet the same editorial standard"
+    ]
+  },
+  "mistakes": [
+    {
+      "mistake": "cutting a qualification to hit the word limit",
+      "fix": "shorten the setup first. if the exception still won't fit, leave the advice out."
+    },
+    {
+      "mistake": "turning a paraphrase into a quote",
+      "fix": "use your own phrasing or copy a verified quote with its context and credit."
+    }
+  ],
+  "quick": {
+    "steps": [
+      "choose one paragraph with an exception",
+      "give the bot a counter question and a browsing question",
+      "compare the guidance in both drafts with the source"
+    ]
+  },
+  "faq": [
+    {
+      "q": "can i use a transcript instead of an article?",
+      "a": "yes, if you have a transcript cleared for reuse. mark speaker changes so an editor can trace an opinion back to the right person."
+    },
+    {
+      "q": "should every long article become several pieces?",
+      "a": "only make a piece if the source answers its reader's question. one useful card earns its place even if the proposed faq falls flat."
+    }
+  ],
+  "sources": [
+    {
+      "label": "composio: google docs actions",
+      "url": "https://docs.composio.dev/toolkits/googledocs",
+      "checked": "2026-11-20"
+    },
+    {
+      "label": "dusk bot docs: files and connected apps",
+      "url": "/docs/files-and-apps"
+    },
+    {
+      "label": "dusk bot docs: routines",
+      "url": "/docs/routines"
+    },
+    {
+      "label": "dusk bot docs: a bot’s computer",
+      "url": "/docs/computer"
+    }
+  ]
+}

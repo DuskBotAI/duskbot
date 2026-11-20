@@ -83,6 +83,12 @@ export function TransferSettings() {
     return () => { alive.current = false; loadSequence.current++; };
   }, [load, ready, refreshKey]);
 
+  const openPlace = window.duskDesktop?.workspaces?.open;
+  if (!bridge && openPlace) return <Card label={t("vpsLink.transfer.whereTitle")}>
+    <NavRow data-open-this-device="" title={t("vpsLink.transfer.openThisDevice", { device })} hint={t("vpsLink.transfer.fromServerPage", { device })}
+      onClick={() => void openPlace("local").catch((cause) => setError(message(cause)))} />
+    {error && <NoteRow tone="danger">{error}</NoteRow>}
+  </Card>;
   if (!bridge) return <Card><NoteRow>{t("vpsLink.transfer.desktopOnly")}</NoteRow></Card>;
   const perform = async (ask: ConfirmRequest | null, work: () => Promise<unknown>, done?: string) => {
     if (busy || (ask && !await askConfirm(ask))) return;

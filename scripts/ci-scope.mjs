@@ -52,7 +52,7 @@ export const VITEST_SUBSETS = {
       "server/notify.test.ts", "server/room-lines.test.ts", "server/post-to-room.test.ts",
       "server/teammate-lines.test.ts", "server/cloud-send-arrived.test.ts", "scripts/ci-workflow.test.ts", "scripts/pre-push-check.test.ts",
       "server/host/wait-words.test.ts", "electron/accounts-e2e.test.mjs", "scripts/testing/send-confirmation.e2e.test.ts",
-      "scripts/testing/team-own-chat.e2e.test.ts", "shared/app-prefs.test.ts",
+      "scripts/testing/team-own-chat.e2e.test.ts", "shared/app-prefs.test.ts", "shared/failure-plan.test.ts",
       "scripts/testing/analytics-docs.test.ts"],
     shards: 2,
     nodeTests: true,

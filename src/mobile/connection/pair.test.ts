@@ -2,8 +2,8 @@ import { createCipheriv, hkdfSync, randomBytes } from "node:crypto";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { mobileLinkUrl, pairingFromPayload, type MobileLinkPayload, type MobilePairingPayload, type MobileRedeemResponse } from "../../../shared/mobile-link";
 import type { MobilePlatform } from "../platform";
-import { connectToWorkspace, createConnectionStore } from "./connections";
-import { PairError, parseTypedPairing, readScanned, redeemPairing, resolveTypedCode } from "./pair";
+import { connectToWorkspace, createConnectionStore, PlaceGoneError } from "./connections";
+import { LINK_DEADLINE_MS, linkDeadline, PairError, parseTypedPairing, readScanned, redeemPairing, resolveTypedCode } from "./pair";
 import { MOBILE_LINK_VERSION, universalPairLink, universalSignInLink } from "../../../shared/mobile-link";
 import * as relay from "../transport/relay";
 import { createRelaySecrets } from "../transport/link-crypto";
@@ -217,6 +217,35 @@ describe("v2 pairing", () => {
     expect(channel.close).toHaveBeenCalledOnce();
   });
 
+  it("sends this install's own id with every pairing, the same one each time, kept in its preferences", async () => {
+    const { platform, preferences } = fakePlatform();
+    const fetcher = vi.fn<typeof fetch>().mockImplementation(async () => response(v2Answer()));
+    vi.stubGlobal("fetch", fetcher);
+    vi.spyOn(relay, "open").mockReturnValue({ request: vi.fn().mockRejectedValue(new TypeError("offline")), close: vi.fn() });
+    await redeemPairing(pairingFromPayload(v2Payload()), platform);
+    await redeemPairing(pairingFromPayload({ ...v2Payload(), grant: { ...v2Payload().grant, id: "grant-two" } }), platform);
+    const [first, second] = fetcher.mock.calls.map((call) => JSON.parse(String(call[1]?.body)).device.install);
+    expect(first).toMatch(/^[0-9a-f-]{36}$/);
+    expect(second).toBe(first);
+    expect(preferences.get("dusk.mobile.install")).toBe(first);
+  });
+
+  it("times a grant that says when it was issued on the phone's own clock, so a computer an hour slow still pairs", async () => {
+    const { platform, preferences } = fakePlatform();
+    const fetcher = vi.fn<typeof fetch>().mockImplementation(async () => response(v2Answer()));
+    vi.stubGlobal("fetch", fetcher);
+    vi.spyOn(relay, "open").mockReturnValue({ request: vi.fn().mockRejectedValue(new TypeError("offline")), close: vi.fn() });
+    const slow = Date.now() - 60 * 60_000;
+    const late = pairingFromPayload({ ...v2Payload(), grant: { ...v2Payload().grant, issuedAt: slow, expiresAt: slow + 10 * 60_000 } });
+    expect(late.issuedAt).toBe(slow);
+    await expect(redeemPairing(late, platform)).resolves.toMatchObject({ token: expect.any(String) });
+    expect(fetcher).toHaveBeenCalled();
+    fetcher.mockClear();
+    preferences.set("dusk.mobile.grantSeen.grant-id", String(Date.now() - 11 * 60_000));
+    await expect(redeemPairing(late, platform)).rejects.toMatchObject({ code: "expired" });
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+
   it("falls back to grant relay and records the device channel", async () => {
     const channel = { request: vi.fn().mockResolvedValue(response(v2Answer())), close: vi.fn() };
     const opened = vi.spyOn(relay, "open").mockReturnValue(channel);
@@ -363,6 +392,17 @@ describe("workspace reconnect", () => {
     expect(await connectToWorkspace(record, token, platform, new AbortController().signal)).toEqual({ kind: "bearer", origin: "https://workspace.test", token, asleep: true });
     // a plain outage is still unreachable
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(response({}, 503)));
+    await expect(connectToWorkspace(record, token, platform, new AbortController().signal)).rejects.toMatchObject({ code: "unreachable" });
+  });
+
+  it("says a dusk cloud whose edge answers gone was deleted, never unreachable or unpaired", async () => {
+    const { record, token, platform } = await saved();
+    record.via = [{ kind: "https", url: "https://workspace.test" }];
+    const gone = () => new Response("This dusk bot was deleted.", { status: 410, headers: { "x-dusk-cloud-power": "gone" } });
+    vi.stubGlobal("fetch", vi.fn().mockImplementation(async () => gone()));
+    await expect(connectToWorkspace(record, token, platform, new AbortController().signal)).rejects.toBeInstanceOf(PlaceGoneError);
+    // a 410 without the edge's word is no more than a failed route
+    vi.stubGlobal("fetch", vi.fn().mockImplementation(async () => response({}, 410)));
     await expect(connectToWorkspace(record, token, platform, new AbortController().signal)).rejects.toMatchObject({ code: "unreachable" });
   });
 
@@ -537,5 +577,23 @@ describe("the app's own scanner reads every qr the desktop, the site or an older
     expect(readScanned("https://dusk.bot/download")).toEqual({ kind: "store" });
     expect(readScanned("qwer-typl-kmnb")).toEqual({ kind: "code", code: "QWERTYPLKMNB" });
     for (const text of ["https://dusk.bot/m/pair?m=x", "https://evil.example/m/pair#m=x", "https://dusk.bot/pricing", "hello", ""]) expect(readScanned(text), text).toBeNull();
+  });
+});
+
+describe("a link attempt never spins forever", () => {
+  it("one the computer never answers ends at the deadline with can't reach, for Try again", async () => {
+    vi.useFakeTimers();
+    try {
+      vi.stubGlobal("fetch", vi.fn(() => new Promise<Response>(() => {})));
+      const attempt = redeemPairing(payload, fakePlatform().platform);
+      const outcome = expect(attempt).rejects.toMatchObject({ name: "PairError", code: "unreachable" });
+      await vi.advanceTimersByTimeAsync(LINK_DEADLINE_MS + 1);
+      await outcome;
+    } finally { vi.useRealTimers(); }
+  });
+
+  it("the guard passes a result or a failure that comes in time through as it is", async () => {
+    await expect(linkDeadline(Promise.resolve("ok"), 50)).resolves.toBe("ok");
+    await expect(linkDeadline(Promise.reject(new PairError("used")), 50)).rejects.toMatchObject({ code: "used" });
   });
 });

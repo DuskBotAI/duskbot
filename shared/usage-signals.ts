@@ -2,6 +2,7 @@
 // count snapshot. every value is a word from a fixed list, a count or a time. message text, prompts, file contents,
 // urls, tool arguments, error messages and names never reach these records: the workspace maps them to words here first.
 import { CURATED_CONNECTOR_SLUGS } from "./connector-curated.ts";
+import { TOOL_NAMESPACE, toolSurfaceKind } from "./tool-surface.ts";
 import { traceToolLook } from "./usage-trace.ts";
 
 export const USAGE_ENGINES = ["claude", "codex", "gemini", "grok", "opencode", "cursor", "kimi", "deepseek", "qwen", "copilot", "api", "other"] as const;
@@ -60,6 +61,65 @@ export function toolSignals(names: readonly string[]): { tools: UsageTool[]; app
     if (look.icon === "app") apps.add(look.app && APP_SET.has(look.app) ? look.app : "other_app");
   }
   return { tools: [...tools].sort(), apps: [...apps].sort() };
+}
+
+/** why one tool call failed, read from its error on the workspace. `schema_invalid` is the model sending arguments the
+ * tool refused (a weak model's mistake), counted apart so it never reads as the tool breaking */
+export const USAGE_TOOL_ERRORS = ["timeout", "permission", "not_found", "schema_invalid", "network", "bot_wall", "crashed", "other"] as const;
+export type UsageToolError = (typeof USAGE_TOOL_ERRORS)[number];
+const TOOL_ERROR_WORDS: ReadonlyArray<[UsageToolError, RegExp]> = [
+  ["schema_invalid", /invalid[ _-]?(?:arg|param|input|type|enum|selector|json|request params)|-32602|is required|required (?:property|field|param)|missing required|expected (?:a |an )?(?:string|number|integer|boolean|object|array)|must be (?:a|an|one of) |unknown (?:argument|parameter|property|field|key|tool)|unrecognized (?:argument|parameter|key)|additional propert|validation (?:error|failed)|does not match (?:the )?schema|no such tool|tool .{0,60} not found/i],
+  ["bot_wall", /captcha|turnstile|cloudflare|human check|verify you are (?:a )?human|are you a robot|unusual traffic|bot detection|perimeterx|datadome|you have been (?:rate[- ]limited|blocked)|(?:request|access) (?:was |has been )?blocked/i],
+  ["timeout", /timed? ?out|timeout|deadline exceeded|took too long/i],
+  ["permission", /permission|not permitted|\beacces\b|\beperm\b|screen recording|accessibility (?:access|is not|isn't|not)|not allowed|forbidden|denied|unauthori[sz]ed|\b40[13]\b/i],
+  ["network", /econnrefused|econnreset|enotfound|eai_again|ehostunreach|enetunreach|net::err_|err_(?:name|internet|connection|network)|socket hang up|fetch failed|network|\bdns\b|offline|unreachable|\b50[234]\b/i],
+  ["not_found", /not found|no (?:such|matching) |no (?:element|file|tab|window|app|node|frame) |\benoent\b|\b404\b|does not exist|doesn't exist|could not find|couldn't find|cannot find|can't find|unable to (?:locate|find)/i],
+  ["crashed", /crash|exited|killed|\bsig(?:kill|segv|term|abrt)\b|closed|disconnected|broken pipe|not running|is dead|terminated/i],
+];
+
+/** a failed tool call's error as a class; the text itself never leaves the workspace */
+export function toolErrorClass(text: unknown): UsageToolError {
+  const line = typeof text === "string" ? text.slice(0, 500) : "";
+  if (!line) return "other";
+  for (const [kind, pattern] of TOOL_ERROR_WORDS) if (pattern.test(line)) return kind;
+  return "other";
+}
+
+const TOOL_ACTION = /^[a-z][a-z0-9_]{0,31}$/;
+const FAILED_TOOL = /^(?:browser|computer)\.[a-z][a-z0-9_]{0,31}$/;
+/** a tool call's name as it may be sent: `browser.<action>` or `computer.<action>` for a screen tool, else its kind */
+export function failedToolName(name: string): string {
+  const surface = toolSurfaceKind(name);
+  if (!surface) return toolSignals([name]).tools[0] ?? "other";
+  const bare = name.toLowerCase().replace(TOOL_NAMESPACE, "").replace(surface === "browser" ? /^(?:agent_browser_|browser_)/ : /^computer_/, "");
+  return `${surface}.${TOOL_ACTION.test(bare) ? bare : "other"}`;
+}
+
+/** one tool and error class a turn's calls failed with, and how many calls did */
+export interface UsageToolFailure { tool: string; error: UsageToolError; count: number }
+export const MAX_TOOL_FAILURES = 12;
+/** a turn's failed calls (name and error text, read here only) as tool and class counts */
+export function toolFailures(calls: ReadonlyArray<{ name: string; error?: string }>): UsageToolFailure[] {
+  const counts = new Map<string, UsageToolFailure>();
+  for (const call of calls) {
+    if (typeof call?.name !== "string") continue;
+    const tool = failedToolName(call.name), error = toolErrorClass(call.error), key = `${tool}|${error}`;
+    const row = counts.get(key);
+    if (row) row.count++; else counts.set(key, { tool, error, count: 1 });
+  }
+  return [...counts.values()].sort((a, b) => b.count - a.count || a.tool.localeCompare(b.tool) || a.error.localeCompare(b.error)).slice(0, MAX_TOOL_FAILURES);
+}
+function cleanToolFailures(value: unknown): UsageToolFailure[] {
+  if (!Array.isArray(value)) return [];
+  const rows = new Map<string, UsageToolFailure>();
+  for (const item of value.slice(0, MAX_TOOL_FAILURES * 2)) {
+    if (!item || typeof item !== "object") continue;
+    const { tool, error, count: n } = item as Record<string, unknown>;
+    if (typeof tool !== "string" || !(FAILED_TOOL.test(tool) || (USAGE_TOOLS as readonly string[]).includes(tool)) || !oneOf(USAGE_TOOL_ERRORS, error) || !count(n, 1000) || n < 1) continue;
+    const key = `${tool}|${error}`, row = rows.get(key);
+    if (row) row.count = Math.min(999, row.count + n); else rows.set(key, { tool, error, count: n });
+  }
+  return [...rows.values()].slice(0, MAX_TOOL_FAILURES);
 }
 
 export const USAGE_REASONS = ["rate_limit", "quota", "auth", "timeout", "network", "context", "refused", "crashed", "tool", "model_not_found", "bad_request", "provider_down",
@@ -264,6 +324,9 @@ export interface UsageTurn {
   /** tool kinds and apps whose call failed in this turn */
   failedTools?: UsageTool[];
   failedApps?: string[];
+  /** each failed call's tool (`browser.navigate`, `computer.click`, or a tool kind) and error class, counted; absent
+   * from older workspaces. A newer workspace leaves `schema_invalid` calls out of `failedTools` and `failedApps` */
+  toolFailures?: UsageToolFailure[];
   /** a connected app's action names (like gmail_send_email), from its catalog, for curated apps only */
   actions?: string[];
   /** a salted hash of the bot and of the chat, kept on the workspace: counts turns per bot and per chat, names neither */
@@ -329,7 +392,7 @@ export interface UsageSession {
 }
 export interface UsageReport { turns: UsageTurn[]; runs: UsageRun[]; frustrations?: UsageFrustration[]; sessions?: UsageSession[]; digests?: UsageDigest[]; signals?: UsageSignal[]; snapshot?: UsageSnapshot }
 
-export const USAGE_TURN_KEYS = ["id", "at", "engine", "outcome", "reason", "detail", "ms", "tools", "apps", "category", "from", "place", "room", "firstMs", "model", "failedTools", "failedApps", "actions", "bot", "chat"] as const;
+export const USAGE_TURN_KEYS = ["id", "at", "engine", "outcome", "reason", "detail", "ms", "tools", "apps", "category", "from", "place", "room", "firstMs", "model", "failedTools", "failedApps", "toolFailures", "actions", "bot", "chat"] as const;
 export const USAGE_RUN_KEYS = ["id", "at", "trigger", "outcome", "reason", "ms", "every", "routine"] as const;
 export const USAGE_SNAPSHOT_KEYS = ["bots", "rooms", "routines", "webhooks", "appEvents", "skills"] as const;
 export const USAGE_SNAPSHOT_EXTRA_KEYS = ["chats", "archived", "memory", "botEngines"] as const;
@@ -405,11 +468,12 @@ export function cleanUsageTurn(input: unknown, now = Date.now()): UsageTurn | nu
   const detail = v.outcome === "failed" && typeof v.detail === "string" && v.detail.length <= DETAIL_MAX && FAILURE_DETAIL.test(v.detail) ? v.detail : undefined;
   const failedTools = Array.isArray(v.failedTools) ? [...new Set(v.failedTools.filter((tool): tool is UsageTool => oneOf(USAGE_TOOLS, tool)))].sort() : [];
   const failedApps = Array.isArray(v.failedApps) ? [...new Set(v.failedApps.filter((app): app is string => typeof app === "string" && (APP_SET.has(app) || app === "other_app")))].sort() : [];
+  const failures = cleanToolFailures(v.toolFailures);
   const actions = Array.isArray(v.actions) ? [...new Set(v.actions.slice(0, 20).filter((action): action is string => typeof action === "string" && ACTION.test(action) && APP_SET.has(action.split("_")[0]!)))].slice(0, 10) : [];
   const model = typeof v.model === "string" ? modelFamily(v.model) : undefined;
   return { id: v.id, at: v.at as number, engine: v.engine, outcome: v.outcome, ...(reason ? { reason } : {}), ...(detail ? { detail } : {}), ms: v.ms, tools, apps, category: v.category, from: v.from, place: v.place, room: v.room,
     ...(count(v.firstMs, 7 * DAY) && v.firstMs <= v.ms ? { firstMs: v.firstMs } : {}), ...(model ? { model } : {}), ...(failedTools.length ? { failedTools } : {}), ...(failedApps.length ? { failedApps } : {}),
-    ...(actions.length ? { actions } : {}), ...(typeof v.bot === "string" && HASH.test(v.bot) ? { bot: v.bot } : {}), ...(typeof v.chat === "string" && HASH.test(v.chat) ? { chat: v.chat } : {}) };
+    ...(failures.length ? { toolFailures: failures } : {}), ...(actions.length ? { actions } : {}), ...(typeof v.bot === "string" && HASH.test(v.bot) ? { bot: v.bot } : {}), ...(typeof v.chat === "string" && HASH.test(v.chat) ? { chat: v.chat } : {}) };
 }
 
 export function cleanUsageRun(input: unknown, now = Date.now()): UsageRun | null {
@@ -472,7 +536,11 @@ function copies(note: string, sources: readonly string[]): boolean {
   return false;
 }
 /** the writer saying it could not write the note (it saw no chat, or asks for one), not a note */
-const NOT_A_NOTE = /^i(?:'m| am)?\b.{0,40}\b(?:can't|cannot|can not|unable|don't have|do not have)\b|\b(?:paste|share|send) (?:the|that|your) (?:exchange|conversation|chat|transcript)\b|\b(?:conversation|chat|transcript) (?:itself )?(?:isn't|is not|wasn't|was not) (?:in|included|provided|given|shown)\b|\bno record of the work\b|\bthe summary can(?:'t|not)?\b/i;
+const NOT_A_NOTE = /^i(?:'m| am)?\b.{0,40}\b(?:can't|cannot|can not|unable|don't have|do not have)\b|\b(?:paste|share|send) (?:the|that|your) (?:exchange|conversation|chat|transcript)\b|\b(?:conversation|chat|transcript) (?:itself )?(?:isn't|is not|wasn't|was not) (?:here|there|available|in|included|provided|given|shown)\b|\bno record of the work\b|\bthe summary can(?:'t|not)?\b/i;
+/** the writer repeating its own instruction back ("user wants a compact digest in at most 90 words ...") */
+const ECHOED_PROMPT = /\b(?:compact digest|in at most \d+ words|reply with the (?:prose|sentences) only|\d+ lowercase sentences|lowercase prose|anonymous product note)\b/i;
+/** a verb right after "the" whose subject was a bot's name the scrub took out */
+const SUBJECTLESS = /\bthe (?=(?:could|couldn't|can't|cannot|did|didn't|was|wasn't|kept|said|claimed|failed|would|wouldn't|had|has|is|never|tried|asked|replied|stopped|ran|opened|sent|made|got)\b)/g;
 /** an engine's note as short lowercase prose with no message text, addresses, links, handles, paths, file names,
  * long numbers, ids or names; only small counts ("3 tries") and app names stay. `sources`, when given, are the chat
  * lines the engine read: a note that copies a run of their words is dropped, and their names are taken out. null when
@@ -480,17 +548,19 @@ const NOT_A_NOTE = /^i(?:'m| am)?\b.{0,40}\b(?:can't|cannot|can not|unable|don't
 export function scrubSummary(raw: unknown, max = SUMMARY_MAX, options: { sources?: readonly string[]; avoid?: readonly string[] } = {}): string | null {
   if (typeof raw !== "string") return null;
   const original = raw.replace(/\s+/g, " ").trim().slice(0, max * 2.5);
-  if (original.length < 12 || NOT_A_NOTE.test(original)) return null;
+  if (original.length < 12 || NOT_A_NOTE.test(original) || ECHOED_PROMPT.test(original)) return null;
   const sources = options.sources ?? [];
   if (sources.length && copies(original, sources)) return null;
-  const avoid = new Set([...chatAvoidWords(sources), ...(options.avoid ?? []).flatMap(words)].filter(word => !NOTE_WORDS.has(word)));
-  let text = original.replace(EMAIL, " ").replace(URL_LIKE, " ").replace(HANDLE, " ").replace(QUOTED, " ").replace(PATH, " ").replace(FILE, " ").replace(LONG, " ")
+  const botNames = new Set((options.avoid ?? []).flatMap(words).filter(word => !NOTE_WORDS.has(word)));
+  const avoid = new Set([...chatAvoidWords(sources)].filter(word => !NOTE_WORDS.has(word) && !botNames.has(word)));
+  let text = original.replace(/[\p{L}\p{N}'-]+/gu, (word: string) => botNames.has(word.toLowerCase().replace(/'s$/, "")) ? "bot" : word).replace(EMAIL, " ").replace(URL_LIKE, " ").replace(HANDLE, " ").replace(QUOTED, " ").replace(PATH, " ").replace(FILE, " ").replace(LONG, " ")
     .replace(NUMBER_RUN, " ").replace(DIGITS, (token: string) => COUNT.test(token) ? token : " ");
   // a capitalised word that does not start a sentence is taken as a name, unless it is a known app or product
   text = text.replace(/\b\p{Lu}[\p{L}'-]*/gu, (word: string, offset: number, whole: string) => offset === 0 || /[.!?;:]\s+$/.test(whole.slice(Math.max(0, offset - 3), offset))
     || NOTE_WORDS.has(word.toLowerCase().replace(/'s$/, "")) ? word : " ");
   if (avoid.size) text = text.replace(/[\p{L}\p{N}'-]+/gu, (word: string) => avoid.has(word.toLowerCase().replace(/'s$/, "")) ? " " : word);
-  text = text.replace(/[^\p{L}\p{N}\s,.;:!?'()-]/gu, " ").replace(/\s+([,.;:!?])/g, "$1").replace(/\s+/g, " ").trim().toLowerCase();
+  text = text.replace(/[^\p{L}\p{N}\s,.;:!?'()-]/gu, " ").replace(/\s+([,.;:!?])/g, "$1").replace(/\s+/g, " ").trim().toLowerCase()
+    .replace(/\bbot(?: bot)+\b/g, "bot").replace(SUBJECTLESS, "the bot ");
   if (text.length < 12 || text.length < original.length * 0.7) return null;
   return text.length > max ? `${text.slice(0, max).replace(/\s+\S*$/, "")}.` : text;
 }

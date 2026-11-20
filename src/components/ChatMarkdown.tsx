@@ -825,7 +825,7 @@ function ChatMarkdownComponent({ text, message, mentionPeers = NO_MENTION_PEERS,
   const markdown = reveal ? draw() : markdownCache.render(text, variant, draw);
   return (
     <MessageScopeContext.Provider value={{ message, imageOffsets, threads, currentBotId, delivered }}>
-      <div className="chat-md min-w-0 [&>*+*]:mt-2" data-revealing={reveal ? "" : undefined} style={reveal ? { "--rv-step": `${reveal.step}ms` } as CSSProperties : undefined}>{markdown}</div>
+      <div className="chat-md min-w-0 [&>:where(:not(:first-child))]:mt-2" data-revealing={reveal ? "" : undefined} style={reveal ? { "--rv-step": `${reveal.step}ms` } as CSSProperties : undefined}>{markdown}</div>
     </MessageScopeContext.Provider>
   );
 }

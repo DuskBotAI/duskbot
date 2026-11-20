@@ -1,4 +1,5 @@
-import { latestSaidByBot, type ThreadLatest } from "./message-db.ts";
+import { parseMemoryEntries } from "./memory-entries.ts";
+import { latestSaidByBot, recallTerms, type ThreadLatest } from "./message-db.ts";
 import { hostTimeZone } from "./turn-clock.ts";
 import type { BotRecord, GroupRecord, TaskRecord } from "./store.ts";
 
@@ -70,12 +71,32 @@ export function recentWorkLines(threads: readonly BotThread[], latest: readonly 
   return lines;
 }
 
+const CHAT_SOURCE = /· from chat ("(?:[^"\\]|\\.)*")/;
+
+/** A chat is titled by its first message. When a note from that chat was struck as wrong and the title says what it
+ * said (two words in common), the title would bring the old fact back, so it is left out wherever titles are shown. */
+export function correctedChatTitles(memory: string): (title: string) => boolean {
+  const stale: string[] = [];
+  for (const entry of parseMemoryEntries(memory)) {
+    if (!entry.struck) continue;
+    const quoted = CHAT_SOURCE.exec(entry.prefix)?.[1];
+    if (!quoted) continue;
+    let title: string;
+    try { title = JSON.parse(quoted) as string; } catch { continue; }
+    const said = new Set(recallTerms(entry.body.replace(/~~/g, "")));
+    if (recallTerms(title).filter((word) => said.has(word)).length >= 2) stale.push(title);
+  }
+  return (title) => stale.some((known) => known === title || (known.endsWith("…") && title.startsWith(known.slice(0, -1))));
+}
+
 export function recentWork(
   store: RecentWorkStore,
   bot: Pick<BotRecord, "id" | "threadId" | "tasks">,
-  opts: { userName: string; currentThreadId?: string; now?: number; windowMs?: number; include?: (threadId: string) => boolean; privateThread?: (threadId: string) => boolean },
+  opts: { userName: string; currentThreadId?: string; now?: number; windowMs?: number; include?: (threadId: string) => boolean; privateThread?: (threadId: string) => boolean; staleTitle?: (title: string) => boolean },
 ): RecentWorkLine[] {
-  const threads = botThreads(store, bot, opts.userName, opts.privateThread).filter((thread) => thread.threadId !== opts.currentThreadId && (!opts.include || opts.include(thread.threadId)));
+  const threads = botThreads(store, bot, opts.userName, opts.privateThread)
+    .filter((thread) => thread.threadId !== opts.currentThreadId && (!opts.include || opts.include(thread.threadId)))
+    .map((thread) => (thread.title && opts.staleTitle?.(thread.title) ? { ...thread, title: null } : thread));
   if (!threads.length) return [];
   const since = (opts.now ?? Date.now()) - (opts.windowMs ?? RECENT_WORK_WINDOW_MS);
   return recentWorkLines(threads, latestSaidByBot(threads.map((thread) => thread.threadId), bot.id, since, RECENT_WORK_MAX_LINES));

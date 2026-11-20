@@ -6,6 +6,7 @@ import { spawnSync } from "node:child_process";
 import { lockDataDir } from "../../dashboard/server/data-dir-lock.ts";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 import { afterEach, expect, it, vi } from "vitest";
 import type { StoredSubscription } from "../../dashboard/server/billing/store.ts";
 import { createInstaboxProvider } from "./instabox.ts";
@@ -174,7 +175,7 @@ it("an ended plan's cloud that is confirmed lost keeps its notices and is not de
 it("the data-dir lock: another process is refused, a dead process's lock is taken over", () => {
   const dir = mkdtempSync(join(tmpdir(), "dusk-lock-")); cleanup.push(() => rmSync(dir, { recursive: true, force: true }));
   const unlock = lockDataDir(dir);
-  const child = spawnSync(process.execPath, ["--experimental-strip-types", "-e", `import("${join(process.cwd(), "apps/dashboard/server/data-dir-lock.ts")}").then(m => { try { m.lockDataDir(${JSON.stringify(dir)}); console.log("TOOK"); } catch (e) { console.log("REFUSED " + e.name); } })`], { encoding: "utf8" });
+  const child = spawnSync(process.execPath, ["--experimental-strip-types", "-e", `import("${pathToFileURL(join(process.cwd(), "apps/dashboard/server/data-dir-lock.ts")).href}").then(m => { try { m.lockDataDir(${JSON.stringify(dir)}); console.log("TOOK"); } catch (e) { console.log("REFUSED " + e.name); } })`], { encoding: "utf8" });
   expect(child.stdout).toContain("REFUSED DataDirLockedError");
   unlock();
   // a crashed process on this host (pid no longer alive)

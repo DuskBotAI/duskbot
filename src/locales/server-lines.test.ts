@@ -410,7 +410,6 @@ const PENDING: Readonly<Record<string, ReadonlyArray<readonly [file: string, sni
     ["server/index.ts", "notice: This thread's model ( … ) isn't available, so it now uses  … '"],
     ["server/index.ts", "Company connection changed: choose whether to reconnect or use a pers"],
     ["server/quota-switch.ts", "while  …  is signed out"],
-    ["server/quota-switch.ts", "after hitting the usage limit"],
     ["server/quota-switch.ts", "because  …  did not answer"],
     ["server/quota-switch.ts", "switched to  … . Your request waits on a card above and continues on"],
     ["server/quota-switch.ts", "switched to  … . Your request is still under way here and continues on"],

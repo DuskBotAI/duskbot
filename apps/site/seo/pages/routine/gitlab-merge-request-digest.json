@@ -1,0 +1,90 @@
+{
+  "path": "/routines/gitlab-merge-request-digest",
+  "type": "routine",
+  "title": "Find blocked work in a daily GitLab merge request digest",
+  "nav": "gitlab merge request digest",
+  "h1": "see what is holding up open gitlab merge requests",
+  "description": "Read open GitLab merge requests aimed at one branch. Get the failing pipeline or unresolved discussion behind each entry before the release meeting.",
+  "keyword": "gitlab merge request digest",
+  "keywords": [
+    "daily gitlab merge request summary",
+    "gitlab unresolved discussions",
+    "merge request pipeline digest"
+  ],
+  "answer": "**go into the release meeting knowing which merge request needs a fix and which needs an answer.** this digest reads the pipelines and discussions on open gitlab merge requests aimed at one branch. it brings the evidence to chat. a failed pipeline and an unresolved thread each get their own line, even on the same change.",
+  "updated": "2026-11-20",
+  "review": {
+    "status": "approved",
+    "by": "lead agent, after four independent reviewers read every page against seo/facts (2026-11-20); every finding applied",
+    "at": "2026-11-20"
+  },
+  "voice": 2,
+  "tags": [
+    "gitlab",
+    "release",
+    "merge requests"
+  ],
+  "connectors": [
+    "gitlab"
+  ],
+  "related": [
+    "/integrations/gitlab",
+    "/routines/github-pr-review-reminder",
+    "/use-cases/bug-triage"
+  ],
+  "art": {
+    "label": "GitLab",
+    "props": [
+      "p-magnifier",
+      "p-newspaper"
+    ],
+    "bubble": "one thread still open"
+  },
+  "og_line": "see which change needs another pair of eyes.",
+  "routine": {
+    "message": "every weekday at 11 am, list all open, non-draft merge requests targeting the branch \"release\" in my gitlab project brookmill/print.\n\nread each request’s latest commit and its pipelines and discussions. use the newest pipeline for that commit. list a failed pipeline, unresolved review thread or missing current pipeline in this chat. include the project, request number, title and the evidence. group by request. don't treat a running pipeline as failed.\n\nnever merge, approve, retry a pipeline or resolve a thread. stay quiet if all reads succeed and none of those conditions apply. if discussions or pipelines are inaccessible, name the request and the missing source.",
+    "when": "weekdays at 11 am, looking at the current state of one target branch",
+    "needs": "gitlab read access for project merge requests, commits, pipelines and discussions[^3]. swap in your project path and target branch.",
+    "output": "brookmill/print · release branch\n!36 · keep trim marks inside the proof\n- pipeline 582 failed on current commit 8b62f11.\n- unresolved: erin walsh asks whether the left margin includes the binding allowance.\n!41 · revise stock labels\n- no pipeline found for current commit 72bc830."
+  },
+  "knobs": [
+    "**use the branch you actually release.** give its exact name if it changes each milestone.",
+    "**focus a meeting on discussion.** request only the unresolved questions if another person already handles failed builds.",
+    "**keep long threads readable.** quote the open question briefly and include its thread reference when available."
+  ],
+  "fails": [
+    "**an old failure follows a new commit.** match the pipeline to the latest commit before giving its status. if none matches, say so.",
+    "**a lively conversation looks unresolved.** count review threads that carry an unresolved status. a long exchange can simply mean two people talked through a decision."
+  ],
+  "sections": [
+    {
+      "h": "keep pipeline status and human feedback separate",
+      "md": "**a passing pipeline cannot answer a reviewer’s question about a margin.** give the release lead enough detail to open the right discussion. a missing pipeline also deserves its own wording. no result gives you no evidence of failure.\n\nif the decision is whether to merge right now, open gitlab and inspect the current request. the 11 am digest describes what the bot saw then."
+    }
+  ],
+  "faq": [
+    {
+      "q": "does a clean digest mean every request can merge?",
+      "a": "**silence has a narrower meaning.** the bot found none of the conditions you asked it to list. approvals and other merge requirements sit outside this routine."
+    },
+    {
+      "q": "why leave drafts out of the release meeting?",
+      "a": "**their authors may still be writing the change.** if an upcoming draft matters, ask for it under a separate heading so it keeps its draft status."
+    }
+  ],
+  "sources": [
+    {
+      "label": "dusk bot docs: routines",
+      "url": "/docs/routines"
+    },
+    {
+      "label": "dusk bot docs: files and apps",
+      "url": "/docs/files-and-apps"
+    },
+    {
+      "label": "composio: gitlab actions",
+      "url": "https://docs.composio.dev/toolkits/gitlab",
+      "checked": "2026-11-20"
+    }
+  ]
+}

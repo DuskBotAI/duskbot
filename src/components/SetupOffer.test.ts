@@ -32,7 +32,7 @@ function renderOffer(message: Message, transcript: Message[] = [message]) {
   const all = nodes(tree);
   return { html, card: all.find((node) => node.props["data-setup-card"] !== undefined),
     choices: all.filter((node) => node.props["data-ask-choice"] !== undefined),
-    close: all.find((node) => node.props["aria-label"] === "Close") };
+    close: all.find((node) => node.props["aria-label"] === "Close question") };
 }
 const press = (node: Node | undefined) => (node!.props.onClick as () => void)();
 const key = (card: Node | undefined, value: string) => {

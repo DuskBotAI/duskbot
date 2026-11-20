@@ -12,3 +12,8 @@ export declare function insideFolders(value: string, folders: readonly string[],
 export declare function defaultCwd(folders: readonly string[] | null | undefined): string;
 export declare function cloudJobRefusal(job: any, opts: { folders?: readonly string[] | null; mode?: string; home?: string }): Promise<any>;
 export declare function createCloudMac(deps: any): any;
+export declare const ON_SCREEN_MS: number;
+export declare const SCREEN_OFF: string;
+export declare const SCREEN_NOT_READY: string;
+export declare function screenJobRefusal(job: any, opts: { screen: boolean; ready: boolean; mode: string; home: string; target?: { app: string | null } }): { error: string; ask?: string } | null;
+export declare function appForPid(result: unknown, pid: number): string | null;

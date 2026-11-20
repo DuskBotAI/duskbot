@@ -10,8 +10,9 @@ import { jobRoutine, useCloudIntent } from "@/lib/cloud-intent";
 import { isInvested } from "@/lib/cloud-upsell";
 import { CLOUD_INTENT_GIVEN, cloudSetupStage } from "@/lib/cloud-setup";
 import { cornerPopupWaits, firstChatQuiet } from "@/lib/corner-popup";
-import { ASLEEP_NOTICE, BRING_NOTICE, CLOUD_INTRO, CLOUD_NOTICE, CLOUD_TRIAL_NOTICE, dismissNotice, GROK_MOVE_NOTICE, introShown, introStage, LATE_ROUTINE_NOTICE, launchNotice, markLaunchNotice, nextNotice, noticeSeen, TWO_PLACES_NOTICE, usedBefore, WHATS_NEW_NOTICE } from "@/lib/notices";
+import { ASLEEP_NOTICE, BRING_NOTICE, CLOUD_INTRO, CLOUD_NOTICE, CLOUD_TRIAL_NOTICE, dismissNotice, GROK_MOVE_NOTICE, introShown, introStage, LATE_ROUTINE_NOTICE, launchNotice, markLaunchNotice, nextNotice, noticeSeen, ROUTINE_SLEEP_NOTICE, TWO_PLACES_NOTICE, usedBefore, WHATS_NEW_NOTICE } from "@/lib/notices";
 import { lateRoutineRun } from "@/lib/late-routine";
+import { routineSleep, useRoutineWake } from "@/lib/routine-sleep";
 import { asleepFresh, useAsleepWork } from "@/lib/asleep-work";
 import { trackUpsell } from "@/lib/cloud-upsell";
 import { useAllowanceNotice } from "@/lib/allowance-notice";
@@ -25,7 +26,7 @@ import { t } from "@/lib/i18n";
 import { engineReady } from "./EngineLibrary";
 import { CLOUD_NOTICE_CARD, cloudNoticeStep, CloudNoticeCard } from "./CloudNotice";
 import { CloudTrialIntroCard } from "./CloudTrialIntro";
-import { AsleepWorkCard, LateRoutineCard } from "./LateRoutineCard";
+import { AsleepWorkCard, LateRoutineCard, RoutineSleepCard } from "./LateRoutineCard";
 import { useMoveQuiet } from "./CloudSendStrip";
 import { CloudTrialNoticeCard, useCloudPlanSnapshot } from "./CloudTrialNotice";
 import { NoticeCard, NoticeToast, NotNowButton, PRIMARY_BUTTON } from "./NoticeCard";
@@ -123,8 +124,13 @@ export function AppNotices({ quiet = false, viewer = null, now = Date.now }: { q
     if (stage === "resting" && !introOpen) return false;
     return introOpen || stage === "due" ? true : null;
   };
+  // this computer's sleep costs its routines: dusk cloud or keep awake while plugged in, said once and in place of the late card
+  const sleepOpen = Boolean(bridge) && !noticeSeen(record, ROUTINE_SLEEP_NOTICE);
+  const routinesBridge = sleepOpen && window.duskDesktop?.routines?.keepAwakePluggedIn ? window.duskDesktop.routines : undefined;
+  const [wake] = useRoutineWake(routinesBridge);
+  const sleep = sleepOpen && routinesBridge ? routineSleep(wake, state.routines ?? [], state.routineRuns ?? [], now()) : null;
   // a routine here that ran late or not at all while this computer slept: the plainest case for dusk cloud, said once
-  const late = bridge && !noticeSeen(record, LATE_ROUTINE_NOTICE) ? lateRoutineRun(state.routines ?? [], state.routineRuns ?? [], now()) : null;
+  const late = bridge && !noticeSeen(record, LATE_ROUTINE_NOTICE) && !noticeSeen(record, ROUTINE_SLEEP_NOTICE) ? lateRoutineRun(state.routines ?? [], state.routineRuns ?? [], now()) : null;
   const asleep = useAsleepWork(state.bots, Boolean(bridge) && !noticeSeen(record, ASLEEP_NOTICE), now);
   const slept = bridge && !noticeSeen(record, ASLEEP_NOTICE) ? asleepFresh(asleep, now()) : null;
   const cloudCardDue = (found: unknown): boolean | null => {
@@ -141,6 +147,7 @@ export function AppNotices({ quiet = false, viewer = null, now = Date.now }: { q
     [WHATS_NEW_NOTICE]: false,
     [BRING_NOTICE]: bring.fact,
     [TWO_PLACES_NOTICE]: twoFact,
+    [ROUTINE_SLEEP_NOTICE]: moving ? false : moving === null || sleep === undefined ? null : cloudCardDue(sleep),
     [LATE_ROUTINE_NOTICE]: moving ? false : moving === null ? null : cloudCardDue(late),
     [ASLEEP_NOTICE]: moving ? false : moving === null ? null : cloudCardDue(slept),
     [CLOUD_INTRO]: moving ? false : moving === null ? null : introDue(),
@@ -173,6 +180,7 @@ export function AppNotices({ quiet = false, viewer = null, now = Date.now }: { q
   const close = () => { noticeClosed(); setClosed(true); setTrialOpen(null); setFailed(false); };
   const card = toast ? null
     : notice === CLOUD_INTRO ? (offer ? notice : null)
+    : notice === ROUTINE_SLEEP_NOTICE ? (sleep ? notice : null)
     : notice === LATE_ROUTINE_NOTICE ? (late ? notice : null)
     : notice === ASLEEP_NOTICE ? (slept ? notice : null)
     : notice === CLOUD_TRIAL_NOTICE ? (trial ? notice : null)
@@ -198,6 +206,13 @@ export function AppNotices({ quiet = false, viewer = null, now = Date.now }: { q
       onSignIn={view?.kind === "signed-out" ? () => { track("cloud_card_action", { action: "signin", ms: noticeActed() }); close(); dispatch({ type: "openCloudAdd", source: "app_card", signIn: true }); } : undefined}
       onNotNow={() => { done("not_now"); setToast(t("cloudIntro.later")); }}
       onDismiss={() => { done("close"); setToast(t("cloudIntro.later")); }} />;
+  }
+  if (notice === ROUTINE_SLEEP_NOTICE && sleep) {
+    const done = (action: string) => { track("routine_sleep_card", { action, reason: sleep.reason, ms: noticeActed() }); close(); save(ROUTINE_SLEEP_NOTICE); };
+    return <RoutineSleepCard sleep={sleep}
+      onCloud={() => { trackUpsell("click", "app_late_routine"); done("cloud"); dispatch({ type: "openCloudAdd", source: "app_late_routine", ...(view?.kind === "signed-out" ? { signIn: true as const } : {}) }); }}
+      onKeepAwake={() => { done("keep_awake"); void routinesBridge?.keepAwakePluggedIn?.(true).catch(() => {}); }}
+      onDismiss={() => { trackUpsell("dismiss", "app_late_routine"); done("close"); }} />;
   }
   if (notice === LATE_ROUTINE_NOTICE && late) {
     const done = (action: string) => { track("late_routine_card", { action, missed: late.ranAt === null, ms: noticeActed() }); close(); save(LATE_ROUTINE_NOTICE); };

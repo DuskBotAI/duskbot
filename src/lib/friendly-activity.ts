@@ -3,6 +3,7 @@ import type { Message } from "@/state/store";
 import type { LiveStatus } from "@/state/turn-status";
 import { t, tOptional } from "./i18n";
 import { phraseCycle, turnNowPhrases, type LiveActivityPhrases } from "./live-activity";
+import { tokenApp } from "../../shared/app-tokens";
 
 // The working line's words, all in one place. A pool says its `words` wherever the active language has them, else its
 // `legacy` words, which every language has.
@@ -141,7 +142,7 @@ export function toolService(name: string | undefined): string | null {
   if (OWN_SERVERS.has(id!.toLowerCase())) return null;
   const raw = id!.toLowerCase() === "composio" ? /^([A-Za-z]+)_/.exec(tool!)?.[1] : id;
   if (!raw) return null;
-  return raw.charAt(0).toUpperCase() + raw.slice(1).toLowerCase();
+  return tokenApp(raw.toLowerCase())?.label ?? raw.charAt(0).toUpperCase() + raw.slice(1).toLowerCase();
 }
 
 /** The typing pool's phase is the line's own "Writing" phase, which comes and goes at once. */

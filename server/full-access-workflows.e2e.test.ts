@@ -250,7 +250,7 @@ it("applies requested Full Access workflows through MCP without duplicate approv
     expect(persisted.find((bot: any) => bot.id === inverse.id)).toMatchObject({ title: "Applied from Full task", approvalMode: "ask" });
     expect(persisted.find((bot: any) => bot.id === inverse.id).tasks.find((task: any) => task.threadId === inverse.activeTaskId).approvalMode).toBe("full");
     expect(persisted.find((bot: any) => bot.id === peer.id).approvalMode).not.toBe("full");
-    expect(persisted.find((bot: any) => bot.id === peer.id).tasks.find((task: any) => task.threadId === peerTurn.threadId)).toMatchObject({ approvalMode: "full", autoApprove: false, alwaysAllow: [] });
+    expect(persisted.find((bot: any) => bot.id === peer.id).tasks.find((task: any) => task.threadId === peerTurn.threadId)?.approvalMode).not.toBe("full");
     expect(JSON.parse(readFileSync(join(dataDir, "routines.json"), "utf8")).routines[0]).toMatchObject({ enabled: false, schedule });
     evidence.push({ persistedBots: persisted, routines: await api("GET", "/api/routines"), handoffs,
       fullMessages: await messages(chief.activeTaskId), askMessages: await messages(ask.threadId), inverseMessages: await messages(inverse.activeTaskId) });

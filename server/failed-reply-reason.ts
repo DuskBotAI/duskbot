@@ -1,6 +1,7 @@
 // what stopped a reply, in one word the app turns into plain words: read from the flags the driver set and the
 // classifiers retries and account switching already use, so a failed row and the retry logic always agree.
 import type { FailedReplyReason } from "../shared/failed-turn.ts";
+import { plainCauseReason } from "../shared/failure-plan.ts";
 import { engineFailureKind } from "./drivers/engine-errors.ts";
 import { classifyError } from "./drivers/retry.ts";
 import { isServerLine } from "./server-lines.ts";
@@ -16,6 +17,10 @@ export function failedReplyReason(message: string, event: { setup?: boolean; cla
   // Claude Code 2.1.295: a session it can no longer open, after dusk bot already rebuilt it once from the chat
   if (/\bNo conversation found with session ID\b/i.test(message)) return "session_lost";
   if (isServerLine("server.freeModel.noReply", message) || isServerLine("server.freeModel.limit", message)) return "no_ai";
+  if (isServerLine("server.allowance.refused", message)) return "plan_limit";
+  if (["server.noAi.admin", "server.noAi.nobodyHere", "server.noAi.member", "server.noAi.memberNoOwner"].some((key) => isServerLine(key as Parameters<typeof isServerLine>[0], message))) return "no_ai";
+  const own = plainCauseReason(message);
+  if (own) return own;
   const kind = engineFailureKind(message);
   const classified = classifyError({ text: message }).reason;
   const usage = failureOf(message, { code: event.errorCode }).reason;

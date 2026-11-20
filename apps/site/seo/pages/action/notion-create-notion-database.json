@@ -1,0 +1,93 @@
+{
+  "path": "/integrations/notion/create-notion-database",
+  "type": "action",
+  "title": "Create a Notion database with the columns you need",
+  "nav": "create a database",
+  "h1": "turn a list of fields into a new notion database",
+  "description": "Give your bot a parent page, a database title and the fields you want. Review a sample entry in chat before creating the new tracker in Notion.",
+  "keyword": "create notion database with ai",
+  "keywords": [
+    "chatgpt create a notion database",
+    "claude build a notion tracker",
+    "make notion database under existing page"
+  ],
+  "answer": "**try fitting a real entry into your columns before you build the tracker.** a bot can create a new notion database under a page you choose. give it the database name and the fields, including one title field. share the parent page with the notion connection or the bot won't be able to create it there.",
+  "updated": "2026-11-20",
+  "review": {
+    "status": "approved",
+    "by": "lead agent, after four independent reviewers read every page against seo/facts (2026-11-20); every finding applied",
+    "at": "2026-11-20"
+  },
+  "tags": [
+    "notion",
+    "create a database"
+  ],
+  "connectors": [
+    "notion"
+  ],
+  "related": [
+    "/integrations/notion",
+    "/integrations/notion/fetch-database",
+    "/integrations/notion/insert-row-database"
+  ],
+  "art": {
+    "logo": "notion",
+    "label": "Notion",
+    "props": [
+      "s-notebook",
+      "p-folder"
+    ],
+    "bubble": "where will it live"
+  },
+  "og_line": "choose the columns before the first entry.",
+  "action": {
+    "toolkit": "notion",
+    "slug": "NOTION_CREATE_DATABASE"
+  },
+  "what": "**decide what each row will describe.** in a seed library, a variety makes a useful title. the date you received a packet belongs in a date field. without column instructions, notion starts the database with just a name column.\n\nchoose an existing page as the parent. if a field should link records in another database, give the bot that database's id too.",
+  "uses": [
+    "start a seed register with a variety title and a received date",
+    "set up a print edition tracker with a title and an edition size",
+    "create a lending register under the right branch library page before anyone records a loan"
+  ],
+  "routine": {
+    "message": "on the first monday in january at 10, look under the seed library page at https://www.notion.so/65ab3a4ff4b54a40818b03949c5b80fc for this year's seed register. if it exists, show me its title here and stop.\n\notherwise propose a database with variety as its title, date received as a date and packets as a number. ask me before you change anything. create the register only after my yes and never add sample entries.",
+    "when": "annually in january on the first monday at 10 am",
+    "needs": "notion connected with read and write for finding the parent, inspecting its children and creating the database",
+    "output": "bette lawson's seed library / seed register 2027\nproposed columns: variety (title), date received (date), packets (number).\nready to create the empty register?"
+  },
+  "steps": [
+    "connect notion in **Connected apps**. in notion, share the parent page with that connection.",
+    "paste your parent page link into the message. give the register a distinct title.",
+    "choose **read and write** for creation. ask to see the fields with a pretend entry in chat first.",
+    "after it creates the database, open it under the parent and inspect the column types."
+  ],
+  "watch": [
+    "**a database can't be the parent for this action.** a missing-page error can also mean the connection lacks access to the page you chose.",
+    "**a save conflict can be temporary.** look for the intended database under the parent before trying again. a successful first save means you can stop."
+  ],
+  "faq": [
+    {
+      "q": "can i give the title column my own name?",
+      "a": "**yes.** include a title field with the label you want. in a seed register, that might be variety."
+    },
+    {
+      "q": "can this add a column to a tracker i already have?",
+      "a": "**use the existing tracker for that edit.** this action creates another database. it would leave you with two places to enter records."
+    }
+  ],
+  "sources": [
+    {
+      "label": "dusk bot docs: files and apps",
+      "url": "/docs/files-and-apps"
+    },
+    {
+      "label": "dusk bot docs: routines",
+      "url": "/docs/routines"
+    }
+  ],
+  "voice": 2,
+  "tip": {
+    "text": "if all you need is a shopping list for today, a few lines on a page will do. columns earn their place when you keep collecting the same details."
+  }
+}

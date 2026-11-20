@@ -23,6 +23,9 @@ const OUTSIDE_TOOL = /browser|web|fetch|read_pages?|research|search|crawl|scrape
 const OWN_TOOL = /^(?:session_search|memory_update|memory_log|list_bots|list_threads)$/;
 /** dusk bot's own tools server in each engine's spelling: its tools are judged by their bare names, not as any MCP server. */
 const OWN_SERVER = /^(?:mcp__agents__|agents__|agents_)/;
+/** The person's own Mac acting for them (the device server's mac_ tools): a download there returns only where it saved,
+ * and a screen read of a browser or an unnamed window marks the turn itself (server/mac-control/host.ts). */
+const OWN_MAC = /^(?:mcp__device__|device__|device_|device\.)mac_/;
 
 type PathMessage = { role: string; kind?: string; sender?: { id?: string; name?: string }; peerAsk?: unknown; tool?: { name?: string } };
 
@@ -31,7 +34,7 @@ export function readOutsideContent(path: readonly PathMessage[]): boolean {
   const asked = path.findLastIndex((message) => message.role === "user" && message.kind === "text");
   for (const message of path.slice(asked + 1)) {
     const name = (message.tool?.name ?? "").replace(OWN_SERVER, "");
-    if (message.kind === "activity" && name && !OWN_TOOL.test(name) && OUTSIDE_TOOL.test(name)) return true;
+    if (message.kind === "activity" && name && !OWN_TOOL.test(name) && !OWN_MAC.test(name) && OUTSIDE_TOOL.test(name)) return true;
   }
   return false;
 }

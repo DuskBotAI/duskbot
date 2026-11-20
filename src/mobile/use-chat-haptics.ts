@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import type { AppState } from "@/state/store";
-import { haptic } from "./haptics";
+import { haptic, type HapticAction } from "./haptics";
 
 type Last = { id: string; optimistic: boolean; userId: string | null; replied: boolean } | null;
 
@@ -16,8 +16,24 @@ function lastOf(state: AppState, chatId: string | null): Last {
   return { id: newest.id, optimistic: newest.role === "user" && newest.id.startsWith("optimistic-"), userId: userIndex >= 0 ? messages[userIndex]!.id : null, replied };
 }
 
+const CHOICE = "[role='tab'], [role='radio'], [role='menuitemradio'], [aria-pressed]";
+
+/** What a tap anywhere in the phone app plays: a switch, a segment or choice changing, a menu or picker option, and a
+ * few chat controls. A choice already made plays nothing. */
+export function tapHaptic(target: EventTarget | null): HapticAction | null {
+  if (!(target instanceof Element) || target.closest(":disabled, [aria-disabled='true']")) return null;
+  if (target.closest("[role='switch'], input[type='checkbox']")) return "toggle";
+  const choice = target.closest(CHOICE);
+  if (choice) return choice.matches("[aria-selected='true'], [aria-checked='true'], [aria-pressed='true']") ? null : "segment";
+  if (target.closest("[role='menuitem'], [role='option']")) return "pick";
+  if (target.closest("[data-composer-stop]")) return "stop";
+  if (target.closest("[data-voice-mic='start'], [data-approval-deny]")) return "tap";
+  if (target.closest("[data-approval-allow]")) return "success";
+  return null;
+}
+
 /** The taps a hand expects from a chat: a light one as a message leaves, a soft one as the reply lands in the open chat,
- * an error buzz when something fails, and a selection tick on any switch. */
+ * an error buzz when something fails, and a tick on any switch, choice or menu option. */
 export function useChatHaptics(state: AppState, chatId: string | null, onSent?: () => void) {
   const sent = useRef(onSent);
   sent.current = onSent;
@@ -32,8 +48,8 @@ export function useChatHaptics(state: AppState, chatId: string | null, onSent?: 
     last.current = next;
     if (shownChat.current !== chatId) { shownChat.current = chatId; return; }
     if (!next || next.id === prev?.id) return;
-    if (next.optimistic) { haptic("light"); sent.current?.(); }
-    else if (next.replied && !(prev?.replied && prev.userId === next.userId)) haptic("soft");
+    if (next.optimistic) { haptic("send"); sent.current?.(); }
+    else if (next.replied && !(prev?.replied && prev.userId === next.userId)) haptic("reply");
   }, [state, chatId]);
 
   useEffect(() => {
@@ -43,19 +59,14 @@ export function useChatHaptics(state: AppState, chatId: string | null, onSent?: 
 
   useEffect(() => {
     const onClick = (event: MouseEvent) => {
-      const target = event.target instanceof Element ? event.target : null;
-      if (!target) return;
-      if (target.closest("[role='switch'], input[type='checkbox']")) haptic("selection");
-      else if (target.closest("[data-composer-stop]")) haptic("medium");
-      else if (target.closest("[data-voice-mic='start']")) haptic("light");
-      else if (target.closest("[data-approval-allow]")) haptic("success");
-      else if (target.closest("[data-approval-deny]")) haptic("light");
+      const action = tapHaptic(event.target);
+      if (action) haptic(action);
     };
     // a long press that brings up a message's actions answers with a tick, as a context menu does
     const shown = new MutationObserver((records) => {
       // the system's context menu gives its own haptic
       if (document.documentElement.dataset.nativeMenu !== undefined) return;
-      if (records.some((record) => record.target instanceof HTMLElement && record.target.dataset.shown === "true" && lastTouch.current > performance.now() - 900)) haptic("selection");
+      if (records.some((record) => record.target instanceof HTMLElement && record.target.dataset.shown === "true" && lastTouch.current > performance.now() - 900)) haptic("hold");
     });
     const onTouch = () => { lastTouch.current = performance.now(); };
     shown.observe(document.body, { subtree: true, attributes: true, attributeFilter: ["data-shown"] });

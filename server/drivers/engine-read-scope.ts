@@ -57,11 +57,14 @@ export function engineReadScope(input: ReadScopeInput): EngineReadScope {
   const own = botId ? join(dataDir, "workspaces", botId) : null;
   const soul = botId ? join(dataDir, "bots", botId) : null;
   const uploads = ids ? boxUploadsDir(dataDir, ids.botId, ids.threadId) : null;
+  // a chat working in a project folder still reads its own folder: compaction saves the folded tool results there
+  const chat = botId && ID.test(input.threadId) ? join(dataDir, "task-workspaces", botId, input.threadId) : null;
   const spill = resolve(spillDir(input.threadId));
   const shared = ["skills-library", "imported-skills"].map((name) => join(dataDir, name));
   const unboxedOnly = input.boxed ? [] : [join(dataDir, "attachments"), spill, ...shared.filter((dir) => existsSync(dir))];
   const granted = [...new Set([
     ...(own ? [own] : []),
+    ...(chat && existsSync(chat) ? [chat] : []),
     ...(uploads && (input.boxed || existsSync(uploads)) ? [uploads] : []),
     ...unboxedOnly,
     ...(input.extraReadable ?? []).map((path) => resolve(path)),

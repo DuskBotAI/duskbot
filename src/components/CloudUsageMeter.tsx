@@ -15,6 +15,7 @@ import {
   includedUsePercent, meterAmounts, meterBand, meterLabel, meterPercent, nextPlan, readUsageCardDismissed, rememberUsageCardDismissed, resetLine,
   upgradeConfirmBody, upgradeLabel, upgradePath, usageCardView, type MeterBand,
 } from "@/lib/usage-meter";
+import { shownShare, useUsageDisplay } from "@/lib/usage-display";
 import type { LocaleKey } from "@/locales";
 import { useStore } from "@/state/store";
 
@@ -254,24 +255,26 @@ export function UpgradeButton({ usage, upgrade, className }: { usage: CloudUsage
 
 const SUMMARY_BAR: Record<MeterBand, string> = { ok: "bg-ink/80", near: "bg-warning", full: "bg-danger" };
 
-export function UsageSummaryCard({ kind, title, percent, label, note, children }: {
+export function UsageSummaryCard({ kind, title, usedPercent, label, note, children }: {
   kind: "cloud" | "plan";
   title: string;
-  percent: number;
+  usedPercent: number;
   label: string;
   note: ReactNode;
   children?: ReactNode;
 }) {
-  const band = meterBand(percent);
+  const display = useUsageDisplay();
+  const band = meterBand(usedPercent);
+  const share = shownShare(usedPercent, display);
   return (
     <section data-usage-summary={kind} data-band={band} aria-label={label} className={cn(SIMPLE_CARD, "px-3 py-2.5")}>
       <p className="text-[13px] leading-[18px] text-ink">{title}</p>
       <p className="mt-1 flex items-baseline gap-1.5">
-        <span className="text-[17px] font-medium leading-6 text-ink tabular-nums">{percent}%</span>
-        <span className="text-[13px] text-ink-secondary">{t("settings.simple.billing.used")}</span>
+        <span className="text-[17px] font-medium leading-6 text-ink tabular-nums">{share}%</span>
+        <span className="text-[13px] text-ink-secondary">{t(display === "left" ? "settings.simple.billing.left" : "settings.simple.billing.used")}</span>
       </p>
-      <div role="progressbar" aria-label={label} aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent} className="mt-2 h-1 w-full overflow-hidden rounded-full bg-ink/[0.04]">
-        <div className={cn("h-full rounded-full", SUMMARY_BAR[band])} style={{ width: `${percent > 0 ? Math.max(percent, 1) : 0}%` }} />
+      <div role="progressbar" aria-label={label} aria-valuemin={0} aria-valuemax={100} aria-valuenow={share} className="mt-2 h-1 w-full overflow-hidden rounded-full bg-ink/[0.04]">
+        <div className={cn("h-full rounded-full", SUMMARY_BAR[band])} style={{ width: `${share > 0 ? Math.max(share, 1) : 0}%` }} />
       </div>
       <p className="mt-2 text-[12px] leading-4 text-ink-secondary">{note}</p>
       {children}
@@ -280,9 +283,11 @@ export function UsageSummaryCard({ kind, title, percent, label, note, children }
 }
 
 export function CloudUsageSummaryView({ usage, upgrade, children }: { usage: CloudUsage; upgrade: UpgradeUi; children?: ReactNode }) {
-  const percent = includedUsePercent(usage);
+  const display = useUsageDisplay();
+  const used = includedUsePercent(usage);
+  const label = t(display === "left" ? "settings.simple.billing.summaryLeft" : "settings.simple.billing.summary", { percent: String(shownShare(used, display)) });
   return (
-    <UsageSummaryCard kind="cloud" title={t("settings.simple.billing.included")} percent={percent} label={t("settings.simple.billing.summary", { percent: String(percent) })} note={resetLine(usage)}>
+    <UsageSummaryCard kind="cloud" title={t("settings.simple.billing.included")} usedPercent={used} label={label} note={resetLine(usage)}>
       <UpgradeButton usage={usage} upgrade={upgrade} className="mt-2.5" />
       {upgrade.note && <div className="mt-2"><NoteLine note={upgrade.note} /></div>}
       {children}

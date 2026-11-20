@@ -1,4 +1,5 @@
-// A routine's probe check (Routine.probe): plain code reads one public page, feed or price before any AI turn. The same
+// A routine's probe check (Routine.probe): plain code reads one public page (or part of it), feed, price or script output
+// before any AI turn. The same
 // reading as last time is nothing new and wakes no model; a change becomes one run, and the reading is kept only once
 // that run's answer is, so a run that fails sees the change again. A read that fails is a failed check, never "nothing
 // new", and says so once per streak. State is a hash or a price and a few item ids per routine (routine-probes.json).
@@ -10,6 +11,7 @@ import type { RoutineProbe } from "../shared/routines.ts";
 import { writeFileAtomic } from "./atomic.ts";
 import { clean, recordsBlock, recordsText } from "./records-block.ts";
 import type { Routine, RoutineCheckResult, RoutineChecks, RoutineRun } from "./routines.ts";
+import { wakeAsked, type ScriptResult } from "./routine-script.ts";
 import { fetchPublicPage, pageText, type PublicPage } from "./wait-probes.ts";
 
 export const PROBES_FILE = "routine-probes.json";
@@ -17,6 +19,12 @@ const KEY_PREFIX = "prb-";
 const EXCERPT = 6_000;
 const FEED_ITEMS = 30;
 const PENDING_MS = 3 * 60 * 60_000;
+const LAST_KEPT = 2_000;
+/** Failed reads in a row before the person hears of it, once per streak; from then on reads back off. */
+export const STUCK_AFTER = 3;
+const RETRY_FIRST_MS = 15 * 60_000;
+const RETRY_MAX_MS = 4 * 60 * 60_000;
+export const NO_SCRIPTS = "Script checks run only on the person's own computer, not here.";
 
 /** What one read found: `value` is what is compared (a hash, a price), `items` a feed's newest item ids. */
 export interface ProbeReading {
@@ -24,9 +32,12 @@ export interface ProbeReading {
   items?: Array<{ id: string; title: string; link?: string }>;
   text?: string;
   price?: string;
+  /** A script asked to be woken whatever changed. */
+  wake?: true;
 }
 
 interface Kept {
+  /** The probe's address, with its selector or script hash: another one starts over. */
   url: string;
   kind: RoutineProbe["kind"];
   value: string;
@@ -34,7 +45,13 @@ interface Kept {
   price?: string;
   at: number;
   failing?: true;
-  pending?: Record<string, { at: number; value: string; seen?: string[]; price?: string }>;
+  /** Failed reads in a row, and no read before `retryAt` once they reach STUCK_AFTER. */
+  fails?: number;
+  retryAt?: number;
+  trouble?: string;
+  /** A script's last output, so a change can be shown beside it. */
+  last?: string;
+  pending?: Record<string, { at: number; value: string; seen?: string[]; price?: string; last?: string }>;
 }
 
 const sha = (text: string) => createHash("sha256").update(text).digest("hex").slice(0, 32);
@@ -71,8 +88,53 @@ export function pagePrice(html: string, text: string): string | null {
   return shown ? `${shown[1]}${shown[2]}` : null;
 }
 
+const VOID = new Set(["area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "source", "track", "wbr"]);
+const escapeRe = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+/** The inside of the first element `selector` (#id, .class, tag, tag#id, tag.class) names; null when none does. */
+export function sectionOf(html: string, selector: string): string | null {
+  const parts = /^([a-z][a-z0-9-]*)?(?:([#.])([\w-]+))?$/i.exec(selector);
+  if (!parts || (!parts[1] && !parts[3])) return null;
+  const [, tag, sign, name] = parts;
+  const id = new RegExp(`\\bid\\s*=\\s*(["']?)${escapeRe(name ?? "")}\\1(?=[\\s/>]|$)`, "i");
+  const classes = /\bclass\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/i;
+  for (const open of html.matchAll(new RegExp(`<(${tag ? escapeRe(tag) : "[a-z][a-z0-9-]*"})\\b([^>]*)>`, "gi"))) {
+    const attrs = open[2] ?? "";
+    if (sign === "#" && !id.test(attrs)) continue;
+    if (sign === ".") {
+      const list = classes.exec(attrs);
+      if (!list || !(list[1] ?? list[2] ?? list[3] ?? "").split(/\s+/).includes(name!)) continue;
+    }
+    const element = open[1]!.toLowerCase();
+    const start = open.index! + open[0].length;
+    if (VOID.has(element) || open[0].endsWith("/>")) return "";
+    const walker = new RegExp(`<(/?)${escapeRe(element)}\\b[^>]*>`, "gi");
+    walker.lastIndex = start;
+    let depth = 1;
+    for (let step = walker.exec(html); step; step = walker.exec(html)) {
+      if (step[0].endsWith("/>")) continue;
+      depth += step[1] ? -1 : 1;
+      if (depth === 0) return html.slice(start, step.index);
+    }
+    return html.slice(start);
+  }
+  return null;
+}
+
+/** What a script printed, as a reading: a {"wakeAgent": false} line is nothing new, so it never reaches here. */
+export function scriptReading(output: string): ProbeReading {
+  const text = output.trim();
+  return { value: sha(text), text, ...(wakeAsked(text) === true ? { wake: true as const } : {}) };
+}
+
+/** Where a probe reads from, as kept: a page with its selector, or a script by its command's hash. */
+export const probeSource = (probe: RoutineProbe) =>
+  probe.kind === "script" ? `script:${sha(probe.command ?? "")}` : probe.selector ? `${probe.url} ${probe.selector}` : probe.url;
+
 export function readingOf(probe: RoutineProbe, page: Extract<PublicPage, { ok: true }>): ProbeReading | { error: string } {
-  const body = page.body.toString("utf8");
+  const whole = page.body.toString("utf8");
+  const body = probe.selector ? sectionOf(whole, probe.selector) : whole;
+  if (body === null) return { error: `Nothing on the page matches ${probe.selector}.` };
   if (probe.kind === "feed") {
     const items = feedItems(body);
     return items.length ? { value: sha(items.map((item) => item.id).join("\n")), items } : { error: "It has no feed items to read." };
@@ -89,8 +151,11 @@ export interface RoutineProbesDeps {
   dataDir: string;
   now?: () => number;
   fetch?: (url: string) => Promise<PublicPage>;
-  /** Once per streak of failed reads: the person hears it, so a probe that cannot read never looks quiet. */
-  failed?(routine: Routine, sentence: string): void;
+  /** Runs a script check's command; absent, script checks fail with NO_SCRIPTS. */
+  script?: (routine: Routine, command: string) => Promise<ScriptResult>;
+  /** Once per streak, at its STUCK_AFTER-th failed read: the person hears it, so a probe that cannot read never looks
+   * quiet for long. */
+  failed?(routine: Routine, sentence: string, count: number): void;
 }
 
 export function createRoutineProbes(deps: RoutineProbesDeps) {
@@ -109,17 +174,34 @@ export function createRoutineProbes(deps: RoutineProbesDeps) {
   };
   const ownerOf = (key: string): Kept | undefined => Object.values(state).find((kept) => kept.pending?.[key]);
   const host = (url: string) => { try { return new URL(url).hostname; } catch { return url; } };
+  const where = (probe: RoutineProbe) => probe.kind === "script" ? "its script" : host(probe.url);
+
+  async function read(routine: Routine, probe: RoutineProbe): Promise<ProbeReading | { error: string } | { asleep: true }> {
+    if (probe.kind === "script") {
+      if (!deps.script) return { error: NO_SCRIPTS };
+      const result = await deps.script(routine, probe.command ?? "");
+      if (!result.ok) return { error: result.error };
+      return wakeAsked(result.output) === false ? { asleep: true } : scriptReading(result.output);
+    }
+    const page = await fetchPage(probe.url);
+    return page.ok ? readingOf(probe, page) : { error: page.error };
+  }
 
   function prompt(routine: Routine, probe: RoutineProbe, kept: Kept, reading: ProbeReading, newItems: NonNullable<ProbeReading["items"]>): string {
-    const source = `${host(probe.url)}, a public web page`;
+    const source = probe.kind === "script" ? "the routine's own script check" : `${host(probe.url)}, a public web page`;
     const lines = [routine.prompt.trim(), ""];
-    if (probe.kind === "price") {
+    if (probe.kind === "script") {
+      lines.push(reading.wake ? "The routine's script check asked for this run. What it printed:" : "The routine's script check printed something new. What it printed now:",
+        recordsText(source, reading.text!.slice(0, EXCERPT)));
+      if (kept.last && !reading.wake) lines.push("What it printed at the last check:", recordsText(source, kept.last));
+    } else if (probe.kind === "price") {
       lines.push(`The routine's price check found that the price at ${probe.url} changed from ${clean(kept.price ?? kept.value, 60)} to ${clean(reading.price!, 60)}.`);
     } else if (probe.kind === "feed") {
       lines.push(`The routine's feed check found ${newItems.length} new item${newItems.length === 1 ? "" : "s"} in ${probe.url}:`,
         recordsBlock(source, newItems.map((item) => `${item.title || "(untitled)"}${item.link ? ` · ${item.link}` : ""}`)));
     } else {
-      lines.push(`The routine's page check found that ${probe.url} changed since the last check. What it says now:`, recordsText(source, reading.text!.slice(0, EXCERPT)));
+      const part = probe.selector ? ` (the part ${probe.selector})` : "";
+      lines.push(`The routine's page check found that ${probe.url}${part} changed since the last check. What it says now:`, recordsText(source, reading.text!.slice(0, EXCERPT)));
     }
     lines.push("If the change does not matter for these instructions, answer with one short line saying so.");
     return lines.join("\n");
@@ -131,28 +213,38 @@ export function createRoutineProbes(deps: RoutineProbesDeps) {
       if (!probe) return {};
       if (context.hold) return { held: true };
       let kept: Kept | undefined = state[routine.id];
-      if (kept && (kept.url !== probe.url || kept.kind !== probe.kind)) kept = undefined;
+      const from = probeSource(probe);
+      if (kept && (kept.url !== from || kept.kind !== probe.kind)) kept = undefined;
       for (const [key, pending] of Object.entries(kept?.pending ?? {})) if (now() - pending.at > PENDING_MS) delete kept!.pending![key];
       // a run already holds a change: it is that run's to answer
       if (kept?.pending && Object.keys(kept.pending).length) return { held: true };
-      const page = await fetchPage(probe.url);
-      const reading = page.ok ? readingOf(probe, page) : { error: page.error };
+      if (!context.manual && kept?.retryAt !== undefined && now() < kept.retryAt) return { held: true, ...(kept.trouble ? { trouble: kept.trouble } : {}) };
+      const reading = await read(routine, probe);
       if ("error" in reading) {
-        const sentence = `Couldn't check ${host(probe.url)}: ${reading.error}`;
-        if (kept && !kept.failing) { kept.failing = true; save(); deps.failed?.(routine, sentence); }
-        else if (!kept) { state[routine.id] = { url: probe.url, kind: probe.kind, value: "", at: now(), failing: true }; save(); deps.failed?.(routine, sentence); }
+        const sentence = `Couldn't check ${where(probe)}: ${reading.error}`;
+        kept ??= state[routine.id] = { url: from, kind: probe.kind, value: "", at: now() };
+        const fails = (kept.fails ?? 0) + 1;
+        Object.assign(kept, { fails, failing: true as const, trouble: sentence }, fails >= STUCK_AFTER ? { retryAt: now() + Math.min(RETRY_FIRST_MS * 2 ** (fails - STUCK_AFTER), RETRY_MAX_MS) } : {});
+        save();
+        if (fails === STUCK_AFTER) deps.failed?.(routine, sentence, fails);
         return { trouble: sentence };
       }
+      if (kept) for (const field of ["failing", "fails", "retryAt", "trouble"] as const) delete kept[field];
+      if ("asleep" in reading) {
+        if (kept) { kept.at = now(); save(); }
+        return {};
+      }
+      const last = probe.kind === "script" ? reading.text!.slice(0, LAST_KEPT) : undefined;
       const seen = reading.items?.map((item) => item.id);
       // the first good read is the baseline: nothing to compare yet
-      if (!kept || !kept.value) {
-        state[routine.id] = { url: probe.url, kind: probe.kind, value: reading.value, at: now(), ...(seen ? { seen } : {}), ...(reading.price ? { price: reading.price } : {}) };
+      if ((!kept || !kept.value) && !reading.wake) {
+        state[routine.id] = { url: from, kind: probe.kind, value: reading.value, at: now(), ...(seen ? { seen } : {}), ...(reading.price ? { price: reading.price } : {}), ...(last ? { last } : {}) };
         save();
         return {};
       }
-      if (kept.failing) delete kept.failing;
+      kept ??= state[routine.id] = { url: from, kind: probe.kind, value: "", at: now() };
       const fresh = reading.items?.filter((item) => !kept!.seen?.includes(item.id)) ?? [];
-      const changed = probe.kind === "feed" ? fresh.length > 0 : reading.value !== kept.value;
+      const changed = reading.wake || (probe.kind === "feed" ? fresh.length > 0 : reading.value !== kept.value);
       if (!changed) {
         kept.at = now();
         if (seen) kept.seen = seen;
@@ -160,7 +252,7 @@ export function createRoutineProbes(deps: RoutineProbesDeps) {
         return {};
       }
       const key = `${KEY_PREFIX}${randomUUID()}`;
-      kept.pending = { [key]: { at: now(), value: reading.value, ...(seen ? { seen } : {}), ...(reading.price ? { price: reading.price } : {}) } };
+      kept.pending = { [key]: { at: now(), value: reading.value, ...(seen ? { seen } : {}), ...(reading.price ? { price: reading.price } : {}), ...(last ? { last } : {}) } };
       save();
       return { run: { key, prompt: prompt(routine, probe, kept, reading, fresh) } };
     },
@@ -175,7 +267,7 @@ export function createRoutineProbes(deps: RoutineProbesDeps) {
       const kept = key ? ownerOf(key) : undefined;
       if (!key || !kept) return;
       const pending = kept.pending![key]!;
-      if (run.status === "completed") Object.assign(kept, { value: pending.value, at: now() }, pending.seen ? { seen: pending.seen } : {}, pending.price ? { price: pending.price } : {});
+      if (run.status === "completed") Object.assign(kept, { value: pending.value, at: now() }, pending.seen ? { seen: pending.seen } : {}, pending.price ? { price: pending.price } : {}, pending.last ? { last: pending.last } : {});
       if (run.status === "completed" || run.status === "failed" || run.status === "cancelled" || run.status === "missed") {
         delete kept.pending![key];
         save();

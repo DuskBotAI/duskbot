@@ -6,7 +6,11 @@ import { setLocale } from "@/lib/i18n";
 import { AccountGate } from "../account/AccountGate";
 import { SignInOffer, SIGN_IN_OFFER_KEY } from "../account/SignInOffer";
 import { PlatformContext, webPlatform, type MobilePlatform } from "../platform";
-import { firstStep, Onboarding, typedCodeComplete } from "./Onboarding";
+import { firstStep, Onboarding } from "./Onboarding";
+import { typedCodeComplete } from "./code-field";
+import { redeemPairing } from "../connection/pair";
+import { MOBILE_LINK_VERSION, mobileLinkUrl, universalPairLink, type MobileLinkPayload } from "../../../shared/mobile-link";
+import { sealLookup } from "../../../server/mobile/lookup";
 
 vi.mock("@/components/Avatar", () => ({ MausAvatar: () => createElement("span"), BotAvatar: () => createElement("span") }));
 // steps swap without waiting on exit animations, so each choice lands on its screen at once
@@ -127,23 +131,83 @@ it("a typed code the relay never had says so, not expired, and offers logging in
   expect(host.querySelector("[data-step]")?.getAttribute("data-step")).toBe("signin");
 });
 
-it("a signed-in phone pairs with its only cloud by itself, never saying it is asleep", async () => {
-  secrets.set("dusk.account", JSON.stringify({ origin, token, expiresAt: Date.now() + 60_000, account, deviceId: "phone" }));
+describe("a sign-in the Keychain kept through a delete and reinstall", () => {
   const cloud = { id: "home", name: "Home cloud", role: "owner", teamId: null, managed: true, status: "ready", origin: "https://home.example.com", primary: true, power: { state: "asleep" } };
-  const onLinked = vi.fn();
-  let pairs = 0;
-  fetcher.mockImplementation(async (input) => {
-    const url = String(input);
-    if (url.endsWith("/api/cloud/desktop/session")) return response({ ok: true, clouds: [cloud] });
-    if (url.endsWith("/api/cloud/desktop/pairing")) { pairs++; return response({ cloudContractVersion: 1, origin: cloud.origin, code: "ABCD-EFGH-JKLM", expiresAt: Date.now() + 60_000 }); }
-    return response({ error: "unreachable" }, 503);
+  const computer = { id: "ws_mac", name: "Studio Mac", kind: "mac", presence: "online", environmentId: "env-mac" };
+  let pairs: number, sessionEnded: boolean;
+  const keptSignIn = (session: () => Response = () => response({ ok: true, clouds: [cloud] })) => {
+    secrets.set("dusk.account", JSON.stringify({ origin, token, expiresAt: Date.now() + 60_000, account, deviceId: "phone" }));
+    pairs = 0; sessionEnded = false;
+    fetcher.mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (url.endsWith("/api/cloud/desktop/session")) { if (init?.method === "DELETE") { sessionEnded = true; return response({ ok: true }); } return session(); }
+      if (url.endsWith("/v1/app/computers")) return response({ v: 1, computers: [computer] });
+      if (url.endsWith("/api/cloud/desktop/pairing")) { pairs++; return response({ cloudContractVersion: 1, origin: cloud.origin, code: "ABCD-EFGH-JKLM", expiresAt: Date.now() + 60_000 }); }
+      return response({ v: 1, providers: [], signupOpen: true });
+    });
+  };
+  const settle = async () => { for (let i = 0; i < 5; i++) await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); }); };
+
+  it("opens the account's places to pick from, with sign out and another account, and never opens one by itself", async () => {
+    keptSignIn();
+    const onLinked = vi.fn();
+    await mount(onboarding({ onLinked }));
+    await settle();
+    expect(heading()).toBe("Pick where to work");
+    expect(host.textContent).not.toMatch(/asleep/i);
+    expect(pairs).toBe(0);
+    expect(onLinked).not.toHaveBeenCalled();
+    expect([...host.querySelectorAll<HTMLElement>("[data-place-kind]")].map((row) => row.dataset.placeKind)).toEqual(["cloud", "computer"]);
+    expect(host.querySelector("[data-entry=sign-out]")?.textContent).toBe("Sign out");
+    expect(host.querySelector("[data-entry=other-account]")).not.toBeNull();
+    expect(prefs.get("dusk.mobile.installed")).toBe("1");
+    await press("[data-testid=mobile-cloud-connect][data-place-kind=cloud]");
+    await settle();
+    expect(pairs).toBe(1);
+    expect(onLinked).toHaveBeenCalledWith(expect.objectContaining({ id: "linked" }), "session", "Home cloud");
   });
-  await mount(onboarding({ onLinked }));
-  expect(heading()).toBe("Pick a cloud");
-  expect(host.textContent).not.toMatch(/asleep/i);
-  await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); });
-  expect(pairs).toBe(1);
-  expect(onLinked).toHaveBeenCalledWith(expect.objectContaining({ id: "linked" }), "session", "Home cloud");
+
+  it("Sign out there ends the session on the service and forgets it on the phone", async () => {
+    keptSignIn();
+    await mount(onboarding());
+    await settle();
+    await press("[data-entry=sign-out]");
+    await settle();
+    expect(sessionEnded).toBe(true);
+    expect(secrets.has("dusk.account")).toBe(false);
+  });
+
+  it("one the service no longer knows is forgotten, and the phone starts on its first screen", async () => {
+    keptSignIn(() => response({ error: "invalid_token", code: "invalid_token" }, 401));
+    await mount(onboarding());
+    await settle();
+    expect(secrets.has("dusk.account")).toBe(false);
+    expect(entries().map((button) => button.dataset.entry)).toEqual(["scan", "signin", "code"]);
+  });
+
+  it("a sign-in made on the phone still opens its only cloud by itself", async () => {
+    keptSignIn();
+    secrets.delete("dusk.account");
+    fetcher.mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.endsWith("/api/cloud/app/sign-in/phone")) return response({ cloudContractVersion: 1, accessToken: token, expiresAt: Date.now() + 86_400_000, device: { id: "phone" }, account });
+      if (url.endsWith("/api/cloud/desktop/session")) return response({ ok: true, clouds: [cloud] });
+      if (url.endsWith("/api/cloud/desktop/pairing")) { pairs++; return response({ cloudContractVersion: 1, origin: cloud.origin, code: "ABCD-EFGH-JKLM", expiresAt: Date.now() + 60_000 }); }
+      return response({ v: 1, providers: [], signupOpen: true });
+    });
+    const onLinked = vi.fn();
+    await mount(onboarding({ onLinked }));
+    await press("[data-entry=code]");
+    await act(async () => {
+      const input = host.querySelector<HTMLInputElement>("input[autocomplete=one-time-code]")!;
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, "ABCDEFGH");
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await press("button[type=submit]");
+    await settle();
+    expect(pairs).toBe(1);
+    expect(onLinked).toHaveBeenCalledWith(expect.objectContaining({ id: "linked" }), "session", "Home cloud");
+  });
 });
 
 it("a signed-in account with no cloud is pointed at linking a computer", async () => {
@@ -207,6 +271,56 @@ it("a scan of the desktop's App Store qr says so, and the screen after a failed 
   expect(host.querySelector("button[type=submit]")).toBeNull();
 });
 
+it("a scan of a dusk cloud's log in qr with no code opens the log in with its email filled in", async () => {
+  platform = { ...platform, camera: {
+    permission: async () => "granted", request: async () => "granted",
+    start: async ({ onCode }: { onCode: (text: string) => void }) => { setTimeout(() => onCode("https://dusk.bot/m/signin#email=person%40example.com"), 0); return { stop: async () => {} }; },
+  } as unknown as MobilePlatform["camera"] };
+  await mount(onboarding());
+  await press("[data-entry=scan]");
+  for (let i = 0; i < 100 && !host.querySelector("input[type=email]"); i++) await act(async () => { await new Promise((resolve) => setTimeout(resolve, 10)); });
+  expect(heading()).toBe("Log in to dusk bot");
+  expect(host.querySelector<HTMLInputElement>("input[type=email]")?.value).toBe("person@example.com");
+});
+
+describe("a dusk cloud's log in qr for another account than the phone's", () => {
+  const signedInWithoutClouds = () => {
+    secrets.set("dusk.account", JSON.stringify({ origin, token, expiresAt: Date.now() + 60_000, account, deviceId: "phone" }));
+    fetcher.mockImplementation(async (input) => String(input).endsWith("/api/cloud/desktop/session") ? response({ ok: true, clouds: [] }) : response({ v: 1, providers: [], signupOpen: true }));
+  };
+  const settle = async (done: () => boolean) => { for (let i = 0; i < 100 && !done(); i++) await act(async () => { await new Promise((resolve) => setTimeout(resolve, 10)); }); };
+
+  it("scanned from the no-cloud screen, asks before switching, then logs in to the qr's account instead of landing back on the same screen", async () => {
+    signedInWithoutClouds();
+    platform = { ...platform, camera: {
+      permission: async () => "granted", request: async () => "granted",
+      start: async ({ onCode }: { onCode: (text: string) => void }) => { setTimeout(() => onCode("https://dusk.bot/m/signin#email=owner%40example.com"), 0); return { stop: async () => {} }; },
+    } as unknown as MobilePlatform["camera"] };
+    await mount(onboarding());
+    const scan = () => [...host.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent === "Scan a QR code");
+    await settle(() => Boolean(scan()));
+    expect(heading()).toBe("No cloud yet");
+    await act(async () => { scan()!.click(); });
+    await settle(() => Boolean(host.querySelector("[data-entry=switch-account]")));
+    expect(heading()).toBe("Log in as owner@example.com?");
+    expect(secrets.has("dusk.account"), "nothing changes before the person says so").toBe(true);
+    await press("[data-entry=switch-account]");
+    await settle(() => Boolean(host.querySelector("input[type=email]")));
+    expect(heading()).toBe("Log in to dusk bot");
+    expect(host.querySelector<HTMLInputElement>("input[type=email]")?.value).toBe("owner@example.com");
+    expect(secrets.has("dusk.account"), "the account in use stays until the other one signs in").toBe(true);
+  });
+
+  it("opened from the camera, does the same", async () => {
+    signedInWithoutClouds();
+    await mount(onboarding({ startAt: "signin", email: "owner@example.com" }));
+    await settle(() => Boolean(host.querySelector("[data-entry=switch-account]")));
+    await press("[data-entry=switch-account]");
+    await settle(() => Boolean(host.querySelector("input[type=email]")));
+    expect(host.querySelector<HTMLInputElement>("input[type=email]")?.value).toBe("owner@example.com");
+  });
+});
+
 describe("a dusk cloud's code from the desktop", () => {
   const phoneGrant = { cloudContractVersion: 1, accessToken: token, expiresAt: Date.now() + 86_400_000, device: { id: "phone" }, account };
   const route = (phone: () => Response) => fetcher.mockImplementation(async (input) => {
@@ -265,5 +379,364 @@ describe("a dusk cloud's code from the desktop", () => {
     expect(typedCodeComplete("ABCD-EFG2")).toBe(false);
     expect(typedCodeComplete("ABCD-EFGH-JK")).toBe(false);
     expect(typedCodeComplete("ABCD-EFGH-JK23")).toBe(true);
+  });
+});
+
+describe("a dusk cloud's QR always ends in that cloud, on its account", () => {
+  const owner = { id: "owner", email: "owner@example.com" };
+  const home = { id: "c1", name: "Home cloud", role: "owner", status: "ready", origin: "https://d0123456789abcdef0123.dusk.bot", primary: true };
+  const work = { id: "c2", name: "Work cloud", role: "owner", status: "ready", origin: "https://dfedcba9876543210fedc.dusk.bot" };
+  const grant = (who: typeof owner) => ({ cloudContractVersion: 1, accessToken: token, expiresAt: Date.now() + 86_400_000, device: { id: "phone" }, account: who });
+  let paired: string[];
+  const route = (clouds: unknown[]) => fetcher.mockImplementation(async (input, init) => {
+    const url = String(input);
+    if (url.endsWith("/api/cloud/app/sign-in/phone")) return response(grant(owner));
+    if (url.endsWith("/api/cloud/desktop/session") && init?.method !== "DELETE") return response({ ok: true, clouds });
+    if (url.endsWith("/v1/app/computers")) return response({ v: 1, computers: [] });
+    if (url.endsWith("/api/cloud/desktop/pairing")) {
+      const asked = JSON.parse(String(init?.body ?? "{}")) as { cloudId?: string };
+      const cloud = [home, work].find((one) => one.id === asked.cloudId) ?? home;
+      paired.push(cloud.id);
+      return response({ cloudContractVersion: 1, origin: cloud.origin, code: "ABCD-EFGH-JKLM", expiresAt: Date.now() + 60_000 });
+    }
+    return response({ v: 1, providers: [], signupOpen: true });
+  });
+  const settle = async (done: () => boolean) => { for (let i = 0; i < 100 && !done(); i++) await act(async () => { await new Promise((resolve) => setTimeout(resolve, 10)); }); };
+  const scanning = (text: string) => ({ ...platform, camera: {
+    permission: async () => "granted", request: async () => "granted",
+    start: async ({ onCode }: { onCode: (value: string) => void }) => { setTimeout(() => onCode(text), 0); return { stop: async () => {} }; },
+  } as unknown as MobilePlatform["camera"] });
+  beforeEach(() => { paired = []; });
+
+  it("a signed-out phone scanning it in the app logs in and opens the cloud the QR was drawn on, of two", async () => {
+    route([home, work]);
+    platform = scanning(`https://dusk.bot/m/signin#c=ABCDEFGH&email=owner%40example.com&o=${encodeURIComponent(work.origin)}`);
+    const onLinked = vi.fn();
+    await mount(onboarding({ onLinked }));
+    await press("[data-entry=scan]");
+    await settle(() => onLinked.mock.calls.length > 0);
+    expect(paired).toEqual(["c2"]);
+    expect(onLinked).toHaveBeenCalledWith(expect.objectContaining({ id: "linked" }), "session", "Work cloud");
+  });
+
+  it("from the camera, inside the app on another place, it opens the account's only cloud without a pick", async () => {
+    route([home]);
+    const onLinked = vi.fn();
+    await mount(onboarding({ onLinked, startAtLink: true, onCancel: vi.fn(), startAt: "signin", email: owner.email, signInCode: "ABCDEFGH" }));
+    await settle(() => onLinked.mock.calls.length > 0);
+    expect(paired).toEqual(["c1"]);
+  });
+
+  it("a phone already linked to that cloud opens it instead of a picker with nothing to pick", async () => {
+    route([home]);
+    prefs.set("dusk.mobile.connections.v1", JSON.stringify([{ id: "kept", environmentId: "env", label: "Home cloud", transport: "https", origin: home.origin, sessionRef: "token.kept", capabilities: {}, addedAt: 1, lastUsedAt: 1 }]));
+    secrets.set("token.kept", "kept-token");
+    secrets.set("dusk.account", JSON.stringify({ origin, token, expiresAt: Date.now() + 60_000, account: owner, deviceId: "phone" }));
+    const onOpen = vi.fn();
+    await mount(onboarding({ onOpen, startAtLink: true, onCancel: vi.fn(), startAt: "signin", email: owner.email, signInCode: "ABCDEFGH", signInCloud: home.origin }));
+    await settle(() => onOpen.mock.calls.length > 0);
+    expect(onOpen).toHaveBeenCalledWith("kept");
+    expect(paired).toEqual([]);
+  });
+
+  it("a phone on another account asks first; switching keeps that account and its clouds beside the new one, then opens the QR's cloud", async () => {
+    route([home]);
+    secrets.set("dusk.account", JSON.stringify({ origin, token, expiresAt: Date.now() + 60_000, account, deviceId: "phone" }));
+    prefs.set("dusk.mobile.connections.v1", JSON.stringify([{ id: "old", environmentId: "env-old", label: "Old cloud", transport: "https", origin: "https://d1111111111111111111a.dusk.bot", sessionRef: "token.old", capabilities: {}, addedAt: 1, lastUsedAt: 1 }]));
+    secrets.set("token.old", "old-token");
+    const onLinked = vi.fn();
+    await mount(onboarding({ onLinked, startAt: "signin", email: owner.email, signInCode: "ABCDEFGH" }));
+    await settle(() => Boolean(host.querySelector("[data-entry=switch-account]")));
+    expect(heading()).toBe("Log in as owner@example.com?");
+    expect(host.textContent).toContain(account.email);
+    await press("[data-entry=switch-account]");
+    await settle(() => onLinked.mock.calls.length > 0);
+    expect(JSON.parse(prefs.get("dusk.mobile.connections.v1") ?? "[]").map((one: { id: string }) => one.id)).toEqual(["old"]);
+    expect(secrets.get("token.old")).toBe("old-token");
+    expect(JSON.parse(secrets.get("dusk.account.others") ?? "[]").map((one: { account: { email: string } }) => one.account.email)).toEqual([account.email]);
+    expect(paired).toEqual(["c1"]);
+  });
+});
+
+describe("another account is always a tap away", () => {
+  it("Add another account on the clouds screen opens an empty sign-in and keeps this account and its clouds", async () => {
+    secrets.set("dusk.account", JSON.stringify({ origin, token, expiresAt: Date.now() + 60_000, account, deviceId: "phone" }));
+    prefs.set("dusk.mobile.connections.v1", JSON.stringify([{ id: "wrong", environmentId: "env-w", label: "Wrong cloud", transport: "https", origin: "https://d2222222222222222222b.dusk.bot", sessionRef: "token.wrong", capabilities: {}, addedAt: 1, lastUsedAt: 1 }]));
+    secrets.set("token.wrong", "wrong-token");
+    fetcher.mockImplementation(async (input) => String(input).endsWith("/api/cloud/desktop/session") ? response({ ok: true, clouds: [] }) : response({ v: 1, providers: [], signupOpen: true }));
+    await mount(onboarding());
+    for (let i = 0; i < 50 && !host.querySelector("[data-entry=other-account]"); i++) await act(async () => { await new Promise((resolve) => setTimeout(resolve, 10)); });
+    await press("[data-entry=other-account]");
+    for (let i = 0; i < 50 && !host.querySelector("input[type=email]"); i++) await act(async () => { await new Promise((resolve) => setTimeout(resolve, 10)); });
+    expect(heading()).toBe("Log in to dusk bot");
+    expect(host.querySelector<HTMLInputElement>("input[type=email]")?.value).toBe("");
+    expect(secrets.has("dusk.account")).toBe(true);
+    expect(JSON.parse(prefs.get("dusk.mobile.connections.v1") ?? "[]").map((one: { id: string }) => one.id)).toEqual(["wrong"]);
+    expect(secrets.get("token.wrong")).toBe("wrong-token");
+  });
+});
+
+describe("a signed-in desktop's QR signs the phone in as it pairs", () => {
+  const linkPayload: MobileLinkPayload = {
+    v: MOBILE_LINK_VERSION, workspace: { name: "Studio Mac", environmentId: "env-mac", kind: "vps" },
+    grant: { id: "grant-1", secret: "s3cret", expiresAt: Date.now() + 5 * 60_000 },
+    via: [{ kind: "https", url: "https://mac.example.org" }],
+  } as MobileLinkPayload;
+  const qr = universalPairLink(mobileLinkUrl(linkPayload), null, { code: "WXYZQRST", email: "owner@example.com" });
+  const owner = { id: "owner", email: "owner@example.com" };
+  const phoneCalls = () => fetcher.mock.calls.filter(([input]) => String(input).endsWith("/api/cloud/app/sign-in/phone"));
+  const scanning = () => ({ ...platform, camera: {
+    permission: async () => "granted", request: async () => "granted",
+    start: async ({ onCode }: { onCode: (value: string) => void }) => { setTimeout(() => onCode(qr), 0); return { stop: async () => {} }; },
+  } as unknown as MobilePlatform["camera"] });
+  const settle = async (done: () => boolean) => { for (let i = 0; i < 100 && !done(); i++) await act(async () => { await new Promise((resolve) => setTimeout(resolve, 10)); }); };
+  beforeEach(() => {
+    fetcher.mockImplementation(async (input) => String(input).endsWith("/api/cloud/app/sign-in/phone")
+      ? response({ cloudContractVersion: 1, accessToken: token, expiresAt: Date.now() + 86_400_000, device: { id: "phone" }, account: owner })
+      : response({ v: 1, providers: [], signupOpen: true }));
+  });
+
+  it("a signed-out phone logs in to the desktop's account and pairs in one scan", async () => {
+    platform = scanning();
+    const onLinked = vi.fn();
+    await mount(onboarding({ onLinked }));
+    await press("[data-entry=scan]");
+    await settle(() => onLinked.mock.calls.length > 0);
+    expect(phoneCalls()).toHaveLength(1);
+    expect(secrets.has("dusk.account")).toBe(true);
+    expect(onLinked).toHaveBeenCalledWith(expect.objectContaining({ id: "linked" }), "session", expect.any(String));
+  });
+
+  it("a phone on another account is asked first, then switches and pairs", async () => {
+    secrets.set("dusk.account", JSON.stringify({ origin, token, expiresAt: Date.now() + 60_000, account, deviceId: "phone" }));
+    platform = scanning();
+    const onLinked = vi.fn();
+    await mount(onboarding({ onLinked, startAtLink: true, onCancel: vi.fn() }));
+    await press("[data-entry=scan]");
+    await settle(() => Boolean(host.querySelector("[data-entry=switch-account]")));
+    expect(heading()).toBe("Log in as owner@example.com?");
+    expect(onLinked).not.toHaveBeenCalled();
+    await press("[data-entry=switch-account]");
+    await settle(() => onLinked.mock.calls.length > 0);
+    expect(phoneCalls()).toHaveLength(1);
+    expect(onLinked).toHaveBeenCalled();
+  });
+
+  it("a sign-in that does not take never stops the pairing", async () => {
+    fetcher.mockImplementation(async (input) => String(input).endsWith("/api/cloud/app/sign-in/phone") ? response({ error: "not found" }, 404) : response({ v: 1, providers: [], signupOpen: true }));
+    platform = scanning();
+    const onLinked = vi.fn();
+    await mount(onboarding({ onLinked }));
+    await press("[data-entry=scan]");
+    await settle(() => onLinked.mock.calls.length > 0);
+    expect(onLinked).toHaveBeenCalled();
+    expect(secrets.has("dusk.account")).toBe(false);
+  });
+});
+
+describe("linking can always be left", () => {
+  const payload = { v: 1, transport: "https", origin: "https://mac.example.org", credential: `omb_pair_${"a".repeat(43)}`, name: "Studio Mac" } as const;
+  it("Cancel works while it links, stops the attempt, and a late answer is dropped", async () => {
+    let finish: (value: unknown) => void = () => {};
+    let seen: AbortSignal | undefined;
+    vi.mocked(redeemPairing).mockImplementationOnce((_payload, _platform, signal) => { seen = signal; return new Promise((resolve) => { finish = resolve as (value: unknown) => void; }) as never; });
+    const onLinked = vi.fn();
+    const onCancel = vi.fn();
+    await mount(onboarding({ initial: payload, onLinked, onCancel, startAtLink: true }));
+    const link = [...host.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent === "Link")!;
+    await act(async () => { link.click(); });
+    const cancel = host.querySelector<HTMLButtonElement>("[data-link-cancel]")!;
+    expect(cancel.disabled).toBe(false);
+    await act(async () => { cancel.click(); });
+    expect(seen?.aborted).toBe(true);
+    expect(onCancel).toHaveBeenCalledOnce();
+    await act(async () => { finish({ record: { id: "late", label: "x" }, token: "t" }); });
+    expect(onLinked).not.toHaveBeenCalled();
+  });
+
+  it("Android back while it links stops it and steps back", async () => {
+    let back: (() => boolean) | undefined;
+    platform = { ...platform, onBack: (listener) => { back = listener; return () => { back = undefined; }; } };
+    let seen: AbortSignal | undefined;
+    vi.mocked(redeemPairing).mockImplementationOnce((_payload, _platform, signal) => { seen = signal; return new Promise(() => {}) as never; });
+    await mount(onboarding({ initial: payload }));
+    const link = [...host.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent === "Link")!;
+    await act(async () => { link.click(); });
+    let handled: boolean | undefined;
+    await act(async () => { handled = back?.(); });
+    expect(handled).toBe(true);
+    expect(seen?.aborted).toBe(true);
+    expect(entries().map((button) => button.dataset.entry)).toEqual(["scan", "signin", "code"]);
+  });
+});
+
+describe("the camera question comes up in place", () => {
+  it("asks the system right away, opens the scanner on yes, and on no stays with one line and Open settings", async () => {
+    const request = vi.fn(async () => "denied" as const);
+    const openSettings = vi.fn(async () => {});
+    platform = { ...platform, camera: { permission: async () => "prompt", request, openSettings, start: async () => ({ stop: async () => {} }) } as unknown as MobilePlatform["camera"] };
+    await mount(onboarding());
+    await press("[data-entry=scan]");
+    expect(request).toHaveBeenCalledOnce();
+    expect(heading()).toBe("Your bots, on your phone");
+    expect(host.textContent).toContain("Turn the camera on in settings");
+    await press("[data-camera-settings]");
+    expect(openSettings).toHaveBeenCalledOnce();
+  });
+});
+
+describe("linking always ends within its deadline", () => {
+  const payload = { v: 1, transport: "https", origin: "https://mac.example.org", credential: `omb_pair_${"a".repeat(43)}`, name: "Studio Mac" } as const;
+  const linkButton = () => [...host.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent === "Link" || button.textContent === "Try again");
+
+  it("a QR's carried sign-in that never answers and a computer that never answers end at 15 s with can't reach and Try again", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    fetcher.mockImplementation((input) => String(input).endsWith("/api/cloud/app/sign-in/phone") ? new Promise<Response>(() => {}) : Promise.resolve(response({ v: 1, providers: [], signupOpen: true })));
+    let seen: AbortSignal | undefined;
+    vi.mocked(redeemPairing).mockImplementationOnce((_payload, _platform, signal) => { seen = signal; return new Promise(() => {}) as never; });
+    const onLinked = vi.fn();
+    await mount(onboarding({ initial: payload, initialSignIn: { code: "WXYZQRST", email: "owner@example.com" }, onLinked }));
+    await act(async () => { linkButton()!.click(); });
+    expect(host.querySelector("main")?.getAttribute("aria-busy")).toBe("true");
+    await act(async () => { await vi.advanceTimersByTimeAsync(14_000); });
+    expect(host.querySelector("[role=alert]")).toBeNull();
+    await act(async () => { await vi.advanceTimersByTimeAsync(1_100); });
+    expect(host.querySelector("main")?.getAttribute("aria-busy")).toBe("false");
+    expect(host.querySelector("[role=alert]")?.textContent).toContain("Can't reach your computer");
+    expect(linkButton()?.disabled, "its button links again").toBe(false);
+    expect(seen?.aborted ?? true).toBe(true);
+    expect(onLinked).not.toHaveBeenCalled();
+  });
+
+  it("a typed code's lookup and its pairing share the 15 s, never 15 s each", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    const linkPayload = {
+      v: MOBILE_LINK_VERSION, workspace: { name: "Studio Mac", environmentId: "env-mac", kind: "mac" },
+      grant: { id: "grant-1", secret: "s3cret", expiresAt: Date.now() + 5 * 60_000 }, via: [{ kind: "https", url: "https://mac.example.org" }],
+    } as MobileLinkPayload;
+    const { sealed } = sealLookup("ABCDEFGHJKLM", linkPayload);
+    fetcher.mockImplementation(async (input) => {
+      if (!String(input).includes("/v1/lookups/")) return response({ v: 1, providers: [], signupOpen: true });
+      await new Promise((resolve) => setTimeout(resolve, 10_000));
+      return response({ sealed });
+    });
+    vi.mocked(redeemPairing).mockImplementationOnce(() => new Promise(() => {}) as never);
+    await mount(onboarding());
+    await press("[data-entry=code]");
+    const field = host.querySelector<HTMLInputElement>("input[autocomplete=one-time-code]")!;
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(field, "ABCD-EFGH-JKLM");
+      field.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await act(async () => { host.querySelector<HTMLFormElement>("form")!.requestSubmit(); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(10_500); });
+    expect(vi.mocked(redeemPairing)).toHaveBeenCalled();
+    expect(host.querySelector("main")?.getAttribute("aria-busy")).toBe("true");
+    await act(async () => { await vi.advanceTimersByTimeAsync(4_600); });
+    expect(host.querySelector("main")?.getAttribute("aria-busy")).toBe("false");
+    expect(host.querySelector("[role=alert]")?.textContent).toContain("Can't reach your computer");
+  });
+});
+
+describe("typing a computer's code", () => {
+  const field = () => host.querySelector<HTMLInputElement>("input[autocomplete=one-time-code]")!;
+  const key = (text: string) => act(async () => {
+    const input = field();
+    const next = input.value + text;
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, next);
+    input.setSelectionRange(next.length, next.length);
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  const lookups = () => fetcher.mock.calls.filter(([input]) => String(input).includes("/v1/lookups/"));
+  const settle = async () => { for (let i = 0; i < 5; i++) await act(async () => { await new Promise((resolve) => setTimeout(resolve, 10)); }); };
+
+  it("adds the dashes as it goes, links by itself on the last character, once, and keeps the keyboard up", async () => {
+    fetcher.mockImplementation(async (input) => String(input).includes("/v1/lookups/") ? new Promise<Response>(() => {}) : response({ v: 1, providers: [], signupOpen: true }));
+    await mount(onboarding());
+    await press("[data-entry=code]");
+    for (const letter of "abcdefghjkl") await key(letter);
+    expect(field().value).toBe("ABCD-EFGH-JKL");
+    expect(field().selectionStart).toBe(13);
+    await settle();
+    expect(lookups()).toHaveLength(0);
+    await key("m");
+    await settle();
+    expect(field().value).toBe("ABCD-EFGH-JKLM");
+    expect(lookups()).toHaveLength(1);
+    expect(field().disabled, "a disabled field drops the keyboard").toBe(false);
+    expect(field().readOnly).toBe(true);
+    await act(async () => { host.querySelector<HTMLFormElement>("form")!.requestSubmit(); });
+    await key("n");
+    await settle();
+    expect(lookups(), "never sent twice").toHaveLength(1);
+  });
+
+  it("a pasted code in any form links at once", async () => {
+    fetcher.mockImplementation(async (input) => String(input).includes("/v1/lookups/") ? new Promise<Response>(() => {}) : response({ v: 1, providers: [], signupOpen: true }));
+    await mount(onboarding());
+    await press("[data-entry=code]");
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(field(), "abcd efgh jklm");
+      field().dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    expect(field().value).toBe("ABCD-EFGH-JKLM");
+    await settle();
+    expect(lookups()).toHaveLength(1);
+  });
+});
+
+describe("a desktop's QR that signs the phone in asks which place opens", () => {
+  const payload = { v: 1, transport: "https", origin: "https://mac.example.org", credential: `omb_pair_${"a".repeat(43)}`, name: "Studio Mac" } as const;
+  const owner = { id: "owner", email: "owner@example.com" };
+  const home = { id: "c1", name: "Home cloud", role: "owner", status: "ready", origin: "https://d0123456789abcdef0123.dusk.bot", primary: true };
+  let paired: string[];
+  const route = (clouds: unknown[]) => fetcher.mockImplementation(async (input, init) => {
+    const url = String(input);
+    if (url.endsWith("/api/cloud/app/sign-in/phone")) return response({ cloudContractVersion: 1, accessToken: token, expiresAt: Date.now() + 86_400_000, device: { id: "phone" }, account: owner });
+    if (url.endsWith("/api/cloud/desktop/session") && init?.method !== "DELETE") return response({ ok: true, clouds });
+    if (url.endsWith("/v1/app/computers")) return response({ v: 1, computers: [] });
+    if (url.endsWith("/api/cloud/desktop/pairing")) { paired.push("c1"); return response({ cloudContractVersion: 1, origin: home.origin, code: "ABCD-EFGH-JKLM", expiresAt: Date.now() + 60_000 }); }
+    return response({ v: 1, providers: [], signupOpen: true });
+  });
+  const settle = async (done: () => boolean) => { for (let i = 0; i < 400 && !done(); i++) await act(async () => { await new Promise((resolve) => setTimeout(resolve, 10)); }); };
+  const link = () => act(async () => { [...host.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent === "Link")!.click(); });
+  const choices = () => [...host.querySelectorAll<HTMLButtonElement>("[data-place-choice]")].map((button) => [button.dataset.placeChoice, button.querySelector("span span")?.textContent]);
+  beforeEach(() => { paired = []; });
+
+  it("with a cloud on the account: the computer and the cloud, nothing opened until one is picked; the computer opens as linked", async () => {
+    route([home]);
+    const onLinked = vi.fn(), onKept = vi.fn(async () => {});
+    await mount(onboarding({ initial: payload, initialSignIn: { code: "WXYZQRST", email: owner.email }, onLinked, onKept }));
+    await link();
+    await settle(() => choices().length > 0);
+    expect(heading()).toBe("Pick where to work");
+    expect(choices()).toEqual([["computer", "Studio Mac"], ["cloud", "Home cloud"]]);
+    expect(onLinked).not.toHaveBeenCalled();
+    await press("[data-place-choice=computer]");
+    expect(onLinked).toHaveBeenCalledWith(expect.objectContaining({ id: "linked" }), "session", "Studio Mac");
+    expect(onKept).not.toHaveBeenCalled();
+  });
+
+  it("picking the cloud keeps the computer's link and opens the cloud", async () => {
+    route([home]);
+    const onLinked = vi.fn(), onKept = vi.fn(async () => {});
+    await mount(onboarding({ initial: payload, initialSignIn: { code: "WXYZQRST", email: owner.email }, onLinked, onKept }));
+    await link();
+    await settle(() => choices().length > 0);
+    await press("[data-place-choice=cloud]");
+    await settle(() => onLinked.mock.calls.length > 0);
+    expect(onKept).toHaveBeenCalledWith(expect.objectContaining({ id: "linked", label: "Studio Mac" }), "session");
+    expect(paired).toEqual(["c1"]);
+    expect(onLinked).toHaveBeenCalledWith(expect.anything(), "session", "Home cloud");
+  });
+
+  it("an account with nothing else opens the computer at once, never a picker of one", async () => {
+    route([]);
+    const onLinked = vi.fn();
+    await mount(onboarding({ initial: payload, initialSignIn: { code: "WXYZQRST", email: owner.email }, onLinked }));
+    await link();
+    await settle(() => onLinked.mock.calls.length > 0);
+    expect(onLinked).toHaveBeenCalledWith(expect.objectContaining({ id: "linked" }), "session", "Studio Mac");
+    expect(host.querySelector("[data-place-choice]")).toBeNull();
   });
 });

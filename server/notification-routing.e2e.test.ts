@@ -371,10 +371,9 @@ describe("bot-to-bot coordination is recorded, not announced", () => {
 
       const current = await state(40);
       const ink = current.bots.find((candidate: { id: string }) => candidate.id === peer.id);
-      expect(consult.threadId).not.toBe(peer.threadId);
-      expect(ink.tasks.find((task: { threadId: string }) => task.threadId === consult.threadId)?.openedBy)
-        .toMatchObject({ botId: asker.id, kind: "work" });
-      expect(ink.messages).toEqual(peerConversation);
+      // one chat per bot: the consultation is recorded in Ink's own chat, still with no badge or banner
+      expect(consult.threadId).toBe(peer.threadId);
+      expect(ink.messages.length).toBeGreaterThan(peerConversation.length);
       expect(current.groups.find((group: { dm?: boolean }) => group.dm === true)).toBeUndefined();
       const pen = current.bots.find((candidate: { id: string }) => candidate.id === asker.id);
       const replied = pen.messages.find(
@@ -416,7 +415,7 @@ describe("bot-to-bot coordination is recorded, not announced", () => {
       expect(asked.status, JSON.stringify(asked.body)).toBe(200);
       expect(asked.body.receipts[0]).toMatchObject({ botId: peer.id, outcome: "queued" });
       const consult = await consultation(asked.body.receipts[0].requestId);
-      expect(consult.threadId).not.toBe(peer.threadId);
+      expect(consult.threadId).toBe(peer.threadId);
       await expect.poll(() => handoffs().find((node) => node.id === consult.id)?.status, { timeout: 20_000 }).toBe("completed");
       expect((await botState(peer.id))?.unread).toBeFalsy();
 
@@ -454,7 +453,7 @@ describe("bot-to-bot coordination is recorded, not announced", () => {
       expect(asked.status, JSON.stringify(asked.body)).toBe(200);
       expect(asked.body.receipts[0]).toMatchObject({ botId: peer.id, outcome: "queued" });
       const consult = await consultation(asked.body.receipts[0].requestId);
-      expect(consult.threadId).not.toBe(peer.threadId);
+      expect(consult.threadId).toBe(peer.threadId);
       expect((await botState(peer.id))?.unread).toBeFalsy();
 
       expect((await api("PATCH", `/api/bots/${peer.id}`, {
@@ -534,7 +533,7 @@ describe("bot-to-bot coordination is recorded, not announced", () => {
       );
       expect(asked.status, JSON.stringify(asked.body)).toBe(200);
       const workThread = asked.body.receipts[0].threadId as string;
-      expect(workThread).not.toBe(peer.threadId);
+      expect(workThread).toBe(peer.threadId);
       const frame = await stream.until(
         (candidate) => candidate.kind === "notify" && candidate.notification?.botId === peer.id,
         20_000,
@@ -552,7 +551,7 @@ describe("bot-to-bot coordination is recorded, not announced", () => {
       expect(card?.card).toMatchObject({ title: "Your bot has a question", subtitle: "Which color?" });
       expect(((await botState(peer.id))?.messages ?? []).some(
         (message: { kind: string; card?: { subtitle?: string } }) => message.kind === "options" && message.card?.subtitle === "Which color?",
-      )).toBe(false);
+      )).toBe(true);
     } finally {
       stream.close();
       await api("POST", `/api/bots/${peer.id}/interrupt`, {}).catch(() => undefined);

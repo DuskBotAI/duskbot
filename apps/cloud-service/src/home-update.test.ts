@@ -7,7 +7,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { DESKTOP_IMAGE_STATUS, homeControlScript, homeSetupScript, HOME_CONTROL, HOME_SCREEN_DIRECT_PORTS } from "./home.ts";
-import type { HomeRelease } from "./home-update.ts";
+import { createReleaseFile, type HomeRelease } from "./home-update.ts";
 import { signRelease, type ReleaseKey } from "./release-signing.ts";
 import { createPolicySource, signPolicy, verifyPolicy } from "./update-policy.ts";
 import { homeFixture, cleanup } from "./test-fixture.ts";
@@ -32,7 +32,7 @@ async function updating(options: { policy?: { serial: number; floor: string | nu
   /** one reconcile with the home's power read due */
   const pass = async () => { f.advance(61_000); c.nextAttemptAt = 0; await f.service.reconcile(); };
   return { f, c, commands, actions, pass, offer: (r: HomeRelease | null) => { offered = r; }, policyFile,
-    setPolicy: (p: { serial: number; floor: string | null; blocked: string[] }) => { writeFileSync(policyFile, JSON.stringify(signPolicy(p, signing))); } };
+    setPolicy: (p: { serial: number; floor: string | null; blocked: string[]; paused?: boolean }) => { writeFileSync(policyFile, JSON.stringify(signPolicy(p, signing))); } };
 }
 const version = (c: StoredCloud) => c.managed!.update?.guard.current?.version ?? null;
 
@@ -65,6 +65,34 @@ describe("staged home updates", () => {
     expect(t.c.managed!.update!.guard.trial).toBeNull();
     expect(t.c.managed!.update!.guard.last).toMatchObject({ kind: "updated", version: "1.1.0" });
     expect(t.actions()).toEqual(["update_applied:idle", "update_settled:trial_passed"]);
+  });
+
+  it("a release that lists cloud ids installs on those clouds only; the rest stay on the package the service started with", async () => {
+    const other = await updating();
+    other.offer({ ...release("1.1.0"), clouds: ["some-other-cloud"] });
+    other.f.power.busy = ["recent-activity"];
+    await other.pass();
+    expect(other.commands().filter(x => x.includes("omb-home install") && x.includes(sha("1.1.0")))).toHaveLength(0);
+    expect(other.c.managed!.installed).toBe(sha("1.0.0"));
+    expect(other.actions()).toEqual([]);
+
+    const canary = await updating();
+    canary.offer({ ...release("1.1.0"), clouds: [canary.c.id] });
+    canary.f.power.busy = ["recent-activity"];
+    await canary.pass();
+    expect(canary.commands().filter(x => x.includes("omb-home install")).at(-1)).toContain(sha("1.1.0"));
+    expect(canary.c.managed!.installed).toBe(sha("1.1.0"));
+    expect(canary.actions()).toEqual(["update_applied:idle"]);
+  });
+
+  it("reads a release file's cloud list, and treats an empty list as every cloud", () => {
+    const dir = mkdtempSync(join(tmpdir(), "dusk-release-file-")); cleanup.push(() => rmSync(dir, { recursive: true, force: true }));
+    const file = join(dir, "release.json");
+    writeFileSync(file, JSON.stringify({ sha256: sha("1.1.0"), url: "https://packages.example.test/1.1.0.tgz", clouds: ["c1", 7, "c2"] }));
+    expect(createReleaseFile(file)()).toMatchObject({ sha256: sha("1.1.0"), clouds: ["c1", "c2"] });
+    const later = join(dir, "all.json");
+    writeFileSync(later, JSON.stringify({ sha256: sha("1.1.0"), url: "https://packages.example.test/1.1.0.tgz", clouds: [] }));
+    expect(createReleaseFile(later)()).not.toHaveProperty("clouds");
   });
 
   it("the operator can end a trial early once its self-test passed, so the next release installs at the next idle moment", async () => {
@@ -171,6 +199,23 @@ describe("staged home updates", () => {
     expect(t.commands().at(-2)).toMatch(/omb-home install \S+ [a-f0-9]{64} r1\.\S+ 1\.0\.0$/);
   });
 
+  it("offers a canary release only to the clouds it names, and holds every install while the policy is paused", async () => {
+    const t = await updating();
+    t.offer({ ...release("1.1.0"), clouds: ["cloud_other"] });
+    await t.pass();
+    expect(t.commands().some(x => x.includes(sha("1.1.0")))).toBe(false);
+    expect(t.actions()).toEqual([]);
+    t.setPolicy({ serial: 1, floor: null, blocked: [], paused: true });
+    t.offer({ ...release("1.1.0"), clouds: ["cloud_other", t.c.id] });
+    await t.pass();
+    expect(t.commands().some(x => x.includes(sha("1.1.0")))).toBe(false);
+    expect(t.actions()).toEqual(["update_refused:paused"]);
+    t.setPolicy({ serial: 2, floor: null, blocked: [] });
+    t.offer(release("1.1.0"));
+    await t.pass();
+    expect(t.c.managed!.installed).toBe(sha("1.1.0"));
+  });
+
   it("serves only a policy the pinned keys signed, and keeps the last good one", () => {
     const dir = mkdtempSync(join(tmpdir(), "dusk-policy-")); cleanup.push(() => rmSync(dir, { recursive: true, force: true }));
     const file = join(dir, "p.json"), alerts: string[] = [];
@@ -185,7 +230,9 @@ describe("staged home updates", () => {
   });
 });
 
-describe("omb-home on the machine", () => {
+// POSIX only: the fixture runs the real control script under bash with a POSIX PATH and shell stubs, presents docker
+// as a unix socket at a path (which the script finds with `[ -S ]`), and archives with the system tar.
+describe.skipIf(process.platform === "win32")("omb-home on the machine", () => {
   // the real control script, its root paths moved into a temp folder and root-only commands stubbed
   function machine() {
     const dir = mkdtempSync(join(tmpdir(), "dusk-machine-")); cleanup.push(() => rmSync(dir, { recursive: true, force: true }));

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { AnimatePresence } from "motion/react";
 import { createPortal } from "react-dom";
 import { Check, Copy } from "../../icons";
 
@@ -6,15 +7,16 @@ import { automationSentence, automationsFrom, automationStatus, AUTOMATION_FIX_L
 import { appWhen } from "@/lib/app-automations";
 import { useAppTriggers } from "@/lib/app-triggers";
 import { cn } from "@/lib/cn";
+import { friendlyError } from "@/lib/plain-error";
 import { t } from "@/lib/i18n";
 import { lowerFirst, upperFirst } from "@/lib/lower-first";
 import { routineRunsOn } from "@/lib/routine-display";
-import { fetchForecast, forecastLine, pauseLine, useLoaded } from "@/lib/spend";
+import { fetchForecast, forecastLine, forecastWarning, lessOften, pauseLine, periodLine, useLoaded } from "@/lib/spend";
 import { formatCost } from "@/lib/usage-trace";
 import { isRoutineProblemRun, type Routine, type RoutineRunOn } from "@/lib/routines";
 import { hoursLine, liveStrip, probeLine } from "@/lib/routine-display";
 import { saveWebhookCredential, webhookCredentialStore } from "@/lib/webhook-credentials";
-import { useStore, type Bot } from "@/state/store";
+import { api, useStore, type Bot } from "@/state/store";
 import { useAllAutomationActions } from "../automations/app-actions";
 import { AppEventEditor } from "../automations/AppEventEditor";
 import { WebhookEditor } from "../WebhookTrigger";
@@ -23,6 +25,12 @@ import { RoutineForm } from "./RoutineForm";
 import { RunStrip } from "./RunStrip";
 import { SpendCap } from "../usage/SpendCap";
 import { GrokDialog } from "../ui/GrokDialog";
+
+interface BotMailView {
+  address: string;
+  problem?: string;
+  routes: Array<{ alias: string; targetId: string; from: string[]; address: string }>;
+}
 
 const termCls = "text-[12px] leading-4 tracking-[0.01em] text-ink-secondary";
 const valueCls = "mt-0.5 text-[13px] leading-[18px] tracking-[0.015em] text-ink";
@@ -149,13 +157,13 @@ function AutomationRow({ bot, automation, routine, open, editing, onOpen, onClos
         )}
       </div>
       {!open && actions.error && <p role="alert" className="m-0 px-2 pb-1.5 text-[12px] leading-4 text-danger">{actions.error}</p>}
-      {open && !(editing && automation.kind !== "schedule") && (
-        <GrokDialog data-panel-modal="routine" title={name} onClose={onClose}>
+      <AnimatePresence>{open && !(editing && automation.kind !== "schedule") && (
+        <GrokDialog key="routine" data-panel-modal="routine" title={name} onClose={onClose}>
           {editing && routine
             ? <RoutineForm bot={bot} routine={routine} onDone={() => onEdit(false)} />
             : <AutomationDetail id={detailId} bot={bot} automation={automation} routine={routine} actions={actions} onEdit={() => onEdit(true)} />}
         </GrokDialog>
-      )}
+      )}</AnimatePresence>
       {editing && automation.kind !== "schedule" && <ForeignEditor automation={automation} onClose={() => onEdit(false)} />}
     </div>
   );
@@ -185,6 +193,24 @@ function AutomationDetail({ id, bot, automation, routine, actions, onEdit }: {
   const [confirming, setConfirming] = useState(false);
   const [capSaved, setCapSaved] = useState(0);
   const forecast = useLoaded(() => (routine ? fetchForecast(routine.id) : Promise.resolve(null)), `${routine?.id}:${routine?.updatedAt}:${capSaved}:${automation.runs[0]?.status}`);
+  const mail = useLoaded(() => (routine ? api(`/api/webhooks/mail/${encodeURIComponent(bot.id)}`).then((body) => body.mail as BotMailView | null).catch(() => null) : Promise.resolve(null)), `${bot.id}:${routine?.id}`);
+  const mailRoutes = mail?.routes?.filter((route) => route.targetId === automation.id) ?? [];
+  const slower = routine && forecast?.warnings?.some((warning) => warning === "frequent" || warning === "spike") ? lessOften(routine.schedule) : null;
+  const [slowing, setSlowing] = useState(false);
+  const runLessOften = async () => {
+    if (!routine || !slower || slowing) return;
+    setSlowing(true);
+    actions.setError("");
+    try {
+      const response = await api(`/api/routines/${routine.id}`, { method: "PATCH", body: JSON.stringify({ schedule: slower }) });
+      dispatch({ type: "routinePatched", routine: response.routine });
+    } catch (failure) {
+      actions.setError(friendlyError(failure));
+    } finally {
+      setSlowing(false);
+    }
+  };
+  const addressCopied = actions.copied === automation.id || (automation.addressId !== undefined && actions.copied === automation.addressId);
   const status = automationStatus(automation);
   const runs = automation.runs.filter((run) => run.status !== "queued" || Boolean(run.attention?.trim())).slice(0, RECENT_RUNS);
   const roomGoal = routine?.target === "room-goal";
@@ -225,9 +251,39 @@ function AutomationDetail({ id, bot, automation, routine, actions, onEdit }: {
         <Fact term={t("routines.inline.worksOn")}>{upperFirst(worksOn.label)}</Fact>
         {automation.kind === "schedule" && <Fact term={t("routines.inline.resultsTo")}>{upperFirst(resultsTo)}</Fact>}
         {routine && forecast?.warnings && (
-          <Fact term={t("routines.cost.term")}>
-            <span data-routine-forecast="">{upperFirst(forecastLine(forecast))}</span>
-            {forecast.warnings.map((warning) => <span key={warning} className="block text-[12px] leading-4 text-warning">{t(warning === "frequent" ? "routines.cost.frequent" : "routines.cost.costly")}</span>)}
+          <Fact term={t("routines.usage.term")}>
+            {forecast.usage && (forecast.usage.month.runs > 0 || !forecast.warnings.length) ? (
+              <>
+                <span data-routine-usage="" className="block">{upperFirst(t("routines.usage.week", { line: periodLine(forecast.usage.week) }))}</span>
+                <span className="block text-ink-secondary">{upperFirst(t("routines.usage.month", { line: periodLine(forecast.usage.month) }))}</span>
+              </>
+            ) : <span data-routine-forecast="">{upperFirst(forecastLine(forecast))}</span>}
+            {forecastWarning(forecast) && <span data-routine-warning="" className="block text-[12px] leading-4 text-warning">{forecastWarning(forecast)}</span>}
+            {slower && (
+              <button type="button" data-routine-action="less-often" disabled={slowing} onClick={() => void runLessOften()} className={cn(buttonCls, "mt-1.5")}>
+                {upperFirst(t("routines.lessOften"))}
+              </button>
+            )}
+          </Fact>
+        )}
+        {routine && (
+          <Fact term={t("routines.address.term")}>
+            <span className="block text-ink-secondary">{upperFirst(t("routines.address.hint"))}</span>
+            <button type="button" data-routine-action="address" disabled={busy} onClick={() => void actions.copyRoutineAddress(automation)} className={cn(buttonCls, "mt-1.5")}>
+              {addressCopied ? <Check size={14} aria-hidden="true" /> : <Copy size={14} aria-hidden="true" />}
+              {upperFirst(addressCopied ? t("automations.address.copied") : automation.addressId ? t("automations.address.copy") : t("routines.address.get"))}
+            </button>
+          </Fact>
+        )}
+        {mailRoutes.length > 0 && (
+          <Fact term={t("routines.email.term")}>
+            {mailRoutes.map((route) => (
+              <span key={route.address} data-routine-mail="" className="block select-text">
+                {route.address}
+                <span className="text-ink-secondary"> · {lowerFirst(t("routines.email.from", { senders: route.from.join(", ") }))}</span>
+              </span>
+            ))}
+            {mail?.problem && <span className="block text-[12px] leading-4 text-warning">{mail.problem}</span>}
           </Fact>
         )}
         {routine && <Fact term={t("usage.cap.label")}><SpendCap kind="routine" id={routine.id} capUsd={forecast?.capUsd} onSaved={() => setCapSaved((n) => n + 1)} className="mt-0.5" sentence /></Fact>}

@@ -26,6 +26,7 @@ export async function lookupRoute(label, env) {
   for (const service of routeServices(env)) {
     const answer = await fetch(`${service.origin}/v1/managed/edge/route?label=${label}`, { headers: { authorization: `Bearer ${service.token}` }, signal: AbortSignal.timeout(ROUTE_TIMEOUT_MS) }).catch(error => { failure = error; return null; });
     if (answer?.status === 404) { await answer.body?.cancel().catch(() => {}); continue; }
+    if (answer?.status === 410) { await answer.body?.cancel().catch(() => {}); return { gone: true }; }
     if (!answer?.ok) { if (answer) { await answer.body?.cancel().catch(() => {}); failure = new Error("route lookup failed"); } continue; }
     const body = await answer.json();
     if (typeof body.upstream !== "string" || !body.upstream.startsWith("https://")) return null;

@@ -75,7 +75,7 @@
         "label": "where you give instructions",
         "cells": [
           "chat channels including whatsapp, telegram, slack and signal",
-          "desktop chat or a paired phone browser; store phone apps are on their way"
+          "desktop chat, iphone app from the app store, or paired browser on android"
         ],
         "src": [
           3,
@@ -218,7 +218,7 @@
     "openclaw vs n8n",
     "openclaw vs lindy"
   ],
-  "updated": "2026-11-12",
+  "updated": "2026-11-20",
   "review": {
     "status": "approved",
     "by": "lead agent: independent reviewer pass against seo/facts (4 reviewers), every finding applied, automated gate",

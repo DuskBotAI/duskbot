@@ -27,6 +27,13 @@ describe("isReadOnlyAction", () => {
     expect(isReadOnlyAction("GMAIL_CREATE_EMAIL_DRAFT")).toBe(false);
     expect(isReadOnlyAction("COMPOSIO_PROXY_EXECUTE")).toBe(false);
   });
+
+  it("treats a read verb followed by a write word as writing", () => {
+    expect(isReadOnlyAction("GOOGLESHEETS_FIND_REPLACE")).toBe(false);
+    expect(isReadOnlyAction("HUBSPOT_SEARCH_AND_DELETE_CONTACTS")).toBe(false);
+    expect(isReadOnlyAction("GOOGLESHEETS_LOOKUP_SPREADSHEET_ROW")).toBe(true);
+    expect(isReadOnlyAction("GOOGLEDRIVE_LIST_SHARED_DRIVES")).toBe(true);
+  });
 });
 
 describe("normalizeConnectorScopes", () => {

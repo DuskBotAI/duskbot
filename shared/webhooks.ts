@@ -33,6 +33,9 @@ export interface WebhookTrigger {
   /** Unfinished runs this webhook may hold before new deliveries get 429.
    * Absent means the default (3). */
   maxPendingRuns?: number;
+  /** The routine this address runs: its deliveries follow that routine's instructions, read when each arrives, with the
+   *  payload as event data. Set only on create; a routine has at most one. */
+  routineId?: string;
 }
 
 export interface WebhookTriggerInput {
@@ -48,6 +51,7 @@ export interface WebhookTriggerInput {
   eventTypes?: string[];
   /** 1–50; `null` goes back to the default. */
   maxPendingRuns?: number | null;
+  routineId?: string;
 }
 
 export interface WebhookVerificationSample {

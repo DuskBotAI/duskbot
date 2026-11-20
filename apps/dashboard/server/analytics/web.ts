@@ -179,6 +179,8 @@ export function valuesOf(visit: Visit, dim: Dimension): string[] {
     case "goal": return [...new Set(visit.goals.map(goal => goal.goal))];
     case "entry": return [visit.entry];
     case "exit": return [visit.exit];
+    // no referring host: the named source a link carried (?ref, utm_source), else the visit came in direct
+    case "referrer": return [visit.referrer || (visit.source && visit.source !== "direct" && visit.source !== "unknown" ? visit.source : "direct")];
     default: {
       const value = visit[dim];
       return [value === null || value === undefined || value === "" ? "unknown" : String(value)];

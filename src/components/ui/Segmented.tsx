@@ -1,5 +1,6 @@
-import { useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import { useLayoutEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactNode } from "react";
 import { cn } from "@/lib/cn";
+import { useSystemControl } from "@/lib/system-control";
 import { useStretch } from "@/lib/use-stretch";
 import { MotionSpan, useMotionReduced } from "./SheetMotion";
 
@@ -25,9 +26,27 @@ export function Segmented<V extends string>({ value, options, onChange, disabled
   "data-panel-select"?: string;
 }) {
   const group = useRef<HTMLDivElement>(null);
+  const plain = options.every((option) => typeof option.label === "string" && !option.disabled);
+  const system = useSystemControl(
+    group,
+    plain
+      ? {
+          kind: "segmented",
+          items: options.map((option) => option.label as string),
+          selected: Math.max(0, options.findIndex((option) => option.value === value)),
+          disabled,
+          label,
+        }
+      : null,
+    (index) => {
+      const option = typeof index === "number" ? options[index] : undefined;
+      if (option && !option.disabled && option.value !== value) onChange(option.value);
+    },
+  );
   const [pill, setPill] = useState<{ x: number; y: number; width: number; height: number; value: V; moved: boolean } | null>(null);
   const reduced = useMotionReduced();
   useLayoutEffect(() => {
+    if (system) return;
     const root = group.current;
     if (!root) return;
     const place = () => {
@@ -42,7 +61,7 @@ export function Segmented<V extends string>({ value, options, onChange, disabled
     const watch = new ResizeObserver(place);
     watch.observe(root);
     return () => watch.disconnect();
-  }, [value, options.length]);
+  }, [value, options.length, system]);
   const stretch = useStretch(pill ? { start: pill.x, end: pill.x + pill.width } : null, reduced || !pill?.moved);
   const enabled = options.filter((option) => !option.disabled);
   const move = (event: KeyboardEvent, by: number) => {
@@ -53,6 +72,15 @@ export function Segmented<V extends string>({ value, options, onChange, disabled
     onChange(next.value);
     group.current?.querySelector<HTMLButtonElement>(`[data-value="${CSS.escape(next.value)}"]`)?.focus();
   };
+  if (system) {
+    return (
+      <div {...rest} ref={group} aria-hidden="true" data-segmented-room="" className={cn("inline-flex h-9 shrink-0 items-center", className)} style={{ visibility: "hidden" }}>
+        {options.map((option) => (
+          <span key={option.value} className="whitespace-nowrap px-3.5 text-[15px] font-medium">{option.label}</span>
+        ))}
+      </div>
+    );
+  }
   return (
     <div
       {...rest}
@@ -61,6 +89,7 @@ export function Segmented<V extends string>({ value, options, onChange, disabled
       aria-label={label}
       aria-disabled={disabled || undefined}
       data-segmented=""
+      style={{ "--seg-count": options.length, "--seg-index": Math.max(0, options.findIndex((option) => option.value === value)) } as CSSProperties}
       onKeyDown={(event) => {
         const rtl = getComputedStyle(event.currentTarget).direction === "rtl";
         if (event.key === "ArrowRight" || event.key === "ArrowDown") move(event, rtl && event.key === "ArrowRight" ? -1 : 1);

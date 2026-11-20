@@ -177,7 +177,7 @@ const NATIVE_PREFETCH_MS = 280;
 export function heldBubble(target: EventTarget | null): { bubble: HTMLElement; row: HTMLElement } | null {
   const el = target instanceof Element ? target : null;
   const bubble = el?.closest<HTMLElement>(BUBBLE);
-  if (!bubble || el?.closest("button, input, textarea, [contenteditable='true'], [aria-hidden='true']")) return null;
+  if (!bubble || el?.closest("button, input, textarea, [contenteditable='true'], [aria-hidden='true'], [data-selectable]")) return null;
   const row = bubble.closest<HTMLElement>("[data-message-row]");
   if (!row?.querySelector("[data-testid='message-actions']")) return null;
   return { bubble, row };
@@ -269,7 +269,7 @@ export function MessageHold({ rootRef }: { rootRef: RefObject<HTMLElement | null
         sink = null;
         // the bar's own long press would also bring up its pill
         row.dispatchEvent(new PointerEvent("pointercancel", { bubbles: true, pointerType: "touch" }));
-        haptic("medium");
+        haptic("hold");
         const rect = bubble.getBoundingClientRect();
         const { actions, reactions } = link ? { actions: linkActions(link), reactions: [] } : await readMessageActions(row);
         if (!actions.length && !reactions.length) return;

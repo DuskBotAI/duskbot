@@ -1096,10 +1096,10 @@ describe("OpenCode session variants", () => {
     { ...variantConfig(ids, currentValue), type: "select", category: "thought_level" },
   ];
   const fixtures: Array<{ scratch: string; instance: ProviderInstance; recorder: EventRecorder }> = [];
-  const fixture = async (variants: Record<string, unknown>, environment: Record<string, string> = {}) => {
+  const fixture = async (variants: Record<string, unknown>, environment: Record<string, string> = {}, models: ModelCatalog = catalog(model, secondModel, plainModel)) => {
     const scratch = mkdtempSync(join(tmpdir(), "dusk-opencode-variants-"));
     const dump = join(scratch, "rpc");
-    const driver = createOpenCodeDriver(async () => catalog(model, secondModel, plainModel));
+    const driver = createOpenCodeDriver(async () => models);
     const instance = await driver.create({
       instanceId: "opencode-variant-test", displayName: "OpenCode", enabled: true,
       config: { cli: FAKE_CLI, fullAuto: false, workspace: scratch },
@@ -1167,6 +1167,21 @@ describe("OpenCode session variants", () => {
     expect((await f.run({ variant })).done).toMatchObject({ ok: false });
     expect(f.prompted()).toBe(false);
     expect(f.calls()).toEqual([]);
+  });
+
+  it("uses the catalog's variant on a free rung when the session still advertises an unsupported one", async () => {
+    const free = "opencode/ladder-free";
+    const f = await fixture(
+      { [free]: variantConfig(["low", "high", "default"], "low") },
+      { FAKE_ACP_MODELS: free },
+      { default: free, options: [{ id: free, label: free, variants: [
+        { id: "none", label: "none" }, { id: "high", label: "high" }, { id: "default", label: "default" },
+      ] }] },
+    );
+    expect((await f.run({ model: free, variant: "low" })).done).toMatchObject({ ok: true });
+    expect(f.calls().map((call) => call.params)).toEqual([
+      { sessionId: "fake-acp-session", configId: "effort", value: "default" },
+    ]);
   });
 
   it("allows a model without configurable reasoning, but rejects an explicit variant", async () => {
@@ -1576,6 +1591,7 @@ describe("OpenCode free model that never answers, or answers nothing", () => {
     expect(events.some((event) => event.type === "runtime.notice" && /another free model/.test(event.message))).toBe(false);
     expect(events.filter((event) => event.type === "runtime.error")).toEqual([expect.objectContaining({
       message: "The free backup model has used up its free replies for now, so this message got no reply. Connect your own AI, like Claude or ChatGPT, to keep going, or send it again later.",
+      errorCode: "free_pool_limit", limit: "engine",
     })]);
   }, 20_000);
 

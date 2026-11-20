@@ -230,6 +230,8 @@ describe("site tracker and app ingest", () => {
     expect(answer.online.site).toBe(1);
     expect(answer.here).toEqual([expect.objectContaining({ seed: "QqQqQqQqQqQqQqQqQqQqQq", page: "/pricing" })]);
     expect((await beacon(view(), { cookie: admin, "x-forwarded-for": "203.0.113.4, 172.70.1.1", "cf-ipcountry": "IN" })).status).toBe(204);
+    // the live view's next poll, past the few seconds one read is shared
+    time += 5_000;
     const both = await live(admin);
     expect(both.online.site).toBe(2);
     expect(both.here.map(item => item.seed).sort()).toEqual(["QqQqQqQqQqQqQqQqQqQqQq", `owner:${VID}`]);

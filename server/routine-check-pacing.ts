@@ -13,6 +13,8 @@ const BACKOFF_MAX_MS = 4 * 60 * 60_000;
 
 /** Why no AI run may start now: one is already queued or working, the day's runs are used up, or the last ones failed. */
 export type CheckHold = "running" | "capped" | "backoff";
+/** `scheduled`: the routine's own time came; otherwise a wake its checks asked for (`wakeAt`) or a person's run. */
+export interface RoutineCheckContext { manual: boolean; hold?: CheckHold; scheduled?: boolean }
 
 const ACTIVE = new Set(["queued", "running", "waiting"]);
 

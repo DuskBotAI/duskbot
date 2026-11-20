@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { isTechnicalError, plainErrorLine } from "./plain-error";
+import { friendlyError, isTechnicalError, plainErrorLine } from "./plain-error";
 import { setLocale } from "./i18n";
 import { registrySaveFailure } from "../../shared/registry-save-failure";
 import { requestTooLargeMessage } from "../../shared/request-too-large";
@@ -77,4 +77,8 @@ it("never shows an engine's internal error or a wall of text, only the plain lin
   expect(plainErrorLine(echoed)).not.toContain("Campaign Manager");
   expect(isTechnicalError("The model said something long. ".repeat(12))).toBe(true);
   expect(isTechnicalError("Your OpenAI key has run out of credits.")).toBe(false);
+});
+
+it("says a reply's quoted message is gone in the app's own sentence, not the server's lowercase English", () => {
+  expect(friendlyError(new Error("the message being replied to is no longer available"))).toBe("The message you replied to is gone. Remove the quote and send it again.");
 });

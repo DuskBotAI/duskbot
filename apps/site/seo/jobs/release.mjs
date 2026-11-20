@@ -43,6 +43,9 @@ export function evaluateGate({ cohort, pages, snapshot, growth, today, seed, wee
 export function sliceSize({ waiting, growth, indexedTotal, lastCohortSize }) {
   return Math.max(0, Math.min(waiting, growth.caps.per_day, Math.floor(indexedTotal * growth.caps.max_share_of_indexed), Math.max(1, lastCohortSize) * growth.caps.max_growth_vs_last));
 }
+// app action pages index slower than written pages, so each lane is gated on its own last cohort (cohort "lane", default editorial)
+export const laneOf = (c) => c.lane || 'editorial';
+export const lastInLane = (cohorts, next) => cohorts.filter((c) => c.released && c !== next && laneOf(c) === laneOf(next)).at(-1) || null;
 export const frozen = (growth, today) => growth.freeze.find((f) => today >= f.from && today <= f.until) || null;
 
 async function takeSnapshot(urls, today) {
@@ -62,11 +65,11 @@ export async function run({ apply = false, today = localDay(), snapshotFile, sit
   const { release, records } = plan({ preview: false });
   const inCohort = (id, status) => records.filter((r) => r.state.cohort === id && (!status || r.state.status === status));
   const released = release.cohorts.filter((c) => c.released);
-  const last = released.at(-1);
   // a cohort that started going out finishes first, slice by slice, without a new gate
   const going = released.find((c) => inCohort(c.id, 'queued').length);
   const next = going || release.cohorts.find((c) => !c.released && inCohort(c.id, 'queued').length);
   if (!next) return log('nothing queued: every cohort is out. add pages (seo/WRITING.md) and a cohort to seo/release.json'), { state: 'idle' };
+  const last = lastInLane(release.cohorts, next);
   const freeze = frozen(growth, today);
   if (freeze) return log(`hold: release freeze until ${freeze.until} (${freeze.why})`), { state: 'freeze' };
   let verdict = { state: 'green', why: `cohort ${next.id} is already going out` };

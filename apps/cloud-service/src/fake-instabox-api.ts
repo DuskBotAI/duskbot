@@ -24,7 +24,8 @@ export async function startFakeInstaboxApi(options: { now?: () => number; key?: 
   const idem = new Map<string, unknown>();
   const queued = new Map<string, () => void>();
   let queueStarts = false;
-  let failNext = 0, limitNext = 0, busyNext = 0, startsBlockedUntil = 0, coldResume = false, refuseResume: string | null = null, growNeedsStop = false, usedGiB = 0;
+  let failNext = 0, limitNext = 0, busyNext = 0, startsBlockedUntil = 0, coldResume = false, refuseResume: string | null = null, growNeedsStop = false, usedGiB = 0, snapshotListReads = 0;
+  const unlisted = new Map<string, { reads: number; operationId: string }>();
   const alphabet = "abcdefghijklmnopqrstuvwxyz234567";
   const ident = (prefix: string) => `${prefix}_${Array.from(randomBytes(26), b => alphabet[b % alphabet.length]).join("")}`;
   const iso = (t: number) => new Date(t).toISOString();
@@ -99,9 +100,12 @@ export async function startFakeInstaboxApi(options: { now?: () => number; key?: 
     const op = /^\/v1\/operations\/(op_[a-z2-7]{26})$/.exec(path);
     if (op) { const found = operations.get(op[1]!); return found ? send(res, 200, found) : error(res, 404, "not_found"); }
     const snapView = (s: { id: string; name: string; status: string; createdAt: number; source: string }) => ({ id: s.id, name: s.name, status: s.status, createdAt: iso(s.createdAt), sourceMachineId: s.source });
-    if (path === "/v1/snapshots" && method === "GET") return send(res, 200, { snapshots: [...snapshots.values()].map(snapView) });
+    if (path === "/v1/snapshots" && method === "GET") {
+      for (const [id, wait] of unlisted) if (--wait.reads <= 0) { unlisted.delete(id); Object.assign(operations.get(wait.operationId)!, { state: "succeeded", updatedAt: iso(now()) }); }
+      return send(res, 200, { snapshots: [...snapshots.values()].filter(x => !unlisted.has(x.id)).map(snapView) });
+    }
     const snap = /^\/v1\/snapshots\/(sn_[a-z2-7]{26})$/.exec(path);
-    if (snap && method === "GET") { const found = snapshots.get(snap[1]!); return found ? send(res, 200, snapView(found)) : error(res, 404, "not_found"); }
+    if (snap && method === "GET") { const found = unlisted.has(snap[1]!) ? undefined : snapshots.get(snap[1]!); return found ? send(res, 200, snapView(found)) : error(res, 404, "not_found"); }
     if (snap && method === "DELETE") { if (req.headers["x-confirm-delete"] !== snap[1]) return error(res, 409, "delete_confirmation_required"); snapshots.delete(snap[1]!); res.writeHead(204); res.end(); return; }
     if (path === "/v1/machines" && method === "POST") {
       const prior = idem.get(String(idemKey));
@@ -202,6 +206,11 @@ export async function startFakeInstaboxApi(options: { now?: () => number; key?: 
       if ([...snapshots.values()].some(s => s.name === body?.name)) return error(res, 409, "name_taken");
       if (m.state === "suspended") return error(res, 409, "operation_conflict");
       const s = { id: ident("sn"), name: body.name, status: "ready", createdAt: now(), source: m.id, volume: new Map(m.volume), files: new Map(m.files), diskGiB: m.diskGiB }; snapshots.set(s.id, s); saved.add(m.id);
+      if (snapshotListReads > 0) {
+        const op = { ...operation(m, "snapshot"), state: "running" }; operations.set(op.id, op);
+        unlisted.set(s.id, { reads: snapshotListReads, operationId: op.id });
+        return send(res, 202, op);
+      }
       return send(res, 201, snapView(s));
     }
     if (action === "usage" && method === "GET") {
@@ -229,6 +238,8 @@ export async function startFakeInstaboxApi(options: { now?: () => number; key?: 
     refuseResume(machineId: string | null) { refuseResume = machineId; },
     /** a running machine's disk grow answers grow_needs_stop */
     growNeedsStop(on = true) { growNeedsStop = on; },
+    /** a snapshot save answers 202 with a running operation, and the snapshot stays out of every read for this many list reads */
+    slowSnapshots(listReads: number) { snapshotListReads = listReads; },
     /** GiB of data on every machine's /data, for shrinks */
     diskUsed(gib: number) { usedGiB = gib; },
     onExec(fn: typeof handler) { handler = fn; },

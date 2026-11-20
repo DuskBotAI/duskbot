@@ -30,3 +30,19 @@ it("keeps a chat held at its newest row there in the same commit that mounts old
   expect(scroller.scrollTop).toBe(1_000 + rows.length * 100);
   act(() => root.unmount());
 });
+
+it("checks whether the first paint fills the view once, not again as each step mounts more rows", async () => {
+  const scroller = document.createElement("div");
+  let reads = 0;
+  Object.defineProperty(scroller, "scrollHeight", { get: () => { reads += 1; return 5_000; } });
+  Object.defineProperty(scroller, "clientHeight", { get: () => 600 });
+  function Probe() {
+    const ref = useRef<HTMLElement | null>(scroller);
+    useFirstPaintRows("bot:thread", rows, false, ref, false);
+    return null;
+  }
+  const root = createRoot(document.createElement("div"));
+  await act(async () => root.render(createElement(Probe)));
+  expect(reads, "each read forces the chat's whole style and layout").toBe(1);
+  act(() => root.unmount());
+});

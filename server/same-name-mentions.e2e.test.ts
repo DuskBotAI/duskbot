@@ -59,8 +59,10 @@ beforeAll(async () => {
   olive = (await team.pair(OLIVE)).token!;
   lead = await create({ name: "Tessaly", title: "Support lead", reportsTo: OLIVE.email });
   analyst = await create({ name: "Marlowe", title: "Analyst", reportsTo: OLIVE.email });
-  chief = await create({ name: "Marlowe", reportsTo: OLIVE.email });
-  expect((await team.as(olive, "PATCH", `/api/bots/${chief.id}`, { chiefOfStaff: true })).status).toBe(200);
+  // a new bot under a taken name gets a number; a rename keeps the name as typed
+  chief = await create({ name: "Second Marlowe", reportsTo: OLIVE.email });
+  expect((await team.as(olive, "PATCH", `/api/bots/${chief.id}`, { name: "Marlowe", chiefOfStaff: true })).status).toBe(200);
+  chief = { ...chief, name: "Marlowe" };
   const made = await team.as(olive, "POST", "/api/groups", { name: "Launch", memberIds: [lead.id, analyst.id, chief.id],
     setup: { bulletin: "", defaultResponder: { kind: "member", botId: lead.id } } });
   expect(made.status, JSON.stringify(made.body)).toBe(201);
@@ -193,7 +195,9 @@ it("refuses a program on the machine with each bot's id, and takes the line agai
     return answer.body;
   };
   const one = (await local("POST", "/api/bots", { name: "Marlowe", title: "Analyst" })).bot as Bot;
-  const two = (await local("POST", "/api/bots", { name: "Marlowe", title: "Writer" })).bot as Bot;
+  const made = (await local("POST", "/api/bots", { name: "Writer", title: "Writer" })).bot as Bot;
+  await local("PATCH", `/api/bots/${made.id}`, { name: "Marlowe" });
+  const two = { ...made, name: "Marlowe" };
   const desk = (await local("POST", "/api/groups", { name: "Desk", memberIds: [one.id, two.id],
     setup: { bulletin: "", defaultResponder: { kind: "mentions" } } })).group as { id: string; threadId: string };
   const refused = await fx.local("POST", `/api/groups/${desk.id}/messages`, { text: "@Marlowe status?" });

@@ -1,0 +1,1452 @@
+{
+  "toolkit": "typeform",
+  "name": "Typeform",
+  "version": "20261101_00",
+  "description": "Build beautiful, interactive forms that people love to fill out. Collect data, accept payments, and integrate with your favorite tools.",
+  "managed_sign_in": true,
+  "auth": [
+    "OAuth2"
+  ],
+  "tools_count": 35,
+  "triggers_count": 1,
+  "tools": [
+    {
+      "name": "Create Account Workspace",
+      "slug": "TYPEFORM_CREATE_ACCOUNT_WORKSPACE",
+      "kind": "write",
+      "description": "Tool to create a new workspace in a specific Typeform account. Use when you need to create a workspace within a particular account using the account ID.",
+      "inputs": [
+        {
+          "name": "name",
+          "type": "string",
+          "required": true,
+          "about": "Name of the new workspace to create"
+        },
+        {
+          "name": "account_id",
+          "type": "string",
+          "required": true,
+          "about": "The ULID format identifier for the account where the workspace will be created"
+        }
+      ],
+      "scopes": [
+        "workspaces:write"
+      ],
+      "tags": [
+        "openWorldHint",
+        "workspaces",
+        "createHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Create Form",
+      "slug": "TYPEFORM_CREATE_FORM",
+      "kind": "write",
+      "description": "Tool to create a new Typeform form with customizable fields, logic, and settings. Use when you need to programmatically create a form with specific questions, welcome screens, thank you screens, and conditional logic.",
+      "inputs": [
+        {
+          "name": "type",
+          "type": "string",
+          "required": false,
+          "about": "Form type (quiz, classification, score, branching, etc.)"
+        },
+        {
+          "name": "logic",
+          "type": "array",
+          "required": false,
+          "about": "Conditional logic jumps and variable calculations"
+        },
+        {
+          "name": "theme",
+          "type": "object",
+          "required": false,
+          "about": "Theme reference"
+        },
+        {
+          "name": "title",
+          "type": "string",
+          "required": true,
+          "about": "Form title"
+        },
+        {
+          "name": "fields",
+          "type": "array",
+          "required": false,
+          "about": "Array of field definitions for the form questions"
+        },
+        {
+          "name": "settings",
+          "type": "object",
+          "required": false,
+          "about": "Form settings configuration"
+        },
+        {
+          "name": "workspace",
+          "type": "object",
+          "required": false,
+          "about": "Workspace reference"
+        },
+        {
+          "name": "welcome_screens",
+          "type": "array",
+          "required": false,
+          "about": "Introductory content screens shown before form fields"
+        },
+        {
+          "name": "thankyou_screens",
+          "type": "array",
+          "required": false,
+          "about": "Completion screens shown after form submission"
+        }
+      ],
+      "scopes": [
+        "forms:write"
+      ],
+      "tags": [
+        "important",
+        "openWorldHint",
+        "forms",
+        "createHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Create Image",
+      "slug": "TYPEFORM_CREATE_IMAGE",
+      "kind": "write",
+      "description": "Tool to upload a new image to your Typeform account via base64 encoding or URL. Use when you need to add images for forms or presentations. Either 'image' (base64) or 'url' parameter must be provided.",
+      "inputs": [
+        {
+          "name": "url",
+          "type": "string",
+          "required": false,
+          "about": "Direct link to an existing image online. Either 'image' or 'url' must be provided."
+        },
+        {
+          "name": "image",
+          "type": "string",
+          "required": false,
+          "about": "Base64 code for the image (exclude data:image descriptors). Either 'image' or 'url' must be provided."
+        },
+        {
+          "name": "file_name",
+          "type": "string",
+          "required": true,
+          "about": "The name assigned to your image file"
+        }
+      ],
+      "scopes": [
+        "images:write"
+      ],
+      "tags": [
+        "openWorldHint",
+        "media",
+        "createHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Create or Update Webhook",
+      "slug": "TYPEFORM_CREATE_OR_UPDATE_WEBHOOK",
+      "kind": "write",
+      "description": "Tool to create a new webhook or update an existing one for a specified Typeform. Use when you need to configure webhooks to receive form response notifications at a specified URL.",
+      "inputs": [
+        {
+          "name": "tag",
+          "type": "string",
+          "required": true,
+          "about": "Unique webhook name you assign to identify this webhook"
+        },
+        {
+          "name": "url",
+          "type": "string",
+          "required": true,
+          "about": "Webhook destination URL where form responses will be sent"
+        },
+        {
+          "name": "secret",
+          "type": "string",
+          "required": false,
+          "about": "HMAC SHA256 signing key for payload verification. Use this to verify webhook authenticity"
+        },
+        {
+          "name": "enabled",
+          "type": "boolean",
+          "required": false,
+          "about": "Whether to send responses immediately. Set to true to enable the webhook, false to disable it"
+        },
+        {
+          "name": "form_id",
+          "type": "string",
+          "required": true,
+          "about": "Unique identifier for the form"
+        },
+        {
+          "name": "verify_ssl",
+          "type": "boolean",
+          "required": false,
+          "about": "Whether to verify SSL certificates during webhook delivery. Set to false if using self-signed certificates"
+        },
+        {
+          "name": "event_types",
+          "type": "object",
+          "required": false,
+          "about": "Event types that trigger the webhook (e.g., {'form_response_partial': True}). If not specified, defaults to form_response"
+        }
+      ],
+      "scopes": [
+        "webhooks:write"
+      ],
+      "tags": [
+        "openWorldHint",
+        "webhooks",
+        "updateHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Create Theme",
+      "slug": "TYPEFORM_CREATE_THEME",
+      "kind": "write",
+      "description": "Tool to create a new custom theme in Typeform with colors, fonts, background, and layout settings. Use when you need to create a theme for branding and styling Typeform forms.",
+      "inputs": [
+        {
+          "name": "font",
+          "type": "string",
+          "required": true,
+          "about": "Font choice from predefined Typeform options (e.g., 'Karla', 'Arial', 'Georgia'). This field is required by the API."
+        },
+        {
+          "name": "name",
+          "type": "string",
+          "required": false,
+          "about": "Name of the theme"
+        },
+        {
+          "name": "colors",
+          "type": "object",
+          "required": true,
+          "about": "Color configuration with answer, background, button, and question hex values. All color fields are required."
+        },
+        {
+          "name": "fields",
+          "type": "object",
+          "required": true,
+          "about": "Field alignment (left/center) and font_size (small/medium/large). Both fields are required."
+        },
+        {
+          "name": "background",
+          "type": "object",
+          "required": false,
+          "about": "Background configuration for the theme."
+        },
+        {
+          "name": "rounded_corners",
+          "type": "string",
+          "required": false,
+          "about": "Border radius setting. Must be 'none', 'small', or 'large'"
+        },
+        {
+          "name": "has_transparent_button",
+          "type": "boolean",
+          "required": false,
+          "about": "Whether the button should be transparent"
+        }
+      ],
+      "scopes": [
+        "themes:write"
+      ],
+      "tags": [
+        "openWorldHint",
+        "themes",
+        "createHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Create Workspace",
+      "slug": "TYPEFORM_CREATE_WORKSPACE",
+      "kind": "write",
+      "description": "Tool to create a new workspace in Typeform. Use when organizing forms into separate workspaces for teams or projects.",
+      "inputs": [
+        {
+          "name": "name",
+          "type": "string",
+          "required": true,
+          "about": "The name of the workspace to create"
+        }
+      ],
+      "scopes": [
+        "workspaces:write"
+      ],
+      "tags": [
+        "openWorldHint",
+        "workspaces",
+        "createHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Delete Form",
+      "slug": "TYPEFORM_DELETE_FORM",
+      "kind": "write",
+      "description": "Tool to permanently delete a Typeform and all of its responses. Use when you need to remove a form completely from the account.",
+      "inputs": [
+        {
+          "name": "form_id",
+          "type": "string",
+          "required": true,
+          "about": "Unique form identifier found in the form URL"
+        }
+      ],
+      "scopes": [
+        "forms:write"
+      ],
+      "tags": [
+        "destructiveHint",
+        "idempotentHint",
+        "openWorldHint",
+        "forms"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Delete Image",
+      "slug": "TYPEFORM_DELETE_IMAGE",
+      "kind": "write",
+      "description": "Tool to delete an image from your Typeform account. Use when you need to remove an image that is no longer needed. Returns a success status once the image has been deleted (204 No Content).",
+      "inputs": [
+        {
+          "name": "image_id",
+          "type": "string",
+          "required": true,
+          "about": "The unique identifier for the image to remove"
+        }
+      ],
+      "scopes": [
+        "images:write"
+      ],
+      "tags": [
+        "destructiveHint",
+        "idempotentHint",
+        "openWorldHint",
+        "media"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Delete Responses",
+      "slug": "TYPEFORM_DELETE_RESPONSES",
+      "kind": "write",
+      "description": "Tool to delete specific responses from a Typeform by response IDs. Use when you need to remove response data from a form. Deletion is asynchronous - a 200 status means the deletion request was registered, not that deletion is complete. Maximum 1000 response IDs can be deleted per request.",
+      "inputs": [
+        {
+          "name": "form_id",
+          "type": "string",
+          "required": true,
+          "about": "Unique form identifier"
+        },
+        {
+          "name": "included_response_ids",
+          "type": "string",
+          "required": true,
+          "about": "Comma-separated list of response IDs to delete (max 1000 IDs). Example: 'id1,id2,id3'"
+        }
+      ],
+      "scopes": [
+        "responses:write"
+      ],
+      "tags": [
+        "destructiveHint",
+        "openWorldHint",
+        "responses"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Delete Theme",
+      "slug": "TYPEFORM_DELETE_THEME",
+      "kind": "write",
+      "description": "Tool to delete a theme from your Typeform account. Use when you need to permanently remove a theme. This operation cannot be undone.",
+      "inputs": [
+        {
+          "name": "theme_id",
+          "type": "string",
+          "required": true,
+          "about": "Unique theme identifier to delete"
+        }
+      ],
+      "scopes": [
+        "themes:write"
+      ],
+      "tags": [
+        "destructiveHint",
+        "idempotentHint",
+        "openWorldHint",
+        "themes"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Delete Webhook",
+      "slug": "TYPEFORM_DELETE_WEBHOOK",
+      "kind": "write",
+      "description": "Delete a webhook configuration from a specified Typeform form by its tag. On a successful response, the tool returns a success flag.",
+      "inputs": [
+        {
+          "name": "tag",
+          "type": "string",
+          "required": true,
+          "about": "Unique webhook name to delete"
+        },
+        {
+          "name": "form_id",
+          "type": "string",
+          "required": true,
+          "about": "Unique form identifier"
+        }
+      ],
+      "scopes": [
+        "webhooks:write"
+      ],
+      "tags": [
+        "destructiveHint",
+        "idempotentHint",
+        "openWorldHint",
+        "webhooks"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Delete Workspace",
+      "slug": "TYPEFORM_DELETE_WORKSPACE",
+      "kind": "write",
+      "description": "Tool to delete a workspace from your Typeform account. Use when you need to remove a workspace. Note: The default 'My Workspace' cannot be deleted, and workspaces containing forms cannot be deleted (will return an error).",
+      "inputs": [
+        {
+          "name": "workspace_id",
+          "type": "string",
+          "required": true,
+          "about": "Unique workspace identifier. Note: Default 'My Workspace' cannot be deleted, and workspaces containing forms cannot be deleted."
+        }
+      ],
+      "scopes": [
+        "workspaces:write"
+      ],
+      "tags": [
+        "destructiveHint",
+        "openWorldHint",
+        "workspaces"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get About Me",
+      "slug": "TYPEFORM_GET_ABOUT_ME",
+      "kind": "read",
+      "description": "Get information about the owner account in Typeform.",
+      "inputs": [
+        {
+          "name": "0",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "1",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "2",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "3",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "4",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "5",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "6",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "7",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "8",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "9",
+          "type": "",
+          "required": false,
+          "about": ""
+        }
+      ],
+      "scopes": [
+        "accounts:read"
+      ],
+      "tags": [
+        "important",
+        "readOnlyHint",
+        "openWorldHint",
+        "account"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get All Response Files",
+      "slug": "TYPEFORM_GET_ALL_RESPONSE_FILES",
+      "kind": "read",
+      "description": "Tool to retrieve a compressed archive containing all files that respondents uploaded for a specified form. Use when you need to download all file uploads from a Typeform form as a ZIP archive.",
+      "inputs": [
+        {
+          "name": "form_id",
+          "type": "string",
+          "required": true,
+          "about": "Unique identifier of the form to download response files for"
+        }
+      ],
+      "scopes": [
+        "responses:read"
+      ],
+      "tags": [
+        "readOnlyHint",
+        "openWorldHint",
+        "responses"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get Background By Size",
+      "slug": "TYPEFORM_GET_BACKGROUND_BY_SIZE",
+      "kind": "read",
+      "description": "Request a Typeform background image at the default, tablet, mobile, or thumbnail size. The tool expects a JSON response with image metadata rather than returning image bytes.",
+      "inputs": [
+        {
+          "name": "size",
+          "type": "string",
+          "required": true,
+          "about": "Dimension preset for the background image. default: scaled to fit 1680x1050px, tablet: scaled to fit 1024x768px, mobile: scaled to fit 460x320px, thumbnail: scaled to fit 80x50px"
+        },
+        {
+          "name": "image_id",
+          "type": "string",
+          "required": true,
+          "about": "Unique identifier for the image resource"
+        }
+      ],
+      "scopes": [
+        "images:read"
+      ],
+      "tags": [
+        "readOnlyHint",
+        "openWorldHint",
+        "media"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get Choice Image By Size",
+      "slug": "TYPEFORM_GET_CHOICE_IMAGE_BY_SIZE",
+      "kind": "read",
+      "description": "Request a Typeform choice image at a specified size. The tool expects a JSON response with image metadata rather than downloading image bytes.",
+      "inputs": [
+        {
+          "name": "size",
+          "type": "string",
+          "required": true,
+          "about": "Image size to retrieve. Options: 'default' (scaled to fit 230x230px), 'thumbnail' (cropped to 80x80px), 'supersize' (cropped to 310x233px), 'supermobile' (cropped to 238x164px), 'supersizefit' (scaled to fit 310x233px)"
+        },
+        {
+          "name": "image_id",
+          "type": "string",
+          "required": true,
+          "about": "Unique ID for the image to retrieve"
+        }
+      ],
+      "scopes": [
+        "images:read"
+      ],
+      "tags": [
+        "readOnlyHint",
+        "openWorldHint",
+        "media"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get Form",
+      "slug": "TYPEFORM_GET_FORM",
+      "kind": "read",
+      "description": "Tool to retrieve a specific form's complete configuration including fields, logic, settings, and theme. Use when you need to get detailed information about a Typeform form.",
+      "inputs": [
+        {
+          "name": "form_id",
+          "type": "string",
+          "required": true,
+          "about": "Unique form identifier found in the form URL"
+        }
+      ],
+      "scopes": [
+        "forms:read"
+      ],
+      "tags": [
+        "important",
+        "readOnlyHint",
+        "openWorldHint",
+        "forms"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get Form Messages",
+      "slug": "TYPEFORM_GET_FORM_MESSAGES",
+      "kind": "read",
+      "description": "Tool to retrieve custom messages for a Typeform including button labels, error messages, and UI text. Use when you need to get the current message configuration for a form.",
+      "inputs": [
+        {
+          "name": "form_id",
+          "type": "string",
+          "required": true,
+          "about": "Unique form identifier found in the form URL"
+        }
+      ],
+      "scopes": [
+        "forms:read"
+      ],
+      "tags": [
+        "readOnlyHint",
+        "openWorldHint",
+        "forms"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get Form Responses",
+      "slug": "TYPEFORM_GET_FORM_RESPONSES",
+      "kind": "read",
+      "description": "Tool to retrieve form responses from Typeform with filtering by date, pagination, search, and response type. Use when you need to get responses for a specific form including timestamps of when users landed on and submitted the form. Note: Recent responses may take up to 30 minutes to appear.",
+      "inputs": [
+        {
+          "name": "sort",
+          "type": "string",
+          "required": false,
+          "about": "Sort format: {fieldID},{asc|desc}. Example: 'field_123,asc'"
+        },
+        {
+          "name": "after",
+          "type": "string",
+          "required": false,
+          "about": "Pagination token for responses after this point"
+        },
+        {
+          "name": "query",
+          "type": "string",
+          "required": false,
+          "about": "Search string matched against all response fields"
+        },
+        {
+          "name": "since",
+          "type": "string",
+          "required": false,
+          "about": "Filter responses from timestamp (ISO 8601 format like '2023-01-01T00:00:00Z' or Unix seconds)"
+        },
+        {
+          "name": "until",
+          "type": "string",
+          "required": false,
+          "about": "Filter responses until timestamp (ISO 8601 format like '2023-12-31T23:59:59Z' or Unix seconds)"
+        },
+        {
+          "name": "before",
+          "type": "string",
+          "required": false,
+          "about": "Pagination token for responses before this point"
+        },
+        {
+          "name": "fields",
+          "type": "array",
+          "required": false,
+          "about": "Limit displayed fields in answers section. Provide field IDs."
+        },
+        {
+          "name": "form_id",
+          "type": "string",
+          "required": true,
+          "about": "Unique form identifier"
+        },
+        {
+          "name": "page_size",
+          "type": "integer",
+          "required": false,
+          "about": "Maximum responses per request (default: 25, max: 1000)"
+        },
+        {
+          "name": "response_type",
+          "type": "array",
+          "required": false,
+          "about": "Filter by type: 'started', 'partial', or 'completed'. Can specify multiple values."
+        },
+        {
+          "name": "answered_fields",
+          "type": "array",
+          "required": false,
+          "about": "Filter responses containing specified field IDs"
+        },
+        {
+          "name": "excluded_response_ids",
+          "type": "string",
+          "required": false,
+          "about": "Comma-separated response IDs to exclude"
+        },
+        {
+          "name": "included_response_ids",
+          "type": "string",
+          "required": false,
+          "about": "Comma-separated response IDs to include"
+        }
+      ],
+      "scopes": [
+        "responses:read"
+      ],
+      "tags": [
+        "important",
+        "readOnlyHint",
+        "openWorldHint",
+        "responses"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get Image By Size",
+      "slug": "TYPEFORM_GET_IMAGE_BY_SIZE",
+      "kind": "read",
+      "description": "Tool to retrieve an image in a specific size from Typeform. Use when you need to get a Typeform image optimized for different display contexts (default for desktop, mobile for mobile devices, or thumbnail for previews).",
+      "inputs": [
+        {
+          "name": "size",
+          "type": "string",
+          "required": true,
+          "about": "The desired image dimension. Options: 'default' (800px width), 'mobile' (460px width), or 'thumbnail' (80px×50px cropped)"
+        },
+        {
+          "name": "image_id",
+          "type": "string",
+          "required": true,
+          "about": "Unique identifier for the image to retrieve"
+        }
+      ],
+      "scopes": [
+        "images:read"
+      ],
+      "tags": [
+        "readOnlyHint",
+        "openWorldHint",
+        "media"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get Theme",
+      "slug": "TYPEFORM_GET_THEME",
+      "kind": "read",
+      "description": "Tool to retrieve a specific theme's configuration including colors, fonts, and layout settings. Use when you need to get the design settings of a Typeform theme.",
+      "inputs": [
+        {
+          "name": "theme_id",
+          "type": "string",
+          "required": true,
+          "about": "Unique ID for the theme"
+        }
+      ],
+      "scopes": [
+        "themes:read"
+      ],
+      "tags": [
+        "readOnlyHint",
+        "openWorldHint",
+        "themes"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get Webhook",
+      "slug": "TYPEFORM_GET_WEBHOOK",
+      "kind": "read",
+      "description": "Retrieve a single webhook configuration by form ID and webhook tag. The webhook secret is redacted from the response.",
+      "inputs": [
+        {
+          "name": "tag",
+          "type": "string",
+          "required": true,
+          "about": "Unique name assigned to the webhook"
+        },
+        {
+          "name": "form_id",
+          "type": "string",
+          "required": true,
+          "about": "Unique form identifier"
+        }
+      ],
+      "scopes": [
+        "webhooks:read"
+      ],
+      "tags": [
+        "readOnlyHint",
+        "openWorldHint",
+        "webhooks"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get Workspace",
+      "slug": "TYPEFORM_GET_WORKSPACE",
+      "kind": "read",
+      "description": "Tool to retrieve detailed information about a specific workspace including its name, forms, and team members. Use when you need to get workspace details or check member access.",
+      "inputs": [
+        {
+          "name": "workspace_id",
+          "type": "string",
+          "required": true,
+          "about": "Unique identifier for the workspace to retrieve"
+        }
+      ],
+      "scopes": [
+        "workspaces:read"
+      ],
+      "tags": [
+        "important",
+        "readOnlyHint",
+        "openWorldHint",
+        "workspaces"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "List Forms",
+      "slug": "TYPEFORM_LIST_FORMS",
+      "kind": "read",
+      "description": "Tool to retrieve a list of all forms in your Typeform account with filtering, pagination, and sorting options. Use when you need to list, search, or browse forms across workspaces. Supports filtering by search terms, workspace, and sorting by creation or modification date.",
+      "inputs": [
+        {
+          "name": "page",
+          "type": "integer",
+          "required": false,
+          "about": "Page number for pagination (default: 1)"
+        },
+        {
+          "name": "search",
+          "type": "string",
+          "required": false,
+          "about": "Filters results containing the specified string in form titles or descriptions"
+        },
+        {
+          "name": "sort_by",
+          "type": "string",
+          "required": false,
+          "about": "Field to sort results by: 'created_at' for creation date or 'last_updated_at' for last modification date"
+        },
+        {
+          "name": "order_by",
+          "type": "string",
+          "required": false,
+          "about": "Sort order: 'asc' for ascending or 'desc' for descending"
+        },
+        {
+          "name": "page_size",
+          "type": "integer",
+          "required": false,
+          "about": "Number of results per page (default: 10, maximum: 200)"
+        },
+        {
+          "name": "workspace_id",
+          "type": "string",
+          "required": false,
+          "about": "Filter forms by workspace ID to retrieve forms from a specific workspace"
+        }
+      ],
+      "scopes": [
+        "forms:read"
+      ],
+      "tags": [
+        "important",
+        "readOnlyHint",
+        "openWorldHint",
+        "forms"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "List Images",
+      "slug": "TYPEFORM_LIST_IMAGES",
+      "kind": "read",
+      "description": "Tool to retrieve all images in your Typeform account in reverse-chronological order. Use when you need to list or browse available images.",
+      "inputs": [
+        {
+          "name": "0",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "1",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "2",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "3",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "4",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "5",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "6",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "7",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "8",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "9",
+          "type": "",
+          "required": false,
+          "about": ""
+        }
+      ],
+      "scopes": [
+        "images:read"
+      ],
+      "tags": [
+        "readOnlyHint",
+        "openWorldHint",
+        "media"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "List Typeform Themes",
+      "slug": "TYPEFORM_LIST_THEMES",
+      "kind": "read",
+      "description": "Retrieve a paginated list of Typeform themes and their styling configurations, including public and private themes. The tool declares the images:write scope.",
+      "inputs": [
+        {
+          "name": "page",
+          "type": "integer",
+          "required": false,
+          "about": "Page number to retrieve (default: 1)"
+        },
+        {
+          "name": "page_size",
+          "type": "integer",
+          "required": false,
+          "about": "Number of results per page, maximum 200 (default: 10)"
+        }
+      ],
+      "scopes": [
+        "images:write"
+      ],
+      "tags": [
+        "important",
+        "readOnlyHint",
+        "openWorldHint",
+        "themes"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "List Form Webhooks",
+      "slug": "TYPEFORM_LIST_WEBHOOKS",
+      "kind": "read",
+      "description": "Tool to retrieve all webhooks associated with a specified typeform. Use when you need to view webhook configurations for a form. Returns webhook IDs, URLs, enabled status, event types, and timestamps.",
+      "inputs": [
+        {
+          "name": "form_id",
+          "type": "string",
+          "required": true,
+          "about": "Unique form identifier for which to retrieve webhooks"
+        }
+      ],
+      "scopes": [
+        "webhooks:read"
+      ],
+      "tags": [
+        "readOnlyHint",
+        "openWorldHint",
+        "webhooks"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "List Workspaces",
+      "slug": "TYPEFORM_LIST_WORKSPACES",
+      "kind": "read",
+      "description": "List a page of workspaces in a Typeform account, optionally searching by name. Results include IDs and names and may include form counts and members.",
+      "inputs": [
+        {
+          "name": "page",
+          "type": "integer",
+          "required": false,
+          "about": "Page number for pagination. Default is 1."
+        },
+        {
+          "name": "search",
+          "type": "string",
+          "required": false,
+          "about": "Search term to filter workspaces by name. Only workspaces matching this search term will be returned."
+        },
+        {
+          "name": "page_size",
+          "type": "integer",
+          "required": false,
+          "about": "Number of items per page. Default is 10, maximum is 200."
+        }
+      ],
+      "scopes": [
+        "workspaces:read"
+      ],
+      "tags": [
+        "important",
+        "readOnlyHint",
+        "openWorldHint",
+        "workspaces"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Patch Form",
+      "slug": "TYPEFORM_PATCH_FORM",
+      "kind": "write",
+      "description": "Tool to partially update a Typeform using JSON Patch operations. Use when you need to modify specific fields without replacing the entire form. Supports updating title, settings, theme, workspace, and other form properties.",
+      "inputs": [
+        {
+          "name": "form_id",
+          "type": "string",
+          "required": true,
+          "about": "Unique form identifier found in the form URL"
+        },
+        {
+          "name": "operations",
+          "type": "array",
+          "required": true,
+          "about": "List of JSON Patch operations to apply to the form. Each operation specifies an action (add/remove/replace), a path to the field, and optionally a value"
+        }
+      ],
+      "scopes": [
+        "forms:write"
+      ],
+      "tags": [
+        "updateHint",
+        "openWorldHint",
+        "forms"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Update Theme (Partial)",
+      "slug": "TYPEFORM_PATCH_THEME",
+      "kind": "write",
+      "description": "Tool to partially update a Typeform theme by ID. Updates only the specified properties while leaving other theme settings unchanged. Each provided field must be complete (e.g., if updating colors, all color subfields must be provided). Cannot modify Typeform's public built-in themes.",
+      "inputs": [
+        {
+          "name": "font",
+          "type": "string",
+          "required": false,
+          "about": "Font family for the theme. Must be a valid Typeform font option."
+        },
+        {
+          "name": "name",
+          "type": "string",
+          "required": false,
+          "about": "Name for the theme"
+        },
+        {
+          "name": "colors",
+          "type": "object",
+          "required": false,
+          "about": "Colors configuration for the theme."
+        },
+        {
+          "name": "fields",
+          "type": "object",
+          "required": false,
+          "about": "Configuration for fields or screens alignment and font size."
+        },
+        {
+          "name": "screens",
+          "type": "object",
+          "required": false,
+          "about": "Configuration for fields or screens alignment and font size."
+        },
+        {
+          "name": "theme_id",
+          "type": "string",
+          "required": true,
+          "about": "Unique ID for the theme to update"
+        },
+        {
+          "name": "background",
+          "type": "object",
+          "required": false,
+          "about": "Background configuration for the theme."
+        },
+        {
+          "name": "rounded_corners",
+          "type": "string",
+          "required": false,
+          "about": "Rounded corners setting for the theme"
+        },
+        {
+          "name": "has_transparent_button",
+          "type": "boolean",
+          "required": false,
+          "about": "Whether the button should be transparent"
+        }
+      ],
+      "scopes": [
+        "themes:write"
+      ],
+      "tags": [
+        "updateHint",
+        "openWorldHint",
+        "themes"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Update Form",
+      "slug": "TYPEFORM_UPDATE_FORM",
+      "kind": "write",
+      "description": "Tool to update an existing Typeform by completely replacing its configuration. PUT request overwrites the entire form - any fields not included will be deleted along with their response data. Always retrieve the form first using Get Form, modify the desired properties, then send the complete updated form definition.",
+      "inputs": [
+        {
+          "name": "type",
+          "type": "string",
+          "required": false,
+          "about": "Form type category such as 'quiz', 'classification', 'score', 'branching', etc."
+        },
+        {
+          "name": "logic",
+          "type": "array",
+          "required": false,
+          "about": "Array of logic jump objects for conditional branching. Each contains: type (field), ref (field reference), and actions (array with action, condition, and details)."
+        },
+        {
+          "name": "theme",
+          "type": "object",
+          "required": false,
+          "about": "Theme object containing 'href' field with theme URL to apply design styling to the form."
+        },
+        {
+          "name": "title",
+          "type": "string",
+          "required": false,
+          "about": "The form's title/name"
+        },
+        {
+          "name": "fields",
+          "type": "array",
+          "required": false,
+          "about": "Array of form field objects defining questions and inputs. Each field must have: ref (unique reference), title (question text), type (field type like short_text, email, multiple_choice, etc.), properties (field-specific config), and optionally validations and attachments. Include all existing fields"
+        },
+        {
+          "name": "hidden",
+          "type": "array",
+          "required": false,
+          "about": "Array of hidden field variable names for passing data via URL parameters."
+        },
+        {
+          "name": "form_id",
+          "type": "string",
+          "required": true,
+          "about": "Unique form identifier to update"
+        },
+        {
+          "name": "settings",
+          "type": "object",
+          "required": false,
+          "about": "Form settings object including language, is_public, progress_bar, show_progress_bar, show_typeform_branding, autosave_progress, hide_navigation, captcha, redirect_after_submit_url, meta (with allow_indexing, description, image), and tracking properties."
+        },
+        {
+          "name": "variables",
+          "type": "object",
+          "required": false,
+          "about": "Variables object for tracking score, price, or enrichment calculations."
+        },
+        {
+          "name": "workspace",
+          "type": "object",
+          "required": false,
+          "about": "Workspace object containing 'href' field with workspace URL. If not specified, form remains in current workspace."
+        },
+        {
+          "name": "welcome_screens",
+          "type": "array",
+          "required": false,
+          "about": "Array of welcome screen objects shown before the form. Each contains: ref, title, properties, and optionally attachment."
+        },
+        {
+          "name": "thankyou_screens",
+          "type": "array",
+          "required": false,
+          "about": "Array of thank you screen objects shown after form completion. Each contains: ref, title, type, properties (show_button, share_icons, button_mode, button_text), and optionally attachment."
+        }
+      ],
+      "scopes": [
+        "forms:write"
+      ],
+      "tags": [
+        "updateHint",
+        "openWorldHint",
+        "forms"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Update Form Messages",
+      "slug": "TYPEFORM_UPDATE_FORM_MESSAGES",
+      "kind": "write",
+      "description": "Tool to update custom messages for form UI elements like buttons, errors, and placeholders in Typeform. Use when you need to customize the text displayed to form respondents.",
+      "inputs": [
+        {
+          "name": "form_id",
+          "type": "string",
+          "required": true,
+          "about": "Unique form identifier"
+        },
+        {
+          "name": "label_button_submit",
+          "type": "string",
+          "required": false,
+          "about": "Text for the submit button (max 100 characters). This is the final button to submit the form."
+        },
+        {
+          "name": "label_error_required",
+          "type": "string",
+          "required": false,
+          "about": "Error message shown when a required field is empty (max 64 characters)."
+        },
+        {
+          "name": "label_button_hint_default",
+          "type": "string",
+          "required": false,
+          "about": "Tooltip text for the continue button (max 28 characters). Use this to provide hints about the button's function."
+        },
+        {
+          "name": "block_short_text_placeholder",
+          "type": "string",
+          "required": false,
+          "about": "Placeholder text for short text input fields (max 100 characters)."
+        },
+        {
+          "name": "label_button_no_answer_default",
+          "type": "string",
+          "required": false,
+          "about": "Text for the 'Continue without answering' button (max 100 characters). Shown when a question is optional."
+        }
+      ],
+      "scopes": [
+        "forms:write"
+      ],
+      "tags": [
+        "updateHint",
+        "openWorldHint",
+        "forms"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Update Theme",
+      "slug": "TYPEFORM_UPDATE_THEME",
+      "kind": "write",
+      "description": "Tool to update a theme's complete definition in Typeform. Use when you need to update all aspects of a theme including colors, fonts, and visual properties. This is a full update (PUT) operation that requires name, font, and colors to be provided. For partial updates, use PATCH instead.",
+      "inputs": [
+        {
+          "name": "font",
+          "type": "string",
+          "required": true,
+          "about": "Font family for the theme (required for PUT requests)"
+        },
+        {
+          "name": "name",
+          "type": "string",
+          "required": true,
+          "about": "Updated theme name"
+        },
+        {
+          "name": "colors",
+          "type": "object",
+          "required": true,
+          "about": "Updated color palette with question, answer, button, and background colors"
+        },
+        {
+          "name": "fields",
+          "type": "object",
+          "required": false,
+          "about": "Field settings for the theme"
+        },
+        {
+          "name": "screens",
+          "type": "object",
+          "required": false,
+          "about": "Screen settings for the theme"
+        },
+        {
+          "name": "theme_id",
+          "type": "string",
+          "required": true,
+          "about": "Unique identifier for the theme to update"
+        },
+        {
+          "name": "background",
+          "type": "object",
+          "required": false,
+          "about": "Background settings for the theme"
+        },
+        {
+          "name": "rounded_corners",
+          "type": "string",
+          "required": false,
+          "about": "Border radius style: none, small, or large"
+        },
+        {
+          "name": "has_transparent_button",
+          "type": "boolean",
+          "required": false,
+          "about": "Whether buttons should be transparent"
+        }
+      ],
+      "scopes": [
+        "themes:write"
+      ],
+      "tags": [
+        "updateHint",
+        "openWorldHint",
+        "themes"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Update Workspace",
+      "slug": "TYPEFORM_UPDATE_WORKSPACE",
+      "kind": "write",
+      "description": "Tool to update a workspace's name or manage team member access (add/remove members) in Typeform. Use when you need to rename a workspace or modify its member list using JSON Patch operations.",
+      "inputs": [
+        {
+          "name": "operations",
+          "type": "array",
+          "required": true,
+          "about": "List of patch operations to apply to the workspace. Each operation modifies a specific property."
+        },
+        {
+          "name": "workspace_id",
+          "type": "string",
+          "required": true,
+          "about": "Unique workspace identifier"
+        }
+      ],
+      "scopes": [
+        "workspaces:write"
+      ],
+      "tags": [
+        "updateHint",
+        "openWorldHint",
+        "workspaces"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Upload Video",
+      "slug": "TYPEFORM_UPLOAD_VIDEO",
+      "kind": "write",
+      "description": "Initiate a video upload to Typeform by obtaining a signed upload URL. Use this action to prepare for uploading a video file to a specific form field. After receiving the upload_url, use it to upload the actual video file via a PUT request.",
+      "inputs": [
+        {
+          "name": "form_id",
+          "type": "string",
+          "required": true,
+          "about": "Unique form identifier where the video will be attached"
+        },
+        {
+          "name": "field_id",
+          "type": "string",
+          "required": true,
+          "about": "Field ID where the video media belongs within the form"
+        },
+        {
+          "name": "language",
+          "type": "string",
+          "required": true,
+          "about": "ISO 639-1 format language code for automatic transcription (e.g., 'en' for English, 'es' for Spanish)"
+        }
+      ],
+      "scopes": [
+        "forms:write"
+      ],
+      "tags": [
+        "openWorldHint",
+        "media",
+        "createHint"
+      ],
+      "deprecated": false
+    }
+  ],
+  "triggers": [],
+  "source": "https://docs.composio.dev/toolkits/typeform",
+  "fetched_at": "2026-11-20"
+}

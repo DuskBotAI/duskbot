@@ -3,6 +3,7 @@
 
     <application
         android:allowBackup="false"
+        android:enableOnBackInvokedCallback="true"
         android:hardwareAccelerated="true"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
@@ -31,6 +32,16 @@
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="duskbot" />
+            </intent-filter>
+
+            <!-- the desktop's and a dusk cloud's QR codes; verified by https://dusk.bot/.well-known/assetlinks.json -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" android:host="dusk.bot" android:pathPrefix="/m/open" />
+                <data android:scheme="https" android:host="dusk.bot" android:pathPrefix="/m/pair" />
+                <data android:scheme="https" android:host="dusk.bot" android:pathPrefix="/m/signin" />
             </intent-filter>
 
         </activity>

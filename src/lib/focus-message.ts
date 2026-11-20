@@ -146,7 +146,10 @@ export function useFocusMessage(threadId: string, ready: boolean) {
       dispatch({ type: "focusMessageConsumed", nonce: focus.nonce });
       flashTimer = setTimeout(() => target?.classList.remove(...FLASH_CLASSES), 1800);
     };
-    attempt();
+    const owner = [...state.bots, ...state.groups].find((candidate) => candidate.threadId === threadId);
+    if (owner?.hasMore && !owner.messages.some((message) => message.id === focus.messageId)) {
+      void loadThroughMessage(owner, focus.messageId, state.transcriptGeneration[threadId] ?? 0, dispatch).catch(() => undefined).then(attempt);
+    } else attempt();
     return () => {
       cancelled = true;
       if (retryTimer) clearTimeout(retryTimer);

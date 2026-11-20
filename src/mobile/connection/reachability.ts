@@ -1,4 +1,4 @@
-import { asleepAnswer, wakingAnswer } from "@/lib/cloud-power";
+import { asleepAnswer, goneAnswer, wakingAnswer } from "@/lib/cloud-power";
 
 type Listener = (at: number) => void;
 const listeners = new Set<Listener>();
@@ -6,7 +6,7 @@ let answeredAt: number | null = null;
 
 /** An answer from the place itself: anything under 500, and not the edge saying a cloud sleeps or is waking. */
 export function placeAnswered(response: Pick<Response, "status" | "headers">): boolean {
-  return response.status > 0 && response.status < 500 && !asleepAnswer(response) && !wakingAnswer(response);
+  return response.status > 0 && response.status < 500 && !asleepAnswer(response) && !wakingAnswer(response) && !goneAnswer(response);
 }
 
 /** every screen that shows the connection re-renders on this, so a burst of answers moves it once a second */

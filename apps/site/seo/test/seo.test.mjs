@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { SUBSCRIPTION, jaccard, ownText } from '../quality.mjs';
-import { evaluateGate, sliceSize, frozen } from '../jobs/release.mjs';
+import { evaluateGate, sliceSize, frozen, lastInLane } from '../jobs/release.mjs';
 import { changes } from '../jobs/indexnow.mjs';
 import { decide } from '../jobs/prune-report.mjs';
 import { writeSitemaps, robotsTxt, SEARCH_BOTS } from '../sitemaps.mjs';
@@ -132,4 +132,11 @@ test('composio pages: reads and changes by dusk bot\'s own rule', () => {
   const f = parse(html, 'gmail');
   assert.equal(f.name, 'Gmail'); assert.equal(f.managed_sign_in, true); assert.deepEqual(f.auth, ['OAuth2']);
   assert.deepEqual(f.tools.map((t) => t.kind), ['read', 'send']);
+});
+
+test('each lane is gated on its own last released cohort', () => {
+  const cohorts = [{ id: '04', released: '2026-11-12' }, { id: '05', lane: 'action', released: '2026-11-12' }, { id: '06' }, { id: '07', lane: 'action' }];
+  assert.equal(lastInLane(cohorts, cohorts[2]).id, '04');
+  assert.equal(lastInLane(cohorts, cohorts[3]).id, '05');
+  assert.equal(lastInLane([{ id: '01' }], { id: '01' }), null);
 });

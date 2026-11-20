@@ -32,3 +32,11 @@ export function normalizeReaction(raw: unknown): Reaction | null {
   const bare = value.replace(VARIANTS, "");
   return REACTIONS.find((reaction) => reaction.replace(VARIANTS, "") === bare) ?? null;
 }
+
+/** What a bot may react with to the person's message (the react tool): never 👎, which reads as a verdict on them. */
+export const BOT_REACTIONS = ["👍", "❤️", "😂", "🎉", "👀"] as const satisfies readonly Reaction[];
+
+/** A bot's reactor key in a message's reactions: no person's key starts with it. A bot's reaction is never a reply. */
+export const BOT_REACTOR_PREFIX = "bot:";
+export const botReactor = (botId: string) => `${BOT_REACTOR_PREFIX}${botId}`;
+export const reactorBotId = (by: string): string | null => (by.startsWith(BOT_REACTOR_PREFIX) ? by.slice(BOT_REACTOR_PREFIX.length) : null);

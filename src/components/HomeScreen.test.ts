@@ -50,11 +50,19 @@ it("a Cloud that isn't running says what it is in plain words with its one actio
   expect(homeScreenText({ screen: "checkout", name: "Client B" })).toEqual({ title: "The checkout for Client B wasn't finished.", body: "Nothing was charged. Continue to finish it in your browser.", reason: null, action: "continue", busy: false });
   expect(homeScreenText({ screen: "checkout" }).title).toBe("This checkout wasn't finished.");
   expect(homeScreenText({ screen: "payment", name: "Client B" }))
-    .toEqual({ title: "The payment for Client B didn't go through.", body: "Update your card to keep using it.", reason: null, action: "card", busy: false });
+    .toEqual({ title: "Your payment didn't go through.", body: "Update your card to get your cloud back.", reason: null, action: "card", busy: false });
+  expect(homeScreenText({ screen: "payment", name: "Client B", deleteAt: day }, now).body).toBe(`Update your card to get your cloud back. Its data is kept until ${homeDay(day, now)}.`);
+  expect(homeScreenText({ screen: "payment", name: "Client B", deleteAt: day, trial: true }, now))
+    .toEqual({ title: "Upgrade to keep using your cloud", body: `Your trial ended. Its data is deleted on ${homeDay(day, now)} unless you upgrade.`, reason: null, action: "upgrade", busy: false });
   expect(homeScreenText({ screen: "offline", name: "Acme" })).toMatchObject({ title: "Can't reach Acme right now.", action: "retry", busy: false });
   expect(homeScreenText({ screen: "offline" })).toMatchObject({ title: "Can't reach my cloud right now.", action: "retry", busy: false });
   expect(homeDay(new Date(2027, 0, 5).getTime(), now), "another year is named").toBe("January 5, 2027");
   for (const screen of ["ended", "checkout", "payment"] as const) {
     for (const words of Object.values(homeScreenText({ screen, name: "Client B", deleteAt: day }, now))) expect(String(words)).not.toMatch(/—|\bVM\b|engine|ctx|server/i);
   }
+});
+
+it("a deleted Cloud is said plainly, with nothing to look again for", () => {
+  expect(homeScreenText({ screen: "gone", name: "Acme" })).toMatchObject({ title: "Acme was deleted.", action: null, busy: false });
+  expect(homeScreenText({ screen: "gone" }).title).toBe("This cloud was deleted.");
 });

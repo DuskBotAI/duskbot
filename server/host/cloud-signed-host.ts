@@ -32,6 +32,8 @@ export interface CloudSignedHostDeps {
   planTier?: (tier: string) => void;
   /** AI sign-ins the Admin held while this Cloud was being made (server/cloud-ai-signins.ts). */
   aiSignIns?: (items: import("../cloud-ai-signins.ts").CloudAiSignIn[]) => Promise<void>;
+  /** The link grant the Admin sends beside an entitlement, for this Cloud's phone relay. */
+  linkGrant?: (grant: unknown) => void;
   /** The home's own update state (server/update-state.ts), read by the Admin after it installs a release. */
   updates?: () => UpdateState | null;
 }
@@ -42,7 +44,7 @@ export function createCloudSignedHost(deps: CloudSignedHostDeps): { cloudHealth:
   const routes = deps.cloudHome && cloudHealth
     ? createCloudSignedRoutes({ entitlement, secret: deps.cloudHome.bootstrapSecret, sessions: deps.sessions, team: deps.cloudHome.team, health: cloudHealth, power: deps.power, box: deps.box,
       ...(deps.cloudHome.team && deps.teamAdmin ? { teamAdmin: deps.teamAdmin } : {}),
-      ...(deps.cloudHome.team && deps.memberLeft ? { memberLeft: deps.memberLeft } : {}), ...(deps.cloudHome.team && deps.policyChanged ? { policyChanged: deps.policyChanged } : {}), ...(deps.plan ? { plan: deps.plan } : {}), ...(deps.planTier ? { planTier: deps.planTier } : {}), ...(deps.aiSignIns ? { aiSignIns: deps.aiSignIns } : {}) })
+      ...(deps.cloudHome.team && deps.memberLeft ? { memberLeft: deps.memberLeft } : {}), ...(deps.cloudHome.team && deps.policyChanged ? { policyChanged: deps.policyChanged } : {}), ...(deps.plan ? { plan: deps.plan } : {}), ...(deps.planTier ? { planTier: deps.planTier } : {}), ...(deps.aiSignIns ? { aiSignIns: deps.aiSignIns } : {}), ...(deps.linkGrant ? { linkGrant: deps.linkGrant } : {}) })
     : null;
   const update = deps.cloudHome && deps.updates ? createCloudUpdateRoute({ secret: deps.cloudHome.bootstrapSecret, state: deps.updates }) : null;
   // a hosted home without a valid entitlement answers only its signed routes and its liveness probe

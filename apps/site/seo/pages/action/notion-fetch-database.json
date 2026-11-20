@@ -1,0 +1,92 @@
+{
+  "path": "/integrations/notion/fetch-database",
+  "type": "action",
+  "title": "See which fields a Notion database actually has",
+  "nav": "inspect database fields",
+  "h1": "read a notion database's column names and types",
+  "description": "Map an intake form to the actual columns in a Notion database. Get names and field types from the original database before preparing an import.",
+  "keyword": "inspect notion database fields with ai",
+  "keywords": [
+    "chatgpt list notion database columns",
+    "claude read notion database schema",
+    "find property types in notion database"
+  ],
+  "answer": "**a column called quantity might hold text.** before preparing an import, ask your bot for the column names and types in the original notion database. it can read the structure without fetching entries. that tells you whether a form answer has a suitable home before you spend time formatting the values.",
+  "updated": "2026-11-20",
+  "review": {
+    "status": "approved",
+    "by": "lead agent, after four independent reviewers read every page against seo/facts (2026-11-20); every finding applied",
+    "at": "2026-11-20"
+  },
+  "tags": [
+    "notion",
+    "inspect database fields"
+  ],
+  "connectors": [
+    "notion"
+  ],
+  "related": [
+    "/integrations/notion",
+    "/integrations/notion/fetch-database-row",
+    "/integrations/notion/create-notion-database"
+  ],
+  "art": {
+    "logo": "notion",
+    "label": "Notion",
+    "props": [
+      "s-map",
+      "s-notebook"
+    ],
+    "bubble": "does that field exist"
+  },
+  "og_line": "does the tracker have a place for it?",
+  "action": {
+    "toolkit": "notion",
+    "slug": "NOTION_FETCH_DATABASE"
+  },
+  "what": "**use this lookup to design the mapping.** the bot retrieves the title and properties of one database from its id. have it place each form question beside the closest field, preserving the field's spelling. if a number belongs in a text field, that's a decision to take back to the form owner.",
+  "uses": [
+    "see whether item weight has a number field before preparing a delivery manifest",
+    "find the exact spelling of the collection date column for an intake form",
+    "compare two catalogues' column types before deciding which one should receive a new batch"
+  ],
+  "routine": {
+    "message": "on the fifteenth of each month at 9, compare the questions in donations/intake-form.txt in your project folder with the fields of the original donations database at https://www.notion.so/8945a1437dc843eb8b03df0cee31e691. show exact column names here and flag incompatible types. write unknown beside a question with no clear match. never import responses or add fields.",
+    "when": "monthly on the fifteenth at 9 am",
+    "needs": "notion read only for the original database plus access to the donation intake form file",
+    "output": "gilbert stone's intake form\nitem description fits item (title).\ncrate count expects a number. crates currently holds text.\ncondition on arrival has no clear field."
+  },
+  "steps": [
+    "in **Connected apps**, give the bot **read only** for notion.",
+    "open the original database and put its link and your intake form path in the message. if you know just the title, have it search for databases and show the matches.",
+    "ask it to compare one form question with the actual field name and type. choose how to handle a mismatch."
+  ],
+  "watch": [
+    "**a linked database view won't work as the source.** find the original database and use that id.",
+    "**a parent page can hold several databases.** the page id alone doesn't say which one's properties to inspect."
+  ],
+  "faq": [
+    {
+      "q": "will this tell me how many donations are missing a weight?",
+      "a": "**that question needs entries.** fetching the structure tells you whether a weight field exists and what it can hold."
+    },
+    {
+      "q": "can i tell whether two similar databases are interchangeable?",
+      "a": "**compare their field names and types side by side.** matching fields help with the mapping. you'd still need entries to compare the actual contents."
+    }
+  ],
+  "sources": [
+    {
+      "label": "dusk bot docs: files and apps",
+      "url": "/docs/files-and-apps"
+    },
+    {
+      "label": "dusk bot docs: routines",
+      "url": "/docs/routines"
+    }
+  ],
+  "voice": 2,
+  "tip": {
+    "text": "if you're looking for one donor's answer, open that row. use the database lookup when the question is about the form everyone fills in."
+  }
+}

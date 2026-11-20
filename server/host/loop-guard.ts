@@ -4,7 +4,7 @@
 // or a computer is never acted on.
 import { z } from "zod";
 
-import { failedTurnTool } from "../../shared/failed-turn.ts";
+import { failedTurnRow } from "../failed-turn-row.ts";
 import { nameIsCommand } from "../../shared/tool-name.ts";
 import type { RuntimeEvent, SteerOutcome } from "../contracts.ts";
 import { quoteInNote } from "../peer-provenance.ts";
@@ -177,7 +177,7 @@ export function createLoopGuard(deps: LoopGuardDeps): LoopGuard {
     }
     log("stop sent", threadId, streak);
     // Last row, so Retry belongs to it, and written before the engine answers.
-    deps.append(threadId, failedTurnTool(cause));
+    deps.append(threadId, failedTurnRow(cause));
     // One stop per turn; an engine that ignores it runs on, as after the person's Stop.
     void stopping.catch(() => log("stop rejected", threadId, streak));
   };

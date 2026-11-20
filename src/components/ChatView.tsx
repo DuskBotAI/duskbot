@@ -1,5 +1,5 @@
 import { createContext, memo, startTransition, use, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type Dispatch, type RefObject } from "react";
-import { PHONE_LAYOUT, useMediaQuery } from "@/lib/use-media-query";
+import { usePhoneLayout } from "@/lib/use-media-query";
 import { phoneApp } from "@/lib/store-app";
 import { ThreadLinkContext } from "@/components/ThreadLinkMenu";
 import { ChevronRight, Copy, Monitor, RefreshCw, Square, Webhook } from "../icons";
@@ -13,6 +13,7 @@ import { localSystemVoiceActive } from "@/lib/local-voice";
 import { computerStartLine, useScreensWhile } from "@/lib/computer-start";
 import { useCaptionChrome, useDesktopCapabilities } from "@/components/DesktopCapabilities";
 import {
+  api,
   currentTaskBot,
   shownTranscript,
   useStore,
@@ -38,7 +39,10 @@ import { ScreenAccessNotice } from "./ScreenAccessNotice";
 import { ComposerNoticeSlot } from "./ComposerNoticeSlot";
 import { macCuaPermissionMessage, missingMacCuaPermissions } from "@/lib/mac-cua-permissions";
 import { claudeUpdateTarget, failedTurnCause, signedOutEngine } from "@/lib/failed-turn";
-import { plainErrorLine } from "@/lib/plain-error";
+import { blockerDetail, failedReplyDetail, failedReplyKind } from "@/lib/failed-reply";
+import { resetTime } from "@/lib/limit-resets";
+import { openBotSettings } from "./bot-panel/panel-link";
+import { providerName } from "@/lib/simple-model-menu";
 import { lowerFirst } from "@/lib/lower-first";
 import { openPlaceAction, placeRowViewFor, usePlaceSeat, worksOnSimpleLabel } from "@/lib/place-view";
 import type { PlaceRow } from "../../shared/place-view";
@@ -53,6 +57,7 @@ import type { MarkState } from "./mascot-engine";
 import { poolWords } from "@/lib/friendly-activity";
 import type { LiveStatus } from "@/state/turn-status";
 import { STATUS_EXIT_MS, TurnPresence, TYPING_PHASE } from "./TurnPresence";
+import { TranscriptCardSlot } from "./TranscriptCardSlot";
 import { workingMood } from "@/lib/working-mood";
 import { WorkingMascot } from "./WorkingMascot";
 import { BrowserPartLine } from "./BrowserPartLine";
@@ -60,17 +65,21 @@ import { browserPartFor } from "@/lib/browser-part";
 import { liveCallEnabled, voiceCallsEnabled, showToolCallsEnabled } from "@/lib/feature-flags";
 import { normalizeState } from "@/lib/mascot";
 import { peerLine, peerRequest, type PeerLine } from "@/lib/peer-message";
-import { showWorkingDots } from "@/lib/turn-tail";
+import { replyHidesLine, showWorkingDots } from "@/lib/turn-tail";
+import { useLandedReply } from "@/hooks/use-landed-reply";
 import { useNotesWork } from "@/lib/notes-arrival";
 import { useTypingHold } from "@/hooks/use-typing-hold";
 import { OWN_ENTRANCE } from "@/hooks/use-arrival-flow";
+import { useChatSwitchMotion } from "@/hooks/use-chat-switch-motion";
 import { usePrefersReducedMotion } from "@/components/mascot-clock";
 import { enterFromComposer, growFromMascot, hasSendLaunch } from "./bubble-entrance";
 import { STATUS_MOUNT_MS, useReached } from "@/hooks/use-reached";
 import { lifeDraw } from "@/lib/reply-life";
 import { lastNonReceipt } from "@/lib/receipts";
-import { routineStartName } from "./RoutineStartLine"; import { useTurnLive } from "@/state/turn-status"; import { useLiveReplyActive } from "@/state/live-reply"; import { useTurnNow } from "./NowCard"; import { useThreadRoutineRun } from "@/state/older-routine-runs";
+import { routineStartName } from "./RoutineStartLine"; import { SILENT_LINE } from "../../shared/routine-run.ts"; import { useTurnLive } from "@/state/turn-status"; import { useLiveReplyActive } from "@/state/live-reply"; import { useTurnNow } from "./NowCard"; import { useThreadRoutineRun } from "@/state/older-routine-runs";
 import { followSentTurn, sentTurn, useSentTurn } from "@/state/sent-turn";
+import { waitsForNetwork } from "@/state/network-wait";
+import { useOffline } from "@/mobile/network";
 import { forgetLateRow, isLateRow, isSettledRow, noteLateRow, noteSettledRow, useStopPress, type StopPress } from "@/lib/stop-turn";
 import { shownReplyText } from "@/state/live-reply";
 import { ChatMarkdown } from "./ChatMarkdown";
@@ -93,7 +102,7 @@ import { CARD_ACTION, ChatErrorBanner, ChatErrorCard, ChatNotice } from "./ChatE
 import { ThreadContextWarning } from "./ContextWarning";
 import { UsageAlert, useLimitResetContinue } from "./EngineUsage";
 import { ChatFindBar } from "./ChatFindBar";
-import { QuotedText, ReplyQuote } from "./ReplyQuote";
+import { QuotedText, ReplyQuote } from "./ReplyQuote"; import { useQuotedMessage } from "@/lib/quoted-messages";
 import { ConnectorCard } from "./ConnectorCard";
 import { SecretRequestCard } from "./SecretRequestCard";
 import { SignInRequestCard } from "./SignInRequestCard";
@@ -199,9 +208,13 @@ export function ErrorRow({
   action,
   setupInstance,
   claudeUpdateInstance,
+  plain,
 }: {
   message: string;
   headline?: string;
+  /** a failed reply read by the one classifier: its sentence alone, a notice for a usage limit, the reference code beside
+   * it, and never the raw words or a Copy details */
+  plain?: { tone?: "info"; errorRef?: string };
   onRetry?: () => void;
   action?: { label: string; onClick: () => void } | null;
   setupInstance?: InstanceInfo;
@@ -234,10 +247,13 @@ export function ErrorRow({
     <div className="flex justify-start">
       <ChatErrorCard
         className="w-fit max-w-[min(var(--chat-bubble-max),var(--chat-bubble-pct))]"
+        tone={plain?.tone}
+        icon={plain?.tone === "info" ? "batteryFull" : undefined}
         title={headline}
-        details={headline !== message ? details : null}
+        details={!plain && headline !== message ? details : null}
         actions={button}
       >
+        {plain?.errorRef && <span data-error-ref="" title={t("failedReply.refTitle")} className="block text-[12px] text-ink-tertiary tabular-nums">{t("failedReply.ref", { ref: plain.errorRef })}</span>}
         {macCuaReason && <MacCuaRecoveryActions reason={message} />}
         {!usageUrl && claudeUpdateInstance ? (
           <ClaudeUpdatePrompt instance={claudeUpdateInstance} onRetry={onRetry} />
@@ -281,17 +297,31 @@ export function FailedTurnRow({ tool, engine, onRetry, botId, threadId }: {
   threadId?: string;
 }) {
   const resume = useLimitResetContinue(botId, threadId, tool.limitResetsAt);
+  const { dispatch } = useStore();
   if (tool.place && botId) return <PlaceFailedRow place={tool.place} botId={botId} threadId={threadId} onRetry={onRetry} />;
   const cause = failedTurnCause(tool.name) ?? tool.name;
   if (tool.partial) return tool.owned ? null : <PartlyDoneRow cause={cause} onRetry={onRetry} />;
-  const signedOut = signedOutEngine(tool, engine);
+  const kind = failedReplyKind(tool, engine, true);
+  const signedOut = kind === "signed_out" ? signedOutEngine(tool, engine) : undefined;
+  // the kinds a setting fixes: the button opens that setting
+  const fix = kind === "key_rejected" ? { label: t("failedReply.updateKey"), onClick: () => dispatch({ type: "toggleAppSettings", open: true, section: "connections" }) }
+    : kind === "plan_limit" ? { label: t("failedReply.seePlan"), onClick: () => dispatch({ type: "toggleAppSettings", open: true, section: "cloudAccount" }) }
+    : kind === "folder_gone" && botId ? { label: t("botPanel.page.folder"), onClick: () => openBotSettings(dispatch, "access", { botId, page: "folder" }) }
+    : undefined;
+  const limited = kind === "usage_limit";
+  const ai = engine ? providerName(engine) : t("failedReply.limitHold.anAi");
+  const headline = signedOut ? t("chat.error.signedOut", { name: signedOut.displayName })
+    : limited ? (tool.limitResetsAt ? t("failedReply.limitHit", { ai, time: resetTime(tool.limitResetsAt) }) : t("failedReply.limitHitUnknown", { ai }))
+    : tool.blocker ? blockerDetail(tool.blocker)
+    : failedReplyDetail(kind, engine?.displayName ?? t("failedReply.yourAi"), false);
   return (
     <ErrorRow
       message={cause}
-      headline={signedOut ? t("chat.error.signedOut", { name: signedOut.displayName }) : plainErrorLine(cause)}
+      headline={headline}
+      plain={{ ...(limited ? { tone: "info" as const } : {}), ...(tool.errorRef && !limited ? { errorRef: tool.errorRef } : {}) }}
       onRetry={onRetry}
-      action={resume}
-      setupInstance={tool.setup ? engine : undefined}
+      action={fix ?? resume}
+      setupInstance={tool.setup && !fix ? engine : undefined}
       claudeUpdateInstance={tool.claudeUpdate ? claudeUpdateTarget(engine) : undefined}
     />
   );
@@ -317,7 +347,7 @@ const Bubble = memo(function Bubble({
   onCancelEdit,
   onSubmitEdit,
   onRegenerate,
-  replyTarget,
+  replyTarget: loadedReplyTarget,
   onReply,
   underExchangeLine = false,
 }: {
@@ -340,7 +370,7 @@ const Bubble = memo(function Bubble({
   onReply: (message: Message) => void;
 }) {
   const { botId, threadId, botName, voiceId, tts, localVoice, bots, mentionPeers, mentionPerson, focus, dispatch, bubbleStyle, conversational, canReact, openedAt, speakerViewer } = useChatRows(), busy = onRegenerate || versions ? use(ChatBusyContext) : false;
-  const remoteClient = window.duskDesktop?.remoteClient?.active === true;
+  const remoteClient = window.duskDesktop?.remoteClient?.active === true, replyTarget = useQuotedMessage(threadId, message.replyToId, loadedReplyTarget);
   const peer = peerLine(message) ?? peerRequest(message, botId);
   const user = message.role === "user" && !peer;
   const speaker = user ? otherSpeaker(message, speakerViewer ?? null) : null;
@@ -363,7 +393,7 @@ const Bubble = memo(function Bubble({
     pin: remoteClient ? undefined : {
       pinned,
       onToggle: () => dispatch({ type: "updateTask", botId, threadId, patch: { pinnedMessageId: pinned ? "" : message.id } }),
-    },
+    }, onStopSending: message.automation && !remoteClient ? () => void api("/api/proactive/stop", { method: "POST", body: JSON.stringify({ threadId, messageId: message.id }) }).catch(() => {}) : undefined,
   });
   noteMediaSizes(message.media);
   const attached = useMemo(() => splitMessageAttachments(message.attachments), [message.attachments]);
@@ -486,6 +516,7 @@ const Bubble = memo(function Bubble({
             join && !split && !attachmentsOnly && !tabled && !mediaSplit && joinedCorners(user ? "end" : "start", join),
           )}
           data-emoji-only={bigEmoji ? "" : undefined}
+          data-bubble-group={attachmentsOnly || split || tabled || mediaSplit ? "" : undefined}
           data-quotable={user ? undefined : ""}
           data-sending={user && message.id.startsWith("optimistic-") ? t("chat.sending") : undefined}
           style={user && !webhookView && !attachmentsOnly && !bigEmoji ? ownBubbleStyle : undefined}
@@ -548,8 +579,8 @@ const Bubble = memo(function Bubble({
                 </div>
               )}
               {!group && (mediaChips && (generatedPaths.length + linkedFiles.length > 0)
-                ? <div className="relative">{mediaChips}<AttachmentGallery media={message.media} images={generatedPaths} files={linkedFiles} message={{ threadId, messageId: message.id }} eager={eagerAttachments} /></div>
-                : <AttachmentGallery media={message.media} images={generatedPaths} files={linkedFiles} message={{ threadId, messageId: message.id }} eager={eagerAttachments} />)}
+                ? <div className="relative">{mediaChips}<AttachmentGallery media={message.media} images={attached.pictures} files={linkedFiles} message={{ threadId, messageId: message.id }} eager={eagerAttachments} /></div>
+                : <AttachmentGallery media={message.media} images={attached.pictures} files={linkedFiles} message={{ threadId, messageId: message.id }} eager={eagerAttachments} />)}
               {split ? (
                 <ConversationalReply join={join} segments={reply.segments} firstNew={reply.firstNew}
                   renderSegment={(segment) => <ChatMarkdown text={segment} mentionPeers={mentionPeers} mentionPerson={mentionPerson} message={{ threadId, messageId: message.id }} delivered={group?.delivered} />} />
@@ -563,8 +594,8 @@ const Bubble = memo(function Bubble({
                 <ChatMarkdown text={text} mentionPeers={mentionPeers} mentionPerson={mentionPerson} message={{ threadId, messageId: message.id }} delivered={group?.delivered} />
               ) : null}
               {group && (mediaChips
-                ? <div className="relative mt-[26px]">{mediaChips}<AttachmentGallery media={message.media} images={group.images} files={group.files} message={{ threadId, messageId: message.id }} eager={eagerAttachments} /></div>
-                : <AttachmentGallery media={message.media} images={group.images} files={group.files} message={{ threadId, messageId: message.id }} eager={eagerAttachments} />)}
+                ? <div className="relative mt-[26px]">{mediaChips}<AttachmentGallery media={message.media} images={group.pictures} files={group.files} message={{ threadId, messageId: message.id }} eager={eagerAttachments} /></div>
+                : <AttachmentGallery media={message.media} images={group.pictures} files={group.files} message={{ threadId, messageId: message.id }} eager={eagerAttachments} />)}
             </MessageBoundary>
           )}
           {reactionsOnBubble && <ReactionChips float threadId={threadId} message={message} bots={bots} align={user ? "end" : "start"} canReact={canReact} />}
@@ -695,24 +726,32 @@ export const SIMPLE_STATUS_SLOT = 40;
 /** How many of a window's newest rows an opened chat paints in its first frame, and how many older ones each later step adds. */
 export const FIRST_PAINT_ROWS = 16;
 export const MOUNT_STEP_ROWS = 24;
+/** A phone's screen holds far fewer rows, and its slower CPU pays for each one before the chat can start sliding in. */
+export const PHONE_FIRST_PAINT_ROWS = 8;
+const firstPaintRows = () => phoneApp() ? PHONE_FIRST_PAINT_ROWS : FIRST_PAINT_ROWS;
 
 /** A chat opened on a long window paints its newest rows first, then mounts the older ones above them a step at a time in
  * interruptible renders, so switching into it never blocks a frame. A search jump or a window off the latest rows
  * (`hold`) mounts whole, since it scrolls to a row that may sit above the tail. */
 export function useFirstPaintRows(key: string, rows: Message[], hold: boolean, scrollRef?: RefObject<HTMLElement | null>, pinned = false): Message[] {
-  const [shown, setShown] = useState({ key, count: FIRST_PAINT_ROWS });
-  if (shown.key !== key) setShown({ key, count: FIRST_PAINT_ROWS });
+  const first = firstPaintRows();
+  const [shown, setShown] = useState({ key, count: first });
+  if (shown.key !== key) setShown({ key, count: first });
   // a chat whose rows all showed once keeps showing all of them as it grows, without another render to say so
   const whole = useRef<string | null>(null);
-  const count = hold || whole.current === key ? Infinity : shown.key === key ? shown.count : FIRST_PAINT_ROWS;
+  const count = hold || whole.current === key ? Infinity : shown.key === key ? shown.count : first;
   const total = rows.length;
   // Sixteen messages can fold into a few rows (a turn's tool steps are one): a first paint shorter than the viewport sits at
   // the top, then the chat jumps down as the older rows land. Such a paint grows before the browser shows it.
+  // once a paint fills the view, a bigger one does too: the check reads the transcript's height, which forces its whole
+  // style and layout, so it stops there instead of running again at each step the rows grow by
+  const filled = useRef<string | null>(null);
   useLayoutEffect(() => {
     const el = scrollRef?.current;
-    if (!el || count >= total || el.scrollHeight > el.clientHeight + 1) return;
-    setShown({ key, count: count + MOUNT_STEP_ROWS >= total ? Infinity : count + MOUNT_STEP_ROWS });
-  }, [key, count, total, scrollRef]);
+    if (!el || count >= total || filled.current === key) return;
+    if (el.scrollHeight > el.clientHeight + 1) { filled.current = key; return; }
+    setShown({ key, count: count + first >= total ? Infinity : count + first });
+  }, [key, count, total, scrollRef, first]);
   // older rows mount above the ones on screen: a chat held at its newest row stays there in the same frame, rather than
   // a frame later when the transcript's resize is noticed, which would show the rows jumping down and back
   useLayoutEffect(() => {
@@ -737,7 +776,8 @@ const noneTransparent = () => false;
 const hiddenSteps = (item: TranscriptItem) => item.kind !== "message";
 
 function hiddenChatRow(message: Message, botId: string, showToolCalls: boolean): boolean {
-  if (message.reaction || isCancelledTranscriptRow(message)) return true;
+  if (message.reaction || message.quietRun || isCancelledTranscriptRow(message)) return true;
+  if (message.role === "bot" && message.kind === "text" && !message.attachments?.length && SILENT_LINE.test(message.text ?? "")) return true;
   switch (richRowKind(message)) {
     case "activity":
       return Boolean(message.peerResume) || (!message.dataResult && !isStatusActivity(message) && quietRow(message, showToolCalls));
@@ -968,7 +1008,7 @@ export function ChatView({ bot: profile }: { bot: Bot }) {
   const { dragProps: headerDragProps, noDragStyle: headerNoDragStyle } = useCaptionChrome();
   const composerDockRef = useRef<HTMLDivElement>(null);
   const composerDock = useComposerDockPad(composerDockRef, () => scrollRef.current);
-  const phone = useMediaQuery(PHONE_LAYOUT);
+  const phone = usePhoneLayout();
   const phoneMenu = phone && !remoteClient;
   const simpleHead = !remoteClient;
   const canWrite = useCanWriteIn(bot.threadId, bot.yourAccess);
@@ -1108,18 +1148,25 @@ export function ChatView({ bot: profile }: { bot: Bot }) {
   // a send from this window is the turn's start here: its row shows with the bubble, before the server answers the send
   const sent = useSentTurn(bot.threadId);
   useEffect(() => { if (bot.threadId) followSentTurn(bot.threadId, Boolean(bot.busy)); }, [bot.threadId, bot.busy]);
+  const networkWait = waitsForNetwork(messages, useOffline());
   const turnBusy = Boolean(bot.busy) || sent?.phase === "sending";
   const turnStartedAt = sent?.at ?? bot.turnStartedAt;
-  // The mascot and its status line stay for the whole turn, through every bubble it sends; only its end hides them.
-  const waiting = Boolean(turnBusy && bot.activity !== "waiting-on-you" && showWorkingDots(turnBusy, lastMessage, undefined, sent?.phase === "sending" ? false : live.ended));
+  const landed = useLandedReply(`${bot.id}:${bot.threadId ?? ""}`, messages);
+  // a reply takes the line's place in the frame it lands, even before the turn's end reaches this client; the line comes
+  // back under it for a named step or once the turn has gone on a while
+  const waiting = Boolean(turnBusy && bot.activity !== "waiting-on-you" && showWorkingDots(turnBusy, lastMessage, undefined, sent?.phase === "sending" ? false : live.ended))
+    && !replyHidesLine(landed.sinceMs, now.phase);
   const teammatesWorking = !bot.busy && Boolean(bot.waitingForTeammates);
   // the reply is written whole; while the engine types it the mark only looks like it is answering
   const streamingReply = useLiveReplyActive(bot.threadId);
-  const [busySince, setBusySince] = useState<number | null>(null);
+  const chatKey = `${bot.id}:${bot.threadId ?? ""}`;
+  useChatSwitchMotion(scrollRef, chatKey);
+  const [busyMark, setBusyMark] = useState<{ chat: string; at: number } | null>(null);
   useEffect(() => {
-    setBusySince(turnBusy ? turnStartedAt ?? Date.now() : null);
-  }, [turnBusy, bot.id, bot.threadId, turnStartedAt]);
-  const presenceSeed = `${bot.id}:${bot.threadId ?? ""}:${busySince ?? ""}`;
+    setBusyMark(turnBusy ? { chat: chatKey, at: turnStartedAt ?? Date.now() } : null);
+  }, [turnBusy, chatKey, turnStartedAt]);
+  const busySince = busyMark?.chat === chatKey ? busyMark.at : null;
+  const presenceSeed = `${chatKey}:${busySince ?? ""}`;
   // grok's line comes 0.55 to 1.2 s after a send, wordless; a bubble waiting on its typing beat brings it at once
   // a turn whose start this client does not know (a chat opened mid-turn from an older server) shows its line at once,
   // and so does a new bot's hello in a chat with nothing in it yet: there is no send for the wait to follow
@@ -1128,7 +1175,7 @@ export function ChatView({ bot: profile }: { bot: Bot }) {
   const mountDue = useReached(!turnBusy ? null : turnStartedAt && messages.length > 0 ? turnStartedAt + mountDelay : 0);
   // notes from another AI being brought in: the import's own steps are this bot's working row until its summary lands
   const importing = useNotesWork(bot.id);
-  const presenceVisible = !stopCut && (hold.typing || (waiting && mountDue) || teammatesWorking || Boolean(importing));
+  const presenceVisible = !stopCut && (hold.typing || (waiting && mountDue) || teammatesWorking || Boolean(importing) || networkWait);
   // while the turn runs its notices are the working row's to say, not the chat's too; once it ends, what it left is one
   // card above the composer
   const trailing = useTrailingRows(messages, !bot.busy);
@@ -1141,7 +1188,7 @@ export function ChatView({ bot: profile }: { bot: Bot }) {
   const presenceUnderBubble = lastRowIsBubble;
   const lastRowUnderLine = useRef<string | undefined>(undefined);
   if (presenceVisible) lastRowUnderLine.current = lastShownRow?.id;
-  const replyTookLine = lastRowIsBubble && (phoneApp() || lastShownRow?.id !== lastRowUnderLine.current);
+  const replyTookLine = lastRowIsBubble && lastShownRow?.id !== lastRowUnderLine.current;
   // a reply landing as the line leaves takes its place in the same frame: the line fading on under it, pushed below the
   // new bubble, read as a flicker
   const presenceShown = presenceLingers && (presenceVisible || !replyTookLine);
@@ -1161,16 +1208,14 @@ export function ChatView({ bot: profile }: { bot: Bot }) {
   const stoppedShown = (stopCut || personStoppedLast(messages)) && !(turnBusy && !stopCut) && !presenceVisible;
   const typingPhrases = useMemo(() => poolWords("typing"), [locale]);
   // the bot's own label stays on the line while it leaves, after the turn's end has cleared it
-  const shownLabel = useRef<{ seed: string; label?: string }>({ seed: presenceSeed });
+  const shownLabel = useRef<{ chat: string; seed: string; label?: string }>({ chat: chatKey, seed: presenceSeed });
   // a new turn starts clean; the end of this one (busySince gone) keeps it
-  if (busySince !== null && shownLabel.current.seed !== presenceSeed) shownLabel.current = { seed: presenceSeed };
+  if (shownLabel.current.chat !== chatKey || (busySince !== null && shownLabel.current.seed !== presenceSeed)) shownLabel.current = { chat: chatKey, seed: presenceSeed };
   if (live.label) shownLabel.current.label = live.label;
   const turnLabel = live.label ?? shownLabel.current.label;
-  const mood = workingMood({
-    phase: writing ? TYPING_PHASE : now.phase,
-    waiting: teammatesWorking || pendingApprovals(messages).length > 0,
-    failed: lastForLine?.kind === "activity" && lastForLine.tool?.ok === false,
-  });
+  const waitingOnSomeone = teammatesWorking || pendingApprovals(messages).length > 0;
+  const stepFailed = lastForLine?.kind === "activity" && lastForLine.tool?.ok === false;
+  const moodOfShownWords = (shown: string | null) => workingMood({ phase: shown && !shown.startsWith("label:") ? shown : writing ? TYPING_PHASE : now.phase, waiting: waitingOnSomeone, failed: stepFailed });
   const rescuing = useRescueGrace(Boolean(bot.busy), mayTakeOver(bot, state.instances), `${bot.id}:${bot.threadId}`);
   const answering = answeringModel(profile, bot.threadId, bot.modelSelection);
   const folded = useMemo(() => {
@@ -1333,6 +1378,7 @@ export function ChatView({ bot: profile }: { bot: Bot }) {
           // groups sit 16px apart
           data-simple-rows=""
           className="glass-scroller-content chat-column relative flex w-full flex-col gap-4 rounded-[18px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+          data-dock-pad=""
           // 64px between the last row and the composer (grok leaves 54), so the working line has room above the message box
           style={{ paddingBottom: `calc(${composerDock.pad} + ${SIMPLE_TRAILING_GAP - (statusSlot ? SIMPLE_STATUS_SLOT : 0)}px)` }}
           role="log"
@@ -1400,19 +1446,20 @@ export function ChatView({ bot: profile }: { bot: Bot }) {
               </div>
             </div>
           )}
-          <div data-failed-reply-row="" className="empty:hidden [&>[data-failed-reply]]:mb-0 [&>[data-failed-reply]]:px-0"><FailedReplyCard rows={rescuing ? null : trailing} botId={bot.id} threadId={bot.threadId} onRetry={lastUserMessage ? regenerate : undefined} /></div>
+          <TranscriptCardSlot key={transcriptKey}><FailedReplyCard rows={rescuing ? null : trailing} botId={bot.id} threadId={bot.threadId} onRetry={lastUserMessage ? regenerate : undefined} /></TranscriptCardSlot>
           <div className={statusSlot ? cn("turn-status-slot h-9 shrink-0", presenceUnderBubble && SIMPLE_STACKED) : "contents"}>
           {(presenceVisible || presenceShown) && <TurnPresence
-            avatar={<WorkingMascot bot={bot} size={phoneApp() ? 30 : 22} seed={presenceSeed} mood={mood} />}
+            key={chatKey}
+            avatar={(shown) => <WorkingMascot bot={bot} size={phoneApp() ? 24 : 26} seed={presenceSeed} mood={moodOfShownWords(shown)} />}
             wordsAtOnce
             simple
             className={cn(!statusSlot && presenceUnderBubble && SIMPLE_STACKED)}
-            label={teammatesWorking ? t("chat.teammatesWorking") : importing && !turnBusy ? importing : undefined}
+            label={networkWait ? t("mobile.chat.waitingForConnection") : teammatesWorking ? t("chat.teammatesWorking") : importing && !turnBusy ? importing : undefined}
             visible={presenceVisible}
             {...now}
             // grok shows no steps in the chat: the list under the line only with tool calls shown
             card={showToolCalls ? now.card : undefined}
-            phrases={teammatesWorking || (importing && !turnBusy) ? undefined : writing ? typingPhrases : turnLabel ? [turnLabel] : now.phrases}
+            phrases={networkWait || teammatesWorking || (importing && !turnBusy) ? undefined : writing ? typingPhrases : turnLabel ? [turnLabel] : now.phrases}
             phase={writing ? TYPING_PHASE : turnLabel ? `label:${turnLabel}` : now.phase}
             seed={presenceSeed}
             since={busySince ?? (turnBusy ? turnStartedAt ?? null : null)}

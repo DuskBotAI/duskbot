@@ -471,7 +471,8 @@ describe("authenticated browser viewer relay", () => {
   });
   it("requires the person's own human lease and releases only theirs on disconnect", async () => {
     const a = await open(); const b = await open({ botId: "bot-b", owner: "admin-b" });
-    await expect(a.action({ type: "navigate", url: "https://example.com" })).rejects.toThrow("Browser control changed");
+    // a person's own command takes the browser rather than failing
+    await expect(a.action({ type: "navigate", url: "https://example.com" })).resolves.toEqual({ ok: true });
     await a.action({ type: "take" });
     await expect(b.action({ type: "take" })).rejects.toThrow("Another window or device controls this browser. Hand control back there");
     await expect(b.action({ type: "back" })).rejects.toThrow("Another window or device controls this browser");
@@ -484,7 +485,7 @@ describe("authenticated browser viewer relay", () => {
     expect(JSON.parse(nativeInput.mock.calls[0]?.[1].body)).toEqual({ action: "input_keyboard", type: "keyDown", key: "a", text: "a" });
     expect(a.socket.messages).toHaveLength(0);
     a.socket.close(); expect(held.has("profile-a")).toBe(false);
-    expect(execute).toHaveBeenCalledTimes(2); // No close command: logins/browser survive viewers.
+    expect(execute).toHaveBeenCalledTimes(3); // the navigate and two others; no close command: logins/browser survive viewers.
   });
   it("withholds login frames/tabs/URLs from another person's views, advances their upstream ACK and restores the newest frame on release", async () => {
     const a = await open(); const b = await open({ botId: "bot-b", owner: "admin-b" });
@@ -1074,15 +1075,27 @@ describe("one person's hold, across their views and devices", () => {
   const control = (view: { res: ResponseFixture }) => view.res.events("control").at(-1);
   beforeEach(() => { runtime = new BrowserRuntime(); live = new BrowserLive({ runtime }); });
 
+  it("gives the browser to a person's click instead of refusing it, and pauses the bot until they hand it back", async () => {
+    const view = await open();
+    expect(control(view)).toEqual({ held: false, owned: false, controlling: false });
+    const click = (eventType: string) => ({ type: "input_mouse", eventType, x: 10, y: 10, button: "left", clickCount: 1 });
+    await expect(view.action({ type: "input_batch", events: [click("mousePressed"), click("mouseReleased")] })).resolves.toEqual({ ok: true });
+    expect(control(view)).toEqual({ held: true, owned: true, controlling: true });
+    await expect(botWorks()).rejects.toThrow("paused while a person controls");
+    await view.action({ type: "release" });
+    await expect(botWorks()).resolves.toBe(true);
+  });
+
   it("lets their other view see the hold, take it over and hand it back while the first is still open", async () => {
     const phone = await open(); await phone.action({ type: "take" });
     const laptop = await open({ botId: "bot-b" });
     expect(control(laptop)).toEqual({ held: true, owned: true, controlling: false });
-    await expect(laptop.action({ type: "input_keyboard", eventType: "char", text: "x" })).rejects.toThrow("Browser control changed");
-    expect(await laptop.action({ type: "take" })).toEqual({ ok: true, waited: false });
+    await expect(laptop.action({ type: "input_keyboard", eventType: "char", text: "x" })).resolves.toEqual({ ok: true });
     expect(control(laptop)).toEqual({ held: true, owned: true, controlling: true });
+    expect(await laptop.action({ type: "take" })).toEqual({ ok: true, waited: false });
     expect(control(phone)).toEqual({ held: true, owned: true, controlling: false });
-    await expect(phone.action({ type: "input_keyboard", eventType: "char", text: "y" })).rejects.toThrow("Browser control changed");
+    await expect(phone.action({ type: "input_keyboard", eventType: "char", text: "y" })).resolves.toEqual({ ok: true });
+    expect(control(phone)).toEqual({ held: true, owned: true, controlling: true });
     await expect(botWorks()).rejects.toThrow("paused while a person controls");
     await phone.action({ type: "release" });
     expect(runtime.heldBy("profile-a")).toBeNull();
@@ -1261,9 +1274,11 @@ describe("a view used together with the bot", () => {
     expect(res.events("control").length).toBeGreaterThan(0);
   });
 
-  it("keeps the other views' hold rules: a view not used together still needs to take the browser", async () => {
+  it("keeps the other views' hold rules: a view not used together takes the browser before its input goes in", async () => {
     const { action } = await open();
-    await expect(action({ type: "input_keyboard", eventType: "char", text: "x" })).rejects.toThrow(/Browser control changed/);
+    // typing takes the browser for this view instead of being refused, and never goes in beside the bot's work
+    await expect(action({ type: "input_keyboard", eventType: "char", text: "x" })).resolves.toEqual({ ok: true });
+    expect(runtime.take).toHaveBeenCalledWith("profile-a", expect.any(String));
     expect(runtime.withSharedInput).not.toHaveBeenCalled();
   });
 });

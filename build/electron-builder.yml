@@ -193,7 +193,13 @@ win:
       to: cua-driver-background.exe
     - from: dist-native/cua-win32-x64/cua-sdk
       to: cua-sdk
-  # unsigned windows builds show smartscreen's "unknown publisher" prompt.
+  # sha1 dual-signing is obsolete since Windows 7 SHA-2 support; Azure Artifact Signing ignores this list.
+  signtoolOptions:
+    signingHashAlgorithms: [sha256]
+  # vendor executables keep their own bytes: cloudflared, agent-browser and chrome-headless-shell are pinned by
+  # SHA-256, and cua-driver.exe already carries Cua AI, Inc.'s Authenticode signature. Every other .exe is signed,
+  # cua-driver-background.exe included (its derivation removes the upstream signature).
+  signExts: ["!cloudflared.exe", "!agent-browser.exe", "!chrome-headless-shell.exe", "!cua-driver.exe"]
 
 nsis:
   differentialPackage: false

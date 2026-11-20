@@ -2,6 +2,8 @@
 // owner just by being here, so it signs in once with the link printed for it.
 import qrcode from "qrcode-terminal";
 
+import { universalPairLink, type MobilePairingResponse } from "../shared/mobile-link.ts";
+
 /** `url` opens the web app (browsers, the iOS app); `inviteUrl` (duskbot://) is the only thing the Android app scans;
  * `localUrl` signs in a browser on this computer. */
 export function pairingBlock(input: {
@@ -41,6 +43,25 @@ export function pairingBlock(input: {
     }
   }
   return lines.join("\n");
+}
+
+/** The dusk bot phone app's own pairing: a QR its camera scan opens, and the code it can type instead. It reaches this
+ * server over the link relay, so it needs no public address. */
+export function phoneAppBlock(pairing: MobilePairingResponse): string {
+  const lines = ["Scan this with your phone's camera, or in the dusk bot app:", "", qrToString(universalPairLink(pairing.link, pairing.code)), ""];
+  if (pairing.code) lines.push(`or type this code in the app:  ${pairing.code}`);
+  lines.push(`expires:       ${new Date(pairing.expiresAt).toLocaleTimeString()} (single use)`, "Keep this code private.");
+  return lines.join("\n");
+}
+
+type LoopbackPost = (path: string, init: { method: string; body: string; timeoutMs: number }) => Promise<{ status: number; body: any }>;
+
+/** The phone app's pairing over the link relay, printed; null when this server has no relay for phones. */
+export async function phoneAppPairing(post: LoopbackPost, label?: string): Promise<string | null> {
+  const got = await post("/api/mobile/pairing", { method: "POST", body: JSON.stringify(label ? { label } : {}), timeoutMs: 30_000 }).catch(() => null);
+  const relayed = got?.status === 200 && typeof got.body?.link === "string" && Array.isArray(got.body?.payload?.via)
+    && got.body.payload.via.some((route: { kind?: unknown }) => route?.kind === "relay");
+  return relayed ? phoneAppBlock(got.body as MobilePairingResponse) : null;
 }
 
 /** The guided start's one sign-in, for the browser it opens on this computer. */

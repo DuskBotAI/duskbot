@@ -162,6 +162,13 @@ describe("new bot default: one ranking with the welcome, tested AIs first", () =
     expect(freeBackupOverConnected([openCodeFree, claudeReady], { instanceId: "claude", model: "claude-default" })).toBe(false);
   });
 
+  it("keeps a free backup model the person picked as the default themselves, a connected AI notwithstanding", () => {
+    const saved = { instanceId: "opencodeGo", model: "opencode/deepseek-v4-free" };
+    const offered = { ...openCodeFree, models: { default: "opencode/big-pickle", options: [{ id: "opencode/big-pickle", label: "Big Pickle" }, { id: saved.model, label: "DeepSeek" }] } };
+    expect(selectDefaultModelSelection([offered, claudeReady], saved, { preferredChosen: true })).toEqual(saved);
+    expect(selectDefaultModelSelection([offered, claudeReady], saved).instanceId).toBe("claude");
+  });
+
   it("moves a bot the app put on the free backup to a connected AI, never one the person put there", () => {
     const free = { instanceId: "opencodeGo", model: "opencode/deepseek-v4-free" };
     expect(leavesFreeBackup([openCodeFree, claudeReady], { modelSelection: free })).toBe(true);

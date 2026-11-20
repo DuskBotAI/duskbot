@@ -5,7 +5,7 @@ import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
 import type { PhoneBridge, PhoneImage } from "@/lib/phone-bridge";
 import { haptic } from "../haptics";
-import { dismiss, dur, ease, prefersReducedMotion, velocityTracker } from "../motion";
+import { dur, ease, prefersReducedMotion, velocityTracker } from "../motion";
 import { closesOnBack } from "../Sheet";
 import { ViewerNote } from "./ViewerNote";
 import { clampPan, dismisses, doubleTapZoom, dragAxis, elasticPan, fitted, MAX_ZOOM, panLimit, pageStep, pinchTo, type Point, type Size } from "./image-gesture";
@@ -99,7 +99,7 @@ export function ImageViewer({ images, initialIndex, bridge, onClose }: { images:
     setChrome(false);
     const away = dragY.get() !== 0 ? Math.sign(dragY.get()) * stage.h : 0;
     if (away && !reduced) animate(dragY, away, { type: "spring", stiffness: 300, damping: 36, velocity });
-    animate(shown, 0, { duration: (reduced ? dur.fast : dismiss.ms / 1000), ease: dismiss.ease, onComplete: onClose });
+    animate(shown, 0, { duration: reduced ? dur.fast : dur.base, ease: ease.out, onComplete: onClose });
   }, [dragY, shown, stage.h, reduced, onClose]);
   const closeRef = useRef(close);
   closeRef.current = close;
@@ -118,7 +118,7 @@ export function ImageViewer({ images, initialIndex, bridge, onClose }: { images:
   const resetZoom = () => { to(scale, 1); to(panX, 0); to(panY, 0); };
   const go = useCallback((step: -1 | 0 | 1, velocity = 0) => {
     const next = Math.max(0, Math.min(images.length - 1, index + step));
-    if (next !== index) { haptic("selection"); scale.set(1); panX.set(0); panY.set(0); }
+    if (next !== index) { haptic("pick"); scale.set(1); panX.set(0); panY.set(0); }
     to(track, -next * stage.w, { type: "spring", stiffness: 380, damping: 40, velocity });
     if (next !== index) setIndex(next);
   }, [index, images.length, stage.w]);
@@ -238,7 +238,7 @@ export function ImageViewer({ images, initialIndex, bridge, onClose }: { images:
       window.clearTimeout(tapTimer.current);
       lastTap.current = null;
       const next = doubleTapZoom(scale.get(), fromCentre(point), picture(), stage);
-      haptic("light");
+      haptic("tap");
       to(scale, next.scale);
       to(panX, next.pan.x);
       to(panY, next.pan.y);

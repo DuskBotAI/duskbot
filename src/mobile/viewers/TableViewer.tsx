@@ -37,7 +37,7 @@ export function TableViewer({ columns, rows, name, open, onClose }: { columns: T
       bodyClassName="!overflow-hidden flex flex-col !pb-0">
       <div className="relative flex min-h-0 flex-1 flex-col">
       <div ref={scroller} data-table-viewer="" tabIndex={0} role="region" aria-label={name} className="table-viewer min-h-0 flex-1 overflow-auto overscroll-contain pb-[max(var(--m-safe-bottom),16px)] focus-visible:outline-none">
-        <table className="min-w-full border-separate border-spacing-0 text-[15px] leading-[1.45]">
+        <table data-selectable="" className="min-w-full border-separate border-spacing-0 text-[15px] leading-[1.45]">
           <thead><tr>{columns.map((column, index) => <th key={index} scope="col" className="whitespace-nowrap px-4 py-2.5 text-start font-semibold" style={{ textAlign: column.align as "left" | undefined }}>{column.content ?? column.text}</th>)}</tr></thead>
           <tbody>{rows.map((row, r) => <tr key={r}>{columns.map((column, c) => {
             const cell = row[c];

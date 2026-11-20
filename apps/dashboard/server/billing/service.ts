@@ -1,12 +1,13 @@
 import { createHash, randomBytes } from "node:crypto";
-import { CANCEL_ANSWERS, CLOUD_SWATCHES, RETENTION_OUTCOMES, RETENTION_STEPS, checkoutSource } from "../../../../shared/billing-api.ts";
+import { CANCEL_ANSWERS, CLOUD_SWATCHES, RETENTION_OFFERS, RETENTION_OUTCOMES, RETENTION_STEPS, checkoutSource } from "../../../../shared/billing-api.ts";
 import type { CancelAnswer, RetentionInput, RetentionView, FunnelRow, FunnelView, DeletionBlocker, BillingErrorCode, BillingOverview, CancelSurvey, Cart, ChangePreview, ChangeTiming, CheckoutAnswer, CheckoutItem, InvoicePage, LicenseCheck, LicenseView, SubscriptionView } from "../../../../shared/billing-api.ts";
 import type { CloudsService, DesktopPlan } from "../clouds/types.ts";
 import { paidCloud } from "../clouds/service.ts";
 import { BILLING_CONFIG, catalogView } from "./plans.ts";
+import { TRIAL_DATA_DAYS } from "../../../cloud-service/src/retention.ts";
 import type { BillingConfig } from "./plans.ts";
 import { changeTiming, dodoCart, dodoCartKeys, parseCart, quote, sameCart } from "./pricing.ts";
-import type { BillingMode, BillingStore, CloudAction, PendingChange, ScheduledChange, StoredCheckout, StoredSubscription } from "./store.ts";
+import type { BillingMode, BillingStore, CloudAction, DunningStep, PaymentProblem, PendingChange, ScheduledChange, StoredCheckout, StoredSubscription } from "./store.ts";
 import { BillingProviderError, SYNC_PAGE } from "./types.ts";
 import type { AccountRef, BillingEvent, BillingProvider, ChangeMode } from "./types.ts";
 import type { WebhookHeaders } from "./webhook-signature.ts";
@@ -34,9 +35,13 @@ export const RETENTION_DISCOUNT = { percent: 30, cycles: 3 } as const;
 export type BillingNotice =
   | { kind: "receipt"; accountId: string; invoiceId: string; amountCents: number; currency: string; description: string; paidAt: number;
       periodStart: number | null; periodEnd: number | null; renews: boolean; first: boolean; cloudId: string | null; revived: boolean }
-  | { kind: "payment_failed"; accountId: string; amountCents: number; currency: string; description: string; cloudId: string | null; fixBy: number | null }
+  | { kind: "payment_failed"; accountId: string; amountCents: number; currency: string; description: string; cloudId: string | null; fixBy: number | null; trial: boolean }
+  | { kind: "payment_reminder"; step: DunningStep; accountId: string; amountCents: number; currency: string; description: string; cloudId: string | null; fixBy: number }
+  | { kind: "payment_recovered"; accountId: string; description: string; cloudId: string | null }
   | { kind: "cancelled"; accountId: string; description: string; cloudId: string | null; endsAt: number | null; graceDays: number };
 const day = 86_400_000;
+/** after a failed paid renewal: the reminder 14 days in, and the last one this many days before the data is deleted */
+export const DUNNING = { reminderDay: 14, finalDaysBefore: 3 } as const;
 /** a scheduled change's renewal may arrive this much before the date we stored */
 const SCHEDULED_EARLY_MS = 3_600_000;
 /** a change sent to the provider and not seen back by then was not made there (an unpaid card check, say) */
@@ -61,8 +66,9 @@ function guarded<A extends unknown[], R>(fn: (...args: A) => R): (...args: A) =>
 function surveyOf(input: unknown): CancelSurvey {
   if (!input || typeof input !== "object" || Array.isArray(input)) fail(400, "invalid_request");
   const value = input as Record<string, unknown>;
-  if (!CANCEL_ANSWERS.includes(value.answer as CancelSurvey["answer"]) || Object.keys(value).some(key => !["answer", "expected", "improve"].includes(key))) fail(400, "invalid_request");
-  const survey: CancelSurvey = { answer: value.answer as CancelSurvey["answer"] };
+  if (!CANCEL_ANSWERS.includes(value.answer as CancelSurvey["answer"]) || Object.keys(value).some(key => !["answer", "expected", "improve", "offer"].includes(key))) fail(400, "invalid_request");
+  if (value.offer !== undefined && !RETENTION_OFFERS.includes(value.offer as NonNullable<CancelSurvey["offer"]>)) fail(400, "invalid_request");
+  const survey: CancelSurvey = { answer: value.answer as CancelSurvey["answer"], ...(value.offer === undefined ? {} : { offer: value.offer as NonNullable<CancelSurvey["offer"]> }) };
   for (const key of ["expected", "improve"] as const) if (value[key] !== undefined) {
     if (typeof value[key] !== "string" || value[key].trim().length > 2000) fail(400, "invalid_request");
     survey[key] = value[key].trim();
@@ -216,8 +222,9 @@ export function createBillingService(options: BillingServiceOptions) {
     }
   }
   let draining: Promise<void> | null = null;
+  /** a call while a drain runs waits for it and then drains again, so a cancel queued meanwhile is never left behind */
   function drainProviderCancels(): Promise<void> {
-    if (draining) return draining;
+    if (draining) return draining.then(drainProviderCancels);
     draining = Promise.resolve().then(async () => {
       for (const entry of state.providerCancels!) if (entry.completedAt === null) {
         await provider.cancelAtPeriodEnd(entry.id, true);
@@ -300,6 +307,7 @@ export function createBillingService(options: BillingServiceOptions) {
     return copy({ id: sub.id, cart: sub.cart, bundle: quote(sub.cart, config).bundle, lines: sub.lines, totalCents: sub.totalCents, status: sub.status,
       licenseId: sub.licenseId, cloudId: sub.cloudId, currentPeriodEnd: sub.currentPeriodEnd, cancelAtPeriodEnd: sub.cancelAtPeriodEnd, createdAt: sub.createdAt,
       ...(sub.trialEndsAt !== undefined && now() < sub.trialEndsAt ? { trialEndsAt: sub.trialEndsAt } : {}),
+      ...(sub.status === "payment_problem" && sub.paymentProblem && !sub.cancelAtPeriodEnd ? { fixBy: sub.paymentProblem.fixBy, ...(sub.paymentProblem.trial ? { trialUnpaid: true as const } : {}) } : {}),
       ...(sub.scheduledChange ? { scheduledChange: { cart: sub.scheduledChange.cart, bundle: quote(sub.scheduledChange.cart, config).bundle, totalCents: sub.scheduledChange.totalCents, at: sub.scheduledChange.at } } : {}) });
   }
   /** the free days a first cloud plan of this account starts with: one trial per account, and per email across accounts
@@ -378,7 +386,12 @@ export function createBillingService(options: BillingServiceOptions) {
   }
   function endSubscription(sub: StoredSubscription, email: string) {
     sub.status = "ended"; delete sub.scheduledChange; refreshLicense(sub, email);
-    if (sub.cloudId) cloudAction({ kind: "end", cloudId: sub.cloudId, at: now() + config.graceDays * day });
+    if (!sub.cloudId) return;
+    // known risk: a cloud off the managed backend has no archive or final backup, so after a failed payment it is
+    // stopped and kept for the operator rather than deleted
+    const unarchived = sub.paymentProblem !== undefined && !clouds.get(sub.cloudId)?.backend;
+    if (unarchived) console.warn(`billing: ALERT cloud ${sub.cloudId} ended after a failed payment and has no archive; it is stopped and kept, not deleted`);
+    cloudAction({ kind: "end", cloudId: sub.cloudId, at: unarchived ? OPEN_ENDED_AT : now() + config.graceDays * day });
   }
   function cloudAction(action: CloudAction) { (state.cloudActions ??= []).push(action); }
   function flushCloudActions() {
@@ -507,6 +520,8 @@ export function createBillingService(options: BillingServiceOptions) {
     }
     const first = sub.status === "pending" || sub.cloudId !== null && clouds.get(sub.cloudId)?.status === "checkout";
     if (event.type === "active" || event.type === "renewed") {
+      if (sub.status === "payment_problem") notices.push({ kind: "payment_recovered", accountId: sub.accountId, description: planLabel(sub), cloudId: sub.cloudId });
+      delete sub.paymentProblem;
       const trialStarts = first && checkout.trialDays !== undefined && sub.trialEndsAt === undefined && sub.currentPeriodEnd === null;
       // a renewal that starts a period past the trial's end ends the trial, even one charged early; dodo also sends
       // renewed for a plan change inside the trial (do_not_bill, 2026-11), with the trial's end as its next date
@@ -529,13 +544,13 @@ export function createBillingService(options: BillingServiceOptions) {
       dropNeverPaid(sub, checkout);
       if (event.type === "on_hold") queueProviderCancel(event.subscriptionId);
     } else if (event.type === "on_hold" || event.type === "failed") {
-      if (sub.status !== "payment_problem") notices.push({ kind: "payment_failed", accountId: sub.accountId, amountCents: sub.totalCents, currency: config.currency, description: planLabel(sub),
-        cloudId: sub.cloudId, fixBy: (sub.currentPeriodEnd ?? now()) + config.graceDays * day });
-      sub.status = "payment_problem"; refreshLicense(sub, checkout.email);
-      if (sub.cloudId) {
-        cloudAction({ kind: "payment", cloudId: sub.cloudId, problem: true });
-        cloudAction({ kind: "schedule", cloudId: sub.cloudId, at: (sub.currentPeriodEnd ?? now()) + config.graceDays * day });
+      if (sub.status !== "payment_problem" || !sub.paymentProblem) {
+        const trial = unpaidTrial(sub);
+        sub.paymentProblem = { since: now(), fixBy: trial ? (sub.trialEndsAt ?? now()) + TRIAL_DATA_DAYS * day : now() + config.graceDays * day, sent: ["first"], ...(trial ? { trial: true as const } : {}) };
+        if (!sub.cancelAtPeriodEnd) notices.push(failedNotice(sub));
       }
+      sub.status = "payment_problem"; refreshLicense(sub, checkout.email);
+      if (sub.cloudId) cloudAction({ kind: "payment", cloudId: sub.cloudId, problem: true });
     } else if (event.type === "cancelled" || event.type === "expired") endSubscription(sub, checkout.email);
     else {
       // a change that started a new billing cycle (monthly to yearly) moves the period with it
@@ -749,6 +764,72 @@ export function createBillingService(options: BillingServiceOptions) {
   try { expireLapsed(); } catch {}
   const sweepLapsed = setInterval(() => { try { expireLapsed(); } catch {} }, 10 * 60_000);
   sweepLapsed.unref();
+  /** a failed charge's emails (the first, and for a paid plan 14 days in and 3 days before the data goes), and at the fix-by
+   *  date the plan ends as a cancelled one does: cancelled at the provider, so it never charges for a cloud already gone */
+  function dunning() {
+    // a plan already set to end gets no reminders: it ends at its period end, as it would have
+    const lapsed = (sub: StoredSubscription) => sub.cancelAtPeriodEnd ? (sub.currentPeriodEnd ?? 0) <= now() : !!sub.paymentProblem && now() >= sub.paymentProblem.fixBy;
+    const due = state.subscriptions.filter(sub => sub.status === "payment_problem" && !closureFor(sub.accountId)
+      && (lapsed(sub) || !sub.cancelAtPeriodEnd && !!sub.paymentProblem && dunningStep(sub.paymentProblem) !== null));
+    if (!due.length) return { ended: 0, reminded: 0 };
+    const before = copy(state);
+    let ended = 0, reminded = 0;
+    try {
+      for (const sub of due) {
+        const email = state.checkouts.find(row => row.id === sub.checkoutId)?.email ?? "";
+        if (lapsed(sub)) {
+          if (renews(sub)) queueProviderCancel(sub.providerSubscriptionId!);
+          endSubscription(sub, email); sub.updatedAt = now(); sub.version++; ended++;
+          record(draft({ key: `subscription.expired:${sub.providerSubscriptionId ?? sub.id}`, at: now(), type: "subscription.expired", via: "app", ...subFields(sub), status: "ended", reason: "payment_failed" }));
+          continue;
+        }
+        const problem = sub.paymentProblem!, step = dunningStep(problem)!;
+        problem.sent = [...new Set([...problem.sent, ...(step === "final" ? ["day_14" as const] : []), step])];
+        notices.push(step === "first" ? failedNotice(sub) : { kind: "payment_reminder", step, accountId: sub.accountId, amountCents: sub.totalCents, currency: config.currency, description: planLabel(sub), cloudId: sub.cloudId, fixBy: problem.fixBy });
+        reminded++;
+      }
+      store.commit();
+    } catch (error) { Object.assign(state, before); notices = []; recorded = []; throw error; }
+    sendNotices(); flushCloudActions(); kickProviderCancels();
+    return { ended, reminded };
+  }
+  function failedNotice(sub: StoredSubscription): BillingNotice {
+    return { kind: "payment_failed", accountId: sub.accountId, amountCents: sub.totalCents, currency: config.currency, description: planLabel(sub), cloudId: sub.cloudId,
+      fixBy: sub.paymentProblem?.fixBy ?? null, trial: sub.paymentProblem?.trial === true };
+  }
+  function dunningStep(problem: PaymentProblem): DunningStep | null {
+    if (!problem.sent.includes("first")) return "first";
+    if (problem.trial) return null;
+    const step = now() >= problem.fixBy - DUNNING.finalDaysBefore * day ? "final" : now() >= problem.since + DUNNING.reminderDay * day ? "day_14" : null;
+    return step && !problem.sent.includes(step) ? step : null;
+  }
+  /** 7 days after the trial ended, and never less than 3 days after its email goes out */
+  const trialDeletion = (trialEnd: number) => Math.max(trialEnd + TRIAL_DATA_DAYS * day, now() + 3 * day);
+  /** a trial whose first charge failed: no payment of it ever went through */
+  function unpaidTrial(sub: StoredSubscription) {
+    return sub.trialEndsAt !== undefined && !state.invoices.some(row => row.checkoutId === sub.checkoutId && row.status !== "failed" && row.amountCents > 0);
+  }
+  /** a payment problem from before the clock was stored: it started at its first failure on the ledger; a paid plan's data
+   *  is kept 30 days from then, a trial's 7 days from its end but at least 3 days from now, so nobody loses data
+   *  without a warning; the first email of the new story goes out once (the sweep sends it) */
+  function healPaymentProblems() {
+    const missing = state.subscriptions.filter(sub => sub.status === "payment_problem" && !sub.paymentProblem && !neverPaid(sub) && !sub.cancelAtPeriodEnd);
+    for (const sub of missing) {
+      const rows = state.ledger!.filter(row => row.subscriptionId === sub.id);
+      const recovered = Math.max(0, ...rows.filter(row => row.type === "subscription.recovered").map(row => row.at));
+      const failures = rows.filter(row => (row.type === "subscription.on_hold" || row.type === "subscription.failed") && row.at >= recovered).map(row => row.at);
+      const since = failures.length ? Math.min(...failures) : sub.currentPeriodEnd ?? sub.updatedAt;
+      sub.paymentProblem = unpaidTrial(sub)
+        ? { since, fixBy: trialDeletion(sub.trialEndsAt ?? since), sent: [], trial: true }
+        : { since, fixBy: since + config.graceDays * day, sent: [] };
+    }
+    if (missing.length) store.commit();
+  }
+  try { healPaymentProblems(); } catch (error) { console.warn(`billing: storing payment problems' fix-by dates failed (${(error as Error).message})`); }
+  // the first sweep waits for the service's owner to finish wiring its notices
+  setTimeout(() => { try { dunning(); } catch (error) { console.warn(`billing: the payment reminders failed (${(error as Error).message})`); } }, 1000).unref();
+  const sweepDunning = setInterval(() => { try { dunning(); } catch (error) { console.warn(`billing: the payment reminders failed (${(error as Error).message})`); } }, 10 * 60_000);
+  sweepDunning.unref();
   /** `all`: an operator's grant replaces an open checkout the person never paid */
   function expireCheckouts(accountId: string, all = false) {
     for (const checkout of state.checkouts) if (checkout.accountId === accountId && checkout.status === "open" && (all || checkout.openUntil <= now())) {
@@ -846,7 +927,7 @@ export function createBillingService(options: BillingServiceOptions) {
       let sub = editable(account.id, subscriptionId);
       if (!cancel && (sub.status !== "active" || sub.currentPeriodEnd === null || sub.currentPeriodEnd <= now())) fail(409, "not_subscribed");
       const answer = survey === undefined ? undefined : surveyOf(survey);
-      if (answer) saveFeedback(account, sub.cloudId, sub.id, answer);
+      if (answer) saveFeedback(account, sub.cloudId, sub.id, cancel ? { ...answer, outcome: "cancelled" } : answer);
       await provider.cancelAtPeriodEnd(sub.providerSubscriptionId!, cancel);
       sub = owned(account.id, subscriptionId);
       if (sub.status === "ended" || !cancel && (sub.status !== "active" || sub.currentPeriodEnd === null || sub.currentPeriodEnd <= now())) fail(409, "not_subscribed");
@@ -873,8 +954,12 @@ export function createBillingService(options: BillingServiceOptions) {
   function retentionStep(account: AccountRef, subscriptionId: string, input: unknown) {
     const sub = owned(account.id, subscriptionId), value = input as Record<string, unknown> | null;
     if (!value || typeof value !== "object" || !CANCEL_ANSWERS.includes(value.reason as CancelAnswer) || !RETENTION_STEPS.includes(value.step as RetentionInput["step"])
-      || !RETENTION_OUTCOMES.includes(value.outcome as RetentionInput["outcome"])) fail(400, "invalid_request");
-    saveRetention(account, sub.id, { reason: value.reason as CancelAnswer, step: value.step as RetentionInput["step"], outcome: value.outcome as RetentionInput["outcome"] });
+      || !RETENTION_OUTCOMES.includes(value.outcome as RetentionInput["outcome"]) || (value.offer !== undefined && !RETENTION_OFFERS.includes(value.offer as NonNullable<RetentionInput["offer"]>))
+      || (value.note !== undefined && (typeof value.note !== "string" || value.note.trim().length > 2000))) fail(400, "invalid_request");
+    const entry = { reason: value.reason as CancelAnswer, step: value.step as RetentionInput["step"], outcome: value.outcome as RetentionInput["outcome"] };
+    saveRetention(account, sub.id, entry);
+    const note = typeof value.note === "string" ? value.note.trim() : "";
+    if (entry.outcome !== "shown") saveFeedback(account, sub.cloudId, sub.id, { answer: entry.reason, ...(note ? { improve: note } : {}), ...(value.offer ? { offer: value.offer as NonNullable<RetentionInput["offer"]> } : {}), outcome: entry.outcome });
     return { ok: true as const };
   }
   const discountable = (sub: StoredSubscription) => sub.status === "active" && !sub.cancelAtPeriodEnd && !sub.pendingChange && !sub.scheduledChange && sub.cart.interval === "month" && sub.totalCents > 0
@@ -897,6 +982,7 @@ export function createBillingService(options: BillingServiceOptions) {
       state.retentionDiscounts!.push({ id: id("disc"), accountId: account.id, subscriptionId: sub.id, code, ...RETENTION_DISCOUNT, at: now() });
       store.commit();
       saveRetention(account, sub.id, { reason: reason as CancelAnswer, step: "help", outcome: "discount" });
+      saveFeedback(account, sub.cloudId, sub.id, { answer: reason as CancelAnswer, offer: "discount", outcome: "discount" });
       return { subscription: view(sub), retention: retentionView(account.id) };
     });
   }
@@ -1249,7 +1335,7 @@ export function createBillingService(options: BillingServiceOptions) {
     syncFromProvider: guarded(syncFromProvider), recoverUnapplied: guarded(recoverUnapplied), setAttribution: guarded(setAttribution),
     funnel: guarded(funnel), markReview: guarded(markReview), grantReview: guarded(grantReview),
     deletionBlockers: guarded(deletionBlockers), closeAccount: guarded(closeAccount), accountDeleted: guarded(accountDeleted), scrubDeleted: guarded(scrubDeleted), destroyDeleted: guarded(destroyDeleted), drainProviderCancels: guarded(drainProviderCancels),
-    expireLapsed: guarded(expireLapsed),
+    expireLapsed: guarded(expireLapsed), dunning: guarded(dunning),
     catalog: guarded((account?: AccountRef | null) => { const trial = trialDays(account ?? null); return { ...catalogView(now(), config), ...(trial ? { trialDays: trial } : {}) }; }),
     trialDays: guarded((account: AccountRef | null) => trialDays(account)), quote: guarded((input: unknown) => quote(parsed(input), config)), checkout: guarded(checkout), handleWebhook: guarded(handleWebhook),
     subscriptions: guarded((accountId: string) => state.subscriptions.filter(sub => sub.accountId === accountId).map(view)), licenses: guarded(licenses), licenseCheck: guarded(licenseCheck), addMember: guarded(addMember), removeMember: guarded(removeMember),
@@ -1257,6 +1343,6 @@ export function createBillingService(options: BillingServiceOptions) {
     feedback: guarded(feedback), retentionStep: guarded(retentionStep), retentionDiscount: guarded(retentionDiscount), previewChange: guarded(previewChange), change: guarded(change),
     operatorChange: guarded(operatorChange), setPeriodEnd: guarded(setPeriodEnd), moveRenewal: guarded(moveRenewal), endNow: guarded(endNow), mode,
     updateCard: guarded(async (account: AccountRef, subscriptionId: string, path?: string) => { const url = returnUrl(path), sub = editable(account.id, subscriptionId); return provider.updatePaymentMethod(sub.providerSubscriptionId!, url); }),
-    invoices: guarded(invoices), invoiceDownload: guarded(invoiceDownload), overview: guarded(overview), appState: guarded(appState), close: guarded(() => { clearInterval(retryCloudActions); clearInterval(sweepDeleted); clearInterval(sweepLapsed); confirmations.clear(); store.close(); }),
+    invoices: guarded(invoices), invoiceDownload: guarded(invoiceDownload), overview: guarded(overview), appState: guarded(appState), close: guarded(() => { clearInterval(retryCloudActions); clearInterval(sweepDeleted); clearInterval(sweepLapsed); clearInterval(sweepDunning); confirmations.clear(); store.close(); }),
   };
 }

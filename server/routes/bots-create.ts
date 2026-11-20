@@ -189,6 +189,7 @@ export function createBotCreateRoutes(deps: BotCreateRouteDeps): RouteHandler {
         store.patchBot(bot.id, {
           // Store creation completed the workspace defaults (effort included): the rest of the template must not undo them.
           ...ordinary, name: bot.name, section, modelSelection: bot.modelSelection,
+          ...(body.modelSelection !== undefined ? { modelChosen: true as const } : {}),
           mascotExpression: ordinary.mascotExpression ?? undefined,
           avatarUrl: ordinary.avatarUrl || undefined,
           computer: ordinary.computer ?? undefined, cwd: checkedCwd.cwd ?? undefined,

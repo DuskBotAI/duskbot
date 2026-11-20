@@ -119,3 +119,10 @@ test("a backup of this computer that fails stops before the server is touched, a
   failing = false;
   assert.deepEqual(await back.run("env-box"), { ok: true });
 });
+
+test("a copy that runs out of time says so plainly, and the server's pause is lifted", async () => {
+  const { back, server } = fixture({ backupFrom: async () => { throw new DOMException("The operation was aborted due to timeout", "TimeoutError"); } });
+  await assert.rejects(back.run("env-box"), /box took too long to answer\. Your bots are still there\. Try again\./);
+  assert.equal(back.view().status, "failed");
+  assert.equal(server.frozen, false);
+});

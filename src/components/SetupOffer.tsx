@@ -116,7 +116,7 @@ export function SetupOffer({ botId, threadId, message, transcript }: { botId: st
       {/* grok's question card: a 15/22 title, then its lettered rows 8px in from the card's edge */}
       <div className="flex min-w-0 items-start gap-2">
         <h3 dir="auto" className={cn("min-w-0 flex-1 break-words text-[15px] font-semibold leading-[22px]", settled ? "text-ink/[0.56]" : "text-ink")}>{title}</h3>
-        {!settled && <button type="button" onClick={close} aria-label={t("chat.ui.commonClose")} title={t("chat.ui.commonClose")}
+        {!settled && <button type="button" onClick={close} aria-label={t("chat.setupCard.close")} title={t("chat.setupCard.close")}
           className="-me-1.5 -mb-1 -mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-full text-ink-tertiary hover:bg-ink/[0.07] hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus pointer-coarse:size-9">
           <X size={15} aria-hidden="true" />
         </button>}

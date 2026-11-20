@@ -1,16 +1,17 @@
 import { useLayoutEffect, useRef, type ReactNode } from "react";
 import { reducedMotion } from "@/lib/onboarding";
+import { cssBezier, pacedInOut, pacedMs, pacedOut } from "@/lib/motion-speed";
 
 /** How a card above the composer comes and goes, so the composer and the chat never jump. It comes in with a fade and a
  * short rise, the slot's height following; it leaves by fading where it is while the slot's height collapses under it,
  * on an ease-in-out, and the chat rides that collapse. */
 export const NOTICE_MOTION = {
-  enterMs: 220,
-  fadeOutMs: 140,
-  collapseMs: 200,
+  enterMs: pacedMs(220),
+  fadeOutMs: pacedMs(140),
+  collapseMs: pacedMs(200),
   rise: 6,
-  ease: "cubic-bezier(0.22, 1, 0.36, 1)",
-  collapseEase: "cubic-bezier(0.645, 0.045, 0.355, 1)",
+  ease: cssBezier(pacedOut([0.22, 1, 0.36, 1])),
+  collapseEase: cssBezier(pacedInOut([0.645, 0.045, 0.355, 1])),
 } as const;
 
 const canAnimate = (node: Element) => typeof (node as HTMLElement).animate === "function";

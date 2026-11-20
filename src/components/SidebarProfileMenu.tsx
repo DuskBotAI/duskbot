@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { AnimatePresence } from "motion/react";
 import {
   Archive,
   Check,
@@ -44,11 +45,12 @@ import { useSidebarPhoneStatus } from "./SidebarPhoneButton";
 import { api, useStore, type Action, type ConfigStatus } from "@/state/store";
 import { localDesktopPage } from "./onboarding/WelcomeGate";
 import { serverCheckPhase, serverUpdateRow, type ServerUpdateCheck, type ServerUpdatePhase } from "@/lib/server-update";
-import type { AccountFace, CloudAccountBridge, CloudAccountState } from "../../electron/cloud-account.mjs";
+import type { AccountFace } from "../../electron/cloud-account.mjs";
 import { cloudPlanLabel, trialRunning } from "@/lib/cloud-plan";
 import { cloudColor } from "@/lib/cloud-look";
 import { cn } from "@/lib/cn";
 import { meterPercent, resetLine } from "@/lib/usage-meter";
+import { shownShare, useUsageDisplay, type UsageDisplay } from "@/lib/usage-display";
 import type { CloudPlanSnapshot } from "../../electron/cloud-account.mjs";
 import { activeLocale, t } from "@/lib/i18n";
 import { HELP_CENTER_URL, appVersion, openExternalLink } from "@/lib/app-links";
@@ -57,15 +59,11 @@ import { openAccountDashboard } from "@/lib/account-dashboard";
 import { useOtherServerName } from "@/lib/other-server";
 import { profileForSession, readSessionState, type SessionState } from "@/lib/session";
 import {
-  cloudPhoneDestination,
   connectPhoneEntry,
   currentPhonePairingTarget,
   loadPhonePairingAccess,
-  phoneDestinations,
   phonePairingSettingsAction,
-  type CloudPhoneDestination,
   type ConnectPhoneEntry,
-  type PhoneDestination,
   type PhonePairingAccess,
 } from "@/lib/phone-pairing";
 import { phoneAppEnabled } from "@/lib/feature-flags";
@@ -342,48 +340,24 @@ function useConnectPhoneEntry(cloudHome: boolean): ConnectPhoneEntry | null {
   return offered ? connectPhoneEntry(target, access) : null;
 }
 
-export function useCloudPhoneDestination(enabled: boolean): { cloud: CloudPhoneDestination; bridge?: CloudAccountBridge } {
-  const bridge = enabled && !window.duskDesktop?.remoteClient?.active ? window.duskDesktop?.cloudAccount : undefined;
-  const [account, setAccount] = useState<CloudAccountState | null>(null);
-  useEffect(() => {
-    if (!bridge) return;
-    let active = true, updated = false;
-    const unsubscribe = bridge.onState((next) => { updated = true; if (active) setAccount(next); });
-    void bridge.state().then((next) => { if (active && !updated) setAccount(next); }).catch(() => {});
-    return () => { active = false; unsubscribe(); };
-  }, [bridge]);
-  return bridge ? { cloud: cloudPhoneDestination(account), bridge } : { cloud: null };
-}
-
-export function selectPhoneDestination(destination: PhoneDestination, { bridge, dispatch }: { bridge?: Pick<CloudAccountBridge, "connectHomeForPhone">; dispatch: (action: Action) => void }): void {
-  if (destination.id !== "cloud" || !bridge) {
-    dispatch(phonePairingSettingsAction());
-    return;
-  }
-  void bridge.connectHomeForPhone().catch(() => dispatch({ type: "toggleAppSettings", open: true, section: "cloudAccount" }));
-}
-
 export function phoneMenuItems({
-  destinations,
+  entry,
   connected,
   onConnect,
 }: {
-  destinations: PhoneDestination[];
+  entry: ConnectPhoneEntry | null;
   connected: boolean;
-  onConnect: (destination: PhoneDestination) => void;
+  onConnect: () => void;
 }): SidebarMenuItem[] {
-  return destinations.map((destination) => ({
-    key: destination.id === "cloud" ? "connect-phone-cloud" : "connect-phone",
+  if (!entry) return [];
+  return [{
+    key: "connect-phone",
     label: t("sidebar.menu.connectPhone"),
-    subtitle: destination.team ? t("sidebar.menu.connectPhone.team", { team: destination.team }) : t(destination.subtitleKey),
-    ...(destination.noteKey ? { note: t(destination.noteKey) } : {}),
+    subtitle: entry.team ? t("sidebar.menu.connectPhone.team", { team: entry.team }) : t(entry.subtitleKey),
     icon: <Smartphone size={18} />,
-    trailing:
-      destination.id === "here" && destination.target === "computer" && connected ? (
-        <span aria-hidden="true" className="size-1.5 shrink-0 rounded-full bg-success" />
-      ) : undefined,
-    onSelect: () => onConnect(destination),
-  } satisfies SidebarMenuItem));
+    trailing: entry.target === "computer" && connected ? <span aria-hidden="true" className="size-1.5 shrink-0 rounded-full bg-success" /> : undefined,
+    onSelect: onConnect,
+  } satisfies SidebarMenuItem];
 }
 
 export function toolMenuItems({ archived }: { archived?: ArchivedBots }): SidebarMenuItem[] {
@@ -453,37 +427,40 @@ export function resetsIn(at: number | null, now: number): string | undefined {
   return t("sidebar.menu.resets", { when: hours < 24 ? format.format(Math.max(1, Math.round(hours)), "hour") : format.format(Math.round(hours / 24), "day") });
 }
 
-export function planUsageSummary(report: PlanUsageWindows | null, now = Date.now()): UsageSummary | null {
+const usageValue = (usedPercent: number, display: UsageDisplay) =>
+  t(display === "left" ? "sidebar.menu.usageLeft" : "sidebar.menu.usageUsed", { percent: shownShare(usedPercent, display) });
+
+export function planUsageSummary(report: PlanUsageWindows | null, now = Date.now(), display: UsageDisplay = "used"): UsageSummary | null {
   const signedIn = report?.providers.filter((provider) => provider.ok) ?? [];
   for (const window of ["weekly", "fiveHour"] as const) {
     const known = signedIn.map((provider) => provider[window]).filter((entry) => entry.available && entry.usedPercent !== null);
     if (known.length === 0) continue;
     const tightest = known.reduce((most, entry) => (entry.usedPercent! > most.usedPercent! ? entry : most));
     const resets = resetsIn(tightest.resetsAt ? Date.parse(tightest.resetsAt) : null, now);
-    return { value: t("sidebar.menu.usageUsed", { percent: Math.round(tightest.usedPercent!) }), weekly: window === "weekly", ...(resets ? { resets } : {}) };
+    return { value: usageValue(tightest.usedPercent!, display), weekly: window === "weekly", ...(resets ? { resets } : {}) };
   }
   const budgets = signedIn.flatMap((provider) => provider.extra?.filter((extra) => extra.label === "Monthly spend") ?? []);
-  return budgets.length ? { value: t("sidebar.menu.usageUsed", { percent: Math.round(Math.max(...budgets.map((budget) => budget.usedPercent))) }) } : null;
+  return budgets.length ? { value: usageValue(Math.max(...budgets.map((budget) => budget.usedPercent)), display) } : null;
 }
 
-export function cloudUsageSummary(plan: CloudPlanSnapshot | null): UsageSummary | null {
+export function cloudUsageSummary(plan: CloudPlanSnapshot | null, display: UsageDisplay = "used"): UsageSummary | null {
   if (plan?.status !== "paid") return null;
   const usage = plan.usage;
-  if (usage?.meters.length) return { value: t("sidebar.menu.usageUsed", { percent: Math.max(...usage.meters.map(meterPercent)) }), resets: resetLine(usage) };
+  if (usage?.meters.length) return { value: usageValue(Math.max(...usage.meters.map(meterPercent)), display), resets: resetLine(usage) };
   return null;
 }
 
-function usePlanUsageSummary(enabled: boolean): UsageSummary | null {
-  const [summary, setSummary] = useState<UsageSummary | null>(null);
+function usePlanUsageSummary(enabled: boolean, display: UsageDisplay): UsageSummary | null {
+  const [report, setReport] = useState<PlanUsageWindows | null>(null);
   useEffect(() => {
     if (!enabled) return;
     let alive = true;
     void api<PlanUsageWindows>("/api/plan-usage", { background: true })
-      .then((report) => { if (alive) setSummary(planUsageSummary(report)); })
+      .then((next) => { if (alive) setReport(next); })
       .catch(() => {});
     return () => { alive = false; };
   }, [enabled]);
-  return summary;
+  return planUsageSummary(report, Date.now(), display);
 }
 
 export function profileMenuItems({
@@ -669,13 +646,12 @@ export function SidebarProfileMenu({ iconOnly = false, rail = false, circle = fa
   const { state, dispatch } = useStore();
   const simple = account !== undefined;
   const [menuOpen, setMenuOpen] = useState(false);
+  const usageDisplay = useUsageDisplay();
   const cloudPlan = useCloudPlanSnapshot(simple ? usageBridge(state.config?.cloudHome === true) : undefined);
-  const cloudUsage = cloudUsageSummary(cloudPlan);
-  const engineUsage = usePlanUsageSummary(simple && menuOpen && cloudUsage === null && window.duskDesktop?.remoteClient?.active !== true);
+  const cloudUsage = cloudUsageSummary(cloudPlan, usageDisplay);
+  const engineUsage = usePlanUsageSummary(simple && menuOpen && cloudUsage === null && window.duskDesktop?.remoteClient?.active !== true, usageDisplay);
   const phone = useSidebarPhoneStatus();
   const connectPhone = useConnectPhoneEntry(state.config?.cloudHome === true);
-  const cloudPhone = useCloudPhoneDestination(connectPhone?.target === "computer");
-  const destinations = phoneDestinations(connectPhone, cloudPhone.cloud);
   const update = useServerUpdateItem(true);
   const [aboutOpen, setAboutOpen] = useState(false);
   const [phoneAppOpen, setPhoneAppOpen] = useState(false);
@@ -702,17 +678,15 @@ export function SidebarProfileMenu({ iconOnly = false, rail = false, circle = fa
   // grok's footer falls back to the computer's account: its initial in the grey circle, its name beside it
   const computer = useComputerName(simple && !profile?.name?.trim() && !profile?.email?.trim());
   const name = computer ?? profileLabel(profile);
-  const connectTo = (destination: PhoneDestination) => selectPhoneDestination(destination, { bridge: cloudPhone.bridge, dispatch });
   const remote = window.duskDesktop?.remoteClient?.active === true;
   const cloudAccount = !remote && Boolean(window.duskDesktop?.cloudAccount || (window.duskDesktop?.cloudPlan && state.config?.cloudHome === true));
   const openCloudAccount = () => dispatch({ type: "toggleAppSettings", open: true, section: "cloudAccount" });
   const phoneApp = phoneAppEnabled();
   const move = useAccountMove(state.config?.cloudHome === true, { onOpen: openCloudAccount, onPairPhone: phoneApp ? () => dispatch(phonePairingSettingsAction()) : undefined });
 
-  // one place to connect the phone to opens its pairing at once; only a choice of places asks where
+  // a team's place pairs from Settings, where its policy is said; anywhere else the dialog shows the code at once
   const getApp = () => {
-    if (destinations.length > 1) setPhoneAppOpen(true);
-    else if (destinations[0]) connectTo(destinations[0]);
+    if (connectPhone && !connectPhone.team) setPhoneAppOpen(true);
     else dispatch(phonePairingSettingsAction());
   };
   const headerEmail = accounts.view?.active?.email ?? place?.account?.email ?? null;
@@ -746,9 +720,9 @@ export function SidebarProfileMenu({ iconOnly = false, rail = false, circle = fa
       : simple
       ? simplePhoneItems({ connected: phone.kind === "connected", onGetApp: getApp })
       : phoneMenuItems({
-        destinations,
+        entry: connectPhone,
         connected: phone.kind === "connected",
-        onConnect: connectTo,
+        onConnect: getApp,
       }),
     usage: !remote,
     usageSummary: cloudUsage ?? engineUsage,
@@ -850,18 +824,17 @@ export function SidebarProfileMenu({ iconOnly = false, rail = false, circle = fa
         )}
       />
       <AboutDialog open={aboutOpen} onClose={() => setAboutOpen(false)} />
-      {accounts.sheet && <AccountsSheet adding={accounts.sheet.email} note={accounts.sheet.note} onClose={accounts.closeSheet} />}
+      <AnimatePresence>{accounts.sheet && <AccountsSheet key="accounts" adding={accounts.sheet.email} note={accounts.sheet.note} onClose={accounts.closeSheet} />}</AnimatePresence>
       {accounts.signOutConfirm}
       {accounts.picking && accounts.view?.active && <AvatarPicker account={accounts.view.active} anchor={triggerRef.current?.closest("button") ?? null} onClose={accounts.closeAvatar} />}
-      {phoneAppOpen && <PhoneAppDialog
+      <AnimatePresence>{phoneAppOpen && <PhoneAppDialog
+        key="phone"
         open
         onClose={() => setPhoneAppOpen(false)}
-        connect={destinations.map((destination) => ({
-          key: destination.id,
-          subtitle: destination.team ? t("sidebar.menu.connectPhone.team", { team: destination.team }) : t(destination.subtitleKey),
-          onSelect: () => connectTo(destination),
-        }))}
-      />}
+        remote={remote}
+        cloudHome={state.config?.cloudHome === true}
+        email={state.config?.profile?.email}
+      />}</AnimatePresence>
     </>
   );
 }

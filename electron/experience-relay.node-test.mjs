@@ -32,7 +32,9 @@ test("crashes and update failures become fixed words", () => {
   assert.deepEqual(crashProps("page", "crashed"), { kind: "page", reason: "crashed" });
   assert.deepEqual(crashProps("GPU", "launch-failed"), { kind: "gpu", reason: "launch_failed" });
   assert.equal(crashProps("page", "clean-exit"), null);
-  assert.deepEqual(crashProps("Utility", "killed", { name: "Network Service" }), { kind: "utility", reason: "killed" });
+  assert.deepEqual(crashProps("Utility", "killed", { name: "Network Service" }), { kind: "utility", reason: "killed", service: "network_service" });
+  assert.deepEqual(crashProps("Utility", "crashed", { name: "Audio Service", exitCode: -36861 }), { kind: "utility", reason: "crashed", service: "audio_service", exit: "xffff7003" });
+  assert.deepEqual(crashProps("server", "crashed", { exitCode: 3 }), { kind: "server", reason: "crashed", exit: "3" });
   for (const name of Object.values(UTILITY_NAMES)) assert.equal(crashProps("Utility", "killed", { name }), null);
   assert.equal(crashProps("Utility", "abnormal-exit", { name: UTILITY_NAMES.companion }), null);
   assert.equal(crashProps("GPU", "crashed", { ending: true }), null);

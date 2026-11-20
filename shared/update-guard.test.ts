@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { acceptPolicy, compareVersions, freshUpdateRecord, idleForUpdate, parsePolicy, refusal, review, rolledBack, sawRun, selfTested, settle, startTrial, TRIAL_MS } from "./update-guard.ts";
+import { acceptPolicy, compareVersions, freshUpdateRecord, idleForUpdate, inRollout, parsePolicy, refusal, review, rolledBack, sawRun, selfTested, settle, startTrial, TRIAL_MS } from "./update-guard.ts";
 
 const v = (version: string) => ({ version, sha256: version.replace(/\./g, "").padEnd(64, "a").slice(0, 64) });
 
@@ -63,6 +63,28 @@ describe("update guard", () => {
     // a replayed older policy never loosens the block
     expect(acceptPolicy(r, parsePolicy({ serial: 1, floor: null, blocked: [] }))).toBe(false);
     expect(r.policy.blocked).toContain("1.1.0");
+  });
+
+  it("a paused policy holds every install until a newer policy lifts it, and keeps rollbacks", () => {
+    const r = freshUpdateRecord(v("1.0.0"));
+    startTrial(r, v("1.1.0"), 0);
+    expect(acceptPolicy(r, parsePolicy({ serial: 3, floor: null, blocked: [], paused: true }))).toBe(true);
+    expect(refusal(r, v("1.2.0"))).toBe("paused");
+    expect(selfTested(r, false, 1)).toEqual({ action: "rollback", reason: "self_test", to: v("1.0.0") });
+    expect(acceptPolicy(r, parsePolicy({ serial: 4, floor: null, blocked: [] }))).toBe(true);
+    expect(refusal(r, v("1.2.0"))).toBeNull();
+  });
+
+  it("a staged rollout lets in only installs under its share", () => {
+    const policy = parsePolicy({ serial: 1, floor: null, blocked: [], rollout: { "1.2.0": 10 } });
+    expect(inRollout(policy, "1.2.0", 9)).toBe(true);
+    expect(inRollout(policy, "1.2.0", 10)).toBe(false);
+    expect(inRollout(policy, "1.3.0", 99)).toBe(true);
+    expect(inRollout(null, "1.2.0", 99)).toBe(true);
+    expect(() => parsePolicy({ serial: 1, floor: null, blocked: [], rollout: { "1.2.0": 101 } })).toThrow();
+    expect(() => parsePolicy({ serial: 1, floor: null, blocked: [], paused: "yes" })).toThrow();
+    // an old policy signs the same body it always did
+    expect(JSON.stringify(parsePolicy({ serial: 1, floor: null, blocked: [] }))).toBe('{"serial":1,"floor":null,"blocked":[]}');
   });
 
   it("refuses a downgrade, and never rolls back below the signed floor", () => {

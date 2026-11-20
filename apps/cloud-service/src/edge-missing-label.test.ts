@@ -69,4 +69,17 @@ describe("unknown labels at the edge", () => {
     expect((await send(1000, "203.0.113.8")).status).toBe(404);
     expect(lookups).toHaveLength(MISSES_PER_MINUTE + 1);
   });
+
+  it("says a deleted home is gone, for good, so apps stop asking: 410 with the power header, remembered like a missing label", async () => {
+    const { lookups, caches, ctx, settle } = setup(() => Response.json({ error: "gone" }, { status: 410 }));
+    const send = () => worker.fetch(new Request(`https://${label(7)}.${DOMAIN}/api/events`, { headers: { origin: "capacitor://localhost" } }), env, ctx);
+    const first = await send();
+    expect(first.status).toBe(410);
+    expect(first.headers.get("x-dusk-cloud-power")).toBe("gone");
+    expect(first.headers.get("access-control-expose-headers")).toContain("x-dusk-cloud-power");
+    await settle();
+    expect([...caches.entries.values()][0]).toEqual({ body: JSON.stringify({ missing: true, gone: true }), maxAge: MISSING_TTL_S });
+    expect((await send()).status).toBe(410);
+    expect(lookups).toEqual([label(7)]);
+  });
 });

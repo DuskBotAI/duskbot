@@ -112,7 +112,7 @@ it("opens the bot's Share dialog from its row, and a change there applies at onc
   expect(document.querySelector("[data-share-bot]")!.getAttribute("data-share-bot")).toBe("payroll");
   await choose("Bob's access", "remove");
   expect(server.calls.at(-1)).toEqual({ path: "/api/bots/payroll/access", body: { everyone: "none", people: {} } });
-  const toast = document.querySelector<HTMLElement>("[data-access-toast]")!;
+  const toast = document.querySelector<HTMLElement>("[data-access-toast]:not([data-exit-ghost])")!;
   expect(toast.textContent).toContain("Removed Bob");
   toast.querySelector("button")!.click();
   await settle();
@@ -152,7 +152,7 @@ it("shows a person's bots with a Remove on each they were added to, Undo after i
   document.querySelector<HTMLElement>('button[aria-label="Remove Bob from Payroll"]')!.click();
   await settle();
   expect(server.calls.at(-1)).toEqual({ path: "/api/bots/payroll/access", body: { everyone: "none", people: {} } });
-  const toast = document.querySelector<HTMLElement>("[data-access-toast]")!;
+  const toast = document.querySelector<HTMLElement>("[data-access-toast]:not([data-exit-ghost])")!;
   expect(toast.textContent).toContain("Payroll: removed Bob");
   toast.querySelector("button")!.click();
   await settle();

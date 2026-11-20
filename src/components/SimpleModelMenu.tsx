@@ -169,7 +169,7 @@ function GroupBody({ group, props }: { group: MenuGroup; props: SimpleModelMenuP
             </button>
           )}
           {body.toggle && (
-            <div className={cn(body.toggle === "less" && "sticky bottom-0 z-[1] -mx-1.5 bg-linear-to-b from-transparent to-menu to-[12px] px-1.5 pt-3")}>
+            <div className={cn(body.toggle === "less" && "sticky bottom-0 z-[1] -mx-1.5 bg-linear-to-b from-transparent to-(--simple-menu-bg,var(--color-menu)) to-[12px] px-1.5 pt-3")}>
               <button type="button" data-menu-row data-simple-show-all tabIndex={-1} aria-expanded={body.toggle === "less"}
                 onClick={() => props.onToggle(instance)} className={cn(MENU_ROW, "text-ink-secondary hover:text-ink focus:text-ink")}>
                 <Gutter />
@@ -201,7 +201,7 @@ function Thinking({ thinking, labelId }: { thinking: SimpleThinking; labelId: st
             </button>
           ))}
       </div>
-      <SlidingPills aria-labelledby={labelId} data-simple-effort value={levels.current} onPick={levels.onPick} pillClassName="px-1"
+      <SlidingPills aria-labelledby={labelId} label={t("botSettings.simple.thinking")} data-simple-effort value={levels.current} onPick={levels.onPick} pillClassName="px-1"
         options={levels.levels.map((level) => ({ value: level, label: effortLabel(level), title: t("model.simple.thinkingLevel", { level: effortLabel(level) }),
           attrs: { "data-effort-pill": "" } }))} />
     </div>
@@ -243,7 +243,7 @@ function Scope({ scope, labelId }: { scope: NonNullable<SimpleModelMenuProps["sc
   return (
     <div className="flex flex-col">
       <span id={labelId} className="flex h-6 items-end px-2 pb-0.5 text-[12px] font-medium leading-4 text-ink-tertiary">{t("model.picker.scope")}</span>
-      <SlidingPills aria-labelledby={labelId} data-picker-scope value={scope.value} onPick={scope.onChange} pillClassName="h-8 px-3 text-[13px] leading-5"
+      <SlidingPills aria-labelledby={labelId} label={t("model.picker.scope")} data-picker-scope value={scope.value} onPick={scope.onChange} pillClassName="h-8 px-3 text-[13px] leading-5"
         options={choices.map((choice) => ({ value: choice.value, label: choice.label, title: choice.hint, attrs: { "data-scope-pill": choice.value } }))} />
     </div>
   );
@@ -361,7 +361,7 @@ export function SimpleModelMenu(props: SimpleModelMenuProps) {
             return (
               <div key={group.instance.instanceId} role="group" aria-labelledby={labelId} data-simple-provider={group.instance.instanceId}
                 className={cn("flex flex-col gap-0.5", index > 0 && "mt-1")}>
-                <div className={cn("group/heading flex items-end", expanded && "sticky top-0 z-[1] -mx-1.5 bg-menu px-1.5")}>
+                <div className={cn("group/heading flex items-end", expanded && "sticky top-0 z-[1] -mx-1.5 bg-(--simple-menu-bg,var(--color-menu)) px-1.5")}>
                   <div id={labelId} className={cn(MENU_LABEL, "min-w-0 flex-1")}>
                     <Gutter><InstanceProviderMark instance={group.instance} size={14} subtle /></Gutter>
                     <span className="min-w-0 truncate">{group.label}</span>

@@ -570,6 +570,7 @@ export class RuntimeCoordinator implements Coordinator {
       },
       names: (a, parent) => host.names(view(a, parent), parent && this.project(parent)),
       outward: a => host.outward ? host.outward(this.project(a)) : [],
+      progress: a => host.progress ? host.progress(this.project(a)) : [],
     };
   }
 

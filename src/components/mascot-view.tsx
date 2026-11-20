@@ -171,10 +171,11 @@ export const DuskMark = forwardRef<DuskMarkHandle, DuskMarkProps>(function DuskM
   );
 });
 
-/** A 1px pixel ring one grid step outside a body's silhouette, for a picker's hovered or chosen shape. */
-export function BodyRing({ body, size, className }: { body: string; size: number; className?: string }) {
+/** A 1px pixel ring one grid step outside a body's silhouette, for a picker's hovered or chosen shape. Without
+ * `corners` the ring leaves out the cells that touch the body only at a corner, so a slanted edge is one cell thick. */
+export function BodyRing({ body, size, className, corners = true }: { body: string; size: number; className?: string; corners?: boolean }) {
   const shape = duskBody(body);
-  const d = useMemo(() => ringPath(shape, size), [shape, size]);
+  const d = useMemo(() => ringPath(shape, size, corners), [shape, size, corners]);
   const { drawn, left, top } = fitBox(bodyFit(shape), size);
   // the viewBox is widened so the ring lands where the fitted mark is drawn
   const unit = d.G / drawn;
@@ -185,7 +186,7 @@ export function BodyRing({ body, size, className }: { body: string; size: number
   );
 }
 
-function ringPath(body: string, size: number) {
+function ringPath(body: string, size: number, corners: boolean) {
   const { G, body: silhouette } = stillSvgPaths(body, { size });
   const on = new Set<string>();
   for (const m of silhouette.matchAll(/M(-?\d+) (-?\d+)h(\d+)/g)) for (let i = 0; i < Number(m[3]); i++) on.add(`${Number(m[1]) + i},${m[2]}`);
@@ -193,6 +194,7 @@ function ringPath(body: string, size: number) {
   for (const key of on) {
     const [x, y] = key.split(",").map(Number) as [number, number];
     for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+      if (!corners && dx !== 0 && dy !== 0) continue;
       const k = `${x + dx},${y + dy}`;
       if (!on.has(k)) ring.add(k);
     }

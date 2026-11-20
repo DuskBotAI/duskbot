@@ -1,17 +1,23 @@
 import { useEffect, useRef } from "react";
+import { motion, useIsPresent } from "motion/react";
+import { MotionDiv, useMotionReduced } from "./ui/SheetMotion";
+import { overlaySlide } from "./bot-panel/overlay-slide";
 
 import { useStore, type Bot } from "@/state/store";
 import { useBotSettingsDerived } from "./bot-settings/useBotSettingsDerived";
 import { BotPanel } from "./bot-panel/PanelShell";
 import { BOT_PANEL_ID, sidePanelCls } from "./bot-panel/side-panel";
 import { escapeIsUnclaimed } from "@/lib/composer-focus";
+import { phoneApp } from "@/lib/store-app";
 
 /** What the panel that just unmounted would have handed focus back to, taken by the next bot's panel when it mounts. */
 let focusHandoff: HTMLElement | null = null;
 
-export function BotSettingsDialog({ bot, overlay = false }: {
+export function BotSettingsDialog({ bot, overlay = false, slideIn = true }: {
   bot: Bot;
   overlay?: boolean;
+  /** as an overlay, it slides in; false when it takes over from another bot's overlay already open */
+  slideIn?: boolean;
 }) {
   const { state, dispatch } = useStore();
   const section = state.botSettingsSection;
@@ -65,16 +71,24 @@ export function BotSettingsDialog({ bot, overlay = false }: {
     };
   }, [dispatch]);
 
+  const reduced = useMotionReduced();
+  const leaving = !useIsPresent();
+  const Scrim = overlay ? MotionDiv : "div";
+  const Aside = overlay ? motion.aside : "aside";
+  const sliding = overlay ? overlaySlide(reduced, slideIn) : null;
+
   return (
     <>
     {/* too narrow to dock, the panel lies over the chat: the chat dims behind it, as under any sheet, and a click there
         closes it, so its cut-off rows read as covered rather than clipped */}
-    {overlay && <div aria-hidden="true" data-panel-scrim="" className="ui-scrim-light ui-dialog-scrim-panel absolute inset-0 z-40 hidden md:block" onMouseDown={() => dispatch({ type: "toggleSettings", open: false })} />}
-    <aside
+    {overlay && <Scrim {...sliding?.scrim} aria-hidden="true" data-panel-scrim="" data-raw-dialog="" className="ui-scrim-light ui-dialog-scrim-panel absolute inset-0 z-40 hidden md:block" onMouseDown={() => !leaving && dispatch({ type: "toggleSettings", open: false })} />}
+    <Aside
+      {...sliding?.panel}
+      inert={leaving || undefined}
       ref={dialogRef}
       id={BOT_PANEL_ID}
-      role="dialog"
-      aria-labelledby="bot-settings-title"
+      role={phoneApp() ? undefined : "dialog"}
+      aria-labelledby={phoneApp() ? undefined : "bot-settings-title"}
       tabIndex={-1}
       className={sidePanelCls(overlay)}
     >
@@ -85,7 +99,7 @@ export function BotSettingsDialog({ bot, overlay = false }: {
         computerRequest={state.computerTabRequest}
         onClose={() => dispatch({ type: "toggleSettings", open: false })}
       />
-    </aside>
+    </Aside>
     </>
   );
 }

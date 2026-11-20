@@ -13,7 +13,7 @@
     "ai personal assistant app"
   ],
   "answer": "**stop reintroducing the same project every time you need a hand.** a personal agent can keep an ongoing job; dusk gives its bots separate chats and memory. choose where you want to talk, what it may reach and whether it must work with your laptop off. a texting service, cloud task agent or workflow builder may fit your day better.",
-  "updated": "2026-11-12",
+  "updated": "2026-11-20",
   "review": {
     "status": "approved",
     "by": "lead agent: read against seo/facts, automated gate, independent fact-check pass",
@@ -99,7 +99,7 @@
     },
     {
       "h": "choose a conversation you will return to",
-      "md": "**pick somewhere you will remember to text it.** [poke](/alternatives/poke) supports apple messages, telegram, whatsapp and rcs. it fits if your existing chat app is where you want the helper.[^3]\n\ndusk has desktop chats and phone pairing. store apps are on the way; today you add the paired browser version to your home screen. that version sends no notifications.[^6]\n\npairing to your computer needs it awake with dusk running. pairing to dusk cloud works with your computer off. try [phone access](/claude-code-from-your-phone) under the conditions you expect to use."
+      "md": "**pick somewhere you will remember to text it.** [poke](/alternatives/poke) supports apple messages, telegram, whatsapp and rcs. it fits if your existing chat app is where you want the helper.[^3]\n\ndusk has desktop chats and phone pairing. get the iphone app from the app store for reply notifications. android uses the paired browser until the google play app arrives.[^6]\n\npairing to your computer needs it awake with dusk running. pairing to dusk cloud works with your computer off. try [phone access](/claude-code-from-your-phone) under the conditions you expect to use."
     },
     {
       "h": "tell it once, then keep the memory useful",
@@ -111,7 +111,7 @@
     },
     {
       "h": "where dusk earns its place",
-      "md": "**pick dusk when you want a helper whose work stays together.** give bots distinct jobs and memory. change a bot’s model without losing its chats, files or notes.\n\nmainly need research or a presentation? try [manus](/alternatives/manus) on that task. enjoy mapping and maintaining a visual process? look at [n8n](/alternatives/n8n).\n\ndusk is a weaker fit if you need a phone-store app or phone-browser notifications today. its code is source-available under polyform noncommercial, not open source. personal and work use have different terms.[^12]"
+      "md": "**pick dusk when you want a helper whose work stays together.** give bots distinct jobs and memory. change a bot’s model without losing its chats, files or notes.\n\nmainly need research or a presentation? try [manus](/alternatives/manus) on that task. enjoy mapping and maintaining a visual process? look at [n8n](/alternatives/n8n).\n\nif you need alerts on android, dusk's browser version is a poor fit. its code is source-available under polyform noncommercial, not open source. personal and work use have different terms.[^12]"
     },
     {
       "h": "try one helper before making a team",
@@ -129,7 +129,7 @@
     },
     {
       "q": "how do i use dusk from a phone?",
-      "a": "**pair to the machine holding your bots.** the current browser version sends no notifications. pairing to dusk cloud lets you text with your own computer off."
+      "a": "**pair to the machine holding your bots.** the iphone app notifies you of replies. on android, open the browser to read them. pairing to dusk cloud lets you text with your own computer off."
     },
     {
       "q": "must a personal agent run in the cloud?",

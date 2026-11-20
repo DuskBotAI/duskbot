@@ -1,7 +1,7 @@
 import { TYPING_PHASE } from "./friendly-activity";
 
 /** How the chat's working mascot carries itself for what the bot is doing now. */
-export const WORKING_MOODS = ["thinking", "writing", "searching", "browsing", "running", "reading", "waiting", "error", "done"] as const;
+export const WORKING_MOODS = ["thinking", "writing", "replying", "searching", "browsing", "running", "reading", "waiting", "error", "done"] as const;
 export type WorkingMood = (typeof WORKING_MOODS)[number];
 
 const BY_POOL: Record<string, WorkingMood> = {
@@ -38,7 +38,26 @@ export function workingMood({ phase, waiting = false, failed = false, done = fal
   if (failed || phase?.startsWith("notice:")) return "error";
   if (waiting) return "waiting";
   if (!phase) return "thinking";
-  if (phase === TYPING_PHASE) return "writing";
+  if (phase === TYPING_PHASE) return "replying";
   if (phase.startsWith("friendly:service:")) return "browsing";
   return BY_POOL[phase.startsWith("friendly:") ? phase.slice("friendly:".length) : ""] ?? "thinking";
+}
+
+const WORD_GROUP: Record<WorkingMood, string> = {
+  thinking: "thinking",
+  searching: "looking",
+  browsing: "looking",
+  reading: "looking",
+  running: "working",
+  writing: "working",
+  replying: "writing",
+  waiting: "waiting",
+  error: "error",
+  done: "done",
+};
+
+/** The coarse step a working line's words stand for (thinking, looking things up, working on it, writing): steps in
+ * one group never change the words. The bot's own labels and notices each stand alone. */
+export function wordGroup(phase: string): string {
+  return phase.startsWith("friendly:") ? WORD_GROUP[workingMood({ phase })] : phase;
 }

@@ -3,7 +3,7 @@
 Dusk is the bot every place and every Team Cloud member gets once: a new
 install's first bot and its Chief of Staff, or, for an install that already has
 bots, a helper beside them. It is never deleted or archived; the person takes it
-off the sidebar with "Show Dusk in the sidebar" in Settings → General, which
+off the sidebar with "Show Dusk in the sidebar" in Settings → Models, which
 its menu's **Hide from sidebar** also turns off.
 
 ## Automated checks
@@ -62,5 +62,5 @@ finish the first-run welcome, then:
    example asks and, on a new install, only the setup steps still to do. Each
    step opens the app's own flow.
 3. Its sidebar menu offers **Hide from sidebar**, not Archive or Delete; the
-   switch in Settings → General brings it back.
+   switch in Settings → Models brings it back.
 

@@ -10,6 +10,7 @@ import { SessionRegistry } from "../sessions.ts";
 import { generateKeyPairSync } from "node:crypto";
 
 import { createMobileLink, mobileLookupRelay, PUSH_GRACE_MS } from "./link.ts";
+import { PRESENCE_OVERDUE_MS } from "./presence.ts";
 import { lookupKeys, openLookup } from "./lookup.ts";
 import type { PushMessage, PushTarget } from "./push.ts";
 
@@ -184,6 +185,42 @@ describe("mobile link", () => {
     expect(answer.payload.via.map((one) => one.kind)).toEqual(["relay", "companion"]);
   });
 
+  it("gives a phone paired before the relay was up its own relay channel when it asks, without pairing again", async () => {
+    const mobile = link();
+    const answer = (await call(mobile, owner, "POST", "/api/mobile/pairing")).body as MobilePairingResponse;
+    const phone = (await redeem(mobile, { secret: answer.payload.grant.secret, attemptId: "attempt-0401", device: { name: "Pixel", platform: "android" } })).body as MobileRedeemResponse;
+    expect(phone.relay).toBeUndefined();
+    const auth: RequestAuth = { kind: "session", session: sessions.authenticate(phone.token)!, via: "bearer", scopes: phone.scopes };
+    expect((await call(mobile, auth, "GET", "/api/mobile/routes")).body).not.toHaveProperty("relay");
+
+    // the relay comes up later (the computer signed in, the link agent installed)
+    const agent = { base: "https://link.test", tunnel: "abcdefghij", pub: "A".repeat(43) };
+    const first = await call(mobile, owner, "POST", "/api/mobile/relay/sync", { ...agent, applied: 0, wait: 0 });
+    expect((await call(mobile, auth, "GET", "/api/mobile/routes")).body.relay).toBeNull();
+    const phonePub = generateKeyPairSync("x25519").publicKey.export({ format: "jwk" }).x!;
+    const asking = call(mobile, auth, "POST", "/api/mobile/relay", { pub: phonePub, verifier: "d".repeat(64) });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    const next = await call(mobile, owner, "POST", "/api/mobile/relay/sync", { ...agent, applied: first.body.rev, wait: 0 });
+    const channel = next.body.channels.find((one: { kind: string }) => one.kind === "device");
+    expect(channel).toMatchObject({ pub: phonePub, verifier: "d".repeat(64) });
+    void call(mobile, owner, "POST", "/api/mobile/relay/sync", { ...agent, applied: next.body.rev, wait: 0 });
+    expect((await asking)).toMatchObject({ status: 200, body: { base: "https://link.test", channel: channel.id, agentPub: agent.pub } });
+    expect((await call(mobile, auth, "GET", "/api/mobile/routes")).body.relay).toEqual({ base: "https://link.test", channel: channel.id, agentPub: agent.pub });
+    expect((await call(mobile, auth, "POST", "/api/mobile/relay", { pub: "nope", verifier: "d".repeat(64) })).status).toBe(400);
+  });
+
+  it("keeps a paired phone's session until the phone is removed, used or not", async () => {
+    let clock = Date.now();
+    sessions.close();
+    sessions = new SessionRegistry({ file: join(dir, "sessions.json"), now: () => clock });
+    const mobile = link();
+    const answer = (await call(mobile, owner, "POST", "/api/mobile/pairing")).body as MobilePairingResponse;
+    const phone = (await redeem(mobile, { secret: answer.payload.grant.secret, attemptId: "attempt-0402", device: { name: "p", platform: "ios" } })).body as MobileRedeemResponse;
+    clock += 400 * 24 * 60 * 60_000;
+    expect(sessions.authenticate(phone.token)).not.toBeNull();
+    expect((await call(mobile, owner, "GET", "/api/mobile/devices")).body.devices).toHaveLength(1);
+  });
+
   it("refuses a relay key no agreement can use", async () => {
     const mobile = link();
     const answer = (await call(mobile, owner, "POST", "/api/mobile/pairing")).body as MobilePairingResponse;
@@ -203,6 +240,44 @@ describe("mobile link", () => {
     await vi.advanceTimersByTimeAsync(PUSH_GRACE_MS);
     expect(sent).toEqual([{ target: { service: "apns", token: "abcdef0123456789", environment: "sandbox" }, message: { id: "n1", kind: "mention", title: "Nova", botId: "b1", botName: "Nova", threadId: "t1" } }]);
     await mobile.notify({ id: "n1", at: 1, read: false, kind: "mention", botId: "b1", botName: "Nova", threadId: "t1", title: "Nova", body: "again" });
+    await vi.advanceTimersByTimeAsync(PUSH_GRACE_MS);
+    expect(sent).toHaveLength(1);
+    vi.useRealTimers();
+  });
+
+  it("a phone paired again with its install id replaces the pairing it made before, push or not", async () => {
+    const mobile = link();
+    const pairOnce = async (attemptId: string, install: string) => {
+      const answer = (await call(mobile, owner, "POST", "/api/mobile/pairing")).body as MobilePairingResponse;
+      return (await redeem(mobile, { secret: answer.payload.grant.secret, attemptId, device: { name: "p", platform: "android", install } })).body as MobileRedeemResponse;
+    };
+    const first = await pairOnce("attempt-0301", "0b5e6a52-6a0e-4f7e-9d0c-1f2e3d4c5b6a");
+    const other = await pairOnce("attempt-0302", "9a8b7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d");
+    const again = await pairOnce("attempt-0303", "0b5e6a52-6a0e-4f7e-9d0c-1f2e3d4c5b6a");
+    const listed = (await call(mobile, owner, "GET", "/api/mobile/devices")).body.devices.map((one: { id: string }) => one.id);
+    expect(listed).toEqual([other.device.id, again.device.id]);
+    expect(sessions.authenticate(first.token)).toBeNull();
+    expect(sessions.authenticate(other.token)).not.toBeNull();
+    const odd = await pairOnce("attempt-0304", "not an id");
+    expect((await call(mobile, owner, "GET", "/api/mobile/devices")).body.devices).toHaveLength(3);
+    expect(sessions.authenticate(odd.token)).not.toBeNull();
+  });
+
+  it("a phone paired again takes its push token from the pairing it replaced, which is removed, so each notification arrives once", async () => {
+    vi.useFakeTimers();
+    const mobile = link();
+    const pairOnce = async (attemptId: string) => {
+      const answer = (await call(mobile, owner, "POST", "/api/mobile/pairing")).body as MobilePairingResponse;
+      const phone = (await redeem(mobile, { secret: answer.payload.grant.secret, attemptId, device: { name: "p", platform: "ios" } })).body as MobileRedeemResponse;
+      const auth: RequestAuth = { kind: "session", session: sessions.authenticate(phone.token)!, via: "bearer", scopes: phone.scopes };
+      expect((await call(mobile, auth, "PUT", "/api/mobile/push", { service: "apns", token: "abcdef0123456789" })).status).toBe(200);
+      return { phone, auth };
+    };
+    const first = await pairOnce("attempt-0201");
+    const again = await pairOnce("attempt-0202");
+    expect((await call(mobile, owner, "GET", "/api/mobile/devices")).body.devices.map((one: { id: string }) => one.id)).toEqual([again.phone.device.id]);
+    expect(sessions.authenticate(first.phone.token)).toBeNull();
+    await mobile.notify({ id: "n1", at: 1, read: false, kind: "mention", botId: "b1", botName: "Nova", threadId: "t1", title: "Nova", body: "x" });
     await vi.advanceTimersByTimeAsync(PUSH_GRACE_MS);
     expect(sent).toHaveLength(1);
     vi.useRealTimers();
@@ -296,9 +371,7 @@ describe("mobile link", () => {
       const mobile = link();
       const auth = await pushPhone(mobile, "attempt-0105");
       await call(mobile, auth, "PUT", "/api/mobile/presence", { away: false, threadId: "t1" });
-      await mobile.notify(note("n1"));
       await vi.advanceTimersByTimeAsync(64_000);
-      expect(sent).toHaveLength(0);
       await mobile.notify(note("n2"));
       await vi.advanceTimersByTimeAsync(PUSH_GRACE_MS);
       expect(sent.map((one) => one.message.id)).toEqual(["n2"]);
@@ -306,6 +379,31 @@ describe("mobile link", () => {
       await mobile.notify(note("n3"));
       await vi.advanceTimersByTimeAsync(PUSH_GRACE_MS);
       expect(sent.map((one) => one.message.id)).toEqual(["n2", "n3"]);
+    });
+
+    it("pushes what the open chat showed when the phone then goes quiet, as one suspended before its away got out", async () => {
+      vi.useFakeTimers();
+      const mobile = link();
+      const auth = await pushPhone(mobile, "attempt-0106");
+      await call(mobile, auth, "PUT", "/api/mobile/presence", { away: false, threadId: "t1" });
+      await vi.advanceTimersByTimeAsync(10_000);
+      await mobile.notify(note("n1"));
+      await vi.advanceTimersByTimeAsync(PRESENCE_OVERDUE_MS - 10_000 - 1);
+      expect(sent).toHaveLength(0);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(sent.map((one) => one.message.id)).toEqual(["n1"]);
+    });
+
+    it("never pushes what the open chat showed once the phone checks in again", async () => {
+      vi.useFakeTimers();
+      const mobile = link();
+      const auth = await pushPhone(mobile, "attempt-0107");
+      await call(mobile, auth, "PUT", "/api/mobile/presence", { away: false, threadId: "t1" });
+      await mobile.notify(note("n1"));
+      await vi.advanceTimersByTimeAsync(20_000);
+      await call(mobile, auth, "PUT", "/api/mobile/presence", { away: true, threadId: null });
+      await vi.advanceTimersByTimeAsync(PRESENCE_OVERDUE_MS);
+      expect(sent).toHaveLength(0);
     });
 
     it("pushes after the grace to a phone that never reported, and tries a failed push again at 10 s and 60 s", async () => {

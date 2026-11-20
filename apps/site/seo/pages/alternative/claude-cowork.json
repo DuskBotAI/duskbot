@@ -13,7 +13,7 @@
     "claude cowork pricing"
   ],
   "answer": "**give each job the ai you want doing it.** dusk bot offers separate bots with their own chats and memory, on your disk, your server or dusk cloud.[^3][^4][^7] claude already supports windows and linux beta, alongside macos, web and phones.[^2] as of 12 november 2026, cowork is becoming just claude.[^1] switching makes more sense for ai choice than platform support.",
-  "updated": "2026-11-12",
+  "updated": "2026-11-20",
   "review": {
     "status": "approved",
     "by": "lead agent: read against seo/facts, automated gate, independent fact-check pass",
@@ -79,7 +79,7 @@
         "label": "phone and web",
         "cells": [
           "web, ios and android",
-          "paired phone browser added to the home screen; store apps on the way"
+          "iphone app with notifications; paired browser on android"
         ],
         "src": [
           2,
@@ -156,7 +156,7 @@
     },
     {
       "h": "use the app that fits your actual computer",
-      "md": "**you can keep claude on windows.** its downloads also include ubuntu/debian linux beta with cowork available.[^2] the [windows guide](/guides/claude-cowork-windows) covers that narrower question.\n\ndusk bot supports macos 12+, windows 10/11 64-bit and ubuntu 24.04 beta, through .deb or appimage.[^3] use the listed linux versions; beta support stops short of every distribution.\n\nclaude has ios and android apps. dusk currently pairs through a phone browser with no notifications; store apps are on their way.[^2][^5]"
+      "md": "**you can keep claude on windows.** its downloads also include ubuntu/debian linux beta with cowork available.[^2] the [windows guide](/guides/claude-cowork-windows) covers that narrower question.\n\ndusk bot supports macos 12+, windows 10/11 64-bit and ubuntu 24.04 beta, through .deb or appimage.[^3] use the listed linux versions; beta support stops short of every distribution.\n\nclaude has ios and android apps. dusk's iphone app is in the app store and can notify you of replies. on android, use the browser without notifications until the google play app arrives.[^2][^5]"
     },
     {
       "h": "choose the ai arrangement you want to live with",
@@ -261,7 +261,7 @@
       ],
       [
         "i need phone notifications now",
-        "account for dusk’s browser limit"
+        "dusk's iphone app can notify you; its android browser can't"
       ],
       [
         "i want new tasks to stay local",

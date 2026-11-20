@@ -38,7 +38,7 @@ export function TableFileButton({ path, name, message }: { path: string; name: s
   </>;
 }
 
-function TableFileContent({ path, name, message, delimiter }: {
+export function TableFileContent({ path, name, message, delimiter }: {
   path: string; name: string; message: MessageAttachmentContext; delimiter: "," | "\t";
 }) {
   const [attempt, setAttempt] = useState(0);
@@ -73,5 +73,5 @@ function TableFileContent({ path, name, message, delimiter }: {
   const data = useMemo(() => table && ({ columns: table.headers.map((text) => ({ text })), rows: table.rows.map((row) => row.map((text) => ({ text }))) }), [table]);
   if (error) return <div className="p-8 text-center text-sm"><p role="alert" className="mb-3 text-ink-secondary">{t(error === "gone" ? "attach.gone" : error === "size" ? "table.tooLarge" : error === "columns" || error === "format" ? "table.invalid" : "table.loadFailed")}</p>{error !== "gone" && <button type="button" className="rounded-lg border border-transparent px-3 py-2 hover:bg-raised" onClick={() => setAttempt(attempt + 1)}>{t("chat.retry")}</button>}</div>;
   if (!data) return <div role="status" className="flex items-center justify-center gap-2 p-12 text-sm text-ink-secondary"><LoaderCircle size={16} className="animate-spin" />{t("table.loading")}</div>;
-  return <RichTable {...data} name={name} expanded />;
+  return <div data-selectable=""><RichTable {...data} name={name} expanded /></div>;
 }

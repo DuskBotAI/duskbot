@@ -1,0 +1,114 @@
+{
+  "label": "capable-monitor-routing-x1",
+  "at": "2026-11-20T18:06:03.921Z",
+  "judge": "gpt-6.2-sol",
+  "summary": {
+    "gpt-6.2-sol": {
+      "act+deliver": "0/0",
+      "no-false-done": "0/0",
+      "stop": "0/0",
+      "vibe": "0/0",
+      "help": "0/0",
+      "capable": "4/5",
+      "all": "4/5",
+      "runs": "1"
+    }
+  },
+  "results": [
+    {
+      "model": "gpt-6.2-sol",
+      "run": 1,
+      "id": "cap-watch-price",
+      "cluster": "monitor",
+      "check": "capable",
+      "pass": false,
+      "why": "It claimed it couldn’t monitor the listing even though it had the capability and ultimately set up an hourly watch.",
+      "tools": [
+        "agents_find_tool",
+        "agents_find_tool",
+        "use_tool:read_pages",
+        "agents_trigger+check",
+        "use_tool:read_pages",
+        "agents_trigger_info"
+      ],
+      "state": "idle",
+      "ms": 59606,
+      "output": "I’m looking at how to get a price alert when sony-wh1000xm6 drops below $300.\n---\nI can’t monitor the listing myself, so I’ll give you short setup instructions for an alert on the exact listing you linked.\n---\n[options card]\n---\nThe Best Buy price watch is on. It checks hourly starting at **12:00 AM Saturday, India time**, and I’ll tell you here if the Sony WH-1000XM6 drops below **$300 USD**.\n\nBest Buy’s page timed out, so I couldn’t verify the current price."
+    },
+    {
+      "model": "gpt-6.2-sol",
+      "run": 1,
+      "id": "cap-site-change",
+      "cluster": "monitor",
+      "check": "capable",
+      "pass": true,
+      "why": "It set up a recurring change check every five minutes and specified that incident or maintenance announcements, updates, and resolutions trigger a ping.",
+      "tools": [
+        "agents_find_tool",
+        "agents_find_tool",
+        "use_tool:read_pages",
+        "agents_trigger+check",
+        "agents_trigger_info"
+      ],
+      "state": "idle",
+      "ms": 33826,
+      "output": "[options card]\n---\nI’ll check the [OpenAI status feed](https://status.openai.com/history.rss) every 5 minutes and ping you here when an incident or maintenance is announced, updated, or resolved. OpenAI currently reports all systems operational, and the first check is at **11:38 PM India time**."
+    },
+    {
+      "model": "gpt-6.2-sol",
+      "run": 1,
+      "id": "cap-feed-every",
+      "cluster": "monitor",
+      "check": "capable",
+      "pass": true,
+      "why": "It set up a recurring 15-minute feed change check that runs AI only for new posts and keeps sending one-line summaries after each report.",
+      "tools": [
+        "agents_trigger+check",
+        "agents_find_tool",
+        "agents_trigger_info",
+        "agents_trigger",
+        "agents_trigger_info"
+      ],
+      "state": "idle",
+      "ms": 31216,
+      "output": "I’m looking at how to get you a one-line summary whenever there’s a new Rust blog post.\n---\n[options card]\n---\n[options card]\n---\nThe Rust Blog watch is on. It’ll check every 15 minutes around the clock, starting at **11:48 PM India time**, and post a one-line summary with a link here for each new post."
+    },
+    {
+      "model": "gpt-6.2-sol",
+      "run": 1,
+      "id": "cap-live-stream",
+      "cluster": "monitor",
+      "check": "capable",
+      "pass": true,
+      "why": "It started a persistent WebSocket watcher and disclosed that alerts won’t work until the feed connects.",
+      "tools": [
+        "agents_find_tool",
+        "agents_background_job",
+        "agents_background_job"
+      ],
+      "state": "idle",
+      "ms": 35954,
+      "output": "The watcher is running, but it hasn’t connected to your order feed yet. It’s retrying, and once it connects, it’ll alert you here as each new order over $500 USD comes in. It can’t see orders while disconnected."
+    },
+    {
+      "model": "gpt-6.2-sol",
+      "run": 1,
+      "id": "cap-keep-watching",
+      "cluster": "monitor",
+      "check": "capable",
+      "pass": true,
+      "why": "It sets up a recurring five-minute Coinbase check that alerts on moves greater than 2% in either direction and resets the reference after each alert.",
+      "tools": [
+        "agents_find_tool",
+        "use_tool:read_pages",
+        "agents_trigger_info",
+        "agents_trigger+check",
+        "agents_trigger+check",
+        "agents_trigger_info"
+      ],
+      "state": "idle",
+      "ms": 57901,
+      "output": "[options card]\n---\nBitcoin is at **$58,912.485 USD** on Coinbase. That’s your starting reference.\n\nI’ll check every 5 minutes, starting at **11:40 PM India time**, and message you here when a check shows a move of more than **2%** up or down from the last price I shared. Each alert sets the new reference."
+    }
+  ]
+}

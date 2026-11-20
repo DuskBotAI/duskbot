@@ -93,11 +93,9 @@ it("a card in work a bot handed on reaches the person, and saving it carries the
     ] },
   });
   await f.say(f.chief.threadId, "GET-MAIL please", f.chief.id);
-  let work: any;
-  await expect.poll(async () => {
-    work = (await f.owner()).tasks.find((row: any) => row.openedBy?.botId === f.chief.id);
-    return work?.threadId && (await f.card(work.threadId)) !== undefined;
-  }, { timeout: 20_000 }).toBe(true);
+  // one chat per bot: the work runs in Postie's own chat
+  const work = { threadId: f.bot.threadId as string };
+  await expect.poll(async () => (await f.card(work.threadId)) !== undefined, { timeout: 20_000 }).toBe(true);
   await f.said(work.threadId, "ASKED: waiting for the password.");
   await f.settled(work.threadId);
 

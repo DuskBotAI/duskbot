@@ -1,0 +1,93 @@
+{
+  "path": "/routines/notion-meeting-notes-to-tasks",
+  "type": "routine",
+  "title": "Turn Notion meeting notes into tasks people agreed to",
+  "nav": "meeting notes to notion tasks",
+  "h1": "turn promises in notion meeting notes into tasks",
+  "description": "Extract agreed actions from a dated section of Notion meeting notes. Review each task beside the original words before adding it to your follow-up page.",
+  "keyword": "notion meeting notes to tasks",
+  "keywords": [
+    "notion meeting action items",
+    "turn meeting notes into checkboxes"
+  ],
+  "answer": "**turn “i’ll get the proof to the printer” into a task while everyone remembers who said it.** this routine reads the day’s meeting notes in notion and puts each commitment beside its source line in dusk chat. review the wording there, then approve the items you want on your follow-up page.",
+  "updated": "2026-11-20",
+  "review": {
+    "status": "approved",
+    "by": "lead agent, after four independent reviewers read every page against seo/facts (2026-11-20); every finding applied",
+    "at": "2026-11-20"
+  },
+  "voice": 2,
+  "tags": [
+    "routine",
+    "notion",
+    "meetings",
+    "tasks"
+  ],
+  "connectors": [
+    "notion"
+  ],
+  "related": [
+    "/integrations/notion",
+    "/use-cases/meeting-notes",
+    "/routines/meeting-prep-brief",
+    "/routines/google-docs-weekly-report-draft"
+  ],
+  "art": {
+    "logo": "notion",
+    "label": "Notion",
+    "props": [
+      "s-notebook",
+      "p-folder"
+    ],
+    "bubble": "who promised the proof"
+  },
+  "og_line": "give each task a line in the minutes.",
+  "routine": {
+    "message": "each thursday at 4pm, read today's dated section on the notion page “production meeting log”, including its nested notes. use “production follow-ups” as the follow-up page. compare new commitments with the tasks already on the follow-up page, including finished ones.\n\nin this chat propose one checkbox per new commitment. show the action, named owner, any agreed deadline and the source sentence. mark a missing owner or date as unstated. skip suggestions and questions. stay quiet if the notes and task list are readable and nothing new qualifies. flag missing notes or a partial read.\n\nask me before you change anything. append only the tasks i approve to the follow-up page. reread it before appending. never edit the minutes or add the same commitment twice.",
+    "when": "thursdays at 4pm after the production meeting’s notes are ready",
+    "needs": "notion page and block reads for the proposal, plus the append task blocks action for approved additions. use your own notes and follow-up page titles.",
+    "output": "proposed checkbox · deliver the revised sleeve proof to the printer\nowner: harvey bell · due friday\nsource: “harvey bell will deliver the revised sleeve proof to the printer by friday.”\nno matching task on the follow-up page. add this checkbox?"
+  },
+  "knobs": [
+    "**use your meeting’s date format.** give the exact heading the note-taker uses, especially when the page holds several meetings.",
+    "**keep inference out of assignments.** for “we’ll bring samples,” leave the owner unstated until someone claims the job.",
+    "**start with a proposal only.** set notion to read only. copy the approved task text yourself if you prefer to maintain the list.[^3]"
+  ],
+  "fails": [
+    "**a brainstorm becomes homework.** look for a promise or an agreed action. “could we try a smaller run?” belongs in the discussion.",
+    "**a retry adds a second checkbox.** compare the action, owner and meeting date with existing entries, including completed work.",
+    "**the notes end inside a toggle.** the block read can stop at a depth or access limit. ask for the missing section before approving tasks.[^1]"
+  ],
+  "sections": [
+    {
+      "h": "keep a promise tied to the words people heard",
+      "md": "**read the source sentence before accepting the checkbox.** “get a quote by friday” and “approve the quote by friday” commit someone to different jobs. keep the verb that the meeting actually agreed on.\n\nif nobody took notes, this routine is the wrong pick. ask the people who attended to record the decision first."
+    }
+  ],
+  "faq": [
+    {
+      "q": "does the owner become a notion assignee?",
+      "a": "**the owner appears as text on a checkbox.** the routine appends task blocks to a page. it doesn’t set a person property on a database row.[^1]"
+    },
+    {
+      "q": "what if the same job comes up again next week?",
+      "a": "**ask whether the team agreed to new work.** a reminder about last week’s promise belongs with the existing item. a new print run can justify a separate task."
+    }
+  ],
+  "sources": [
+    {
+      "label": "composio: notion actions",
+      "url": "https://docs.composio.dev/toolkits/notion",
+      "checked": "2026-11-12"
+    },
+    {
+      "label": "dusk bot docs: routines",
+      "url": "/docs/routines"
+    },
+    {
+      "label": "dusk bot docs: connected apps",
+      "url": "/docs/files-and-apps"
+    }
+  ]
+}

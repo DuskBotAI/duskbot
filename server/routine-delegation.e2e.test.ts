@@ -115,7 +115,7 @@ describe("routine delegation through the isolated harness", () => {
     expect((await runState(run.id)).finishedAt).toBeUndefined();
     const work = await awaitPeerWork(run.threadId);
     expect(work).toMatchObject({ id: receipts[0].requestId, status: "queued", mode: "work", reply: "resume", text: "Produce the fixture report." });
-    expect(work.threadId).not.toBe(peerThread);
+    expect(work.threadId).toBe(peerThread);
     expect(rows().find((node) => node.id === work.parentId)).toMatchObject({ threadId: run.threadId, botId: source.id, status: "waiting" });
     finish(peerThread);
     await dump(work.threadId);

@@ -12,7 +12,7 @@
     "ai agent vs zapier"
   ],
   "answer": "**keep the automation that works; move the job that's still a pain.** zapier agents acts across a large app catalogue, by request or trigger. dusk gives you named bots with separate memories, in a desktop app with local or hosted homes.\n\nzapier agents activities and zap automation tasks use different allowances. find out what your job spends before comparing bills.",
-  "updated": "2026-11-12",
+  "updated": "2026-11-20",
   "review": {
     "status": "approved",
     "by": "lead agent: independent reviewer pass against seo/facts (4 reviewers), every finding applied, automated gate",
@@ -78,7 +78,7 @@
         "label": "where you interact",
         "cells": [
           "web app and chrome extension",
-          "desktop app and a paired iphone or android browser"
+          "desktop and iphone apps, plus a paired browser on android"
         ],
         "src": [
           2,
@@ -154,7 +154,7 @@
     },
     {
       "h": "try the friday file review",
-      "md": "**get the weekly file roundup out of your head.** ask: \"every friday at 3, read your folder's files from this week. list filenames with one line about each. change nothing.\" bots keep their work in their own folders, alongside chats and memory.[^4][^6]\n\nmoving because you want phone chat? dusk uses its own app and paired phone browser. store apps are on the way.[^5]\n\nsee [assistants you text](/alternatives/ai-assistant-you-text) for messaging-app choices. read your ai provider's current terms before choosing the ai for your dusk bot."
+      "md": "**get the weekly file roundup out of your head.** ask: \"every friday at 3, read your folder's files from this week. list filenames with one line about each. change nothing.\" bots keep their work in their own folders, alongside chats and memory.[^4][^6]\n\nmoving because you want phone chat? get dusk's iphone app from the app store to receive reply alerts. android pairs through a browser while the google play app is on its way.[^5]\n\nsee [assistants you text](/alternatives/ai-assistant-you-text) for messaging-app choices. read your ai provider's current terms before choosing the ai for your dusk bot."
     }
   ],
   "faq": [

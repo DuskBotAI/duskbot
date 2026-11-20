@@ -88,3 +88,76 @@ automation names, Sentence case, draft plus connect for an app that is not conne
 Flat overall: most of this round's fixes (one reply after a failed tool, the card, titles, casing, promised checks)
 are outside what these cases measure and are covered by unit tests instead. `email-landlord` failures went 6 to 3 of
 12; `reminder-and-note` 3 to 5 and `x-posts` 5 to 5 (mostly gpt-oss) did not improve.
+
+### Round 5 (voice and helpfulness, docs/bot-voice.md), three runs per case
+
+Seven new cases: a hello, a vent, thanks and a correction, judged for a friendly, human, concise voice with no stock
+phrases, flattery or cringe; gift picks, a standup reminder with a one-line offer to repeat it, and an honest limit (a
+price it cannot check). `round5-before-x3.json` (dev at `84edd241d`) against `round5-after-x3.json` (the voice
+commits) and `round5-after2-voice-x3.json` (the new cases again on the final build, after the no-computer note and
+the price and repeat-offer rules). Passes over 4 models x 3 runs:
+
+| | before | after | final build |
+| --- | --- | --- | --- |
+| voice (4 cases) | 6/48 | 21/48 | 19/48 |
+| helpfulness (3 cases) | 8/36 | 8/36 | 16/36 |
+| act+deliver | 65/84 | 64/84 | - |
+| no false done | 41/48 | 43/48 | - |
+| stop | 60/60 | 60/60 | - |
+
+By case, before to final: hello 2 to 8, thanks 4 to 5, correction 0 to 3, vent 0 to 3, gift picks 3 to 3, honest
+limits 5 to 12, a repeat offer on the standup reminder 0 to 1 (of 12 each). The vent case is judged strictly (no
+echo of their words); small models still skip per-pick prices and the repeat offer.
+
+### Round 6 (repeat offer in the reminder tool's result, venting hint), full run, three runs per case
+
+`round6-final-x3.json` against `round5-before-x3.json`, all 23 cases over 4 models x 3 runs: 180/276 to 212/276.
+act+deliver 65 to 68/84, no false done 41 to 38/48, stop 60/60, voice 6 to 26/48, helpfulness 8 to 20/36. By case:
+hello 2 to 11, thanks 4 to 6, vent 0 to 8, correction 0 to 1, gift picks 3 to 3, honest limits 5 to 9, standup
+repeat offer 0 to 8 (of 12 each).
+
+### Round 7 (lean consolidation), three runs per case
+
+One pass that merges overlapping habit rules, drops the style guides' basics the habits already give and shortens the
+no-computer note, plus three ideas from Poke's prompts (a casual hello for a bare hi, remembering without saying so,
+mistakes told from the person's side). A turn's system prompt (`prompt-size.ts`, a new bot in a fresh workspace):
+40,274 to 35,354 characters, about 10,070 to 8,840 tokens (-12%).
+
+`round7-lean-x3.json` against `round6-final-x3.json`: 212/276 to 211/276. act+deliver 68 to 69/84, help 20 to 22/36,
+stop 60/60, voice 26 to 24/48, no false done 38 to 36/48. Re-runs on the final build of the cases that dipped
+(`round7-lean2-dipped-x3.json`, `round7-lean3-hey-x3.json`): rename-folder 12/12, post-x 12/12, cancel-summary 9/12
+(back to round 6), email-landlord 7/12 (round 6: 5), thanks 7 and vent 9 (round 6: 6 and 8), hello 8/12 (round 6:
+11; the misses are gpt-oss and gemini ending a hello with an offer of help).
+
+### Capability round (`--suite capable`), 2026-11-20
+
+Does a bot take real work on instead of refusing it? 27 jobs from the Grok task library (`GROK-DISTILL.md` section 9)
+and from prod frustration notes and bug reports: a Telegram group watch (the cofounder's refused request), watching a
+page or a price, a check every hour, an always-on loop, "use my Mac" and "use your computer", research, csv, xlsx, a
+web app, a script, a lead list, inbox triage, a weekly report, a marketing department, a site QA, connected apps,
+sign-ins, a purchase, a model switch, memory, language, an angry person and a bot with Works on Off. Cases run with
+Works on Auto (`place: "auto"`; no computer is set up in the sandbox) unless they say otherwise, and are judged for
+doing the job, picking the right capability, asking at most one real question, one concrete offer and honest limits.
+Bot and judge: `gpt-6.2-sol`. Every run was judged again from its saved transcripts with the final pass conditions
+(`rejudge.ts`), so the numbers below compare like with like.
+
+| build | runs | passed |
+| --- | --- | --- |
+| before: dev at `6142d184f`, when this round started (`capable-before-x2-judged.json`) | 2 | 24/54 |
+| mid: dev at `97178ba1e`, background jobs and chat apps landed, none of this round's fixes (`capable-mid-x1-judged.json`) | 1 | 10/27 |
+| after: dev at `ec3136180` (`capable-after-x2-judged.json`) | 2 | 33/54 |
+
+By case, before to after (of 2): always-on 0 to 2, hourly script 0 to 2, model switch 0 to 2, Works on Off 1 to 2,
+leads 0 to 1, use your computer 0 to 1; csv, inbox, research, script, web app, weekly report, memory and language
+stay 2/2. Down: site change and price watch 2 to 0 on the live judge, both set up as background jobs, which the first
+pass conditions did not name; they pass under the final ones only when the job is confirmed. The Telegram watch now
+starts and is refused by Telegram for the made-up token, then asks once for a real one.
+
+A targeted rerun of six cases on dev at `4be02d1e3` (`capable-after2-targeted-x2-judged.json`), after the no-computer
+note and the beat and angry fixes: use your computer 2/2, QA a site 2/2, angry person 1/2, use my Mac 0/2, lead list
+0/2, marketing department 0/2 (5/12, as in the after run, with a different mix).
+
+Still failing and why: the lead list reads 25+ pages and passes the eval's 240 s wait before it answers; the marketing
+department now designs before it builds (a later prompt change), which this case's pass condition does not credit;
+sign-in, purchase, Gmail and Calendar have no browser or connected-app tools in the sandbox, so the bot says what is
+missing, which the judge holds as too little; the xlsx case wants the departure city named.

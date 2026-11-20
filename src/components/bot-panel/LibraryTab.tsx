@@ -3,7 +3,7 @@ import { useMemo, useState, type ReactNode } from "react";
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
 import { usePageOpener } from "@/lib/page-open";
-import { SIDEBAR_INLINE, useMediaQuery } from "@/lib/use-media-query";
+import { usePhoneLayout } from "@/lib/use-media-query";
 import { useStore, visibleMessages, type Bot, type Message } from "@/state/store";
 import { useLocalFileSave } from "../AttachmentPreview";
 import { recentChangedFiles, sharedFileReferences } from "../ComputerFilesPane";
@@ -171,7 +171,7 @@ function Group({ group, entries, now }: { group: GroupKey; entries: Entry[]; now
 function useLibraryEntries(bot: Bot): Entry[] {
   const { dispatch } = useStore();
   const openPage = usePageOpener();
-  const phone = !useMediaQuery(SIDEBAR_INLINE, true);
+  const phone = usePhoneLayout();
   const items = useMemo(() => libraryItems(bot), [bot]);
   const showInChat = (messageId: string) => {
     dispatch({ type: "focusMessage", threadId: bot.threadId, messageId });

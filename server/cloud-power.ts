@@ -12,7 +12,7 @@ import { writeFileAtomic } from "./atomic.ts";
 import { withLegacyHeaders } from "../electron/legacy-names.mjs";
 
 /** Why a home is not idle, as fixed codes (the Admin keeps the latest one for its operator page). */
-export type CloudPowerBusy = "turn" | "run" | "live-call" | "computer" | "maintenance" | "recent-activity" | "recent-work" | "just-woke" | "due-soon" | "team" | "focus";
+export type CloudPowerBusy = "turn" | "run" | "job" | "live-call" | "computer" | "maintenance" | "recent-activity" | "recent-work" | "just-woke" | "due-soon" | "team" | "focus";
 
 export interface CloudPowerReport {
   v: 1; at: number; bootedAt: number; wokeAt: number;
@@ -40,6 +40,8 @@ export interface CloudPowerProbes {
   /** A routine run is queued to start now, starting or running. One waiting for a person's answer is not: the answer wakes the home. */
   run(): boolean;
   liveCall(): boolean;
+  /** A bot's background job should be running (docs/background-jobs.md): it runs around the clock, so the home stays up. */
+  job?(): boolean;
   /** A cloud computer is on, starting or within its own idle window: its idle timer lives in this process. */
   computer(): boolean;
   /** Backup or restore, Move to Cloud, an engine or browser install, a provider sign-in. */
@@ -166,6 +168,7 @@ export function createCloudPower(options: {
     const { probes } = options;
     if (probes.turn()) busy.push("turn");
     if (probes.run()) busy.push("run");
+    if (probes.job?.()) busy.push("job");
     if (probes.liveCall()) busy.push("live-call");
     if (probes.computer()) busy.push("computer");
     if (probes.maintenance() || inFlight > 0) busy.push("maintenance");

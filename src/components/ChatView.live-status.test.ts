@@ -10,6 +10,7 @@ import type { ModelPicker } from "./ModelPicker";
 import { STATUS_EXIT_MS, STATUS_HOLD_MS, STATUS_QUIET_MS } from "./TurnPresence";
 import { STATUS_MOUNT_MS } from "@/hooks/use-reached";
 import { TYPING_MIN_MS } from "@/hooks/use-typing-hold";
+import { LINE_BACK_AFTER_REPLY_MS } from "@/lib/turn-tail";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -17,7 +18,7 @@ const dispatch = vi.hoisted(() => vi.fn());
 vi.mock("@/state/store", async (importOriginal) => {
   const original = await importOriginal<typeof import("@/state/store")>();
   return { ...original, useStore: () => ({
-    state: { ...original.initialState, config: null, instances: [{ instanceId: "test", driverKind: "claudeAgent", displayName: "Test", snapshot: { state: "available" } } as InstanceInfo] },
+    state: { ...original.initialState, config: null, instances: [{ instanceId: "test", driverKind: "claudeAgent", displayName: "Test", snapshot: { state: "available" }, models: { default: "profile-default", options: [] } } as unknown as InstanceInfo] },
     dispatch,
   }) };
 });
@@ -102,18 +103,19 @@ describe("the working line", () => {
     engine({ type: "item.completed", itemType: "assistant_text", text: intro.text! } as Partial<RuntimeEvent>);
     render(busyBot([ask, intro]));
     expect(slot().classList, "under the bot's own bubble it sits close, as one more part of the reply").toContain("-mt-3");
-    expect(line(), "a bubble in the middle of a turn is not its end: the line stays").not.toBeNull();
-    act(() => void vi.advanceTimersByTime(STATUS_HOLD_MS));
+    expect(line(), "the bubble takes the line's place as it lands").toBeNull();
     engine({ type: "turn.progress", activity: "write", itemId: "toolu_write", file: "index.html", bytes: 14 * 1024 + 300 } as Partial<RuntimeEvent>);
-    expect(statusLine()).toBe("Writing code");
+    expect(statusLine(), "a named step brings the line back under it at once").toBe("Writing code");
   });
 
-  it("stays through the turn's bubbles and leaves only when the turn ends, its words fading in 140ms", () => {
+  it("gives way to a landing reply, is back under it while the turn goes on, and leaves when it ends, its words fading in 140ms", () => {
     const reply: Message = { id: "reply", role: "bot", kind: "text", at: started + 9_000, text: "Fair, quiet day", turnId: "t1" };
     engine({ type: "turn.started" });
     render(busyBot([ask]));
     render(busyBot([ask, reply]));
-    expect(line()).not.toBeNull();
+    expect(line(), "the reply takes the line's place even before the turn's end arrives").toBeNull();
+    act(() => void vi.advanceTimersByTime(LINE_BACK_AFTER_REPLY_MS));
+    expect(line(), "a turn still running a while later shows the line again").not.toBeNull();
     engine({ type: "turn.completed", ok: true } as Partial<RuntimeEvent>);
     render(busyBot([ask, reply], false));
     expect(host.querySelector(".turn-status-out"), "the line fades out, its mascot with it").not.toBeNull();
@@ -179,6 +181,7 @@ describe("the working line", () => {
   it("says Writing while the reply comes, by the mascot, never the dots", () => {
     engine({ type: "turn.started" });
     render(busyBot([ask]));
+    act(() => void vi.advanceTimersByTime(STATUS_HOLD_MS));
     engine({ type: "content.delta", streamKind: "assistant_text", delta: "Hi" } as Partial<RuntimeEvent>);
     expect(line()!.querySelector("[data-working-mascot]")).not.toBeNull();
     expect(statusLine()).toBe("Writing");
@@ -209,18 +212,20 @@ describe("each bubble's typing beat", () => {
   const fresh = (id: string, text: string): Message => ({ id, role: "bot", kind: "text", at: Date.now(), text, turnId: "t1" });
   const rows = () => [...host.querySelectorAll("[data-mid]")].map((row) => row.getAttribute("data-mid"));
 
-  it("says Writing for at least 500ms before each bubble lands, the line staying for the turn", () => {
+  it("holds each bubble 500ms for its typing beat, the line staying for the turn", () => {
     engine({ type: "turn.started" });
     render(busyBot([ask]));
     const ack = fresh("ack", "On it, checking reviews now.");
     render(busyBot([ask, ack]));
     expect(rows(), "held while the line types").toEqual(["ask"]);
-    expect(statusLine()).toBe("Writing");
+    expect(statusLine(), "a short turn keeps its one phrase while the bubble types").toBe("Thinking");
     act(() => void vi.advanceTimersByTime(TYPING_MIN_MS - 10));
     expect(rows()).toEqual(["ask"]);
     act(() => void vi.advanceTimersByTime(10));
     expect(rows()).toEqual(["ask", "ack"]);
-    expect(line(), "the line stays for the rest of the turn").not.toBeNull();
+    expect(line(), "the bubble takes the line's place").toBeNull();
+    act(() => void vi.advanceTimersByTime(LINE_BACK_AFTER_REPLY_MS));
+    expect(line(), "and the line is back under it for the rest of the turn").not.toBeNull();
     expect(statusLine()).not.toBe("typing…");
   });
 
@@ -230,7 +235,7 @@ describe("each bubble's typing beat", () => {
     render(busyBot([ask, fresh("one", "First."), fresh("two", "Second.")]));
     act(() => void vi.advanceTimersByTime(TYPING_MIN_MS));
     expect(rows()).toEqual(["ask", "one"]);
-    expect(statusLine()).toBe("Writing");
+    expect(statusLine(), "a short turn keeps its one phrase").toBe("Thinking");
     act(() => void vi.advanceTimersByTime(TYPING_MIN_MS));
     expect(rows()).toEqual(["ask", "one", "two"]);
   });
@@ -241,7 +246,7 @@ describe("each bubble's typing beat", () => {
     const last = fresh("last", "It's 441, so yes.");
     engine({ type: "turn.completed", ok: true } as Partial<RuntimeEvent>);
     render(busyBot([ask, last], false));
-    expect(statusLine()).toBe("Writing");
+    expect(statusLine(), "a short turn keeps its one phrase").toBe("Thinking");
     expect(rows()).toEqual(["ask"]);
     act(() => void vi.advanceTimersByTime(TYPING_MIN_MS));
     expect(rows()).toEqual(["ask", "last"]);
@@ -259,6 +264,41 @@ describe("each bubble's typing beat", () => {
     const mine: Message = { id: "mine", role: "user", kind: "text", at: Date.now(), text: "also flag fraud" };
     render(busyBot([ask, fresh("ack", "On it."), mine]));
     expect(rows()).toEqual(["ask", "ack", "mine"]);
+  });
+});
+
+describe.each(["desktop", "phone"] as const)("the reply landing where the line was, on the %s", (layout) => {
+  const fresh = (id: string, text: string): Message => ({ id, role: "bot", kind: "text", at: Date.now(), text, turnId: "t1" });
+  /** The transcript's rows and the line's slot, top to bottom. */
+  const order = () => [...host.querySelectorAll("[data-mid], .turn-status-slot")].map((el) =>
+    el.classList.contains("turn-status-slot") ? (el.querySelector("[data-turn-status]") ? "line" : "slot") : el.getAttribute("data-mid"));
+  beforeEach(() => { if (layout === "phone") document.documentElement.dataset.mobileApp = "ios"; });
+  afterEach(() => { delete document.documentElement.dataset.mobileApp; });
+
+  it("thinks in the slot right under the person's message, and the reply takes that slot even before the turn's end arrives", () => {
+    engine({ type: "turn.started" });
+    render(busyBot([ask]));
+    expect(order()).toEqual(["ask", "line"]);
+    render(busyBot([ask, fresh("reply", "Three flats are under budget.")]));
+    act(() => void vi.advanceTimersByTime(TYPING_MIN_MS));
+    expect(order(), "the reply in the line's place, nothing of the line under it").toEqual(["ask", "reply", "slot"]);
+    expect(host.querySelector(".turn-status-out"), "no line fading on under the new bubble").toBeNull();
+    engine({ type: "turn.completed", ok: true } as Partial<RuntimeEvent>);
+    render(busyBot([ask, fresh("reply", "Three flats are under budget.")], false));
+    expect(order()).toEqual(["ask", "reply", "slot"]);
+  });
+
+  it("lets a line under an earlier bubble of the turn fade out when the turn ends", () => {
+    engine({ type: "turn.started" });
+    const ack = fresh("ack", "On it.");
+    render(busyBot([ask]));
+    render(busyBot([ask, ack]));
+    act(() => void vi.advanceTimersByTime(TYPING_MIN_MS));
+    act(() => void vi.advanceTimersByTime(LINE_BACK_AFTER_REPLY_MS));
+    expect(order()).toEqual(["ask", "ack", "line"]);
+    engine({ type: "turn.completed", ok: true } as Partial<RuntimeEvent>);
+    render(busyBot([ask, ack], false));
+    expect(host.querySelector(".turn-status-out"), "it leaves as on the desktop, not cut in one frame").not.toBeNull();
   });
 });
 

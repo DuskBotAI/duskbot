@@ -62,7 +62,7 @@ export function PulseGrid({ overview }: { overview: { data: Overview | null; err
       <Tile to="/admin/retention" label="came back" icon={<Repeat {...I} />} wash="bg-wash-lilac" loading={!retention.data && !retention.error} value={percent(rate("d1"))}>
         {retention.data && `next day · ${percent(rate("d7"))} in week 2`}
       </Tile>
-      <Tile to="/admin/product" label="using the app" icon={<ChartNoAxesCombined {...I} />} wash="bg-wash-sky" loading={!o && !overview.error} value={n(o?.totals.wau)}>
+      <Tile to="/admin/product" label="using the app" icon={<ChartNoAxesCombined {...I} />} wash="bg-wash-sky" loading={!o && !overview.error} value={n(o?.totals.appWau)}>
         {o && `this week · ${n(o.bots.bots)} bots, ${n(o.bots.turns30d)} replies in 30d`}
       </Tile>
       <Tile to="/admin/events" label="events today" icon={<ChartNoAxesColumn {...I} />} wash="bg-wash-pink" loading={!events.data && !events.error} value={n(todayEvents)}>

@@ -69,8 +69,8 @@ export function lastLine(bot: Bot, visible: Message[], instances: InstanceInfo[]
   if (!newest) return "";
   const last = quotedLine(visible, newest);
   if (last.kind === "options" && last.card) {
-    // Dusk's intro by its first line.
-    if (last.helperIntro) return t(bot.chiefOfStaff ? "helperIntro.hello" : "helperIntro.hi.helper", { name: bot.name });
+    // Dusk's intro by the line its chat opens with
+    if (last.helperIntro) return t(bot.chiefOfStaff ? "helperIntro.single" : "helperIntro.hi.helper", { name: bot.name });
     return (last.card.requestId && last.card.tool && !last.card.questionRequest && approvalCardOutcome(last.card)) || last.card.title;
   }
   if (last.kind === "activity" && last.tool) return activityPreview(last.tool, botEngine(bot, instances), last.dataResult);

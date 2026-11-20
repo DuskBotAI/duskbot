@@ -1,0 +1,140 @@
+{
+  "path": "/integrations/zendesk",
+  "type": "integration",
+  "title": "Zendesk bot for urgent tickets and repeat handoffs",
+  "nav": "zendesk",
+  "h1": "see why an urgent zendesk ticket keeps changing hands",
+  "description": "Trace an urgent Zendesk ticket through its comments, assignments and SLA targets. Get a handoff an agent can use without changing the ticket.",
+  "keyword": "zendesk bot",
+  "keywords": [
+    "zendesk ai assistant",
+    "zendesk ai agent"
+  ],
+  "answer": "**see why an urgent ticket came back to your queue before you pass it on again.** a zendesk bot in dusk can read the ticket, follow its assignment history and pull its service targets. ask for the customer’s last question and the last action an agent took. keep both beside the ticket id.",
+  "updated": "2026-11-20",
+  "review": {
+    "status": "approved",
+    "by": "lead agent, after four independent reviewers read every page against seo/facts (2026-11-20); every finding applied",
+    "at": "2026-11-20"
+  },
+  "voice": 2,
+  "tags": [
+    "ticket audits",
+    "support",
+    "service targets"
+  ],
+  "connectors": [
+    "zendesk"
+  ],
+  "related": [
+    "/routines/zendesk-urgent-tickets",
+    "/integrations/intercom",
+    "/use-cases/customer-support-inbox"
+  ],
+  "art": {
+    "label": "Zendesk",
+    "props": [
+      "s-notebook"
+    ],
+    "bubble": "why is this back"
+  },
+  "og_line": "follow the ticket through each handoff.",
+  "app": {
+    "name": "Zendesk",
+    "toolkit": "zendesk",
+    "intro": "**put the ticket history beside the current owner.** the owner field tells you where the ticket sits now. an audit can show who held it earlier. the comments tell you what the customer has already tried.",
+    "highlight": [
+      {
+        "slug": "ZENDESK_SEARCH_ZENDESK",
+        "use": "find unsolved tickets marked urgent in the support queue"
+      },
+      {
+        "slug": "ZENDESK_GET_ZENDESK_TICKET_BY_ID",
+        "use": "open the ticket a shift lead needs to assign"
+      },
+      {
+        "slug": "ZENDESK_GET_TICKET_COMMENTS",
+        "use": "recover troubleshooting steps the customer already attempted"
+      },
+      {
+        "slug": "ZENDESK_GET_TICKETS_AUDITS",
+        "use": "follow the sequence of assignment changes for this ticket"
+      },
+      {
+        "slug": "ZENDESK_GET_TICKET_SLA_POLICY_METRICS",
+        "use": "look up the policy targets that apply to a particular ticket"
+      },
+      {
+        "slug": "ZENDESK_GET_ZENDESK_TICKET_RELATED",
+        "use": "look for an associated issue or a follow-up source"
+      },
+      {
+        "slug": "ZENDESK_REPLY_ZENDESK_TICKET",
+        "use": "add a private note or a public reply after choosing the audience"
+      }
+    ],
+    "setup": "**name the queue as your team searches for it.** sign in to zendesk from connected apps. give your bot reading access and your usual ticket search. try a ticket that changed groups this week. ask for the transfer and the first comment after it."
+  },
+  "routines_intro": "**pick a brief the next agent can act on.** each routine brings back ticket ids. keep the original comments close so a short handoff still has a source.",
+  "routines": [
+    {
+      "name": "urgent queue at shift start",
+      "message": "every weekday at 8, search zendesk for unsolved urgent tickets in my group. for each, read the last customer comment and any service targets on the ticket. show me the request, assignee and applicable target here. flag an empty assignee. leave the queue alone.",
+      "when": "weekdays at 8 am",
+      "output": "urgent tickets with owners and applicable targets"
+    },
+    {
+      "name": "tickets that came back",
+      "message": "at noon each friday, read the audits for unsolved tickets our group touched this week. find tickets that left our group and then came back. list the transfers in order. quote a reason only if a comment gives one.",
+      "when": "fridays at noon",
+      "output": "return trips that a shift lead can investigate"
+    },
+    {
+      "name": "handoff to engineering",
+      "message": "at 4 each workday, review our open tickets tagged for engineering. pull out the reproduction steps the customer actually tried. look for a related issue and include its reference if present. draft a handoff here with the next missing detail. never add it to the ticket.",
+      "when": "workdays at 4 pm",
+      "output": "a technical handoff that preserves earlier troubleshooting"
+    }
+  ],
+  "asks": "**choose who can see the comment.** the ticket reply action defaults to public. both public and private comments through that action count as sends and ask first by default. for a handoff draft, stay in dusk chat. changing ticket tags is a write and can run without a prompt.\n\ncareful with **Full access**: a bot there with no sending rule can send up to 25 a day without asking. give it **Ask every time**.",
+  "cannot": [
+    "**recover missing comment text from the comments action.** some entries lack a body. report the gap before attributing a request to the customer.",
+    "**find archived tickets in the account-wide audit list.** use the per-ticket audit action when investigating a known ticket.",
+    "**turn a policy target into an exact time remaining on its own.** the target action returns the targets applied to the ticket. elapsed time is a separate question."
+  ],
+  "sections": [
+    {
+      "h": "where the next shift should start",
+      "md": "**lead with what the customer already tried.** asking someone to repeat a failed fix makes a transfer feel like starting over. keep the ticket id, the failed step and the next unanswered question together. for a single urgent ticket already on your screen, work it directly in zendesk."
+    }
+  ],
+  "faq": [
+    {
+      "q": "can the bot tell which group sent a ticket back?",
+      "a": "**read the ticket’s audit events.** ask for each group change in order. follow the remaining pages before deciding that a transfer never happened."
+    },
+    {
+      "q": "can i have it prepare an internal note without posting it?",
+      "a": "**ask for the note in your dusk chat.** read-only access keeps the draft there until you decide how to use it."
+    }
+  ],
+  "worked": {
+    "intro": "a fictional example.",
+    "before": "elliot marsh tried a fresh install. the ticket went from support to engineering and back with a request for the build number.",
+    "after": "next question for elliot: which build failed after the fresh install? skip the reinstall instructions. engineering is waiting on the build number."
+  },
+  "sources": [
+    {
+      "label": "dusk bot docs: files and apps",
+      "url": "/docs/files-and-apps"
+    },
+    {
+      "label": "dusk bot docs: routines",
+      "url": "/docs/routines"
+    },
+    {
+      "label": "dusk bot docs: sending permissions",
+      "url": "/docs/computer"
+    }
+  ]
+}

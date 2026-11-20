@@ -1,6 +1,5 @@
 import { useEffect, useRef } from "react";
 import { t } from "@/lib/i18n";
-import { Loader2 } from "../icons";
 import {
   PhoneSetupFlowView,
   companionAccountActionError,
@@ -147,13 +146,13 @@ export function CompanionSection({ profileEmail = "", focusRequest = 0 }: { prof
 
   if (!companionBridge()) return null;
 
-  if (!state) {
-    return (
-      <SettingsRows>
-        <SettingRow title={t("settings.w6.phone.title")} subtitle={t("common.checking")}><Loader2 size={14} className="animate-spin text-ink-secondary" /></SettingRow>
-      </SettingsRows>
-    );
-  }
+  const advancedRow = (
+    <SettingsRows>
+      <NavRow data-panel-page={PHONE_ADVANCED_PAGE} pixel="sliders" title={t("settings.w6.phone.advanced")} onClick={() => sub.open(PHONE_ADVANCED_PAGE, t("settings.w6.phone.advanced"))} />
+    </SettingsRows>
+  );
+  // while the computer's own link loads, the page is already the one it settles into: no row comes and goes above Advanced
+  if (!state) return advancedPage ? null : <div className="flex flex-col gap-5"><PhonesList />{advancedRow}</div>;
 
   const accountActionError = companionAccountActionError(c.account, c.accountError);
   const tailscaleStatus = deriveTailscalePairingStatus(state, c.tailscaleAvailable);
@@ -264,9 +263,11 @@ export function CompanionSection({ profileEmail = "", focusRequest = 0 }: { prof
 
   return (
     <div className="flex flex-col gap-5">
-      <div ref={pairingFlow} tabIndex={-1} data-phone-pairing="computer" className="scroll-mt-4 rounded-[14px] focus:outline-none">
-        <SettingsRows><PhoneSetupFlowView controller={c} /></SettingsRows>
-      </div>
+      {c.phase !== "intro" && (
+        <div ref={pairingFlow} tabIndex={-1} data-phone-pairing="computer" className="scroll-mt-4 rounded-[14px] focus:outline-none">
+          <SettingsRows><PhoneSetupFlowView controller={c} /></SettingsRows>
+        </div>
+      )}
       {remoteBlocked && <p role="status" className="-mt-3 pl-3 text-[11px] leading-4 text-ink-tertiary">{remoteBlocked}</p>}
 
       {state.devices.length > 0 && (
@@ -307,9 +308,7 @@ export function CompanionSection({ profileEmail = "", focusRequest = 0 }: { prof
 
       <PhonesList />
 
-      <SettingsRows>
-        <NavRow data-panel-page={PHONE_ADVANCED_PAGE} pixel="sliders" title={t("settings.w6.phone.advanced")} onClick={() => sub.open(PHONE_ADVANCED_PAGE, t("settings.w6.phone.advanced"))} />
-      </SettingsRows>
+      {advancedRow}
     </div>
   );
 }

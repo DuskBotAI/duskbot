@@ -1,19 +1,20 @@
 {
   "path": "/alternatives/poke",
   "type": "alternative",
-  "title": "Poke AI alternatives: texting a contact or your bots",
+  "title": "Poke AI alternatives: when to choose dusk bot for texting",
   "nav": "poke",
   "h1": "poke ai alternatives when you want an app for your bots",
-  "description": "Compare Poke's iMessage assistant and credit tiers with dusk bot's own app, separate AI bill and phone pairing, including the Cognition update.",
+  "description": "Compare Poke and dusk bot for texting an AI assistant. See which uses iMessage, where your bots run and whether the AI is included in the price.",
   "keyword": "poke ai alternatives",
   "keywords": [
     "poke ai",
     "poke ai review",
     "poke ai imessage",
-    "poke ai cost"
+    "poke ai cost",
+    "poke ai alternatives"
   ],
   "answer": "**poke suits an assistant beside your contacts.** it works in imessage and other chat apps without an install. dusk bot suits separate bots in their own app, with an ai you choose per bot. poke bundles models; dusk separates ai and hosting bills. as of 12 november 2026, poke says it is joining cognition. existing users can continue as before.[^1][^2][^3][^4]",
-  "updated": "2026-11-12",
+  "updated": "2026-11-20",
   "review": {
     "status": "approved",
     "by": "lead agent: read against seo/facts, automated gate, independent fact-check pass",
@@ -29,7 +30,8 @@
   "related": [
     "/vs/poke",
     "/alternatives/ai-assistant-you-text",
-    "/personal-ai-agent"
+    "/personal-ai-agent",
+    "/integrations/whatsapp"
   ],
   "competitor": {
     "key": "poke",
@@ -68,7 +70,7 @@
         "label": "where you text",
         "cells": [
           "apple messages, telegram, whatsapp or rcs",
-          "desktop app or paired phone browser"
+          "desktop app, iphone app or paired android browser"
         ],
         "src": [
           1,
@@ -155,7 +157,7 @@
     },
     {
       "h": "the phone works only if its host does",
-      "md": "**text from the couch with the laptop shut.** poke is an always-on cloud agent, according to cognition.[^4]\n\nin dusk, pair your phone to where your bots live:\n\n- your computer: keep it on with dusk running\n- dusk cloud: your computer can be off\n- current phone version: browser and home-screen shortcut, without notifications; store apps are on the way[^6][^7]\n\nread [poke versus dusk bot](/vs/poke) if phone access decides the choice."
+      "md": "**text from the couch with the laptop shut.** poke is an always-on cloud agent, according to cognition.[^4]\n\nin dusk, pair your phone to where your bots live:\n\n- your computer: keep it on with dusk running\n- dusk cloud: your computer can be off\n- iphone: the app store version notifies you of replies\n- android: open the paired browser to read replies until the google play app arrives[^6][^7]\n\nread [poke versus dusk bot](/vs/poke) if phone access decides the choice."
     },
     {
       "h": "one bundle or two bills",
@@ -173,7 +175,7 @@
     },
     {
       "q": "how are people running agents from their phone?",
-      "a": "**the phone reaches work running elsewhere.** poke uses existing chat apps. dusk pairs its phone browser to your computer or cloud. use cloud if your computer needs to be off.[^1][^6]"
+      "a": "**the phone reaches work running elsewhere.** poke uses existing chat apps. pair the dusk iphone app or android browser to your computer or cloud. use cloud if your computer needs to be off.[^1][^6]"
     },
     {
       "q": "can i choose the exact ai in poke?",
@@ -232,7 +234,7 @@
   "mistakes": [
     {
       "mistake": "expecting dusk to appear as an imessage contact",
-      "fix": "its phone conversation lives in a paired browser today."
+      "fix": "open the dusk iphone app or the paired android browser to continue the conversation."
     },
     {
       "mistake": "buying a tier from the price alone",

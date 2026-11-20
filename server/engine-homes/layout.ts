@@ -59,10 +59,10 @@ export const ENGINE_FOLDERS: readonly EngineFolder[] = [
   { env: "KIMI_CODE_HOME", home: ".kimi-code", shared: ["credentials/kimi-code.json", KIMI_AI_SIGN_IN, "config.toml"] },
   { env: "DSH_HOME", home: ".dsh", shared: [".credentials.yaml", ".env"] },
   { env: "FACTORY_HOME_OVERRIDE", home: "", shared: [".factory/auth.v2.file", ".factory/auth.v2.keyring", ".factory/settings.json"] },
-  { env: "XDG_CONFIG_HOME", home: ".config", shared: ["muse/auth.json"] },
+  { env: "XDG_CONFIG_HOME", home: ".config", shared: ["muse/auth.json", "cursor/auth.json"] },
   { env: "XDG_DATA_HOME", home: ".local/share", shared: ["opencode/auth.json"] },
   { home: ".gemini", shared: ["oauth_creds.json", "google_accounts.json", "settings.json"] },
-  { home: ".pi/agent", shared: ["auth.json"] },
+  { home: ".pi/agent", shared: ["auth.json", "models.json", "models-store.json"] },
 ];
 
 /** Folder variables that move with HOME besides those above. */

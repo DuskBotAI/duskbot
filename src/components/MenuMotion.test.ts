@@ -135,11 +135,21 @@ describe("the menu motion in overlays.css", () => {
   const rule = (selector: string) => css.match(new RegExp(`^${selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*\\{([^}]*)\\}`, "m"))?.[1] ?? "";
 
   it("grows a menu in from .97 toward its trigger and shrinks it out", () => {
-    expect(rule(`${anchored}.animate-pop-in`)).toMatch(/animation:\s*overlay-menu-in 120ms var\(--ease-menu-in\)/);
-    expect(rule(`${anchored}.animate-pop-out`)).toMatch(/animation:\s*overlay-menu-out 80ms var\(--ease-out-bencho\) forwards/);
-    expect(css).toMatch(/@keyframes overlay-menu-in \{\s*from \{ opacity: 0; transform: translate3d\(0, calc\(var\(--menu-shift, -4px\)\), 0\) scale\(0\.97\); \}/);
-    expect(css).toMatch(/@keyframes overlay-menu-out \{\s*to \{ opacity: 0; transform: translate3d\(0, calc\(var\(--menu-shift, -4px\) \/ 2\), 0\) scale\(0\.98\); \}/);
+    expect(rule(`${anchored}.animate-pop-in`)).toMatch(/transition:\s*opacity calc\(120ms \* var\(--motion-scale, 1\)\) var\(--motion-ease-out, var\(--ease-menu-in\)\), transform calc\(120ms \* var\(--motion-scale, 1\)\) var\(--motion-ease-out, var\(--ease-menu-in\)\)/);
+    expect(css).toMatch(/@starting-style \{\s*:is\(\[role="menu"\][^{]*\.animate-pop-in \{ opacity: 0; transform: translate3d\(0, calc\(var\(--menu-shift, -4px\)\), 0\) scale\(0\.97\); \}/);
+    const out = rule(`${anchored}.animate-pop-out`);
+    expect(out).toMatch(/opacity: 0;\s*transform: translate3d\(0, calc\(var\(--menu-shift, -4px\) \/ 2\), 0\) scale\(0\.98\);/);
+    expect(out).toMatch(/transition:\s*opacity calc\(80ms \* var\(--motion-scale, 1\)\) var\(--motion-ease-out, var\(--ease-out-bencho\)\), transform calc\(80ms \* var\(--motion-scale, 1\)\) var\(--motion-ease-out, var\(--ease-out-bencho\)\)/);
     expect(css).toMatch(/--ease-menu-in: cubic-bezier\(0\.16, 1, 0\.3, 1\);/);
+  });
+
+  // a keyframe starts over from its first frame when the class flips back; a transition turns around where it is
+  it("turns a menu opened again mid-close back from where it is, on every anchored surface", () => {
+    for (const selector of [`${anchored}.animate-pop-in`, `${anchored}.animate-pop-out`, '[role="dialog"][data-model-picker-content].animate-pop-in',
+      '[role="dialog"][data-model-picker-content].animate-pop-out', '[role="menu"][data-sidebar-popover-menu].animate-pop-in', '[role="menu"][data-sidebar-popover-menu].animate-pop-out']) {
+      expect(rule(selector), selector).toMatch(/transition/);
+      expect(rule(selector), selector).not.toMatch(/animation/);
+    }
   });
 
   it("never holds an anchored surface still", () => {
@@ -149,7 +159,7 @@ describe("the menu motion in overlays.css", () => {
 
   it("fades instead of moving under reduced motion", () => {
     const reducedBlock = css.slice(css.indexOf("@media (prefers-reduced-motion: reduce)"));
-    expect(reducedBlock).toMatch(/\.animate-pop-in \{\s*animation: overlay-fade-in/);
-    expect(reducedBlock).toMatch(/\.animate-pop-out \{\s*animation: overlay-fade-out .* forwards/);
+    expect(reducedBlock).toMatch(/:is\(\.animate-pop-in, \.animate-pop-out\) \{\s*transform: none;\s*transition: opacity var\(--overlay-fast\) ease-out;/);
+    expect(reducedBlock).toMatch(/@starting-style \{\s*:is\([^{]*\.animate-pop-in \{ transform: none; \}/);
   });
 });

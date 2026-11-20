@@ -65,7 +65,8 @@ export function BubbleEditor({
         <button
           onClick={submit}
           disabled={!draft.trim()}
-          className="rounded-full bg-ink px-3 py-1 text-[13px] font-medium text-app disabled:opacity-40"
+          className={cn("rounded-full bg-ink px-3 py-1 text-[13px] font-medium disabled:opacity-40", !bubbleStyle && "text-app")}
+          style={bubbleStyle ? { color: "var(--grok-bubble, var(--color-bubble-user))" } : undefined}
         >
           {t("chat.send")}
         </button>

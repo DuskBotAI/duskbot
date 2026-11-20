@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { StoredEvent } from "../analytics/sink.ts";
-import { appFirstRun, featureRows, productReport } from "./product.ts";
+import { identityOf } from "../analytics/web.ts";
+import { accountOfWho, appFirstRun, featureRows, productDigest, productReport, productReportOf, resolvePeople } from "./product.ts";
 
 const DAY = 86_400_000;
 const to = 30 * DAY;
@@ -96,5 +97,19 @@ describe("appFirstRun", () => {
     expect(at("cloud", "done")).toMatchObject({ reached: 0 });
     expect(at("mac", "done")).toMatchObject({ reached: 1 });
     expect(at("mac", "phone"), "the hidden phone step only once someone reaches it").toBeUndefined();
+  });
+});
+
+describe("people across sign-in", () => {
+  it("counts an install and the account it signed in to as one person", () => {
+    const install: StoredEvent = { id: "i1", name: "app_feature", at: 2 * DAY, accountId: null, props: { feature: "voice_used" }, ctx: { install: "inst1" } };
+    const identify: StoredEvent = { id: "id1", name: "identify", at: 2 * DAY, accountId: "acc1", props: { via: "app" }, ctx: { install: "inst1" } };
+    const digest = productDigest.empty();
+    for (const event of [install, ev("app_feature", 3 * DAY, "acc1", { feature: "voice_used" }), ev("app_feature", 3 * DAY, "acc2", { feature: "voice_used" })]) productDigest.add(digest, event);
+    expect(productReportOf(digest, 0, to, []).appPeople).toBe(3);
+    const merged = productReportOf(resolvePeople(digest, accountOfWho(identityOf([identify]))), 0, to, []);
+    expect(merged.appPeople).toBe(2);
+    expect(merged.features.find(row => row.feature === "voice_used")).toMatchObject({ people: 2, uses: 3 });
+    expect(productReportOf(digest, 0, to, []).appPeople, "the kept digest is left as it was").toBe(3);
   });
 });

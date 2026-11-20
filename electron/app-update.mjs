@@ -8,9 +8,11 @@
 // and an AppImage by replacing its own file (app-update-linux.mjs); a .deb is shown a link to its own installer.
 // a downloaded update installs when the app quits, or at a quiet moment (locked, or no window focused and nobody touched
 // the mac for QUIET_IDLE_MS, with no turn, call or dictation running), and the app shows "restart to update" while it waits.
+// the signed update policy (POLICY_SOURCES) may hold a version back: paused, blocked, below the floor, or outside its staged
+// rollout share for this install's fixed bucket; a version held back is neither downloaded nor restarted into.
 import { execFile } from "node:child_process";
 import { createHash, createPublicKey, randomBytes, verify } from "node:crypto";
-import { accessSync, constants, createReadStream, mkdirSync, readdirSync, rmSync, statSync } from "node:fs";
+import { accessSync, constants, createReadStream, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { dirname, join } from "node:path";
 import { pipeline } from "node:stream/promises";
@@ -33,11 +35,56 @@ const UNREACHABLE = new Set(["enotfound", "eai_again", "eai_fail", "timeout", "e
 export const unreachable = (reason) => UNREACHABLE.has(String(reason));
 /** an unreachable check counts as a failure only after this many in a row (hours apart), or when the person asked */
 export const OFFLINE_CHECKS_BEFORE_FAILED = 6;
+/** Squirrel.Mac taking longer than its timeout to unpack is tried again quietly this many times before the person is told */
+export const SLOW_UNPACKS_BEFORE_FAILED = 3;
+const slowUnpack = (error) => error instanceof UpdateError && error.stage === "install" && /did not unpack in time/.test(error.message);
 /** CI's release keys (apps/cloud-service/src/release-signing.ts pins the same ones; a test keeps them equal) */
 export const RELEASE_KEYS = Object.freeze([{ kid: "rel-2026-11", x: "wtwZypDwVPBXZ25XsZOVpd0PZPBbVMhugheUj5_NLIM" }]);
-const HOUR_MS = 60 * 60_000;
+const CHECK_EVERY_MS = 30 * 60_000;
 /** each check lands somewhere in this much more, so every app does not ask dusk.bot in the same minute */
-const JITTER_MS = 15 * 60_000;
+const JITTER_MS = 10 * 60_000;
+/** the signed update policy (shared/update-guard.ts), first answer that verifies wins: the account service, then dusk.bot's copy */
+export const POLICY_SOURCES = Object.freeze(["https://dusk.bot/v1/updates/policy", "https://dusk.bot/releases/update-policy.json"]);
+const SEMVER = /^\d+\.\d+\.\d+$/;
+
+/** `{ serial, floor, blocked, paused, rollout }` from a `{ body, signature }` policy a pinned key signed, or null */
+export function verifiedPolicy(doc, keys = RELEASE_KEYS) {
+  if (typeof doc?.body !== "string" || typeof doc?.signature !== "string" || doc.body.length > 64_000) return null;
+  const parts = doc.signature.trim().split(".");
+  if (parts.length !== 4 || parts[0] !== "r1" || !/^[A-Za-z0-9_-]+$/.test(parts[2]) || !/^[A-Za-z0-9_-]+$/.test(parts[3])) return null;
+  const key = keys.find((item) => item.kid === parts[1]);
+  if (!key) return null;
+  try {
+    const publicKey = createPublicKey({ key: { kty: "OKP", crv: "Ed25519", x: key.x }, format: "jwk" });
+    if (!verify(null, Buffer.from(parts.slice(0, 3).join(".")), publicKey, Buffer.from(parts[3], "base64url"))) return null;
+    const m = JSON.parse(Buffer.from(parts[2], "base64url").toString("utf8"));
+    if (m.v !== 1 || m.kind !== "update-policy" || m.name !== "update-policy" || m.sha256 !== createHash("sha256").update(doc.body).digest("hex")) return null;
+    const p = JSON.parse(doc.body);
+    if (!Number.isSafeInteger(p.serial) || m.version !== String(p.serial) || (p.floor !== null && !SEMVER.test(p.floor ?? "")) || !Array.isArray(p.blocked)) return null;
+    const rollout = p.rollout && typeof p.rollout === "object" ? Object.fromEntries(Object.entries(p.rollout).filter(([v, share]) => SEMVER.test(v) && Number.isInteger(share))) : {};
+    return { serial: p.serial, floor: p.floor, blocked: p.blocked.filter((v) => typeof v === "string"), paused: p.paused === true, rollout };
+  } catch {
+    return null;
+  }
+}
+
+/** why the policy holds `version` back from this install (`bucket`: 0 to 99, fixed per install), or null */
+export function policyHolds(policy, version, bucket) {
+  if (!policy) return null;
+  if (policy.paused) return "paused";
+  if (policy.blocked.includes(version)) return "blocked";
+  if (policy.floor && newer(policy.floor, version)) return "below_floor";
+  const share = policy.rollout?.[version];
+  return share !== undefined && bucket() >= share ? "rollout" : null;
+}
+
+/** this install's fixed rollout bucket, 0 to 99, kept beside the update folder */
+export function storedBucket(file, random = Math.random) {
+  try { const n = JSON.parse(readFileSync(file, "utf8")).bucket; if (Number.isInteger(n) && n >= 0 && n < 100) return n; } catch { /* first time */ }
+  const bucket = Math.floor(random() * 100);
+  try { writeFileSync(file, JSON.stringify({ bucket })); } catch { /* a new one next launch */ }
+  return bucket;
+}
 export const QUIET_IDLE_MS = 10 * 60_000;
 
 /** `{ version, sums }` from a desktop release manifest signed by a pinned key, or null */
@@ -210,8 +257,8 @@ export async function installerUrl(version, name, fetchImpl = fetch) {
  * not finish. `onFailed(message, { stage, reason })`: `reason` is a short word, never a path.
  */
 export function createAppUpdater({ current, arch, dir, fetchImpl = fetch, keys = RELEASE_KEYS, installs = true, platform = "darwin", appImage = false, signed, blocked = async () => null,
-  asset = (sums, version) => zipIn(sums, version, arch), sources = zipSources, keep = [], installer, quiet, fallback, onState = () => {}, onFailed = () => {}, log = () => {}, firstDelayMs = 20_000, intervalMs = HOUR_MS, jitterMs = JITTER_MS, random = Math.random,
-  quietEveryMs = 60_000, timers = globalThis, download = {} }) {
+  asset = (sums, version) => zipIn(sums, version, arch), sources = zipSources, keep = [], installer, quiet, fallback, onState = () => {}, onFailed = () => {}, log = () => {}, firstDelayMs = 20_000, intervalMs = CHECK_EVERY_MS, jitterMs = JITTER_MS, random = Math.random,
+  quietEveryMs = 60_000, timers = globalThis, download = {}, policySources = POLICY_SOURCES, bucket = () => storedBucket(join(dirname(dir), "update-bucket.json")) }) {
   let ready = null, available = null, progress = null, timer = null, quietTimer = null, checking = null, installing = false, failed = false, retrying = false, stuck = null, manual = null, kick = null, again = false;
   const toldBlocked = new Set();
   const state = () => ({ ready, available, progress, checking: checking !== null, failed, retrying, blocked: stuck, manual });
@@ -222,7 +269,7 @@ export function createAppUpdater({ current, arch, dir, fetchImpl = fetch, keys =
     try { onFailed(why, { stage: "other", reason: why }); } catch {}
   };
 
-  let offlineChecks = 0;
+  let offlineChecks = 0, slowUnpacks = 0;
   const wait = download.wait ?? ((ms) => new Promise((resolve) => timers.setTimeout(resolve, ms)));
 
   async function textFrom(url, limit) {
@@ -272,8 +319,25 @@ export function createAppUpdater({ current, arch, dir, fetchImpl = fetch, keys =
     return { version: release.version, sums };
   }
 
+  let policy = null, heldBack = null, myBucket = null;
+  const bucketOf = () => (myBucket ??= bucket());
+  /** the newest signed policy any source gives; one that fails or is older than the one held changes nothing */
+  async function refreshPolicy() {
+    for (const url of policySources) {
+      try {
+        const answer = await fetchImpl(url, { signal: AbortSignal.timeout(15_000), cache: "no-store" });
+        if (!answer.ok) { await answer.body?.cancel?.().catch(() => {}); continue; }
+        const text = await answer.text();
+        const found = text.length <= 64 * 1024 ? verifiedPolicy(JSON.parse(text), keys) : null;
+        if (found && found.serial > (policy?.serial ?? 0)) policy = found;
+        if (found) return;
+      } catch { /* the next source */ }
+    }
+  }
+  const holds = (version) => policyHolds(policy, version, bucketOf);
+
   async function run() {
-    if (ready) return ready;
+    if (ready) { await refreshPolicy(); return ready; }
     const release = await lookup();
     if (!release) { available = manual = stuck = null; return null; }
     const { version, sums } = release;
@@ -287,6 +351,13 @@ export function createAppUpdater({ current, arch, dir, fetchImpl = fetch, keys =
     if (where === "portable") { stuck = null; manual = { version, url: await byHand() }; report(version, "portable"); return null; }
     if (installer.failed?.(version) && !again) { stuck = null; manual = { version, url: await byHand() }; report(version, "did_not_install"); return null; }
     stuck = manual = null;
+    await refreshPolicy();
+    const hold = holds(version);
+    if (hold) {
+      if (heldBack !== `${version}:${hold}`) { heldBack = `${version}:${hold}`; log(`app update: ${version} is held back (${hold})`); }
+      available = null;
+      return null;
+    }
     const zip = asset(sums, version);
     if (!zip) throw new UpdateError("manifest", "no_zip", `release ${version} has no update for ${platform} ${arch}`);
     mkdirSync(dir, { recursive: true });
@@ -315,11 +386,13 @@ export function createAppUpdater({ current, arch, dir, fetchImpl = fetch, keys =
     if (asked) again = true;
     if (checking) return checking;
     failed = false;
-    checking = run().then((result) => { offlineChecks = 0; return result; }, async (error) => {
+    checking = run().then((result) => { offlineChecks = slowUnpacks = 0; return result; }, async (error) => {
       const offline = error instanceof UpdateError && error.stage === "manifest" && unreachable(error.code);
       offlineChecks = offline ? offlineChecks + 1 : 0;
       if (offline && !asked && offlineChecks < OFFLINE_CHECKS_BEFORE_FAILED) { log(`app update: no network for the check (${error.code}); trying at the next one`); return null; }
-      offlineChecks = 0;
+      slowUnpacks = slowUnpack(error) ? slowUnpacks + 1 : 0;
+      if (slowUnpacks && !asked && slowUnpacks < SLOW_UNPACKS_BEFORE_FAILED) { log("app update: the update did not unpack in time; trying at the next check"); return null; }
+      offlineChecks = slowUnpacks = 0;
       failed = true;
       const message = error instanceof Error ? error.message : String(error);
       log(`app update: ${message}; telling the person instead`);
@@ -336,7 +409,7 @@ export function createAppUpdater({ current, arch, dir, fetchImpl = fetch, keys =
     const look = async () => {
       quietTimer = null;
       if (installing) return;
-      if (await quiet().catch(() => false)) return restart();
+      if (!holds(ready) && await quiet().catch(() => false)) return restart();
       quietTimer = timers.setTimeout(look, quietEveryMs);
       quietTimer?.unref?.();
     };
@@ -361,7 +434,7 @@ export function createAppUpdater({ current, arch, dir, fetchImpl = fetch, keys =
       later(firstDelayMs);
     },
     /** the mac woke: a download in flight goes on from where it got (its socket died in the sleep), and the next check
-     * comes after `delayMs` (the network needs a moment), then hourly from there */
+     * comes after `delayMs` (the network needs a moment), then every half hour from there */
     soon(delayMs = 30_000) {
       kick?.();
       if (!timer) return;

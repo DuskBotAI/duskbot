@@ -19,8 +19,9 @@ function harness() {
   dirs.push(dataDir);
   let answer: PublicPage = page("<p>hello</p>");
   const failed: string[] = [];
-  const probes = createRoutineProbes({ dataDir, fetch: async () => answer, failed: (_routine, sentence) => failed.push(sentence) });
-  return { probes, failed, set: (next: PublicPage) => { answer = next; } };
+  let now = 1_800_000_000_000, reads = 0;
+  const probes = createRoutineProbes({ dataDir, now: () => now, fetch: async () => { reads++; return answer; }, failed: (_routine, sentence, count) => failed.push(`${count}: ${sentence}`) });
+  return { probes, failed, set: (next: PublicPage) => { answer = next; }, advance: (ms: number) => { now += ms; }, reads: () => reads };
 }
 
 describe("probe checks", () => {
@@ -44,18 +45,30 @@ describe("probe checks", () => {
     expect(await h.probes.check(r, { manual: false })).toEqual({});
   });
 
-  it("surfaces a failed read every time, and tells the person once per streak", async () => {
+  it("surfaces every failed read, tells the person once at the third in a row, then reads less often until one works", async () => {
     const h = harness();
     const r = routine({ kind: "page", url: "https://example.com/" });
     await h.probes.check(r, { manual: false });
     h.set({ ok: false, refused: false, error: "The page answered 500." });
-    expect(await h.probes.check(r, { manual: false })).toEqual({ trouble: "Couldn't check example.com: The page answered 500." });
-    expect(await h.probes.check(r, { manual: false })).toEqual({ trouble: "Couldn't check example.com: The page answered 500." });
+    const trouble = { trouble: "Couldn't check example.com: The page answered 500." };
+    expect(await h.probes.check(r, { manual: false })).toEqual(trouble);
+    expect(await h.probes.check(r, { manual: false })).toEqual(trouble);
+    expect(h.failed).toEqual([]);
+    expect(await h.probes.check(r, { manual: false })).toEqual(trouble);
+    expect(h.failed).toEqual(["3: Couldn't check example.com: The page answered 500."]);
+    const reads = h.reads();
+    h.advance(5 * 60_000);
+    expect(await h.probes.check(r, { manual: false })).toEqual({ held: true, ...trouble });
+    expect(h.reads()).toBe(reads);
+    h.advance(10 * 60_000);
+    expect(await h.probes.check(r, { manual: false })).toEqual(trouble);
     expect(h.failed).toHaveLength(1);
+    h.advance(29 * 60_000);
+    expect(await h.probes.check(r, { manual: false })).toMatchObject({ held: true });
     h.set(page("<p>hello</p>"));
-    expect(await h.probes.check(r, { manual: false })).toEqual({});
+    expect(await h.probes.check(r, { manual: true })).toEqual({});
     h.set({ ok: false, refused: false, error: "The page took too long to answer." });
-    await h.probes.check(r, { manual: false });
+    for (let i = 0; i < 3; i++) await h.probes.check(r, { manual: false });
     expect(h.failed).toHaveLength(2);
   });
 

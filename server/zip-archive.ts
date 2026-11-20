@@ -6,7 +6,7 @@ import { mkdir, open, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
-import { createInflateRaw } from "node:zlib";
+import { createInflateRaw, inflateRawSync } from "node:zlib";
 
 export interface ZipMember {
   name: string;
@@ -124,6 +124,22 @@ async function memberDataOffset(path: string, entry: ZipMember): Promise<number>
     }
     if (name.toString("utf8") !== entry.name) throw new Error("A verified archive member name did not match its directory.");
     return entry.localHeaderOffset + 30 + nameBytes + extraBytes;
+  } finally {
+    await handle.close();
+  }
+}
+
+/** One member's bytes in memory, refused past `maxBytes` or the size it declares. */
+export async function readZipMember(archivePath: string, entry: ZipMember, maxBytes: number): Promise<Buffer> {
+  if (entry.uncompressedBytes > maxBytes) throw new Error("An archive member is too large.");
+  const dataOffset = await memberDataOffset(archivePath, entry);
+  const handle = await open(archivePath, "r");
+  try {
+    const raw = Buffer.alloc(entry.compressedBytes);
+    if ((await handle.read(raw, 0, raw.length, dataOffset)).bytesRead !== raw.length) throw new Error("An archive member was truncated.");
+    const data = entry.compression === 8 ? inflateRawSync(raw, { maxOutputLength: Math.max(1, entry.uncompressedBytes) }) : raw;
+    if (data.length !== entry.uncompressedBytes) throw new Error("An archive member does not match its declared size.");
+    return data;
   } finally {
     await handle.close();
   }

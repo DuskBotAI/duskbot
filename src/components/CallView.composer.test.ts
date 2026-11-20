@@ -148,7 +148,7 @@ describe("composer call button", () => {
     expect(html).toContain("Call unavailable");
     expect(html).toContain("Set up voice");
     expect(html).not.toContain("open agent settings");
-    expect(html).toMatch(/role="group" aria-label="Call unavailable" class="[^"]*\bbottom-full\b/);
+    expect(html).toMatch(/role="group" data-call-popover="" aria-label="Call unavailable" class="[^"]*\bbottom-full\b/);
     button.props.onClick!();
     expect(fixture.startCall).not.toHaveBeenCalled();
   });
@@ -219,6 +219,6 @@ describe("composer call button", () => {
     const { html, button } = render("header");
     expect(String(button.props.className).split(" ")).toContain("size-9");
     expect(html).toContain("gi-phone");
-    expect(html).not.toMatch(/role="group" aria-label="Call unavailable" class="[^"]*\bbottom-full\b/);
+    expect(html).not.toMatch(/role="group" data-call-popover="" aria-label="Call unavailable" class="[^"]*\bbottom-full\b/);
   });
 });

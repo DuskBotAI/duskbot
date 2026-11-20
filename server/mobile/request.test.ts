@@ -54,6 +54,7 @@ it.each(origins)("allows the live stream preflight older phone builds send from 
   expect(res.statusCode).toBe(204);
   expect(res.getHeader("access-control-allow-origin")).toBe(origin);
   expect(res.getHeader("access-control-allow-headers")).toBe("Accept, Authorization, Cache-Control");
+  expect(res.getHeader("access-control-max-age")).toBe("600");
 });
 
 it.each([

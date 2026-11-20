@@ -95,6 +95,7 @@ export function createActionReceipts(deps: ActionReceiptDeps) {
   const now = deps.now ?? Date.now;
   const turns = new Map<string, Turn>();
   let lastPrune = 0;
+  const writing = new Set<Promise<void>>();
   const turn = (threadId: string): Turn => {
     let current = turns.get(threadId);
     if (!current) turns.set(threadId, current = { text: "", evidence: new Set(), pending: new Map() });
@@ -107,17 +108,24 @@ export function createActionReceipts(deps: ActionReceiptDeps) {
     const at = new Date(now());
     const line = JSON.stringify({ at: at.toISOString(), botId, threadId, turnId: turns.get(threadId)?.turnId, kind, what: what.slice(0, 200) }) + "\n";
     const dir = join(deps.dataDir, "receipts");
-    void mkdir(dir, { recursive: true, mode: 0o700 })
+    const done: Promise<void> = mkdir(dir, { recursive: true, mode: 0o700 })
       .then(() => appendFile(join(dir, `${at.toISOString().slice(0, 7)}.jsonl`), line, { mode: 0o600 }))
       .then(async () => {
         if (at.getTime() - lastPrune < PRUNE_EVERY_MS) return;
         lastPrune = at.getTime();
         await pruneMonthFiles(dir, RECEIPT_RETENTION_DAYS, at, RECEIPT_FILE);
       })
-      .catch((error: unknown) => console.error(`receipts: not written: ${error instanceof Error ? error.message : String(error)}`));
+      .catch((error: unknown) => console.error(`receipts: not written: ${error instanceof Error ? error.message : String(error)}`))
+      .finally(() => writing.delete(done));
+    writing.add(done);
   }
 
   return {
+    /** Resolves once every receipt line written so far is on disk (or failed). */
+    async settled(): Promise<void> {
+      while (writing.size) await Promise.all(writing);
+    },
+
     /** An outbound call the connected-apps relay carried and its app answered without an error. */
     record(threadId: string, slug: string): void {
       const kind = connectorActionKind(slug);

@@ -52,7 +52,7 @@ it("traces a person's message to the Chief through the teammate it delegated to 
     const nested = first!.children.filter((child): child is TraceTurn => child.kind === "turn");
     expect(nested.map((turn) => turn.botId).sort()).toEqual([chief.id, researcher.id].sort());
     const research = nested.find((turn) => turn.botId === researcher.id)!;
-    expect(research.threadId).not.toBe(researcher.activeTaskId);
+    expect(research.threadId).toBe(researcher.activeTaskId);
     expect(toolsOf(research).map((tool) => tool.name)).toEqual(["list_room_targets", "list_bots", "list_rooms"]);
     for (const tool of toolsOf(research)) {
       expect(tool).toMatchObject({ timedBy: "dusk", status: "ok", icon: "bots" });

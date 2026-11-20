@@ -42,6 +42,8 @@ export function excludedWorkspaceAuthPath(path: string): boolean {
   if (path === "seal-identity.key") return true;
   // The HighLevel connection and its key stay with the installation that connected: its refresh token rotates, so a copy signs one side out.
   if (/^(?:highlevel\.json\.enc|highlevel-key)(?:$|\.\d+\.[0-9a-f-]+\.tmp$)/.test(path)) return true;
+  // A Cloud home's phone relay tunnel and key belong to its machine: a restored or moved home makes its own.
+  if (/^phone-relay\.json(?:$|\.\d+\.[0-9a-f-]+\.tmp$)/.test(path)) return true;
   // A Cloud home's connected-apps installation: its connected accounts belong to it, so a copy would share them.
   if (/^connected-apps-installation\.json(?:$|\.\d+\.[0-9a-f-]+\.tmp$)/.test(path)) return true;
   // A Team Cloud's kept rules: a restored Cloud asks the Admin for the ones in force now.

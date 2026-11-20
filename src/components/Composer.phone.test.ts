@@ -175,11 +175,12 @@ describe("the phone composer", () => {
     expect(fixture.call?.fill).toBeUndefined();
   });
 
-  it("offers the photo library, the camera and files from the +, each its own picker", () => {
-    render({ bot });
+  it("offers only the photo library, the camera and files from the +, each its own picker", () => {
+    render({ bot: { ...bot, tasks: [{ threadId: bot.threadId, title: "new thread", createdAt: 1, approvalMode: "full" }] } });
     openPlus();
     const keys = [...menu()!.querySelectorAll("[data-menu-key]")].map((row) => row.getAttribute("data-menu-key"));
-    expect(keys.slice(0, 3)).toEqual(["attach:photos", "attach:camera", "attach"]);
+    expect(keys).toEqual(["attach:photos", "attach:camera", "attach"]);
+    expect(menu()!.textContent).not.toMatch(/Work until done|Teach a task|acts|Call mode|Live/);
     expect(item("attach:photos")?.textContent).toContain("Photo library");
     expect(item("attach:camera")?.textContent).toContain("Take photo");
     expect(item("attach")?.textContent).toContain("Files");

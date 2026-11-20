@@ -27,7 +27,9 @@ export function useCloudMacState(bridge: CloudMacBridge | undefined): [CloudMacS
 /** Settings > Your computer on the person's dusk cloud: whether its bots may use this Mac, or where to turn that on. */
 export function CloudMacCard() {
   const bridge = cloudMacBridge();
-  return bridge ? <CloudMacControls bridge={bridge} /> : <CloudMacElsewhere />;
+  if (bridge) return <CloudMacControls bridge={bridge} />;
+  const platform = typeof window === "undefined" ? undefined : window.duskDesktop?.platform;
+  return platform && platform !== "darwin" ? null : <CloudMacElsewhere />;
 }
 
 function CloudMacControls({ bridge }: { bridge: CloudMacBridge }) {
@@ -94,6 +96,21 @@ function CloudMacControls({ bridge }: { bridge: CloudMacBridge }) {
           ))}
           {state.limitFolders && (
             <NavRow icon={FolderPlus} title={t("cloudMac.addFolder")} drill={false} disabled={pending} onClick={() => void run(() => bridge.addFolder())} />
+          )}
+          {bridge.setScreen && (
+            <SwitchRow
+              data-settings-row="cloud-mac-screen"
+              title={t("cloudMac.screen")}
+              hint={<span aria-live="polite">{t(!state.screen ? "cloudMac.screenOff" : state.screenReady ? "cloudMac.screenOn" : "cloudMac.screenNotReady")}</span>}
+              checked={state.screen}
+              disabled={pending}
+              onChange={() => void run(() => bridge.setScreen!(!state.screen))}
+            />
+          )}
+          {state.onScreen && bridge.stopScreen && (
+            <ItemRow data-sheet-row="cloud-mac-on-screen" tone="warn" title={<span aria-live="polite">{t("cloudMac.onScreen", { name: state.onScreen.bot })}</span>}>
+              <button type="button" className="ui-button" onClick={() => void run(() => bridge.stopScreen!())}>{t("cloudMac.stopScreen")}</button>
+            </ItemRow>
           )}
           <NavRow title={t("cloudMac.viewLog")} external onClick={() => void bridge.openLog().catch(() => {})} />
         </>

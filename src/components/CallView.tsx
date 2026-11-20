@@ -8,7 +8,7 @@ import { AudioLines, Check, ChevronDown, Loader2, Phone, PhoneOff, X } from "../
 import { openBot, useStore, visibleMessages, type Bot } from "@/state/store";
 import { cn } from "@/lib/cn";
 import { useMenuMotion } from "./MenuMotion";
-import { currentCall, deferCallCleanup, endCall, startCall, useOnCall } from "@/lib/call";
+import { currentCall, deferCallCleanup, endCall, startCall, takeCallAsk, useCallAsk, useOnCall } from "@/lib/call";
 import { CALL_MODES, callModeHint, effectiveCallMode, setCallMode, useCallMode, type CallMode } from "@/lib/call-mode";
 import { NO, YES } from "../../shared/call-consent";
 import { dismissStartPrompt, hangUpLiveCall, isLiveCallRunning, startLiveCall, useLiveMedia } from "@/lib/live-call-media";
@@ -25,7 +25,6 @@ import { isRoutineApproval, isSkillApproval, pendingApprovals, spokenApprovalPro
 import { callStarted } from "@/lib/product-events";
 import { useDesktopCapabilities } from "./DesktopCapabilities";
 import { callCapabilityHelp, type CallCapabilityHelp } from "@/lib/call-capability";
-import { onCallStartRequest } from "@/lib/call-start-request";
 import { serverListeningReady, listensHere, speechBridge } from "@/lib/speech";
 import { VoiceSetupDialog } from "./lazy-screens";
 import { useLocalVoiceCall } from "@/lib/voice-call/availability";
@@ -36,12 +35,11 @@ import { MENU_SHEET } from "./menu-recipe";
 type Phase = "listening" | "sending" | "working" | "speaking";
 const CALL_ENDPOINT_MS = 850;
 
-/** `panel`: the small round button beside the bot in its panel, with no chevron. It leaves the composer's + menu to the
- * composer's own button: two buttons answering it would start two calls. */
+/** `panel`: the small round button beside the bot in its panel, with no chevron. */
 export type CallButtonPlacement = "header" | "composer" | "panel";
 
-/** `fill` (Simple composer): a round button in that colour with its glyph in `ink`, and no chevron; the + menu picks the
- * call mode. */
+/** `fill` (Simple composer): a round button in that colour with its glyph in `ink`, and no chevron; the bot's Voice chat
+ * settings pick the call mode. */
 /** `inverse` (phone composer): one of the pill's own 32 px controls, a plain glyph in the quiet ink, like its mic. */
 /** `live`: offer a Live call beside the built-in voice. */
 export function CallButton({ bot, placement = "header", fill, ink, inverse, live = true }: { bot: Bot; placement?: CallButtonPlacement; fill?: string; ink?: string; inverse?: boolean; live?: boolean }) {
@@ -195,17 +193,14 @@ export function CallTargetButton({
     startCall(targetId);
   };
 
-  // The Simple composer's + menu: the same choice as this button's own call-mode menu, which it replaces there.
-  const requestedStart = useRef<(next: CallMode) => void>(() => {});
-  requestedStart.current = (next) => {
-    // Hidden below while Live's line is held on another device: the + menu must not start a second call either.
-    if (active || liveElsewhere || (next === "live" && !canLive) || lineHeldElsewhere) return;
-    closePopovers();
-    setCallMode(next);
-    start(next);
-  };
-  const answersPlusMenu = placement !== "panel";
-  useEffect(() => answersPlusMenu ? onCallStartRequest(targetId, (next) => requestedStart.current(next)) : undefined, [targetId, answersPlusMenu]);
+  const callAsked = useCallAsk() === targetId;
+  const startRef = useRef(start);
+  startRef.current = start;
+  useEffect(() => {
+    if (!callAsked || !capabilitiesReady || active || liveElsewhere || !takeCallAsk(targetId)) return;
+    if (unavailable) setHelpOpen(true);
+    else startRef.current(liveMode ? "live" : "turns");
+  }, [callAsked, capabilitiesReady, active, liveElsewhere, unavailable, liveMode, targetId]);
 
   const popoverOpen = helpOpen || menuOpen || startPrompt;
   useEffect(() => {
@@ -467,7 +462,7 @@ export function CallOverlay({ bot }: { bot: Bot }) {
   if (!active || onLiveCall) return null;
   if (builtInVoice) return <VoiceCall key={bot.threadId} bot={bot} />;
   return (
-    <div className="absolute inset-0 z-30 flex flex-col items-center justify-center gap-6 bg-app/95 backdrop-blur-sm">
+    <div data-call-surface="" className="absolute inset-0 z-30 flex flex-col items-center justify-center gap-6 bg-app/95 backdrop-blur-sm">
       <Call key="turns" bot={bot} />
     </div>
   );

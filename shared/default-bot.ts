@@ -2,7 +2,8 @@ import type { HelperFollowupField } from "./helper-followup.ts";
 import type { MausColor } from "./wire.ts";
 
 /** Dusk: every person's built-in helper. A new install's first bot (its Chief of Staff too); an existing place or
- * person without one is given one once. It can be renamed and recoloured, hidden from the sidebar, never deleted. */
+ * person without one is given one once. It can be renamed and recoloured and hidden from the sidebar;
+ * it is deleted or archived only once it is not the Chief of Staff and another bot remains, and is never made again. */
 export const DEFAULT_BOT_NAME = "dusk bot";
 export const DEFAULT_BOT_COLOR: MausColor = "chrome";
 
@@ -12,9 +13,10 @@ export interface DefaultBotMark {
 }
 
 export interface DefaultBotFields {
-  /** This bot is its place's (or, on a Team Cloud, its member's) Dusk. Never deleted or archived. */
+  /** This bot is its place's (or, on a Team Cloud, its member's) Dusk. Deleted or archived only while it is not the
+   * Chief of Staff and another bot remains. */
   defaultBot?: DefaultBotMark;
-  /** Settings → General "Show Dusk in the sidebar" is off: the bot keeps working, only its sidebar row is gone. */
+  /** Settings → Models "Show Dusk in the sidebar" is off: the bot keeps working, only its sidebar row is gone. */
   sidebarHidden?: boolean;
   /** Its person has seen Dusk's first-launch welcome here and chose Add or Not now. */
   welcomed?: boolean;

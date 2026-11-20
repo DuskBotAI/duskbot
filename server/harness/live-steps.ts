@@ -13,7 +13,7 @@ type OutputEvent = Extract<RuntimeEvent, { type: "item.output" }>;
 
 /** The least time between two frames that change only a call's output. */
 export const TAIL_FRAME_MS = 1_000;
-const TAIL_LINES = 2;
+const TAIL_LINES = 12;
 const TAIL_LINE_MAX = 160;
 const OUTPUT_KEPT = 8 * 1024;
 

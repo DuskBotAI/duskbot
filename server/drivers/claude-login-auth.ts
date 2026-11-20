@@ -157,7 +157,7 @@ export class ClaudeLoginController {
     if (flow.codeSent) throw new Error("A code was already sent for this sign-in. Wait for the result, or cancel and start again.");
     if (isLoopbackCallback(pasted)) return this.relayed(flow, pasted);
     const code = claudeLoginCode(pasted);
-    if (!code) throw new Error("Paste the whole code shown on Anthropic's page after signing in.");
+    if (!code) throw Object.assign(new Error("Paste the whole code shown on Anthropic's page after signing in."), { status: 400 });
     const child = flow.child;
     const stdin = child?.stdin;
     if (!child || !stdin || child.exitCode !== null || child.signalCode !== null) throw new Error(NOT_AVAILABLE);

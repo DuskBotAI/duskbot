@@ -6,7 +6,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { setLocale } from "@/lib/i18n";
 import { AccountGate, mobileAccountOrigin, providersFor, useMobileAccount } from "./AccountGate";
 import { MobileSignIn } from "./MobileSignIn";
-import { PlatformContext, webPlatform, type MobilePlatform } from "../platform";
+import { PlatformContext, SecretsLocked, webPlatform, type MobilePlatform } from "../platform";
 
 vi.mock("@/components/Avatar", () => ({ MausAvatar: () => createElement("span") }));
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -20,7 +20,8 @@ const response = (value: unknown, status = 200) => new Response(JSON.stringify(v
 beforeEach(() => {
   host = document.createElement("div"); document.body.append(host); root = null;
   setLocale("en"); window.history.replaceState({}, "", "/"); vi.stubEnv("VITE_DUSK_ALLOW_SIGNED_OUT", ""); vi.stubEnv("VITE_DUSK_ACCOUNT_ORIGIN", "");
-  secrets = new Map(); prefs = new Map(); listener = undefined; resume = undefined;
+  // an install launched before: a new one waits for the service before it shows a kept sign-in
+  secrets = new Map(); prefs = new Map([["dusk.mobile.installed", "1"]]); listener = undefined; resume = undefined;
   platform = { ...webPlatform(), native: true, kind: "ios", secrets: {
     get: async key => secrets.get(key) ?? null, set: async (key, value) => { secrets.set(key, value); }, remove: async key => { secrets.delete(key); },
   }, prefs: { get: async key => prefs.get(key) ?? null, set: async (key, value) => { prefs.set(key, value); }, remove: async key => { prefs.delete(key); } },
@@ -67,6 +68,19 @@ it("restores an account and provides its identity through context", async () => 
   save(); fetcher.mockResolvedValue(response({}));
   await mount(); expect(host.textContent).toBe(signedIn); expect(host.querySelector("h1")).toBeNull();
 });
+it("a Keychain it cannot read at launch (a locked phone) never shows the sign-in: it waits, then reads it in front", async () => {
+  save(); fetcher.mockResolvedValue(response({}));
+  let locked = true;
+  const read = platform.secrets.get;
+  platform = { ...platform, secrets: { ...platform.secrets, get: async (key) => { if (locked) throw new SecretsLocked(); return read(key); } } };
+  await mount();
+  expect(host.querySelector("h1"), "no sign-in over a session it could not read").toBeNull();
+  expect(host.textContent).not.toBe(signedIn);
+  expect(secrets.has("dusk.account")).toBe(true);
+  locked = false;
+  await act(async () => { resume?.(); await new Promise((done) => setTimeout(done, 0)); });
+  expect(host.textContent).toBe(signedIn);
+});
 it("shows the saved sign-in before the service answers, and stays signed in when the check fails", async () => {
   save();
   let answer: (value: Response) => void = () => {};
@@ -74,6 +88,15 @@ it("shows the saved sign-in before the service answers, and stays signed in when
   await mount(); expect(host.textContent).toBe(signedIn);
   await act(async () => { answer(response({ error: "failed" }, 503)); });
   expect(host.textContent).toBe(signedIn);
+});
+it("a new install shows a sign-in the Keychain kept only once the service says it still works", async () => {
+  prefs.clear(); save();
+  let answer: (value: Response) => void = () => {};
+  fetcher.mockImplementation(() => new Promise<Response>((resolve) => { answer = resolve; }));
+  await mount(); expect(host.textContent).not.toContain("workspace");
+  await act(async () => { answer(response({})); });
+  expect(host.textContent).toBe(signedIn);
+  expect(prefs.get("dusk.mobile.installed")).toBe("1");
 });
 it("stays signed in when the app comes back and the service is down", async () => {
   save(); fetcher.mockResolvedValue(response({}));

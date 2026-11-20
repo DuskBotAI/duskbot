@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { AnimatePresence } from "motion/react";
 
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
@@ -63,7 +64,7 @@ function MemoryRows({ bot, derived }: { bot: Bot; derived: ReturnType<typeof use
             <NavRow data-sheet-row="add-note" disabled={index === null} title={t("botPanel.ui.sheetRowsAddNote")} onClick={() => setAdding(true)} />
           </Card>
         )}
-        {adding && <AddNoteDialog bot={bot} editor={editor} onClose={() => setAdding(false)} />}
+        <AnimatePresence>{adding && <AddNoteDialog key="add-note-dialog" bot={bot} editor={editor} onClose={() => setAdding(false)} />}</AnimatePresence>
         <ForgetUndoToast editor={editor} />
       </>
     );
@@ -83,7 +84,7 @@ function MemoryRows({ bot, derived }: { bot: Bot; derived: ReturnType<typeof use
         {memoryOn && editable && <NavRow data-sheet-row="add-note" disabled={index === null} title={t("botPanel.ui.sheetRowsAddNote")} onClick={() => setAdding(true)} />}
       </Card>
       {error && <Card><NoteRow tone="warn">{error}</NoteRow></Card>}
-      {adding && <AddNoteDialog bot={bot} editor={editor} onClose={() => setAdding(false)} />}
+      <AnimatePresence>{adding && <AddNoteDialog key="add-note-dialog" bot={bot} editor={editor} onClose={() => setAdding(false)} />}</AnimatePresence>
     </>
   );
 }

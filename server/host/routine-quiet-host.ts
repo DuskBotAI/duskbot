@@ -8,6 +8,7 @@ import { createAllowance } from "../allowance.ts";
 import { writeFileAtomic } from "../atomic.ts";
 import { ledgerCost } from "../model-prices.ts";
 import { createRoutineProbes, withProbes } from "../routine-probe.ts";
+import { runCheckScript } from "../routine-script.ts";
 import { flexOf, useFreeReruns } from "../routine-quiet.ts";
 import { nextOccurrence } from "../routine-schedules.ts";
 import { createRoutineSelfCap } from "../routine-self-cap.ts";
@@ -17,6 +18,7 @@ import { serverLine } from "../server-lines.ts";
 import type { Spend } from "../spend.ts";
 import { fetchPublicPage } from "../wait-probes.ts";
 import { createWakingHours } from "../waking-hours.ts";
+import { outsideQuiet, type QuietHours } from "./proactive-prefs.ts";
 
 const FREE_FILE = "free-reruns.json";
 const SKIPPED_FILE = "limit-skips.json";
@@ -82,9 +84,11 @@ export function createRoutineHost(deps: RoutineHostDeps) {
   const probes = createRoutineProbes({
     dataDir: deps.dataDir,
     fetch: (url) => fetchPublicPage(url, loopback && url.startsWith(`${loopback}/`) ? { allow: () => true } : {}),
-    failed: (routine, sentence) => {
+    // Security: a Cloud home runs no script checks; its routines can be written by people who do not own the machine.
+    ...(deps.cloudHome ? {} : { script: (_routine: Routine, command: string) => runCheckScript(command) }),
+    failed: (routine, sentence, count) => {
       const thread = resultsThread(routine);
-      deps.tell(routine.botId, thread, serverLine(deps.language(thread), "server.routine.probeFailed", { routine: routine.name, reason: sentence }));
+      deps.tell(routine.botId, thread, serverLine(deps.language(thread), "server.routine.probeStuck", { routine: routine.name, count, reason: sentence }));
     },
   });
 
@@ -104,7 +108,8 @@ export function createRoutineHost(deps: RoutineHostDeps) {
   });
 
   const wakingHours = createWakingHours({ dataDir: deps.dataDir });
-  useWakingWindow(() => wakingHours.window());
+  let quietHours: () => QuietHours | null = () => null;
+  useWakingWindow(() => outsideQuiet(wakingHours.window(), quietHours()));
 
   return {
     allowance,
@@ -114,6 +119,8 @@ export function createRoutineHost(deps: RoutineHostDeps) {
     /** Only a Cloud home runs an "around this time" routine early: it may fold it into a wake it has anyway. */
     earlyMs: deps.cloudHome ? (routine: Routine) => flexOf(routine) : undefined,
     shape: <T>(input: T): T => shapeNewRoutine(input as never) as T,
+    /** The person's quiet hours, which the waking hours new routines are shaped to leave out. */
+    useQuietHours(read: () => QuietHours | null): void { quietHours = read; },
     /** Runs a rolled-back version failed (server/update-state.ts `takeFreeReruns()`): each of their routines runs
      * again once, never held by or charged to the allowance, and its strip says so. A run already re-run, or whose
      * routine is gone, is skipped. Returns the new runs' ids. */

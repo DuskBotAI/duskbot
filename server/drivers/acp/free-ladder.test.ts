@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 
 import type { ModelCatalog } from "../../contracts.ts";
 import {
-  coolFreeRung, FREE_RUNG_COOL_MS, FREE_RUNG_WARM_MS, freeFailure, freeLadder, freeRungCooling, probeFreeLadder, resetFreeLadder, spannedSuspend,
+  advertisedVariant, coolFreeRung, FREE_RUNG_COOL_MS, FREE_RUNG_WARM_MS, freeFailure, freeLadder, freeRungCooling, probeFreeLadder, resetFreeLadder, spannedSuspend,
   warmFreeModel, warmFreeRung,
 } from "./free-ladder.ts";
 
@@ -124,5 +124,25 @@ describe("free model start-up probe", () => {
     calls = 0;
     expect(await probeFreeLadder(ladder, async () => { calls += 1; throw new Error("503"); }, () => {}, { maxRungs: 2 })).toBeNull();
     expect(calls).toBe(2);
+  });
+});
+
+describe("advertised variant", () => {
+  const noneHighDefault = [{ id: "none" }, { id: "high" }, { id: "default" }];
+
+  it("keeps a variant the model advertises", () => {
+    expect(advertisedVariant(noneHighDefault, "high")).toBe("high");
+  });
+
+  it("falls back to the model's default when the configured variant is not advertised", () => {
+    expect(advertisedVariant(noneHighDefault, "low")).toBe("default");
+  });
+
+  it("falls back to none when the model has no default either", () => {
+    expect(advertisedVariant([{ id: "none" }, { id: "high" }], "low")).toBeUndefined();
+  });
+
+  it("leaves the variant alone when the model has no variant list", () => {
+    expect(advertisedVariant(undefined, "low")).toBe("low");
   });
 });

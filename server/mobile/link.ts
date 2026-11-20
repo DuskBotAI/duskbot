@@ -54,12 +54,14 @@ export const PUSH_GRACE_MS = 4_000;
 
 const relayId = () => Array.from(randomBytes(10), (byte) => B32[byte & 31]).join("");
 
+const INSTALL_ID = /^[A-Za-z0-9-]{16,64}$/;
 const deviceSchema = z.object({
   id: z.string().uuid(),
   sessionId: z.string().min(1),
   name: z.string().max(80),
   platform: z.enum(MOBILE_PLATFORMS),
   app: z.string().max(40).optional(),
+  install: z.string().regex(INSTALL_ID).optional(),
   createdAt: z.number(),
   relay: z.object({ channel: z.string().regex(/^[a-z2-7]{10}$/), verifier: z.string().regex(HEX64), pub: z.string().regex(B64URL_KEY) }).nullable(),
   push: z.object({ service: z.enum(PUSH_SERVICES), token: z.string().min(8).max(4096), environment: z.enum(["sandbox", "production"]).optional(), updatedAt: z.number() }).nullable(),
@@ -79,7 +81,7 @@ interface Agent { base: string; tunnel: string; pub: string; origin: string | nu
 
 export interface MobileLinkDeps {
   dataDir: string;
-  sessions: Pick<SessionRegistry, "openPairing" | "exchange" | "list" | "isLive" | "revoke" | "onSessionRevoked">;
+  sessions: Pick<SessionRegistry, "openPairing" | "exchange" | "list" | "isLive" | "revoke" | "onSessionRevoked" | "holdForPairedDevice">;
   workspace(): { name: string; environmentId: string | null; kind: "mac" | "server" };
   /** this server's own https origin when it has one */
   publicOrigin(): string | null;
@@ -92,6 +94,9 @@ export interface MobileLinkDeps {
   push?: PushSender;
   /** whether the person already read this notification (on any device) */
   isRead?: (notificationId: string) => boolean;
+  /** A dusk cloud: its phones sign in with the account instead of pairing, so a phone's own bearer session may ask for a
+   * relay channel, and is listed as a phone once it does. */
+  adoptSessions?: boolean;
   fetch?: typeof fetch;
   now?: () => number;
   log?: (line: string) => void;
@@ -134,6 +139,7 @@ export function createMobileLink(deps: MobileLinkDeps) {
   const push = deps.push ?? createPushSender(process.env, { relay: () => pushRelayBase(process.env, agentLive()?.base ?? deps.lookupRelay ?? DEFAULT_MOBILE_RELAY) });
   const file = join(deps.dataDir, "mobile-devices.json");
   let devices: DeviceRecord[] = load();
+  for (const device of devices) deps.sessions.holdForPairedDevice(device.sessionId);
   const grants = new Map<string, Grant>();
   let agent: Agent | null = null;
   let rev = 1, applied = 0, failed = new Set<string>();
@@ -155,6 +161,16 @@ export function createMobileLink(deps: MobileLinkDeps) {
     }, PUSH_GRACE_MS);
     timer.unref?.();
     waiting.set(key, { timer, id: message.id });
+  }
+  /** a phone showing this conversation that then goes quiet without saying it went away was likely suspended before it
+   * could, and never saw this: it gets the push. One that checks in again was open and showed it. */
+  function unlessCheckedIn(device: DeviceRecord, message: PushMessage) {
+    const at = now();
+    const timer = setTimeout(() => {
+      if (!devices.includes(device) || !device.push || presence.reportedSince(device.id, at) || deps.isRead?.(message.id)) return;
+      void deliver(device, message);
+    }, Math.max(0, presence.overdueIn(device.id)));
+    timer.unref?.();
   }
   function read(ids: readonly string[]) {
     const done = new Set(ids);
@@ -274,14 +290,34 @@ export function createMobileLink(deps: MobileLinkDeps) {
       .map((url) => ({ kind: "https", url, ...(url === relay?.origin && relay.spki ? { spki: relay.spki } : {}) })));
   }
 
-  async function routes(): Promise<MobileRoutesResponse> {
+  async function routes(device: DeviceRecord | null): Promise<MobileRoutesResponse> {
     const companion = deps.companion ? await deps.companion().catch(() => null) : null;
     const isHttps = (route: MobileTransport): route is MobileRoutesResponse["https"][number] => route.kind === "https";
     const isCompanion = (route: MobileTransport): route is NonNullable<MobileRoutesResponse["companion"]>[number] => route.kind === "companion";
     return {
       https: httpsRoutes().filter(isHttps),
       companion: companion ? mobileTransports(companion.slice(0, 16).map((one) => ({ ...one, kind: "companion", net: one.kind }))).filter(isCompanion) : null,
+      ...relayOf(device),
     };
+  }
+
+  function relayOf(device: DeviceRecord | null): Pick<MobileRoutesResponse, "relay"> {
+    const relay = agentLive();
+    if (!relay) return {};
+    return { relay: device?.relay && !failed.has(device.relay.channel) ? { base: relay.base, channel: device.relay.channel, agentPub: relay.pub } : null };
+  }
+
+  /** a paired phone with no relay channel (paired while this place had no relay, or its keys lost) asks for one */
+  async function relayFor(device: DeviceRecord, body: Record<string, unknown>): Promise<{ status: number; body: unknown }> {
+    if (typeof body.pub !== "string" || !usableX25519(body.pub) || typeof body.verifier !== "string" || !HEX64.test(body.verifier)) return { status: 400, body: { error: "relay needs pub (base64url x25519) and verifier (sha256 hex)" } };
+    const relay = agentLive();
+    if (!relay) return { status: 409, body: { error: "This place has no relay right now.", code: "no_relay" } };
+    if (!devices.includes(device)) { devices.push(device); deps.sessions.holdForPairedDevice(device.sessionId); }
+    device.relay = { channel: device.relay && !failed.has(device.relay.channel) ? device.relay.channel : relayId(), verifier: body.verifier, pub: body.pub };
+    persist();
+    bump();
+    if (!await applied_(rev, device.relay.channel)) return { status: 503, body: { error: "The relay did not take this phone yet.", code: "not_applied" } };
+    return { status: 200, body: { base: relay.base, channel: device.relay.channel, agentPub: relay.pub } };
   }
 
   async function pairing(auth: RequestAuth, body: Record<string, unknown>): Promise<{ status: number; body: unknown }> {
@@ -315,7 +351,7 @@ export function createMobileLink(deps: MobileLinkDeps) {
       grants.delete(opened.id);
       return { status: 409, body: { error: "A phone cannot reach this workspace yet: turn on phone access or give it a public address first.", code: "unreachable" } };
     }
-    const payload: MobileLinkPayload = { v: MOBILE_LINK_VERSION, workspace: workspace(), grant: { id: opened.id, secret: opened.credential, expiresAt: opened.expiresAt }, via };
+    const payload: MobileLinkPayload = { v: MOBILE_LINK_VERSION, workspace: workspace(), grant: { id: opened.id, secret: opened.credential, expiresAt: opened.expiresAt, issuedAt: now() }, via };
     const lookupBase = relay?.base ?? deps.lookupRelay;
     const typed = lookupBase && await postLookup(lookupBase, opened.code, payload, opened.expiresAt - now(), deps.fetch) ? formatPairingCode(opened.code) : null;
     const answer: MobilePairingResponse = { payload, link: mobileLinkUrl(payload), code: typed, expiresAt: opened.expiresAt };
@@ -331,6 +367,7 @@ export function createMobileLink(deps: MobileLinkDeps) {
     const name = typeof device?.name === "string" ? device.name.slice(0, 80) : "";
     const platform = MOBILE_PLATFORMS.find((one) => one === device?.platform) ?? "other";
     const app = typeof device?.app === "string" ? device.app.replace(/[^\w .+-]/g, "").slice(0, 40) : undefined;
+    const install = typeof device?.install === "string" && INSTALL_ID.test(device.install) ? device.install : undefined;
     const relayAsk = body.relay as Record<string, unknown> | undefined;
     if (relayAsk !== undefined && (typeof relayAsk?.pub !== "string" || !usableX25519(relayAsk.pub) || typeof relayAsk.verifier !== "string" || !HEX64.test(relayAsk.verifier))) {
       return { status: 400, body: { error: "relay needs pub (base64url x25519) and verifier (sha256 hex)" } };
@@ -340,11 +377,14 @@ export function createMobileLink(deps: MobileLinkDeps) {
     // a wrong secret here is an expired or already used grant (the phone only has what the desktop made): 410 reads as
     // expired on every app version, where 401 read as "refused"
     if (!exchanged.ok) return exchanged.status === 401 ? { status: 410, body: { error: exchanged.error, code: "expired" } } : { status: exchanged.status, body: { error: exchanged.error } };
+    deps.sessions.holdForPairedDevice(exchanged.session.id);
     // a retried attempt gets the device it already opened
     let record = devices.find((one) => one.sessionId === exchanged.session.id);
     if (!record) {
-      record = { id: randomUUID(), sessionId: exchanged.session.id, name: exchanged.session.label, platform, ...(app ? { app } : {}), createdAt: now(), relay: null, push: null };
+      record = { id: randomUUID(), sessionId: exchanged.session.id, name: exchanged.session.label, platform, ...(app ? { app } : {}), ...(install ? { install } : {}), createdAt: now(), relay: null, push: null };
       devices.push(record);
+      const kept = record;
+      if (install) for (const replaced of devices.filter((one) => one !== kept && one.install === install)) revoke(replaced.id);
     }
     const relay = agentLive();
     let relayAnswer: MobileRedeemResponse["relay"];
@@ -416,16 +456,31 @@ export function createMobileLink(deps: MobileLinkDeps) {
       const session = sessions.get(device.sessionId);
       if (!session || (options.adminOnly && !session.scopes.includes("admin")) || !device.push) return;
       if (!presence.viewing(device.id, message.threadId)) later(device, message);
+      else unlessCheckedIn(device, message);
     }));
   }
 
   const deviceOf = (auth: RequestAuth) => (auth.kind === "session" ? devices.find((device) => device.sessionId === auth.session.id) ?? null : null);
+  const adoptable = (auth: RequestAuth) => Boolean(deps.adoptSessions) && auth.kind === "session" && auth.via === "bearer";
+  /** a cloud phone's own session, listed as a phone the first time it asks for a relay channel */
+  function adopt(auth: RequestAuth): DeviceRecord | null {
+    if (auth.kind !== "session" || devices.length >= MAX_DEVICES) return null;
+    return { id: randomUUID(), sessionId: auth.session.id, name: auth.session.label.slice(0, 80), platform: "other", createdAt: now(), relay: null, push: null };
+  }
 
   activeNotify = (notification, options) => { void notify(notification, options).catch((error) => log(`mobile: push failed (${(error as Error).message})`)); };
   activeTurnActivity = (threadId, event, context) => activities.event(threadId, event, context);
   activeRead = read;
 
   return {
+    /** the channel sync of a phone hub running in this process (a dusk cloud's), as POST /api/mobile/relay/sync answers it */
+    async relaySync(input: Record<string, unknown>): Promise<unknown> {
+      const closed = new AbortController();
+      if (input.signal instanceof AbortSignal) input.signal.addEventListener("abort", () => closed.abort(), { once: true });
+      const answer = await sync(input, closed.signal);
+      if (answer.status !== 200) throw new Error(`phone sync answered ${answer.status}`);
+      return answer.body;
+    },
     /** POST /api/mobile/redeem, before the auth gate: the grant's secret is the authorization */
     async publicRoute(req: IncomingMessage, res: import("node:http").ServerResponse, path: string, method: string, json: Json, readBody: ReadBody): Promise<boolean> {
       if (path !== "/api/mobile/redeem") return false;
@@ -460,8 +515,16 @@ export function createMobileLink(deps: MobileLinkDeps) {
         return true;
       }
       if (path === "/api/mobile/routes" && method === "GET") {
-        if (!deviceOf(auth)) { json(res, 404, { error: "this session is not a paired phone" }); return true; }
-        json(res, 200, await routes());
+        const device = deviceOf(auth);
+        if (!device && !adoptable(auth)) { json(res, 404, { error: "this session is not a paired phone" }); return true; }
+        json(res, 200, await routes(device));
+        return true;
+      }
+      if (path === "/api/mobile/relay" && method === "POST") {
+        const device = deviceOf(auth) ?? (adoptable(auth) ? adopt(auth) : null);
+        if (!device) { json(res, 404, { error: "this session is not a paired phone" }); return true; }
+        const answer = await relayFor(device, await body());
+        json(res, answer.status, answer.body);
         return true;
       }
       if (path === "/api/mobile/device" && method === "GET") {
@@ -479,6 +542,7 @@ export function createMobileLink(deps: MobileLinkDeps) {
         const environment = value.environment === "sandbox" || value.environment === "production" ? value.environment : undefined;
         if (!service || !/^[\w:.-]{8,4096}$/.test(token)) { json(res, 400, { error: "service must be apns or fcm, with its device token" }); return true; }
         device.push = { service, token, ...(environment ? { environment } : {}), updatedAt: now() };
+        for (const replaced of devices.filter((one) => one !== device && one.push?.service === service && one.push.token === token)) revoke(replaced.id);
         persist();
         json(res, 200, { ok: true, delivering: push.delivers?.(service) ?? push.configured.includes(service) });
         return true;

@@ -140,8 +140,24 @@ describe("guided phone pairing address discovery", () => {
     expect(await runPair(options)).toBe(1);
     expect(mocks.ui.choose).not.toHaveBeenCalled();
     expect(fetchMock.mock.calls.filter(([url]) => String(url).startsWith("https://"))).toHaveLength(0);
-    expect(fetchMock.mock.calls.filter(([, init]) => init?.method === "POST")).toHaveLength(0);
+    expect(fetchMock.mock.calls.filter(([url, init]) => init?.method === "POST" && !String(url).endsWith("/api/mobile/pairing"))).toHaveLength(0);
     expect(console.log).toHaveBeenCalledWith(expect.stringContaining("running only on this computer"));
+  });
+
+  it("pairs the phone app over the link relay on a server with no public address", async () => {
+    publicUrl = null;
+    mocks.readCliStartup.mockReturnValue({ access: "local" });
+    const local = `http://127.0.0.1:${options.port}`, typed = "WXYZ-2345-6789";
+    const base = fetchMock.getMockImplementation()!;
+    fetchMock.mockImplementation(async (input, init) => String(input) === `${local}/api/mobile/pairing` && init?.method === "POST"
+      ? Response.json({ link: "duskbot://link?v=1&g=grant", code: typed, expiresAt: Date.now() + 300_000, payload: { via: [{ kind: "relay" }] } })
+      : base(input, init));
+    expect(await runPair(options)).toBe(0);
+    const printed = vi.mocked(console.log).mock.calls.map(([line]) => String(line)).join("\n");
+    expect(printed).toContain(typed);
+    expect(printed).toMatch(/[▀▄█]/);
+    expect(printed).not.toContain("running only on this computer");
+    expect(mocks.ui.choose).not.toHaveBeenCalled();
   });
 
   it("does not mint a code when the advertised endpoint identifies another workspace", async () => {

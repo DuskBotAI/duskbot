@@ -1,17 +1,28 @@
 {
   "path": "/use-cases/file-organizer",
   "type": "use-case",
-  "title": "AI file organizer: review a folder plan before moving",
+  "title": "AI file organizer for sorting documents into folders",
   "nav": "file organizer",
-  "h1": "a file organizer bot that lists its moves first",
-  "description": "Give a local bot one folder. Copy a routine that proposes file moves and renames, waits for your review and starts with a backup.",
-  "keyword": "ai to organize files on my computer",
+  "h1": "ai file organizer for sorting one project folder",
+  "description": "Sort one project folder with an AI file organizer. Get proposed filenames, destinations and reasons, then choose which moves to make after backing up.",
+  "keyword": "ai file organizer",
   "keywords": [
     "ai to rename files",
-    "ai file organizer"
+    "ai file organizer",
+    "ai to organize files on my computer",
+    "ai file organization",
+    "ai document organizer folder",
+    "ai document organizer",
+    "ai to organize files",
+    "ai document sorting",
+    "ai auto file organizer",
+    "ai file manager",
+    "ai file sorter",
+    "ai desktop organizer",
+    "ai personal file organizer with smart search"
   ],
-  "answer": "**find the receipt without opening half the project folder.** give a local bot the folder and ask for a tidy-up plan: where each file would go, what it would be called and why. you approve the moves after opening a separate backup. unclear files stay put, and similar names never turn into permission to delete.",
-  "updated": "2026-11-12",
+  "answer": "**an ai file organizer can sort documents by their contents and show you where each one belongs.** give a local dusk bot one project folder. ask for the old path, proposed path and reason for each move. open your backup, then approve specific moves. leave anything the bot can't identify where it is.",
+  "updated": "2026-11-20",
   "review": {
     "status": "approved",
     "by": "lead agent: independent reviewer pass against seo/facts (4 reviewers), every finding applied, automated gate",
@@ -39,7 +50,7 @@
   "og_line": "one folder, a backup, a plan first.",
   "routine": {
     "intro": "**get a move list you can read before anything moves.** make a separate copy yourself and open a few files from it. then give a local bot the project folder, on ask for approval.",
-    "message": "every friday at 5pm, inspect only the project folder i gave you. propose a tidy-up here. ask me before you change anything.\n\n- list the current path, proposed path and reason for each move\n- group receipts under receipts, reference material under references and unfinished work under working\n- suggest clearer names only when the contents justify them\n- keep file extensions unchanged\n\nleave ambiguous files, shortcuts, hidden files and app-managed folders alone. flag name collisions. never delete, deduplicate or move anything outside this folder.\n\nwait for me to confirm my tested backup and approve specific moves. compare the paths with the plan again before moving. stop if a file changed or a destination exists. afterwards list only completed operations.",
+    "message": "every friday at 5pm, inspect only the project folder i gave you. propose a tidy-up here.\n\n- list the current path, proposed path and reason for each move\n- group receipts under receipts, reference material under references and unfinished work under working\n- suggest clearer names only when the contents justify them\n- keep file extensions unchanged\n\nleave ambiguous files, shortcuts, hidden files and app-managed folders alone. flag name collisions. never delete, deduplicate or move anything. finish with the proposed plan.",
     "when": "fridays at 17:00 for inspection; specific approved moves follow separately",
     "needs": "a local bot, one project folder and a separately tested backup; no connected app",
     "output": "cedar project: proposed moves\nreceipt-talvo.pdf -> receipts/receipt-talvo.pdf | contents show a receipt\ncedar-style-notes.txt -> references/cedar-style-notes.txt | reference notes\nunfinished-copy.txt -> working/unfinished-copy.txt | marked unfinished\n\nleft alone: final-final.pdf; purpose unclear\ncollision: references/cedar-logo.png already exists\n\nno files moved. confirm the backup and choose which moves to apply."
@@ -75,6 +86,10 @@
     {
       "q": "is there an undo button for a bad tidy-up?",
       "a": "**keep the backup as your way back.** do not rely on an undo button. the completed operation list tells you which originals to recover."
+    },
+    {
+      "q": "can i find a document again after the bot sorts it?",
+      "a": "**ask for the final paths in chat.** once the moves are done, search your chats for a filename with `cmd k` or `ctrl k`. that finds the bot's filing note. use your computer's file search if you need to search the whole desktop.[^4]"
     }
   ],
   "sources": [
@@ -89,6 +104,10 @@
     {
       "label": "dusk bot docs: routines",
       "url": "/docs/routines"
+    },
+    {
+      "label": "dusk bot docs: searching chats",
+      "url": "/docs/bots"
     }
   ],
   "quick": {
@@ -96,7 +115,8 @@
       "make a separate copy of one folder and open a few files in it",
       "give a local bot that project folder",
       "ask for a move plan with no changes",
-      "compare one proposed move with the actual file"
+      "compare one proposed move with the actual file",
+      "copy the exact moves you approve from the plan into a reply. the bot works from that reply and lists only completed moves."
     ]
   },
   "worked": {

@@ -153,7 +153,14 @@ export function canScroll(target: EventTarget | null, root: HTMLElement, axis: "
   return false;
 }
 
-/** Text fields, sliders and canvases keep their own drags. */
+/** Text fields, sliders and canvases keep their own drags, and so does text being selected. */
 export function ownsDrag(target: EventTarget | null): boolean {
-  return target instanceof Element && Boolean(target.closest("input, textarea, select, [contenteditable='true'], canvas, [data-no-swipe], [role='slider']"));
+  return target instanceof Element && (Boolean(target.closest("input, textarea, select, [contenteditable='true'], canvas, [data-no-swipe], [role='slider']")) || selectingIn(target));
+}
+
+/** A finger moving over viewer text that holds a selection is dragging that selection, not the sheet under it. */
+export function selectingIn(target: Element): boolean {
+  const area = target.closest("[data-selectable]");
+  const selection = area ? window.getSelection() : null;
+  return Boolean(selection && !selection.isCollapsed && selection.anchorNode && area!.contains(selection.anchorNode));
 }

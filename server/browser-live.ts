@@ -75,6 +75,10 @@ export class BrowserSlowActionError extends BrowserLiveError {
 /** The browser answered that it did not take an input, which therefore had no effect. */
 class BrowserInputRefusedError extends Error {}
 const INPUT_REFUSED = "The page did not take some of your input. Check the page, then try again.";
+/** A press, a key going down or typed, a wheel or a toolbar command: not a release of something already held. */
+const personActs = (action: Action) => action.type === "command"
+  || (action.type === "input" ? [action.message] : action.type === "inputs" ? action.messages : []).some((message) => message.type === "input_keyboard"
+    ? message.eventType !== "keyUp" : message.eventType === "mousePressed" || message.eventType === "mouseWheel");
 const TOGETHER_BUSY = "The bot was in the middle of something on this page. Check the page, then try again.";
 
 /** An input, or the release of a key or button, the browser never confirmed: its state in the page is unknown. */
@@ -941,29 +945,15 @@ export class BrowserLive {
       this.end(viewer.session, viewer.person);
       return { ok: true };
     }
-    if (action.type === "take") {
-      try {
-        const taking = this.runtime.take(viewer.session, viewer.person);
-        this.control(viewer.session);
-        // The bot's own action finished first, so input aimed before the grant may no longer fit the page.
-        const waited = await taking;
-        // Taken over from another view of theirs: what that view pressed is let go first, and never replayed here.
-        const before = this.viewers.get(this.drivers.get(viewer.session) ?? "");
-        if (before && before !== viewer) await this.releaseHeld(before);
-        await this.left.get(viewer.session)?.settled;
-        if (!this.current(viewer)) { this.close(viewer, true, true); throw new BrowserLiveError("This browser view closed.", 409); }
-        if (this.ownedBy(viewer)) {
-          this.drivers.set(viewer.session, viewer.id);
-          this.left.delete(viewer.session);
-          this.clock(viewer.session).used();
-          this.clock(viewer.session).watched(true);
-        }
-        return { ok: true, waited: waited === true };
-      } catch { throw this.refusal(viewer, "Another browser view or bot action is using this browser. Try again shortly."); }
-      finally { this.control(viewer.session); }
-    }
+    if (action.type === "take") return this.takeControl(viewer);
     if (this.shared(viewer)) return this.together(viewer, action);
-    if (!this.controlling(viewer)) throw this.refusal(viewer, "Browser control changed. Try again.");
+    // A person's press, key or command takes the browser from the bot: its running step ends first and its next call waits.
+    if (!this.controlling(viewer)) {
+      if (action.type !== "input" && action.type !== "inputs" && action.type !== "command") throw this.refusal(viewer, "Browser control changed. Try again.");
+      if (!personActs(action)) return { ok: true };
+      await this.takeControl(viewer);
+      if (!this.controlling(viewer)) throw this.refusal(viewer, "Browser control changed. Try again.");
+    }
     this.clock(viewer.session).used();
     if (action.type === "dialog") {
       const watch = this.dialogs.get(viewer.session)?.watch;
@@ -1030,12 +1020,34 @@ export class BrowserLive {
       return refused ? { ok: true, notice: INPUT_REFUSED } : { ok: true };
     } catch (error) {
       // The bot's own command was running: the engine took the person's input after it, or not at all. Nothing restarts.
-      if (error instanceof BrowserInputUnconfirmedError || error instanceof BrowserBusyError) throw new BrowserLiveError(TOGETHER_BUSY, 409);
+      if (error instanceof BrowserInputUnconfirmedError || error instanceof BrowserBusyError) return { ok: true, notice: TOGETHER_BUSY };
       throw error instanceof BrowserLiveError ? error : this.refusal(viewer, TOGETHER_BUSY);
     } finally {
       viewer.pendingActions -= 1;
       if (viewer.closed && viewer.pendingActions === 0) viewer.idle?.();
     }
+  }
+
+  private async takeControl(viewer: Viewer): Promise<{ ok: true; waited: boolean }> {
+    try {
+      const taking = this.runtime.take(viewer.session, viewer.person);
+      this.control(viewer.session);
+      // The bot's own action finished first, so input aimed before the grant may no longer fit the page.
+      const waited = await taking;
+      // Taken over from another view of theirs: what that view pressed is let go first, and never replayed here.
+      const before = this.viewers.get(this.drivers.get(viewer.session) ?? "");
+      if (before && before !== viewer) await this.releaseHeld(before);
+      await this.left.get(viewer.session)?.settled;
+      if (!this.current(viewer)) { this.close(viewer, true, true); throw new BrowserLiveError("This browser view closed.", 409); }
+      if (this.ownedBy(viewer)) {
+        this.drivers.set(viewer.session, viewer.id);
+        this.left.delete(viewer.session);
+        this.clock(viewer.session).used();
+        this.clock(viewer.session).watched(true);
+      }
+      return { ok: true, waited: waited === true };
+    } catch { throw this.refusal(viewer, "Another browser view or bot action is using this browser. Try again shortly."); }
+    finally { this.control(viewer.session); }
   }
 
   private refusal(viewer: Viewer, otherwise: string): BrowserLiveError {

@@ -3,6 +3,7 @@ import { t } from "@/lib/i18n";
 import { friendlyError } from "@/lib/plain-error";
 import { api, useStore, type AppState } from "@/state/store";
 import { ErrorDetailsCopy } from "./ErrorDetailsCopy";
+import { ConnectAiDialog } from "./onboarding/ConnectAi";
 import { Icon } from "./Icon";
 import { NoticeGlyph } from "./ui/Notice";
 import type { PixelIconName } from "./ui/PixelIcon";
@@ -16,7 +17,7 @@ export function ChatNotice({ notice }: { notice: AppState["notice"] }) {
     <div className="w-full px-5">
       <div role="status" className={`mb-2 ${NOTICE_LINE} text-ink-secondary`}>
         {notice.kind === "note"
-          ? <>{notice.found ? <span className="min-w-0 flex-1">{notice.text}</span> : notice.text}{notice.found && <UseFoundAi found={notice.found} />}</>
+          ? <>{notice.found || notice.connect ? <span className="min-w-0 flex-1">{notice.text}</span> : notice.text}{notice.found && <UseFoundAi found={notice.found} />}{notice.connect && <ConnectAiButton />}</>
           : notice.kind === "steer-images"
             ? t("composer.queued.steerImagesHeld")
             : notice.kind === "bot-gone"
@@ -25,6 +26,19 @@ export function ChatNotice({ notice }: { notice: AppState["notice"] }) {
       </div>
     </div>
   );
+}
+
+/** Opens the connect flow for a send no AI could take; the note clears once one is connected, and they send again. */
+function ConnectAiButton() {
+  const { dispatch } = useStore();
+  const [open, setOpen] = useState(false);
+  return <>
+    <button type="button" data-connect-ai-note="" onClick={() => setOpen(true)}
+      className="-my-1 shrink-0 rounded-full bg-ink/[0.06] px-2.5 py-1 text-[12px] leading-4 text-ink hover:bg-ink/[0.1]">
+      {t("onboarding.meet.connectAi")}
+    </button>
+    {open && <ConnectAiDialog tested={null} onClose={() => { setOpen(false); dispatch({ type: "notice", notice: null }); }} />}
+  </>;
 }
 
 /** Turns on an AI the person's send found waiting, then clears the note; they send again. */

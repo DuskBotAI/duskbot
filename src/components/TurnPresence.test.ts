@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import "@/testing/quiet-canceled-animations";
 
 import { phraseAt, phraseHoldMs, rotationHoldMs } from "@/lib/live-activity";
-import { STATUS_HOLD_MS, STATUS_QUIET_MS, TurnPresence } from "./TurnPresence";
+import { LONG_TURN_MS, STATUS_HOLD_MS, STATUS_QUIET_MS, TurnPresence, WORD_DWELL_MS, WORD_SWAP } from "./TurnPresence";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -152,28 +152,56 @@ describe("Simple mode's rotating words", () => {
   const line = saying;
   const pool = Array.from({ length: 12 }, (_, index) => `Word ${index}`);
 
-  it("shows the mark alone first, then its first word, then a new word every 2.5 to 3.5 s, never the same one twice in a row", () => {
+  it("shows the mark alone first, then one word, and only a long turn moves on, 7.9 to 9.9 s apart, never the same word twice in a row", () => {
     vi.setSystemTime(10_000);
     render({ simple: true, since: 10_000, phrases: pool, phase: "friendly:generic" });
     expect(line(), "the mascot alone for a beat").toBe("");
     act(() => void vi.advanceTimersByTime(STATUS_QUIET_MS.max));
-    const said = [line()];
-    for (let i = 0; i < 9; i++) {
-      act(() => void vi.advanceTimersByTime(3500));
-      said.push(line());
+    const said: Array<{ word: string; at: number }> = [{ word: line(), at: Date.now() }];
+    while (Date.now() < 10_000 + 60_000) {
+      act(() => void vi.advanceTimersByTime(100));
+      if (line() !== said.at(-1)!.word) said.push({ word: line(), at: Date.now() });
     }
-    expect(said[0], "it opens with the pool's first word").toBe("Word 0");
-    expect(new Set(said).size, "a 30 s turn says nine or ten different words").toBeGreaterThanOrEqual(9);
-    for (let i = 1; i < said.length; i++) expect(said[i], `word ${i}`).not.toBe(said[i - 1]);
-    for (const word of said) expect(pool).toContain(word);
+    expect(said[0]!.word, "it opens with the pool's first word").toBe("Word 0");
+    expect(said[1]!.at - 10_000, "nothing else until the turn is long").toBeGreaterThanOrEqual(LONG_TURN_MS);
+    expect(said.length, "a minute says a handful of words").toBeGreaterThanOrEqual(5);
+    for (let i = 2; i < said.length; i++) expect(said[i]!.at - said[i - 1]!.at, `gap ${i}`).toBeGreaterThanOrEqual(WORD_SWAP.duration + 7000);
+    for (let i = 1; i < said.length; i++) expect(said[i]!.word, `word ${i}`).not.toBe(said[i - 1]!.word);
+    for (const { word } of said) expect(pool).toContain(word);
     expect(host.querySelector("[data-turn-now]")?.classList, "a later word crossfades in place, it does not rise").not.toContain("turn-label-in");
   });
 
-  it("holds a word its seeded time before the next", () => {
+  it("says one phrase through a short turn, whatever its steps", () => {
+    vi.setSystemTime(10_000);
+    render({ simple: true, since: 10_000, phrases: ["Running a command"], phase: "friendly:commands", wordsAtOnce: true });
+    const said = new Set([line()]);
+    for (const [phrase, phase] of [["Reading files", "friendly:files"], ["Writing", "friendly:chat.typing"], ["Searching", "friendly:web"], ["Writing", "friendly:chat.typing"]]) {
+      act(() => void vi.advanceTimersByTime(1_100));
+      render({ simple: true, since: 10_000, phrases: [phrase], phase, wordsAtOnce: true });
+      said.add(line());
+    }
+    expect(Date.now() - 10_000).toBeLessThan(6_000);
+    expect([...said]).toEqual(["Thinking"]);
+  });
+
+  it("never changes its words for a step in the same coarse group", () => {
+    vi.setSystemTime(10_000);
+    render({ simple: true, since: 0, phrases: ["Reading files"], phase: "friendly:files" });
+    for (const [phrase, phase] of [["Searching", "friendly:web"], ["Opening a page", "friendly:page"], ["Clicking", "friendly:clicking"], ["Reading files", "friendly:files"]]) {
+      act(() => void vi.advanceTimersByTime(STATUS_HOLD_MS + 1_000));
+      render({ simple: true, since: 0, phrases: [phrase], phase });
+      expect(line(), phase).toBe("Reading files");
+    }
+    act(() => void vi.advanceTimersByTime(STATUS_HOLD_MS));
+    render({ simple: true, since: 0, phrases: ["Running a command"], phase: "friendly:commands" });
+    expect(line(), "working on it is a new group").toBe("Running a command");
+  });
+
+  it("holds a word for its swap and its seeded time before the next", () => {
     vi.setSystemTime(10_000);
     render({ simple: true, since: 0, phrases: pool, phase: "friendly:generic" });
     const first = line();
-    act(() => void vi.advanceTimersByTime(rotationHoldMs(`${seed}|friendly:generic`, 0) - 1));
+    act(() => void vi.advanceTimersByTime(WORD_SWAP.duration + rotationHoldMs(`${seed}|friendly:generic`, 0) - 1));
     expect(line()).toBe(first);
     act(() => void vi.advanceTimersByTime(1));
     expect(line()).not.toBe(first);
@@ -199,8 +227,24 @@ describe("Simple mode's rotating words", () => {
     vi.setSystemTime(10_000);
     render({ simple: true, since: 0, phrases: ["Writing", "Wrapping up"], phase: "friendly:chat.typing" });
     expect(line()).toBe("Writing");
-    act(() => void vi.advanceTimersByTime(3500));
+    act(() => void vi.advanceTimersByTime(WORD_SWAP.duration + 9000));
     expect(line()).toBe("Wrapping up");
+  });
+
+  it("keeps each step's words readable 5 s past their swap however fast the steps come, then says only the newest", () => {
+    vi.setSystemTime(10_000);
+    render({ simple: true, since: 0, phrases: ["Running a command"], phase: "friendly:commands" });
+    expect(STATUS_HOLD_MS).toBe(WORD_SWAP.duration + WORD_DWELL_MS);
+    expect(WORD_DWELL_MS).toBeGreaterThanOrEqual(5000);
+    const said = [line()];
+    for (const [phrase, phase] of [["Reading files", "friendly:files"], ["Searching", "friendly:web"], ["Opening a page", "friendly:page"]]) {
+      act(() => void vi.advanceTimersByTime(700));
+      render({ simple: true, since: 0, phrases: [phrase], phase });
+      said.push(line());
+    }
+    expect(said, "steps 0.7 s apart change nothing before the hold ends").toEqual(["Running a command", "Running a command", "Running a command", "Running a command"]);
+    act(() => void vi.advanceTimersByTime(STATUS_HOLD_MS - 2100));
+    expect(line(), "the newest step, the two between never said").toBe("Opening a page");
   });
 
   it("keeps fun words out of a short turn and mixes them into a long one, never one word twice in a row", () => {
@@ -215,8 +259,8 @@ describe("Simple mode's rotating words", () => {
       if (line() !== said.at(-1)) said.push(line());
     }
     expect(said[0]).toBe("Thinking");
-    const early = said.slice(0, 4);
-    expect(early.every((word) => normal.includes(word)), `first 15 s: ${early.join(", ")}`).toBe(true);
+    const early = said.slice(0, 2);
+    expect(early.every((word) => normal.includes(word)), `first 20 s: ${early.join(", ")}`).toBe(true);
     expect(said.some((word) => fun.includes(word)), "a two minute turn says some fun words").toBe(true);
     expect(said.filter((word) => normal.includes(word)).length, "plain words still lead overall").toBeGreaterThan(said.filter((word) => fun.includes(word)).length);
   });

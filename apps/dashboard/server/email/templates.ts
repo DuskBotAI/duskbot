@@ -38,6 +38,7 @@ const SAY = {
   receipt: { say: "paid. thank you!", accent: "lime" },
   revived: { say: "welcome back!", accent: "lime" },
   payment: { say: "uh oh, card trouble", accent: "pink" },
+  fixed: { say: "all fixed. thank you!", accent: "lime" },
   napping: { say: "no hard feelings", accent: "lav" },
   headsUp: { say: "heads up!", accent: "lemon" },
   lastDay: { say: "last call!", accent: "pink" },
@@ -186,20 +187,66 @@ export function receiptEmail(cfg: EmailConfig, input: ReceiptInput): Rendered {
   });
 }
 
-export interface PaymentFailedInput { amountCents: number | null; currency: string; description: string; cloudName: string | null; fixBy: number | null }
+/** `fixBy`: when the paused cloud's data is deleted unless a payment goes through first; `trial`: the charge that failed
+ *  was the trial's first */
+export interface PaymentFailedInput { amountCents: number | null; currency: string; description: string; cloudName: string | null; fixBy: number | null; trial?: boolean }
+const cloudButton = (cfg: EmailConfig, cloudName: string | null): Block => cloudName ? { t: "button", label: "open dusk cloud", href: `${cfg.app}/cloud` } : { t: "button", label: "open the app", href: `${cfg.site}/download` };
+/** a charge that didn't go through: the cloud is paused at once and kept until `fixBy` */
 export function paymentFailedEmail(cfg: EmailConfig, input: PaymentFailedInput): Rendered {
   const amount = input.amountCents === null ? null : formatMoney(input.amountCents, input.currency);
+  const what = input.cloudName ? `**${input.cloudName}**` : "your cloud", date = input.fixBy === null ? null : formatDate(input.fixBy);
+  if (input.trial) return render(cfg, {
+    subject: date ? `your trial data will be deleted on ${date}` : "your trial ended", preheader: `${input.cloudName ?? "your cloud"} is paused. starting the plan brings it back.`, tag: "billing", ...SAY.payment,
+    blocks: [
+      { t: "h1", text: "your trial ended" },
+      { t: "p", text: `we couldn't charge ${amount ? `**${amount}** ` : ""}for **${input.description}** when the trial ended, so ${what} is paused.` },
+      ...(date ? [{ t: "note", tone: "alert", text: `its bots, chats, files and sign-ins are deleted on **${date}**. start the plan before then and it comes back as it was.` } as Block] : []),
+      billingLink(cfg, "the plan starts from your"),
+      cloudButton(cfg, input.cloudName),
+    ],
+    reason: ACCOUNT_REASON,
+  });
   return render(cfg, {
-    subject: "your payment didn't go through", preheader: `a new card keeps ${input.cloudName ?? "your plan"} running.`, tag: "billing", ...SAY.payment,
+    subject: "your payment didn't go through", preheader: `${input.cloudName ?? "your cloud"} is paused until the card is fixed.`, tag: "billing", ...SAY.payment,
     blocks: [
       { t: "h1", text: "your card needs a look" },
       { t: "p", text: `we couldn't charge ${amount ? `**${amount}** ` : ""}for **${input.description}**. usually it's an expired card, a new card number or the bank saying no.` },
-      ...(input.fixBy !== null ? [{ t: "note", tone: "alert", text: input.cloudName
-        ? `**${input.cloudName}** keeps running for now. fix the card by **${formatDate(input.fixBy)}** so it doesn't stop.`
-        : `fix the card by **${formatDate(input.fixBy)}** to keep your plan.` } as Block] : []),
+      { t: "note", tone: "warn", text: `${what} is paused until the card is fixed.${date ? ` its bots, chats, files and sign-ins are kept until **${date}**, and fixing the card before then brings it all back.` : ""}` },
       billingLink(cfg, "the card on file lives on your"),
-      input.cloudName ? { t: "button", label: "open dusk cloud", href: `${cfg.app}/cloud` } : { t: "button", label: "open the app", href: `${cfg.site}/download` },
+      cloudButton(cfg, input.cloudName),
       { t: "p", small: true, text: "already fixed it? then you're good, there's nothing else to do." },
+    ],
+    reason: ACCOUNT_REASON,
+  });
+}
+
+/** a paid plan's reminder 14 days after its charge failed, or (`final`) 3 days before its paused cloud's data is deleted */
+export interface PaymentReminderInput extends PaymentFailedInput { fixBy: number; final: boolean }
+export function paymentReminderEmail(cfg: EmailConfig, input: PaymentReminderInput): Rendered {
+  const amount = input.amountCents === null ? null : formatMoney(input.amountCents, input.currency), date = formatDate(input.fixBy);
+  const what = input.cloudName ? `**${input.cloudName}**` : "your cloud";
+  return render(cfg, {
+    subject: input.final ? `3 days left: your cloud's data is deleted on ${date}` : "your cloud is still paused", preheader: `its data is kept until ${date}.`, tag: "billing", ...(input.final ? SAY.lastDay : SAY.payment),
+    blocks: [
+      { t: "h1", text: input.final ? "3 days left to fix your card" : "your card still needs a look" },
+      { t: "p", text: `we still couldn't charge ${amount ? `**${amount}** ` : ""}for **${input.description}**, so ${what} is paused.` },
+      { t: "note", tone: input.final ? "alert" : "warn", text: `its bots, chats, files and sign-ins are kept until **${date}**${input.final ? ", then deleted for good" : ""}. fixing the card before then brings it all back.` },
+      billingLink(cfg, "the card on file lives on your"),
+      cloudButton(cfg, input.cloudName),
+      { t: "p", small: true, text: "already fixed it? then you're good, there's nothing else to do." },
+    ],
+    reason: ACCOUNT_REASON,
+  });
+}
+
+/** a payment that went through after one that failed: the paused cloud comes back */
+export function paymentRecoveredEmail(cfg: EmailConfig, input: { description: string; cloudName: string | null }): Rendered {
+  return render(cfg, {
+    subject: "you're back, thanks", preheader: "your payment went through.", tag: "billing", ...SAY.fixed,
+    blocks: [
+      { t: "h1", text: "you're back" },
+      { t: "p", text: `the payment for **${input.description}** went through${input.cloudName ? `, and **${input.cloudName}** is waking up with everything where it was` : ""}. thanks for sorting it out.` },
+      cloudButton(cfg, input.cloudName),
     ],
     reason: ACCOUNT_REASON,
   });

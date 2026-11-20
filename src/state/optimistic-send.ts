@@ -50,6 +50,14 @@ export const SEND_REOPEN_CUT_MS = 1_000;
 /** how many cut attempts a send makes before the outbox holds it for the next reconnect or resume */
 export const SEND_ATTEMPT_CUTS = 15;
 
+/** The live stream opening again, or the device's network returning while the stream never noticed it was gone. */
+function onPlaceBack(run: () => void): () => void {
+  const stopOpen = onLiveEventsOpen(run);
+  const network = globalThis.window;
+  network?.addEventListener("online", run);
+  return () => { stopOpen(); network?.removeEventListener("online", run); };
+}
+
 /** Each send attempt gets `ms` to be answered before the same sendId goes again on a new request; a live stream that
  * opens again cuts it short too. The server answers every request for one sendId with the one receipt
  * (server/send-idempotency.ts), so asking again never sends twice. Off by default: the phone installs it. */
@@ -119,7 +127,7 @@ export async function sendReconciled<T>(
   const beforeRetry = (ms: number): Promise<unknown> => wait ? Promise.race([wait(ms), delivered]) : new Promise<void>((resolve) => {
     const finish = () => { clearTimeout(timer); stopOpen(); owned.signal.removeEventListener("abort", finish); resolve(); };
     const timer = setTimeout(finish, ms);
-    const stopOpen = limited ? onLiveEventsOpen(finish) : () => {};
+    const stopOpen = limited ? onPlaceBack(finish) : () => {};
     if (owned.signal.aborted) finish();
     else owned.signal.addEventListener("abort", finish, { once: true });
   });

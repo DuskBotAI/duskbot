@@ -24,6 +24,8 @@ export interface ManagedCloudContext {
   removeWorkspace(workspaceId: string): void;
   /** a fresh signed entitlement for this cloud's home, or null when this service signs none */
   entitlement(cloud: StoredCloud): string | null;
+  /** a link grant for the cloud's account, for its home's phone relay, or null when this service signs none */
+  linkGrant?(cloud: StoredCloud): string | null;
   /** runs a reconcile pass now; with a cloud id, keeps running them every second until that cloud's wake is through */
   kick?(cloudId?: string): void;
 }

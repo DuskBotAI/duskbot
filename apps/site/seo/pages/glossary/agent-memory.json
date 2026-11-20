@@ -1,0 +1,75 @@
+{
+  "path": "/glossary/agent-memory",
+  "type": "glossary",
+  "title": "What is agent memory, and how do you correct it?",
+  "nav": "agent memory",
+  "h1": "what is agent memory?",
+  "description": "Learn which facts an AI agent should carry into a new chat, when a note needs an end date, and where to correct a stale preference in Dusk Bot.",
+  "keyword": "agent memory",
+  "keywords": [
+    "what is ai agent memory",
+    "how do ai agents remember"
+  ],
+  "answer": "**agent memory is information an ai keeps for later tasks, even after you start a new conversation.** a packing preference can save you from repeating yourself on every trip. a detail from a single journey can also become a bad habit if the agent treats it as permanent.",
+  "updated": "2026-11-20",
+  "review": {
+    "status": "approved",
+    "by": "lead agent, after four independent reviewers read every page against seo/facts (2026-11-20); every finding applied",
+    "at": "2026-11-20"
+  },
+  "tags": [
+    "memory",
+    "bots",
+    "glossary"
+  ],
+  "connectors": [],
+  "related": [
+    "/guides/what-is-an-ai-agent",
+    "/glossary/ai-routine"
+  ],
+  "art": {
+    "props": [
+      "s-notebook",
+      "p-bag"
+    ],
+    "bubble": "just for this trip"
+  },
+  "og_line": "give temporary facts an end date.",
+  "definition": "agent memory carries selected facts or preferences from an earlier exchange into a later one.",
+  "example": "**daphne usually packs walking shoes but needs dress shoes for a wedding trip.** imagine her next packing list includes dress shoes for a muddy campsite. the agent remembered a true detail and used it in the wrong place. a better note ties the shoes to the wedding and expires after the trip.",
+  "sections": [
+    {
+      "h": "separate a habit from an exception",
+      "md": "**ask whether the detail will still help on an ordinary day next month.** a preference for a short packing list probably will. the dress code for a particular dinner belongs with that dinner.\n\nto test the distinction, start a fresh chat and ask for a campsite list. if the dress shoes turn up, inspect the saved preference."
+    },
+    {
+      "h": "where dusk bot keeps the note",
+      "md": "**open the bot's memory settings to read or edit its notes.** each bot has its own memory. its threads share that memory, and a note can have an end date.[^1][^2]\n\na bot can pick up facts from your own messages. look in settings under about me for facts added by your bots. every bot gets the about me details, so reserve that space for preferences that travel well.[^1]"
+    },
+    {
+      "h": "when a saved note is the wrong tool",
+      "md": "**keep a one-off detail in the task if it would confuse the next one.** dusk bot is more setup than you need for a single packing list. if you already use it and want to stop using saved notes, switch off let this bot use memory. the files stay on disk. turning memory off doesn't erase them.[^1]"
+    }
+  ],
+  "faq": [
+    {
+      "q": "will switching the bot's ai clear its memory?",
+      "a": "no. the bot keeps its chats, files and memory when you change its model. edit the note itself to correct a mistake.[^2]"
+    },
+    {
+      "q": "does my bot learn preferences from group chat?",
+      "a": "dusk bots learn from your own messages to them. they don't learn from group chats. tell the bot directly when a detail should carry forward.[^1]"
+    }
+  ],
+  "sources": [
+    {
+      "label": "dusk bot docs: memory",
+      "url": "/docs/memory"
+    },
+    {
+      "label": "dusk bot docs: bots and threads",
+      "url": "/docs/bots"
+    }
+  ],
+  "voice": 2
+}

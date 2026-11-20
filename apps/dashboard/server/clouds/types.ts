@@ -81,8 +81,9 @@ export interface HomeClient {
   /** the sleep handshake: ok once the home agreed and closed for the stop. `force`: the owner's pause, so the home tells its
    * open apps it is going to sleep even while busy, and always agrees. */
   sleep?(origin: string, secret: string, idleMinutes: number, options?: { force?: boolean }): Promise<{ ok: boolean; nextDueAt: number | null }>;
-  /** a hosted home's signed entitlement (shared/entitlement.ts): it refuses clients without a valid one */
-  entitle?(origin: string, secret: string, token: string): Promise<{ expiresAt: number }>;
+  /** a hosted home's signed entitlement (shared/entitlement.ts): it refuses clients without a valid one. `linkGrant`: a
+   * link grant for the cloud's account, which the home makes its phone relay's tunnel with when it has none */
+  entitle?(origin: string, secret: string, token: string, linkGrant?: string | null): Promise<{ expiresAt: number }>;
   /** tells the home its plan was cancelled or renewed, so it holds its routines (docs/cloud-pro.md) */
   plan?(origin: string, secret: string, input: { cancelled: boolean }): Promise<void>;
   /** hands the home AI sign-ins held for it (ai-stash.ts); resolves once it applied them */

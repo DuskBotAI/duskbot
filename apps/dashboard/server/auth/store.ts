@@ -48,5 +48,5 @@ export function createAuthStore(dataDir: string) {
     if (secret.length < 32) throw new Error("Invalid auth secret file.");
     chmodSync(secretPath, 0o600);
   }
-  return { state: store.state, secret, changed: store.changed, close: store.commit };
+  return { state: store.state, secret, changed: store.changed, changedRow: store.changedRow, close: store.commit };
 }

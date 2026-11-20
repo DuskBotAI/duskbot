@@ -1,5 +1,5 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { CANCEL_ANSWERS, CLOUD_SWATCHES } from "../../../../shared/billing-api.ts";
+import { CANCEL_ANSWERS, CLOUD_SWATCHES, RETENTION_OFFERS } from "../../../../shared/billing-api.ts";
 import type { CancelSurvey, CloudSwatch } from "../../../../shared/billing-api.ts";
 import { BillingError } from "./service.ts";
 
@@ -41,7 +41,9 @@ export function color(value: unknown): CloudSwatch | null {
 export function survey(value: unknown): CancelSurvey {
   const data = object(value);
   if (!CANCEL_ANSWERS.includes(data.answer as CancelSurvey["answer"])) invalid();
-  return { answer: data.answer as CancelSurvey["answer"], ...(data.expected === undefined ? {} : { expected: text(data.expected) }), ...(data.improve === undefined ? {} : { improve: text(data.improve) }) };
+  if (data.offer !== undefined && !RETENTION_OFFERS.includes(data.offer as NonNullable<CancelSurvey["offer"]>)) invalid();
+  return { answer: data.answer as CancelSurvey["answer"], ...(data.expected === undefined ? {} : { expected: text(data.expected) }), ...(data.improve === undefined ? {} : { improve: text(data.improve) }),
+    ...(data.offer === undefined ? {} : { offer: data.offer as NonNullable<CancelSurvey["offer"]> }) };
 }
 export function cartInput(value: unknown) {
   const data = object(value), license = object(data.license), desktop = object(data.desktop);

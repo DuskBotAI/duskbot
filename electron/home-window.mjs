@@ -10,7 +10,7 @@
 // Admin's team pairing (its claims are the Admin's), never an address a page supplied.
 import { cloudHomeConnectUrl, cloudSetupOf, cloudUnreachableText, machineSetup, readyCloudOrigin } from "./cloud-home.mjs";
 import { cloudMachine, cloudState, otherOwnClouds, ownCloud } from "./cloud-list.mjs";
-import { asleepAnswer, BACKGROUND_HEADERS, openSleepingCloud, SIGNED_IN_MS } from "./cloud-power.mjs";
+import { asleepAnswer, BACKGROUND_HEADERS, goneAnswer, openSleepingCloud, SIGNED_IN_MS } from "./cloud-power.mjs";
 import { awayIn, parseJournal } from "./one-home.mjs";
 
 export const HOME_SCREEN_PATH = "/home";
@@ -119,7 +119,8 @@ export function cloudScreen(cloud) {
   const state = cloudState(cloud);
   if (!state) return null;
   if (state === "setup") return { screen: "setup", ...(cloud.setup?.step ? { step: cloud.setup.step } : {}) };
-  return { screen: state, name: cloud.name, ...(state === "ended" && cloud.deleteAfter ? { deleteAt: cloud.deleteAfter } : {}), ...(cloud.removable ? { removable: true } : {}) };
+  return { screen: state, name: cloud.name, ...(state === "ended" && cloud.deleteAfter ? { deleteAt: cloud.deleteAfter } : {}),
+    ...(state === "payment" && cloud.payment ? { deleteAt: cloud.payment.fixBy, ...(cloud.payment.trial ? { trial: true } : {}) } : {}), ...(cloud.removable ? { removable: true } : {}) };
 }
 
 /** Another Cloud of the person's own, asked for (`{ cloud }`) or remembered: the session's word, as placeOf reads a team. One
@@ -357,6 +358,13 @@ export function createHomeWindow(deps) {
     goScreen();
   }
 
+  /** A deleted dusk cloud: said once and never looked up again; `removable` while its owner may take it off their list. */
+  function goneScreen(place) {
+    const id = place.kind === "own" ? place.id : place.kind === "cloud" ? myListed()?.id ?? null : null;
+    const cloud = id ? (state()?.clouds ?? []).find((entry) => entry.id === id) ?? null : null;
+    return { screen: "gone", ...(cloud?.removable ? { removable: true } : {}) };
+  }
+
   /** My Cloud asleep on this computer's screen: `waking` once the person asked, `held` the message they sent meanwhile. */
   const asleepScreen = () => ({ screen: "asleep", ...(wakeIntent ? { waking: true } : {}), ...(held ? { held: held.text } : {}) });
 
@@ -414,6 +422,7 @@ export function createHomeWindow(deps) {
         signal: AbortSignal.timeout(LOOK_MS), headers: { accept: "application/json", ...BACKGROUND_HEADERS } });
       await response.body?.cancel?.().catch(() => {});
       if (asleepAnswer(response)) return "asleep";
+      if (goneAnswer(response)) return "gone";
       return response.type === "opaqueredirect" || response.status < 500 ? "yes" : "no";
     } catch { return "no"; }
   }
@@ -501,6 +510,7 @@ export function createHomeWindow(deps) {
         if (naming) await forgetNames();
         const look = await answers(origin);
         if (look === "no") return unreachable(place, token);
+        if (look === "gone") { clearRetry(); connecting = null; return toScreen(goneScreen(place)); }
         if (look === "asleep" && otherPlace(place)) return offline(token);
         if (look === "asleep") { power.hold(); asleep = true; }
       }
@@ -756,12 +766,13 @@ export function createHomeWindow(deps) {
       if (moved || after.kind !== before.kind || after.origin !== before.origin || after.clean !== before.clean || screen || status) await show();
     },
     /** The signed-in account is about to change: nothing under way for the one leaving goes on, and the next show() takes
-     * the window off whatever it shows of that account. */
-    accountLeaving() {
+     * the window off whatever it shows of that account. `keep`: the window shows a place that is no account's (the
+     * person's own server their bots live on), which it stays on. */
+    accountLeaving({ keep = false } = {}) {
       opens++; here = false;
       clearRetry(); clearRenewal();
       asked = null; naming = null; connecting = null; shown = null; opening = null; screen = null; status = null; wakeIntent = null; held = null;
-      away = away || !shows(localOrigin());
+      away = away || (!keep && !shows(localOrigin()));
       void lastSeen?.forget?.()?.catch?.(() => {});
     },
     /** A response the window got (Electron's webRequest): a 401 from the place's API means its session ended. */

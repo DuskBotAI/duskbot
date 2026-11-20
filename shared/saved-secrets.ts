@@ -49,7 +49,7 @@ export function sealKeySigningInput(key: Pick<CardSealKey, "keyId" | "x" | "y">,
 export const SEALED_VALUE_INFO = "dusk bot sealed value v1";
 
 /** Where a sealed login, token or key may be opened: a relay cannot move it to another purpose or target. */
-export type SealPurpose = "login.create" | "login.update" | "login.card" | "onepassword.connect" | "config" | "model-provider" | "vault.secret" | "card.secret";
+export type SealPurpose = "login.create" | "login.update" | "login.card" | "onepassword.connect" | "config" | "model-provider" | "vault.secret" | "card.secret" | "key.test";
 
 /** A login saved from Settings is bound to its site and username, a change to the login's id, a sign-in card's to
  * that card; a config seal to the sorted paths it carries. */

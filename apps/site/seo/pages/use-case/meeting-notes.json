@@ -1,0 +1,125 @@
+{
+  "path": "/use-cases/meeting-notes",
+  "type": "use-case",
+  "title": "Turn meeting notes into decisions and action items",
+  "nav": "meeting notes",
+  "h1": "turn meeting notes into a decision log",
+  "description": "Use a Notion meeting page to recover decisions, agreed owners and open questions. Try a routine that keeps the exact wording beside each action.",
+  "keyword": "ai meeting notes",
+  "keywords": [
+    "meeting notes to action items",
+    "ai meeting summary"
+  ],
+  "answer": "**“we could try friday” makes a terrible deadline.** ask a dusk bot to turn your written meeting notes into a decision log. it can read the notion page and put each agreement beside the line that supports it. take unanswered questions back to the room before anyone starts work.",
+  "updated": "2026-11-20",
+  "review": {
+    "status": "approved",
+    "by": "lead agent, after four independent reviewers read every page against seo/facts (2026-11-20); every finding applied",
+    "at": "2026-11-20"
+  },
+  "voice": 2,
+  "tags": [
+    "meetings",
+    "decisions",
+    "notes"
+  ],
+  "connectors": [
+    "notion"
+  ],
+  "related": [
+    "/integrations/notion",
+    "/routines/notion-meeting-notes-to-tasks",
+    "/use-cases/crm-updates"
+  ],
+  "art": {
+    "props": [
+      "s-notebook",
+      "p-mug"
+    ],
+    "bubble": "did we agree?"
+  },
+  "og_line": "keep the words behind each decision.",
+  "routine": {
+    "intro": "**use the notes the participants can correct.** give the bot the notion page for your recurring review.",
+    "message": "each thursday at noon, read today's dated section on our notion review page at https://www.notion.so/c0b67ca1355243a8888f1b197d2d7ae1. return decisions, accepted actions and open questions here. quote a short line for each decision. for actions, copy the owner and due date only when someone agreed to them. leave either blank when missing.\n\nif two statements disagree, look for a later decision that settles them. if you can't find one, show both lines. skip last week's items. if today's notes are missing or unfinished, say so. leave notion as you found it.",
+    "when": "thursdays at noon, after the team finishes writing",
+    "needs": "read only access to notion and a link to the recurring meeting page. paste your own page link into the message.",
+    "output": "example minutes\nagreed | keep paper labels for the pilot | “paper for this run”\naction | terence will order the labels | due date open\nquestion | switch to foil for the full run? no decision in the notes"
+  },
+  "sections": [
+    {
+      "h": "what counts as a decision",
+      "md": "**a useful recap tells someone what they can act on.** keep suggestions under discussion until the notes record an agreement. look for words like “i'll order” or “let's keep the current version.” a person mentioned in a question hasn't accepted an assignment."
+    },
+    {
+      "h": "build the log from the page",
+      "md": "**make each entry traceable to the meeting.**\n\n1. open the dated heading in notion and read the blocks beneath it.[^1]\n2. follow relevant nested notes. mark any section the bot cannot read.\n3. put each decision and its supporting line together. pull out actions separately so a decision without an owner stays visible."
+    },
+    {
+      "h": "give participants the last word",
+      "md": "**take disputed wording back to whoever made the call.** read the proposed action aloud if it changes someone's workload. the meeting chair can settle an ambiguous date or ask for a volunteer. keep the log in chat until that review finishes.\n\nif you need a recording or a transcript from a live call, pick a meeting recorder. this routine starts with text."
+    }
+  ],
+  "safeguards": [
+    "give the bot read only access to the notes.[^2] creating tasks is a separate decision.",
+    "keep personnel discussions out of the page you give it. quote only what the recap needs.",
+    "when the note taker records a correction, use the corrected wording and keep the meeting date with it."
+  ],
+  "worked": {
+    "intro": "invented notes from a packaging review",
+    "before": "“foil might look better.” later: “paper for this run.” terence offers to order paper labels. someone asks if friday is possible.",
+    "after": "the decision log gives the pilot a material and the order an owner. friday stays in the questions until terence accepts it."
+  },
+  "saves": {
+    "estimate": "a possible 6 minutes per meeting",
+    "formula": "10 minutes writing the recap from notes\n- 4 minutes comparing entries with the notes\n= 6 minutes per recap",
+    "assumptions": [
+      "time a recap of a meeting you usually attend",
+      "include corrections in your review time",
+      "take the original notes in both cases"
+    ]
+  },
+  "mistakes": [
+    {
+      "mistake": "turning the agenda into minutes",
+      "fix": "use the part written during the meeting. an agenda item only shows what people meant to discuss."
+    },
+    {
+      "mistake": "carrying last week's owner forward",
+      "fix": "ask who accepted the action this time. leave it open if the notes never say."
+    }
+  ],
+  "quick": {
+    "steps": [
+      "pick a finished notion meeting page",
+      "find one suggestion and one agreement",
+      "ask for each under its own heading",
+      "match the decision to the original line"
+    ]
+  },
+  "faq": [
+    {
+      "q": "can it work with notes i typed by hand?",
+      "a": "yes. paste the text into chat for a single recap. include the date and who was speaking where that affects the meaning."
+    },
+    {
+      "q": "what if a decision happened after the meeting?",
+      "a": "add a dated follow-up from the decision maker. ask for a fresh log that distinguishes it from what the group agreed in the room."
+    }
+  ],
+  "sources": [
+    {
+      "label": "composio: notion actions",
+      "url": "https://docs.composio.dev/toolkits/notion",
+      "checked": "2026-11-12"
+    },
+    {
+      "label": "dusk bot docs: files and connected apps",
+      "url": "/docs/files-and-apps"
+    },
+    {
+      "label": "dusk bot docs: routines",
+      "url": "/docs/routines"
+    }
+  ]
+}

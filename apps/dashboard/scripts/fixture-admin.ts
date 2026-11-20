@@ -149,7 +149,40 @@ function seedPaymentHistory(app: ReturnType<typeof createDashboardApp>, accounts
     ledgerRow(state, { type: "subscription.renewed", at: invoice.createdAt, sub });
   }
   seedHistoric(app, now);
+  seedTrials(app, accounts, now);
   app.billing.store.commit();
+}
+
+/** made-up trials for the subscribers page: some running, one set to end with its survey answer, one ended, with a few days of app use each */
+function seedTrials(app: ReturnType<typeof createDashboardApp>, accounts: SeededAccount[], now: number) {
+  const state = app.billing.store.state, bundle = BILLING_CONFIG.bundles.find(item => item.id === "starter")!;
+  const free = accounts.filter(account => !state.subscriptions.some(sub => sub.accountId === account.id)).slice(0, 7);
+  const plans: Array<{ cancel?: "scheduled" | "ended"; answer?: "price" | "unused" | "feature"; improve?: string }> = [{}, {}, {}, { cancel: "scheduled", answer: "price", improve: "a cheaper plan for one bot" }, {}, { cancel: "ended", answer: "unused" }, {}];
+  for (const [k, account] of free.entries()) {
+    const plan = plans[k] ?? {}, start = Math.max(account.createdAt + 3_600_000, now - (0.4 + k * 0.35) * DAY), priced = app.billing.service.quote({ ...bundle.cart, interval: "month" });
+    const checkoutId = `chk_trial_${k}`, id = `sub_trial_${k}`;
+    state.checkouts.push({ id: checkoutId, accountId: account.id, email: account.email, kind: "cart", cart: priced.cart, cloudId: null, providerSessionId: `fake_trial_${k}`, url: null,
+      status: "completed", source: "dash_onboarding", createdAt: start - 5 * 60_000, openUntil: start + 30 * 60_000, subscriptionId: id, amountCents: 0, lines: priced.lines });
+    state.subscriptions.push({ id, accountId: account.id, providerSubscriptionId: `dsub_trial_${k}`, checkoutId, cart: priced.cart, totalCents: priced.totalCents, lines: priced.lines,
+      status: plan.cancel === "ended" ? "ended" : "active", source: "dash_onboarding", licenseId: null, cloudId: null, currentPeriodStart: start, currentPeriodEnd: start + 3 * DAY, trialEndsAt: start + 3 * DAY,
+      cancelAtPeriodEnd: !!plan.cancel, createdAt: start, updatedAt: start, version: 1, lastEventAt: start, mode: "live" });
+    if (plan.answer) state.feedback.push({ id: `fb_trial_${k}`, accountId: account.id, cloudId: null, subscriptionId: id, answer: plan.answer, ...(plan.improve ? { improve: plan.improve } : {}), at: start + DAY });
+    const install = `fixture-trial-${k}`, platform = k % 3 === 0 ? "win32" : "darwin";
+    const ctx = { install, app: { platform, version: "0.2.20" }, country: pick(["IN", "US", "DE", "BR"]) };
+    void app.analytics.sink.insert({ id: `ev_trial_id_${k}`, name: "identify", at: start - 60_000, accountId: account.id, props: { via: "app" }, ctx });
+    // the site visit that brought them, so the overview's cards can credit the trial
+    const visitor = `vtrial${k}`.padEnd(22, "x"), [source, channel] = ([["X", "social"], ["Google", "search"], ["ChatGPT", "ai"], ["Hacker News", "referral"]] as const)[k % 4]!;
+    void app.analytics.sink.insert({ id: `ev_trial_vid_${k}`, name: "identify", at: start - 50_000, accountId: account.id, props: { via: "page" }, ctx: { visitor } });
+    void app.analytics.sink.insert({ id: `ev_trial_site_${k}`, name: "site_view", at: start - 2 * 3_600_000, accountId: null, props: { path: "/" },
+      ctx: { visitor, session: `strial${k}`, pv: `pvtrial${k}`, page: "/", host: "dusk.bot", source, channel, country: ctx.country, device: "desktop", os: "mac", browser: k % 2 ? "chrome" : "safari" } });
+    for (const [name, props, after] of [["onboarding_step", { step: "name" }, -40_000], ["onboarding_done", {}, -20_000], ["app_open", { kind: "desktop", platform, appVersion: "0.2.20" }, 0],
+      ["first_bot_reply", {}, 120_000]] as const) void app.analytics.sink.insert({ id: `ev_trial_${name}_${k}`, name, at: start + after, accountId: account.id, props, ctx });
+    for (let d = 0; start + d * DAY < now; d++) {
+      void app.analytics.sink.insert({ id: `ev_trial_msg_${k}_${d}`, name: "app_messages", at: Math.min(now - 60_000, start + d * DAY + 3_600_000), accountId: account.id, props: { sent: 3 + ((k * 7 + d * 5) % 11), replies: 3 }, ctx });
+      void app.analytics.sink.insert({ id: `ev_trial_feat_${k}_${d}`, name: "app_feature", at: Math.min(now - 60_000, start + d * DAY + 7_200_000), accountId: account.id, props: { feature: pick(["chat_opened", "bot_created", "routine_ran", "voice_used", "app_connected"]) }, ctx });
+    }
+    if (k % 2 === 1) void app.analytics.sink.insert({ id: `ev_trial_fail_${k}`, name: "app_action", at: now - 2 * 3_600_000, accountId: account.id, props: { name: "turn_failed", reason: "quota", engine: "codex" }, ctx });
+  }
 }
 
 type BillingState = ReturnType<typeof createDashboardApp>["billing"]["store"]["state"];

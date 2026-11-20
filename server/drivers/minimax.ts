@@ -108,6 +108,7 @@ export const MinimaxDriver: ProviderDriver<MinimaxConfig> = {
       apiKey,
       apiUrl,
       tools: input.config.tools,
+      computerUse: true, imageInput: () => false,
       models: () => models,
       requestBody: (model, messages, stream) => ({
         model,

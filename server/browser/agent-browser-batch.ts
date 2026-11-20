@@ -5,6 +5,7 @@ import { z } from "zod";
 import type { BatchStepOf } from "./batch.ts";
 import type { PageProbe } from "./cdp/settle.ts";
 import { PROBE_EXPRESSION } from "./cdp/settle.ts";
+import { agentBrowserArguments } from "./agent-browser-args.ts";
 import { BATCH_TOOL, MAX_BATCH_MS, MAX_BATCH_PICTURES, MAX_BATCH_STEPS } from "./tools.ts";
 
 /** No eval, upload, close or tab steps: those need a look at the page first, or end what the later steps act on. */
@@ -55,17 +56,26 @@ function listedTool(tools: unknown, name: string): (Listed & object) | null {
   return (list as unknown[]).find((tool): tool is Listed & object => Boolean(tool) && typeof tool === "object" && (tool as Listed).name === name) ?? null;
 }
 
+const TIMEOUT_ALIASES: ReadonlySet<string> = new Set(["timeoutMs", "timeout"]);
+
+function propertiesOf(tool: Listed & object): ReadonlySet<string> | null {
+  const properties = (tool.inputSchema as { properties?: unknown } | null | undefined)?.properties;
+  return properties && typeof properties === "object" ? new Set(Object.keys(properties)) : null;
+}
+
 const issues = (error: z.ZodError) => error.issues.slice(0, 3).map((issue) => `${issue.path.join(".") || "input"}: ${issue.message}`).join("; ");
 
 /** One step as the agent-browser call it stands for, checked against that tool's advertised schema. */
 export function agentBrowserStep(step: BatchStepOf, tools: unknown): { ok: true; call: AgentBrowserCall } | { ok: false; error: string } {
-  const { do: action, ...args } = step;
+  const { do: action, ...given } = step;
   if (!(AGENT_BROWSER_BATCH_ACTIONS as readonly string[]).includes(action)) return { ok: false, error: `${action} cannot run in a batch` };
   const name = `agent_browser_${action}`;
   const tool = listedTool(tools, name);
   if (!tool) return { ok: false, error: `${action} is not a tool this browser offers` };
   const schema = schemaOf(tool);
   if (!schema) return { ok: false, error: `${action}'s arguments could not be checked` };
+  const taken = propertiesOf(tool);
+  const args = Object.fromEntries(Object.entries(agentBrowserArguments(name, given)).filter(([key]) => !TIMEOUT_ALIASES.has(key) || taken?.has(key)));
   const parsed = schema.safeParse(args);
   if (!parsed.success) return { ok: false, error: `${action} got arguments it cannot use (${issues(parsed.error)})` };
   return { ok: true, call: { name, arguments: args } };

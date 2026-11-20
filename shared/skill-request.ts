@@ -41,6 +41,8 @@ export interface SkillRequestCardData {
   previous?: { preview: string; source: string; references?: Array<{ path: string; content: string }> };
   shared?: SkillShareRecord;
   shareError?: string;
+  /** "review": the background skill review wrote this change on its own after the work, not the bot mid-turn. */
+  learnedBy?: "review";
 }
 
 /** The hash a current client may echo after it displayed the complete

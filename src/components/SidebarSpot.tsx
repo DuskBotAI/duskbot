@@ -151,7 +151,7 @@ export function SpotCloudCard({ cta, card }: { cta: SpotCta; card: NonNullable<S
   );
 }
 
-const CARD = cn("flex h-10 w-full items-center gap-2.5 rounded-full ps-[17px] pe-3.5 text-start", PRESS, FOCUS);
+const CARD = cn("flex h-9 w-full items-center gap-2.5 rounded-full ps-[15px] pe-3.5 text-start", PRESS, FOCUS);
 
 /** Give feedback, the update, or an offer: the same one-line card each time, so the spot only changes state. */
 export function SidebarSpot({ className, bridge, cta = null }: { className?: string; bridge?: AppUpdateBridge; cta?: SpotCta | null }) {
@@ -167,8 +167,8 @@ export function SpotView({ className, state, cta = null }: { className?: string;
         : cta ? (cta.card ? <SpotCloudCard cta={cta} card={cta.card} /> : <SpotCtaCard cta={cta} />)
         : (
           <button type="button" data-sidebar-spot="feedback" data-art-hover="" onClick={act} className={cn(CARD, TONAL)}>
-            <Art name="bubbles" className="h-5 w-5 shrink-0 object-contain" />
-            <span className="min-w-0 flex-1 truncate text-[14px] font-medium leading-5 text-ink">{t("giveFeedback.card")}</span>
+            <Art name="bubbles" className="h-[18px] w-[18px] shrink-0 object-contain" />
+            <span className="min-w-0 flex-1 truncate text-[13px] font-medium leading-5 text-ink">{t("giveFeedback.card")}</span>
           </button>
         )}
     </div>

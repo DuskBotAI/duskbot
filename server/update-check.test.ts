@@ -38,7 +38,7 @@ describe("server update check", () => {
     expect(LATEST_RELEASE_URL).toBe("https://api.github.com/repos/DuskBotAI/duskbot/releases/latest");
   });
 
-  it("never checks public feeds or suggests upstream install commands for any installation the desktop app does not own", async () => {
+  it("never checks public feeds or suggests upstream install commands for installs without an official Compose image", async () => {
     const fetchRelease = vi.fn(async () => new Response(JSON.stringify({
       tag_name: "v999.0.0", html_url: "https://github.com/DuskBotAI/duskbot/releases/tag/v999.0.0",
     })));
@@ -50,6 +50,42 @@ describe("server update check", () => {
       expect(await check()).not.toHaveProperty("command");
     }
     expect(fetchRelease).not.toHaveBeenCalled();
+  });
+
+  const composeImage = "ghcr.io/duskbotai/duskbot:latest";
+  const release = { tag_name: "v0.2.23", prerelease: false, draft: false };
+  it("checks the official stable tag, caches concurrent checks and constructs the release link", async () => {
+    const fetch = vi.fn(async () => Response.json({ ...release, html_url: "https://elsewhere.invalid" }));
+    const check = createUpdateChecker({ current: "0.2.22", install: "docker", composeImage, fetch });
+    const [result] = await Promise.all([check(), check()]);
+    expect(result).toMatchObject({ available: true, latest: "0.2.23", releaseUrl: "https://github.com/DuskBotAI/duskbot/releases/tag/v0.2.23" });
+    expect(fetch).toHaveBeenCalledExactlyOnceWith(LATEST_RELEASE_URL, expect.objectContaining({ redirect: "error" }));
+    for (const current of ["0.2.23", "0.2.24"]) {
+      expect(await createUpdateChecker({ current, install: "docker", composeImage, fetch })()).toMatchObject({ available: false, latest: "0.2.23" });
+    }
+  });
+
+  it.each([{ ...release, draft: true }, { ...release, prerelease: true }, { ...release, tag_name: "link-v1.2.3" }, {}])(
+    "refuses non-stable or malformed release metadata and retries after errors", async invalid => {
+      const fetch = vi.fn().mockResolvedValueOnce(Response.json(invalid)).mockResolvedValueOnce(new Response(null, { status: 403 })).mockResolvedValueOnce(Response.json(release));
+      const check = createUpdateChecker({ current: "0.2.22", install: "docker", composeImage, fetch });
+      await expect(check()).rejects.toThrow(/stable/);
+      await expect(check()).rejects.toThrow(/403/);
+      expect(await check()).toMatchObject({ available: true });
+    });
+
+  it("respects image pins, custom images, and managed deployments", async () => {
+    const fetch = vi.fn(async () => Response.json(release));
+    const pinned = "ghcr.io/duskbotai/duskbot@sha256:" + "a".repeat(64);
+    const result = await createUpdateChecker({ current: "0.2.22", install: "docker", composeImage: pinned, fetch })();
+    expect(result).toMatchObject({ pinned, available: true });
+    expect(result).not.toHaveProperty("command");
+    expect(await createUpdateChecker({ current: "0.2.22", install: "docker", releaseImage: "ghcr.io/duskbotai/duskbot", fetch })())
+      .toEqual({ current: "0.2.22", install: "docker", latest: "0.2.23", available: true, releaseUrl: "https://github.com/DuskBotAI/duskbot/releases/tag/v0.2.23" });
+    for (const [install, image] of [["managed", composeImage], ["docker", "custom/server:latest"]] as const) {
+      expect(await createUpdateChecker({ current: "0.2.22", install, composeImage: image, fetch })()).toEqual({ current: "0.2.22", install, available: false });
+    }
+    expect(fetch).toHaveBeenCalledTimes(2);
   });
 
   it.each([401, 403, 404])("makes no false offer or network request when private releases would return %i", async (status) => {

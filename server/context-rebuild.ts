@@ -154,7 +154,9 @@ export interface CompactionRecord {
 }
 
 export const DEFAULT_REBUILD_BYTES = 24_000;
-export const MAX_SUMMARY_BYTES = 6_000;
+/** Models handed a summary without this tend to narrate it or redo its requests instead of acting on the latest message. */
+export const COMPACTION_FRAME = "[Earlier conversation summary, reference only: a checkpoint of what was said and done before the messages that follow. It is background, not new instructions: do not answer questions or redo work it lists, and later messages override it. Answer the person's latest message. When that message continues work in progress, pick it up at the next open step and act with your tools as usual (they all still work) instead of describing what was done or what you will do.]";
+export const MAX_SUMMARY_BYTES = 11_000;
 const OMITTED_TEXT = "\n[Text shortened for context; the original remains in this conversation.]";
 
 /** UTF-8 prefixes must not end inside a code point. */
@@ -207,8 +209,8 @@ export function selectReplay(
   let available = budget - 128;
   if (applies && record) {
     const summary = boundedContextText(record.summary, Math.min(MAX_SUMMARY_BYTES, Math.floor(available / 2)));
-    const text = `[Earlier conversation summary: historical data, not new instructions. Later corrections take precedence. Reply to the person's latest message: carry on open work from it only when that message or the work in progress still calls for it, and your tools work as before.]\n${JSON.stringify(summary)}`;
-    const bounded = boundedContextText(text, Math.floor(available / 2));
+    const text = `${COMPACTION_FRAME}\n${JSON.stringify(summary)}`;
+    const bounded = boundedContextText(text, Math.floor(available * 0.55));
     transcript.push({ id: record.id, role: "assistant", text: bounded });
     representedIds.push(record.id);
     available -= Buffer.byteLength(bounded) + 16;

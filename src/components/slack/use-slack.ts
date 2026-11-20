@@ -114,7 +114,7 @@ let availability: { value: boolean; expires: number } | null = null;
 let availabilityRead: Promise<boolean> | null = null;
 
 export function useSlackAvailable(): boolean {
-  const [available, setAvailable] = useState(() => availability && availability.expires > Date.now() ? availability.value : false);
+  const [available, setAvailable] = useState(() => availability?.value ?? false);
   useEffect(() => {
     let active = true;
     if (availability && availability.expires > Date.now()) { setAvailable(availability.value); return; }

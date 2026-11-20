@@ -1,5 +1,5 @@
 import { useId, useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
-import { REACTIONS, type Reaction } from "../../shared/reactions";
+import { REACTIONS, reactorBotId, type Reaction } from "../../shared/reactions";
 import { messageActionClass } from "@/components/MessageActions";
 import { Icon } from "./Icon";
 import { usePopoverDismiss } from "@/hooks/use-popover-dismiss";
@@ -178,19 +178,22 @@ export function ReactionChips(props: ChipProps) {
 function Chips({ threadId, message, bots = [], align = "start", canReact = true, float = false }: ChipProps) {
   const { me, mine, react } = useReaction(threadId, message);
   const reactions = message.reactions ?? [];
-  const nameOf = (reaction: NonNullable<Message["reactions"]>[number]) => reaction.by === me ? t("chat.you")
-    : reaction.name ?? bots.find((bot) => bot.id === reaction.by)?.name ?? t("approval.someone");
+  const nameOf = (reaction: NonNullable<Message["reactions"]>[number]) => {
+    if (reaction.by === me) return t("chat.you");
+    const botId = reactorBotId(reaction.by) ?? reaction.by;
+    return bots.find((bot) => bot.id === botId)?.name ?? reaction.name ?? t("approval.someone");
+  };
   const justNow = Date.now() - 4_000;
   const shown = [...new Set(reactions.map((reaction) => reaction.emoji))]
     .sort((a, b) => REACTIONS.indexOf(a as Reaction) - REACTIONS.indexOf(b as Reaction))
     .map((emoji) => {
       const chose = reactions.filter((reaction) => reaction.emoji === emoji);
-      return { emoji, people: chose.map(nameOf), fresh: chose.some((reaction) => (reaction.at ?? 0) > justNow) };
+      return { emoji, people: chose.map(nameOf), botsOnly: chose.every((reaction) => reactorBotId(reaction.by)), fresh: chose.some((reaction) => (reaction.at ?? 0) > justNow) };
     });
   return (
     <div role="group" aria-label={t("chat.reactions")} data-copy-skip={float ? "" : undefined}
       className={cn("flex flex-wrap gap-1", float ? cn("absolute -top-[22px] z-[1]", align === "end" ? "-start-4" : "-end-4") : cn("mt-1", align === "end" ? "justify-end" : "justify-start"))}>
-      {shown.map(({ emoji, people, fresh }) => {
+      {shown.map(({ emoji, people, botsOnly, fresh }) => {
         const label = t("chat.reaction.chip", { reaction: labelOf(emoji), people: people.join(", ") });
         const chip = float
           ? cn("chat-reaction-pill flex h-[30px] items-center rounded-full bg-composer px-[7px] text-[12px] leading-4 text-ink/[0.68]", fresh && "chat-reaction-pop")
@@ -205,7 +208,7 @@ function Chips({ threadId, message, bots = [], align = "start", canReact = true,
             {people.length > 1 && <span aria-hidden="true" className="text-[12px] tabular-nums text-ink-secondary">{people.length}</span>}
           </>
         );
-        return canReact && Object.hasOwn(LABEL, emoji) ? (
+        return canReact && !botsOnly && Object.hasOwn(LABEL, emoji) ? (
           <button key={emoji} type="button" aria-pressed={mine === emoji} aria-label={label} title={people.join(", ")}
             onClick={() => react(emoji as Reaction)}
             className={cn(chip, float ? "composer-press focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus" : "hover:bg-raised focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus")}>

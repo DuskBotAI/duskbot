@@ -1,0 +1,72 @@
+/* The desktop's motion at a pick past A, from the root's data-desktop-motion and --dm-* values. Nothing here applies at
+   A, on the phone, or under either reduced-motion setting. */
+
+@keyframes dm-sheet-in { from { opacity: 0; transform: translateY(var(--dm-dialog-y)) scale(var(--dm-dialog-scale)); filter: blur(var(--dm-dialog-blur)); } }
+@keyframes dm-palette-in { from { opacity: 0; transform: translateY(var(--dm-palette-y)) scale(var(--dm-palette-scale)); filter: blur(var(--dm-palette-blur)); } }
+@keyframes dm-swap-in { from { opacity: var(--dm-swap-from); transform: translateY(var(--dm-swap-y)); filter: blur(var(--dm-swap-blur)); } }
+@keyframes dm-fade-in { from { opacity: 0; } }
+@keyframes dm-fade-out { to { opacity: 0; } }
+
+@media (prefers-reduced-motion: no-preference) {
+  :root[data-desktop-motion]:not([data-reduced-motion="true"]) {
+    & :is([role="menu"], [role="listbox"], .popover-surface, .menu-surface, [role="dialog"]:not([aria-modal="true"], .ui-modal, .ui-dialog)).animate-pop-in {
+      transition: opacity var(--dm-menu-ms) var(--motion-ease-out, ease-out), transform var(--dm-menu-ms) var(--dm-menu-ease), filter var(--dm-menu-ms) var(--motion-ease-out, ease-out);
+      @starting-style { opacity: 0; transform: translate3d(0, var(--menu-shift, var(--dm-menu-y)), 0) scale(var(--dm-menu-scale)); filter: blur(var(--dm-menu-blur)); }
+    }
+    & :is([role="menu"], [role="listbox"], .popover-surface, .menu-surface, [role="dialog"]:not([aria-modal="true"], .ui-modal, .ui-dialog)).animate-pop-out {
+      opacity: 0;
+      transform: translate3d(0, var(--dm-menu-out-y), 0) scale(var(--dm-menu-out-scale));
+      transition: opacity var(--dm-menu-out-ms) var(--motion-ease-out, ease-out), transform var(--dm-menu-out-ms) var(--motion-ease-out, ease-out);
+    }
+
+    & :is([role="alertdialog"], [role="dialog"][aria-modal="true"], .ui-modal, .ui-dialog, .templates-sheet):not(.popover-surface, .menu-surface) {
+      animation: dm-sheet-in var(--dm-dialog-ms) var(--dm-dialog-ease);
+    }
+    & :is([role="alertdialog"], [aria-modal="true"], .ui-modal, .ui-dialog):not(.popover-surface, .menu-surface).animate-pop-out {
+      animation: dm-fade-out var(--dm-dialog-out-ms) var(--motion-ease-out, ease-out) forwards;
+    }
+    & :is(.ui-scrim, .ui-dialog-scrim, .ui-dialog-scrim-panel, .settings-backdrop) { animation: dm-fade-in var(--dm-scrim-ms) var(--motion-ease-out, ease-out); }
+    & :is(.ui-scrim, .ui-dialog-scrim)[data-leaving] { animation: dm-fade-out var(--dm-dialog-out-ms) var(--motion-ease-out, ease-out) forwards; }
+
+    & .settings-pane-swap { animation: dm-swap-in var(--dm-swap-ms) var(--motion-ease-out, ease-out) backwards; }
+
+    & [data-sidebar] { transition-duration: var(--dm-sidebar-ms); transition-timing-function: var(--dm-sidebar-ease); }
+    & [data-panel-slot] { transition-duration: var(--dm-panel-ms); transition-timing-function: var(--dm-panel-ease); }
+
+    & .dusk-press {
+      transition-duration: 120ms, 120ms, 120ms, 120ms, 120ms, var(--dm-press-up-ms);
+      transition-timing-function: ease, ease, ease, ease, ease, var(--dm-press-up-ease);
+    }
+    & .dusk-press:is(:enabled, a):active {
+      scale: var(--dm-press-scale);
+      transition-duration: 120ms, 120ms, 120ms, 120ms, 120ms, var(--dm-press-down-ms);
+      transition-timing-function: ease, ease, ease, ease, ease, var(--dusk-ease-out);
+    }
+    & .dusk-press-soft { transition-duration: 140ms, 140ms, 140ms, var(--dm-press-up-ms); transition-timing-function: ease, ease, ease, var(--dm-press-up-ease); }
+    & .dusk-press-soft:enabled:active { scale: var(--dm-press-soft); transition-duration: 140ms, 140ms, 140ms, var(--dm-press-down-ms); }
+  }
+
+  :root[data-desktop-motion-palette]:not([data-reduced-motion="true"]) {
+    & [data-command-palette][data-raw-dialog]:not([data-exit-ghost] *) { animation: dm-palette-in var(--dm-palette-ms) var(--dm-palette-ease) !important; }
+    & .palette-scrim:not([data-exit-ghost] *) { animation: dm-fade-in var(--dm-palette-ms) var(--motion-ease-out, ease-out); }
+  }
+
+  :root[data-desktop-motion-rows]:not([data-reduced-motion="true"]) [data-palette-row]:not([data-exit-ghost]) {
+    transition: opacity var(--dm-rows-ms) var(--motion-ease-out, ease-out);
+    @starting-style { opacity: 0; }
+    &:nth-child(2) { transition-delay: var(--dm-stagger-ms); }
+    &:nth-child(3) { transition-delay: calc(var(--dm-stagger-ms) * 1.8); }
+    &:nth-child(4) { transition-delay: calc(var(--dm-stagger-ms) * 2.4); }
+    &:nth-child(n + 5) { transition-delay: calc(var(--dm-stagger-ms) * 2.8); }
+  }
+
+  :root[data-desktop-motion-toast]:not([data-reduced-motion="true"]) .ui-toast:not([data-exit-ghost]) {
+    transition: opacity var(--dm-toast-ms) var(--motion-ease-out, ease-out), translate var(--dm-toast-ms) var(--dm-toast-ease), scale var(--dm-toast-ms) var(--dm-toast-ease);
+    @starting-style { opacity: 0; translate: 0 var(--dm-toast-y); scale: var(--dm-toast-scale); }
+  }
+}
+
+:root[data-reduced-motion="true"] [data-palette-glide] { transition: none !important; }
+@media (prefers-reduced-motion: reduce) {
+  [data-palette-glide] { transition: none !important; }
+}

@@ -1,0 +1,90 @@
+{
+  "path": "/routines/mailchimp-campaign-report",
+  "type": "routine",
+  "title": "Read a Mailchimp campaign report after the first day",
+  "nav": "mailchimp campaign report",
+  "h1": "give a mailchimp campaign a day before reading the results",
+  "description": "Get sent, bounced, opened and clicked figures for one newsletter audience. Each Mailchimp report carries its send time and the time you read the numbers.",
+  "keyword": "mailchimp campaign report routine",
+  "keywords": [
+    "mailchimp newsletter report",
+    "daily campaign performance summary",
+    "mailchimp clicks and bounces"
+  ],
+  "answer": "**give a newsletter time to collect clicks before you judge it.** each morning, a bot reads mailchimp campaigns sent two calendar days ago to the audience you choose. you get delivery and engagement figures side by side in chat. each line names the metric so repeat clicks never masquerade as extra readers.",
+  "updated": "2026-11-20",
+  "review": {
+    "status": "approved",
+    "by": "lead agent, after four independent reviewers read every page against seo/facts (2026-11-20); every finding applied",
+    "at": "2026-11-20"
+  },
+  "voice": 2,
+  "tags": [
+    "mailchimp",
+    "newsletter",
+    "reporting"
+  ],
+  "connectors": [
+    "mailchimp"
+  ],
+  "related": [
+    "/integrations/mailchimp",
+    "/use-cases/newsletter",
+    "/routines/friday-wins-summary"
+  ],
+  "art": {
+    "label": "Mailchimp",
+    "props": [
+      "p-chart",
+      "p-newspaper"
+    ],
+    "bubble": "who clicked through"
+  },
+  "og_line": "read each figure with its campaign and time.",
+  "routine": {
+    "message": "daily at 9 am, list the sent campaigns from two calendar days ago for the mailchimp audience \"winter glaze list\". use my local time for the date boundaries. read each matching campaign report.\n\nbring the campaign title, send time and report time into this chat. give emails sent, hard and soft bounces, unique opens and unique clicks when available. label each figure exactly. mark an absent field as unavailable. use zero only when the report actually gives zero.\n\nnever change an audience, resend a campaign or look up individual subscribers. stay quiet when the complete list has no qualifying campaign. flag a campaign whose report you couldn't read.",
+    "when": "9 am every day for campaigns sent on the calendar date two days earlier",
+    "needs": "mailchimp read access to the campaign list and campaign reports for the chosen audience[^3]. put your audience name in the message.",
+    "output": "marta’s kiln notes · winter glaze list\nsent tuesday 2 pm · report read thursday 9 am\nemails sent 240 · hard bounces 2 · soft bounces 1\nunique opens 88 · unique clicks 19"
+  },
+  "knobs": [
+    "**pick a single audience.** a wholesale circular and a public newsletter serve different readers. keep their results apart.",
+    "**wait longer for a slow newsletter.** change the window to campaigns from seven days ago if subscribers read over the weekend.",
+    "**keep the comparison fair.** compare campaigns at roughly the same age. include the send and read times with both."
+  ],
+  "fails": [
+    "**a draft looks like a campaign nobody opened.** restrict the list to sent campaigns. the report action can return zero figures for drafts.[^3]",
+    "**clicks turn into buyers in the recap.** call them clicks. a click by itself tells you nothing about an order."
+  ],
+  "sections": [
+    {
+      "h": "read delivery before interpreting engagement",
+      "md": "**start with how many emails went out and how many bounced.** then look at unique clicks. total clicks can include several from the same reader. keep the labels beside the counts when you copy them into a weekly note.\n\nfor a single newsletter you only review once, opening its mailchimp report directly is simpler."
+    }
+  ],
+  "faq": [
+    {
+      "q": "are these the final campaign numbers?",
+      "a": "**treat them as a reading at the stated time.** a subscriber can interact later. ask for another report on the same campaign if the later figures matter."
+    },
+    {
+      "q": "does reporting need permission to send campaigns?",
+      "a": "**read only is enough for this report.** a separate send asks first by default."
+    }
+  ],
+  "sources": [
+    {
+      "label": "dusk bot docs: routines",
+      "url": "/docs/routines"
+    },
+    {
+      "label": "dusk bot docs: files and apps",
+      "url": "/docs/files-and-apps"
+    },
+    {
+      "label": "composio: mailchimp actions",
+      "url": "https://docs.composio.dev/toolkits/mailchimp",
+      "checked": "2026-11-20"
+    }
+  ]
+}

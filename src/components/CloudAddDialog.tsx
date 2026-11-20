@@ -1,6 +1,8 @@
 // Security: checkout never runs in the app; main opens the provider's checkout page in the default browser and the app
 // follows its own session, never the return. The emailed code's attempt, the token and the checkout page stay in main.
 import { useEffect, useState, type ReactNode } from "react";
+import { AnimatePresence } from "motion/react";
+import { DialogScrimLayer, DialogSheet } from "./ui/SheetMotion";
 import { X } from "../icons";
 import type { CloudColor } from "../../electron/cloud-buy.mjs";
 import type { CloudAccountState, CloudCheckoutOutcome } from "../../electron/cloud-account.mjs";
@@ -99,14 +101,14 @@ const HELD: ReadonlySet<CloudAddView["kind"]> = new Set(["sign-in", "signing-in"
 /** The sheet over the app: one width per screen, the close button, and the staging mark when the app is on staging.
  * Above the z-50 layers (Settings, the welcome flow) and the full-screen places picker (z-60), which it may be opened over. */
 export function CloudAddSheet({ kind, staging, onClose, children }: { kind: CloudAddView["kind"]; staging: boolean; onClose: () => void; children: ReactNode }) {
-  return <div className="ui-scrim fixed inset-0 z-[61] flex items-center justify-center p-4 sm:p-6" onMouseDown={event => event.target === event.currentTarget && !HELD.has(kind) && onClose()}>
-    <div role="dialog" aria-modal="true" aria-labelledby="cloud-add-title" data-cloud-add-dialog tabIndex={-1}
+  return <DialogScrimLayer className="ui-scrim fixed inset-0 z-[61] flex items-center justify-center p-4 sm:p-6" onMouseDown={event => event.target === event.currentTarget && !HELD.has(kind) && onClose()}>
+    <DialogSheet role="dialog" aria-modal="true" aria-labelledby="cloud-add-title" data-cloud-add-dialog tabIndex={-1}
       className={cn(SHEET, "relative max-h-full w-full overflow-y-auto overscroll-contain rounded-[14px] border border-transparent outline-none", WIDTH[kind] ?? "max-w-[540px]")}>
       <button type="button" onClick={onClose} aria-label={t("cloudAdd.close")} className={cn(formCloseCls, "absolute end-3 top-3 z-10")}><X size={16} /></button>
       {staging && <StagingMark className="absolute end-11 top-[15px] z-10" />}
       {children}
-    </div>
-  </div>;
+    </DialogSheet>
+  </DialogScrimLayer>;
 }
 const OFFER_VIEWS: ReadonlyArray<CloudAddView["kind"]> = ["offer", "checking", "unreachable", "waiting", "sign-in", "signing-in"];
 const FOCUSABLE = "button:not([disabled]):not([tabindex='-1']), input:not([disabled]):not([tabindex='-1']), [href], [tabindex='0']";
@@ -279,12 +281,12 @@ export function CloudAddDialog({ now = Date.now }: { now?: () => number }) {
     window.addEventListener("blur", stop);
     return () => window.removeEventListener("blur", stop);
   }, [counting]);
-  if (!open || !view || !request || !bridge || view.kind === "settings") return null;
+  if (!open || !view || !request || !bridge || view.kind === "settings") return <AnimatePresence>{null}</AnimatePresence>;
   if (view.kind === "has-cloud" && account?.status === "connected" && account.clouds && window.duskDesktop?.cloudAdd
     && (account.addCloud?.canAdd !== false || (account.adding && !account.adding.done))) {
-    return <CloudAddSheet kind={extraWide ? "offer" : "has-cloud"} staging={account.staging === true} onClose={close}>
+    return <AnimatePresence><CloudAddSheet key="cloud-add" kind={extraWide ? "offer" : "has-cloud"} staging={account.staging === true} onClose={close}>
       <AddCloudFlow onClose={close} onFirstCloud={() => {}} onWide={setExtraWide} source={request.source} />
-    </CloudAddSheet>;
+    </CloudAddSheet></AnimatePresence>;
   }
 
   const offerShown = offer ?? null;
@@ -405,5 +407,5 @@ export function CloudAddDialog({ now = Date.now }: { now?: () => number }) {
   const ui: CloudAddUi = { chosen, current: currentTier(account), offerShown, now: now(), busy, openFailed, email: form.email, code: form.code, profileEmail, look: shownLook,
     counting: typeof auto === "number" ? auto : null, copied: note === "copied", payFailed: note === "pay-failed",
     interest: note === "interest-sent" ? "sent" : note === "interest-failed" ? "failed" : null, moving: request.source === "app_computer_move" };
-  return <CloudAddSheet kind={view.kind} staging={account?.staging === true} onClose={close}><CloudAddPanel view={view} ui={ui} actions={actions} /></CloudAddSheet>;
+  return <AnimatePresence><CloudAddSheet key="cloud-add" kind={view.kind} staging={account?.staging === true} onClose={close}><CloudAddPanel view={view} ui={ui} actions={actions} /></CloudAddSheet></AnimatePresence>;
 }

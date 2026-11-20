@@ -3,7 +3,8 @@ import { createElement } from "react";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { CHAT_ERROR_CLEAR_MS, useChatErrorClear } from "./chat-error";
+import { ApiError } from "./api";
+import { CHAT_ERROR_CLEAR_MS, isNoAiRefusal, refusalConnects, refusalFoundAi, useChatErrorClear } from "./chat-error";
 
 function Harness({ error, clear }: { error: string | null; clear: () => void }) {
   useChatErrorClear(error, clear);
@@ -61,5 +62,18 @@ describe("useChatErrorClear", () => {
     act(() => { root.render(createElement(Harness, { error: null, clear })); });
     act(() => { vi.advanceTimersByTime(CHAT_ERROR_CLEAR_MS); });
     expect(clear).not.toHaveBeenCalled();
+  });
+});
+
+describe("a send no AI could take", () => {
+  it("offers to connect one only when no AI was found and the person can connect it", () => {
+    const none = new ApiError("Connect an AI first, so bots can answer.", 409, { code: "no_ai", connect: true });
+    const found = new ApiError("Claude is on this computer", 409, { code: "no_ai", found: { instanceId: "claude", name: "Claude" } });
+    const member = new ApiError("The owner needs to connect an AI", 409, { code: "no_ai" });
+    expect([none, found, member].map(isNoAiRefusal)).toEqual([true, true, true]);
+    expect(refusalConnects(none)).toBe(true);
+    expect(refusalConnects(found)).toBe(false);
+    expect(refusalConnects(member)).toBe(false);
+    expect(refusalFoundAi(found)).toEqual({ instanceId: "claude", name: "Claude" });
   });
 });

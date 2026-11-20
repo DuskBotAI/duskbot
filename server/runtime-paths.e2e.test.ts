@@ -206,7 +206,7 @@ it("R3 a consultation reaches a teammate without waiting and resumes the asker w
   expect(f.children()[0]).toMatchObject({ status: "completed", result: "R3-ANSWER: port 4242." });
 }), hostTimeout(120_000));
 
-it("R4 a one-way notice opens a notify child in a new thread and never resumes the sender", () => scenario(async (f) => {
+it("R4 a one-way notice opens a notify child in the peer's own chat and never resumes the sender", () => scenario(async (f) => {
   const notice = "R4-NOTICE: own the release QA from here.";
   f.script(f.owner.id, { key: "O0", match: ["R4-SEND"], gateFile: f.gate("r4-owner"), readyFile: f.ready("r4-owner"), reply: "O0: sent onward." });
   f.script(f.peer.id, { key: "P1", match: ["R4-NOTICE"], reply: "R4-DONE: release QA owned." });
@@ -222,9 +222,8 @@ it("R4 a one-way notice opens a notify child in a new thread and never resumes t
   const receipt = sent.body.receipts[0];
   expect(receipt).toMatchObject({ botId: f.peer.id, outcome: "queued" });
   expect(receipt.threadId).toEqual(expect.any(String));
-  expect(receipt.threadId).not.toBe(f.peer.activeTaskId);
-  const peerTasks = (await f.bot(f.peer.id)).tasks;
-  expect(peerTasks.find((task: any) => task.threadId === receipt.threadId)?.title).toBe(notice);
+  // one chat per bot: even thread "new" lands in the peer's own chat
+  expect(receipt.threadId).toBe(f.peer.activeTaskId);
   await expect.poll(() => f.children().length, { timeout: 15_000 }).toBe(1);
   expect(f.children()[0]).toMatchObject({ id: receipt.requestId, mode: "notify", reply: "none", threadId: receipt.threadId, text: expect.stringContaining(notice) });
 

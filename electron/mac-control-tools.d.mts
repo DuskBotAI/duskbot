@@ -3,6 +3,7 @@ import type { spawn } from "node:child_process";
 import type { MacJob, MacJobOutcome } from "../shared/mac-control.ts";
 
 export declare const OUTPUT_TAIL: number;
+export declare const SEND_MAX: number;
 export declare function macLogFile(home?: string): string;
 export declare function resolveMacPath(value: unknown, home?: string): string;
 export declare function folderName(value: unknown): string;
@@ -15,3 +16,4 @@ export declare function createMacExecutor(options?: {
   screenshot?(): Promise<{ data: string; mimeType: string }>; opener?(args: string[]): Promise<unknown>;
   fetch?: typeof fetch; source?: string; defaultCwd?(): string;
 }): (job: MacJob, io?: { download?(path: string): Promise<Response>; signal?: AbortSignal }) => Promise<MacJobOutcome>;
+export declare function servesMacJobs(platform?: string): boolean;

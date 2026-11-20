@@ -1,4 +1,4 @@
-// The first run's last screen on a Mac: the permissions a bot needs to use this Mac, each one press away, all skippable.
+// The permissions a bot needs to use this Mac, each one press away, asked for when a job first needs them.
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Check } from "../../icons";
 import { cn } from "@/lib/cn";
@@ -8,7 +8,7 @@ import { macCuaPermissionHelper, missingMacCuaPermissions } from "@/lib/mac-cua-
 import { useDesktopCapabilities } from "../DesktopCapabilities";
 import { Art, type ArtName } from "../ui/Art";
 import { GrokDialog, mdPrimaryCls } from "../ui/GrokDialog";
-import { PRIMARY, QUIET, StepArt, StepFrame } from "./FunnelSteps";
+import { QUIET } from "./FunnelSteps";
 
 /** How often the screen reads the grants while it is open: they are made in System Settings, outside this window. */
 export const PERMISSIONS_POLL_MS = 1_500;
@@ -118,33 +118,6 @@ export function MacPermissionList({ bridge, relaunch, onStatus }: {
         </p>
       )}
     </>
-  );
-}
-
-export function PermissionsStep({ bridge, onNext, relaunch }: {
-  bridge: MacPermissionsBridge;
-  /** on to the app; `granted`: how many were on when the person left */
-  onNext: (how: "continue" | "later", granted: number) => void;
-  /** reopens the app, for Screen Recording to take effect; absent where the app can't */
-  relaunch?: (() => void) | null;
-}) {
-  const granted = useRef(0);
-  const leave = (how: "continue" | "later") => onNext(how, granted.current);
-
-  return (
-    <div className="my-auto w-full">
-      {/* top right, across from Back, and quiet: Continue is the way on */}
-      <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex h-14 items-center justify-end px-4">
-        <button type="button" data-funnel-permissions-later="" onClick={() => leave("later")}
-          className={cn(QUIET, "pointer-events-auto text-[12px] opacity-40 hover:opacity-70 focus-visible:opacity-100")}>{t("funnel.permissions.later")}</button>
-      </div>
-      <StepFrame art={<StepArt art="mac-key" />} title={t("funnel.permissions.title")} sub={t("funnel.permissions.sub")}
-        footer={<button type="button" data-primary="" data-funnel-permissions-continue="" onClick={() => leave("continue")} className={PRIMARY}>{t("funnel.next")}</button>}>
-        <div className="-mt-2 flex w-full flex-col items-center">
-          <MacPermissionList bridge={bridge} relaunch={relaunch} onStatus={(count) => { granted.current = count; }} />
-        </div>
-      </StepFrame>
-    </div>
   );
 }
 

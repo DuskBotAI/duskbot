@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { formatQuestionAnswers } from "../shared/ask-question.ts";
 import { NO, YES } from "../shared/call-consent.ts";
 import { liveCardKind } from "../shared/live-approval.ts";
+import { isPurchaseTool } from "../shared/purchase.ts";
 import { reactionAnswer, type Reaction, type ReactionDelivery } from "../shared/reactions.ts";
 import type { OptionCardData } from "../shared/wire.ts";
 import { peerName } from "./peer-roster.ts";
@@ -32,6 +33,8 @@ export function reactionSendPrefix(threadId: string, messageId: string, by: stri
 }
 
 export function cardReply(card: OptionCardData, answer: "yes" | "no"): CardReply | null {
+  // Security: a purchase goes ahead only on its own button, never on a reaction.
+  if ((card.purchase || (card.tool && isPurchaseTool(card.tool))) && answer === "yes") return null;
   const kind = liveCardKind(card);
   if (kind === "approval") return { behavior: answer === "yes" ? "allow" : "deny" };
   if (kind !== "question") return null;

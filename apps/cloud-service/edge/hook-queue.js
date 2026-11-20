@@ -102,7 +102,7 @@ export class HookQueue {
     if (entries.length) {
       let route;
       try { route = await lookupRoute(meta.label, this.env); } catch { route = undefined; }
-      if (route === null || route?.wakeable === false && !route.awake) for (const e of entries) await drop(e, route === null ? "no_home" : "not_wakeable");
+      if (route === null || route?.gone || route?.wakeable === false && !route.awake) for (const e of entries) await drop(e, route === null || route.gone ? "no_home" : "not_wakeable");
       else if (route?.awake) {
         for (const e of entries) if (!(await this.deliver(e, meta, route.upstream, now, attempts, drop))) break;
       } else if (route) await askWake(meta.label, "webhook", this.env);

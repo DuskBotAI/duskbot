@@ -6,7 +6,7 @@ export interface ChatToolCall {
 }
 
 /** Calls one model reply may carry (its index bound). */
-const MAX_REPLY_TOOL_CALLS = 32;
+const MAX_REPLY_TOOL_CALLS = 128;
 const MAX_ARGUMENT_CHARS = 256_000;
 
 export class ChatProtocolError extends Error {

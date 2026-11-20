@@ -976,3 +976,22 @@ describe("createOpenAIChatRuntime rejected keys", () => {
     await instance.dispose();
   });
 });
+
+describe("an image model's reply", () => {
+  const png = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.alloc(3_000_000, 7)]).toString("base64");
+  const frame = (delta: unknown, finish: string | null = null) => `data: ${JSON.stringify({ choices: [{ index: 0, delta, finish_reason: finish }] })}\n\n`;
+
+  it("shows a picture sent whole in one large stream frame, with no text beside it", async () => {
+    const events = await runTurn(frame({ role: "assistant", content: "", images: [{ type: "image_url", image_url: { url: `data:image/png;base64,${png}` } }] }, "stop") + "data: [DONE]\n\n");
+    const image = events.find((event) => event.type === "item.completed" && event.itemType === "assistant_image");
+    expect(image && "data" in image && image.data.length).toBeGreaterThan(4_000_000);
+    expect(events.find((event) => event.type === "turn.completed")).toMatchObject({ ok: true });
+    expect(events.some((event) => event.type === "runtime.error")).toBe(false);
+  });
+
+  it("takes a picture given as an image part of the content", async () => {
+    const events = await runTurn(frame({ content: "Here it is." }) + frame({ content: [{ type: "image_url", image_url: { url: "data:image/png;base64,iVBORw0KGgo=" } }] }, "stop") + "data: [DONE]\n\n");
+    expect(events.filter((event) => event.type === "item.completed" && event.itemType === "assistant_image")).toHaveLength(1);
+    expect(events.find((event) => event.type === "turn.completed")).toMatchObject({ ok: true });
+  });
+});

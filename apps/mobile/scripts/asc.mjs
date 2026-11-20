@@ -3,6 +3,7 @@
 //
 //   node apps/mobile/scripts/asc.mjs status                  the app record and its latest builds
 //   node apps/mobile/scripts/asc.mjs testflight [email...]   make the internal group (all builds) and add testers
+//   node apps/mobile/scripts/asc.mjs invite <email> <first> <last> [ROLE]  join the team (this app only) so testflight can add them
 //   node apps/mobile/scripts/asc.mjs testflight-public [n]   anyone with the link (up to n testers) once Beta App Review passes
 //   node apps/mobile/scripts/asc.mjs metadata                listing, categories, age rating, review notes (store/app-store.json)
 //   node apps/mobile/scripts/asc.mjs screenshots <dir> [type] replace the en-US screenshots (default APP_IPHONE_67)
@@ -65,6 +66,16 @@ async function status() {
   const { data } = await call("GET", `/v1/builds?filter[app]=${one.id}&sort=-uploadedDate&limit=5&fields[builds]=version,processingState,uploadedDate,expired`);
   if (!data.length) console.log("no builds uploaded yet");
   for (const b of data) console.log(`build ${b.attributes.version}: ${b.attributes.processingState}${b.attributes.expired ? " (expired)" : ""}, uploaded ${b.attributes.uploadedDate}`);
+  const versions = (await call("GET", `/v1/apps/${one.id}/appStoreVersions?limit=3&fields[appStoreVersions]=versionString,appStoreState,createdDate`)).data;
+  for (const v of versions) console.log(`version ${v.attributes.versionString}: ${v.attributes.appStoreState}`);
+}
+
+// apple only takes internal testers from the team, so an invite comes first; it sees this app only
+async function invite(email, firstName, lastName, role = "MARKETING") {
+  if (!email || !firstName || !lastName) throw new Error("invite needs <email> <first> <last>");
+  const one = await app();
+  await call("POST", "/v1/userInvitations", { data: { type: "userInvitations", attributes: { email, firstName, lastName, roles: [role], allAppsVisible: false, provisioningAllowed: false }, relationships: { visibleApps: { data: [{ type: "apps", id: one.id }] } } } });
+  console.log(`invited ${email} as ${role}, seeing this app only; once they accept, run: testflight ${email}`);
 }
 
 async function testflight(emails) {
@@ -312,6 +323,7 @@ const [verb, ...rest] = process.argv.slice(2);
 const run = {
   status: () => status(),
   testflight: () => testflight(rest),
+  invite: () => invite(rest[0], rest[1], rest[2], rest[3]),
   "testflight-public": () => publicTestflight(Number(rest[0]) || 1000),
   get: async () => console.log(JSON.stringify(await call("GET", rest[0]), null, 1)),
   "dist-cert": () => distCert(rest[0], rest[1]),
@@ -323,5 +335,5 @@ const run = {
   "new-version": () => newVersion(rest[0]),
   free: () => free(),
 }[verb];
-if (!run) { console.error("usage: node apps/mobile/scripts/asc.mjs status | testflight [email...] | testflight-public [limit] | get <path> | dist-cert <csr> <out.cer> | store-profile <certId> <out.mobileprovision> [name] | widget-profile <certId> <out.mobileprovision> [name] | metadata [app-store.json] | screenshots <dir> [displayType] | free | new-version <x.y> | submit [--yes]"); process.exit(2); }
+if (!run) { console.error("usage: node apps/mobile/scripts/asc.mjs status | testflight [email...] | invite <email> <first> <last> [role] | testflight-public [limit] | get <path> | dist-cert <csr> <out.cer> | store-profile <certId> <out.mobileprovision> [name] | widget-profile <certId> <out.mobileprovision> [name] | metadata [app-store.json] | screenshots <dir> [displayType] | free | new-version <x.y> | submit [--yes]"); process.exit(2); }
 run().catch((error) => { console.error(`error: ${error.message}`); process.exit(1); });

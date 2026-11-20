@@ -53,6 +53,10 @@ writeFileSync(
         "@resvg/resvg-js": app.dependencies["@resvg/resvg-js"],
         "node-datachannel": app.dependencies["node-datachannel"],
       },
+      // local voice: ONNX Runtime ships prebuilt binaries for some platforms only; where it fails to install, voice is off
+      optionalDependencies: {
+        "onnxruntime-node": app.dependencies["onnxruntime-node"],
+      },
       files: ["cli.js", "dist-server", "dist", "skills", "LICENSE", "LICENSING.md", "licenses", "README.md"],
       engines: { node: ">=24" },
       repository: app.repository,

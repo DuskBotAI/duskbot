@@ -11,6 +11,8 @@ export interface SpendRouteDeps {
   routine(auth: RequestAuth, id: string): (ForecastRoutine & { name: string }) | undefined;
   mayChangeCaps(auth: RequestAuth): boolean;
   allowance?: Allowance;
+  /** Other ids a routine's runs are booked under, such as its address's. */
+  bookedAs?(routineId: string): string[];
 }
 
 const FORECAST = /^\/api\/routines\/([\w-]{1,200})\/forecast$/;
@@ -43,7 +45,7 @@ export function createSpendRoutes(deps: SpendRouteDeps): RouteHandler {
       const routine = deps.routine(auth, forecast[1]!);
       if (!routine) return json(res, 404, { error: "no such routine" });
       res.setHeader("cache-control", "no-store");
-      return json(res, 200, deps.spend.forecast(routine));
+      return json(res, 200, deps.spend.forecast(routine, deps.bookedAs?.(routine.id)));
     }
     return PASS;
   };

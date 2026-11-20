@@ -74,7 +74,7 @@ describe("a schedule's confirmation, in the person's words", () => {
     const result = await callTool("create_trigger", { when: "schedule", name: "AI news", instructions: "Send five bullets of AI news.", schedule }, applied("create").context);
     expect(result.isError).toBeUndefined();
     expect(result.text).not.toContain("Asia/Calcutta");
-    expect(result.text).toMatch(/tell the person what you set up and what you assumed: when it runs, saying the time zone as "India time", never as a zone id; where its results will appear \(here in this chat\); what each run covers; and that the first run is tomorrow \(\w+, \w+ \d+\) at 9:00 AM India time\.$/);
+    expect(result.text).toMatch(/tell the person what you set up and what you assumed: when it runs, saying the time zone as "India time", never as a zone id; where its results will appear \(here in this chat\); what each run covers; that the first run is tomorrow \(\w+, \w+ \d+\) at 9:00 AM India time; and that they can change, pause or stop it by saying so here\.$/);
   });
 
   it("says what changed and the next run for an update, and one sentence for the rest", async () => {
@@ -102,7 +102,7 @@ describe("the trigger tool's actions", () => {
     const deletes = async (args: Record<string, unknown>) => (await callTool("delete_trigger", args, refused.context)).text;
     expect(await deletes({})).toBe("delete_trigger needs the trigger_id from trigger_info.");
     expect(await deletes({ trigger_id: "t-1", schedule: { type: "daily", time: "09:00" } })).toBe("delete_trigger takes only trigger_id and for_bot_id.");
-    expect((await callTool("trigger_info", { action: "delete" }, refused.context)).text).toBe("trigger_info action is list or events.");
+    expect((await callTool("trigger_info", { action: "delete" }, refused.context)).text).toBe("trigger_info action is list, events or usage.");
     expect(refused.calls).toEqual([]);
   });
 
@@ -136,3 +136,100 @@ describe("schedule triggers", () => {
   });
 });
 
+
+describe("what runs on its own, in one list", () => {
+  function routed(replies: Record<string, { ok: boolean; status: number; body: Record<string, unknown> }>) {
+    const calls: string[] = [];
+    const client = {
+      api: async (path: string) => { calls.push(path); return { now: "2026-11-20T09:00:00Z", timeZone: "Asia/Kolkata", triggers: [{ id: "r-1", name: "Support inbox" }] }; },
+      apiResponse: async (path: string) => { calls.push(path); return replies[path] ?? { ok: false, status: 404, body: {} }; },
+    };
+    return { calls, ctx: { botId: "scout", threadId: "thread-1", depth: 0, externalRuntime: false, client } as unknown as ToolCallContext };
+  }
+
+  it("adds the bot's background jobs and its waits in every chat after its automations", async () => {
+    const { ctx } = routed({
+      "/api/internal/jobs": { ok: true, status: 200, body: { text: "- Deals group watch (id j-1): running" } },
+      "/api/internal/waits/all": { ok: true, status: 200, body: { text: "- w-1 · the pricing page · until it shows $12" } },
+    });
+    const text = (await callTool("trigger_info", { action: "list" }, ctx)).text;
+    expect(text).toContain("Support inbox");
+    expect(text).toContain("Background jobs (background_job):\n- Deals group watch (id j-1): running");
+    expect(text).toContain("Waits, in every chat (wait_until):\n- w-1 · the pricing page");
+  });
+
+  it("leaves out a part this turn may not read instead of calling it empty, and asks nothing more for one trigger", async () => {
+    const refused = routed({ "/api/internal/jobs": { ok: false, status: 403, body: { error: "not in a room" } } });
+    const text = (await callTool("trigger_info", { action: "list" }, refused.ctx)).text;
+    expect(text).not.toContain("Background jobs");
+    expect(text).not.toContain("Waits");
+    const one = routed({});
+    await callTool("trigger_info", { action: "list", trigger_id: "r-1" }, one.ctx);
+    expect(one.calls).toEqual(["/api/internal/triggers?fromBotId=scout&fromThreadId=thread-1&triggerId=r-1"]);
+  });
+});
+
+describe("a test run", () => {
+  it("asks for a run that sends nothing, and refuses test on any other action", async () => {
+    const { calls, context: ctx } = context();
+    const started = await callTool("trigger", { action: "run_now", trigger_id: "r-1", test: true }, ctx);
+    expect(calls[0]!.body).toEqual({ fromBotId: "scout", fromThreadId: "thread-1", action: "run_now", triggerId: "r-1", test: true });
+    expect(started.text).toContain("Started a test run of trigger r-1");
+    expect((await callTool("trigger", { action: "pause", trigger_id: "r-1", test: true }, ctx)).text).toBe("test applies only to action=run_now.");
+  });
+});
+
+describe("mail routes and usage in the trigger tools", () => {
+  const recorder = (body: Record<string, unknown>) => {
+    const calls: Array<{ path: string; method?: string; body?: unknown }> = [];
+    const client = {
+      api: async () => ({}),
+      apiResponse: async (path: string, init: RequestInit) => {
+        calls.push({ path, method: init.method, ...(init.body ? { body: JSON.parse(String(init.body)) } : {}) });
+        return { ok: true, status: 200, body };
+      },
+    };
+    return { calls, ctx: { botId: "scout", threadId: "thread-1", depth: 0, externalRuntime: false, client } as unknown as ToolCallContext };
+  };
+
+  it("routes mail to an automation, shows the address without a trigger, and refuses senders without one", async () => {
+    const { calls, ctx } = recorder({ address: "scout-1@in.dusk.bot", routes: [{ alias: "receipts", targetId: "r1", from: ["@shop.example"] }], received: 0 });
+    const routed = await callTool("trigger", { action: "email", trigger_id: "r1", email_alias: "receipts", email_from: ["@shop.example"] }, ctx);
+    expect(routed.text).toContain("scout-1@in.dusk.bot");
+    expect(calls[0]).toEqual({ path: "/api/internal/bot-mail?fromBotId=scout&fromThreadId=thread-1", method: "POST", body: { triggerId: "r1", alias: "receipts", from: ["@shop.example"] } });
+    await callTool("trigger", { action: "email" }, ctx);
+    expect(calls[1]).toMatchObject({ method: "GET" });
+    expect((await callTool("trigger", { action: "email", email_from: ["a@b.c"] }, ctx)).isError).toBe(true);
+    expect((await callTool("trigger", { action: "email", trigger_id: "r1" }, ctx)).isError).toBe(true);
+    expect(calls).toHaveLength(2);
+  });
+
+  it("reads what the automations used", async () => {
+    const { calls, ctx } = recorder({ basis: "usd", automations: [{ name: "Poller", last7Days: { runs: 90, usd: 3 } }], note: "Most used first." });
+    const result = await callTool("trigger_info", { action: "usage" }, ctx);
+    expect(calls[0]!.path).toBe("/api/internal/trigger-usage?fromBotId=scout&fromThreadId=thread-1");
+    expect(result.text).toContain("approximate dollars");
+    expect(result.text).toContain("Poller");
+  });
+});
+
+describe("a schedule's plain check in the trigger tool", () => {
+  it("sends check as the routine's probe, with continuity on by default", async () => {
+    const { calls, context: ctx } = context();
+    await callTool("trigger", { action: "create", when: "schedule", name: "Group watch", instructions: "Tell me what is new.",
+      schedule: { type: "interval", every_minutes: 30 }, check: { kind: "script", command: " ./last-id.sh " } }, ctx);
+    expect((calls[0]!.body as { routine: unknown }).routine).toMatchObject({ continuity: true, probe: { kind: "script", url: "", command: "./last-id.sh" } });
+    await callTool("trigger", { action: "create", when: "schedule", name: "Status", instructions: "Tell me.", continuity: false,
+      schedule: { type: "interval", every_minutes: 30 }, check: { kind: "page", url: "https://status.example/", selector: "#state" } }, ctx);
+    expect((calls[1]!.body as { routine: unknown }).routine).toMatchObject({ continuity: false, probe: { kind: "page", url: "https://status.example/", selector: "#state" } });
+  });
+
+  it("removes a check with clear_check and refuses a check without what it reads", async () => {
+    const { calls, context: ctx } = context();
+    await callTool("trigger", { action: "update", trigger_id: "r-1", clear_check: true }, ctx);
+    expect((calls[0]!.body as { changes: unknown }).changes).toEqual({ probe: null });
+    expect((await callTool("trigger", { action: "update", trigger_id: "r-1", check: { kind: "script" } }, ctx)).text).toContain("needs command");
+    expect((await callTool("trigger", { action: "update", trigger_id: "r-1", check: { kind: "feed" } }, ctx)).text).toContain("needs url");
+    expect((await callTool("trigger", { action: "create", when: "webhook", name: "A", instructions: "B", check: { kind: "feed", url: "https://a.example/f" } }, ctx)).text).toContain("takes no check");
+  });
+});

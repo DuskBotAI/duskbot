@@ -17,7 +17,7 @@ const fake = (name: string) => join(SERVER_DIR, "testing", name);
 const FAKES = ["fake-claude-cli.ts", "fake-codex-app-server.ts", "fake-pi-cli.ts"];
 const posixOnly = describe.skipIf(process.platform === "win32");
 
-const SUMMARY_MARKER = "Summarize this conversation history in third person";
+const SUMMARY_MARKER = "Write a context checkpoint of this conversation";
 const SUMMARY = "The person said they are vegetarian and asked for nothing else.";
 const SKILL_MD = "---\nname: weekly-report\ndescription: Writes the weekly status report.\n---\n\n# Weekly report\n\nWrites the weekly status report from the project notes.\n\n## When to Use\n- \"write the weekly report\"\n\n## Procedure\n1. Read the notes.\n2. Keep it to five bullets.\n\n## Pitfalls\n- Long reports go unread: stop at five bullets.\n\n## Verification\n- Count the bullets.\n";
 
@@ -165,7 +165,7 @@ posixOnly("the helper model, through the real server", () => {
     await waitFor(() => ledger(bot.id).some((row) => row.trigger.job === "skill-review"), "the review call to be booked");
     expect(ledger(bot.id)).toContainEqual(helperRow("skill-review"));
 
-    expect(await compacted(bot)).toContain(`Model-written historical summary (may be incomplete):\n${SUMMARY}`);
+    expect(await compacted(bot)).toContain(`Checkpoint written by a helper model (may be incomplete):\n${SUMMARY}`);
     await waitFor(() => ledger(bot.id).some((row) => row.trigger.job === "compaction"), "the summary call to be booked");
     expect(ledger(bot.id)).toContainEqual(helperRow("compaction"));
 
@@ -239,7 +239,7 @@ posixOnly("the helper model, through the real server", () => {
     await waitFor(() => ledger(bot.id).some((row) => row.threadId.startsWith("memory-")), "Codex's own capture call to be booked");
     expect(ledger(bot.id).filter((row) => row.threadId.startsWith("memory-")).every((row) => row.driverKind === "codex" && row.trigger.kind === "bot")).toBe(true);
 
-    expect(await compacted(bot)).toContain(`Model-written historical summary (may be incomplete):\n${SUMMARY}`);
+    expect(await compacted(bot)).toContain(`Checkpoint written by a helper model (may be incomplete):\n${SUMMARY}`);
     await waitFor(() => ledger(bot.id).some((row) => row.trigger.job === "compaction"), "the summary call to be booked");
     expect(ledger(bot.id)).toContainEqual(helperRow("compaction"));
     expect(ledger(bot.id).filter((row) => row.trigger.kind === "helper").map((row) => row.trigger.job)).toEqual(["compaction"]);

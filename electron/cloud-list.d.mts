@@ -3,6 +3,9 @@ export type CloudListStatus = "checkout" | "setting_up" | "ready" | "stopped" | 
 export type CloudSwatch = "blue" | "green" | "amber" | "rose" | "violet" | "slate";
 /** One Cloud of the verified session's `clouds` (contract v1), as this app reads it: never an address a page gave. */
 export interface CloudListEntry {
+  /** its charge failed, so it is stopped: its data is deleted at `fixBy` unless a payment goes through; `trial` when that
+   *  was the trial's first charge */
+  payment?: { fixBy: number; trial?: true };
   id: string;
   name: string;
   color: CloudSwatch | null;
@@ -45,6 +48,9 @@ export declare function cloudState(cloud: Pick<CloudListEntry, "status"> | null 
  */
 export interface CloudRenewal { trial: boolean; cancelled: boolean; renewsAt: number | null; endsAt: number | null; keptDays: number | null; team?: string }
 export declare function parseCloudRenewal(clouds: unknown): (CloudRenewal & { cloudId: string }) | null;
+/** My Cloud's renewal failed: it keeps running until `fixBy`. */
+export interface CloudPayment { name: string; fixBy: number; trial?: true }
+export declare function parseCloudPayment(clouds: unknown): CloudPayment | null;
 /** Why an organization can't be added to the Team plan now. */
 export type OrganizationBlock = "no_team_plan" | "limit" | "rate" | "off";
 /** The session's `organizations`: the Team plan this account pays for, whether ＋ may add an organization to it now (else

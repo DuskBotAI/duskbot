@@ -1,0 +1,5254 @@
+{
+  "toolkit": "monday",
+  "name": "Monday",
+  "version": "20261101_00",
+  "description": "monday.com",
+  "managed_sign_in": true,
+  "auth": [
+    "OAuth2"
+  ],
+  "tools_count": 126,
+  "triggers_count": 17,
+  "tools": [
+    {
+      "name": "Get account trigger statistics",
+      "slug": "MONDAY_ACCOUNT_TRIGGER_STATISTICS",
+      "kind": "write",
+      "description": "Tool to retrieve statistics about account-level triggers and automations. Use when you need to monitor trigger execution metrics including success rates, failure counts, and total execution numbers.",
+      "inputs": [
+        {
+          "name": "0",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "1",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "2",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "3",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "4",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "5",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "6",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "7",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "8",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "9",
+          "type": "",
+          "required": false,
+          "about": ""
+        }
+      ],
+      "scopes": [
+        "account:read"
+      ],
+      "tags": [
+        "readOnlyHint",
+        "idempotentHint",
+        "openWorldHint",
+        "automations_integrations"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Activate users",
+      "slug": "MONDAY_ACTIVATE_USERS",
+      "kind": "write",
+      "description": "Tool to activate or reactivate users in a Monday.com account. Use when you need to enable user accounts that were previously deactivated. Cannot be used to activate your own account. Requires account management permissions.",
+      "inputs": [
+        {
+          "name": "user_ids",
+          "type": "array",
+          "required": true,
+          "about": "List of user IDs to activate. Maximum of 200 user IDs per request."
+        }
+      ],
+      "scopes": [
+        "users:write"
+      ],
+      "tags": [
+        "openWorldHint",
+        "idempotentHint",
+        "users_roles",
+        "updateHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Add subscribers to board",
+      "slug": "MONDAY_ADD_SUBSCRIBERS_TO_BOARD",
+      "kind": "write",
+      "description": "Tool to add users as subscribers to a Monday.com board. Use when granting subscriber or owner access to specific users on a board. Note: This mutation is deprecated - consider using add_users_to_board instead.",
+      "inputs": [
+        {
+          "name": "kind",
+          "type": "string",
+          "required": false,
+          "about": "Role for the added users on the board. Possible values: 'owner' or 'subscriber'. Defaults to 'subscriber'."
+        },
+        {
+          "name": "board_id",
+          "type": "integer",
+          "required": true,
+          "about": "The board's unique identifier."
+        },
+        {
+          "name": "user_ids",
+          "type": "array",
+          "required": true,
+          "about": "Array of user unique identifiers to add as subscribers to the board."
+        }
+      ],
+      "scopes": [
+        "boards:write"
+      ],
+      "tags": [
+        "updateHint",
+        "idempotentHint",
+        "openWorldHint",
+        "subscribers_notifications"
+      ],
+      "deprecated": true
+    },
+    {
+      "name": "Add subscribers to object",
+      "slug": "MONDAY_ADD_SUBSCRIBERS_TO_OBJECT",
+      "kind": "write",
+      "description": "Tool to add subscribers or owners to a monday.com object. Use when you need to grant users notification access or ownership permissions to a specific object.",
+      "inputs": [
+        {
+          "name": "id",
+          "type": "integer",
+          "required": true,
+          "about": "The unique identifier of the object to add subscribers to."
+        },
+        {
+          "name": "kind",
+          "type": "string",
+          "required": false,
+          "about": "The role to assign to users. Defaults to 'subscriber' if not specified. 'owner' grants full control permissions, 'subscriber' grants notification access only."
+        },
+        {
+          "name": "user_ids",
+          "type": "array",
+          "required": true,
+          "about": "Array of user identifiers to add as subscribers."
+        }
+      ],
+      "scopes": [
+        "boards:write"
+      ],
+      "tags": [
+        "updateHint",
+        "idempotentHint",
+        "openWorldHint",
+        "subscribers_notifications"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Add teams to board",
+      "slug": "MONDAY_ADD_TEAMS_TO_BOARD",
+      "kind": "write",
+      "description": "Tool to add teams to a Monday.com board with specified permission levels. Use when you need to associate teams with a board as owners or subscribers.",
+      "inputs": [
+        {
+          "name": "kind",
+          "type": "string",
+          "required": false,
+          "about": "Role for the added teams on the board. Possible values: 'owner' or 'subscriber'. If not specified, teams will be added as subscribers."
+        },
+        {
+          "name": "board_id",
+          "type": "integer",
+          "required": true,
+          "about": "Unique identifier of an existing Monday.com board."
+        },
+        {
+          "name": "team_ids",
+          "type": "array",
+          "required": true,
+          "about": "List of unique identifiers for existing Monday.com teams. Pass -1 to subscribe all account members to the board."
+        }
+      ],
+      "scopes": [
+        "boards:write"
+      ],
+      "tags": [
+        "updateHint",
+        "idempotentHint",
+        "openWorldHint",
+        "teams_workspaces"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Add users to board",
+      "slug": "MONDAY_ADD_USERS_TO_BOARD",
+      "kind": "write",
+      "description": "Adds users to a Monday.com board with a specified role.",
+      "inputs": [
+        {
+          "name": "kind",
+          "type": "string",
+          "required": false,
+          "about": "Role for the added users on the board."
+        },
+        {
+          "name": "board_id",
+          "type": "integer",
+          "required": true,
+          "about": "Unique identifier of an existing Monday.com board."
+        },
+        {
+          "name": "user_ids",
+          "type": "array",
+          "required": true,
+          "about": "List of unique identifiers for existing Monday.com users."
+        }
+      ],
+      "scopes": [
+        "boards:write"
+      ],
+      "tags": [
+        "access",
+        "board",
+        "important",
+        "openWorldHint",
+        "user",
+        "updateHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Add users to team",
+      "slug": "MONDAY_ADD_USERS_TO_TEAM",
+      "kind": "write",
+      "description": "Adds users to a Monday.com team. Inspect the returned response for successful and failed users and GraphQL errors; these errors do not necessarily cause the tool call to fail.",
+      "inputs": [
+        {
+          "name": "team_id",
+          "type": "integer",
+          "required": true,
+          "about": "Unique identifier of an existing Monday.com team."
+        },
+        {
+          "name": "user_ids",
+          "type": "array",
+          "required": true,
+          "about": "List of unique identifiers for existing Monday.com users."
+        }
+      ],
+      "scopes": [
+        "teams:write"
+      ],
+      "tags": [
+        "Teams",
+        "update",
+        "updateHint",
+        "openWorldHint",
+        "idempotentHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Add users to workspace",
+      "slug": "MONDAY_ADD_USERS_TO_WORKSPACE",
+      "kind": "write",
+      "description": "Adds existing users to a workspace. The returned success flag can be true even when no added users are returned; inspect the added users list.",
+      "inputs": [
+        {
+          "name": "kind",
+          "type": "string",
+          "required": false,
+          "about": "The role to assign to the users in the workspace. 'owner' grants full control over the workspace. 'subscriber' grants access to view and collaborate on boards within the workspace."
+        },
+        {
+          "name": "user_ids",
+          "type": "array",
+          "required": true,
+          "about": "List of numeric user IDs to add to the workspace. You can get user IDs from the list_users action or from board subscribers."
+        },
+        {
+          "name": "workspace_id",
+          "type": "integer",
+          "required": true,
+          "about": "The unique numeric ID of the workspace to add users to. You can get workspace IDs from the get_workspaces action or from board details."
+        }
+      ],
+      "scopes": [
+        "workspaces:write"
+      ],
+      "tags": [
+        "Workspaces",
+        "update",
+        "updateHint",
+        "openWorldHint",
+        "idempotentHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Aggregate board data",
+      "slug": "MONDAY_AGGREGATE_DATA",
+      "kind": "write",
+      "description": "Aggregate data from a Monday.com board using functions such as COUNT, SUM, MEAN, MIN, and MAX, with optional filtering and grouping.",
+      "inputs": [
+        {
+          "name": "query",
+          "type": "object",
+          "required": true,
+          "about": "Aggregation query configuration including data source, selections, grouping, and filters."
+        }
+      ],
+      "scopes": [
+        "boards:read"
+      ],
+      "tags": [
+        "readOnlyHint",
+        "idempotentHint",
+        "openWorldHint",
+        "aggregate"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get app subscription",
+      "slug": "MONDAY_APP_SUBSCRIPTION",
+      "kind": "write",
+      "description": "Tool to retrieve current app subscription data for the account. Use when you need to check subscription status, billing period, trial status, or pricing information. Must be called within app context using account authentication token.",
+      "inputs": [
+        {
+          "name": "0",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "1",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "2",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "3",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "4",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "5",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "6",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "7",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "8",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "9",
+          "type": "",
+          "required": false,
+          "about": ""
+        }
+      ],
+      "scopes": [
+        "account:read"
+      ],
+      "tags": [
+        "readOnlyHint",
+        "idempotentHint",
+        "openWorldHint",
+        "automations_integrations"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Archive board",
+      "slug": "MONDAY_ARCHIVE_BOARD",
+      "kind": "write",
+      "description": "Archives a specified, existing, and unarchived board in Monday.com; archived boards can typically be restored later.",
+      "inputs": [
+        {
+          "name": "board_id",
+          "type": "integer",
+          "required": true,
+          "about": "Identifier of the board to be archived; it must exist and not already be archived."
+        }
+      ],
+      "scopes": [
+        "boards:write"
+      ],
+      "tags": [
+        "archive",
+        "board",
+        "delete",
+        "openWorldHint",
+        "updateHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Archive item",
+      "slug": "MONDAY_ARCHIVE_ITEM",
+      "kind": "write",
+      "description": "Archives an existing Monday.com item, moving it from active board views to the archive where it can be potentially restored.",
+      "inputs": [
+        {
+          "name": "item_id",
+          "type": "integer",
+          "required": true,
+          "about": "Unique identifier of the Monday.com item to archive."
+        }
+      ],
+      "scopes": [
+        "boards:write"
+      ],
+      "tags": [
+        "archive",
+        "item",
+        "openWorldHint",
+        "updateHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Archive object",
+      "slug": "MONDAY_ARCHIVE_OBJECT",
+      "kind": "write",
+      "description": "Archives a Monday.com object by changing its state to archived rather than permanently deleting it. Use when you need to remove objects from active use while preserving the ability to restore them later.",
+      "inputs": [
+        {
+          "name": "id",
+          "type": "string",
+          "required": true,
+          "about": "The unique identifier of the Monday.com object to archive. Can be an ID for various object types like boards, items, or workspaces."
+        }
+      ],
+      "scopes": [
+        "boards:write"
+      ],
+      "tags": [
+        "updateHint",
+        "idempotentHint",
+        "openWorldHint",
+        "object_lifecycle_publishing"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Archive workspace",
+      "slug": "MONDAY_ARCHIVE_WORKSPACE",
+      "kind": "write",
+      "description": "Delete a Monday.com workspace by its ID, returning its ID and name.",
+      "inputs": [
+        {
+          "name": "workspace_id",
+          "type": "string",
+          "required": true,
+          "about": "The unique identifier of the workspace to archive."
+        }
+      ],
+      "scopes": [
+        "workspaces:write"
+      ],
+      "tags": [
+        "Workspaces",
+        "update",
+        "destructiveHint",
+        "openWorldHint",
+        "idempotentHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get audit logs",
+      "slug": "MONDAY_AUDIT_LOGS",
+      "kind": "write",
+      "description": "Tool to retrieve detailed security-related activity records for a Monday.com account. Use when you need to audit user actions, security events, or account activity. Requires Enterprise plan and account admin permissions with manage_account_security scope.",
+      "inputs": [
+        {
+          "name": "page",
+          "type": "integer",
+          "required": false,
+          "about": "Page number for pagination (starts at 1)."
+        },
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "about": "Number of log entries to return per page."
+        },
+        {
+          "name": "events",
+          "type": "array",
+          "required": false,
+          "about": "Array of specific event types to retrieve (e.g., 'login', 'logout')."
+        },
+        {
+          "name": "user_id",
+          "type": "string",
+          "required": false,
+          "about": "Filter audit logs for a specific user by their ID."
+        },
+        {
+          "name": "end_time",
+          "type": "string",
+          "required": false,
+          "about": "Filter logs up to this date/time (ISO8601 format)."
+        },
+        {
+          "name": "ip_address",
+          "type": "string",
+          "required": false,
+          "about": "Filter logs by specific IP address."
+        },
+        {
+          "name": "start_time",
+          "type": "string",
+          "required": false,
+          "about": "Filter logs from this date/time onwards (ISO8601 format)."
+        }
+      ],
+      "scopes": [
+        "manage_account_security"
+      ],
+      "tags": [
+        "readOnlyHint",
+        "idempotentHint",
+        "openWorldHint",
+        "admin_governance"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get document blocks",
+      "slug": "MONDAY_BLOCKS",
+      "kind": "write",
+      "description": "Tool to retrieve document block data from workdocs via the API. Returns block metadata including type, content, position, and creation info. Use when you need to fetch content blocks from Monday.com documents.",
+      "inputs": [
+        {
+          "name": "page",
+          "type": "integer",
+          "required": false,
+          "about": "Page number for pagination, starting at 1. Defaults to 1."
+        },
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "about": "Maximum number of blocks to return per document. Defaults to 25."
+        },
+        {
+          "name": "doc_ids",
+          "type": "array",
+          "required": true,
+          "about": "List of document IDs to retrieve blocks from. At least one doc ID is required."
+        }
+      ],
+      "scopes": [
+        "account:read",
+        "assets:read",
+        "boards:read",
+        "boards:write",
+        "docs:read",
+        "docs:write",
+        "me:read",
+        "notifications:write",
+        "tags:read",
+        "teams:read",
+        "teams:write",
+        "updates:read",
+        "updates:write",
+        "users:read",
+        "users:write",
+        "webhooks:read",
+        "webhooks:write",
+        "workspaces:read",
+        "workspaces:write"
+      ],
+      "tags": [
+        "readOnlyHint",
+        "idempotentHint",
+        "openWorldHint",
+        "content_docs_forms"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get boards",
+      "slug": "MONDAY_BOARDS",
+      "kind": "write",
+      "description": "Retrieves metadata for one or multiple monday.com boards, including owners and workspace details, with filters for state, board kind, hierarchy type, and workspace.",
+      "inputs": [
+        {
+          "name": "ids",
+          "type": "array",
+          "required": false,
+          "about": "List of specific board IDs to retrieve. Provide to filter by board IDs."
+        },
+        {
+          "name": "page",
+          "type": "integer",
+          "required": false,
+          "about": "Page number for pagination; starts at 1."
+        },
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "about": "Maximum number of boards to return. Default is 25."
+        },
+        {
+          "name": "state",
+          "type": "string",
+          "required": false,
+          "about": "Filter boards by state. Valid values: 'active', 'archived', 'deleted', 'all'. Default is 'active'."
+        },
+        {
+          "name": "order_by",
+          "type": "string",
+          "required": false,
+          "about": "Sort boards by 'created_at' or 'used_at' in descending order."
+        },
+        {
+          "name": "board_kind",
+          "type": "string",
+          "required": false,
+          "about": "Filter boards by type. Valid values: 'private', 'public', 'share'."
+        },
+        {
+          "name": "workspace_ids",
+          "type": "array",
+          "required": false,
+          "about": "List of workspace IDs to filter boards by workspace."
+        },
+        {
+          "name": "hierarchy_type",
+          "type": "array",
+          "required": false,
+          "about": "Filter boards by hierarchy type. Can include 'classic', 'multi_level', or both."
+        }
+      ],
+      "scopes": [
+        "boards:read",
+        "boards:write"
+      ],
+      "tags": [
+        "readOnlyHint",
+        "idempotentHint",
+        "openWorldHint",
+        "important",
+        "boards_projects_organization"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Change simple column value",
+      "slug": "MONDAY_CHANGE_SIMPLE_COLUMN_VALUE",
+      "kind": "write",
+      "description": "Changes a monday.com item's column value using a simple string, suitable for Text, Status, or Dropdown columns. For Status or Dropdown columns, it can create missing labels; label creation is enabled by default.",
+      "inputs": [
+        {
+          "name": "value",
+          "type": "string",
+          "required": true,
+          "about": "New string value. For Status columns: use either a label name (e.g., 'Done', 'Working on it') or an index number as string (e.g., '1'). For Dropdown columns: use the label name. For Text columns: use plain text."
+        },
+        {
+          "name": "item_id",
+          "type": "integer",
+          "required": true,
+          "about": "The unique identifier of the item for which the column value will be updated."
+        },
+        {
+          "name": "board_id",
+          "type": "integer",
+          "required": true,
+          "about": "The unique identifier of the board where the item and column are located."
+        },
+        {
+          "name": "column_id",
+          "type": "string",
+          "required": true,
+          "about": "Identifier of the column to change; typically a Text, Status, or Dropdown column."
+        },
+        {
+          "name": "create_labels_if_missing",
+          "type": "boolean",
+          "required": false,
+          "about": "For Status/Dropdown columns: when true (default), the label will be matched or created if it doesn't exist. Set to false only when using index values or when you want strict label matching."
+        }
+      ],
+      "scopes": [
+        "boards:write"
+      ],
+      "tags": [
+        "column",
+        "important",
+        "openWorldHint",
+        "update",
+        "updateHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get board columns",
+      "slug": "MONDAY_COLUMNS",
+      "kind": "write",
+      "description": "Retrieves column metadata from monday.com boards, including type, title, settings, and archived status, with optional filters by column ID and type.",
+      "inputs": [
+        {
+          "name": "board_ids",
+          "type": "array",
+          "required": true,
+          "about": "Array of board IDs to retrieve columns from. Must provide at least one board ID."
+        },
+        {
+          "name": "column_ids",
+          "type": "array",
+          "required": false,
+          "about": "Optional array of specific column IDs to filter. Column IDs are strings (1-20 characters, lowercase letters and underscores only)."
+        },
+        {
+          "name": "column_types",
+          "type": "array",
+          "required": false,
+          "about": "Optional array of column types to filter. Available types: auto_number, button, checkbox, color_picker, board_relation, country, creation_log, date, dependency, dropdown, email, file, formula, hour, item_id, last_updated, link, location, long_text, mirror, doc, name, numbers, people, phone, progress"
+        }
+      ],
+      "scopes": [
+        "boards:read",
+        "boards:write"
+      ],
+      "tags": [
+        "readOnlyHint",
+        "idempotentHint",
+        "openWorldHint",
+        "important",
+        "boards_projects_organization"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get connection board IDs",
+      "slug": "MONDAY_CONNECTION_BOARD_IDS",
+      "kind": "write",
+      "description": "Tool to retrieve board IDs associated with connection columns. Use when you need to discover which boards can be linked through connection columns. Queries boards and filters for connection columns (board_relation type) to extract the configured board IDs from their settings.",
+      "inputs": [
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "about": "Maximum number of boards to retrieve. Defaults to 25 if not specified."
+        },
+        {
+          "name": "board_ids",
+          "type": "array",
+          "required": false,
+          "about": "List of specific board IDs to query. If not provided, queries all accessible boards up to the limit."
+        }
+      ],
+      "scopes": [
+        "boards:read"
+      ],
+      "tags": [
+        "readOnlyHint",
+        "idempotentHint",
+        "openWorldHint",
+        "automations_integrations"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get connections",
+      "slug": "MONDAY_CONNECTIONS",
+      "kind": "write",
+      "description": "Tool to retrieve connection data for integrations with external services. Use when you need to inspect or manage integrations like Gmail, Slack, or other external service connections. Returns a list of connections with details about authentication, state, and associated accounts.",
+      "inputs": [
+        {
+          "name": "page",
+          "type": "integer",
+          "required": false,
+          "about": "Page index for offset-based pagination (starts at 1). Use this for traditional page-by-page navigation."
+        },
+        {
+          "name": "order",
+          "type": "string",
+          "required": false,
+          "about": "Ordering of returned connections. Use field name for ascending (e.g., 'createdAt') or prefix with '-' for descending (e.g., '-createdAt')."
+        },
+        {
+          "name": "page_size",
+          "type": "integer",
+          "required": false,
+          "about": "Records per page for offset-based pagination. Determines how many connections are returned per page."
+        },
+        {
+          "name": "pagination",
+          "type": "object",
+          "required": false,
+          "about": "Cursor-based pagination configuration."
+        },
+        {
+          "name": "connection_state",
+          "type": "string",
+          "required": false,
+          "about": "Filter by connection state (e.g., 'active', 'inactive'). Only connections matching this state will be returned."
+        },
+        {
+          "name": "with_automations",
+          "type": "boolean",
+          "required": false,
+          "about": "Include connections with automations attached. Set to true to only return connections that have automations."
+        },
+        {
+          "name": "with_partial_scopes",
+          "type": "boolean",
+          "required": false,
+          "about": "Include connections created with partial scopes. When true, connections with limited permissions are included."
+        },
+        {
+          "name": "with_state_validation",
+          "type": "boolean",
+          "required": false,
+          "about": "Validate connection state before returning. When true, the API validates each connection's current state."
+        }
+      ],
+      "scopes": [
+        "account:read",
+        "assets:read",
+        "boards:read",
+        "boards:write",
+        "docs:read",
+        "docs:write",
+        "me:read",
+        "notifications:write",
+        "tags:read",
+        "teams:read",
+        "teams:write",
+        "updates:read",
+        "updates:write",
+        "users:read",
+        "users:write",
+        "webhooks:read",
+        "webhooks:write",
+        "workspaces:read",
+        "workspaces:write"
+      ],
+      "tags": [
+        "readOnlyHint",
+        "idempotentHint",
+        "openWorldHint",
+        "automations_integrations"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Connect project to portfolio",
+      "slug": "MONDAY_CONNECT_PROJECT_TO_PORTFOLIO",
+      "kind": "write",
+      "description": "Links an existing project board to a portfolio board for centralized management. Requires boards:write scope and Enterprise plan.",
+      "inputs": [
+        {
+          "name": "project_board_id",
+          "type": "integer",
+          "required": true,
+          "about": "The unique identifier of the project board to connect to the portfolio."
+        },
+        {
+          "name": "portfolio_board_id",
+          "type": "integer",
+          "required": true,
+          "about": "The unique identifier of the portfolio board to which the project will be linked."
+        }
+      ],
+      "scopes": [
+        "boards:write"
+      ],
+      "tags": [
+        "openWorldHint",
+        "important",
+        "boards_projects_organization",
+        "updateHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Convert board to project",
+      "slug": "MONDAY_CONVERT_BOARD_TO_PROJECT",
+      "kind": "write",
+      "description": "Converts a regular Monday.com board into a project board with advanced project management features. Use when upgrading a board to enable project-specific capabilities like timeline views, project status tracking, and owner assignments.",
+      "inputs": [
+        {
+          "name": "board_id",
+          "type": "integer",
+          "required": true,
+          "about": "The unique identifier of the board to convert to a project."
+        },
+        {
+          "name": "column_mappings",
+          "type": "object",
+          "required": true,
+          "about": "Mapping configuration specifying which existing columns should be used for project-specific fields (status, timeline, owner)."
+        }
+      ],
+      "scopes": [
+        "boards:write"
+      ],
+      "tags": [
+        "openWorldHint",
+        "important",
+        "boards_projects_organization",
+        "updateHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Create a Monday board",
+      "slug": "MONDAY_CREATE_BOARD",
+      "kind": "write",
+      "description": "Creates a Monday.com board; `template_id` if used must be accessible, and `folder_id` must be in `workspace_id` if both are provided.",
+      "inputs": [
+        {
+          "name": "folder_id",
+          "type": "integer",
+          "required": false,
+          "about": "ID of the folder for the board. If `workspace_id` is absent, the board uses this folder's containing workspace. If `workspace_id` is present, this folder must be within the specified workspace."
+        },
+        {
+          "name": "board_kind",
+          "type": "string",
+          "required": true,
+          "about": "The kind of board to create, determining its visibility and access."
+        },
+        {
+          "name": "board_name",
+          "type": "string",
+          "required": true,
+          "about": "The name for the new board."
+        },
+        {
+          "name": "description",
+          "type": "string",
+          "required": false,
+          "about": "Description for the new board."
+        },
+        {
+          "name": "template_id",
+          "type": "integer",
+          "required": false,
+          "about": "ID of an accessible template to use for the new board."
+        },
+        {
+          "name": "workspace_id",
+          "type": "integer",
+          "required": false,
+          "about": "Numeric ID of the workspace for the board. Use MONDAY_GET_WORKSPACES action to retrieve valid workspace IDs. This field is optional - if omitted, the board is created in the default workspace. If `folder_id` is given, this workspace must contain that folder."
+        },
+        {
+          "name": "board_owner_ids",
+          "type": "array",
+          "required": false,
+          "about": "User IDs to be assigned as owners of the board."
+        },
+        {
+          "name": "board_subscriber_ids",
+          "type": "array",
+          "required": false,
+          "about": "User IDs to be subscribed to the board."
+        },
+        {
+          "name": "board_subscriber_teams_ids",
+          "type": "array",
+          "required": false,
+          "about": "Team IDs to be subscribed to the board."
+        }
+      ],
+      "scopes": [
+        "boards:write"
+      ],
+      "tags": [
+        "board",
+        "create",
+        "important",
+        "openWorldHint",
+        "createHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Create column",
+      "slug": "MONDAY_CREATE_COLUMN",
+      "kind": "write",
+      "description": "Creates a new column with a specified type and title on a monday.com board.",
+      "inputs": [
+        {
+          "name": "title",
+          "type": "string",
+          "required": true,
+          "about": "Title for the new column."
+        },
+        {
+          "name": "board_id",
+          "type": "integer",
+          "required": true,
+          "about": "Unique identifier of the board for the new column. Note: Subitems boards are not supported; use create_subitem mutation instead."
+        },
+        {
+          "name": "defaults",
+          "type": "string",
+          "required": false,
+          "about": "JSON string with default values or settings, often for 'status' or 'dropdown' types to define labels. Example: '''{\"labels\": [\"To Do\", \"In Progress\", \"Done\"]}'''"
+        },
+        {
+          "name": "column_type",
+          "type": "string",
+          "required": true,
+          "about": "Type of the column. Must be a valid GraphQL enum token in snake_case format (e.g., 'long_text', not 'text_long' or 'long-text'). Supported types include: status, text, long_text, numbers, date, dropdown, people, timeline, link, email, phone, rating, checkbox, country, file, hour, week, item_id, loca"
+        },
+        {
+          "name": "description",
+          "type": "string",
+          "required": false,
+          "about": "Description for the new column."
+        },
+        {
+          "name": "after_column_id",
+          "type": "string",
+          "required": false,
+          "about": "ID of an existing column after which the new column will be inserted."
+        }
+      ],
+      "scopes": [
+        "boards:write"
+      ],
+      "tags": [
+        "column",
+        "create",
+        "important",
+        "openWorldHint",
+        "createHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Create custom activity",
+      "slug": "MONDAY_CREATE_CUSTOM_ACTIVITY",
+      "kind": "write",
+      "description": "Tool to create a custom activity in the Monday.com Emails & Activities app. Use when you need to define a new activity type with specific color and icon for tracking interactions.",
+      "inputs": [
+        {
+          "name": "name",
+          "type": "string",
+          "required": true,
+          "about": "The custom activity's name. Must be non-empty."
+        },
+        {
+          "name": "color",
+          "type": "string",
+          "required": true,
+          "about": "The custom activity's color. Must be one of the predefined color values."
+        },
+        {
+          "name": "icon_id",
+          "type": "string",
+          "required": true,
+          "about": "The custom activity's icon. Must be one of the predefined icon values."
+        }
+      ],
+      "scopes": [
+        "boards:write"
+      ],
+      "tags": [
+        "openWorldHint",
+        "updates_communication",
+        "createHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Create a Monday dashboard",
+      "slug": "MONDAY_CREATE_DASHBOARD",
+      "kind": "write",
+      "description": "Tool to create a Monday.com dashboard with associated boards. Use when you need to establish a new dashboard in a workspace with specific board visibility settings.",
+      "inputs": [
+        {
+          "name": "kind",
+          "type": "string",
+          "required": false,
+          "about": "The dashboard's visibility. Valid values: PRIVATE (default) or PUBLIC."
+        },
+        {
+          "name": "name",
+          "type": "string",
+          "required": true,
+          "about": "The dashboard's name. Maximum 255 characters."
+        },
+        {
+          "name": "board_ids",
+          "type": "array",
+          "required": true,
+          "about": "The unique identifier(s) of the board(s) to associate with the dashboard. Must provide at least one valid board ID."
+        },
+        {
+          "name": "workspace_id",
+          "type": "integer",
+          "required": true,
+          "about": "The unique identifier of the workspace to create the dashboard in. Use -1 for the main workspace."
+        },
+        {
+          "name": "board_folder_id",
+          "type": "integer",
+          "required": false,
+          "about": "The unique identifier of the folder to create the dashboard in."
+        }
+      ],
+      "scopes": [
+        "boards:read",
+        "boards:write",
+        "workspaces:write"
+      ],
+      "tags": [
+        "openWorldHint",
+        "boards_projects_organization",
+        "createHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Create doc",
+      "slug": "MONDAY_CREATE_DOC",
+      "kind": "write",
+      "description": "Tool to create a new doc in Monday.com. Use when you need to add a doc to a workspace or into a doc column on an item.",
+      "inputs": [
+        {
+          "name": "kind",
+          "type": "string",
+          "required": false,
+          "about": "Access level of the new doc in workspace. Choose one of 'private', 'public', or 'share'."
+        },
+        {
+          "name": "name",
+          "type": "string",
+          "required": false,
+          "about": "Title of the new doc. Required with workspace_id and kind for workspace location."
+        },
+        {
+          "name": "item_id",
+          "type": "integer",
+          "required": false,
+          "about": "ID of the item containing the doc column. Required with column_id for board location."
+        },
+        {
+          "name": "column_id",
+          "type": "string",
+          "required": false,
+          "about": "ID of the monday doc column on the item (e.g., 'monday_doc'). Required with item_id for board location."
+        },
+        {
+          "name": "workspace_id",
+          "type": "integer",
+          "required": false,
+          "about": "ID of the workspace where the doc will be created. Required with name and kind for workspace location."
+        }
+      ],
+      "scopes": [
+        "boards:read",
+        "boards:write",
+        "items:read",
+        "items:write",
+        "updates:read",
+        "updates:write",
+        "users:read",
+        "users:write",
+        "workspaces:read",
+        "workspaces:write",
+        "teams:read",
+        "teams:write",
+        "tags:read",
+        "tags:write",
+        "files:read",
+        "files:write",
+        "account:read",
+        "account:write",
+        "webhooks:read",
+        "webhooks:write",
+        "notifications:read",
+        "notifications:write",
+        "settings:read",
+        "settings:write",
+        "templates:read",
+        "templates:write",
+        "activity_logs:read",
+        "activity_logs:write",
+        "audit_logs:read",
+        "audit_logs:write",
+        "time_tracking:read",
+        "time_tracking:write",
+        "forms:read",
+        "forms:write",
+        "docs:read",
+        "docs:write"
+      ],
+      "tags": [
+        "Documents",
+        "create",
+        "openWorldHint",
+        "createHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Create a folder",
+      "slug": "MONDAY_CREATE_FOLDER",
+      "kind": "write",
+      "description": "Tool to create a new folder in a Monday.com workspace to organize boards. Use when you need to structure boards within a workspace by grouping them into folders.",
+      "inputs": [
+        {
+          "name": "name",
+          "type": "string",
+          "required": true,
+          "about": "The folder's name."
+        },
+        {
+          "name": "color",
+          "type": "string",
+          "required": false,
+          "about": "The folder's color."
+        },
+        {
+          "name": "workspace_id",
+          "type": "integer",
+          "required": true,
+          "about": "The unique identifier of the workspace to create the new folder in."
+        },
+        {
+          "name": "parent_folder_id",
+          "type": "integer",
+          "required": false,
+          "about": "The ID of the folder you want to nest the new one under. Use this to create subfolder hierarchies."
+        }
+      ],
+      "scopes": [
+        "workspaces:write"
+      ],
+      "tags": [
+        "openWorldHint",
+        "boards_projects_organization",
+        "createHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Create group",
+      "slug": "MONDAY_CREATE_GROUP",
+      "kind": "write",
+      "description": "Creates a new group with the given `group_name` on an existing Monday.com board, identified by its `board_id`.",
+      "inputs": [
+        {
+          "name": "board_id",
+          "type": "string",
+          "required": true,
+          "about": "The unique identifier of the Monday.com board where the new group will be created."
+        },
+        {
+          "name": "group_name",
+          "type": "string",
+          "required": true,
+          "about": "The desired name for the new group to be created on the board."
+        }
+      ],
+      "scopes": [
+        "boards:read",
+        "boards:write",
+        "users:read",
+        "users:write",
+        "teams:read",
+        "teams:write",
+        "workspaces:read",
+        "workspaces:write",
+        "docs:read",
+        "docs:write",
+        "updates:read",
+        "updates:write",
+        "notifications:write",
+        "tags:read",
+        "webhooks:read",
+        "webhooks:write",
+        "account:read",
+        "assets:read",
+        "me:read"
+      ],
+      "tags": [
+        "create",
+        "group",
+        "openWorldHint",
+        "createHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Create item",
+      "slug": "MONDAY_CREATE_ITEM",
+      "kind": "write",
+      "description": "Creates a new item on a Monday.com board, optionally assigning it to a group and setting column values.",
+      "inputs": [
+        {
+          "name": "board_id",
+          "type": "string",
+          "required": true,
+          "about": "The board's unique identifier. Note: Subitems boards are not supported for this action; use create_subitem mutation instead."
+        },
+        {
+          "name": "group_id",
+          "type": "string",
+          "required": false,
+          "about": "Optional group ID where the item will be created."
+        },
+        {
+          "name": "item_name",
+          "type": "string",
+          "required": true,
+          "about": "Name of the new item. Maximum length is 256 characters."
+        },
+        {
+          "name": "column_values",
+          "type": "",
+          "required": false,
+          "about": "Column values for the new item. Accepts either a JSON string or an object/dict. Keys must be valid column IDs and values must match the column type. For date columns, use nested structure: {\"date\": {\"date\": \"YYYY-MM-DD\"}}. For people columns, use array of person IDs: {\"person\": {\"personsAndTeams\": ["
+        }
+      ],
+      "scopes": [
+        "boards:write"
+      ],
+      "tags": [
+        "create",
+        "important",
+        "item",
+        "openWorldHint",
+        "createHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Create Item From Natural Language",
+      "slug": "MONDAY_CREATE_ITEM_FROM_NL",
+      "kind": "write",
+      "description": "Creates a new item on a Monday.com board from a natural language description. Fetches the board's column schema at runtime, uses an LLM to generate the column values and extract the item name, and creates the item.",
+      "inputs": [
+        {
+          "name": "board_id",
+          "type": "string",
+          "required": true,
+          "about": "The Monday.com board ID where the item will be created."
+        },
+        {
+          "name": "group_id",
+          "type": "string",
+          "required": false,
+          "about": "Optional group ID where the item will be created within the board."
+        },
+        {
+          "name": "nl_query",
+          "type": "string",
+          "required": true,
+          "about": "Natural language description of the item to create. Must include an item name. Example: 'Create item: Fix login bug, status Working on it, priority High, due date 2025-03-15'."
+        }
+      ],
+      "scopes": [
+        "boards:write"
+      ],
+      "tags": [
+        "important",
+        "openWorldHint",
+        "createHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Create notification",
+      "slug": "MONDAY_CREATE_NOTIFICATION",
+      "kind": "write",
+      "description": "Tool to send a notification to a user. Use when you need to alert a user about a board, item, or update. Call after obtaining the user and target IDs.",
+      "inputs": [
+        {
+          "name": "text",
+          "type": "string",
+          "required": true,
+          "about": "The notification text to display."
+        },
+        {
+          "name": "user_id",
+          "type": "integer",
+          "required": true,
+          "about": "The recipient user's unique identifier (ID)."
+        },
+        {
+          "name": "target_id",
+          "type": "integer",
+          "required": true,
+          "about": "The target's unique identifier (ID). If target_type is Post, use an update or reply ID; if Project, use an item or board ID."
+        },
+        {
+          "name": "target_type",
+          "type": "string",
+          "required": true,
+          "about": "The notification target type: 'Post' for updates/replies or 'Project' for items/boards."
+        }
+      ],
+      "scopes": [
+        "notifications:write"
+      ],
+      "tags": [
+        "Notifications",
+        "create",
+        "openWorldHint",
+        "createHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Create object",
+      "slug": "MONDAY_CREATE_OBJECT",
+      "kind": "write",
+      "description": "Execute a custom Monday.com GraphQL mutation, with optional variables. It can create objects such as workspaces, boards, items, columns, docs, updates, and webhooks, and can also modify or delete data.",
+      "inputs": [
+        {
+          "name": "query",
+          "type": "string",
+          "required": true,
+          "about": "GraphQL mutation query to create an object. Must start with 'mutation'. For read queries, use the appropriate query tool instead. Examples: 'mutation { create_workspace(name: \"My Workspace\", kind: open) { id name } }' or 'mutation { create_item(board_id: 123, item_name: \"Task\") { id name } }'"
+        },
+        {
+          "name": "variables",
+          "type": "object",
+          "required": false,
+          "about": "Optional GraphQL variables object to pass with the query. Use this to parameterize your mutation instead of hardcoding values in the query string."
+        }
+      ],
+      "scopes": [
+        "boards:write",
+        "docs:write",
+        "workspaces:write",
+        "updates:write",
+        "notifications:write",
+        "teams:write",
+        "webhooks:write"
+      ],
+      "tags": [
+        "openWorldHint",
+        "object_lifecycle_publishing",
+        "destructiveHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Create tag",
+      "slug": "MONDAY_CREATE_TAG",
+      "kind": "write",
+      "description": "Tool to create a new tag or return an existing tag. Use when you need to label items with color-coded tags on a public or private board.",
+      "inputs": [
+        {
+          "name": "board_id",
+          "type": "integer",
+          "required": false,
+          "about": "Optional board ID for a private tag; omit for a public tag."
+        },
+        {
+          "name": "tag_name",
+          "type": "string",
+          "required": true,
+          "about": "Name of the tag to create; must be non-empty."
+        }
+      ],
+      "scopes": [
+        "boards:write"
+      ],
+      "tags": [
+        "tag",
+        "create",
+        "openWorldHint",
+        "idempotentHint",
+        "createHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Create timeline item",
+      "slug": "MONDAY_CREATE_TIMELINE_ITEM",
+      "kind": "write",
+      "description": "Tool to create a new timeline item in the Emails & Activities app on a Monday.com item. Use when you need to establish a timeline event or activity on an item. Note: Timeline items created via this action won't trigger automations that run when a new E&A timeline item is created.",
+      "inputs": [
+        {
+          "name": "url",
+          "type": "string",
+          "required": false,
+          "about": "URL to add."
+        },
+        {
+          "name": "phone",
+          "type": "string",
+          "required": false,
+          "about": "Phone number to add. This input isn't verified as a phone number."
+        },
+        {
+          "name": "title",
+          "type": "string",
+          "required": true,
+          "about": "The new timeline item's title."
+        },
+        {
+          "name": "content",
+          "type": "string",
+          "required": false,
+          "about": "The new timeline item's content."
+        },
+        {
+          "name": "item_id",
+          "type": "integer",
+          "required": true,
+          "about": "The ID of the item to create the new timeline item on. Must be a valid item identifier."
+        },
+        {
+          "name": "summary",
+          "type": "string",
+          "required": false,
+          "about": "The new timeline item's summary. Maximum 255 characters."
+        },
+        {
+          "name": "location",
+          "type": "string",
+          "required": false,
+          "about": "Location data to add. This input isn't verified as a location."
+        },
+        {
+          "name": "timestamp",
+          "type": "string",
+          "required": true,
+          "about": "The new timeline item's creation time. Must be in ISO8601 format (e.g., 2024-12-10T10:00:00Z)."
+        },
+        {
+          "name": "time_range",
+          "type": "object",
+          "required": false,
+          "about": "Time range for a timeline item."
+        },
+        {
+          "name": "custom_activity_id",
+          "type": "string",
+          "required": true,
+          "about": "The ID of the new timeline item's custom activity. Required identifier."
+        }
+      ],
+      "scopes": [
+        "boards:write"
+      ],
+      "tags": [
+        "openWorldHint",
+        "timeline_sprints",
+        "createHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Create update",
+      "slug": "MONDAY_CREATE_UPDATE",
+      "kind": "write",
+      "description": "Tool to create a new update for an item or reply to an existing update. Use after determining the target item or update to comment on.",
+      "inputs": [
+        {
+          "name": "body",
+          "type": "string",
+          "required": true,
+          "about": "The update's text content."
+        },
+        {
+          "name": "item_id",
+          "type": "integer",
+          "required": false,
+          "about": "ID of the item to post the update on."
+        },
+        {
+          "name": "parent_id",
+          "type": "integer",
+          "required": false,
+          "about": "ID of the parent update to reply under."
+        },
+        {
+          "name": "use_app_info",
+          "type": "boolean",
+          "required": false,
+          "about": "If true, attribute the update to the app rather than the current user (API version 2025-10+)."
+        },
+        {
+          "name": "mentions_list",
+          "type": "array",
+          "required": false,
+          "about": "List of entities to mention in the update."
+        },
+        {
+          "name": "original_creation_date",
+          "type": "string",
+          "required": false,
+          "about": "Original creation date in DD-MM-YYYY format (API version 2025-10+)."
+        }
+      ],
+      "scopes": [
+        "boards:read",
+        "boards:write",
+        "users:read",
+        "users:write",
+        "updates:read",
+        "updates:write",
+        "workspaces:read",
+        "workspaces:write",
+        "docs:read",
+        "docs:write",
+        "teams:read",
+        "teams:write",
+        "tags:read",
+        "notifications:write",
+        "webhooks:read",
+        "webhooks:write",
+        "account:read",
+        "me:read"
+      ],
+      "tags": [
+        "Updates",
+        "create",
+        "openWorldHint",
+        "createHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Invite and create a Monday user",
+      "slug": "MONDAY_CREATE_USER",
+      "kind": "write",
+      "description": "Tool to invite and create a new user. Use when you need to programmatically add new users to your Monday account.",
+      "inputs": [
+        {
+          "name": "emails",
+          "type": "array",
+          "required": true,
+          "about": "List of email addresses to invite and create."
+        },
+        {
+          "name": "product",
+          "type": "string",
+          "required": false,
+          "about": "Product to invite the user to; allowed values: 'crm', 'dev', 'forms', 'knowledge', 'service', 'whiteboard', 'workflows', 'work_management'."
+        },
+        {
+          "name": "user_role",
+          "type": "string",
+          "required": false,
+          "about": "Role to assign to the invited user; allowed values: 'ADMIN', 'GUEST', 'MEMBER', 'VIEW_ONLY'."
+        }
+      ],
+      "scopes": [
+        "users:write"
+      ],
+      "tags": [
+        "Users",
+        "create",
+        "openWorldHint",
+        "createHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Create a Monday workspace",
+      "slug": "MONDAY_CREATE_WORKSPACE",
+      "kind": "write",
+      "description": "Tool to create a Monday.com workspace. Use when you need to programmatically add a workspace after planning your project structure.",
+      "inputs": [
+        {
+          "name": "kind",
+          "type": "string",
+          "required": true,
+          "about": "The visibility kind of the workspace; allowed values: 'open' or 'closed'."
+        },
+        {
+          "name": "name",
+          "type": "string",
+          "required": true,
+          "about": "The name for the new workspace."
+        },
+        {
+          "name": "description",
+          "type": "string",
+          "required": false,
+          "about": "Optional description for the new workspace."
+        },
+        {
+          "name": "account_product_id",
+          "type": "string",
+          "required": false,
+          "about": "Optional account product ID under which to create the workspace (API v2025-07+)."
+        }
+      ],
+      "scopes": [
+        "workspaces:write"
+      ],
+      "tags": [
+        "Workspaces",
+        "create",
+        "openWorldHint",
+        "createHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get custom activity",
+      "slug": "MONDAY_CUSTOM_ACTIVITY",
+      "kind": "write",
+      "description": "Tool to retrieve custom activity data from the Emails & Activities app. Use when you need to list available custom activities with their metadata. Returns up to 50 activities per query.",
+      "inputs": [
+        {
+          "name": "0",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "1",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "2",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "3",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "4",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "5",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "6",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "7",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "8",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "9",
+          "type": "",
+          "required": false,
+          "about": ""
+        }
+      ],
+      "scopes": [
+        "account:read",
+        "assets:read",
+        "boards:read",
+        "boards:write",
+        "docs:read",
+        "docs:write",
+        "me:read",
+        "notifications:write",
+        "tags:read",
+        "teams:read",
+        "teams:write",
+        "updates:read",
+        "updates:write",
+        "users:read",
+        "users:write",
+        "webhooks:read",
+        "webhooks:write",
+        "workspaces:read",
+        "workspaces:write"
+      ],
+      "tags": [
+        "readOnlyHint",
+        "idempotentHint",
+        "openWorldHint",
+        "updates_communication"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Deactivate users",
+      "slug": "MONDAY_DEACTIVATE_USERS",
+      "kind": "write",
+      "description": "Deactivates up to 200 users per request from a monday.com account; only admins can do so, and users cannot deactivate themselves. Deactivating a user also deactivates their integrations and automations.",
+      "inputs": [
+        {
+          "name": "user_ids",
+          "type": "array",
+          "required": true,
+          "about": "Array of user identifiers to deactivate. Maximum 200 users per request. Note: Cannot deactivate yourself, and only admins can execute this action."
+        }
+      ],
+      "scopes": [
+        "users:write"
+      ],
+      "tags": [
+        "openWorldHint",
+        "idempotentHint",
+        "users_roles",
+        "updateHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Delete asset",
+      "slug": "MONDAY_DELETE_ASSET",
+      "kind": "write",
+      "description": "Remove uploaded files by deleting an enclosing update or clearing all files from an item's File column; the required asset ID does not select which file is removed. Confirm with the user before invoking.",
+      "inputs": [
+        {
+          "name": "target",
+          "type": "string",
+          "required": false,
+          "about": "Deletion strategy: 'update' to delete the update, or 'column' to clear a File column"
+        },
+        {
+          "name": "item_id",
+          "type": "integer",
+          "required": false,
+          "about": "Item ID whose File column should be cleared (used when target is 'column')."
+        },
+        {
+          "name": "asset_id",
+          "type": "integer",
+          "required": true,
+          "about": "The unique identifier of the asset related to the removal operation."
+        },
+        {
+          "name": "board_id",
+          "type": "string",
+          "required": false,
+          "about": "Board ID of the item (used when target is 'column')."
+        },
+        {
+          "name": "column_id",
+          "type": "string",
+          "required": false,
+          "about": "File column ID to clear (used when target is 'column'). For example: 'files'."
+        },
+        {
+          "name": "update_id",
+          "type": "integer",
+          "required": false,
+          "about": "ID of the update that contains the attachment to remove (used when target is 'update')."
+        }
+      ],
+      "scopes": [
+        "assets:read",
+        "assets:write",
+        "updates:write",
+        "boards:write"
+      ],
+      "tags": [
+        "Assets",
+        "destructiveHint",
+        "openWorldHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Delete board",
+      "slug": "MONDAY_DELETE_BOARD",
+      "kind": "write",
+      "description": "Tool to permanently delete a board from your Monday.com account. Use when you need to remove a board permanently after verifying its ID. This action cannot be undone.",
+      "inputs": [
+        {
+          "name": "board_id",
+          "type": "integer",
+          "required": true,
+          "about": "The unique identifier of the board to be deleted."
+        }
+      ],
+      "scopes": [
+        "boards:write"
+      ],
+      "tags": [
+        "Boards",
+        "destructiveHint",
+        "openWorldHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Delete column",
+      "slug": "MONDAY_DELETE_COLUMN",
+      "kind": "write",
+      "description": "Deletes a specified column from a Monday.com board; this action is destructive and cannot be undone via the API.",
+      "inputs": [
+        {
+          "name": "board_id",
+          "type": "integer",
+          "required": true,
+          "about": "The unique identifier of the board from which the column will be deleted."
+        },
+        {
+          "name": "column_id",
+          "type": "string",
+          "required": true,
+          "about": "The unique identifier of the column to be deleted from the specified board."
+        }
+      ],
+      "scopes": "$undefined",
+      "tags": [
+        "column",
+        "delete",
+        "destructiveHint",
+        "openWorldHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Delete Custom Activity",
+      "slug": "MONDAY_DELETE_CUSTOM_ACTIVITY",
+      "kind": "write",
+      "description": "Tool to delete a custom activity from the Emails & Activities app. Use when you need to remove a custom activity by its unique identifier.",
+      "inputs": [
+        {
+          "name": "id",
+          "type": "string",
+          "required": true,
+          "about": "The custom activity's unique identifier."
+        }
+      ],
+      "scopes": [
+        "boards:write"
+      ],
+      "tags": [
+        "destructiveHint",
+        "openWorldHint",
+        "updates_communication"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Delete doc",
+      "slug": "MONDAY_DELETE_DOC",
+      "kind": "write",
+      "description": "Deletes a Monday.com doc by its ID, removing a document that is no longer needed. Returns the document ID and a success indicator.",
+      "inputs": [
+        {
+          "name": "doc_id",
+          "type": "string",
+          "required": true,
+          "about": "Unique identifier of the Monday.com doc to delete."
+        }
+      ],
+      "scopes": [
+        "account:read",
+        "assets:read",
+        "boards:read",
+        "boards:write",
+        "docs:read",
+        "docs:write",
+        "me:read",
+        "notifications:write",
+        "tags:read",
+        "teams:read",
+        "teams:write",
+        "updates:read",
+        "updates:write",
+        "users:read",
+        "users:write",
+        "webhooks:read",
+        "webhooks:write",
+        "workspaces:read",
+        "workspaces:write"
+      ],
+      "tags": [
+        "Documents",
+        "destructiveHint",
+        "openWorldHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Delete folder",
+      "slug": "MONDAY_DELETE_FOLDER",
+      "kind": "write",
+      "description": "Tool to permanently delete a folder and all its contents from a Monday.com workspace. Use when you need to remove a folder along with all nested subfolders and boards. This action is irreversible.",
+      "inputs": [
+        {
+          "name": "folder_id",
+          "type": "integer",
+          "required": true,
+          "about": "The unique identifier of the folder to be deleted. This will permanently remove the folder and all its nested contents including subfolders and boards."
+        }
+      ],
+      "scopes": [
+        "workspaces:write"
+      ],
+      "tags": [
+        "destructiveHint",
+        "openWorldHint",
+        "boards_projects_organization"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Delete group",
+      "slug": "MONDAY_DELETE_GROUP",
+      "kind": "write",
+      "description": "Permanently deletes an existing group (and its items) from an existing board in Monday.com.",
+      "inputs": [
+        {
+          "name": "board_id",
+          "type": "integer",
+          "required": true,
+          "about": "Unique identifier of the board containing the group."
+        },
+        {
+          "name": "group_id",
+          "type": "string",
+          "required": true,
+          "about": "Unique identifier of the group to delete."
+        }
+      ],
+      "scopes": [
+        "boards:write"
+      ],
+      "tags": [
+        "delete",
+        "destructiveHint",
+        "group",
+        "openWorldHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Delete item",
+      "slug": "MONDAY_DELETE_ITEM",
+      "kind": "write",
+      "description": "Permanently deletes an existing Monday.com item; this action is irreversible via the API.",
+      "inputs": [
+        {
+          "name": "item_id",
+          "type": "string",
+          "required": true,
+          "about": "The unique identifier of the Monday.com item to be deleted."
+        }
+      ],
+      "scopes": [
+        "boards:write"
+      ],
+      "tags": [
+        "delete",
+        "destructiveHint",
+        "item",
+        "openWorldHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Delete object",
+      "slug": "MONDAY_DELETE_OBJECT",
+      "kind": "write",
+      "description": "Tool to permanently delete a Monday.com object with a 30-day recovery grace period. Use when you need to remove any object type from Monday.com by its unique identifier.",
+      "inputs": [
+        {
+          "name": "id",
+          "type": "string",
+          "required": true,
+          "about": "The unique identifier of the Monday.com object to delete. Can be an ID for various object types like boards, items, or workspaces."
+        }
+      ],
+      "scopes": [
+        "boards:write",
+        "workspaces:write",
+        "docs:write",
+        "updates:write",
+        "webhooks:write",
+        "teams:write"
+      ],
+      "tags": [
+        "destructiveHint",
+        "openWorldHint",
+        "object_lifecycle_publishing"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Delete subscribers from board",
+      "slug": "MONDAY_DELETE_SUBSCRIBERS_FROM_BOARD",
+      "kind": "write",
+      "description": "Tool to remove subscribers from a Monday.com board. Use when revoking subscriber access for specific users on a board.",
+      "inputs": [
+        {
+          "name": "board_id",
+          "type": "integer",
+          "required": true,
+          "about": "The board's unique identifier."
+        },
+        {
+          "name": "user_ids",
+          "type": "array",
+          "required": true,
+          "about": "Array of user unique identifiers to remove as subscribers."
+        }
+      ],
+      "scopes": [
+        "boards:write"
+      ],
+      "tags": [
+        "updateHint",
+        "idempotentHint",
+        "openWorldHint",
+        "subscribers_notifications"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Delete tag",
+      "slug": "MONDAY_DELETE_TAG",
+      "kind": "write",
+      "description": "Tool to remove a tag from an item in Monday.com. Important: Monday.com's GraphQL API does not provide a mutation to delete a tag from the account. Tags are account-level entities shared across boards. This action can remove a tag from a specific item by updating its tags column to exclude the given tag_id. To do so, provide item_id and board_id.",
+      "inputs": [
+        {
+          "name": "tag_id",
+          "type": "integer",
+          "required": true,
+          "about": "The unique identifier of the tag to remove."
+        },
+        {
+          "name": "item_id",
+          "type": "integer",
+          "required": false,
+          "about": "The item ID to remove the tag from. If provided, the tag will be removed from this item's tags column. If omitted, the action will report that account-level tag deletion is not supported."
+        },
+        {
+          "name": "board_id",
+          "type": "integer",
+          "required": false,
+          "about": "The board ID where the item lives. Required when item_id is provided."
+        }
+      ],
+      "scopes": [
+        "boards:read",
+        "boards:write",
+        "tags:write"
+      ],
+      "tags": [
+        "Tags",
+        "updateHint",
+        "openWorldHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Delete team",
+      "slug": "MONDAY_DELETE_TEAM",
+      "kind": "write",
+      "description": "Delete an existing Monday.com team by ID. Inspect the raw response for GraphQL errors before treating the deletion as successful.",
+      "inputs": [
+        {
+          "name": "team_id",
+          "type": "integer",
+          "required": true,
+          "about": "The unique identifier of the team to be deleted."
+        }
+      ],
+      "scopes": [
+        "teams:write"
+      ],
+      "tags": [
+        "Teams",
+        "destructiveHint",
+        "openWorldHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Delete teams from board",
+      "slug": "MONDAY_DELETE_TEAMS_FROM_BOARD",
+      "kind": "write",
+      "description": "Remove teams from a Monday.com board to revoke their board access. Inspect the raw response for GraphQL errors before treating the removal as successful.",
+      "inputs": [
+        {
+          "name": "board_id",
+          "type": "integer",
+          "required": true,
+          "about": "The unique identifier of the board from which teams will be removed."
+        },
+        {
+          "name": "team_ids",
+          "type": "array",
+          "required": true,
+          "about": "List of unique identifiers for the teams to remove from the board. Multiple teams can be removed in a single operation."
+        }
+      ],
+      "scopes": [
+        "boards:write"
+      ],
+      "tags": [
+        "updateHint",
+        "idempotentHint",
+        "openWorldHint",
+        "teams_workspaces"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Delete teams from workspace",
+      "slug": "MONDAY_DELETE_TEAMS_FROM_WORKSPACE",
+      "kind": "write",
+      "description": "Tool to remove teams from a workspace. Use when revoking workspace access for specific teams.",
+      "inputs": [
+        {
+          "name": "team_ids",
+          "type": "array",
+          "required": true,
+          "about": "The unique identifiers of the teams to remove from the workspace."
+        },
+        {
+          "name": "workspace_id",
+          "type": "integer",
+          "required": true,
+          "about": "The workspace's unique identifier from which teams will be removed."
+        }
+      ],
+      "scopes": [
+        "workspaces:write"
+      ],
+      "tags": [
+        "updateHint",
+        "idempotentHint",
+        "openWorldHint",
+        "teams_workspaces"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Delete timeline item",
+      "slug": "MONDAY_DELETE_TIMELINE_ITEM",
+      "kind": "write",
+      "description": "Tool to delete a timeline item from the Emails & Activities app. Use when you need to remove an existing timeline event or activity from a Monday.com item. This action is irreversible.",
+      "inputs": [
+        {
+          "name": "id",
+          "type": "string",
+          "required": true,
+          "about": "The unique identifier of the timeline item to delete. Must be a valid UUID string."
+        }
+      ],
+      "scopes": [
+        "boards:write"
+      ],
+      "tags": [
+        "destructiveHint",
+        "openWorldHint",
+        "timeline_sprints"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Delete update",
+      "slug": "MONDAY_DELETE_UPDATE",
+      "kind": "write",
+      "description": "Tool to delete an update by its ID. Use when an update is no longer relevant. Use after confirming deletion is irreversible.",
+      "inputs": [
+        {
+          "name": "update_id",
+          "type": "integer",
+          "required": true,
+          "about": "The unique identifier of the update to be deleted."
+        }
+      ],
+      "scopes": [
+        "updates:write"
+      ],
+      "tags": [
+        "Updates",
+        "destructiveHint",
+        "openWorldHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Delete workspace",
+      "slug": "MONDAY_DELETE_WORKSPACE",
+      "kind": "write",
+      "description": "Tool to permanently delete a workspace by its ID. Use when a workspace is no longer needed. Use after confirming deletion is irreversible.",
+      "inputs": [
+        {
+          "name": "workspace_id",
+          "type": "string",
+          "required": true,
+          "about": "The unique identifier of the workspace to permanently delete."
+        }
+      ],
+      "scopes": [
+        "account:read",
+        "assets:read",
+        "boards:read",
+        "boards:write",
+        "docs:read",
+        "docs:write",
+        "me:read",
+        "notifications:write",
+        "tags:read",
+        "teams:read",
+        "teams:write",
+        "updates:read",
+        "updates:write",
+        "users:read",
+        "users:write",
+        "webhooks:read",
+        "webhooks:write",
+        "workspaces:read",
+        "workspaces:write"
+      ],
+      "tags": [
+        "Workspaces",
+        "destructiveHint",
+        "openWorldHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Retrieve Monday docs",
+      "slug": "MONDAY_DOCS",
+      "kind": "write",
+      "description": "Tool to retrieve Monday.com document data via the API. Use when you need to fetch documents with filtering by IDs, object IDs, workspace IDs, or with pagination support.",
+      "inputs": [
+        {
+          "name": "ids",
+          "type": "array",
+          "required": false,
+          "about": "List of document IDs to retrieve. These are the internal IDs shown in the top-left corner when developer mode is enabled."
+        },
+        {
+          "name": "page",
+          "type": "integer",
+          "required": false,
+          "about": "Page number for pagination. Starts at 1. Use in combination with 'limit' to retrieve large result sets."
+        },
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "about": "Maximum number of documents to retrieve per page. Must be between 1 and 100. Defaults to 25."
+        },
+        {
+          "name": "order_by",
+          "type": "string",
+          "required": false,
+          "about": "Field to order results by. 'created_at' sorts by creation time, 'used_at' sorts by last access time. Newest first by default. Not applied when 'ids' parameter is used."
+        },
+        {
+          "name": "object_ids",
+          "type": "array",
+          "required": false,
+          "about": "List of object IDs (board or item IDs) associated with the documents. These are the IDs that appear in URLs and doc column values."
+        },
+        {
+          "name": "workspace_ids",
+          "type": "array",
+          "required": false,
+          "about": "List of workspace IDs to filter documents. Only documents within these workspaces will be returned."
+        }
+      ],
+      "scopes": [
+        "account:read",
+        "assets:read",
+        "boards:read",
+        "boards:write",
+        "docs:read",
+        "docs:write",
+        "me:read",
+        "notifications:write",
+        "tags:read",
+        "teams:read",
+        "teams:write",
+        "updates:read",
+        "updates:write",
+        "users:read",
+        "users:write",
+        "webhooks:read",
+        "webhooks:write",
+        "workspaces:read",
+        "workspaces:write"
+      ],
+      "tags": [
+        "readOnlyHint",
+        "idempotentHint",
+        "openWorldHint",
+        "important",
+        "content_docs_forms"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Duplicate board",
+      "slug": "MONDAY_DUPLICATE_BOARD",
+      "kind": "write",
+      "description": "Tool to duplicate a Monday.com board with its structure and optionally items and updates. Use when you need to create a copy of an existing board. Duplication is asynchronous and may take time to complete for large boards.",
+      "inputs": [
+        {
+          "name": "board_id",
+          "type": "integer",
+          "required": true,
+          "about": "The unique identifier of the board to duplicate. This board must exist."
+        },
+        {
+          "name": "folder_id",
+          "type": "integer",
+          "required": false,
+          "about": "Destination folder ID within workspace. Required when moving to another workspace."
+        },
+        {
+          "name": "board_name",
+          "type": "string",
+          "required": false,
+          "about": "Name for the new board. If omitted, a name will be auto-generated."
+        },
+        {
+          "name": "workspace_id",
+          "type": "integer",
+          "required": false,
+          "about": "Destination workspace ID. If omitted, the board will be duplicated to the original workspace."
+        },
+        {
+          "name": "duplicate_type",
+          "type": "string",
+          "required": true,
+          "about": "Specifies what to include in the duplicate: structure only, structure and items, or structure, items, and updates."
+        },
+        {
+          "name": "keep_subscribers",
+          "type": "boolean",
+          "required": false,
+          "about": "Whether to copy subscribers from the original board. Defaults to false."
+        }
+      ],
+      "scopes": [
+        "boards:write"
+      ],
+      "tags": [
+        "openWorldHint",
+        "boards_projects_organization",
+        "createHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Duplicate item",
+      "slug": "MONDAY_DUPLICATE_ITEM",
+      "kind": "write",
+      "description": "Duplicates an item on a Monday.com board, optionally including its updates.",
+      "inputs": [
+        {
+          "name": "item_id",
+          "type": "integer",
+          "required": true,
+          "about": "The unique identifier of the item to be duplicated. This item must exist on the specified `board_id`."
+        },
+        {
+          "name": "board_id",
+          "type": "integer",
+          "required": true,
+          "about": "The unique identifier of the board containing the item to be duplicated. This board must exist."
+        },
+        {
+          "name": "with_updates",
+          "type": "boolean",
+          "required": false,
+          "about": "If true, item updates (e.g., comments, replies) are duplicated with the item; if false, the new item is created without any updates."
+        }
+      ],
+      "scopes": [
+        "boards:write"
+      ],
+      "tags": [
+        "create",
+        "duplicate",
+        "item",
+        "openWorldHint",
+        "createHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Edit update",
+      "slug": "MONDAY_EDIT_UPDATE",
+      "kind": "write",
+      "description": "Tool to modify the text content of an existing update on an item. Use when you need to correct or change a previously posted update.",
+      "inputs": [
+        {
+          "name": "id",
+          "type": "integer",
+          "required": true,
+          "about": "The update's unique identifier."
+        },
+        {
+          "name": "body",
+          "type": "string",
+          "required": true,
+          "about": "The update's new text content."
+        }
+      ],
+      "scopes": [
+        "boards:write",
+        "updates:write"
+      ],
+      "tags": [
+        "updateHint",
+        "idempotentHint",
+        "openWorldHint",
+        "updates_communication"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get account info",
+      "slug": "MONDAY_GET_ACCOUNT_INFO",
+      "kind": "read",
+      "description": "Retrieve account metadata and settings for the authenticated Monday.com account. Use this action to inspect account configuration such as: - Account name, slug, and tier - Active member count - Calendar preferences (first day of week, timeline weekends) - Active products and billing plan details Requires the 'account:read' OAuth scope.",
+      "inputs": [
+        {
+          "name": "0",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "1",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "2",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "3",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "4",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "5",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "6",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "7",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "8",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "9",
+          "type": "",
+          "required": false,
+          "about": ""
+        }
+      ],
+      "scopes": [
+        "account:read"
+      ],
+      "tags": [
+        "Accounts",
+        "readOnlyHint",
+        "idempotentHint",
+        "openWorldHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get board activity logs",
+      "slug": "MONDAY_GET_ACTIVITY_LOGS",
+      "kind": "read",
+      "description": "Tool to retrieve activity logs from a specific Monday.com board. Use when you need to track changes, user actions, or board history for auditing or analytics purposes.",
+      "inputs": [
+        {
+          "name": "to",
+          "type": "string",
+          "required": false,
+          "about": "End timestamp for filtering activity logs (ISO8601 DateTime format)."
+        },
+        {
+          "name": "from",
+          "type": "string",
+          "required": false,
+          "about": "Start timestamp for filtering activity logs (ISO8601 DateTime format)."
+        },
+        {
+          "name": "page",
+          "type": "integer",
+          "required": false,
+          "about": "Page number for pagination (starts at 1)."
+        },
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "about": "Number of activity logs to return. Default is 25."
+        },
+        {
+          "name": "board_id",
+          "type": "string",
+          "required": true,
+          "about": "The unique identifier of the board to fetch activity logs from. Required."
+        },
+        {
+          "name": "item_ids",
+          "type": "array",
+          "required": false,
+          "about": "Filter events by specific item IDs."
+        },
+        {
+          "name": "user_ids",
+          "type": "array",
+          "required": false,
+          "about": "Filter events by specific user IDs."
+        },
+        {
+          "name": "group_ids",
+          "type": "array",
+          "required": false,
+          "about": "Filter events by specific group IDs."
+        },
+        {
+          "name": "column_ids",
+          "type": "array",
+          "required": false,
+          "about": "Filter events by specific column IDs."
+        }
+      ],
+      "scopes": [
+        "boards:read"
+      ],
+      "tags": [
+        "readOnlyHint",
+        "idempotentHint",
+        "openWorldHint",
+        "activity"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get API version",
+      "slug": "MONDAY_GET_API_VERSION",
+      "kind": "read",
+      "description": "Tool to retrieve the Monday.com API version in use. Use when you need to check which API version is currently active for debugging or compatibility purposes.",
+      "inputs": [
+        {
+          "name": "0",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "1",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "2",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "3",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "4",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "5",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "6",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "7",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "8",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "9",
+          "type": "",
+          "required": false,
+          "about": ""
+        }
+      ],
+      "scopes": "$undefined",
+      "tags": [
+        "readOnlyHint",
+        "idempotentHint",
+        "openWorldHint",
+        "API"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get assets",
+      "slug": "MONDAY_GET_ASSETS",
+      "kind": "read",
+      "description": "Tool to retrieve file/asset metadata from monday.com by asset IDs. Returns file information including URL, name, size, extension, and thumbnails for images. Asset IDs originate from updates, update replies, or file-type columns.",
+      "inputs": [
+        {
+          "name": "ids",
+          "type": "array",
+          "required": true,
+          "about": "Array of asset IDs to retrieve. Must contain at least one ID. Asset IDs from file-type column values may be embedded in nested JSON strings and must be parsed before use."
+        }
+      ],
+      "scopes": [
+        "assets:read"
+      ],
+      "tags": [
+        "readOnlyHint",
+        "idempotentHint",
+        "openWorldHint",
+        "content_docs_forms"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get board views",
+      "slug": "MONDAY_GET_BOARD_VIEWS",
+      "kind": "read",
+      "description": "Tool to retrieve board view data via GraphQL API. Returns array of board view metadata including type, settings, filters, and access levels. Must be nested within a boards query.",
+      "inputs": [
+        {
+          "name": "board_ids",
+          "type": "array",
+          "required": true,
+          "about": "List of board IDs to retrieve views from. Must contain at least one board ID."
+        },
+        {
+          "name": "view_type",
+          "type": "string",
+          "required": false,
+          "about": "Optional filter to retrieve specific view type. Valid types: 'TABLE', 'FORM', 'DASHBOARD', 'APP'. If not specified, all views are returned."
+        }
+      ],
+      "scopes": [
+        "boards:read"
+      ],
+      "tags": [
+        "readOnlyHint",
+        "idempotentHint",
+        "openWorldHint",
+        "boards_projects_organization"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get favorites",
+      "slug": "MONDAY_GET_FAVORITES",
+      "kind": "read",
+      "description": "Tool to retrieve all favorited items for the authenticated user. Use when you need to query items that have been marked as favorites.",
+      "inputs": [
+        {
+          "name": "0",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "1",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "2",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "3",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "4",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "5",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "6",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "7",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "8",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "9",
+          "type": "",
+          "required": false,
+          "about": ""
+        }
+      ],
+      "scopes": [
+        "users:read"
+      ],
+      "tags": [
+        "readOnlyHint",
+        "idempotentHint",
+        "openWorldHint",
+        "user"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get folders",
+      "slug": "MONDAY_GET_FOLDERS",
+      "kind": "read",
+      "description": "Tool to retrieve folder data from workspaces with filtering and pagination options. Use when you need to list folders from specific workspaces or filter by folder IDs.",
+      "inputs": [
+        {
+          "name": "ids",
+          "type": "array",
+          "required": false,
+          "about": "Specific folder identifiers to retrieve. If not provided, all folders will be returned."
+        },
+        {
+          "name": "page",
+          "type": "integer",
+          "required": false,
+          "about": "Page number for pagination, starts at 1."
+        },
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "about": "Number of folders to return. Default is 25, maximum is 100."
+        },
+        {
+          "name": "workspace_ids",
+          "type": "array",
+          "required": false,
+          "about": "Workspace identifiers to filter folders. Pass [None] to get folders from the Main Workspace."
+        }
+      ],
+      "scopes": [
+        "workspaces:read"
+      ],
+      "tags": [
+        "readOnlyHint",
+        "idempotentHint",
+        "openWorldHint",
+        "boards_projects_organization"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get form details",
+      "slug": "MONDAY_GET_FORM",
+      "kind": "read",
+      "description": "Tool to retrieve form metadata via the API using the form's unique token from the URL. Returns form configuration, questions, and settings.",
+      "inputs": [
+        {
+          "name": "form_token",
+          "type": "string",
+          "required": true,
+          "about": "The form's unique string token, located in the form's URL after '/forms/' and before the '?' parameter. Use this to identify and retrieve the specific form."
+        }
+      ],
+      "scopes": [
+        "boards:read"
+      ],
+      "tags": [
+        "readOnlyHint",
+        "idempotentHint",
+        "openWorldHint",
+        "content_docs_forms"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get items by IDs",
+      "slug": "MONDAY_GET_ITEMS",
+      "kind": "read",
+      "description": "Tool to retrieve specific items by their IDs from Monday.com, returning metadata including name, timestamps, state, board, and group information. Use when you need to fetch detailed information about specific items.",
+      "inputs": [
+        {
+          "name": "ids",
+          "type": "array",
+          "required": true,
+          "about": "Array of item IDs to retrieve. Maximum of 100 IDs at one time."
+        },
+        {
+          "name": "page",
+          "type": "integer",
+          "required": false,
+          "about": "Page number for pagination, starting at 1."
+        },
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "about": "Number of items to return. Default is 25, maximum is 100."
+        },
+        {
+          "name": "newest_first",
+          "type": "boolean",
+          "required": false,
+          "about": "When true, orders the results with recently created items first."
+        },
+        {
+          "name": "exclude_nonactive",
+          "type": "boolean",
+          "required": false,
+          "about": "When true, filters out inactive, deleted, or orphaned items from the results."
+        }
+      ],
+      "scopes": [
+        "boards:read"
+      ],
+      "tags": [
+        "important",
+        "readOnlyHint",
+        "idempotentHint",
+        "openWorldHint",
+        "item"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get current user",
+      "slug": "MONDAY_GET_ME",
+      "kind": "read",
+      "description": "Tool to fetch the current authenticated user's profile and permissions. Use when you need to retrieve user metadata before performing other operations.",
+      "inputs": [
+        {
+          "name": "api_version",
+          "type": "string",
+          "required": false,
+          "about": "Optional Monday API version header (e.g., '2025-04'). Overrides default if provided."
+        }
+      ],
+      "scopes": [
+        "account:read",
+        "assets:read",
+        "boards:read",
+        "boards:write",
+        "docs:read",
+        "docs:write",
+        "me:read",
+        "notifications:write",
+        "tags:read",
+        "teams:read",
+        "teams:write",
+        "updates:read",
+        "updates:write",
+        "users:read",
+        "users:write",
+        "webhooks:read",
+        "webhooks:write",
+        "workspaces:read",
+        "workspaces:write"
+      ],
+      "tags": [
+        "Users",
+        "readOnlyHint",
+        "idempotentHint",
+        "openWorldHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Execute GraphQL and get mutation complexity",
+      "slug": "MONDAY_GET_MUTATION_COMPLEXITY",
+      "kind": "read",
+      "description": "Execute a caller-provided Monday.com GraphQL document and return its complexity data. The supplied document runs in full and may perform destructive mutations.",
+      "inputs": [
+        {
+          "name": "query",
+          "type": "string",
+          "required": true,
+          "about": "GraphQL document to execute against Monday.com. The document must request the top-level complexity field. Warning: the entire document is executed; mutations can create, modify, or delete Monday.com data."
+        }
+      ],
+      "scopes": "$undefined",
+      "tags": [
+        "destructiveHint",
+        "openWorldHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get query complexity",
+      "slug": "MONDAY_GET_QUERY_COMPLEXITY",
+      "kind": "read",
+      "description": "Retrieve Monday.com API complexity budget metrics and the cost of this complexity query, including the remaining budget before and after execution and the reset time.",
+      "inputs": [
+        {
+          "name": "0",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "1",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "2",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "3",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "4",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "5",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "6",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "7",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "8",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "9",
+          "type": "",
+          "required": false,
+          "about": ""
+        }
+      ],
+      "scopes": "$undefined",
+      "tags": [
+        "readOnlyHint",
+        "idempotentHint",
+        "openWorldHint",
+        "Complexity"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get tags",
+      "slug": "MONDAY_GET_TAGS",
+      "kind": "read",
+      "description": "Tool to retrieve tags from the account. Use when you need to list all tags or filter by specific IDs.",
+      "inputs": [
+        {
+          "name": "ids",
+          "type": "array",
+          "required": false,
+          "about": "Optional list of tag IDs to filter; only tags matching these IDs will be returned."
+        }
+      ],
+      "scopes": [
+        "boards:read",
+        "boards:write",
+        "users:read",
+        "users:write",
+        "workspaces:read",
+        "workspaces:write",
+        "updates:read",
+        "updates:write",
+        "tags:read",
+        "tags:write",
+        "teams:read",
+        "teams:write",
+        "docs:read",
+        "docs:write",
+        "account:read",
+        "account:write",
+        "me:read",
+        "me:write",
+        "notifications:read",
+        "notifications:write",
+        "webhooks:read",
+        "webhooks:write",
+        "assets:read",
+        "assets:write"
+      ],
+      "tags": [
+        "Tags",
+        "readOnlyHint",
+        "idempotentHint",
+        "openWorldHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get teams",
+      "slug": "MONDAY_GET_TEAMS",
+      "kind": "read",
+      "description": "Tool to retrieve teams from Monday.com. Use when you need an overview of teams in your account.",
+      "inputs": [
+        {
+          "name": "ids",
+          "type": "array",
+          "required": false,
+          "about": "Optional list of team IDs to filter by. If omitted, all teams are returned."
+        }
+      ],
+      "scopes": [
+        "teams:read",
+        "teams:write",
+        "boards:write",
+        "workspaces:write"
+      ],
+      "tags": [
+        "Teams",
+        "readOnlyHint",
+        "idempotentHint",
+        "openWorldHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get update replies",
+      "slug": "MONDAY_GET_UPDATE_REPLIES",
+      "kind": "read",
+      "description": "Retrieves updates and their replies for a specific Monday.com item. Use this to fetch conversation threads and discussions attached to an item, including all replies to each update.",
+      "inputs": [
+        {
+          "name": "page",
+          "type": "integer",
+          "required": false,
+          "about": "Page number for pagination, starts at 1."
+        },
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "about": "Number of updates to return per page. Maximum 100, default 25."
+        },
+        {
+          "name": "item_id",
+          "type": "string",
+          "required": true,
+          "about": "The unique identifier of the item to fetch updates and replies for."
+        }
+      ],
+      "scopes": [
+        "boards:read"
+      ],
+      "tags": [
+        "readOnlyHint",
+        "idempotentHint",
+        "openWorldHint",
+        "updates_communication"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get item updates",
+      "slug": "MONDAY_GET_UPDATES",
+      "kind": "read",
+      "description": "Tool to retrieve updates for a specific item. Use when you need to fetch the conversation history tied to an item.",
+      "inputs": [
+        {
+          "name": "page",
+          "type": "integer",
+          "required": false,
+          "about": "Page number for pagination (starts at 1)."
+        },
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "about": "Number of updates to return per page (max 100, default 25)."
+        },
+        {
+          "name": "item_id",
+          "type": "string",
+          "required": true,
+          "about": "The unique identifier of the item to fetch updates for."
+        }
+      ],
+      "scopes": [
+        "account:read",
+        "assets:read",
+        "boards:read",
+        "boards:write",
+        "docs:read",
+        "docs:write",
+        "me:read",
+        "notifications:write",
+        "tags:read",
+        "teams:read",
+        "teams:write",
+        "updates:read",
+        "updates:write",
+        "users:read",
+        "users:write",
+        "webhooks:read",
+        "webhooks:write",
+        "workspaces:read",
+        "workspaces:write"
+      ],
+      "tags": [
+        "Updates",
+        "readOnlyHint",
+        "idempotentHint",
+        "openWorldHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get API versions",
+      "slug": "MONDAY_GET_VERSIONS",
+      "kind": "read",
+      "description": "Tool to retrieve data about available API versions. Use when you need to check which API versions are supported by Monday.com.",
+      "inputs": [
+        {
+          "name": "0",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "1",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "2",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "3",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "4",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "5",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "6",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "7",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "8",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "9",
+          "type": "",
+          "required": false,
+          "about": ""
+        }
+      ],
+      "scopes": "$undefined",
+      "tags": [
+        "readOnlyHint",
+        "idempotentHint",
+        "openWorldHint",
+        "metadata"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get view schema by type",
+      "slug": "MONDAY_GET_VIEW_SCHEMA_BY_TYPE",
+      "kind": "read",
+      "description": "Tool to retrieve type-specific board view configuration schemas via GraphQL API. Use when you need to understand the structure and available settings for creating or updating board views of a specific type.",
+      "inputs": [
+        {
+          "name": "type",
+          "type": "string",
+          "required": true,
+          "about": "Specifies which view type's schema to retrieve. Determines the structure of configuration settings returned."
+        },
+        {
+          "name": "mutation_type",
+          "type": "string",
+          "required": true,
+          "about": "Indicates whether the schema is for CREATE or UPDATE operations. Different mutation types may expose different configuration options."
+        }
+      ],
+      "scopes": [
+        "boards:read"
+      ],
+      "tags": [
+        "readOnlyHint",
+        "idempotentHint",
+        "openWorldHint",
+        "boards_projects_organization"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get webhooks",
+      "slug": "MONDAY_GET_WEBHOOKS",
+      "kind": "read",
+      "description": "Tool to retrieve webhooks for a board. Use when you need to list all webhooks on a board.",
+      "inputs": [
+        {
+          "name": "board_id",
+          "type": "integer",
+          "required": true,
+          "about": "The unique identifier of the board to fetch webhooks for."
+        },
+        {
+          "name": "app_webhooks_only",
+          "type": "boolean",
+          "required": false,
+          "about": "Return only webhooks created by the calling app."
+        }
+      ],
+      "scopes": [
+        "boards:read"
+      ],
+      "tags": [
+        "Webhooks",
+        "readOnlyHint",
+        "idempotentHint",
+        "openWorldHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get workspaces",
+      "slug": "MONDAY_GET_WORKSPACES",
+      "kind": "read",
+      "description": "Tool to retrieve workspaces. Use when you need to list workspaces with optional filtering, pagination, or ordering after authentication.",
+      "inputs": [
+        {
+          "name": "ids",
+          "type": "array",
+          "required": false,
+          "about": "List of specific workspace IDs to return. Provide to filter by workspace IDs."
+        },
+        {
+          "name": "kind",
+          "type": "string",
+          "required": false,
+          "about": "Filter by workspace kind. Valid values: 'open' or 'closed'."
+        },
+        {
+          "name": "page",
+          "type": "integer",
+          "required": false,
+          "about": "Pagination page number; starts at 1."
+        },
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "about": "Maximum number of workspaces to return. Default is 25."
+        },
+        {
+          "name": "state",
+          "type": "string",
+          "required": false,
+          "about": "Filter by workspace state. Valid values: 'active', 'all', 'archived', 'deleted'."
+        },
+        {
+          "name": "order_by",
+          "type": "string",
+          "required": false,
+          "about": "Field to order by. Currently only 'created_at' is supported."
+        }
+      ],
+      "scopes": [
+        "workspaces:read"
+      ],
+      "tags": [
+        "Workspaces",
+        "readOnlyHint",
+        "idempotentHint",
+        "openWorldHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Import doc from HTML",
+      "slug": "MONDAY_IMPORT_DOC_FROM_HTML",
+      "kind": "write",
+      "description": "Tool to import HTML content into a new Monday.com doc, converting it to doc blocks. Use when you need to create a doc from HTML content.",
+      "inputs": [
+        {
+          "name": "html",
+          "type": "string",
+          "required": true,
+          "about": "The HTML content to convert into a new doc. Supports style/format text, emoji, quote, table, list, code, divider, and title/header text."
+        },
+        {
+          "name": "kind",
+          "type": "string",
+          "required": false,
+          "about": "Document access level - private, public, or share. If omitted, defaults to workspace settings."
+        },
+        {
+          "name": "title",
+          "type": "string",
+          "required": false,
+          "about": "The new document's title. If omitted, the title will be inferred from the provided HTML content."
+        },
+        {
+          "name": "folder_id",
+          "type": "integer",
+          "required": false,
+          "about": "The unique identifier of the folder to create the doc in. If omitted, the document will be created at the root level of the workspace."
+        },
+        {
+          "name": "workspace_id",
+          "type": "integer",
+          "required": true,
+          "about": "The unique identifier of the workspace to create the doc in."
+        }
+      ],
+      "scopes": [
+        "docs:write"
+      ],
+      "tags": [
+        "openWorldHint",
+        "content_docs_forms",
+        "createHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get items page",
+      "slug": "MONDAY_ITEMS_PAGE",
+      "kind": "write",
+      "description": "Retrieve a page of items from a Monday.com board or group, with optional server-side filtering and sorting. Column values can be included as ID, text, and raw value; use the returned cursor to fetch subsequent pages.",
+      "inputs": [
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "about": "Number of items to return per page. Default is 25, maximum is 500 per Monday.com API limits."
+        },
+        {
+          "name": "cursor",
+          "type": "string",
+          "required": false,
+          "about": "Opaque pagination cursor from previous response. When provided, retrieves the next page using next_items_page query. Cursors are cached for 60 minutes. If provided, board_id and query_params are ignored."
+        },
+        {
+          "name": "board_id",
+          "type": "integer",
+          "required": false,
+          "about": "The board's unique identifier. Required for initial fetch (when cursor is not provided). Ignored if cursor is provided."
+        },
+        {
+          "name": "group_id",
+          "type": "string",
+          "required": false,
+          "about": "Optional group ID to filter items within a specific group. Only used for initial fetch (when cursor is not provided). If provided, queries items within the group instead of the entire board."
+        },
+        {
+          "name": "query_params",
+          "type": "object",
+          "required": false,
+          "about": "Query parameters for filtering and sorting items."
+        },
+        {
+          "name": "include_column_values",
+          "type": "boolean",
+          "required": false,
+          "about": "Whether to include column_values in the response. When false, only returns id and name for each item."
+        }
+      ],
+      "scopes": [
+        "boards:read"
+      ],
+      "tags": [
+        "important",
+        "item",
+        "list",
+        "read",
+        "pagination",
+        "readOnlyHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Like update",
+      "slug": "MONDAY_LIKE_UPDATE",
+      "kind": "write",
+      "description": "Tool to like an update on an item. Use when you want to express approval or acknowledgment of an update.",
+      "inputs": [
+        {
+          "name": "update_id",
+          "type": "integer",
+          "required": true,
+          "about": "The unique identifier of the update to like."
+        }
+      ],
+      "scopes": [
+        "updates:write"
+      ],
+      "tags": [
+        "idempotentHint",
+        "openWorldHint",
+        "updates_communication",
+        "updateHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "List board items",
+      "slug": "MONDAY_LIST_BOARD_ITEMS",
+      "kind": "read",
+      "description": "Lists a page of items from a specified monday.com board, returning their IDs, names, states, and a cursor. The tool is deprecated and may omit items on larger boards.",
+      "inputs": [
+        {
+          "name": "board_id",
+          "type": "integer",
+          "required": true,
+          "about": "The unique identifier of the Monday.com board from which to retrieve items."
+        }
+      ],
+      "scopes": [
+        "boards:read"
+      ],
+      "tags": [
+        "important",
+        "item",
+        "list",
+        "openWorldHint",
+        "read",
+        "readOnlyHint",
+        "deprecated"
+      ],
+      "deprecated": true
+    },
+    {
+      "name": "List Monday boards (Deprecated)",
+      "slug": "MONDAY_LIST_BOARDS",
+      "kind": "read",
+      "description": "DEPRECATED: Use MONDAY_BOARDS instead. Retrieves a list of boards from a Monday.com account, supporting pagination and filtering by state.",
+      "inputs": [
+        {
+          "name": "page",
+          "type": "integer",
+          "required": false,
+          "about": "Page number for pagination. Increment until an empty response is returned to exhaust results; limit of 50–100 reduces total calls."
+        },
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "about": "Maximum number of boards to retrieve per page."
+        },
+        {
+          "name": "state",
+          "type": "string",
+          "required": false,
+          "about": "Filters boards by their state. Valid states: 'active', 'archived', 'deleted', or 'all'. Default 'active' excludes archived and deleted boards; use 'all' for a complete board inventory."
+        }
+      ],
+      "scopes": [
+        "boards:read"
+      ],
+      "tags": [
+        "board",
+        "important",
+        "list",
+        "openWorldHint",
+        "read",
+        "readOnlyHint",
+        "deprecated"
+      ],
+      "deprecated": true
+    },
+    {
+      "name": "List columns (Deprecated)",
+      "slug": "MONDAY_LIST_COLUMNS",
+      "kind": "read",
+      "description": "DEPRECATED: Use MONDAY_COLUMNS instead. Lists all columns and their properties for a specified Monday.com `board_id`; the board must exist.",
+      "inputs": [
+        {
+          "name": "board_id",
+          "type": "string",
+          "required": true,
+          "about": "The unique identifier of the board from which to retrieve the columns. Retrieve dynamically; do not hardcode, as board and column IDs are environment-specific."
+        }
+      ],
+      "scopes": [
+        "boards:read"
+      ],
+      "tags": [
+        "column",
+        "list",
+        "openWorldHint",
+        "read",
+        "readOnlyHint",
+        "deprecated"
+      ],
+      "deprecated": true
+    },
+    {
+      "name": "List groups",
+      "slug": "MONDAY_LIST_GROUPS",
+      "kind": "read",
+      "description": "Retrieves groups from a specified Monday.com board, optionally filtering by group IDs. Returns group details such as title, color, position, and archived or deleted status.",
+      "inputs": [
+        {
+          "name": "board_id",
+          "type": "integer",
+          "required": true,
+          "about": "The unique identifier of the board from which to retrieve groups."
+        },
+        {
+          "name": "group_ids",
+          "type": "array",
+          "required": false,
+          "about": "Optional list of specific group IDs to filter the results; provide to retrieve only these groups. Invalid or non-existent group IDs silently return an empty array rather than an error; always verify the returned groups array is non-empty before indexing."
+        }
+      ],
+      "scopes": [
+        "boards:read",
+        "boards:write",
+        "me:read",
+        "users:read",
+        "users:write",
+        "teams:read",
+        "teams:write",
+        "workspaces:read",
+        "workspaces:write",
+        "updates:read",
+        "updates:write",
+        "notifications:write",
+        "tags:read",
+        "docs:read",
+        "docs:write",
+        "account:read",
+        "assets:read",
+        "webhooks:read",
+        "webhooks:write"
+      ],
+      "tags": [
+        "Groups",
+        "readOnlyHint",
+        "idempotentHint",
+        "openWorldHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "List items",
+      "slug": "MONDAY_LIST_ITEMS",
+      "kind": "read",
+      "description": "Retrieve specified Monday.com items, including subitems, by ID and return their ID, name, and state in raw JSON.",
+      "inputs": [
+        {
+          "name": "item_ids",
+          "type": "array",
+          "required": true,
+          "about": "Subitem IDs to retrieve. For large sets, batch IDs into smaller requests to avoid response truncation."
+        }
+      ],
+      "scopes": [
+        "boards:read"
+      ],
+      "tags": [
+        "item",
+        "list",
+        "openWorldHint",
+        "read",
+        "readOnlyHint",
+        "subitem"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "List items by column values",
+      "slug": "MONDAY_LIST_ITEMS_BY_COLUMN_VALUES",
+      "kind": "read",
+      "description": "Tool to search for items on a Monday.com board based on column values using the items_page_by_column_values query. Use when you need to find items matching specific column criteria (e.g., status=\"Done\", name contains \"Task 1\"). For initial requests, provide columns; for pagination, use the cursor from the previous response.",
+      "inputs": [
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "about": "Number of items to return per page. Default is 25, maximum is 500."
+        },
+        {
+          "name": "cursor",
+          "type": "string",
+          "required": false,
+          "about": "Opaque pagination cursor from previous response. Use instead of columns for paginated requests. When provided, columns parameter is ignored."
+        },
+        {
+          "name": "columns",
+          "type": "array",
+          "required": false,
+          "about": "Array of column filters to search by. Required for initial request (when cursor is not provided). Uses AND logic between filters and ANY_OF logic within each filter. Cannot be used with cursor."
+        },
+        {
+          "name": "board_id",
+          "type": "string",
+          "required": true,
+          "about": "The board's unique identifier. Required for all requests."
+        }
+      ],
+      "scopes": [
+        "boards:read"
+      ],
+      "tags": [
+        "important",
+        "readOnlyHint",
+        "openWorldHint",
+        "search"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "List subitems by parent",
+      "slug": "MONDAY_LIST_SUBITEMS_BY_PARENT",
+      "kind": "read",
+      "description": "Tool to retrieve subitems nested under parent items via GraphQL API. Use when you need to list subitems and their column values for specific parent items. Monday's API requires querying subitems through their parent items.",
+      "inputs": [
+        {
+          "name": "parent_item_ids",
+          "type": "array",
+          "required": true,
+          "about": "Array of parent item IDs whose subitems should be retrieved. Required."
+        },
+        {
+          "name": "include_column_values",
+          "type": "boolean",
+          "required": false,
+          "about": "Whether to include column_values (id, text, value) for each subitem. Defaults to true."
+        },
+        {
+          "name": "include_parent_fields",
+          "type": "boolean",
+          "required": false,
+          "about": "Whether to include parent item's id and name in the response. Defaults to true."
+        }
+      ],
+      "scopes": [
+        "boards:read"
+      ],
+      "tags": [
+        "item",
+        "list",
+        "openWorldHint",
+        "read",
+        "readOnlyHint",
+        "subitem"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "List team members",
+      "slug": "MONDAY_LIST_TEAM_MEMBERS",
+      "kind": "read",
+      "description": "List members of Monday.com teams, optionally selecting team IDs and filtering or paginating their users.",
+      "inputs": [
+        {
+          "name": "team_ids",
+          "type": "array",
+          "required": false,
+          "about": "List of team IDs to filter. If omitted, all teams are returned."
+        },
+        {
+          "name": "user_filters",
+          "type": "object",
+          "required": false,
+          "about": "Filters to apply when querying team users."
+        }
+      ],
+      "scopes": [
+        "users:read",
+        "teams:read"
+      ],
+      "tags": [
+        "Teams",
+        "readOnlyHint",
+        "idempotentHint",
+        "openWorldHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "List users",
+      "slug": "MONDAY_LIST_USERS",
+      "kind": "read",
+      "description": "Retrieves a list of users from Monday.com. Paginate by starting at page=1, incrementing page on each request, and stopping when the returned user list is empty. An empty user list does not signify action failure.",
+      "inputs": [
+        {
+          "name": "page",
+          "type": "integer",
+          "required": false,
+          "about": "Page number for results; starts at 1."
+        },
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "about": "Maximum number of users to return per page."
+        }
+      ],
+      "scopes": [
+        "boards:write"
+      ],
+      "tags": [
+        "important",
+        "list",
+        "openWorldHint",
+        "read",
+        "readOnlyHint",
+        "user"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Move item to board",
+      "slug": "MONDAY_MOVE_ITEM_TO_BOARD",
+      "kind": "write",
+      "description": "Moves a Monday.com item to a specified board and group; requires the item, target board, and target group to exist.",
+      "inputs": [
+        {
+          "name": "item_id",
+          "type": "integer",
+          "required": true,
+          "about": "The unique identifier of the item to be moved."
+        },
+        {
+          "name": "board_id",
+          "type": "integer",
+          "required": true,
+          "about": "The unique identifier of the target board to which the item will be moved."
+        },
+        {
+          "name": "group_id",
+          "type": "string",
+          "required": true,
+          "about": "The unique identifier of the target group on the destination board where the item will be placed."
+        }
+      ],
+      "scopes": [
+        "boards:write"
+      ],
+      "tags": [
+        "board",
+        "item",
+        "move",
+        "openWorldHint",
+        "updateHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Move item to group",
+      "slug": "MONDAY_MOVE_ITEM_TO_GROUP",
+      "kind": "write",
+      "description": "Moves an item to a different group on the same Monday.com board; the item and group must exist.",
+      "inputs": [
+        {
+          "name": "item_id",
+          "type": "integer",
+          "required": true,
+          "about": "The unique identifier of the item to be moved."
+        },
+        {
+          "name": "group_id",
+          "type": "string",
+          "required": true,
+          "about": "The unique identifier of the target group where the item will be moved."
+        }
+      ],
+      "scopes": [
+        "boards:write"
+      ],
+      "tags": [
+        "group",
+        "important",
+        "item",
+        "move",
+        "openWorldHint",
+        "updateHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Query board mute settings",
+      "slug": "MONDAY_MUTE_BOARD_SETTINGS",
+      "kind": "write",
+      "description": "Tool to query a board's notification mute settings. Use when you need to check if notifications are muted for specific boards.",
+      "inputs": [
+        {
+          "name": "board_ids",
+          "type": "array",
+          "required": true,
+          "about": "The unique identifiers of the boards to retrieve mute settings for. This is a required non-null array of board IDs."
+        }
+      ],
+      "scopes": [
+        "boards:write"
+      ],
+      "tags": [
+        "readOnlyHint",
+        "idempotentHint",
+        "openWorldHint",
+        "subscribers_notifications"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Pin update to top",
+      "slug": "MONDAY_PIN_TO_TOP",
+      "kind": "write",
+      "description": "Tool to pin an update to the top of an item. Use when you need to highlight an important update or keep it visible at the top.",
+      "inputs": [
+        {
+          "name": "item_id",
+          "type": "integer",
+          "required": false,
+          "about": "The unique identifier of the item. Optional parameter."
+        },
+        {
+          "name": "update_id",
+          "type": "integer",
+          "required": true,
+          "about": "The unique identifier of the update to pin to the top."
+        }
+      ],
+      "scopes": [
+        "updates:write"
+      ],
+      "tags": [
+        "idempotentHint",
+        "openWorldHint",
+        "updates_communication",
+        "updateHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Publish object",
+      "slug": "MONDAY_PUBLISH_OBJECT",
+      "kind": "send",
+      "description": "Tool to publish a Monday.com object. Use when you need to make an object publicly visible or change its state to published.",
+      "inputs": [
+        {
+          "name": "id",
+          "type": "string",
+          "required": true,
+          "about": "The unique identifier of the Monday.com object to publish. This is typically a board ID or document ID. The object will be made shareable/public after publishing."
+        }
+      ],
+      "scopes": [
+        "account:read",
+        "assets:read",
+        "boards:read",
+        "boards:write",
+        "docs:read",
+        "docs:write",
+        "me:read",
+        "notifications:write",
+        "tags:read",
+        "teams:read",
+        "teams:write",
+        "updates:read",
+        "updates:write",
+        "users:read",
+        "users:write",
+        "webhooks:read",
+        "webhooks:write",
+        "workspaces:read",
+        "workspaces:write"
+      ],
+      "tags": [
+        "updateHint",
+        "openWorldHint",
+        "object_lifecycle_publishing"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Query dashboards",
+      "slug": "MONDAY_QUERY_DASHBOARDS",
+      "kind": "write",
+      "description": "Query Monday.com dashboards through the objects API, returning dashboard metadata, owners, and subscribers, with an optional result limit.",
+      "inputs": [
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "about": "Maximum number of dashboards to return. Limits the result set size."
+        }
+      ],
+      "scopes": [
+        "boards:read"
+      ],
+      "tags": [
+        "readOnlyHint",
+        "idempotentHint",
+        "openWorldHint",
+        "boards_projects_organization"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Query sprints",
+      "slug": "MONDAY_QUERY_SPRINTS",
+      "kind": "write",
+      "description": "Tool to query sprint data for agile project management from Monday.com boards. Use when you need to retrieve sprint information including sprint title, ID, color, position, archived/deleted status, and associated items.",
+      "inputs": [
+        {
+          "name": "board_ids",
+          "type": "array",
+          "required": true,
+          "about": "List of board IDs to query sprint groups from. Sprints are implemented as groups on sprint boards."
+        },
+        {
+          "name": "sprint_ids",
+          "type": "array",
+          "required": false,
+          "about": "Optional list of specific sprint (group) IDs to filter the results. If not provided, all sprints on the board will be returned."
+        }
+      ],
+      "scopes": [
+        "boards:read"
+      ],
+      "tags": [
+        "readOnlyHint",
+        "idempotentHint",
+        "openWorldHint",
+        "important",
+        "timeline_sprints"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Remove users from team",
+      "slug": "MONDAY_REMOVE_USERS_FROM_TEAM",
+      "kind": "write",
+      "description": "Removes users from a Monday.com team. Inspect the returned response for successful and failed users and GraphQL errors; these errors do not necessarily cause the tool call to fail.",
+      "inputs": [
+        {
+          "name": "team_id",
+          "type": "integer",
+          "required": true,
+          "about": "Unique identifier of the existing Monday.com team."
+        },
+        {
+          "name": "user_ids",
+          "type": "array",
+          "required": true,
+          "about": "List of user IDs to remove from the team."
+        }
+      ],
+      "scopes": [
+        "teams:write"
+      ],
+      "tags": [
+        "Teams",
+        "update",
+        "updateHint",
+        "openWorldHint",
+        "idempotentHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Remove users from workspace",
+      "slug": "MONDAY_REMOVE_USERS_FROM_WORKSPACE",
+      "kind": "write",
+      "description": "Tool to remove users from a workspace. Use when revoking access for specific users in a workspace.",
+      "inputs": [
+        {
+          "name": "user_ids",
+          "type": "array",
+          "required": true,
+          "about": "List of unique user IDs to remove from the workspace."
+        },
+        {
+          "name": "workspace_id",
+          "type": "integer",
+          "required": true,
+          "about": "Unique identifier of the workspace."
+        }
+      ],
+      "scopes": [
+        "workspaces:write"
+      ],
+      "tags": [
+        "Workspaces",
+        "update",
+        "updateHint",
+        "openWorldHint",
+        "idempotentHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Set board permission",
+      "slug": "MONDAY_SET_BOARD_PERMISSION",
+      "kind": "write",
+      "description": "Sets or updates a board's default role and permissions. Use when you need to configure default permissions for a board. Requires boards:write scope and can only be used by board owners on enterprise plans.",
+      "inputs": [
+        {
+          "name": "board_id",
+          "type": "integer",
+          "required": true,
+          "about": "The board's unique identifier. The board must exist and you must be the board owner."
+        },
+        {
+          "name": "basic_role_name",
+          "type": "string",
+          "required": true,
+          "about": "The role to assign. 'contributor' allows editing content, 'editor' allows editing content and structure, 'viewer' provides read-only access."
+        }
+      ],
+      "scopes": [
+        "boards:write"
+      ],
+      "tags": [
+        "updateHint",
+        "openWorldHint",
+        "important",
+        "boards_projects_organization"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get item timeline",
+      "slug": "MONDAY_TIMELINE",
+      "kind": "write",
+      "description": "Tool to retrieve an item's Email & Activities (E&A) timeline data from Monday.com. Use when you need to access CRM activity tracking and client communication history for a specific item. This returns a paginated list of timeline entries.",
+      "inputs": [
+        {
+          "name": "id",
+          "type": "integer",
+          "required": true,
+          "about": "The unique identifier of the item from which to retrieve timeline activities. Must be a valid item ID."
+        }
+      ],
+      "scopes": [
+        "boards:read",
+        "boards:write"
+      ],
+      "tags": [
+        "readOnlyHint",
+        "idempotentHint",
+        "openWorldHint",
+        "timeline_sprints"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get timeline item",
+      "slug": "MONDAY_TIMELINE_ITEM",
+      "kind": "write",
+      "description": "Tool to retrieve a specific timeline item from the Emails & Activities app by ID. Use when you need to fetch metadata including content, user, title, type, and associated custom activity for a timeline item.",
+      "inputs": [
+        {
+          "name": "id",
+          "type": "string",
+          "required": true,
+          "about": "The unique identifier of the timeline item to retrieve. Must be a valid UUID string obtained from create_timeline_item mutation."
+        }
+      ],
+      "scopes": [
+        "boards:read",
+        "boards:write"
+      ],
+      "tags": [
+        "readOnlyHint",
+        "idempotentHint",
+        "openWorldHint",
+        "timeline_sprints"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Unlike update",
+      "slug": "MONDAY_UNLIKE_UPDATE",
+      "kind": "write",
+      "description": "Tool to remove a like from an update on an item. Use when you want to retract a previously expressed approval or acknowledgment of an update.",
+      "inputs": [
+        {
+          "name": "update_id",
+          "type": "integer",
+          "required": true,
+          "about": "The unique identifier of the update to unlike."
+        }
+      ],
+      "scopes": [
+        "updates:write"
+      ],
+      "tags": [
+        "idempotentHint",
+        "openWorldHint",
+        "updates_communication",
+        "updateHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Unpin update from top",
+      "slug": "MONDAY_UNPIN_FROM_TOP",
+      "kind": "write",
+      "description": "Tool to unpin an update from the top of an item. Use when you want to remove a pinned update from the top position of an item's updates feed.",
+      "inputs": [
+        {
+          "name": "item_id",
+          "type": "integer",
+          "required": false,
+          "about": "The unique identifier of the item. Optional parameter."
+        },
+        {
+          "name": "update_id",
+          "type": "integer",
+          "required": true,
+          "about": "The unique identifier of the update to unpin from the top."
+        }
+      ],
+      "scopes": [
+        "updates:write"
+      ],
+      "tags": [
+        "idempotentHint",
+        "openWorldHint",
+        "updates_communication",
+        "updateHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Unpublish object",
+      "slug": "MONDAY_UNPUBLISH_OBJECT",
+      "kind": "write",
+      "description": "Unpublish a Monday.com object (board, item, or workspace) to revert it from a published state. The operation will return success=true only if the object was previously published and can be unpublished. If the object is not in a publishable state or was never published, success=false is returned.",
+      "inputs": [
+        {
+          "name": "id",
+          "type": "string",
+          "required": true,
+          "about": "The unique identifier (numeric string) of the Monday.com object to unpublish. This can be a board ID, item ID, or workspace ID. Objects must be in a published state for unpublishing to succeed."
+        }
+      ],
+      "scopes": [
+        "boards:write"
+      ],
+      "tags": [
+        "updateHint",
+        "openWorldHint",
+        "object_lifecycle_publishing"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Update board",
+      "slug": "MONDAY_UPDATE_BOARD",
+      "kind": "write",
+      "description": "Updates a specified attribute of an existing board on Monday.com.",
+      "inputs": [
+        {
+          "name": "board_id",
+          "type": "string",
+          "required": true,
+          "about": "The unique identifier of the board to be updated."
+        },
+        {
+          "name": "new_value",
+          "type": "string",
+          "required": true,
+          "about": "The new value to assign to the specified board attribute."
+        },
+        {
+          "name": "board_attribute",
+          "type": "string",
+          "required": true,
+          "about": "The specific attribute of the board to update. This should be an enum value as defined by Monday.com's API and should not be enclosed in quotes in the final GraphQL mutation. Common updatable attributes include 'description' and 'communication'. Unsupported enum values may be silently ignored withou"
+        }
+      ],
+      "scopes": [
+        "boards:write"
+      ],
+      "tags": [
+        "board",
+        "important",
+        "openWorldHint",
+        "update",
+        "updateHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Update board hierarchy",
+      "slug": "MONDAY_UPDATE_BOARD_HIERARCHY",
+      "kind": "write",
+      "description": "Updates a board's position, workspace, or product in Monday.com. Use when you need to move a board to a different workspace or folder, assign it to a product, or reposition it relative to other boards.",
+      "inputs": [
+        {
+          "name": "board_id",
+          "type": "integer",
+          "required": true,
+          "about": "The board's unique identifier."
+        },
+        {
+          "name": "attributes",
+          "type": "object",
+          "required": true,
+          "about": "The board's attributes to update. At least one attribute (workspace_id, folder_id, account_product_id, or position) must be provided."
+        }
+      ],
+      "scopes": [
+        "boards:write"
+      ],
+      "tags": [
+        "updateHint",
+        "openWorldHint",
+        "boards_projects_organization"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Update column",
+      "slug": "MONDAY_UPDATE_COLUMN",
+      "kind": "write",
+      "description": "Tool to update column title or description. Use when modifying a column’s metadata after creation.",
+      "inputs": [
+        {
+          "name": "value",
+          "type": "string",
+          "required": true,
+          "about": "The new value for the specified column property."
+        },
+        {
+          "name": "board_id",
+          "type": "integer",
+          "required": true,
+          "about": "The unique identifier of the board containing the column to be updated."
+        },
+        {
+          "name": "column_id",
+          "type": "string",
+          "required": true,
+          "about": "The column's unique identifier (e.g., 'status_1', 'text_2')."
+        },
+        {
+          "name": "column_property",
+          "type": "string",
+          "required": true,
+          "about": "The metadata property to update. Must be 'description' or 'title'."
+        }
+      ],
+      "scopes": [
+        "boards:write"
+      ],
+      "tags": [
+        "Columns",
+        "update",
+        "updateHint",
+        "openWorldHint",
+        "idempotentHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Update a doc",
+      "slug": "MONDAY_UPDATE_DOC",
+      "kind": "write",
+      "description": "Updates a doc's title and/or adds Markdown content, optionally after a specified block. When both are requested, the title is updated first and may remain changed if adding content fails.",
+      "inputs": [
+        {
+          "name": "title",
+          "type": "string",
+          "required": false,
+          "about": "The new title for the document."
+        },
+        {
+          "name": "doc_id",
+          "type": "string",
+          "required": true,
+          "about": "The unique identifier of the Monday.com document to update."
+        },
+        {
+          "name": "markdown",
+          "type": "string",
+          "required": false,
+          "about": "Markdown content to append to the document."
+        },
+        {
+          "name": "after_block_id",
+          "type": "string",
+          "required": false,
+          "about": "Block ID after which to insert the markdown content. If omitted, content is appended at the end."
+        }
+      ],
+      "scopes": [
+        "account:read",
+        "assets:read",
+        "boards:read",
+        "boards:write",
+        "docs:read",
+        "docs:write",
+        "me:read",
+        "notifications:write",
+        "tags:read",
+        "teams:read",
+        "teams:write",
+        "updates:read",
+        "updates:write",
+        "users:read",
+        "users:write",
+        "webhooks:read",
+        "webhooks:write",
+        "workspaces:read",
+        "workspaces:write"
+      ],
+      "tags": [
+        "Documents",
+        "update",
+        "updateHint",
+        "openWorldHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Update email domain",
+      "slug": "MONDAY_UPDATE_EMAIL_DOMAIN",
+      "kind": "write",
+      "description": "Tool to update users' email domains. Use when migrating users to a new email domain; requires admin privileges.",
+      "inputs": [
+        {
+          "name": "user_ids",
+          "type": "array",
+          "required": true,
+          "about": "List of unique identifiers for users whose email domains will be updated."
+        },
+        {
+          "name": "new_domain",
+          "type": "string",
+          "required": true,
+          "about": "The new email domain to apply to the specified users (e.g., 'newcompany.com')."
+        }
+      ],
+      "scopes": [
+        "users:write"
+      ],
+      "tags": [
+        "updateHint",
+        "openWorldHint",
+        "admin_governance"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Update a Monday folder",
+      "slug": "MONDAY_UPDATE_FOLDER",
+      "kind": "write",
+      "description": "Tool to update a Monday.com folder's properties including name, color, or parent folder. Use when you need to modify existing folder details or move folders between workspaces.",
+      "inputs": [
+        {
+          "name": "name",
+          "type": "string",
+          "required": false,
+          "about": "The new name for the folder."
+        },
+        {
+          "name": "color",
+          "type": "string",
+          "required": false,
+          "about": "The folder's color. Available colors include: DONE_GREEN, DARK_RED, LIPSTICK, SALADISH, EGG_YOK, WORKING_ORANGE, DARK_ORANGE, PEACH, SUNSET, STUCK_RED, SOFIA_PINK, PURPLE, DARK_PURPLE, BERRY, ROYAL, BLUISH_PURPLE, NAVY, BRIGHT_BLUE, DARK_BLUE, AQUAMARINE, CHILI_BLUE, RIVER, WINTER, EXPLOSIVE, TESLA,"
+        },
+        {
+          "name": "folder_id",
+          "type": "integer",
+          "required": true,
+          "about": "The unique identifier of the folder to update."
+        },
+        {
+          "name": "workspace_id",
+          "type": "integer",
+          "required": false,
+          "about": "The unique identifier of the workspace to move the folder to. Use for cross-workspace transfers."
+        },
+        {
+          "name": "parent_folder_id",
+          "type": "integer",
+          "required": false,
+          "about": "The ID of the folder you want to nest the updated folder under. Use to move folder to a different parent."
+        }
+      ],
+      "scopes": [
+        "workspaces:write"
+      ],
+      "tags": [
+        "updateHint",
+        "idempotentHint",
+        "openWorldHint",
+        "important",
+        "boards_projects_organization"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Update group",
+      "slug": "MONDAY_UPDATE_GROUP",
+      "kind": "write",
+      "description": "Tool to update an existing group on a board. Use when you need to modify a group's attribute (title, color, or position) after confirming the group ID.",
+      "inputs": [
+        {
+          "name": "board_id",
+          "type": "integer",
+          "required": true,
+          "about": "The unique identifier of the board containing the group."
+        },
+        {
+          "name": "group_id",
+          "type": "string",
+          "required": true,
+          "about": "The unique identifier of the group to update (use the group ID or descriptive string)."
+        },
+        {
+          "name": "new_value",
+          "type": "string",
+          "required": true,
+          "about": "The new value for the specified attribute. For title or color, provide the new string value. For relative_position_after/before, provide the target group ID."
+        },
+        {
+          "name": "group_attribute",
+          "type": "string",
+          "required": true,
+          "about": "The attribute of the group to update. Must be one of: color, position, relative_position_after, relative_position_before, title. Do not enclose this enum value in quotes in the GraphQL mutation."
+        }
+      ],
+      "scopes": [
+        "boards:read",
+        "boards:write",
+        "users:read",
+        "users:write",
+        "teams:read",
+        "teams:write",
+        "workspaces:read",
+        "workspaces:write",
+        "docs:read",
+        "docs:write",
+        "updates:read",
+        "updates:write",
+        "notifications:write",
+        "tags:read",
+        "webhooks:read",
+        "webhooks:write",
+        "account:read",
+        "assets:read",
+        "me:read"
+      ],
+      "tags": [
+        "Groups",
+        "update",
+        "updateHint",
+        "openWorldHint",
+        "idempotentHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Update item",
+      "slug": "MONDAY_UPDATE_ITEM",
+      "kind": "write",
+      "description": "Tool to update an existing item's column value on Monday.com. Use when setting complex column types like Timeline or People.",
+      "inputs": [
+        {
+          "name": "value",
+          "type": "",
+          "required": true,
+          "about": "New column value as a JSON-serializable object or string. This will be stringified for the GraphQL mutation. For text/number/name columns, send a plain string; for complex columns like status/timeline/people, send a JSON object (e.g., {\"index\": 1})."
+        },
+        {
+          "name": "item_id",
+          "type": "string",
+          "required": true,
+          "about": "ID of the item to update."
+        },
+        {
+          "name": "board_id",
+          "type": "string",
+          "required": true,
+          "about": "ID of the board containing the item."
+        },
+        {
+          "name": "column_id",
+          "type": "string",
+          "required": true,
+          "about": "The unique identifier of the column to change."
+        },
+        {
+          "name": "create_labels_if_missing",
+          "type": "boolean",
+          "required": false,
+          "about": "If true, creates missing labels for Status/Dropdown columns when the label does not exist. Requires permission to change board structure."
+        }
+      ],
+      "scopes": [
+        "account:read",
+        "assets:read",
+        "boards:read",
+        "boards:write",
+        "docs:read",
+        "docs:write",
+        "me:read",
+        "notifications:write",
+        "tags:read",
+        "teams:read",
+        "teams:write",
+        "updates:read",
+        "updates:write",
+        "users:read",
+        "users:write",
+        "webhooks:read",
+        "webhooks:write",
+        "workspaces:read",
+        "workspaces:write"
+      ],
+      "tags": [
+        "Columns",
+        "update",
+        "updateHint",
+        "openWorldHint",
+        "idempotentHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Update multiple users",
+      "slug": "MONDAY_UPDATE_MULTIPLE_USERS",
+      "kind": "write",
+      "description": "Tool to update one or multiple users' attributes on Monday.com. Use when you need to batch update user profiles such as name, email, title, or department.",
+      "inputs": [
+        {
+          "name": "user_updates",
+          "type": "array",
+          "required": true,
+          "about": "Array of user update objects, each containing user_id and the attributes to update. At least one user update must be provided."
+        }
+      ],
+      "scopes": [
+        "users:write"
+      ],
+      "tags": [
+        "updateHint",
+        "openWorldHint",
+        "users_roles"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Update mute board settings",
+      "slug": "MONDAY_UPDATE_MUTE_BOARD_SETTINGS",
+      "kind": "write",
+      "description": "Tool to update a board's notification mute settings. Use when you need to configure notification preferences for a specific board.",
+      "inputs": [
+        {
+          "name": "enabled",
+          "type": "array",
+          "required": false,
+          "about": "Array of custom notification settings, only applicable when mute_state is CUSTOM_SETTINGS. AUTOMATION_NOTIFY: alerts when automations trigger notify steps. IM_ASSIGNED: alerts when user is assigned. IM_MENTIONED: alerts when user is mentioned."
+        },
+        {
+          "name": "board_id",
+          "type": "string",
+          "required": true,
+          "about": "The unique identifier of the board to modify."
+        },
+        {
+          "name": "mute_state",
+          "type": "string",
+          "required": true,
+          "about": "Desired mute notification state. CURRENT_USER_MUTE_ALL: suppress all notifications for current user. CUSTOM_SETTINGS: allow notifications matching enabled custom settings. MENTIONS_AND_ASSIGNS_ONLY: notify only for mentions or assignments. MUTE_ALL: suppress notifications for all users (admin only)."
+        }
+      ],
+      "scopes": [
+        "boards:write"
+      ],
+      "tags": [
+        "updateHint",
+        "idempotentHint",
+        "openWorldHint",
+        "subscribers_notifications"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Update tag",
+      "slug": "MONDAY_UPDATE_TAG",
+      "kind": "write",
+      "description": "Tool to return a tag's details or best-effort \"rename\" by creating or getting a tag with the requested name. The monday API does not support updating existing tag name/color.",
+      "inputs": [
+        {
+          "name": "name",
+          "type": "string",
+          "required": false,
+          "about": "New name for the tag. monday API does not support renaming a tag; we will create or get a tag with this name and return it."
+        },
+        {
+          "name": "color",
+          "type": "string",
+          "required": false,
+          "about": "New color for the tag as a hex code (e.g., '#FFAA00'). monday API does not support changing tag colors; this parameter is ignored."
+        },
+        {
+          "name": "tag_id",
+          "type": "integer",
+          "required": true,
+          "about": "Unique identifier of the tag to update or fetch."
+        }
+      ],
+      "scopes": [
+        "account:read",
+        "assets:read",
+        "boards:read",
+        "boards:write",
+        "docs:read",
+        "docs:write",
+        "me:read",
+        "notifications:write",
+        "tags:read",
+        "teams:read",
+        "teams:write",
+        "updates:read",
+        "updates:write",
+        "users:read",
+        "users:write",
+        "webhooks:read",
+        "webhooks:write",
+        "workspaces:read",
+        "workspaces:write"
+      ],
+      "tags": [
+        "Tags",
+        "update",
+        "openWorldHint",
+        "idempotentHint",
+        "createHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Update team",
+      "slug": "MONDAY_UPDATE_TEAM",
+      "kind": "write",
+      "description": "Add users to a Monday.com team. Name, guest status, and parent team changes are ignored; the response includes warnings and the raw result of the add-users operation, including any GraphQL errors.",
+      "inputs": [
+        {
+          "name": "name",
+          "type": "string",
+          "required": false,
+          "about": "New name for the team."
+        },
+        {
+          "name": "team_id",
+          "type": "string",
+          "required": true,
+          "about": "The unique identifier of the team to be updated."
+        },
+        {
+          "name": "is_guest_team",
+          "type": "boolean",
+          "required": false,
+          "about": "Whether the team should be marked as a guest team."
+        },
+        {
+          "name": "parent_team_id",
+          "type": "string",
+          "required": false,
+          "about": "ID of the new parent team if changing hierarchy."
+        },
+        {
+          "name": "subscriber_ids",
+          "type": "array",
+          "required": false,
+          "about": "List of user IDs to subscribe to the team."
+        }
+      ],
+      "scopes": [
+        "account:read",
+        "assets:read",
+        "boards:read",
+        "boards:write",
+        "docs:read",
+        "docs:write",
+        "me:read",
+        "notifications:write",
+        "tags:read",
+        "teams:read",
+        "teams:write",
+        "updates:read",
+        "updates:write",
+        "users:read",
+        "users:write",
+        "webhooks:read",
+        "webhooks:write",
+        "workspaces:read",
+        "workspaces:write"
+      ],
+      "tags": [
+        "Teams",
+        "update",
+        "updateHint",
+        "openWorldHint",
+        "idempotentHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Update users role",
+      "slug": "MONDAY_UPDATE_USERS_ROLE",
+      "kind": "write",
+      "description": "Updates users' roles to custom or default roles; this admin-only operation cannot update your own role. Inspect the returned updated users and per-user errors to determine which changes succeeded.",
+      "inputs": [
+        {
+          "name": "role_id",
+          "type": "integer",
+          "required": false,
+          "about": "Custom role ID to assign (for enterprise customers only). Either new_role or role_id must be provided."
+        },
+        {
+          "name": "new_role",
+          "type": "string",
+          "required": false,
+          "about": "Default role to assign. Use this for standard roles. Valid values: ADMIN, GUEST, MEMBER, VIEW_ONLY. Either new_role or role_id must be provided."
+        },
+        {
+          "name": "user_ids",
+          "type": "array",
+          "required": true,
+          "about": "List of unique identifiers for users whose roles will be updated. Maximum 200 user IDs per request."
+        }
+      ],
+      "scopes": [
+        "users:write"
+      ],
+      "tags": [
+        "updateHint",
+        "openWorldHint",
+        "users_roles"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Update a Monday workspace",
+      "slug": "MONDAY_UPDATE_WORKSPACE",
+      "kind": "write",
+      "description": "Tool to update a Monday.com workspace. Use when you need to modify the name, description, visibility, or product placement of an existing workspace.",
+      "inputs": [
+        {
+          "name": "kind",
+          "type": "string",
+          "required": false,
+          "about": "The visibility kind for the workspace; 'open' or 'closed'."
+        },
+        {
+          "name": "name",
+          "type": "string",
+          "required": false,
+          "about": "The new name for the workspace."
+        },
+        {
+          "name": "description",
+          "type": "string",
+          "required": false,
+          "about": "The new description for the workspace."
+        },
+        {
+          "name": "workspace_id",
+          "type": "integer",
+          "required": true,
+          "about": "The unique identifier of the workspace to be updated."
+        },
+        {
+          "name": "account_product_id",
+          "type": "string",
+          "required": false,
+          "about": "The account product ID to move the workspace under (API v2025-10+)."
+        }
+      ],
+      "scopes": [
+        "workspaces:read",
+        "workspaces:write"
+      ],
+      "tags": [
+        "Workspaces",
+        "update",
+        "updateHint",
+        "openWorldHint",
+        "idempotentHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Upload Asset",
+      "slug": "MONDAY_UPLOAD_ASSET",
+      "kind": "write",
+      "description": "Tool to upload a file to an update or file column. Use when you need to attach a file to an existing update or file column. File attachments are permanent and irreversible; confirm with the user before uploading.",
+      "inputs": [
+        {
+          "name": "file",
+          "type": "object",
+          "required": true,
+          "about": "File to upload."
+        },
+        {
+          "name": "target",
+          "type": "string",
+          "required": true,
+          "about": "Where to upload the file. Use 'update' to attach the file to an existing update/comment, or 'column' to upload to a file column on an item."
+        },
+        {
+          "name": "item_id",
+          "type": "integer",
+          "required": false,
+          "about": "The numeric ID of the item containing the file column. Required when target is 'column'. You can get this ID from creating an item or listing board items."
+        },
+        {
+          "name": "column_id",
+          "type": "string",
+          "required": false,
+          "about": "The ID of the file column to upload to. Required when target is 'column'. File columns have type 'file' and can be found by listing board columns."
+        },
+        {
+          "name": "update_id",
+          "type": "integer",
+          "required": false,
+          "about": "The numeric ID of the update (comment) to attach the file to. Required when target is 'update'. You can get this ID from creating an update or listing updates on an item."
+        }
+      ],
+      "scopes": [
+        "updates:write",
+        "boards:write"
+      ],
+      "tags": [
+        "Assets",
+        "create",
+        "openWorldHint",
+        "createHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get user connections",
+      "slug": "MONDAY_USER_CONNECTIONS",
+      "kind": "write",
+      "description": "Tool to query user-specific connection data from Monday.com. Use when you need to retrieve integration connections established by the authenticated user with external services.",
+      "inputs": [
+        {
+          "name": "page",
+          "type": "integer",
+          "required": false,
+          "about": "Page index for offset-based pagination, starting from 1. Use with page_size for paginated results."
+        },
+        {
+          "name": "order",
+          "type": "string",
+          "required": false,
+          "about": "Ordering of returned connections. Use 'createdAt' for ascending or '-createdAt' for descending order by creation date."
+        },
+        {
+          "name": "page_size",
+          "type": "integer",
+          "required": false,
+          "about": "Number of records to return per page when using offset-based pagination. Use with page parameter."
+        },
+        {
+          "name": "with_automations",
+          "type": "boolean",
+          "required": false,
+          "about": "Include connections that have automations attached. Set to true to filter only connections with automations."
+        },
+        {
+          "name": "with_state_validation",
+          "type": "boolean",
+          "required": false,
+          "about": "Validate connection state before returning the result. Set to true to ensure connections are in valid state."
+        }
+      ],
+      "scopes": [
+        "me:read",
+        "users:read",
+        "teams:read"
+      ],
+      "tags": [
+        "readOnlyHint",
+        "idempotentHint",
+        "openWorldHint",
+        "automations_integrations"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Who Am I",
+      "slug": "MONDAY_WHO_AM_I",
+      "kind": "write",
+      "description": "Return the identity (name, email, account) of the connected monday.com account.",
+      "inputs": [
+        {
+          "name": "0",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "1",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "2",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "3",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "4",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "5",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "6",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "7",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "8",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "9",
+          "type": "",
+          "required": false,
+          "about": ""
+        }
+      ],
+      "scopes": "$undefined",
+      "tags": [
+        "important",
+        "readOnlyHint",
+        "idempotentHint",
+        "auth"
+      ],
+      "deprecated": false
+    }
+  ],
+  "triggers": [],
+  "source": "https://docs.composio.dev/toolkits/monday",
+  "fetched_at": "2026-11-20"
+}

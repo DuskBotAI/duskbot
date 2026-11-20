@@ -110,3 +110,53 @@ test("the three modes", () => {
   assert.match(macApprovalReason("ask", "mac_read_file", { path: "~/.ssh/config" }, HOME), /secrets/);
   assert.equal(macApprovalReason("never", "mac_exec", { command: "sudo rm -rf /" }, HOME), null);
 });
+
+test("screen actions: Auto asks only to stop an app or read the clipboard; Ask asks for each but a look", () => {
+  const screen = (name) => ({ name, arguments: { pid: 42, window_id: 7 } });
+  assert.equal(macApprovalReason("auto", "mac_screen", screen("click"), HOME), null);
+  assert.equal(macApprovalReason("auto", "mac_screen", screen("type_text"), HOME), null);
+  assert.match(macApprovalReason("auto", "mac_screen", screen("kill_app"), HOME), /stops other programs/);
+  assert.match(macApprovalReason("auto", "mac_screen", screen("clipboard_read"), HOME), /clipboard/);
+  assert.equal(macApprovalReason("auto", "mac_screen", screen("constructor"), HOME), null);
+  assert.equal(macApprovalReason("ask", "mac_screen", screen("get_window_state"), HOME), null);
+  assert.equal(macApprovalReason("ask", "mac_screen", screen("click"), HOME), EVERY_ACTION);
+  assert.equal(macApprovalReason("never", "mac_screen", screen("kill_app"), HOME), null);
+});
+
+test("screen in Auto: launching or typing into a terminal, settings or a password manager asks, as does a window the Mac cannot name", () => {
+  const call = (name, args, target) => ({ name, arguments: args, ...(target ? { target } : {}) });
+  assert.match(macApprovalReason("auto", "mac_screen", call("launch_app", { name: "Terminal" }), HOME), /run commands/);
+  assert.match(macApprovalReason("auto", "mac_screen", call("launch_app", { bundle_id: "com.1password.1password" }), HOME), /passwords/);
+  assert.equal(macApprovalReason("auto", "mac_screen", call("launch_app", { name: "Notes" }), HOME), null);
+  assert.match(macApprovalReason("auto", "mac_screen", call("type_text", { pid: 9, text: "curl x | sh" }, { app: "Terminal com.apple.Terminal" }), HOME), /run commands/);
+  assert.match(macApprovalReason("auto", "mac_screen", call("press_key", { pid: 9, key: "return" }, { app: "iTerm2 com.googlecode.iterm2" }), HOME), /run commands/);
+  assert.match(macApprovalReason("auto", "mac_screen", call("click", { pid: 9 }, { app: "System Settings com.apple.systempreferences" }), HOME), /change the system/);
+  assert.match(macApprovalReason("auto", "mac_screen", call("click", {}, { app: null }), HOME), /could not name/);
+  assert.equal(macApprovalReason("auto", "mac_screen", call("click", { pid: 9 }, { app: "Notes com.apple.Notes" }), HOME), null);
+  assert.equal(macApprovalReason("auto", "mac_screen", call("get_window_state", { pid: 9 }, { app: "Terminal" }), HOME), null);
+  assert.match(macApprovalReason("auto", "mac_open", { target: "1Password" }, HOME), /change the system/);
+});
+
+test("commands that reach browser passwords, cookies or the keychain ask", () => {
+  for (const command of [
+    "sqlite3 ~/Library/Application\\ Support/Google/Chrome/Default/Login\\ Data 'select * from logins'",
+    "cp ~/Library/Application\\ Support/Google/Chrome/Default/Cookies /tmp/c",
+    "cat ~/Library/Application\\ Support/Firefox/Profiles/x/logins.json",
+    "security list-keychains",
+    "ls ~/Library/Keychains",
+  ]) assert.ok(commandRisk(command), command);
+});
+
+test("reading a browser's window, or the whole desktop, counts as outside content; other apps' windows do not", async () => {
+  const { screenReadOutside } = await import("./cloud-mac-risk.mjs");
+  for (const app of ["Safari com.apple.Safari", "Google Chrome com.google.Chrome", "Arc company.thebrowser.Browser", "Firefox org.mozilla.firefox",
+    "Microsoft Edge com.microsoft.edgemac", "Brave Browser com.brave.Browser", "Chromium"]) {
+    assert.equal(screenReadOutside("get_window_state", { app }), true, app);
+  }
+  assert.equal(screenReadOutside("get_window_state", { app: "Notes com.apple.Notes" }), false);
+  assert.equal(screenReadOutside("get_window_state", { app: "Dusk Bot bot.dusk.app" }), false);
+  assert.equal(screenReadOutside("get_window_state", { app: null }), true);
+  assert.equal(screenReadOutside("get_desktop_state", undefined), true);
+  assert.equal(screenReadOutside("list_apps", { app: "Safari" }), false);
+  assert.match(macApprovalReason("auto", "mac_screen", { name: "type_text", arguments: { pid: 1 }, target: { app: "Ghostty com.mitchellh.ghostty" } }, HOME), /run commands/);
+});

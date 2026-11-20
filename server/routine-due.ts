@@ -3,7 +3,7 @@
 import type { Routine, RoutineRun } from "./routines.ts";
 import { flexOf } from "./routine-quiet.ts";
 import { nextOccurrence } from "./routine-schedules.ts";
-import { activeMs } from "./routine-waits.ts";
+import { activeMs, QUESTION_WAIT_MS } from "./routine-waits.ts";
 
 type Due = Pick<Routine, "enabled" | "nextRunAt" | "checks" | "wakeAt" | "checkedAt"> & Partial<Pick<Routine, "timing" | "schedule">>;
 /** The latest a run may start: its time, or the end of its window when it may move. */
@@ -31,6 +31,10 @@ export function wakeHoldOf(routines: readonly Due[], runs: readonly Run[], now: 
   const due = dueTimes(routines, runs, now, meetingsDue).filter((at) => at <= now + horizonMs).sort((a, b) => a - b)[0];
   return due === undefined ? { hold: false } : { hold: true, reason: "due", at: due };
 }
+
+/** Enabled routines that run on this machine and are not held: what the desktop's keep-awake while plugged in waits on. */
+export const enabledHereOf = (routines: readonly Pick<Routine, "enabled" | "runOn" | "heldFor">[]) =>
+  routines.filter((routine) => routine.enabled && !routine.heldFor && (routine.runOn ?? "maus") === "maus").length;
 
 /** A Cloud home's sleep check: a run queued to start now, or running, keeps it awake. One waiting for a person does
  * not: their answer wakes the home. */
@@ -75,6 +79,7 @@ export function schedulerDueOf<R extends Due>(routines: readonly R[], runs: read
     else if ((run.status === "running" || run.status === "waiting") && run.startedAt != null && run.timeoutMinutes != null) {
       at = Math.min(at, now + Math.max(0, run.timeoutMinutes * 60_000 - activeMs(run, now)));
     }
+    if (run.status === "waiting" && run.asked && !run.asked.approval) at = Math.min(at, run.asked.since + QUESTION_WAIT_MS);
   }
   return at === Infinity ? null : at;
 }

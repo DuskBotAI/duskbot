@@ -1,0 +1,128 @@
+{
+  "path": "/use-cases/customer-support-inbox",
+  "type": "use-case",
+  "title": "AI support inbox triage for the next shift",
+  "nav": "customer support inbox",
+  "h1": "give the next support shift a ticket handoff",
+  "description": "Turn a Zendesk queue into a shift handoff. See who is waiting, what you promised and which ticket a person should open first.",
+  "keyword": "ai customer support inbox",
+  "keywords": [
+    "support inbox triage",
+    "zendesk shift handoff"
+  ],
+  "answer": "**the hardest ticket to spot is the quiet one where you owe someone a call.** give a bot your zendesk handoff view. ask it to read the last exchange on each ticket and pull out promises coming due. you get a short list in chat before the next shift takes over.",
+  "updated": "2026-11-20",
+  "review": {
+    "status": "approved",
+    "by": "lead agent, after four independent reviewers read every page against seo/facts (2026-11-20); every finding applied",
+    "at": "2026-11-20"
+  },
+  "voice": 2,
+  "tags": [
+    "support",
+    "tickets",
+    "handoff"
+  ],
+  "connectors": [
+    "zendesk"
+  ],
+  "related": [
+    "/routines/zendesk-urgent-tickets",
+    "/routines/intercom-unanswered-conversations",
+    "/use-cases/email-triage"
+  ],
+  "art": {
+    "props": [
+      "s-mailbox",
+      "p-bubbles"
+    ],
+    "bubble": "who owes the reply?"
+  },
+  "og_line": "pick up where the last shift left off.",
+  "routine": {
+    "intro": "**start with the queue the outgoing shift actually uses.** copy its view id into the message.",
+    "message": "at 3:45 each weekday, read the tickets in our zendesk handoff view (id 358214). read the comments on each ticket. who owes the next move? list our dated promises first, oldest due first. include the ticket number, the promise and who made it. then list customers who answered our last question and still need help.\n\nput missing comments or unclear owners under 'open the ticket'. tell me if you only saw part of the queue. write the handoff here. leave the tickets alone.",
+    "when": "weekdays at 3:45 pm, before shift change",
+    "needs": "the handoff view id and read only zendesk access",
+    "output": "example handoff\n#681 | bridget promised a replacement tracking number by 4 pm. customer still waiting.\n#694 | customer sent the requested photo. support owes the next reply.\n#703 | latest comment has no readable text. open the ticket."
+  },
+  "sections": [
+    {
+      "h": "what the incoming shift needs to know",
+      "md": "**give the next person a reason to open each ticket.** “waiting” can mean the customer owes a photo. it can also mean a colleague promised to call before closing. put the promise beside its deadline. preserve the time zone if the writer gave one."
+    },
+    {
+      "h": "follow a ticket past its status",
+      "md": "**read the conversation before deciding who owes a reply.**\n\n1. list tickets in the named zendesk view and follow additional result pages.[^1]\n2. read each comment in date order. distinguish an internal note from a reply the customer received.\n3. quote the few words that set a deadline. carry forward an older promise until a later reply settles it."
+    },
+    {
+      "h": "hand the decision to the incoming agent",
+      "md": "**open the live ticket before contacting anyone.** another agent might have replied during the handoff. let the shift lead choose an owner for unresolved promises. if you need someone to respond to emergencies as they happen, a scheduled dusk bot handoff is the wrong tool."
+    }
+  ],
+  "safeguards": [
+    "keep zendesk read only. the handoff belongs in the bot chat.",
+    "leave attachments and customer contact details out of the summary. a ticket number gets the agent back to the original.",
+    "sending a customer reply through a connected app asks first by default.[^4]"
+  ],
+  "worked": {
+    "intro": "an invented shift change at a repair desk",
+    "before": "the subject still says “broken clasp”. the customer sent a photo yesterday. bridget later promised tracking by closing time.",
+    "after": "the handoff leads with the tracking promise. the next agent looks up the replacement shipment instead of requesting the same photo again."
+  },
+  "saves": {
+    "estimate": "about 8 minutes per handoff with these timings",
+    "formula": "12 minutes reading the queue by hand\n- 4 minutes verifying the handoff\n= 8 minutes per shift change",
+    "assumptions": [
+      "time both methods on the same view",
+      "include time spent opening ambiguous tickets and correcting the list",
+      "count the handoff only. customers still need answers"
+    ]
+  },
+  "mistakes": [
+    {
+      "mistake": "sorting by the latest update alone",
+      "fix": "look back for outstanding promises. an internal spelling correction can bring an older case to the top."
+    },
+    {
+      "mistake": "treating a private note as a customer reply",
+      "fix": "identify who could see the comment before saying the customer has an answer."
+    }
+  ],
+  "quick": {
+    "steps": [
+      "choose a zendesk view the shift lead knows",
+      "try one ticket with a dated promise",
+      "compare the handoff with the last public reply"
+    ]
+  },
+  "faq": [
+    {
+      "q": "can the handoff catch a promise on a quiet ticket?",
+      "a": "yes, if the ticket belongs to the view and its comments include the promise. a view limited to today's updates can miss it."
+    },
+    {
+      "q": "what if a ticket has no readable last comment?",
+      "a": "keep the ticket number in the handoff. an agent can open the original before taking it off the list."
+    }
+  ],
+  "sources": [
+    {
+      "label": "composio: zendesk actions",
+      "url": "https://docs.composio.dev/toolkits/zendesk",
+      "checked": "2026-11-20"
+    },
+    {
+      "label": "dusk bot docs: files and connected apps",
+      "url": "/docs/files-and-apps"
+    },
+    {
+      "label": "dusk bot docs: routines",
+      "url": "/docs/routines"
+    },
+    {
+      "label": "dusk bot docs: a bot’s computer",
+      "url": "/docs/computer"
+    }
+  ]
+}

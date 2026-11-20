@@ -37,6 +37,14 @@ export function VoiceSection({
           }}
         />
       </div>
+
+      <div className="flex items-center justify-between gap-4 rounded-xl bg-card p-4">
+        <div>
+          <div className="text-[15px] font-medium text-ink">{t("botSettings.suggestions.title")}</div>
+          <div className="mt-0.5 text-[13px] text-ink-secondary">{t("botSettings.suggestions.help")}</div>
+        </div>
+        <Switch checked={bot.suggestions !== false} aria-label={t("botSettings.suggestions.title")} onClick={() => patch({ suggestions: bot.suggestions === false })} />
+      </div>
     </div>
   );
 }

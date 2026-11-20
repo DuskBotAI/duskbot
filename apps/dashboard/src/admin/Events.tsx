@@ -7,7 +7,7 @@ import { useAdmin, type EventRow } from "./api";
 import { AdminHeader, Failed, Loading, n, Section, stamp } from "./ui";
 
 const WINDOWS = [{ value: "1", label: "24 h" }, { value: "7", label: "7 days" }, { value: "30", label: "30 days" }, { value: "400", label: "all kept" }] as const;
-type Answer = { names: string[]; counts: Array<{ name: string; count: number }>; events: EventRow[]; next: number | null };
+type Answer = { names: string[]; counts: Array<{ name: string; count: number }>; events: EventRow[]; next: number | null; untracked?: number | null };
 
 function context(ctx: Record<string, unknown> | undefined) {
   if (!ctx) return "";
@@ -29,7 +29,7 @@ export function EventsPage() {
   const max = Math.max(1, ...(data?.counts.map((row) => row.count) ?? [1]));
   return (
     <>
-      <AdminHeader title="events" sub="what people did, newest first. counts and states only." action={<Segmented<typeof days> label="window" value={days} options={[...WINDOWS]} onChange={setDays} />} />
+      <AdminHeader title="events" sub={`what people did, newest first. counts and states only.${data?.untracked ? ` ${n(data.untracked)} accounts turned off help improve dusk bot, so none of their events are here; signups and people elsewhere count every account.` : ""}`} action={<Segmented<typeof days> label="window" value={days} options={[...WINDOWS]} onChange={setDays} />} />
       <div className="mb-6 flex flex-wrap items-end gap-3">
         <div>
           <label htmlFor={selectId} className="mb-1.5 block text-13 text-ink-2">event</label>

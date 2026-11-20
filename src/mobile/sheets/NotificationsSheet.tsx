@@ -90,7 +90,7 @@ export const NotificationsSheet: ComponentType<SheetPageProps<"notifications">> 
   };
 
   return (
-    <Sheet open={open} onClose={onClose} title={t("mobile.notifications.title")} full trailing={unread ? <button type="button" disabled={reading} onClick={() => { void readAll(); }} className="mobile-press flex min-h-11 items-center"><span className="flex h-11 items-center rounded-full bg-ink/[0.05] px-4 text-[15px] font-semibold text-ink">{t("mobile.notifications.readAll")}</span></button> : undefined}>
+    <Sheet open={open} onClose={onClose} title={t("mobile.notifications.title")} full actions={unread ? [{ key: "readAll", label: t("mobile.notifications.readAll"), symbol: "checkmark.circle", disabled: reading, onPress: () => { void readAll(); } }] : undefined} trailing={unread ? <button type="button" disabled={reading} onClick={() => { void readAll(); }} className="mobile-press flex min-h-11 items-center"><span className="flex h-11 items-center rounded-full bg-ink/[0.05] px-4 text-[15px] font-semibold text-ink">{t("mobile.notifications.readAll")}</span></button> : undefined}>
       {error && <p role="alert" className="px-6 py-3 text-[15px] text-danger">{t(error === "missing" ? "mobile.notifications.chatMissing" : "mobile.notifications.readError")}</p>}
       {state.notifications.length === 0 ? (
         <EmptyState art="mailbox" title={t("mobile.notifications.emptyTitle")} body={t("mobile.notifications.emptyBody")} className="pt-20" />

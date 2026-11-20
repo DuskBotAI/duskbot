@@ -1,0 +1,92 @@
+{
+  "path": "/integrations/gmail/get-draft",
+  "type": "action",
+  "title": "Read a saved Gmail draft and see exactly what it says",
+  "nav": "read a saved draft",
+  "h1": "what did i promise in my gmail draft?",
+  "description": "Ask a bot to open one saved Gmail draft and quote the price, date or wording you need. Choose whether it reads the body or just the headers.",
+  "keyword": "read a gmail draft with ai",
+  "keywords": [
+    "chatgpt read saved gmail draft",
+    "claude inspect gmail draft",
+    "see recipients on a gmail draft"
+  ],
+  "answer": "**get the sentence you actually wrote before you quote a price on the phone.** a dusk bot can open one saved gmail draft and read the terms back to you. give it the recipient and subject so it can find the draft id. ask for the full text when the wording matters.",
+  "updated": "2026-11-20",
+  "review": {
+    "status": "approved",
+    "by": "lead agent, after four independent reviewers read every page against seo/facts (2026-11-20); every finding applied",
+    "at": "2026-11-20"
+  },
+  "tags": [
+    "gmail",
+    "read a saved draft"
+  ],
+  "connectors": [
+    "gmail"
+  ],
+  "related": [
+    "/integrations/gmail",
+    "/integrations/gmail/list-drafts",
+    "/integrations/gmail/update-draft"
+  ],
+  "art": {
+    "logo": "gmail",
+    "label": "Gmail",
+    "props": [
+      "s-notebook",
+      "p-magnifier"
+    ],
+    "bubble": "what did i promise"
+  },
+  "og_line": "the exact words in one saved draft.",
+  "action": {
+    "toolkit": "gmail",
+    "slug": "GMAIL_GET_DRAFT"
+  },
+  "what": "**a saved draft is evidence of what you wrote.** ask the bot to quote the line about delivery and include the sentence after it. that next sentence might make the date conditional. a draft alone can't tell you what the customer agreed to.\n\nfor a question about the address, ask for headers. for the price in the body, ask for the full draft. gmail's minimal format gives only the id and labels.",
+  "uses": [
+    "read back the cc line before you discuss a confidential estimate",
+    "pull the expiry date from an offer you paused halfway through writing",
+    "find out whether your draft promises delivery by friday or dispatch by friday"
+  ],
+  "routine": {
+    "message": "on thursdays at noon, find the gmail draft with the subject kiln hire estimate in my workshop account. read its full body and quote the rate and any condition on that rate here. if several drafts match, show the recipients and let me pick. never revise the wording in gmail.",
+    "when": "thursdays at noon before quoting kiln time",
+    "needs": "workshop gmail connected with read only for listing and reading drafts",
+    "output": "kiln hire estimate for nadine cole\n“the evening rate is £40 for firing only. glazing is extra.”\nno price for glazing appears in the draft."
+  },
+  "steps": [
+    "choose the workshop mailbox in **Connected apps** and give the bot **read only**.",
+    "have it list drafts to get the id for your recipient and subject.",
+    "ask one question whose answer you can see in the body. compare its quote with the open draft."
+  ],
+  "watch": [
+    "**a subject isn't a draft id.** two versions can have the same subject. identify the recipient and a line of text before choosing.",
+    "**headers leave out the offer itself.** if the price seems missing, ask which format the bot read."
+  ],
+  "faq": [
+    {
+      "q": "can i see who is copied without reading the whole email?",
+      "a": "**ask for the cc header.** the metadata format lets the bot read addressing details without retrieving the body."
+    },
+    {
+      "q": "does the draft prove the customer got that price?",
+      "a": "**a saved draft only shows the proposed wording.** look for the actual correspondence before treating a price as agreed."
+    }
+  ],
+  "sources": [
+    {
+      "label": "dusk bot docs: files and apps",
+      "url": "/docs/files-and-apps"
+    },
+    {
+      "label": "dusk bot docs: routines",
+      "url": "/docs/routines"
+    }
+  ],
+  "voice": 2,
+  "tip": {
+    "text": "if the draft is already open and you need one date, read it there. the bot earns its keep when you keep coming back with the same question."
+  }
+}

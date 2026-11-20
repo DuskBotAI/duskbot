@@ -54,3 +54,11 @@ describe("a room's find bar", () => {
     expect(bar()).toBeNull();
   });
 });
+
+describe("a room's transcript", () => {
+  it("gives the working lines and the failed-reply card their own keys", () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    flushSync(() => root.render(createElement(GroupView, { group: room })));
+    expect(error.mock.calls.filter((call) => String(call[0]).includes("same key"))).toEqual([]);
+  });
+});

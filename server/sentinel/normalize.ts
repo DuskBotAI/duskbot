@@ -65,7 +65,7 @@ export function signatureOf(kind: string, ...parts: Array<string | undefined>): 
 // Reserved: people cannot name their own MCP servers after these.
 const HARNESS_SERVERS = new Set([
   "dusk", "computer", "agents", "composio", "data", "browser", "phone", "dweb",
-  "duskbot", "duskbot_connectors", "duskbot_phone",
+  "duskbot", "duskbot_connectors", "duskbot_phone", "duskbot_browser",
 ]);
 const SHELL_TOOLS = new Set(["bash", "shell", "exec", "exec_command", "local_shell", "run_command", "terminal"]);
 

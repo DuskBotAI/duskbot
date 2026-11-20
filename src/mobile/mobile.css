@@ -32,8 +32,8 @@
   transition-duration: .16s, .15s, .15s;
   transition-timing-function: var(--m-ease-out), ease, ease;
 }
-/* the shared phone layout dims every pressed control; the shell's own controls scale instead */
-.dusk-mobile .mobile-press:active { opacity: 1; }
+/* the shared phone layout dims every pressed control; the shell's own controls scale or tint instead */
+.dusk-mobile :is(.mobile-press, .mobile-row):not(:disabled):active { opacity: 1; }
 
 .dusk-mobile .mobile-float {
   box-shadow: 0 4px 14px -2px rgb(28 28 28 / .10), 0 1px 3px rgb(28 28 28 / .06);
@@ -43,6 +43,12 @@
   box-shadow: 0 4px 14px -2px rgb(0 0 0 / .5);
 }
 
+/* in dark, menus and grouped rows sit a step above the page and the bubbles under them */
+html[data-mobile-app][data-skin="grok-dark"] { --color-menu: #2a2a2d; }
+
+/* the phone writes in sentence case, grok's capitalised unread line included */
+.dusk-mobile [data-unread-divider] .uppercase { text-transform: none; font-size: 13px; letter-spacing: 0; }
+
 .dusk-mobile .mobile-page { box-shadow: -12px 0 32px rgb(10 10 12 / .10); }
 /* the list under an open chat is out of sight: its working dots and other loops hold still until it shows again. Named
    loops only: a rule on every element under it restyles the whole list each time a chat opens and closes */
@@ -50,14 +56,15 @@
   animation-play-state: paused !important;
 }
 
-.dusk-mobile :focus-visible {
-  outline: none;
+/* a keyboard or Switch Control focus shows a ring; text fields show their caret instead, and controls that draw their own
+   focus ring keep it */
+.dusk-mobile :focus-visible:not(input, textarea, [contenteditable], [class*="focus-visible:ring"]) {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
 }
+.dusk-mobile :is(input, textarea, [contenteditable]):focus-visible { outline: none; }
 .dusk-mobile .mobile-row:focus-visible { outline-offset: -2px; border-radius: 16px; }
 
-/* rows press like a list cell: a quick tint, no travel (high frequency) */
-.dusk-mobile .mobile-row { transition: background-color .15s ease; }
-html:not([data-mobile-app="android"]) .dusk-mobile .mobile-row:active { background-color: color-mix(in srgb, var(--color-ink) 6%, transparent); }
 
 /* the keyboard: during its slide the transcript and composer ride it on the compositor; once it settles the layout
    takes the space and the transform returns to zero in the same frame (src/mobile/keyboard.ts) */
@@ -75,8 +82,18 @@ html:not([data-mobile-app="android"]) .dusk-mobile .mobile-row:active { backgrou
 /* the shared chat header row keeps its height as the spacer under the shell's floating nav */
 .dusk-mobile [data-mobile-chat] :is([data-chathead-row], [data-roomhead-row]) { visibility: hidden; }
 .dusk-mobile [data-mobile-chat] main { padding-top: var(--m-safe-top); }
+.dusk-mobile .mobile-switch { position: relative; flex-shrink: 0; width: 51px; height: 31px; border-radius: 9999px; background-color: color-mix(in srgb, var(--color-ink) 14%, transparent); transition: background-color .42s ease; }
+.dusk-mobile .mobile-switch[data-on] { background-color: var(--color-ink); }
+.dusk-mobile .mobile-switch > span {
+  position: absolute; left: 2px; top: 2px; width: 27px; height: 27px; border-radius: 9999px; background-color: var(--color-app);
+  box-shadow: 0 1px 2px rgb(0 0 0 / .05);
+  transition: translate .34s var(--m-ease-release), scale .16s var(--m-ease-out);
+}
+.dusk-mobile .mobile-switch[data-on] > span { translate: 20px 0; }
+.dusk-mobile [role="switch"]:active .mobile-switch > span { scale: 1.11 .9; }
 
 @media (prefers-reduced-motion: reduce) {
+  .dusk-mobile .mobile-switch, .dusk-mobile .mobile-switch > span { transition-duration: .01s; scale: 1; }
   .dusk-mobile .mobile-press, .dusk-mobile .mobile-press:active { scale: 1; }
   .dusk-mobile[data-kb-moving] [data-mobile-chat] .glass-scroller,
   .dusk-mobile[data-kb-moving] [data-mobile-chat] [data-grok-inset] { transition-duration: .01s; transition-delay: 0s; }
@@ -85,9 +102,11 @@ html:not([data-mobile-app="android"]) .dusk-mobile .mobile-row:active { backgrou
 /* the web phone preview draws a status bar and home indicator around an iframe, which reports no safe areas */
 [data-phone-frame] .dusk-mobile { --m-safe-top: 54px; --m-safe-bottom: 34px; }
 
-/* a tapped row keeps its pressed look until the chat it opened has slid in */
-.dusk-mobile .mobile-row[data-opening] { background-color: color-mix(in srgb, var(--color-ink) 6%, transparent); }
 .dusk-mobile .mobile-press[data-opening] { scale: .96; }
+
+/* under the system's bar the safe area already ends below its button: the row that held the page's own is only a gap */
+html[data-native-chrome] .dusk-mobile .mobile-screen-top { height: calc(var(--m-safe-top) + 6px); padding-bottom: 0; }
+html[data-native-bar-hidden] { --m-home-bar-fallback: calc(var(--m-safe-top) + 54px); }
 
 /* the native camera draws behind the webview */
 html.mobile-scanning,
@@ -102,6 +121,9 @@ html[data-mobile-app], html[data-mobile-app] body { overflow: hidden; overscroll
 /* an app, not a page: no pinch or double-tap zoom, no text-size jumps, no stray text selection outside what you type */
 html[data-mobile-app] { touch-action: pan-x pan-y; -webkit-text-size-adjust: 100%; text-size-adjust: 100%; -webkit-user-select: none; user-select: none; }
 html[data-mobile-app] :is(input, textarea, [contenteditable="true"]) { -webkit-user-select: text; user-select: text; }
+/* what a viewer shows (a file, code, a table, a message's words) selects with the system's handles and its Copy, Look Up and Share menu; its own buttons stay taps */
+html[data-mobile-app] [data-selectable] { -webkit-user-select: text; user-select: text; -webkit-touch-callout: default; }
+html[data-mobile-app] [data-selectable] :is(button, [role="button"]) { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
 
 /* touch targets the shared desktop components draw smaller than a thumb needs: at least 44px inside the phone shell */
 .dusk-mobile [data-mobile-chat] [data-grok-inset] button:not([role="menuitem"]),
@@ -109,6 +131,8 @@ html[data-mobile-app] :is(input, textarea, [contenteditable="true"]) { -webkit-u
 .dusk-mobile .side-panel > div > div > button[aria-label],
 .dusk-mobile .side-panel [data-panel-share],
 .dusk-mobile [data-mobile-chat] form button { min-width: 44px; min-height: 44px; }
+/* an attached file's remove button is a small disc on its thumbnail; it answers 44 through the rule below */
+.dusk-mobile [data-mobile-chat] [data-grok-inset] [data-composer-attachment] button:not([role="menuitem"]) { min-width: 0; min-height: 0; }
 
 /* the rest (a code block's copy, a message's actions, a panel switch, an inline link) answer a 44px square around
    their centre without changing how they look; in the base layer, so a control placed with a position utility keeps it */
@@ -208,7 +232,6 @@ html[data-native-menu] .dusk-mobile [data-mobile-chat] [data-message-row] [data-
 /* the page's stand-in for the native glass (the chat's header pills and composer, Home's top buttons): blur and a hairline, no highlight or glow */
 .dusk-mobile :is([data-mobile-chat], [data-home-bar]) {
   --g-tint: rgb(255 255 255 / .55);
-  --g-tint-press: rgb(255 255 255 / .75);
   --g-tint-quiet: rgb(24 24 32 / .055);
   --g-solid: rgb(250 250 252 / .97);
   --g-container: rgb(240 240 244);
@@ -217,7 +240,6 @@ html[data-native-menu] .dusk-mobile [data-mobile-chat] [data-message-row] [data-
 }
 [data-skin="grok-dark"] .dusk-mobile :is([data-mobile-chat], [data-home-bar]), .dusk-mobile[data-scheme="dark"] :is([data-mobile-chat], [data-home-bar]) {
   --g-tint: rgb(48 48 52 / .55);
-  --g-tint-press: rgb(72 72 78 / .65);
   --g-tint-quiet: rgb(255 255 255 / .07);
   --g-solid: rgb(38 38 42 / .97);
   --g-container: rgb(43 43 47);
@@ -232,7 +254,6 @@ html[data-native-menu] .dusk-mobile [data-mobile-chat] [data-message-row] [data-
   box-shadow: inset 0 0 0 .5px var(--g-rim), var(--g-shadow);
   transform: translateZ(0);
 }
-.dusk-mobile :is([data-mobile-chat], [data-home-bar]) .m-glass.mobile-press:active:not(:disabled) { background-color: var(--g-tint-press); }
 
 /* under the status bar the transcript fades into the page, so text never runs into the clock */
 .dusk-mobile [data-mobile-chat] .m-edge-top {
@@ -247,7 +268,9 @@ html[data-native-menu] .dusk-mobile [data-mobile-chat] [data-message-row] [data-
   .dusk-mobile :is([data-mobile-chat] :is(.m-glass, [data-tour="composer"]), [data-home-bar] .m-glass) { background-color: var(--g-solid); -webkit-backdrop-filter: none; backdrop-filter: none; }
 }
 /* android webviews drop frames compositing backdrop-filter on many phones: there every glass surface is its solid twin */
-html[data-mobile-app="android"] :is(*, ::before, ::after) { -webkit-backdrop-filter: none !important; backdrop-filter: none !important; }
+/* named, not every element: a rule ending in a universal selector is tried on each element at every restyle */
+html[data-mobile-app="android"] :is(.glass-surface, .m-glass, [data-tour="composer"], [class*="backdrop-blur"]),
+html[data-mobile-app="android"] .glass-bar::before { -webkit-backdrop-filter: none !important; backdrop-filter: none !important; }
 html[data-mobile-app="android"] .dusk-mobile :is([data-mobile-chat] :is(.m-glass, [data-tour="composer"]), [data-home-bar] .m-glass) { background-color: var(--g-solid); }
 html[data-mobile-app="android"] .glass-surface { background: var(--color-menu); }
 html[data-mobile-app="android"] :is(.glass-card, .glass-surface .bg-card) { background: var(--color-card); }
@@ -261,6 +284,33 @@ html[data-mobile-app="android"] .dusk-mobile [data-mobile-chat] [data-tour="comp
   background-color: var(--g-container);
   box-shadow: inset 0 0 0 .5px var(--g-rim);
 }
+/* and the chat's header is M3's center-aligned top app bar: one surface from under the status bar, a soft edge below it,
+   and plain icon buttons and title (no discs, no pill) that answer the same centred ripple */
+html[data-mobile-app="android"] .dusk-mobile [data-mobile-chat] [data-glass-nav] {
+  background-color: var(--color-app);
+  padding-block-end: 6px;
+}
+html[data-mobile-app="android"] .dusk-mobile [data-mobile-chat] [data-glass-nav]::after {
+  content: "";
+  position: absolute;
+  inset-inline: 0;
+  top: 100%;
+  height: 12px;
+  pointer-events: none;
+  background: linear-gradient(to bottom, var(--color-app), transparent);
+}
+html[data-mobile-app="android"] .dusk-mobile [data-mobile-chat] [data-glass-nav] .m-glass {
+  background-color: transparent;
+  box-shadow: none;
+}
+html[data-mobile-app="android"] .dusk-mobile [data-mobile-chat] [data-glass-nav] .mobile-press:active:not(:disabled) { scale: 1; }
+html[data-mobile-app="android"] .dusk-mobile [data-mobile-chat] [data-glass-nav] button { position: relative; }
+/* Home's top buttons: M3's tonal icon buttons, flat on the page */
+html[data-mobile-app="android"] .dusk-mobile [data-home-bar] :is(.m-glass, .mobile-float) {
+  background-color: var(--g-container);
+  box-shadow: none;
+}
+html[data-mobile-app="android"] .dusk-mobile [data-mobile-chat] [data-glass-nav] button::after,
 html[data-mobile-app="android"] .dusk-mobile [data-mobile-chat] [data-tour="composer"] button:not([role="menuitem"])::after {
   content: "";
   position: absolute;
@@ -271,6 +321,7 @@ html[data-mobile-app="android"] .dusk-mobile [data-mobile-chat] [data-tour="comp
   opacity: 0;
   transition: background-size 400ms cubic-bezier(.05, .7, .1, 1), opacity 300ms linear 100ms;
 }
+html[data-mobile-app="android"] .dusk-mobile [data-mobile-chat] [data-glass-nav] button:active::after,
 html[data-mobile-app="android"] .dusk-mobile [data-mobile-chat] [data-tour="composer"] button:not([role="menuitem"]):active::after {
   background-size: 300% 300%;
   opacity: .12;
@@ -278,14 +329,15 @@ html[data-mobile-app="android"] .dusk-mobile [data-mobile-chat] [data-tour="comp
 }
 html[data-mobile-app="android"] .dusk-mobile [data-mobile-chat] :active > [data-composer-plus] { scale: 1; }
 /* every other control's touch ripple (press.ts installRipple): a disc from the finger, painted over the control's own
-   background so nothing round it moves or is clipped; the ripple is the pressed state, so rows drop their tint */
+   background so nothing round it moves or is clipped; rows and menu items take none */
 @property --m-ripple { syntax: "<length>"; inherits: false; initial-value: 0px; }
 @property --m-ripple-a { syntax: "<number>"; inherits: false; initial-value: 1; }
 html[data-mobile-app="android"] .dusk-mobile [data-ripple] {
   background-image: radial-gradient(circle at var(--m-rx, 50%) var(--m-ry, 50%),
-    color-mix(in srgb, currentColor calc(12% * var(--m-ripple-a)), transparent) var(--m-ripple),
+    color-mix(in srgb, currentColor calc(8% * var(--m-ripple-a)), transparent) var(--m-ripple),
     transparent calc(var(--m-ripple) + 1px));
-}@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+}
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
   .dusk-mobile :is([data-mobile-chat] :is(.m-glass, [data-tour="composer"]), [data-home-bar] .m-glass) { background-color: var(--g-solid); }
 }
 @media (forced-colors: active) {
@@ -297,16 +349,60 @@ html[data-mobile-app="android"] .dusk-mobile [data-ripple] {
    still answers 44); a plain +, the field 10 after it at the body's 17/24, then the mic and the call, or send */
 .dusk-mobile [data-mobile-chat] [data-composer-backdrop] { display: none; }
 .dusk-mobile [data-mobile-chat] [data-tour="composer"] {
-  align-items: flex-end;
+  align-items: stretch;
   gap: 0;
   /* the dock pads 16 */
   margin-inline: 14px;
   padding: 8px;
   border-radius: 24px;
   box-shadow: inset 0 0 0 .5px var(--g-rim), 0 2px 10px -6px rgb(20 20 28 / .14);
-  transition: margin-inline var(--m-kb-dur, .35s) var(--m-kb-ease, ease) var(--m-kb-delay, 0s);
+  transition: margin-inline var(--m-kb-dur, .35s) var(--m-kb-ease, ease) var(--m-kb-delay, 0s), opacity 200ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 .dusk-mobile[data-keyboard="open"] [data-mobile-chat] [data-tour="composer"] { margin-inline: -10px; }
+/* in a call its bar takes the composer's place, one bar at a time: the same glass pill on the same frame (30 in from
+   each side, 12 above the dock's foot, 48 high, 32 controls 8 in), the composer fading out under it as it comes and back
+   as it goes */
+.dusk-mobile [data-mobile-chat]:has([data-call-surface]:not([data-call-leaving])) [data-tour="composer"] {
+  opacity: 0;
+  visibility: hidden;
+  transition: margin-inline var(--m-kb-dur, .35s) var(--m-kb-ease, ease) var(--m-kb-delay, 0s), opacity 200ms cubic-bezier(0.22, 1, 0.36, 1), visibility 0s 200ms;
+}
+.dusk-mobile [data-mobile-chat] .voice-call-dock {
+  gap: 8px;
+  padding: 0 30px 12px;
+  background: none;
+  animation-duration: 200ms;
+}
+.dusk-mobile [data-mobile-chat] .voice-call-pill {
+  width: 100%;
+  height: 48px;
+  gap: 8px;
+  padding: 8px;
+  border-radius: 24px;
+  color: var(--color-ink);
+  background-color: var(--g-tint);
+  -webkit-backdrop-filter: blur(16px) saturate(180%);
+  backdrop-filter: blur(16px) saturate(180%);
+  box-shadow: inset 0 0 0 .5px var(--g-rim), 0 2px 10px -6px rgb(20 20 28 / .14);
+  animation: voice-call-fade 200ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.dusk-mobile [data-mobile-chat] .voice-call-pill-out { animation: voice-call-unfade 200ms cubic-bezier(0.22, 1, 0.36, 1) both; }
+.dusk-mobile [data-mobile-chat] .voice-call-pill > [data-call-wave] { flex: 1; min-width: 0; padding-inline: 0; }
+/* plain glyphs like the composer's own controls; only hanging up (and a muted mic) is a filled disc */
+.dusk-mobile [data-mobile-chat] .voice-call-pill .voice-call-press { width: 32px; height: 32px; }
+.dusk-mobile [data-mobile-chat] .voice-call-pill .voice-call-press:not([data-call-filled]) { background-color: transparent; }
+html[data-mobile-app="android"] .dusk-mobile [data-mobile-chat] .voice-call-pill { background-color: var(--g-container); box-shadow: inset 0 0 0 .5px var(--g-rim); }
+@media (prefers-reduced-transparency: reduce) {
+  .dusk-mobile [data-mobile-chat] .voice-call-pill { background-color: var(--g-solid); -webkit-backdrop-filter: none; backdrop-filter: none; }
+}
+/* while a card waits above the composer nothing is working, so the working line's empty slot gives its room back */
+.dusk-mobile [data-mobile-chat]:has([data-approval-dock]) .turn-status-slot:empty { display: none; }
+/* a card waiting on the person above the composer stops under the top bar: its words scroll, its title and buttons stay */
+.dusk-mobile [data-mobile-chat] [data-approval-dock] [data-ask-card="approval"] {
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - 208px);
+}
 .dusk-mobile [data-mobile-chat] [data-tour="composer"] > div:has(> [data-composer-row]) {
   min-height: 32px;
   padding: 0;
@@ -439,10 +535,12 @@ html[data-native-glass-composer] .dusk-mobile [data-mobile-chat] [data-tour="com
 
 /* message text at the phone's body size, 17 on a 24 line, regular weight; the bot's bubble is a little roomier at the
    sides than the person's, and every bubble keeps one 20px radius, no tail */
-.dusk-mobile [data-mobile-chat] [data-chat-bubble] {
+.dusk-mobile [data-mobile-chat] [data-chat-bubble]:not([data-emoji-only]) {
   font-size: 17px;
   line-height: 24px;
   font-weight: 400;
+}
+.dusk-mobile [data-mobile-chat] [data-chat-bubble]:not([data-emoji-only], [data-bubble-group]) {
   padding: 8px 14px;
   border-radius: 20px;
 }

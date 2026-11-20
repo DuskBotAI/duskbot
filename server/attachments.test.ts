@@ -561,6 +561,9 @@ describe("shared files", () => {
   it("sanitizes the display name and derives its extension from the mime", () => {
     expect(sanitizeSharedFileName("  Quarterly: report.exe  ", "application/pdf")).toBe("Quarterly_ report.pdf");
     expect(sanitizeSharedFileName("notes", "text/markdown")).toBe("notes.md");
+    expect(sanitizeSharedFileName("rename.py", "text/plain")).toBe("rename.py");
+    expect(sanitizeSharedFileName("rename.py", "application/pdf")).toBe("rename.pdf");
+    expect(sanitizeSharedFileName("page.html", "text/plain")).toBe("page.txt");
     expect(() => sanitizeSharedFileName("../../secret.txt", "text/plain")).toThrow(/filename, not a path/);
     expect(() => sanitizeSharedFileName("..\\..\\secret.txt", "text/plain")).toThrow(/filename, not a path/);
     expect(() => sanitizeSharedFileName("..%2F..%2Fsecret.txt", "text/plain")).toThrow(/filename, not a path/);

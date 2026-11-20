@@ -22,12 +22,12 @@ export function systemVoiceAvailable(): boolean {
 }
 
 /** Says one sentence with the computer's voice; resolves when it is done or stopped. */
-export function systemSpeak(text: string, { speed, signal, onStart }: { speed: number; signal: AbortSignal; onStart?: () => void }): Promise<void> {
+export function systemSpeak(text: string, { speed, signal, onStart, language }: { speed: number; signal: AbortSignal; onStart?: () => void; language?: string }): Promise<void> {
   const speech = synth();
   if (!speech || signal.aborted) return Promise.resolve();
   return new Promise((resolve) => {
     const utterance = new window.SpeechSynthesisUtterance(text);
-    const voice = bestSystemVoice(speech.getVoices());
+    const voice = bestSystemVoice(speech.getVoices(), language);
     if (voice) utterance.voice = voice;
     utterance.rate = speed;
     const done = () => {
@@ -58,9 +58,11 @@ export class SystemListener {
   failed = false;
   private offs: Array<() => void> = [];
   private readonly onSaid: (text: string) => void;
+  private readonly language: string | undefined;
 
-  constructor(onSaid: (text: string) => void) {
+  constructor(onSaid: (text: string) => void, language?: string) {
     this.onSaid = onSaid;
+    this.language = language;
   }
 
   get active(): boolean {
@@ -86,7 +88,7 @@ export class SystemListener {
         else this.failed = true;
       }),
     ];
-    void bridge.speechStart({ endpointMs: 700 }).catch(() => {
+    void bridge.speechStart({ endpointMs: 700, ...(this.language ? { locale: this.language } : {}) }).catch(() => {
       this.running = false;
       this.failed = true;
       this.release();

@@ -30,17 +30,24 @@ export interface EventContext {
   lon?: number;
   device?: "desktop" | "mobile" | "tablet";
   os?: "mac" | "windows" | "linux" | "ios" | "android" | "other";
-  browser?: "chrome" | "safari" | "firefox" | "edge" | "arc" | "brave" | "other";
+  browser?: "chrome" | "safari" | "firefox" | "edge" | "arc" | "brave" | "samsung" | "opera" | "x app" | "threads app" | "instagram app" | "facebook app" | "linkedin app" | "tiktok app" | "other";
   width?: number;
   app?: { platform?: string; version?: string };
 }
 
+/** the in-app browsers of social apps, named in their user agents (Threads on iOS calls itself Barcelona) */
+const IN_APP: ReadonlyArray<[RegExp, NonNullable<EventContext["browser"]>]> = [
+  [/\bTwitter(?:Android| for i)|\bTwitterWebView/i, "x app"], [/\bBarcelona\b|\bThreads\b/, "threads app"], [/\bInstagram\b/, "instagram app"],
+  [/\bFBAN\/|\bFBAV\/|\bFB_IAB\b/, "facebook app"], [/\bLinkedInApp\b/i, "linkedin app"], [/\bmusical_ly\b|\bBytedanceWebview\b|\bTikTok\b/i, "tiktok app"],
+];
 /** Arc and Brave send Chrome's user agent; Brave names itself in the sec-ch-ua header, and the site tracker passes a hint
  * for either (Brave's navigator.brave, Arc's --arc-palette-* page styles) */
 export function deviceOf(ua: string, hints: { brands?: unknown; hint?: unknown } = {}): Pick<EventContext, "device" | "os" | "browser"> {
   const os = /iphone|ipad|ipod/i.test(ua) ? "ios" : /android/i.test(ua) ? "android" : /mac os x|macintosh/i.test(ua) ? "mac" : /windows/i.test(ua) ? "windows" : /linux|cros/i.test(ua) ? "linux" : "other";
   const device = /ipad|tablet/i.test(ua) || (/android/i.test(ua) && !/mobile/i.test(ua)) ? "tablet" : /mobi|iphone|ipod/i.test(ua) ? "mobile" : "desktop";
-  let browser: NonNullable<EventContext["browser"]> = /edg\//i.test(ua) ? "edge" : /firefox|fxios/i.test(ua) ? "firefox" : /chrome|crios|chromium/i.test(ua) ? "chrome" : /safari/i.test(ua) ? "safari" : "other";
+  const inApp = IN_APP.find(([pattern]) => pattern.test(ua))?.[1];
+  let browser: NonNullable<EventContext["browser"]> = inApp ?? (/edg(?:e|a|ios)?\//i.test(ua) ? "edge" : /opr\/|opera/i.test(ua) ? "opera" : /samsungbrowser/i.test(ua) ? "samsung" : /firefox|fxios/i.test(ua) ? "firefox"
+    : /chrome|crios|chromium/i.test(ua) ? "chrome" : /safari/i.test(ua) ? "safari" : /applewebkit/i.test(ua) && /iphone|ipad|ipod/i.test(ua) ? "safari" : "other");
   if (browser === "chrome") browser = hints.hint === "arc" || hints.hint === "brave" ? hints.hint : typeof hints.brands === "string" && /"Brave"/.test(hints.brands) ? "brave" : browser;
   return { device, os, browser };
 }

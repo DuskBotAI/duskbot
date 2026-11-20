@@ -12,6 +12,7 @@ export function secondsLeft(view: ReconnectView | null, now = Date.now()): numbe
 /** The page's lines: who it waits on and when it looks again. */
 export function reconnectText(view: ReconnectView | null, now = Date.now()): { title: string; next: string | null } {
   if (!view) return { title: t("reconnect.opening"), next: null };
+  if (view.gone) return { title: t("reconnect.gone", { name: view.name }), next: null };
   const seconds = secondsLeft(view, now);
   return { title: t(view.neverConnected ? "reconnect.notYet" : "reconnect.title", { name: view.name }), next: seconds === null ? t("reconnect.checking") : t("reconnect.next", { seconds: String(seconds) }) };
 }
@@ -45,15 +46,15 @@ export function ReconnectScreen({ bridge }: { bridge: ReconnectBridge }) {
     <main data-reconnect-screen className="flex min-h-screen justify-center overflow-y-auto bg-app px-6 py-16 text-ink" style={{ WebkitAppRegion: "drag" } as React.CSSProperties}>
       <div className="flex w-full max-w-[460px] flex-col items-start gap-3" style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}>
         <p role="status" className="flex items-center gap-2 text-[20px] font-semibold">
-          {view?.checking !== false && <span aria-hidden="true" className="size-3.5 shrink-0 animate-spin rounded-full border-2 border-transparent border-t-accent" />}
+          {view?.checking !== false && !view?.gone && <span aria-hidden="true" className="size-3.5 shrink-0 animate-spin rounded-full border-2 border-transparent border-t-accent" />}
           {text.title}
         </p>
-        {view && <p className="text-[14px] leading-relaxed text-ink-secondary">{view.neverConnected ? t("reconnect.notYetBody", { host: view.host }) : t("reconnect.kept")}</p>}
+        {view && <p className="text-[14px] leading-relaxed text-ink-secondary">{view.gone ? t("reconnect.goneBody") : view.neverConnected ? t("reconnect.notYetBody", { host: view.host }) : t("reconnect.kept")}</p>}
         {text.next && <p data-reconnect-next className="text-[13px] tabular-nums text-ink-secondary">{text.next}</p>}
         {view && <div className="mt-1 flex flex-wrap gap-2">
-          <button type="button" data-reconnect-retry className="ui-button" disabled={view.checking}
-            onClick={() => { void bridge.retry().then(setView).catch(() => {}); }}>{t("reconnect.retry")}</button>
-          {view.neverConnected && <button type="button" data-reconnect-remove className="ui-button"
+          {!view.gone && <button type="button" data-reconnect-retry className="ui-button" disabled={view.checking}
+            onClick={() => { void bridge.retry().then(setView).catch(() => {}); }}>{t("reconnect.retry")}</button>}
+          {(view.neverConnected || view.gone) && <button type="button" data-reconnect-remove className="ui-button"
             onClick={() => { void bridge.remove().catch(() => {}); }}>{t("reconnect.remove")}</button>}
         </div>}
         {frame && (frame.bots.length > 0 || frame.groups.length > 0) && <section data-reconnect-frame aria-label={t("reconnect.lastSeen", { time: seen ?? "" })} className="mt-6 flex w-full flex-col gap-3">

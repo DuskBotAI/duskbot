@@ -1,5 +1,6 @@
 // A server connected by hand, before the window goes there: the window goes only to a server that answers; one that
 // doesn't (its name no longer resolves, nothing listens) is the person's choice: try again, remove it, or stay.
+import { goneAnswer } from "./cloud-power.mjs";
 
 /** How long a server has to answer before it counts as not answering. */
 export const SERVER_LOOK_MS = 3_000;
@@ -13,16 +14,24 @@ export function tunnelOrigin(origin) {
   try { return /^vps-[^.]+\.localhost$/iu.test(new URL(origin).hostname); } catch { return false; }
 }
 
-/** Whether anything answers at `origin` (any HTTP status but a 5xx from a proxy in front of a stopped app). */
-export async function serverAnswers(origin, fetchImpl, timeoutMs = SERVER_LOOK_MS) {
+/** "yes" when anything answers at `origin` (any HTTP status but a 5xx from a proxy in front of a stopped app), "gone" for a
+ * dusk cloud that was deleted, else "no". */
+export async function serverLook(origin, fetchImpl, timeoutMs = SERVER_LOOK_MS) {
   try {
     const response = await fetchImpl(`${origin}/.well-known/duskbot/environment`, {
       cache: "no-store", redirect: "manual", credentials: "omit", signal: AbortSignal.timeout(timeoutMs), headers: { accept: "application/json" },
     });
-    return response.status < 500;
+    await response.body?.cancel?.().catch(() => {});
+    if (goneAnswer(response)) return "gone";
+    return response.status < 500 ? "yes" : "no";
   } catch {
-    return false;
+    return "no";
   }
+}
+
+/** Whether anything answers at `origin`; a deleted dusk cloud does not. */
+export async function serverAnswers(origin, fetchImpl, timeoutMs = SERVER_LOOK_MS) {
+  return (await serverLook(origin, fetchImpl, timeoutMs)) === "yes";
 }
 
 /** Whether `origin` answers within `withinMs`, looked at again every second until then. */

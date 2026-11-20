@@ -88,6 +88,7 @@ describe("connected providers", () => {
     expect(providerOfInstance({ instanceId: "openai-compat-1", driverKind: "openai-compat", url: "https://api.groq.com/openai/v1" })?.id).toBe("groq");
     expect(providerOfInstance({ instanceId: "openai-compat-2", driverKind: "openai-compat", url: "https://acme.openai.azure.com/openai/v1" })?.id).toBe("azure");
     expect(providerOfInstance({ instanceId: "openai-compat-3", driverKind: "openai-compat", url: "http://127.0.0.1:8317/v1" })?.id).toBe("cliproxyapi");
+    expect(providerOfInstance({ instanceId: "openai-compat-5", driverKind: "openai-compat", url: "https://llmtr.com/v1" })?.id).toBe("llmtr");
     expect(providerOfInstance({ instanceId: "openai-compat-4", driverKind: "openai-compat", url: "https://api.groq.com.evil.test/v1" })).toBeUndefined();
   });
 

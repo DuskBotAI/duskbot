@@ -28,8 +28,8 @@ const PATTERN_ROUTES: Array<[method: string, route: string]> = [
   ["POST", "/users/acct_someone1/plan"], ["POST", "/users/acct_someone1/plan/preview"], ["POST", "/users/acct_someone1/admin-role"],
   ["POST", `/clouds/${CLOUD}/pause`], ["POST", `/clouds/${CLOUD}/resume`], ["POST", `/clouds/${CLOUD}/delete`], ["POST", `/clouds/${CLOUD}/end-trial`],
 ];
-const PATTERN_COUNT = 10;
-const ALLOWED_GETS = ["/me", "/overview", "/web", "/web/country", "/funnel", "/realtime", "/retention", "/waitlist", "/revenue"];
+const PATTERN_COUNT = 11;
+const ALLOWED_GETS = ["/me", "/overview", "/web", "/web/country", "/funnel", "/realtime", "/retention", "/waitlist", "/revenue", "/subscribers"];
 /** what cloud spend, cost per customer, margins and machines answer on; none of it is the growth role's */
 const CLOUD_ROUTES = ["/revenue/infra", "/clouds", "/clouds?status=all", `/clouds/${CLOUD}/usage`, "/ops", "/ops/accounts", "/ops/relays", "/ops/sharing"];
 
@@ -105,7 +105,7 @@ describe("growth admin role", () => {
 
   it("pins the allowlist: reads only, and only these", () => {
     expect(GROWTH_ROUTES.map(pattern => pattern.source)).toEqual([
-      "^\\/me$", "^\\/overview$", "^\\/web$", "^\\/web\\/[a-z_]{1,30}$", "^\\/funnel$", "^\\/realtime$", "^\\/retention$", "^\\/waitlist$", "^\\/revenue$",
+      "^\\/me$", "^\\/overview$", "^\\/web$", "^\\/web\\/[a-z_]{1,30}$", "^\\/funnel$", "^\\/realtime$", "^\\/retention$", "^\\/waitlist$", "^\\/revenue$", "^\\/subscribers$", "^\\/subscribers\\/[A-Za-z0-9_-]{1,80}$",
     ]);
     for (const route of ALLOWED_GETS) { expect(growthMay("GET", route)).toBe(true); expect(growthMay("POST", route)).toBe(false); }
     expect(growthMay("GET", "/waitlist.csv")).toBe(false);
@@ -215,6 +215,28 @@ describe("growth admin role", () => {
     expect(revenue.headline.mrr).toBeGreaterThan(0);
     const waitlist = await (await call("/v1/admin/waitlist?q=waiting", { cookie: growth })).json() as { entries: unknown[]; count: number; total: number };
     expect(waitlist).toMatchObject({ entries: [], count: 2, total: 2 });
+  });
+
+  it("reads subscribers and one subscriber by handle, never by email or name; the owner sees the email", async () => {
+    const { owner, growth } = await setup();
+    await paidBuyer();
+    const buyerId = app.auth.accountByEmail(BUYER)!.id;
+    type List = { rows: Array<{ accountId: string; handle: string; email: string | null; name: string | null }>; launch: { mrrCents: number } };
+    const mine = await (await call("/v1/admin/subscribers?filter=all", { cookie: owner })).json() as List;
+    expect(mine.rows.find(row => row.accountId === buyerId)?.email).toBe(BUYER);
+    const list = await call("/v1/admin/subscribers?filter=all", { cookie: growth });
+    expect(list.status).toBe(200);
+    const text = await list.text();
+    expect(EMAILISH.exec(text)?.[0] ?? null).toBeNull();
+    const row = (JSON.parse(text) as List).rows.find(item => item.accountId === buyerId)!;
+    expect(row).toMatchObject({ email: null, name: null });
+    expect(row.handle).toMatch(/^p-[0-9a-f]{6}$/);
+    const one = await call(`/v1/admin/subscribers/${buyerId}`, { cookie: growth });
+    expect(one.status).toBe(200);
+    expect(EMAILISH.exec(await one.text())?.[0] ?? null).toBeNull();
+    expect(((await (await call(`/v1/admin/subscribers/${buyerId}`, { cookie: owner })).json()) as { account: { email: string } }).account.email).toBe(BUYER);
+    expect((await call("/v1/admin/subscribers/acct_nobody0001", { cookie: growth })).status).toBe(404);
+    expect((await call("/v1/admin/subscribers", { method: "POST", cookie: growth })).status).toBe(403);
   });
 
   it("strips people from any shape it is handed", () => {

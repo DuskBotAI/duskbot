@@ -103,21 +103,29 @@ async function withQuotaFixture(
 }
 
 /** A bot whose conversation runs on the limited engine, and the turn that meets the limit. */
-async function meetTheLimit(api: (method: string, path: string, body?: unknown) => Promise<any>, control: (...args: string[]) => Promise<any>, text: string) {
+async function meetTheLimit(api: (method: string, path: string, body?: unknown) => Promise<any>, control: (...args: string[]) => Promise<any>, text: string, botPatch?: Record<string, unknown>, ends = "failed") {
   const { bot } = await control("new-bot", "--name", "Out of quota");
   const threadId = bot.activeTaskId as string;
   const limited = (await api("GET", "/api/bots")).bots.find((entry: any) => entry.id === bot.id).modelSelection;
   await api("PATCH", `/api/bots/${bot.id}/tasks/${threadId}`, { modelSelection: { ...limited, instanceId: "claude" }, updateBotDefault: true });
+  if (botPatch) await api("PATCH", `/api/bots/${bot.id}`, botPatch);
   await control("send", "--bot", bot.id, "--task", threadId, "--text", text);
-  expect((await control("wait", "--bot", bot.id, "--task", threadId, "--timeout", "30")).status).toBe("failed");
+  expect((await control("wait", "--bot", bot.id, "--task", threadId, "--timeout", "30")).status).toBe(ends);
   const messages = async () => (await api("GET", `/api/threads/${threadId}/messages?limit=100`)).messages as any[];
   const state = async () => (await api("GET", "/api/bots")).bots.find((entry: any) => entry.id === bot.id);
   return { bot, threadId, messages, state };
 }
 
-it("never carries the request on with an AI the person did not choose: the turn waits for its own AI and nothing is sent again", async () => {
+it("with no backup chosen, carries the request on with another AI the person has working", async () => {
   await withQuotaFixture({}, async ({ api, control, backupPrompts }) => {
-    const { bot, threadId, messages, state } = await meetTheLimit(api, control, "SUMMARISE_THE_QUARTER_4K");
+    await meetTheLimit(api, control, "CARRY_IT_ON_ANYWAY_3Q", undefined, "settled");
+    await expect.poll(() => backupPrompts().length, { timeout: 30_000 }).toBe(1);
+  });
+}, 240_000);
+
+it("set to No backup, never carries the request on with another AI: the turn waits for its own AI and nothing is sent again", async () => {
+  await withQuotaFixture({}, async ({ api, control, backupPrompts }) => {
+    const { bot, threadId, messages, state } = await meetTheLimit(api, control, "SUMMARISE_THE_QUARTER_4K", { fallback: [] });
     const mine = async () => (await api("GET", "/api/notifications")).notifications.filter((entry: any) => entry.kind === "notice" && entry.botId === bot.id);
     await expect.poll(async () => (await mine()).length, { timeout: 20_000 }).toBe(1);
     expect((await mine())[0].body).toMatch(/, so Out of quota waits.*: no other AI you have set up can take over\.$/);

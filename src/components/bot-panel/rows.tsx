@@ -1,8 +1,9 @@
-import type { KeyboardEvent, ReactNode } from "react";
+import { useRef, type KeyboardEvent, type ReactNode } from "react";
 import { Check, ChevronRight, Trash2, type GlyphIcon } from "../../icons";
 
 import { cn } from "@/lib/cn";
 import type { MausColor } from "@/lib/mascot";
+import { useSystemControl } from "@/lib/system-control";
 import { rowCls, RowText, SwitchRow as ListSwitchRow } from "../ListRows";
 import { Toggle } from "../ui/Toggle";
 
@@ -87,6 +88,40 @@ export function Segmented<V extends string>({ options, value, onChange, label, a
   /** Grok's tab pills instead of a filled track: 26px, the chosen one on a 6% ink wash. */
   compact?: boolean;
 }) {
+  const room = useRef<HTMLDivElement>(null);
+  const allDisabled = options.length > 0 && options.every((option) => option.disabled);
+  const plain = options.every((option) => typeof option.label === "string" && (allDisabled || !option.disabled));
+  const system = useSystemControl(
+    room,
+    plain
+      ? {
+          kind: "segmented",
+          items: options.map((option) => option.label as string),
+          selected: options.findIndex((option) => option.value === value),
+          disabled: allDisabled,
+          label,
+        }
+      : null,
+    (index) => {
+      const option = typeof index === "number" ? options[index] : undefined;
+      if (option && !option.disabled && option.value !== value) onChange(option.value);
+    },
+  );
+  if (system) {
+    return (
+      <div
+        ref={room}
+        aria-hidden="true"
+        data-segmented-room=""
+        className={cn(compact ? "inline-flex h-9 max-w-full items-center" : "flex h-9 w-full items-center")}
+        style={{ visibility: "hidden" }}
+      >
+        {options.map((option) => (
+          <span key={option.value} className={cn("whitespace-nowrap px-3 text-[15px] font-medium", !compact && "flex-1 text-center")}>{option.label}</span>
+        ))}
+      </div>
+    );
+  }
   if (compact) {
     return (
       <div role="group" aria-label={label} className="flex min-w-0 gap-0.5">

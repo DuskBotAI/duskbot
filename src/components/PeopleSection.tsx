@@ -1,5 +1,6 @@
 // Security: the invite link is convenience, not a second door; the one-time code still goes to the address itself.
 import { useCallback, useEffect, useState } from "react";
+import { AnimatePresence } from "motion/react";
 import { Link2 } from "../icons";
 import { api } from "@/state/store";
 import { t } from "@/lib/i18n";
@@ -201,8 +202,8 @@ export function PeopleSection() {
         onRemove={(person) => { if (lists) void save(withoutEntry(lists, person.entry)); }}
         onLink={(person) => setLink(inviteLink(base, person.entry))}
       />
-      {inviting && (
-        <FormDialog data-panel-modal="people-invite" title={t("settings.simple.people.invite")} description={t("people.inviteHint")}
+      <AnimatePresence>{inviting && (
+        <FormDialog key="people-invite" data-panel-modal="people-invite" title={t("settings.simple.people.invite")} description={t("people.inviteHint")}
           saveLabel={t("people.invite")} canSave={Boolean(draft.trim())} busy={busy} error={error ?? undefined}
           onSave={async () => { if (await invite()) setInviting(false); }} onClose={() => setInviting(false)}>
           <FormField label={t("people.inviteEmail")}>
@@ -216,7 +217,7 @@ export function PeopleSection() {
             </SettingRow>
           </div>
         </FormDialog>
-      )}
+      )}</AnimatePresence>
     </div>
   );
 }

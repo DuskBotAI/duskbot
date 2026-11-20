@@ -1,0 +1,136 @@
+{
+  "path": "/integrations/zoom",
+  "type": "integration",
+  "title": "Zoom AI assistant for attendance and meeting follow-up",
+  "nav": "zoom",
+  "h1": "a zoom bot for finding what happened in the right session",
+  "description": "Match a recurring Zoom meeting to its attendance, available summary and cloud recording. Get a host's prep list without mixing up last week's session.",
+  "keyword": "zoom bot",
+  "keywords": [
+    "zoom ai assistant",
+    "zoom ai agent"
+  ],
+  "answer": "**last week's workshop has the same title as today's. it has a different attendance list.** a zoom bot can find the ended session, look up who attended and retrieve its summary when available. give the bot the host and session date. get the follow-up in dusk chat without mixing two workshops together.",
+  "updated": "2026-11-20",
+  "review": {
+    "status": "approved",
+    "by": "lead agent, after four independent reviewers read every page against seo/facts (2026-11-20); every finding applied",
+    "at": "2026-11-20"
+  },
+  "voice": 2,
+  "tags": [
+    "meetings",
+    "attendance",
+    "workshops"
+  ],
+  "connectors": [
+    "zoom"
+  ],
+  "related": [
+    "/use-cases/meeting-notes",
+    "/integrations/calendly",
+    "/integrations/google-calendar"
+  ],
+  "art": {
+    "label": "Zoom",
+    "props": [
+      "s-clock"
+    ],
+    "bubble": "which session was it"
+  },
+  "og_line": "same meeting series. different attendance.",
+  "app": {
+    "name": "Zoom",
+    "toolkit": "zoom",
+    "intro": "**keep the meeting id and the session identifier together.** one recurring meeting can have several ended instances. each instance has its own uuid. use that identifier when attendance, notes or a recording need to match a particular date.",
+    "highlight": [
+      {
+        "slug": "ZOOM_LIST_MEETINGS",
+        "use": "find upcoming scheduled workshops for the host"
+      },
+      {
+        "slug": "ZOOM_GET_A_MEETING",
+        "use": "read the time and settings for a chosen occurrence"
+      },
+      {
+        "slug": "ZOOM_LIST_MEETING_REGISTRANTS",
+        "use": "count approved registrations for the upcoming workshop"
+      },
+      {
+        "slug": "ZOOM_LIST_PAST_MEETING_INSTANCES",
+        "use": "find the ended instance on the workshop date"
+      },
+      {
+        "slug": "ZOOM_GET_PAST_MEETING_PARTICIPANTS",
+        "use": "read attendance for that specific instance"
+      },
+      {
+        "slug": "ZOOM_GET_A_MEETING_SUMMARY",
+        "use": "retrieve the available summary using the session uuid"
+      },
+      {
+        "slug": "ZOOM_GET_MEETING_RECORDINGS",
+        "use": "see which cloud recording files zoom returns for the session"
+      }
+    ],
+    "setup": "**start with a workshop you hosted and a date you recognize.** connect zoom for the host account and allow the listed reads. tell the bot your time zone and meeting series. ask which ended instance it found before relying on the attendance list."
+  },
+  "routines_intro": "**build each run around one occurrence.** name your workshop series in chat. the prep list uses the upcoming occurrence. the two follow-ups start by finding the ended one.",
+  "routines": [
+    {
+      "name": "host's prep list",
+      "message": "each monday at 8, find my scheduled workshops for this week matching <series title>. list each start time in my zone and its approved registrant count. read all registrant pages for that occurrence. omit join links and passcodes.",
+      "when": "mondays at 08:00",
+      "output": "workshop times and expected turnout for the host"
+    },
+    {
+      "name": "attendance after class",
+      "message": "every thursday at 5, find the ended instance of my workshop from today. read its participants by instance uuid. show names here, flag repeat entries and leave uncertain matches separate. if it hasn't ended, say so. never use last week's attendance.",
+      "when": "thursdays at 17:00",
+      "output": "an attendance sheet tied to a specific class"
+    },
+    {
+      "name": "materials for the recap",
+      "message": "on fridays at 10, look up this week's ended workshop. read its available zoom summary and cloud recording inventory. pull any promised follow-up materials from the summary. list the recording file types available. if either source is missing, label the gap. keep download links out of the recap.",
+      "when": "fridays at 10:00",
+      "output": "promised materials and recording availability for the organizer"
+    }
+  ],
+  "asks": "**give the bot read access for host reports.** it can retrieve details without changing the meeting. a schedule update or deletion is a write, outside send approval. if you let a scheduling bot edit meetings, put “ask me before you change anything” in its routine.",
+  "cannot": [
+    "**produce zoom's summary for an ineligible session.** the host needs a paid plan and the relevant ai companion setting. end-to-end encrypted meetings don't support summaries.",
+    "**pull attendance for any meeting ever held.** the participant action needs a pro or higher account and covers the last 15 months. single-person meetings are excluded by default.",
+    "**recover a local recording through the cloud inventory.** an empty result means the lookup returned no cloud files. confirm the host account and session before declaring a recording lost."
+  ],
+  "sections": [
+    {
+      "h": "when you need someone in the call",
+      "md": "**use another tool if you need a live meeting participant.** these zoom actions retrieve meeting records. there is no join-and-listen action here. for an ended call, ask for promises the available summary actually contains and have the host confirm any owner it leaves unnamed."
+    }
+  ],
+  "faq": [
+    {
+      "q": "why did i get attendance for the wrong week?",
+      "a": "**a meeting id can select the latest instance.** resolve the date to an instance uuid and use that for the participant lookup."
+    },
+    {
+      "q": "does a registration count tell me how many people attended?",
+      "a": "**registration counts signups.** after the meeting, use its participant records for attendance. someone can register and never join."
+    }
+  ],
+  "worked": {
+    "intro": "an example from a recurring workshop.",
+    "before": "rosalie hosted the same workshop on 4 and 11 june. the follow-up concerns the earlier class. the meeting id is the same.",
+    "after": "4 june instance selected. use its participant list.\nmaterials promised in this summary: the worksheet. keep the 11 june recap separate."
+  },
+  "sources": [
+    {
+      "label": "dusk bot docs: connected apps",
+      "url": "/docs/files-and-apps"
+    },
+    {
+      "label": "dusk bot docs: routines",
+      "url": "/docs/routines"
+    }
+  ]
+}

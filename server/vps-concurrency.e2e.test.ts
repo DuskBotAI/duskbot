@@ -278,7 +278,7 @@ it.skipIf(process.platform === "win32")("never wakes a bot's own VPS computer fo
   } finally { await h.close(); }
 }, 90_000);
 
-it.skipIf(process.platform !== "darwin")("refuses an unavailable explicit cloud destination while a synthetic host connection is available", async () => {
+it.skipIf(process.platform !== "darwin")("never moves an unavailable cloud destination onto a synthetic host connection that is available", async () => {
   const h = await harness({ host: true, missingInitially: true });
   try {
     expect((await h.api("PUT", "/api/config", { vps: { sshAlias: "fixture-vps", mode: "shared", autoStart: false } })).status).toBe(200);
@@ -292,10 +292,10 @@ it.skipIf(process.platform !== "darwin")("refuses an unavailable explicit cloud 
     expect((await h.api("PATCH", `/api/bots/${cloud.id}`, { computer: "cloud" })).status).toBe(200);
     const before = readFileSync(h.vps.calls, "utf8").length;
     expect((await h.api("POST", `/api/bots/${cloud.id}/messages`, { text: "Work only on the cloud computer" })).status).toBe(202);
-    await h.idle(cloud.id, cloud.threadId);
-    expect(h.dump(cloud.threadId)).toBe(null);
-    const rows = (await h.api("GET", `/api/threads/${cloud.threadId}/messages?limit=100`)).body.messages as any[];
-    expect(rows.some(row => row.tool?.ok === false && /cloud|VPS|team's computer/i.test(row.tool.name))).toBe(true);
+    // a Works on Cloud turn whose VPS can't be prepared goes on with no computer (6c14850881), never this Mac's
+    const sent = await h.launched(cloud.threadId);
+    expect(sent.mcpConfig.mcpServers.computer).toBeUndefined();
+    h.release(sent.pid); await h.idle(cloud.id, cloud.threadId);
     expect(readFileSync(h.vps.calls, "utf8").slice(before)).not.toMatch(/"(?:run|start)"/);
   } finally { await h.close(); }
 }, 60_000);

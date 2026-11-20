@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { EMPTY_ONBOARDING, type OnboardingStatus } from "@/lib/onboarding";
 import { ASLEEP_NOTICE, CLOUD_INTRO, CLOUD_NOTICE, CLOUD_TRIAL_NOTICE, dismissNotice, GROK_MOVE_NOTICE, introShown, introStage, LATE_ROUTINE_NOTICE, launchNotice, localDay, markLaunchNotice, nextNotice, noticeSeen,
-  BRING_NOTICE, INVESTED_NOTICE, NOTICES, OLD_PRO_DISMISSALS, TWO_PLACES_NOTICE, usedBefore, WHATS_NEW_NOTICE, type NoticeFacts } from "./notices";
+  BRING_NOTICE, INVESTED_NOTICE, NOTICES, OLD_PRO_DISMISSALS, ROUTINE_SLEEP_NOTICE, TWO_PLACES_NOTICE, usedBefore, WHATS_NEW_NOTICE, type NoticeFacts } from "./notices";
 
 let storage: Map<string, string>, session: Map<string, string>;
 beforeEach(() => {
@@ -17,10 +17,11 @@ const none = () => false;
 const DAY = 86_400_000, NOON = new Date(2026, 9, 9, 12).getTime();
 
 it("queues account and workspace notices without upstream campaigns", () => {
-  expect(NOTICES).toEqual([GROK_MOVE_NOTICE, WHATS_NEW_NOTICE, BRING_NOTICE, TWO_PLACES_NOTICE, LATE_ROUTINE_NOTICE, ASLEEP_NOTICE, CLOUD_INTRO, CLOUD_TRIAL_NOTICE, CLOUD_NOTICE]);
+  expect(NOTICES).toEqual([GROK_MOVE_NOTICE, WHATS_NEW_NOTICE, BRING_NOTICE, TWO_PLACES_NOTICE, ROUTINE_SLEEP_NOTICE, LATE_ROUTINE_NOTICE, ASLEEP_NOTICE, CLOUD_INTRO, CLOUD_TRIAL_NOTICE, CLOUD_NOTICE]);
   expect(NOTICES, "the invested pitch lives in the sidebar card").not.toContain(INVESTED_NOTICE);
   // a routine that ran late is the stronger moment, so it goes before the general Cloud card
   expect(nextNotice(facts({ [LATE_ROUTINE_NOTICE]: true, [CLOUD_INTRO]: true }), none)).toBe(LATE_ROUTINE_NOTICE);
+  expect(nextNotice(facts({ [ROUTINE_SLEEP_NOTICE]: true, [LATE_ROUTINE_NOTICE]: true }), none)).toBe(ROUTINE_SLEEP_NOTICE);
   expect(nextNotice(facts({ [ASLEEP_NOTICE]: true, [CLOUD_INTRO]: true }), none)).toBe(ASLEEP_NOTICE);
   expect(nextNotice(facts({ [TWO_PLACES_NOTICE]: true, [CLOUD_INTRO]: true }), none)).toBe(TWO_PLACES_NOTICE);
   expect(nextNotice(facts({ [CLOUD_TRIAL_NOTICE]: true, [CLOUD_NOTICE]: true }), none)).toBe(CLOUD_TRIAL_NOTICE);

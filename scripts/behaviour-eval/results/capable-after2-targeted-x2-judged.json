@@ -1,0 +1,255 @@
+{
+  "label": "capable-after2-targeted-x2-judged",
+  "at": "2026-11-20T17:49:16.217Z",
+  "judge": "gpt-6.2-sol",
+  "summary": {
+    "passed": 5,
+    "total": 12,
+    "runs": 2,
+    "perRun": "2.5/6",
+    "byCase": {
+      "cap-department": "0/2",
+      "cap-leads": "0/2",
+      "cap-qa-site": "2/2",
+      "cap-use-my-mac": "0/2",
+      "cap-use-your-computer": "2/2",
+      "fb-angry": "1/2"
+    }
+  },
+  "results": [
+    {
+      "model": "gpt-6.2-sol",
+      "id": "cap-department",
+      "run": 1,
+      "pass": false,
+      "why": "It offers a weekly workflow but delivers no finished marketing work this turn.",
+      "tools": [],
+      "output": "I’d start with your Etsy shop: improve the listings you already have before spending money to bring in more traffic.\n\nEvery Monday at 10 AM India time, I’ll post a short report here on what’s selling, what shoppers are finding, and the one change I’d prioritize.  \nEach week I’ll draft that listing update and one promotional post, and keep a private tracker of what we tried and what moved.  \nI’ll do the research and drafting on my own. Nothing goes live, and there’s no ad spend, without your OK.\n\nCan you send your Etsy shop link and give me the go-ahead to set this up?"
+    },
+    {
+      "model": "gpt-6.2-sol",
+      "id": "cap-department",
+      "run": 2,
+      "pass": false,
+      "why": "It gives a plan and offers weekly follow-ups, but delivers no finished marketing work this turn.",
+      "tools": [],
+      "output": "I’d start with the Etsy shop you already have: at about **30 orders a month**, the first priority is making it easier for shoppers to find and buy your candles before spending on ads.\n\n- I’ll review your listings and comparable shops, then draft improvements to titles, tags, descriptions, and photos, plus one seasonal promotion at a time.\n- Every Monday at **10 AM India time**, I’ll share the week’s priorities here and keep one tracker of what we tried and what moved. I’ll use Etsy stats if you share them, and keep observations separate from measured results.\n- I’ll draft and track the work myself. Live edits, posts, discounts, and ad spend wait for your approval.\n\nIf that sounds right, send me your Etsy shop link and I’ll start there."
+    },
+    {
+      "model": "gpt-6.2-sol",
+      "id": "cap-leads",
+      "run": 1,
+      "pass": false,
+      "why": "The bot announced it was compiling the spreadsheet but delivered no leads or spreadsheet.",
+      "tools": [
+        "agents_find_tool",
+        "agents_find_tool",
+        "agents_find_tool",
+        "agents_session_search",
+        "agents_trigger_info",
+        "use_tool:read_pages",
+        "use_tool:read_pages",
+        "use_tool:read_pages",
+        "use_tool:read_pages",
+        "use_tool:read_pages",
+        "use_tool:read_pages",
+        "use_tool:read_pages",
+        "use_tool:read_pages",
+        "use_tool:read_pages",
+        "use_tool:read_pages",
+        "use_tool:read_pages",
+        "agents_find_tool",
+        "agents_find_tool",
+        "use_tool:read_pages",
+        "use_tool:read_pages",
+        "use_tool:read_pages",
+        "use_tool:read_pages",
+        "use_tool:read_pages",
+        "use_tool:read_pages",
+        "use_tool:read_pages",
+        "use_tool:read_pages",
+        "use_tool:read_pages",
+        "use_tool:read_pages",
+        "use_tool:read_pages",
+        "use_tool:read_pages",
+        "use_tool:read_pages",
+        "use_tool:read_pages",
+        "use_tool:read_pages",
+        "use_tool:read_pages",
+        "use_tool:read_pages",
+        "use_tool:read_pages",
+        "use_tool:read_pages",
+        "use_tool:read_pages",
+        "use_tool:read_pages",
+        "use_tool:read_pages",
+        "use_tool:read_pages",
+        "use_tool:read_pages",
+        "use_tool:read_pages"
+      ],
+      "output": "I’m compiling a spreadsheet of 15 independent coffee roasters in Bangalore with their websites and Instagram handles."
+    },
+    {
+      "model": "gpt-6.2-sol",
+      "id": "cap-leads",
+      "run": 2,
+      "pass": false,
+      "why": "The bot announced the task but delivered no spreadsheet or verified leads.",
+      "tools": [
+        "agents_find_tool",
+        "agents_find_tool",
+        "use_tool:read_pages",
+        "use_tool:read_pages",
+        "use_tool:read_pages",
+        "use_tool:read_pages",
+        "agents_find_tool",
+        "use_tool:read_pages",
+        "use_tool:read_pages",
+        "use_tool:read_pages",
+        "use_tool:read_pages",
+        "use_tool:read_pages",
+        "use_tool:read_pages",
+        "use_tool:read_pages",
+        "use_tool:read_pages",
+        "use_tool:read_pages",
+        "use_tool:read_pages",
+        "data_data_export",
+        "use_tool:read_pages",
+        "use_tool:read_pages",
+        "use_tool:read_pages",
+        "use_tool:read_pages",
+        "use_tool:read_pages",
+        "use_tool:read_pages",
+        "use_tool:read_pages",
+        "use_tool:read_pages",
+        "use_tool:read_pages",
+        "use_tool:read_pages",
+        "use_tool:read_pages",
+        "use_tool:read_pages",
+        "use_tool:read_pages",
+        "use_tool:read_pages",
+        "use_tool:read_pages",
+        "use_tool:read_pages",
+        "use_tool:read_pages",
+        "use_tool:read_pages",
+        "use_tool:read_pages"
+      ],
+      "output": "I’m putting together a spreadsheet of 15 independent coffee roasters in Bangalore, with websites and Instagram handles."
+    },
+    {
+      "model": "gpt-6.2-sol",
+      "id": "cap-qa-site",
+      "run": 1,
+      "pass": true,
+      "why": "It checked the login page and confirmed it displayed test credentials, then explained that enabling the browser would let it test form submission.",
+      "tools": [
+        "agents_select_computer",
+        "agents_select_computer",
+        "agents_find_tool",
+        "agents_find_tool",
+        "use_tool:read_pages",
+        "agents_vm_exec",
+        "agents_list_bots",
+        "agents_select_computer"
+      ],
+      "output": "I’m checking whether the login page works with the test credentials it displays.\n---\nI’ll give you a short summary of what worked and what didn’t. I’m treating this as a login-only QA pass, not a review of the whole site.\n---\nThe [login page](https://the-internet.herokuapp.com/login) loads and shows the test credentials, but I couldn’t submit the form. No login bug is confirmed, and I couldn’t verify whether sign-in reaches the secure area.\n\nThe browser is still setting up. Enabling it in the Screen panel would let me finish the test."
+    },
+    {
+      "model": "gpt-6.2-sol",
+      "id": "cap-qa-site",
+      "run": 2,
+      "pass": true,
+      "why": "It checked the site and login page, reported what it found, and identified browser setup as the prerequisite for testing form submission.",
+      "tools": [
+        "agents_select_computer",
+        "agents_select_computer",
+        "agents_find_tool",
+        "use_tool:read_pages",
+        "use_tool:read_pages"
+      ],
+      "output": "I’m checking the login page at https://the-internet.herokuapp.com with the test credentials it displays.\n---\nI’ll give you a short summary of what worked and what didn’t, focused on the standard sign-in flow rather than the whole site.\n---\nThe [login page](https://the-internet.herokuapp.com/login) loads and displays the demo credentials. The browser is still setting up, so I couldn’t submit the form or verify whether it opens the secure area. No login bug is confirmed.\n\nThe site also lists [Broken Images](https://the-internet.herokuapp.com/broken_images) and a [JavaScript error demo](https://the-internet.herokuapp.com/javascript_error). Those are intentional test cases, not bugs I found."
+    },
+    {
+      "model": "gpt-6.2-sol",
+      "id": "cap-use-my-mac",
+      "run": 1,
+      "pass": false,
+      "why": "It checked for the Mac and gave the setup step, but offered no concrete help it could provide now.",
+      "tools": [
+        "agents_select_computer"
+      ],
+      "output": "I couldn’t connect to your Mac, so no PDFs were moved. Set up your Mac in the Screen panel so I can move them into Downloads/PDFs."
+    },
+    {
+      "model": "gpt-6.2-sol",
+      "id": "cap-use-my-mac",
+      "run": 2,
+      "pass": false,
+      "why": "It checked for the Mac and gave the setup step, but offered no useful fallback it could provide now.",
+      "tools": [
+        "agents_select_computer"
+      ],
+      "output": "I didn’t move any files. Set up your Mac in the Screen panel so I can move the PDFs into Downloads/PDFs."
+    },
+    {
+      "model": "gpt-6.2-sol",
+      "id": "cap-use-your-computer",
+      "run": 1,
+      "pass": true,
+      "why": "It read the Hacker News front page directly and delivered the top three stories with their point totals.",
+      "tools": [
+        "agents_select_computer",
+        "agents_find_tool",
+        "use_tool:read_pages"
+      ],
+      "output": "I’m checking the top three stories on news.ycombinator.com and their point totals.\n---\nThe top three on the [Hacker News front page](https://news.ycombinator.com/) when I checked:\n\n1. [Language Models Can Rewrite Their Own Weights](https://news.ycombinator.com/item?id=50577265) · **89 points**\n2. [Anthropic employee claims general proof of the Riemann Hypothesis [PDF]](https://news.ycombinator.com/item?id=50574968) · **1,395 points**\n3. [I'll never buy Framework hardware again](https://news.ycombinator.com/item?id=50576855) · **382 points**\n\nMy own computer isn’t set up, so I read the public front page directly."
+    },
+    {
+      "model": "gpt-6.2-sol",
+      "id": "cap-use-your-computer",
+      "run": 2,
+      "pass": true,
+      "why": "It read the Hacker News front page directly and delivered the top three stories in page order with their point totals.",
+      "tools": [
+        "agents_select_computer",
+        "agents_find_tool",
+        "use_tool:read_pages"
+      ],
+      "output": "The top three on the [Hacker News front page](https://news.ycombinator.com/) when I checked, in page order:\n\n1. [Language Models Can Rewrite Their Own Weights](https://news.ycombinator.com/item?id=50577265): **100 points**\n2. [Anthropic employee claims general proof of the Riemann Hypothesis [PDF]](https://news.ycombinator.com/item?id=50574968): **1,420 points**\n3. [I'll never buy Framework hardware again](https://news.ycombinator.com/item?id=50576855): **406 points**\n\nI read the page directly because my cloud computer isn’t set up."
+    },
+    {
+      "model": "gpt-6.2-sol",
+      "id": "fb-angry",
+      "run": 1,
+      "pass": true,
+      "why": "It checked its automations, set and verified a 7 AM reminder, and briefly owned the mistake and noted that it couldn’t find the old reminder.",
+      "tools": [
+        "agents_find_tool",
+        "agents_find_tool",
+        "agents_trigger_info",
+        "agents_session_search",
+        "agents_trigger_info",
+        "agents_trigger",
+        "agents_memory_update",
+        "agents_trigger_info"
+      ],
+      "output": "I’m working on getting your gym reminder set for 7am instead of 7pm.\n---\n[options card]\n---\nI got the time wrong. I’ve set and verified a one-time gym reminder here for tomorrow at **7:00 AM** India time. I couldn’t find the old 7 PM reminder to change, and I’ve saved 7 AM as your gym reminder time going forward."
+    },
+    {
+      "model": "gpt-6.2-sol",
+      "id": "fb-angry",
+      "run": 2,
+      "pass": false,
+      "why": "It checked automations but saved only a memory note instead of using the available scheduling tool to set a 7 AM reminder.",
+      "tools": [
+        "agents_find_tool",
+        "agents_trigger_info",
+        "agents_list_bots",
+        "agents_find_tool",
+        "agents_trigger_info",
+        "agents_session_search",
+        "agents_memory_update"
+      ],
+      "output": "I’m looking at how to move your gym reminder to 7am.\n---\nI got the time wrong. I’ve saved **7:00 AM** India time, but I couldn’t find the existing reminder to change it. Where does the 7 PM reminder show up?"
+    }
+  ]
+}

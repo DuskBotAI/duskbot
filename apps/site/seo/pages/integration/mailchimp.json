@@ -1,0 +1,140 @@
+{
+  "path": "/integrations/mailchimp",
+  "type": "integration",
+  "title": "Mailchimp AI assistant for campaign checks and click reports",
+  "nav": "mailchimp",
+  "h1": "a mailchimp bot for the moments before and after a send",
+  "description": "Find the error holding up a Mailchimp campaign, inspect the email copy and see which links readers clicked. Try three routines with campaign sending disabled.",
+  "keyword": "mailchimp bot",
+  "keywords": [
+    "mailchimp ai assistant",
+    "mailchimp ai agent"
+  ],
+  "answer": "**find out what would stop a campaign from going out before launch morning.** a mailchimp bot in dusk can read the send checklist and the email itself. after the send, it can bring back delivery figures and clicks by link. keep the bot on reporting duty while you make the call to send.",
+  "updated": "2026-11-20",
+  "review": {
+    "status": "approved",
+    "by": "lead agent, after four independent reviewers read every page against seo/facts (2026-11-20); every finding applied",
+    "at": "2026-11-20"
+  },
+  "voice": 2,
+  "tags": [
+    "campaigns",
+    "email marketing",
+    "click reports"
+  ],
+  "connectors": [
+    "mailchimp"
+  ],
+  "related": [
+    "/routines/mailchimp-campaign-report",
+    "/integrations/hubspot",
+    "/integrations/google-sheets"
+  ],
+  "art": {
+    "label": "Mailchimp",
+    "props": [
+      "p-megaphone"
+    ],
+    "bubble": "which link got clicks"
+  },
+  "og_line": "find the error before launch morning.",
+  "app": {
+    "name": "Mailchimp",
+    "toolkit": "mailchimp",
+    "intro": "**use the campaign id from the edition you mean.** a draft, a test idea and last week’s send can have nearly identical names. have the bot show the title and status before reading the content or reporting numbers.",
+    "highlight": [
+      {
+        "slug": "MAILCHIMP_LIST_CAMPAIGNS",
+        "use": "find the edition in the right audience and date window"
+      },
+      {
+        "slug": "MAILCHIMP_GET_CAMPAIGN_INFO",
+        "use": "confirm the chosen campaign and its status"
+      },
+      {
+        "slug": "MAILCHIMP_GET_CAMPAIGN_SEND_CHECKLIST",
+        "use": "separate errors blocking a send from optional warnings"
+      },
+      {
+        "slug": "MAILCHIMP_GET_CAMPAIGN_CONTENT",
+        "use": "compare the plain-text copy with the html version"
+      },
+      {
+        "slug": "MAILCHIMP_GET_CAMPAIGN_REPORT",
+        "use": "read delivery and engagement totals for the sent campaign"
+      },
+      {
+        "slug": "MAILCHIMP_LIST_CAMPAIGN_CLICK_DETAILS",
+        "use": "rank tracked destinations by the click metric you choose"
+      },
+      {
+        "slug": "MAILCHIMP_GET_CAMPAIGN_LINK_DETAILS",
+        "use": "read total and unique clicks for an individual tracked destination"
+      }
+    ],
+    "setup": "**give the reporting bot an exact list of read actions.** connect mailchimp, choose your bot and select the reads above. give it the newsletter audience and the campaign id for a recent send. ask for the most-clicked destination before scheduling regular reports."
+  },
+  "routines_intro": "**treat launch prep and results as different jobs.** a campaign can pass the send checklist and still have the wrong offer in its copy. use the first two routines before launch and the last one after readers have had a chance to click.",
+  "routines": [
+    {
+      "name": "launch blockers",
+      "message": "every thursday at 3, find the newest draft for my newsletter audience. read its send checklist. give me the campaign id and the errors i have to fix. put optional warnings on a separate line. leave it as a draft.",
+      "when": "thursdays at 3 pm",
+      "output": "errors that block launch and warnings that need judgment"
+    },
+    {
+      "name": "offer in both versions",
+      "message": "every friday at 9, open the newest newsletter draft. compare the offer, deadline and main destination in its html and plain-text copy. quote any mismatch here with its location. flag either version if it is empty. leave the copy alone.",
+      "when": "fridays at 9 am",
+      "output": "differences a reader would notice between email versions"
+    },
+    {
+      "name": "where readers went",
+      "message": "every monday at noon, find last week’s sent newsletter for my audience. get its report and tracked link details. list delivery totals and rank the destinations by unique clicks. name the metric. separate the main offer from footer links. if nothing went out, skip the ranking.",
+      "when": "mondays at noon",
+      "output": "delivery figures and a ranked list of destinations"
+    }
+  ],
+  "asks": "**keep resend off the action list too.** send campaign asks first by default. resend campaign can also deliver mail, but dusk classifies that action as a change. the send rule does not cover it. a reporting bot only needs the named reads.\n\ncareful with **Full access**: a bot there with no sending rule can send up to 25 a day without asking. give it **Ask every time**.",
+  "cannot": [
+    "**measure a draft’s performance.** mailchimp can return zeros for a draft. read the status before treating zero as a result.",
+    "**rank links without tracking data.** the click detail action lists tracked links for sent campaigns. a missing link has no figure to rank.",
+    "**explain a reader’s intent from a click.** a click shows a destination. it does not tell you whether the reader liked the offer."
+  ],
+  "sections": [
+    {
+      "h": "deciding if the campaign is ready",
+      "md": "**reserve the final read for someone who knows the offer.** a send checklist can identify a missing requirement. it cannot decide whether the discount in the email matches what you meant to promise. if your only job is to press send on an approved edition, do that in mailchimp."
+    }
+  ],
+  "faq": [
+    {
+      "q": "can i find which newsletter link got the most attention?",
+      "a": "**choose the click metric first.** ask for unique clicks per destination and the campaign id. repeated clicks by one reader can change a ranking based on total clicks."
+    },
+    {
+      "q": "does the bot need my subscriber list for a weekly report?",
+      "a": "**campaign totals and link results are enough for these routines.** leave individual subscriber lookups off its action list."
+    }
+  ],
+  "worked": {
+    "intro": "a fictional example.",
+    "before": "grace bell has a newsletter draft ready for review. the html offers free shipping through friday. the plain-text copy says thursday.",
+    "after": "offer mismatch: the two versions give readers different deadlines. confirm the intended day before changing the copy or sending the campaign."
+  },
+  "sources": [
+    {
+      "label": "dusk bot docs: files and apps",
+      "url": "/docs/files-and-apps"
+    },
+    {
+      "label": "dusk bot docs: routines",
+      "url": "/docs/routines"
+    },
+    {
+      "label": "dusk bot docs: sending permissions",
+      "url": "/docs/computer"
+    }
+  ]
+}

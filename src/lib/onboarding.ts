@@ -99,15 +99,27 @@ export function hintSeenPatch(
 }
 
 
-/** Every screen the first run can show, in the order it shows them; the chat comes after the last. */
-// where the bots live comes first on the desktop app; the account follows it only where this Mac is the place (dusk cloud
-// signs in and pays in the browser, "checkout"); the Mac's permissions come last, right before the app
-export const BEAT_ORDER = ["welcome", "account", "place", "checkout", "ai", "bring", "phone", "making", "permissions"] as const;
+/** Every screen the first run can show, in the order it shows them; the chat comes after the last. On the desktop app it
+ * is the hello and the AI choice; an account only where the install requires one, and dusk cloud's checkout and making
+ * only for a run already on its way there. Everything else is raised in the chat when it is needed. */
+export const BEAT_ORDER = ["welcome", "account", "checkout", "ai", "bring", "making"] as const;
 export type BeatId = (typeof BEAT_ORDER)[number];
 
-/** Where a reloaded first run opens: the saved screen while it is offered, else the first. */
+/** Screens earlier first runs had, which a saved run may still be on: each comes after the hello, so it resumes on the AI. */
+const RETIRED_BEATS = ["place", "phone", "permissions"] as const;
+
+/** A saved screen as this first run knows it: a retired one becomes the AI choice; anything else is no screen. */
+export function knownBeat(saved: unknown): BeatId | undefined {
+  if (BEAT_ORDER.includes(saved as BeatId)) return saved as BeatId;
+  return RETIRED_BEATS.includes(saved as (typeof RETIRED_BEATS)[number]) ? "ai" : undefined;
+}
+
+/** Where a reloaded first run opens: the saved screen while it is offered; a screen past the hello this run no longer
+ * shows (the bring step on this Mac) opens on the AI choice; else the first. */
 export function resumeBeat(beats: readonly BeatId[], saved: BeatId | undefined): BeatId {
-  return saved && beats.includes(saved) ? saved : beats[0] ?? "welcome";
+  if (saved && beats.includes(saved)) return saved;
+  if (saved && BEAT_ORDER.includes(saved) && saved !== "welcome" && beats.includes("ai")) return "ai";
+  return beats[0] ?? "welcome";
 }
 
 export function onboardingCloudOffered(record: OnboardingStatus | undefined): boolean {

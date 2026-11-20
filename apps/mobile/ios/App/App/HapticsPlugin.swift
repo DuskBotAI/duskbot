@@ -32,7 +32,7 @@ public class DuskHapticsPlugin: CAPPlugin, CAPBridgedPlugin {
             case "medium": medium.impactOccurred(); medium.prepare()
             case "selection": selection.selectionChanged(); selection.prepare()
             case "success": notice.notificationOccurred(.success)
-            case "error": notice.notificationOccurred(.error)
+            case "error": notice.notificationOccurred(.warning)
             default: light.impactOccurred(intensity: 0.7); light.prepare()
             }
         }

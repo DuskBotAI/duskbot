@@ -1,4 +1,5 @@
-import { isMotionValue, motion, useReducedMotion, type HTMLMotionProps } from "motion/react";
+import { isMotionValue, motion, useIsPresent, useReducedMotion, type HTMLMotionProps } from "motion/react";
+import { dialogMotion } from "@/lib/motion-presets";
 
 
 /** The app's reduced-motion choice or the system's. */
@@ -39,4 +40,29 @@ export function SheetMotion(props: HTMLMotionProps<"div">) {
 /** The dimmed backdrop behind a sheet; overlays.css fades it in. */
 export function ScrimMotion(props: HTMLMotionProps<"div">) {
   return <MotionDiv initial={false} {...props} />;
+}
+
+/** A centred sheet's motion both ways: spread `layer` on its fixed layer, `scrim` on the dim behind (a ScrimMotion, or the
+ * layer itself when the layer is the dim) and `sheet` on its box (a SheetMotion). Inside its parent's AnimatePresence it
+ * plays its way out and takes no presses or focus meanwhile. */
+export function useDialogMotion() {
+  const motion = dialogMotion(useMotionReduced());
+  const leaving = !useIsPresent();
+  return {
+    layer: { inert: leaving || undefined, "data-leaving": leaving ? "" : undefined },
+    scrim: { ...motion.scrim, "data-raw-dialog": "" },
+    sheet: { ...motion.sheet, "data-raw-dialog": "" },
+  };
+}
+
+/** A centred sheet's dim that is also its layer, playing the dialog motion both ways. */
+export function DialogScrimLayer(props: HTMLMotionProps<"div">) {
+  const played = useDialogMotion();
+  return <ScrimMotion {...played.layer} {...played.scrim} {...props} />;
+}
+
+/** A centred sheet's box, playing the dialog motion both ways. */
+export function DialogSheet(props: HTMLMotionProps<"div">) {
+  const played = useDialogMotion();
+  return <SheetMotion {...played.sheet} {...props} />;
 }

@@ -150,3 +150,19 @@ describe("bundled data-dashboards skill", () => {
     expect(Buffer.byteLength(template)).toBeLessThan(APP_LIMITS.htmlBytes / 4);
   });
 });
+
+describe("the business workflows skill", () => {
+  const bundled = loadBundledSkills(join(import.meta.dirname, "..", "skills"));
+  const picked = (text: string) => selectBundledSkills(text, [], bundled).map((skill) => skill.manifest.id);
+  it("rides only a turn that hands over a whole piece of work, never a quick ask or a single reminder", () => {
+    expect(picked("You're my marketing department now. Take it from here.")).toContain("business-workflows");
+    expect(picked("Take over my inbox: sort new emails every morning and draft replies")).toContain("business-workflows");
+    for (const text of ["what's 18% of 2450?", "remind me at 9:45 to post my standup notes", "Every weekday at 8am send me my top 3 priorities"]) {
+      expect(picked(text), text).not.toContain("business-workflows");
+    }
+    const skill = bundled.find((one) => one.manifest.id === "business-workflows")!;
+    expect(skill.instructions).toContain("design it before you build it");
+    expect(skill.instructions).toContain("that is the go-ahead: build it all now, test it, and report the plan with what you built");
+    expect(skill.instructions).toContain("Then build nothing until they answer");
+  });
+});

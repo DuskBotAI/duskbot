@@ -492,3 +492,34 @@ describe("WaitManager", () => {
     error.mockRestore();
   });
 });
+
+describe("a time wait", () => {
+  it("comes back to its chat at its time with the follow-up and no line before it, reading nothing meanwhile", async () => {
+    const h = harness();
+    const result = await h.create({ kind: "time", at: T0 + 20 * 60_000 }, { label: "check the deploy", followUp: "Check whether the deploy finished and tell me." });
+    expect(result.state).toBe("created");
+    h.advance(19 * 60_000);
+    await h.manager.tick();
+    expect(h.followUp).not.toHaveBeenCalled();
+    h.advance(60_000);
+    await h.manager.tick();
+    expect(h.followUp).toHaveBeenCalledTimes(1);
+    expect(h.posts).toEqual([]);
+    expect(h.pageCalls + h.stampCalls + h.processCalls).toBe(0);
+    expect(h.manager.list("bot-1")).toEqual([]);
+  });
+
+  it("without a follow-up posts a reminder, and still fires after the computer slept past it", async () => {
+    const h = harness();
+    await h.create({ kind: "time", at: T0 + 60 * 60_000 }, { label: "stretch" });
+    h.advance(5 * 60 * 60_000);
+    await h.manager.tick();
+    expect(h.posts).toEqual([{ status: "fired", text: "Reminder: stretch." }]);
+  });
+
+  it("asks a sleeping Cloud to wake by its time", async () => {
+    const h = harness();
+    await h.create({ kind: "time", at: T0 + 10 * 60_000 }, { label: "soon" });
+    expect(h.manager.nextWakeAt()).toBe(T0 + 10 * 60_000);
+  });
+});

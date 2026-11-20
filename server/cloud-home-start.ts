@@ -12,6 +12,7 @@ import {
   withoutCloudSecrets, type CloudHomeConfig,
 } from "./cloud-home.ts";
 import { boxMemory, heapSizeArgs } from "./box-memory.ts";
+import { startBotTools } from "./bot-tools.ts";
 import { clearRecordsFromOtherMachines } from "./data-dir-lease.ts";
 import { OOM_SCORE, protectSupervisor, spawnWithOomScore } from "./oom-score.ts";
 import { restartPolicy } from "./restart.ts";
@@ -215,6 +216,7 @@ export function startCloudHome(env: NodeJS.ProcessEnv = process.env) {
     ids = passwdIds(readFileSync("/etc/passwd", "utf8"), SERVICE_USER);
     if (!ids) throw new Error(`The ${SERVICE_USER} user is missing from this image.`);
     if (process.platform === "linux") for (const note of hardenHost(env)) console.log(`cloud home: ${note}`);
+    if (process.platform === "linux") console.log(`cloud home: ${startBotTools(env)}`);
     if (protectSupervisor()) console.log("cloud home: the supervisor is never stopped for memory");
     // Only the mount point changes owner; anything inside keeps its owner.
     const stat = statSync(home);

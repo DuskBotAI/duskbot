@@ -2,14 +2,14 @@ import { useState } from "react";
 import { cx } from "../ui/kit";
 import { useAdmin } from "./api";
 import { RangePicker, rangeOf, type Range } from "./kit";
-import { AdminHeader, DayBars, Failed, Loading, Section, Tile, n, stamp } from "./ui";
+import { AdminHeader, DayBars, Failed, Loading, PartialNote, Section, Tile, n, stamp } from "./ui";
 
 type Family = "bad" | "confusing" | "done";
 interface CountRow { key: string; count: number }
 interface Recent { who: string; last: number; bad: number; confusing: number; done: number; version: string | null; platform: string | null; signedIn: boolean }
 interface ExperienceAnswer {
   from: number; to: number; days: string[]; series: Record<Family, number[]>; totals: Record<Family, number>; installs: number;
-  top: Record<Family, CountRow[]>; recent: Recent[];
+  top: Record<Family, CountRow[]>; recent: Recent[]; partialBefore?: number | null;
 }
 interface TimelineAnswer { who: string; items: Array<{ at: number; name: string; family: Family | null; label: string }> }
 
@@ -76,6 +76,7 @@ export function ExperiencePage() {
       {!data && loading && <Loading />}
       {data && (
         <>
+          <PartialNote before={data.partialBefore} />
           <div className="grid grid-cols-2 gap-2.5 md:grid-cols-4">
             <Tile label="bad experiences" value={n(data.totals.bad)} tone={data.totals.bad > 0 ? "bad" : undefined} />
             <Tile label="confusing moments" value={n(data.totals.confusing)} tone={data.totals.confusing > 0 ? "warn" : undefined} />

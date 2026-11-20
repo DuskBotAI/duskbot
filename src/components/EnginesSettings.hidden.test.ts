@@ -114,3 +114,18 @@ describe("disconnecting a provider", () => {
   });
 });
 
+describe("a provider's own page in Settings", () => {
+  it("goes back to the list, once, when its provider is disconnected under it", async () => {
+    const { SubPageContext } = await import("./ListRows");
+    const { EnginesSettings } = await import("./EnginesSettings");
+    const back = vi.fn();
+    const nav = { at: "engine:claude", open: () => {}, back };
+    const page = () => createElement(SubPageContext.Provider, { value: nav }, createElement(EnginesSettings, { simple: true, more: { id: "m", open: false, onToggle: () => {} } }));
+    flushSync(() => root.render(page()));
+    flushSync(() => root.render(page()));
+    await settle();
+    expect(back).toHaveBeenCalledTimes(1);
+    expect(host.querySelector("[data-simple-engine]")).toBeNull();
+  });
+});
+

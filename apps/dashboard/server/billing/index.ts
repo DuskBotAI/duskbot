@@ -2,6 +2,7 @@ import { randomBytes } from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { DashboardState } from "../store.ts";
 import { createCloudsService } from "../clouds/service.ts";
+import { linkGrantSignerFromEnv, signLinkGrant } from "../link-grant.ts";
 import type { CloudEventKind } from "../clouds/service.ts";
 import { createFakeCloudProvider } from "../clouds/fake-provider.ts";
 import { createFakePoolDriver } from "../clouds/fake-pool-driver.ts";
@@ -121,7 +122,7 @@ export function createBilling(options: BillingOptions) {
     power: (origin, secret, minutes) => realHome.power!(origin, secret, minutes),
     sleep: (origin, secret, minutes) => realHome.sleep!(origin, secret, minutes),
     plan: (origin, secret, input) => realHome.plan!(origin, secret, input),
-    entitle: (origin, secret, token) => fakeOrigin(origin) ? Promise.resolve({ expiresAt: now() + 3_600_000 }) : realHome.entitle!(origin, secret, token),
+    entitle: (origin, secret, token, linkGrant) => fakeOrigin(origin) ? Promise.resolve({ expiresAt: now() + 3_600_000 }) : realHome.entitle!(origin, secret, token, linkGrant),
     healthy: (origin, secret) => (fakeOrigin(origin) ? fakeHome : realHome).healthy(origin, secret),
     pair: (origin, secret, input) => (fakeOrigin(origin) ? fakeHome : realHome).pair(origin, secret, input),
     signIns: (origin, secret, items) => (fakeOrigin(origin) ? Promise.resolve() : realHome.signIns!(origin, secret, items)),
@@ -131,7 +132,8 @@ export function createBilling(options: BillingOptions) {
   const entitlements = entitlementSignerFromEnv(env, { dataDir: options.dataDir, loopback, now, required: !loopback && (cloudProvider !== "off" || poolDriver !== "off" || managed !== null) });
   const sealer = createSealer(sealKey);
   const aiStash = createAiStash({ store: options.aiStash ?? memoryAiStashStore(now), sealer, now });
-  const clouds = createCloudsService({ aiStash, entitlements, onEvent: options.cloudEvent, onStatus: options.cloudStatus, dataDir: options.dataDir, now, providers: { pool, dedicated }, home, sealer, managed, managedHome: realHome,
+  const linkGrants = linkGrantSignerFromEnv(env, { dataDir: options.dataDir, loopback });
+  const clouds = createCloudsService({ aiStash, entitlements, linkGrant: linkGrants ? cloud => signLinkGrant(cloud.accountId, linkGrants, now()).grant : null, onEvent: options.cloudEvent, onStatus: options.cloudStatus, dataDir: options.dataDir, now, providers: { pool, dedicated }, home, sealer, managed, managedHome: realHome,
     workspaces: {
       register({ accountId, name, publicKey }) {
         const id = `ws_${randomBytes(16).toString("base64url")}`;

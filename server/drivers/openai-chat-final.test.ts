@@ -157,8 +157,17 @@ describe("a broken or tool-only final round", () => {
     expect(toolName).toContain("fixture_lookup");
     expect(run.sent).toHaveLength(3);
     expect(run.sent[2]!.messages.at(-1)).toMatchObject({ role: "user" });
+    expect(String(lastUser(run.sent[2]!))).toMatch(/^Your tools have finished and you wrote no reply\. Without calling another tool, write your final answer now/);
+    expect(String(lastUser(run.sent[2]!))).not.toMatch(/A step failed/);
     expect(run.replies).toEqual(["Found it."]);
     expect(run.completed).toMatchObject({ ok: true });
+  });
+
+  it("asks for the failure in plain words when a tool failed before the empty reply", async () => {
+    mcp = await startFakeHttpMcp({ tools: [{ name: "lookup", inputSchema: { type: "object", properties: {} } }] });
+    const run = await turn([call("c1", "fixture_missing"), EMPTY, say("The lookup failed, so nothing was found.")], { integrations: { custom: { fixture: { type: "http", url: mcp.url, headers: {} } } } });
+    expect(String(lastUser(run.sent.at(-1)!))).toMatch(/A step failed: say plainly what failed/);
+    expect(run.replies.at(-1)).toBe("The lookup failed, so nothing was found.");
   });
 
   it("asks once more after a tool call with no id, which ran nothing", async () => {

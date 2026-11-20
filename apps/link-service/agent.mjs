@@ -53,7 +53,7 @@ export const SERVER = { host: "127.0.0.1", port: Number(process.env.LINK_SERVER_
 export const LINK_PROTOCOL = 2;
 export const LINK_MIN_APP = 1;
 export const LINK_MIN_SERVER = 1;
-export const AGENT_VERSION = "2.4.5";
+export const AGENT_VERSION = "2.4.7";
 export const AGENT_CAPS = Object.freeze(["direct-ssh", "direct-wss", "direct-rtc", "direct-cf", "egress", "egress-lane", "self-update", "cloud-relay"]);
 /** what this agent says about itself, in its direct hello and its answer to the app's `hello` */
 export const agentHello = () => ({ protocol: LINK_PROTOCOL, minApp: LINK_MIN_APP, minServer: LINK_MIN_SERVER, agent: AGENT_VERSION, caps: [...AGENT_CAPS] });
@@ -72,6 +72,8 @@ export function noteRelayDate(value, now = Date.now()) {
   relayOffsetMs = Math.abs(offset) < RELAY_CLOCK_SLACK_MS ? 0 : offset;
 }
 export const relayNow = () => Date.now() + relayOffsetMs;
+/** a time this computer stamped (a pairing grant's end from the harness beside it), as the link service reads it */
+const inRelayTime = (at) => at + relayOffsetMs;
 const CHUNK = 128 * 1024;
 /** one post stays well under a proxy's usual 1 MB body limit (nginx's default) */
 const BATCH_BYTES = 700 * 1024;
@@ -1527,7 +1529,7 @@ export const installedAgent = () => process.env.DUSK_LINK_LAUNCHER || fileURLToP
 const releasesDir = () => join(configDir(), "releases");
 /** ed25519 public keys (base64, raw 32 bytes) a release must be signed by; with none, the link service's tls and hash vouch, as for the install */
 export const RELEASE_KEYS = Object.freeze(["beeDw16fb1PcswmcgHOGG4Dic9r/6Vpnvbwc9+v5m6E="]);
-const UPDATE_EVERY_MS = 6 * 60 * 60_000;
+const UPDATE_EVERY_MS = 60 * 60_000;
 const UPDATE_FIRST_MS = 5 * 60_000;
 /** no request, stream byte or egress stream from the app for this long, and nothing open on egress: an update may restart the tunnel */
 export const UPDATE_IDLE_MS = 5 * 60_000;
@@ -1654,10 +1656,10 @@ export function createUpdater({ base, dir = releasesDir(), current = AGENT_VERSI
  * same install.sh pins. this check only saves a wasted download: root's updater checks everything again
  */
 export const SERVER_RELEASE_KEYS = Object.freeze(["rel-2026-11:wtwZypDwVPBXZ25XsZOVpd0PZPBbVMhugheUj5_NLIM"]);
-const SERVER_UPDATE_EVERY_MS = 60 * 60_000;
-const SERVER_UPDATE_FIRST_MS = 10 * 60_000;
+const SERVER_UPDATE_EVERY_MS = 10 * 60_000;
+const SERVER_UPDATE_FIRST_MS = 2 * 60_000;
 /** each check lands somewhere in this much more, so servers that started together do not ask the link service together */
-const SERVER_UPDATE_JITTER_MS = 20 * 60_000;
+const SERVER_UPDATE_JITTER_MS = 5 * 60_000;
 const SIGNATURE = /^r1\.[a-z0-9-]{1,32}\.[A-Za-z0-9_-]{1,4000}\.[A-Za-z0-9_-]{40,200}$/;
 export const serverReleaseDir = () => join(configDir(), "server-release");
 
@@ -1700,10 +1702,11 @@ export function createServerUpdater({ base, id, token, dir = serverReleaseDir(),
   }
 
   async function stage() {
-    const answer = await fetchImpl(`${base}/v1/tunnels/${id}/server`, { headers: auth, signal: AbortSignal.timeout(30_000) });
+    const running = await current().catch(() => null);
+    const answer = await fetchImpl(`${base}/v1/tunnels/${id}/server`, { headers: { ...auth, "x-dusk-agent-version": AGENT_VERSION, ...(running ? { "x-dusk-server-version": String(running) } : {}) }, signal: AbortSignal.timeout(30_000) });
     if (answer.status === 404) {
-      await answer.body?.cancel().catch(() => {});
-      tell("link: no server build is published on the link service (it answered 404); the server stays as it is");
+      const code = await answer.json().then((body) => body?.code, () => null);
+      tell(code === "paused" ? "link: server updates are paused on the link service; the server stays as it is" : "link: no server build is published on the link service (it answered 404); the server stays as it is");
       return null;
     }
     if (!answer.ok) throw new Error(`the link service answered ${answer.status} for the server release`);
@@ -1714,7 +1717,6 @@ export function createServerUpdater({ base, id, token, dir = serverReleaseDir(),
     const signed = signature ? serverReleaseSigned(signature, sha256, keys) : null;
     if (!signed) throw new Error("the server release is not signed by a pinned key");
     const version = signed.version;
-    const running = await current().catch(() => null);
     if (running && compareVersions(version, running) <= 0) {
       tell(`link: server ${running} is up to date (the link service offers ${version})`);
       return null;
@@ -2593,7 +2595,7 @@ export function createPhoneHub({ base, id, token, keys, server = SERVER, sync = 
           try { return [{ ...channel, key: channel.kind === "grant" ? Buffer.from(channel.key, "base64url") : sealKeyOf(keys.priv, keys.pub, channel.pub, channel.id) }]; }
           catch { unusable.push(channel.id); return []; }
         });
-        const register = () => fetchImpl(route, { method: "PUT", headers, body: JSON.stringify({ channels: wanted.map(({ id, verifier, kind, expiresAt }) => ({ id, verifier, kind, ...(kind === "grant" ? { expiresAt } : {}) })) }), signal: AbortSignal.any([abort.signal, AbortSignal.timeout(40_000)]) });
+        const register = () => fetchImpl(route, { method: "PUT", headers, body: JSON.stringify({ channels: wanted.map(({ id, verifier, kind, expiresAt }) => ({ id, verifier, kind, ...(kind === "grant" ? { expiresAt: inRelayTime(expiresAt) } : {}) })) }), signal: AbortSignal.any([abort.signal, AbortSignal.timeout(40_000)]) });
         let response = await register();
         const refused = [...unusable];
         // each taken id (still held by a tunnel this computer made before) is left out in turn, so the rest still register

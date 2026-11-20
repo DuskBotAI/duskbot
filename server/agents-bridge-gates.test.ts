@@ -162,7 +162,7 @@ describe("every mount that puts a selection in front of the agents server", () =
     it("is bridged as built when the bot has no selection", async () => {
       const names = await mounted();
       expect(names.slice(-2)).toEqual(["agents_find_tool", "agents_use_tool"]);
-      expect(names).not.toContain("agents_trigger");
+      expect(names).not.toContain("agents_trigger_info");
       expect(session!.view("agents_use_tool", { name: "list_triggers" })).toMatchObject({ ask: false });
     });
   });

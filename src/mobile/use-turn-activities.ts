@@ -4,6 +4,7 @@ import type { AppState, Bot } from "@/state/store";
 import { onAnyTurnLive, turnLive } from "@/state/turn-status";
 import { duskBody } from "../../shared/body-migration";
 import { turnActivityEnded, turnActivityStart, type TurnActivityRegistration, type TurnActivityState } from "../../shared/phone-activity";
+import { liveActivityEnabled, subscribeLiveActivity } from "./live-activity-setting";
 import type { MobilePlatform } from "./platform";
 import { localTurnActivity, sameTurnActivity, turnUnderway } from "./turn-activity";
 
@@ -14,9 +15,9 @@ interface Tracked { id: string; botId: string; threadId: string; state: TurnActi
 
 const environment = import.meta.env.DEV ? "sandbox" : "production";
 
-async function put(path: string, body: object): Promise<void> {
+async function put(path: string, body: object, method: "PUT" | "DELETE" = "PUT"): Promise<void> {
   try {
-    const response = await fetch(path, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body), signal: AbortSignal.timeout(15_000) });
+    const response = await fetch(path, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body), signal: AbortSignal.timeout(15_000) });
     await response.body?.cancel();
   } catch {}
 }
@@ -54,8 +55,10 @@ export function useTurnActivities(platform: MobilePlatform, state: AppState): (b
 
   useEffect(() => {
     if (!bridge) return;
+    let startToken: string | null = null;
     const stops = [
       bridge.onToken(({ id, threadId, token, startedAt }) => {
+        if (!liveActivityEnabled()) { void bridge.end(id, turnActivityStart(startedAt), true).catch(() => {}); return; }
         void (async () => {
           const key = await bridge.lineKey().catch(() => null);
           const body: TurnActivityRegistration & { startedAt: number } = { threadId, token, environment, startedAt, ...(key ? { key } : {}) };
@@ -68,13 +71,30 @@ export function useTurnActivities(platform: MobilePlatform, state: AppState): (b
           }).catch(() => {});
         }
       }),
-      bridge.onStartToken((token) => { void put("/api/mobile/activity-start", { token, environment }); }),
+      bridge.onStartToken((token) => {
+        startToken = token;
+        if (liveActivityEnabled()) void put("/api/mobile/activity-start", { token, environment });
+      }),
+      // off: what is on the Lock Screen goes now and an ask no longer starts one by push; reply notifications are untouched
+      subscribeLiveActivity(() => {
+        if (liveActivityEnabled()) {
+          if (startToken) void put("/api/mobile/activity-start", { token: startToken, environment });
+          return;
+        }
+        void put("/api/mobile/activity-start", {}, "DELETE");
+        for (const one of Array.from(tracked.current.values())) {
+          tracked.current.delete(one.id);
+          void put("/api/mobile/activity", { threadId: one.threadId }, "DELETE");
+          void bridge.end(one.id, one.state, true).catch(() => {});
+        }
+        void bridge.list().then((all) => { for (const one of all) void bridge.end(one.id, turnActivityStart(one.startedAt), true).catch(() => {}); }).catch(() => {});
+      }),
     ];
     return () => { for (const stop of stops) stop(); };
   }, [bridge]);
 
   return useCallback((bot: Bot) => {
-    if (!bridge || Array.from(tracked.current.values()).some((one) => one.threadId === bot.threadId)) return;
+    if (!bridge || !liveActivityEnabled() || Array.from(tracked.current.values()).some((one) => one.threadId === bot.threadId)) return;
     const startedAt = Math.floor(Date.now() / 1000);
     const initial = turnActivityStart(startedAt);
     void bridge.start({ botId: bot.id, botName: bot.name, threadId: bot.threadId, color: bot.color, body: duskBody(bot.mascotBody) }, initial).then((id) => {

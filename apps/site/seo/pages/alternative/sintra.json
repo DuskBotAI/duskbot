@@ -11,7 +11,7 @@
     "ai employee apps"
   ],
   "answer": "**buy the role you need this week, not the whole imaginary department.** sintra packages ready-made helpers with ai included. dusk lets you write the jobs and choose each bot’s ai separately. try the task that keeps getting put off, then compare the bill. sintra’s listed rates are promotional; the payment term and renewal price matter as much as the monthly headline.",
-  "updated": "2026-11-12",
+  "updated": "2026-11-20",
   "review": {
     "status": "approved",
     "by": "lead agent: independent reviewer pass against seo/facts (4 reviewers), every finding applied, automated gate",
@@ -47,7 +47,7 @@
     "them": [
       "**the packaged roles suit you.** you want helpers for the business areas sintra lists.",
       "**you want ai inside one plan.** you prefer that to a separate provider bill.",
-      "**you want store phone apps today.** sintra links ios and android apps."
+      "**you want an android app from the store today.** sintra links ios and android apps."
     ],
     "dusk": [
       "**you want to write the job yourself.** name a bot and change its responsibility as you learn.",
@@ -135,7 +135,7 @@
         "label": "where you use it",
         "cells": [
           "hosted service with web, ios and android apps",
-          "desktop app, plus paired phone browser; store phone apps are coming"
+          "desktop app, iphone app and paired android browser"
         ],
         "src": [
           1,
@@ -171,7 +171,7 @@
     },
     {
       "q": "does dusk have a phone app like sintra?",
-      "a": "**dusk’s store apps are still on the way.** sintra links ios and android apps.[^2] today, pair your phone and add dusk’s browser version to the home screen. that version sends no notifications.[^8]"
+      "a": "**on iphone, yes. the dusk bot app is in the app store and sends notifications.** sintra links ios and android apps.[^2] until dusk arrives on google play, android uses a paired browser without notifications.[^8]"
     }
   ],
   "sources": [

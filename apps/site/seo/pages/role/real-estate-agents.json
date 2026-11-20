@@ -10,7 +10,7 @@
     "ai assistant for real estate agents"
   ],
   "answer": "**arrive at the showing with the address, the questions and the follow-up already in hand.** use verified property notes for listing drafts, gmail threads for promises and google calendar for showing prep. these routines work with files and supported apps; they assume no listing-service or property-software connection. you review property claims before publishing and keep client commitments with you.",
-  "updated": "2026-11-12",
+  "updated": "2026-11-20",
   "review": {
     "status": "approved",
     "by": "lead agent: independent reviewer pass against seo/facts (4 reviewers), every finding applied, automated gate",
@@ -101,7 +101,7 @@
     },
     {
       "q": "can i message the bot while i'm out at showings?",
-      "a": "**yes, through the paired phone browser version.** an office computer must stay on with dusk running if it hosts your bot. dusk cloud is another home for it."
+      "a": "**yes. pair the iphone app or use the browser on android.** an office computer must stay on with dusk running if it hosts your bot. dusk cloud is another home for it."
     },
     {
       "q": "will it write and publish listings for me?",

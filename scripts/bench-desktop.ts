@@ -717,7 +717,7 @@ async function main() {
         await sleep(16);
       }
       await sleep(1_000);
-      const scroll = await page.evaluate<{ frames: number[]; longTasks: Array<[number, number]>; rows: number; nodes: number; top: number; height: number }>(FRAMES_STOP);
+      const scroll = await page.evaluate<{ frames: number[]; longTasks: Array<[number, number]>; rows: number; nodes: number; top: number; height: number; firstRow?: string; lastRow?: string }>(FRAMES_STOP);
       const memoryAfter = await page.metrics();
       big.scroll = {
         wheelEvents: 400, frames: scroll.frames.length, frameMsP50: round(percentile(scroll.frames, 50)), frameMsP95: round(percentile(scroll.frames, 95)), frameMsMax: round(Math.max(...scroll.frames)),
@@ -725,6 +725,19 @@ async function main() {
         rowsBefore: box.rows, rowsAfter: scroll.rows, domNodesBefore: box.nodes, domNodesAfter: scroll.nodes, scrollHeightBefore: box.height, scrollHeightAfter: scroll.height, scrollTopAfter: scroll.top,
         jsHeapMbBefore: round(memoryBefore.JSHeapUsedSize! / 1048576), jsHeapMbAfter: round(memoryAfter.JSHeapUsedSize! / 1048576),
         rendererRssMbAfter: Math.max(...await chrome.rendererRssMb()),
+      };
+      await page.evaluate(FRAMES_START);
+      for (let i = 0; i < 400; i++) {
+        await page.send("Input.dispatchMouseEvent", { type: "mouseWheel", x: box.x, y: box.y, deltaX: 0, deltaY: 600 });
+        await sleep(16);
+      }
+      await sleep(1_000);
+      const down = await page.evaluate<{ frames: number[]; longTasks: Array<[number, number]>; rows: number; nodes: number; top: number; height: number; firstRow?: string; lastRow?: string }>(FRAMES_STOP);
+      big.scrollBackDown = {
+        wheelEvents: 400, frameMsP95: round(percentile(down.frames, 95)), framesOver33ms: down.frames.filter((ms) => ms > 33.4).length,
+        longTasks: down.longTasks.length, longestTaskMs: Math.max(0, ...down.longTasks.map((task) => task[1])), rowsAfter: down.rows, domNodesAfter: down.nodes,
+        scrollTopAfter: down.top, scrollHeightAfter: down.height, firstRow: down.firstRow, lastRow: down.lastRow, upFirstRow: scroll.firstRow, upLastRow: scroll.lastRow,
+        newestDrawn: await page.evaluate<boolean>(`Boolean(document.querySelector('[data-mid="${seeded.bigLastMessageId}"]'))`),
       };
     }
     await page.send("Page.reload");

@@ -141,7 +141,7 @@
 }
 
 /* grok's prose: blocks 10px apart, headings 8px further from what they follow */
-[data-chat-bubble="simple"] .chat-md > * + * {
+[data-chat-bubble="simple"] .chat-md > :where(:not(:first-child)) {
   margin-top: 10px;
 }
 [data-chat-bubble="simple"] .chat-md > [data-md-h] {

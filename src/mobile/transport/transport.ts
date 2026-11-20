@@ -1,7 +1,8 @@
 import { RelayGoneError, type RelayChannel } from "./relay";
 import { noteRefusedRequest } from "@/lib/session-ended";
-import { asleepAnswer, BACKGROUND_HEADERS, markCloudAsleep } from "@/lib/cloud-power";
+import { asleepAnswer, BACKGROUND_HEADERS, forgetCloudGone, goneAnswer, markCloudAsleep, markCloudGone } from "@/lib/cloud-power";
 import { setUploadRoute } from "@/lib/upload-request";
+import { forgetLocalVoiceCall } from "@/lib/voice-call/availability";
 import { limitSendAttempts } from "@/state/optimistic-send";
 import { forgetWorkspaceAnswers, noteWorkspaceAnswer, placeAnswered } from "../connection/reachability";
 
@@ -138,6 +139,7 @@ export class BearerEventSource extends EventTarget {
       // a stream refused for its credential is the one request a quiet phone makes: it asks whether the session still stands
       if (response.status === 401) noteRefusedRequest();
       if (asleepAnswer(response)) markCloudAsleep();
+      else if (goneAnswer(response)) markCloudGone();
       else if (!response.ok) context.failed?.();
       if (!response.ok || !response.body) { this.fail(); return; }
       reader = response.body.getReader();
@@ -298,7 +300,7 @@ export function asleepProbe(send: typeof fetch, origin: string, token: string, n
     if (now() - last < ASLEEP_PROBE_GAP_MS) return;
     last = now();
     void send(`${origin}/api/health`, { headers: { Authorization: `Bearer ${token}`, ...BACKGROUND_HEADERS }, credentials: "omit", redirect: "error", signal: AbortSignal.timeout(10_000) })
-      .then((response) => { if (asleepAnswer(response)) markCloudAsleep(); void response.body?.cancel().catch(() => {}); })
+      .then((response) => { if (asleepAnswer(response)) markCloudAsleep(); else if (goneAnswer(response)) markCloudGone(); void response.body?.cancel().catch(() => {}); })
       .catch(() => {});
   };
 }
@@ -329,9 +331,11 @@ export function installTransport(transport: PhoneTransport, onGone?: () => void)
   // every answer from the place proves it is reachable, whatever the live stream is doing
   const fetchWorkspace: typeof fetch = (input, init) => sendWorkspace(input, init).then((response) => {
     if (placeAnswered(response)) noteWorkspaceAnswer();
+    else if (goneAnswer(response)) markCloudGone();
     return response;
   });
   forgetWorkspaceAnswers();
+  forgetCloudGone();
   const context = { transport, streamFetch: inPage(transport) ? fetchWorkspace : streamFetch.bind(window) };
   const probeAsleep = transport.kind === "bearer" ? asleepProbe(fetchWorkspace, origin, transport.token ?? "") : undefined;
   installed = context;
@@ -382,6 +386,7 @@ export function installTransport(transport: PhoneTransport, onGone?: () => void)
   window.fetch = patchedFetch;
   window.EventSource = PatchedEventSource;
   window.WebSocket = PatchedWebSocket;
+  forgetLocalVoiceCall();
   // the relay sends a body from the page in chunks, so it can count them; bearer requests go out through native http
   const stopUploads = transport.kind === "relay" ? setUploadRoute((input, init, onProgress) => {
     const url = rewriteApiUrl(input, window.location.origin, origin);

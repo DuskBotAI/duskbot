@@ -64,7 +64,7 @@
         "label": "starting a conversation",
         "cells": [
           "use the web without an install, or link telegram",
-          "desktop app with a phone browser paired to your computer or cloud"
+          "desktop app, plus an iphone app or android browser paired to your computer or cloud"
         ],
         "src": [
           3,
@@ -146,7 +146,7 @@
     },
     {
       "q": "can i message manus from telegram?",
-      "a": "**yes.** its launch post describes linking telegram and getting recurring summaries there.[^3] dusk has its own desktop and paired phone interface. store phone apps are still on the way.[^7]"
+      "a": "**yes.** its launch post describes linking telegram and getting recurring summaries there.[^3] dusk has its own desktop and paired phone interface. get its iphone app from the app store. android uses the browser until the google play release.[^7]"
     }
   ],
   "sources": [
@@ -209,7 +209,7 @@
     "manus ai vs chatgpt",
     "openclaw vs manus"
   ],
-  "updated": "2026-11-12",
+  "updated": "2026-11-20",
   "review": {
     "status": "approved",
     "by": "lead agent: independent reviewer pass against seo/facts (4 reviewers), every finding applied, automated gate",

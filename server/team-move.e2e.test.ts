@@ -230,9 +230,10 @@ it("a move cut short, by the app killed while My Cloud holds the bot and by a dr
 }, hostTimeout(300_000));
 
 it("a bot whose name Acme already uses arrives as \"Scout (Ada)\"", async () => {
-  const again = await fx.onCloud("POST", "/api/bots", { name: "Scout", soul: "Another Scout." });
+  const again = await fx.onCloud("POST", "/api/bots", { name: "Second scout", soul: "Another Scout." });
   expect(again.status).toBe(201);
-  const bot = again.body.bot as Bot;
+  expect((await fx.onCloud("PATCH", `/api/bots/${again.body.bot.id}`, { name: "Scout" })).status).toBe(200);
+  const bot = { ...again.body.bot, name: "Scout" } as Bot;
   await say(bot, bot.threadId, "Hello, second Scout.");
   await move(bot);
   expect(phaseOf(bot.id)?.phase).toBe("done");

@@ -11,7 +11,7 @@
     "genspark alternatives"
   ],
   "answer": "**keep genspark if its editors are what save you the afternoon.** it brings slides, sheets, documents and media tools together with claw, an assistant in chat apps. dusk fits ongoing jobs with separate memory and ai choices. both offer local and hosted routes. choose around the work you keep doing, then add up the computer and ai bills.[^1][^2][^3][^4]",
-  "updated": "2026-11-12",
+  "updated": "2026-11-20",
   "review": {
     "status": "approved",
     "by": "lead agent: independent reviewer pass against seo/facts (4 reviewers), every finding applied, automated gate",
@@ -125,7 +125,7 @@
         "label": "where you message",
         "cells": [
           "claw supports whatsapp, slack, teams, telegram and more, with its own email address",
-          "dusk desktop chats and paired phone browser"
+          "dusk chats in the desktop app, iphone app or paired android browser"
         ],
         "src": [
           1,

@@ -62,9 +62,9 @@ export interface CallIo {
   player: (render: Render, prepare: Prepare, events: PlayerEvents, system: SystemVoice | null) => CallPlayer;
   now: () => number;
   /** Null where the computer has no voice of its own. */
-  systemVoice: (speed: () => number) => SystemVoice | null;
+  systemVoice: (speed: () => number, language?: string) => SystemVoice | null;
   /** Null where the computer has no recognizer of its own. */
-  systemListener: (onSaid: (text: string) => void) => FallbackListener | null;
+  systemListener: (onSaid: (text: string) => void, language?: string) => FallbackListener | null;
   /** How often to look again while the models are still on their way. */
   pollMs: number;
   chime: (kind: ChimeKind) => Promise<void>;
@@ -84,8 +84,8 @@ const defaultIo = (): CallIo => ({
   openMic: openCallMic,
   player: (render, prepare, events, system) => new CallPlayer(render, prepare, events, system),
   now: () => performance.now(),
-  systemVoice: (speed) => (systemVoiceAvailable() ? { use: () => true, speak: (text, signal) => systemSpeak(text, { speed: speed(), signal }) } : null),
-  systemListener: (onSaid) => (systemListenerAvailable() ? new SystemListener(onSaid) : null),
+  systemVoice: (speed, language) => (systemVoiceAvailable() ? { use: () => true, speak: (text, signal) => systemSpeak(text, { speed: speed(), signal, language }) } : null),
+  systemListener: (onSaid, language) => (systemListenerAvailable() ? new SystemListener(onSaid, language) : null),
   pollMs: 1_500,
   chime: (kind) => playChime(kind),
 });
@@ -136,14 +136,16 @@ export class VoiceCallSession {
   constructor(
     private readonly bot: { id: string; threadId: string },
     private readonly actions: CallActions,
-    opts: { voice: string; speed: number; accountVoiceId?: string; io?: Partial<CallIo> },
+    opts: { voice: string; speed: number; accountVoiceId?: string; io?: Partial<CallIo>;
+      /** The bot's own call language (BCP 47); undefined listens and speaks in the computer's own. */
+      language?: string },
   ) {
     this.accountVoiceId = opts.accountVoiceId;
     this.io = { ...defaultIo(), ...opts.io };
     this.voice = opts.voice;
     this.speed = opts.speed;
     this.callId = `vc-${Math.random().toString(36).slice(2, 10)}${Date.now().toString(36)}`;
-    const system = this.io.systemVoice(() => this.speed);
+    const system = this.io.systemVoice(() => this.speed, opts.language);
     this.player = this.io.player(
       (text, signal) => this.render(text, signal),
       (text, signal) => this.prepareText(text, signal),
@@ -154,7 +156,7 @@ export class VoiceCallSession {
       },
       system ? { use: () => this.voice !== "account" && !this.halves.speak, speak: (text, signal) => system.speak(text, signal) } : null,
     );
-    this.listener = this.io.systemListener((text) => this.heardBySystem(text));
+    this.listener = this.io.systemListener((text) => this.heardBySystem(text), opts.language);
   }
 
   subscribe(fn: () => void): () => void {

@@ -5,6 +5,7 @@
 // reaches them: the relay refuses every send there. Shared by the harness (which
 // enforces it) and the app.
 import { isConnectedAppsServer } from "./own-apps.ts";
+import { isPurchaseTool } from "./purchase.ts";
 
 export type OutboundPolicy = {
   /** ask: every outbound call waits for a tap. allow: up to dailyCap a day. */
@@ -100,6 +101,7 @@ export function isOutboundTool(name: string): boolean {
   const tokens = actionTokens(name);
   if (tokens.length === 0) return false;
   if (isReadOnlyTool(name)) return false;
+  if (isPurchaseTool(name)) return true;
   if (tokens.some((token) => SEND_VERBS.has(token))) return true;
   if (tokens.includes("DRAFT")) return false;
   return tokens.some((token) => CREATE_VERBS.has(token)) && tokens.some((token) => SENT_NOUNS.has(token));

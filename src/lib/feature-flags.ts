@@ -1,7 +1,7 @@
 import { t } from "./i18n";
 
 export interface FeatureFlagConfig {
-  features?: { skillAuthoring?: boolean; skillReview?: boolean; skillReviewSteps?: number; showToolCalls?: boolean; browser?: boolean; claudeUserMcp?: boolean; claudeUserSkills?: boolean; llmThreadTitles?: boolean; quickUpdates?: boolean; skillsLibrary?: boolean; shareLearnedSkills?: "off" | "ask" | "auto"; roomMemoryCapture?: boolean };
+  features?: { skillAuthoring?: boolean; skillReview?: boolean; skillReviewSteps?: number; showToolCalls?: boolean; browser?: boolean; claudeUserMcp?: boolean; claudeUserSkills?: boolean; llmThreadTitles?: boolean; quickUpdates?: boolean; skillsLibrary?: boolean; shareLearnedSkills?: "off" | "ask" | "auto"; roomMemoryCapture?: boolean; suggestions?: boolean };
   browserEngine?: { kind: "engine" | "unavailable"; reason?: string; installable?: boolean; installing?: boolean; installError?: string };
 }
 
@@ -52,7 +52,7 @@ export const MIN_SKILL_REVIEW_STEPS = 3;
 export const MAX_SKILL_REVIEW_STEPS = 100;
 
 export function skillReviewEnabled(config: FeatureFlagConfig | null | undefined): boolean {
-  return skillAuthoringEnabled(config) && config?.features?.skillReview === true;
+  return skillAuthoringEnabled(config) && config?.features?.skillReview !== false;
 }
 
 export function skillReviewSteps(config: FeatureFlagConfig | null | undefined): number {

@@ -53,7 +53,7 @@ describe("the setup card while its answers are written", () => {
     press("a");
     press("f");
     expect(fixture.api).not.toHaveBeenCalled();
-    act(() => container.querySelector<HTMLButtonElement>('button[aria-label="Close"]')!.click());
+    act(() => container.querySelector<HTMLButtonElement>('button[aria-label="Close question"]')!.click());
     expect(fixture.api).toHaveBeenCalledWith("/api/bots/b1/setup-request", { method: "DELETE", body: JSON.stringify({ threadId: "t1" }) });
     expect(card()).toBeNull();
   });
@@ -88,7 +88,7 @@ describe("the setup card while its answers are written", () => {
     expect(container.querySelector("[data-setup-waiting]")).toBeNull();
     expect(labels()).toEqual([...FIXED, "Something else"]);
     expect([...container.querySelectorAll<HTMLButtonElement>("[data-ask-choice]")].every((button) => button.disabled)).toBe(true);
-    expect(container.querySelector('button[aria-label="Close"]')).toBeNull();
+    expect(container.querySelector('button[aria-label="Close question"]')).toBeNull();
   });
 
   it("keeps the first list it showed when the answers change afterwards, so a letter never picks a job that was not on screen", () => {

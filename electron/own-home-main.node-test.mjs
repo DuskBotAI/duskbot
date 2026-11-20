@@ -136,6 +136,9 @@ test("while the move goes, this computer's screen names the server; once home is
   assert.deepEqual(done.own.home(), { id: "g", origin: garage.origin, environmentId: ID, name: "Garage server" });
   assert.equal(done.own.offers(garage), false);
   done.own.close();
+  const readdressed = install({ answers: {}, choice: { ...choice, origin: "http://vps-g.localhost:4100" }, journal: { v: 1, phase: "done", cloud, doneAt: 1 } });
+  assert.deepEqual(readdressed.own.home(), { id: "g", origin: garage.origin, environmentId: ID, name: "Garage server" }, "a linked server whose address changed is still home, at its new address");
+  readdressed.own.close();
 });
 
 test("a server that does not say who owns it is asked once at a time, and again only after OWNER_RETRY_MS", async () => {

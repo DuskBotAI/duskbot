@@ -5,7 +5,7 @@ import { escapeNotes, OUTSIDE, type WorkOrigin } from "../peer-provenance.ts";
 import { AUTHORITY, fromNote, personWho } from "../provenance-label.ts";
 import { queueSteeredMessage } from "../steer-queue.ts";
 import type { Message, Store } from "../store.ts";
-import { failedTurnTool } from "../../shared/failed-turn.ts";
+import { failedTurnRow } from "../failed-turn-row.ts";
 
 type PeerAsk = NonNullable<Message["peerAsk"]>;
 type Relay = NonNullable<Message["relay"]>;
@@ -29,7 +29,7 @@ export function relayedTurn(deps: RelayedTurnDeps) {
     }
     const userMessage = deps.store.appendMessage(threadId, { role: "user", kind: "text", text, peerAsk, relay });
     void deps.startTurn(botId, prompt, { threadId, peerAsk, origin: OUTSIDE, userMessage }).catch((error: unknown) => {
-      deps.store.appendMessage(threadId, { role: "bot", kind: "activity", tool: failedTurnTool(`this conversation could not carry on: ${error instanceof Error ? error.message : String(error)}`) });
+      deps.store.appendMessage(threadId, { role: "bot", kind: "activity", tool: failedTurnRow(`this conversation could not carry on: ${error instanceof Error ? error.message : String(error)}`) });
     });
   };
 }

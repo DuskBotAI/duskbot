@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { createLinkService } from "../src/app.mjs";
-import { createPhoneHub, createServing, harnessSync, sealKeyOf, x25519Pair } from "../agent.mjs";
+import { createPhoneHub, createServing, harnessSync, noteRelayDate, sealKeyOf, x25519Pair } from "../agent.mjs";
 import { createTunnelProxy, frameGuard, openFrame, sealFrame, sha256hex } from "../../../electron/vps-link-protocol.mjs";
 
 const root = fileURLToPath(new URL("..", import.meta.url));
@@ -119,6 +119,17 @@ describe("phone hub without sockets", () => {
     expect(lines.filter((text) => text.startsWith("link: phone channel read"))).toEqual([
       "link: phone channel read retrying", "link: phone channel read is back after 1 retry",
     ]);
+  });
+
+  it("registers a pairing grant's end in the relay's time, so a computer whose clock is 30 minutes slow still opens its pairing channel", async () => {
+    noteRelayDate(new Date(Date.now() + 30 * 60_000).toUTCString());
+    try {
+      const grant = spec();
+      await start([grant]);
+      const sent = registrations[0].channels[0].expiresAt;
+      expect(sent - grant.expiresAt).toBeGreaterThan(29 * 60_000);
+      expect(sent - grant.expiresAt).toBeLessThan(31 * 60_000);
+    } finally { noteRelayDate(new Date().toUTCString()); }
   });
 
   it("opens each channel separately, drops replays and unknown channels, and seals replies for their owner", async () => {

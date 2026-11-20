@@ -1,0 +1,129 @@
+{
+  "path": "/use-cases/form-filling",
+  "type": "use-case",
+  "title": "Fill recurring web forms from an approved answer sheet",
+  "nav": "form filling",
+  "h1": "let a bot fill a web form up to the review screen",
+  "description": "Use a bot’s own browser to copy approved answers into a recurring form. See where to take control, resolve ambiguous fields and submit it yourself.",
+  "keyword": "ai form filling",
+  "keywords": [
+    "fill web forms from a spreadsheet",
+    "browser form filling assistant"
+  ],
+  "answer": "**the venue wants the same stall details again, but this time the form asks for watts.** let a bot copy the answers you already approved into its own browser. tell it to stop at unfamiliar units, declarations or the final button. you settle the exceptions while you can still see the fields.",
+  "updated": "2026-11-20",
+  "review": {
+    "status": "approved",
+    "by": "lead agent, after four independent reviewers read every page against seo/facts (2026-11-20); every finding applied",
+    "at": "2026-11-20"
+  },
+  "voice": 2,
+  "tags": [
+    "forms",
+    "browser",
+    "data entry"
+  ],
+  "connectors": [
+    "googlesheets"
+  ],
+  "related": [
+    "/ai-agent-that-controls-your-computer",
+    "/integrations/google-sheets",
+    "/use-cases/client-onboarding"
+  ],
+  "art": {
+    "props": [
+      "s-computer",
+      "p-folder"
+    ],
+    "bubble": "ready for your signature"
+  },
+  "og_line": "review the fields before you submit.",
+  "routine": {
+    "intro": "**pick an application you can review before it goes through.** confirm how the site saves entries first.",
+    "message": "each monday at 10, look for a row marked ready in my stalls sheet. use the first ready row only. ask me to confirm it hasn't already gone through. open its venue link on your own desktop. enter approved answers only where the field, unit and event date match. skip blanks. if a next button might send the application, stop there.\n\nshow me what you entered and what needs an answer. stop before declarations, uploads, signatures, payment or submission. don't start a second copy. if the site saves entries as you type and i haven't approved that, stop before typing.",
+    "when": "mondays at 10 am when the stall coordinator is available",
+    "needs": "an approved row in google sheets, read only access and the bot's own browser",
+    "output": "example field review\ncurtis | saturday craft stall | frontage 3 metres entered\npower draw | blank | sheet says 'one socket', form asks for watts\ntrader declaration | untouched | coordinator needs to read and sign"
+  },
+  "sections": [
+    {
+      "h": "decide what can safely go in the boxes",
+      "md": "**reuse answers only where the question still means the same thing.** “stall frontage” and “total floor area” can both look like size fields. keep the form label, value and unit together. include the event date so last year's insurance details don't slip in."
+    },
+    {
+      "h": "move from the sheet to the form",
+      "md": "**keep the source row open beside the work.**\n\n1. have the bot read the named range from google sheets.[^1]\n2. open the venue form on the bot's own desktop. use screen to watch the field labels.[^2]\n3. enter the clear matches. read back the visible entries after any page transition. report fields the site cleared or changed."
+    },
+    {
+      "h": "take over at the point of commitment",
+      "md": "**you make the declaration and press submit.** take control to handle a sign-in, captcha or two-step code. hand control back when the form is ready.[^2] if the site blocks automation, finish it manually.\n\nchoose ordinary browser autofill for a simple address form. dusk bot makes sense when you have several differently worded questions to match."
+    }
+  ],
+  "safeguards": [
+    "confirm whether typing creates a saved draft. use a blank practice form if the site's behavior is unclear.",
+    "keep passwords, payment details and signatures out of the answer sheet. enter them yourself when needed.",
+    "read only applies to the sheets connection. watch what the bot types into the website separately.",
+    "for connected-app sends, dusk asks first by default.[^2] browser forms still need a clear stopping point."
+  ],
+  "worked": {
+    "intro": "an invented application for a weekend market",
+    "before": "curtis has a three-metre stand and asks for a socket. the venue wants frontage in metres, total watts and the trader's signature.",
+    "after": "frontage goes in as 3. the bot leaves watts blank. curtis reads the appliance label, enters the correct draw and signs after reviewing the venue terms."
+  },
+  "saves": {
+    "estimate": "about 5 minutes on a familiar form if these timings fit",
+    "formula": "9 minutes reading and typing by hand\n- 4 minutes supervising and reviewing the filled form\n= 5 minutes per application",
+    "assumptions": [
+      "time yourself on the same form version",
+      "include corrections, takeovers and time spent preparing the sheet",
+      "include the final review under both methods"
+    ]
+  },
+  "mistakes": [
+    {
+      "mistake": "treating a required box as permission to guess",
+      "fix": "leave it blank and quote the full question. a required field still needs a true answer."
+    },
+    {
+      "mistake": "starting again after a timeout",
+      "fix": "look for an existing draft or receipt first. the site may already hold the entry."
+    }
+  ],
+  "quick": {
+    "steps": [
+      "choose a permitted practice form",
+      "prepare a sheet row with one exact match and one missing value",
+      "watch the bot fill the match and stop at the gap"
+    ]
+  },
+  "faq": [
+    {
+      "q": "can i give it a verification code in chat?",
+      "a": "enter the code yourself with take control. that also lets you see which account and site requested it."
+    },
+    {
+      "q": "what if there is no final review screen?",
+      "a": "choose an earlier stopping point with a clear boundary. if the first field commits the entry, fill that form yourself."
+    }
+  ],
+  "sources": [
+    {
+      "label": "composio: google sheets actions",
+      "url": "https://docs.composio.dev/toolkits/googlesheets",
+      "checked": "2026-11-12"
+    },
+    {
+      "label": "dusk bot docs: a bot’s computer",
+      "url": "/docs/computer"
+    },
+    {
+      "label": "dusk bot docs: files and connected apps",
+      "url": "/docs/files-and-apps"
+    },
+    {
+      "label": "dusk bot docs: routines",
+      "url": "/docs/routines"
+    }
+  ]
+}

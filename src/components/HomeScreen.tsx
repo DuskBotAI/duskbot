@@ -13,7 +13,7 @@ const MACHINE: Record<string, LocaleKey> = {
 
 /** What the screen's one button does: sign in again, open the Plan page, look again, or, for a Cloud that isn't running, buy
  * it again, continue its checkout or update the card (each on the Cloud page in the browser, or its checkout reopened). */
-export type HomeAction = "sign-in" | "manage" | "retry" | "buy" | "continue" | "card";
+export type HomeAction = "sign-in" | "manage" | "retry" | "buy" | "continue" | "card" | "upgrade";
 
 /** A day as this person reads it: "November 1", with the year once it isn't this one. */
 export function homeDay(at: number, now = Date.now()): string {
@@ -35,8 +35,10 @@ export function homeScreenText(view: HomeView | null, now = Date.now()): { title
   // A Cloud the Admin's list says isn't running: what it is in plain words, with its one fitting action.
   if (view?.screen === "ended") return { title: named("cloudHome.ended", "cloudHome.endedNamed"), body: view.deleteAt ? t("cloudHome.endedFiles", { date: homeDay(view.deleteAt, now) }) : null,
     reason: null, action: "buy", busy: false };
+  if (view?.screen === "gone") return { title: named("cloudHome.gone", "cloudHome.goneNamed"), body: t("cloudHome.goneBody"), reason: null, action: null, busy: false };
   if (view?.screen === "checkout") return { title: named("cloudHome.checkout", "cloudHome.checkoutNamed"), body: t("cloudHome.checkoutBody"), reason: null, action: "continue", busy: false };
-  if (view?.screen === "payment") return { title: named("cloudHome.payment", "cloudHome.paymentNamed"), body: t("cloudHome.paymentBody"), reason: null, action: "card", busy: false };
+  if (view?.screen === "payment" && view.trial) return { title: t("cloudHome.trialUnpaid"), body: view.deleteAt ? t("cloudHome.trialUnpaidBody", { date: homeDay(view.deleteAt, now) }) : null, reason: null, action: "upgrade", busy: false };
+  if (view?.screen === "payment") return { title: t("cloudHome.paymentStopped"), body: t(view.deleteAt ? "cloudHome.paymentStoppedKept" : "cloudHome.paymentStoppedBody", view.deleteAt ? { date: homeDay(view.deleteAt, now) } : undefined), reason: null, action: "card", busy: false };
   if (view?.screen === "asleep") return { title: t("cloudAsleep.waking"), body: null, reason: null, action: null, busy: true };
   if (view?.screen === "waking") return { title: t("homeScreen.waking"), body: null, reason: null, action: null, busy: true };
   if (view?.screen === "moving") return { title: named("homeScreen.moving", "homeScreen.movingNamed"), body: null, reason: null, action: null, busy: true };
@@ -44,7 +46,7 @@ export function homeScreenText(view: HomeView | null, now = Date.now()): { title
 }
 
 const BUTTON: Record<Exclude<HomeAction, "sign-in" | "manage">, LocaleKey> = {
-  retry: "cloudHome.tryAgain", buy: "cloudHome.buyAgain", continue: "cloudHome.continue", card: "cloudHome.updateCard",
+  retry: "cloudHome.tryAgain", buy: "cloudHome.buyAgain", continue: "cloudHome.continue", card: "cloudAccount.updateCard", upgrade: "cloudHome.upgrade",
 };
 
 /** Remove from list on this screen: asked first, in plain words; then the window goes on without that Cloud. */
@@ -97,10 +99,10 @@ export function HomeScreen({ bridge, manage }: { bridge: HomeBridge; manage?: ()
   const reopen = window.duskDesktop?.cloudAdd?.reopen;
   const run: Partial<Record<HomeAction, () => Promise<unknown>>> = {
     retry: () => bridge.retry().then((next) => setView(next)),
-    ...(manage ? { manage, buy: manage, card: manage, continue: async () => { if (!(reopen && await reopen().catch(() => false))) await manage(); } } : {}),
+    ...(manage ? { manage, buy: manage, card: manage, upgrade: manage, continue: async () => { if (!(reopen && await reopen().catch(() => false))) await manage(); } } : {}),
   };
   const button = text.action && text.action !== "sign-in" && text.action !== "manage" ? text.action : null;
-  const removable = (view?.screen === "ended" || view?.screen === "payment") && view.removable === true && typeof bridge.remove === "function";
+  const removable = (view?.screen === "ended" || view?.screen === "payment" || view?.screen === "gone") && view.removable === true && typeof bridge.remove === "function";
   if (view?.screen === "asleep") return <CloudAsleepHome bridge={bridge} view={view} />;
   return (
     <main data-home-screen={view?.screen ?? "opening"} className="flex min-h-screen items-center justify-center bg-app px-6 text-ink" style={{ WebkitAppRegion: "drag" } as React.CSSProperties}>

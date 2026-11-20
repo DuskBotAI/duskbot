@@ -1,4 +1,7 @@
-import { useId, useState, type ReactNode } from "react";
+import { useId, useRef, useState, type ReactNode } from "react";
+import { useSettledReveal } from "./settled-reveal";
+import { cn } from "@/lib/cn";
+import { AnimatePresence } from "motion/react";
 import { openSignIn } from "@/lib/sign-in-sheet";
 import { importFirst, previousOpenAt } from "@/lib/import-first";
 import { ChevronRight } from "../icons";
@@ -48,6 +51,7 @@ import { PeopleSection } from "./PeopleSection";
 import { PlanUsageSummary } from "./PlanUsage";
 import { BatteryCard } from "./usage/BatteryCard";
 import { ProviderSummary } from "./usage/ProviderSummary";
+import { UsageDisplayRow } from "./usage/UsageDisplayRow";
 import { UsageGraph } from "./usage/UsageGraph";
 import { ProfileAvatar, ProfileFields } from "./ProfileSettings";
 import { SettingRow, SettingsGroup, SettingsRows } from "./SettingsPrimitives";
@@ -66,7 +70,7 @@ import { ModelDirectory } from "./models/ModelDirectory";
 import { AiCards } from "./onboarding/AiCards";
 import { reportsUsage, useEngineLimits } from "@/lib/limit-resets";
 import {
-  BotOrderRow, ExperimentalFeaturesRow, FollowUpRow, LanguageRow, QuickUpdatesRow, SendKeyRow, TalkingStyleRow,
+  BotOrderRow, ExperimentalFeaturesRow, FollowUpRow, LanguageRow, QuickUpdatesRow, SendKeyRow, SuggestionsRow, TalkingStyleRow,
 } from "./AppSettingsRows";
 
 export type Has = (id: AppSettingsSection) => boolean;
@@ -143,11 +147,11 @@ export function AccountRows() {
       )}
       {/* signed out: sign in continues in the browser for its context (the account context redirect), never an in-app form */}
       {!active && window.duskDesktop?.accounts && <NavRow data-settings-open="sign-in" title={t("accounts.signIn")} onClick={() => window.duskDesktop?.cloudAccount?.continueInBrowser ? openSignIn() : setAdding(true)} />}
-      {editing && (
-        <FormDialog data-panel-modal="profile" title={t("settings.w6.group.aboutYou")} width={460} onClose={() => setEditing(false)}>
+      <AnimatePresence>{editing && (
+        <FormDialog key="profile" data-panel-modal="profile" title={t("settings.w6.group.aboutYou")} width={460} onClose={() => setEditing(false)}>
           <div data-settings-look="simple" className="-mx-2 flex flex-col"><ProfileFields face={face} /></div>
         </FormDialog>
-      )}
+      )}</AnimatePresence>
       {(adding || accounts.sheet) && (
         <AccountsSheet
           adding={adding ? "" : accounts.sheet?.email ?? null}
@@ -227,7 +231,7 @@ export function GeneralPane({ has, remoteActive }: { has: Has; remoteActive: boo
         </SettingsGroup>
       )}
       <SettingsGroup label={tPreferred("settings.docs.notifications", "notifications.title")} block="notifications">
-        <SettingsRows><NotificationRows /></SettingsRows>
+        <SettingsRows><NotificationRows /><SuggestionsRow /></SettingsRows>
       </SettingsGroup>
       {!remoteActive && (
         <SettingsGroup label={t("settings.dataSharing.title")} block="data-sharing">
@@ -270,9 +274,19 @@ function ImportRow() {
 /** Phone pairing and the paired devices' access, all on the pane: the code to scan or type first, then the phones. */
 export function TextingPane({ has, remoteAccess }: { has: Has; remoteAccess: RemoteAccessCards }) {
   const { at } = useSubPage();
-  if (at === PHONE_ADVANCED_PAGE) return <div data-settings-block="companion-advanced" className="flex flex-col gap-5">{remoteAccess.companion}</div>;
-  if (!has("companion")) return null;
-  return <div data-settings-block="companion" className="flex flex-col gap-5">{remoteAccess.pairing}{remoteAccess.companion}</div>;
+  const advanced = at === PHONE_ADVANCED_PAGE;
+  if (!advanced && !has("companion")) return null;
+  // one tree for the pane and its Advanced page: going there and back keeps the code, the phones and their reads as they
+  // are, so the pane never loads (and moves) again
+  return <PhonePaneBody advanced={advanced}><div hidden={advanced} className={advanced ? undefined : "contents"}>{remoteAccess.pairing}</div>{remoteAccess.companion}</PhonePaneBody>;
+}
+
+/** The phone pane's parts (the code, the phones, the computer's own link) each load on their own: the pane shows once
+ * they have, so nothing appears and moves the rows under it on open. */
+function PhonePaneBody({ advanced, children }: { advanced: boolean; children: ReactNode }) {
+  const block = useRef<HTMLDivElement>(null);
+  const shown = useSettledReveal(block);
+  return <div ref={block} data-settings-block={advanced ? "companion-advanced" : "companion"} data-settled={shown ? "" : undefined} className={cn("flex flex-col gap-5", !shown && "invisible")}>{children}</div>;
 }
 
 export function ComputerPane({ has, remoteAccess, transfer, remoteActive = false }: { has: Has; remoteAccess: RemoteAccessCards; transfer?: ReactNode; remoteActive?: boolean }) {
@@ -333,10 +347,16 @@ function ServerUpdatesRow() {
   const entry = useServerUpdateItem(true);
   if (!entry) return null;
   const status = entry.phase === "idle" ? undefined : [entry.label, entry.item.subtitle].filter(Boolean).join(" ");
-  const action = entry.phase === "available" ? t("settings.simple.updates.seeRelease")
+  const action = entry.pending ? t("settings.updates.updatingServer")
+    : entry.phase === "available" ? t(entry.check?.compose?.supported ? "settings.updates.updateNow" : "settings.simple.updates.seeRelease")
     : entry.phase === "reload" ? t("settings.simple.updates.reload")
       : entry.phase === "checking" ? t("common.checking") : t("settings.updates.check");
-  return <NavRow data-settings-open="server-update" title={versionTitle()} hint={status} value={action} drill={false} disabled={entry.item.disabled} onClick={entry.item.onSelect} />;
+  const title = entry.check?.install === "docker" ? t("settings.updates.serverVersion", { version: entry.check.current }) : versionTitle();
+  return <>
+    <NavRow data-settings-open="server-update" title={title} hint={status} value={action} drill={false} disabled={entry.item.disabled} onClick={entry.item.onSelect} />
+    {entry.toggleAutomatic && <SwitchRow title={t("settings.updates.automaticServer")} checked={entry.check?.compose?.automatic === true}
+      disabled={entry.item.disabled} onChange={entry.toggleAutomatic} />}
+  </>;
 }
 
 export function UpdatesPane() {
@@ -434,6 +454,7 @@ export function UsagePane({ has, cloudAccount }: { has: Has; cloudAccount: React
   // while the plan row offers dusk cloud, a second dusk cloud row would only repeat it; a subscriber manages it there
   const subscribed = plan !== null && plan.view.kind !== "signed-out" && plan.view.kind !== "removed" && !buyOfferAllowed(plan.view);
   const limits = useEngineLimits().filter(reportsUsage);
+  const showsFigures = limits.length > 0 || Boolean(usage);
   if (at === "breakdown") {
     return (
       <div className="flex flex-col gap-5">
@@ -449,12 +470,10 @@ export function UsagePane({ has, cloudAccount }: { has: Has; cloudAccount: React
       <ProviderSummary limits={limits} />
       {has("usage") && <AdminOnly note="settings.adminOnly.usage"><BatteryCard version={0} /><UsageGraph /></AdminOnly>}
       {/* no limits yet: one quiet line in the same card as the breakdown, never a greyed-out row */}
-      {((!limits.length && !usage) || usage || has("usage")) && (
-        <RowsCard label={t("settings.docs.usageMore")} data-settings-block={!limits.length && !usage ? "usage" : undefined}>
-          {!limits.length && !usage && <ItemRow title={t("settings.usage.empty.title")} hint={t("settings.s2.usage.emptyHint")} />}
-          {(usage || has("usage")) && <PageRow page="breakdown" title={t("settings.usage.breakdown")} hint={t("settings.hint.breakdown")} />}
-        </RowsCard>
-      )}
+      <RowsCard label={t("settings.docs.usageMore")} data-settings-block={showsFigures ? undefined : "usage"}>
+        {showsFigures ? <UsageDisplayRow /> : <ItemRow title={t("settings.usage.empty.title")} hint={t("settings.s2.usage.emptyHint")} />}
+        {(usage || has("usage")) && <PageRow page="breakdown" title={t("settings.usage.breakdown")} hint={t("settings.hint.breakdown")} />}
+      </RowsCard>
       {usage && <div data-settings-block="cloudUsage" className="scroll-mt-4"><CloudUsageSummaryView usage={usage} upgrade={upgrade}>{dialog}</CloudUsageSummaryView></div>}
       {has("cloudAccount") && (
         <SettingsGroup label={t("settings.simple.billing.plan")} block="cloudAccount">

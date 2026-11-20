@@ -20,6 +20,8 @@ export const SPAWNED_PROXIES = {
   dweb: resolveProxy("drivers/dweb-proxy"),
   connectors: resolveProxy("connector-proxy"),
   mcpGate: resolveProxy("mcp-gate"),
+  dryRunMcp: resolveProxy("dry-run-mcp"),
+  hostShell: resolveProxy("host-shell-mcp"),
   mcpRemote: resolveProxy("mcp-remote-proxy"),
   phone: resolveProxy("drivers/phone-proxy"),
   hook: resolveProxy("hooks/dusk-hook"),

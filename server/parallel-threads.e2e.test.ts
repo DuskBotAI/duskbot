@@ -355,10 +355,8 @@ describe("a Starter Cloud", () => {
     const env = agents.env.DUSK_GATE_UPSTREAM ? JSON.parse(agents.env.DUSK_GATE_UPSTREAM).env : agents.env;
     return internal(f, "/api/internal/threads", env.DUSK_COMMS_TOKEN, { title, message: `Work on ${title}`, ...(toBotId ? { toBotId } : {}) });
   };
-  const ownThread = async (botId: string, title: string) => {
-    await expect.poll(async () => (await botRow(f, botId)).tasks.find((task: any) => task.title === title)?.threadId, { timeout: 20_000, interval: 50 }).toBeTruthy();
-    return (await botRow(f, botId)).tasks.find((task: any) => task.title === title).threadId as string;
-  };
+  /** Where a hand-off runs: the teammate's own chat, one chat per bot. */
+  const handedThread = (sent: { body: any }) => sent.body.receipts[0].threadId as string;
   /** What the Admin says, signed as it signs: which plan this Cloud is on. */
   const tellPlan = async (tier: string) => {
     const body = JSON.stringify({ v: 1, tier }), timestamp = String(Math.floor(Date.now() / 1000)), nonce = randomBytes(16).toString("base64url");
@@ -427,25 +425,22 @@ describe("a Starter Cloud", () => {
     expect(grandchild.status, JSON.stringify(grandchild.body)).toBe(409);
   }, 90_000);
 
-  it("lets a hand-off through to a busy bot, and one to a bot whose own turn is still running", async () => {
+  it("lets a hand-off to a busy bot wait in its one chat and run once the bot's own turn there ends", async () => {
     await starter();
     const a = await botWithThreads(f, CLAUDE, 1, "Ada");
     const b = await botWithThreads(f, CLAUDE, 1, "Ben");
-    const c = await botWithThreads(f, CLAUDE, 1, "Cyd");
     await send(f, a.botId, a.threads[0]!, "Ada's job");
     await whenStarted(a.threads[0]!);
     await send(f, b.botId, b.threads[0]!, "Ben's own job");
     await whenStarted(b.threads[0]!);
-    await send(f, c.botId, c.threads[0]!, "Cyd's own job");
-    await whenStarted(c.threads[0]!);
+    const turnsIn = (threadId: string) => f.claudeDumps().filter((file) => basename(f.dump(file).cwd) === threadId).length;
+    const before = turnsIn(b.threads[0]!);
     const toBen = await startThread(a.threads[0]!, "For Ben", b.botId);
     expect(toBen.status, JSON.stringify(toBen.body)).toBeLessThan(300);
-    await whenStarted(await ownThread(b.botId, "For Ben"));
-    // From a third bot: Ben asking Ada back while Ada waits on Ben would be refused as a loop (crossed-handoffs.e2e).
-    const toAda = await startThread(c.threads[0]!, "For Ada", a.botId);
-    expect(toAda.status, JSON.stringify(toAda.body)).toBeLessThan(300);
-    await whenStarted(await ownThread(a.botId, "For Ada"));
-    expect(await busyThreads(f, a.botId), "Ada's first turn never had to end for it").toContain(a.threads[0]);
+    expect(handedThread(toBen)).toBe(b.threads[0]);
+    f.finish(b.threads[0]!);
+    await expect.poll(() => turnsIn(b.threads[0]!), { timeout: 20_000, interval: 50 }).toBeGreaterThan(before);
+    expect(await busyThreads(f, a.botId), "Ada's turn never had to end for it").toContain(a.threads[0]);
   }, 90_000);
 
   it("keeps a teammate's hand-off out of the person's slot, and the person's own threads still run one at a time", async () => {
@@ -456,11 +451,13 @@ describe("a Starter Cloud", () => {
     await whenStarted(a.threads[0]!);
     const toBen = await startThread(a.threads[0]!, "For Ben", b.botId);
     expect(toBen.status, JSON.stringify(toBen.body)).toBeLessThan(300);
-    await whenStarted(await ownThread(b.botId, "For Ben"));
-    const own = await f.api("POST", `/api/bots/${b.botId}/messages`, { threadId: b.threads[1], text: "The person's own job" });
+    const handed = handedThread(toBen);
+    await whenStarted(handed);
+    const [mine, next] = b.threads.filter((threadId) => threadId !== handed) as [string, string];
+    const own = await f.api("POST", `/api/bots/${b.botId}/messages`, { threadId: mine, text: "The person's own job" });
     expect(own.body.queued, JSON.stringify(own.body)).toBeUndefined();
-    await whenStarted(b.threads[1]!);
-    expect((await f.api("POST", `/api/bots/${b.botId}/messages`, { threadId: b.threads[2], text: "Their next job" })).body).toMatchObject({ queued: true, reason: "capacity" });
+    await whenStarted(mine);
+    expect((await f.api("POST", `/api/bots/${b.botId}/messages`, { threadId: next, text: "Their next job" })).body).toMatchObject({ queued: true, reason: "capacity" });
   }, 90_000);
 
   it("brings a teammate's result back into the thread that asked, while another thread of that bot holds the slot", async () => {
@@ -472,7 +469,7 @@ describe("a Starter Cloud", () => {
     await whenStarted(job!);
     const toBen = await startThread(job!, "For Ben", b.botId);
     expect(toBen.status, JSON.stringify(toBen.body)).toBeLessThan(300);
-    const benThread = await ownThread(b.botId, "For Ben");
+    const benThread = handedThread(toBen);
     await whenStarted(benThread);
     f.finish(job!);
     await expect.poll(() => busyThreads(f, a.botId), { timeout: 20_000, interval: 100 }).toEqual([]);

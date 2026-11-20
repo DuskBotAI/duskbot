@@ -2,9 +2,10 @@
 import { api, type ConfigStatus } from "@/state/store";
 import { t } from "@/lib/i18n";
 import { keyTestResult } from "@/lib/product-events";
-import { putConfig } from "@/lib/sealed-send";
+import { putConfig, sendSealed } from "@/lib/sealed-send";
 import type { KeyResult } from "@/lib/analytics-allowlist";
 import { keyEntry, type KeyId, type KeyTarget, type TestableProvider } from "./key-catalog";
+import type { KeyCheckAnswer } from "./key-check-view";
 
 /** Saves one credential where this app keeps it ("" removes it): the desktop's encrypted store when the key has a slot
  * there, so Remove also clears the stored copy its boot migration made, else the server's own config, which on a Cloud
@@ -38,21 +39,26 @@ export function tregVerdict(result: { ok?: unknown; balanceUsd?: unknown; messag
   return `${t("keys.treg.working")}${balance}`;
 }
 
-export interface KeyCheck { result: KeyResult; ok: boolean; text: string }
+export interface KeyCheck { result: KeyResult; ok: boolean; text: string; answer: KeyCheckAnswer }
 
-export async function checkKey(provider: TestableProvider): Promise<KeyCheck> {
-  const answer = await api("/api/keys/test", { method: "POST", body: JSON.stringify({ provider }) });
+/** Tests the saved key, or `draft`'s key before it is saved (sealed for this server, never kept). */
+export async function checkKey(provider: TestableProvider, draft?: { key: string; url?: string; model?: string }): Promise<KeyCheck> {
+  const extra = { ...(draft?.url ? { url: draft.url } : {}), ...(draft?.model ? { model: draft.model } : {}) };
+  const answer = draft?.key
+    ? await sendSealed("key.test", [provider], { key: draft.key }, (sealed) =>
+      api("/api/keys/test", { method: "POST", body: JSON.stringify({ provider, ...extra, ...(sealed ? { sealed } : {}) }) }))
+    : await api("/api/keys/test", { method: "POST", body: JSON.stringify({ provider, ...extra }) });
   const result = keyTestResult(answer);
-  if (answer.check === "treg") return { result, ok: answer.ok === true, text: tregVerdict(answer) };
+  if (answer.check === "treg") return { result, ok: answer.ok === true, text: tregVerdict(answer), answer };
   if (!answer.ok) {
     const text = answer.reason === "rejected" ? t("keys.testRejected")
       : answer.reason === "unreachable" ? t("keys.testUnreachable")
         : answer.reason === "address" ? t("keys.testAddress")
         : t("keys.testUnexpected", { status: String(answer.status ?? "?") });
-    return { result, ok: false, text };
+    return { result, ok: false, text, answer };
   }
   const outcome = answer.check === "authentication"
     ? answer.freeTier === true ? `${t("keys.testAuthenticated")}\n${t("keys.testFreeTier")}` : t("keys.testAuthenticated")
     : answer.models?.length ? t("keys.testCatalog", { models: answer.models.join(", ") }) : t("keys.testCatalogNoModels");
-  return { result, ok: true, text: `${t("keys.testSaved")} ${outcome}` };
+  return { result, ok: true, text: `${t("keys.testSaved")} ${outcome}`, answer };
 }

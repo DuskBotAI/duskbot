@@ -774,6 +774,9 @@ do_basics() {
   # the bot browser's live view goes as H.264 through this ffmpeg (server/browser/viewers/h264-encoder.ts); best effort:
   # without it the view stays JPEG, so it never fails the install
   apt_install ffmpeg || echo "ffmpeg could not be installed; the live browser view stays JPEG"
+  # pdftotext and pdftoppm: a PDF someone sends a bot is read as text, and a scanned one rendered to pictures for engines
+  # that see images; best effort: without them such a PDF reaches the bot as a file only
+  apt_install poppler-utils || echo "poppler-utils could not be installed; bots get scanned PDFs as files only"
   bwrap_userns
 }
 

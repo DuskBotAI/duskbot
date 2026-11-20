@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { Routine, RoutineRun } from "@/lib/routines";
 import type { WebhookTrigger } from "@/lib/webhooks";
 import {
-  automationSentence, automationsFrom, automationStatus, doesPhrase, lastReceived, lastWhen, nextWhen, orderAutomations, plainWhen, runLine, sourcePhrase, statusLine,
+  automationSentence, automationsFrom, automationStatus, cronAsDaily, doesPhrase, lastReceived, lastWhen, nextWhen, orderAutomations, plainWhen, runLine, sameZoneHere, sourcePhrase, statusLine,
   webhookCalls, type Automation,
 } from "./automations";
 import type { WebhookAttempt } from "@/lib/webhooks";
@@ -67,6 +67,29 @@ describe("the plain sentence", () => {
     expect(plainWhen({ type: "daily", time: "17:30", weekdays: [5] })).toBe("Every Friday at 5:30 PM");
     expect(plainWhen({ type: "interval", everyMinutes: 30, anchorAt: 0 })).toBe("Every 30 minutes");
     expect(plainWhen({ type: "interval", everyMinutes: 120, anchorAt: 0, weekdays: [1, 2, 3, 4, 5] })).toBe("Every 2 hours on weekdays");
+  });
+
+  it("says a daily cron in the same words and clock as a daily schedule, naming its zone only when it is not this device's", () => {
+    const here = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    expect(plainWhen({ type: "cron", expression: "0 9 * * 1-5", timeZone: here })).toBe("Every weekday at 9 AM");
+    expect(plainWhen({ type: "cron", expression: "30 17 * * 5", timeZone: here })).toBe("Every Friday at 5:30 PM");
+    expect(plainWhen({ type: "cron", expression: "0 8 * * *", timeZone: here })).toBe("Every day at 8 AM");
+    const away = sameZoneHere("Asia/Tokyo") ? "America/Los_Angeles" : "Asia/Tokyo";
+    expect(plainWhen({ type: "cron", expression: "30 18 * * 5", timeZone: away })).toMatch(/^Every Friday at 6:30 PM \S/);
+    expect(plainWhen({ type: "cron", expression: "0 9 1 * *", timeZone: here })).toMatch(/^Monthly on day 1 at 9:00/);
+  });
+
+  it("reads only the crons that are one time of day on some weekdays as daily", () => {
+    expect(cronAsDaily("0 9 * * 1-5")).toEqual({ time: "9:00", weekdays: [1, 2, 3, 4, 5] });
+    expect(cronAsDaily("5 7 * * 0,6,7")).toEqual({ time: "7:05", weekdays: [0, 6] });
+    expect(cronAsDaily("*/5 9 * * *")).toBeNull();
+    expect(cronAsDaily("0 9 1 * *")).toBeNull();
+    expect(cronAsDaily("0 9 * * MON")).toBeNull();
+  });
+
+  it("knows an alias of this device's zone is the same zone", () => {
+    expect(sameZoneHere(Intl.DateTimeFormat().resolvedOptions().timeZone)).toBe(true);
+    expect(sameZoneHere("Not/AZone")).toBe(false);
   });
 });
 
@@ -217,5 +240,15 @@ describe("order and the grey line", () => {
 
   it("says a run that found nothing to tell found nothing new, whatever its last words were", () => {
     expect(runLine(run("completed", at(0, 9, 2), { output: "Checked 14 emails.\nNOTHING NEW", report: { state: "quiet" } }), NOW)).toEqual({ when: "today 9:02 AM", mark: "✓", text: "Nothing new" });
+  });
+});
+
+describe("a routine's own address", () => {
+  it("is not listed as an automation of its own, and its runs are the routine's", () => {
+    const hookRun = run("completed", at(-1, 10), { routineId: "hook", triggerSource: "webhook", webhookId: "hook" });
+    const own = run("completed", at(-2, 9));
+    const list = automationsFrom({ routines: [routine()], webhooks: [webhook({ routineId: "brief", prompt: "" })], runs: [own, hookRun] });
+    expect(list.map((one) => [one.kind, one.id, one.addressId])).toEqual([["schedule", "brief", "hook"]]);
+    expect(list[0]!.runs.map((one) => one.id)).toEqual([hookRun.id, own.id]);
   });
 });

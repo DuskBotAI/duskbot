@@ -43,7 +43,7 @@ export interface ModeTotals {
 }
 
 const subStatus = (sub: StoredSubscription): SubscriptionStatus => sub.status === "active" && sub.cancelAtPeriodEnd ? "cancelling" : sub.status;
-const PAYING = new Set<SubscriptionStatus>(["active", "payment_problem", "cancelling", "cancelled"]);
+const PAYING = new Set<SubscriptionStatus>(["active", "cancelling", "cancelled"]);
 
 /** the records of one mode, without what the operator gave (grants, comps, App Review's cloud are never money) */
 export function moneyOf(state: Money, mode: MoneyMode, serverMode: MoneyMode): Money {

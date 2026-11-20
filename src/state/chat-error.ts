@@ -14,6 +14,11 @@ export function refusalFoundAi(error: ApiError): { instanceId: string; name: str
   return typeof found?.instanceId === "string" && typeof found.name === "string" ? { instanceId: found.instanceId, name: found.name } : undefined;
 }
 
+/** A no-AI refusal the person can fix here by connecting one (never a team member's, whose owner connects it). */
+export function refusalConnects(error: ApiError): boolean {
+  return error.body?.connect === true;
+}
+
 export function useChatErrorClear(error: string | null, clear: () => void): void {
   useEffect(() => {
     if (!error) return;

@@ -4,9 +4,9 @@ import type { ComponentProps } from "react";
 import { Mic } from "../icons";
 import { ComposerPlusMenu } from "./ComposerPlusMenu";
 
-type PhonePlusProps = Pick<ComponentProps<typeof ComposerPlusMenu>, "onAttach" | "attachChoices" | "goal" | "teach" | "approval" | "callBotId">;
+type PhonePlusProps = Pick<ComponentProps<typeof ComposerPlusMenu>, "onAttach" | "attachChoices">;
 
-/** The phone composer's round +: attach, Finish together, approval level and call mode. */
+/** The phone composer's round +: the photo library, the camera and Files. */
 export function PhonePlus(props: PhonePlusProps) {
   return <ComposerPlusMenu {...props} circle />;
 }

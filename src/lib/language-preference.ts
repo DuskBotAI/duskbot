@@ -1,5 +1,5 @@
-import { useEffect, useState, useSyncExternalStore } from "react";
-import { loadLocale } from "@/lib/i18n";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { activeLocale, loadLocale } from "@/lib/i18n";
 
 export const LANGUAGE_KEY = "dusk-language";
 
@@ -109,7 +109,9 @@ export function loadPageLanguage(): Promise<string> {
 /** Shows `language` (the system's when empty) once its pack has loaded, and draws the caller again then. */
 export function usePageLanguage(language: string): void {
   const [, setShown] = useState(0);
+  const drawn = useRef("");
+  drawn.current = activeLocale();
   useEffect(() => {
-    void loadLocale(language || globalThis.navigator?.language).then(() => setShown((shown) => shown + 1));
+    void loadLocale(language || globalThis.navigator?.language).then((shown) => { if (shown !== drawn.current) setShown((count) => count + 1); });
   }, [language]);
 }

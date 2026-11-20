@@ -49,7 +49,8 @@ it("starts a thread a Chief opens with a teammate at the Chief's level, and a Ch
     await api("PATCH", `/api/bots/${chief.id}/tasks/${chief.activeTaskId}`, { approvalMode: "auto", acknowledgeLocalAuto: true });
     const adaTurn = await bringIn(chief, chief.activeTaskId, ada, "check-auto");
     expect(adaTurn.permissionMode).toBe("auto");
-    expect(persistedTask(ada.id, adaTurn.threadId)).toMatchObject({ approvalMode: "auto", autoApprove: false });
+    // her own chat keeps her own level: the Chief's rides only the hand-off's turn
+    expect(persistedTask(ada.id, adaTurn.threadId)?.approvalMode ?? "ask").toBe("ask");
     expect((await messages(adaTurn.threadId)).some(message => message.kind === "activity"
       && message.tool?.name === "Approve for me: handed on by Clive, a Chief of Staff on Approve for me")).toBe(true);
     expect((await api("GET", "/api/bots")).bots.find((bot: any) => bot.id === ada.id).approvalMode ?? "ask").toBe("ask");

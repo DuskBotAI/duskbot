@@ -1,26 +1,15 @@
-// The first-run funnel's frame (back, progress, a step that arrives piece by piece) and its simpler steps:
-// the welcome, where bots live, the phone, and the help-improve line on the last screen.
-import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+// The first-run funnel's frame (back, progress, a step that arrives piece by piece) and its hello.
+import { useLayoutEffect, useRef, type ReactNode } from "react";
 import { animate, motion, useMotionValue, useReducedMotion, useTransform } from "motion/react";
-import { QRCodeSVG } from "qrcode.react";
-import { ChevronLeft, Check } from "../../icons";
+import { ChevronLeft } from "../../icons";
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
-import { useHelpImprove } from "@/lib/help-improve";
-import { minutesLeft } from "@/lib/pairing-time";
-import { companionBridge } from "@/lib/companion-bridge";
-import { requireUserPresence } from "@/lib/user-presence";
-import { api } from "@/state/store";
-import type { MobileDevice, MobilePairingRequest, MobilePairingResponse } from "../../../shared/mobile-link";
 import { MausAvatar } from "../Avatar";
 import { usePrefersReducedMotion } from "../mascot-clock";
 import { Art, type ArtName } from "../ui/Art";
 import { PlaceArt, type PlaceArtName } from "../ui/PlaceArt";
-import { Toggle } from "../ui/Toggle";
 import { DEFAULT_BOT_NAME } from "@/lib/default-bot";
 import { MAC_TRAFFIC_LIGHT_CLEAR_X, useDesktopCapabilities } from "../DesktopCapabilities";
-import phoneHome from "../../assets/onboarding/phone-home.webp";
-import { friendlyError } from "@/lib/plain-error";
 
 export const PRIMARY = "ui-button ui-button-pill ui-button-lg ui-button-primary w-[288px] max-w-full font-normal tracking-[0.14px]";
 /** The quiet way past a step that still reads as a button: a soft fill, no outline. */
@@ -125,21 +114,6 @@ export function StepArt({ art, place }: { art?: ArtName; place?: PlaceArtName })
   return art ? <Art name={art} size="xl" className="place-mark h-16" /> : null;
 }
 
-/** "help improve dusk bot": on by default (an opt-out), small and muted, saved the moment it is switched. Shown at the foot
- * of the place step, a quick screen, never on one people wait on. */
-export function ImproveSwitch() {
-  const improve = useHelpImprove("first_run");
-  const id = useId();
-  if (typeof improve.on !== "boolean") return null;
-  return (
-    <div data-help-improve="" className="flex max-w-[420px] items-start gap-2.5 text-start text-[12px] leading-4 text-ink-tertiary">
-      <Toggle checked={improve.on} aria-labelledby={id} onClick={() => void improve.set(!improve.on)} className="mt-px" />
-      <span id={id}>{t("helperIntro.improve")}</span>
-      {improve.failed && <span role="alert" className="sr-only">{t("settings.dataSharing.error")}</span>}
-    </div>
-  );
-}
-
 /** The hello. On a cloud the desktop app set up it greets the person by the name and picture that computer knows. */
 export function WelcomeStep({ onStart, cloud }: { onStart: () => void; cloud?: { name: string; picture?: string } }) {
   const reduced = usePrefersReducedMotion();
@@ -154,144 +128,6 @@ export function WelcomeStep({ onStart, cloud }: { onStart: () => void; cloud?: {
         sub={cloud ? t("funnel.welcome.cloudSub") : t("funnel.welcome.sub")}
         footer={<button type="button" data-primary="" data-funnel-start="" autoFocus onClick={onStart} className={PRIMARY}>{t("funnel.welcome.start")}</button>}
       />
-    </div>
-  );
-}
-
-function PlaceChoice({ kind, art, title, sub, tag, note, onClick }: { kind: string; art: PlaceArtName; title: string; sub: string; tag: string; note?: string | null; onClick: () => void }) {
-  return (
-    <button type="button" data-funnel-place={kind} onClick={onClick} className={cn(TILE, "flex min-w-0 flex-1 flex-col items-start gap-3 p-5 text-start")}>
-      <span className="flex w-full items-start justify-between gap-2">
-        <PlaceArt name={art} size={44} />
-        <span className="rounded-full bg-ink/[0.06] px-2 py-0.5 text-[12px] leading-4 text-ink-secondary">{tag}</span>
-      </span>
-      <span className="text-[15px] font-semibold leading-5 text-ink">{title}</span>
-      <span className="text-[13px] leading-[18px] text-ink-secondary">{sub}</span>
-      {note && <span data-funnel-place-note="" className="text-[12px] leading-4 text-ink-tertiary">{note}</span>}
-    </button>
-  );
-}
-
-/** The desktop app's first screen: dusk bot says hello and asks the one question that shapes the rest, where the bots
- * live. dusk cloud's tile says its trial and price before anything is asked for. */
-export function PlaceStep({ onMac, onCloud, onServer, cloudTag, cloudNote }: {
-  onMac: () => void; onCloud: () => void; onServer: () => void;
-  /** "7 days free" or "From $15/month" once the offer is known */
-  cloudTag?: string | null;
-  /** the price after the trial, in full */
-  cloudNote?: string | null;
-}) {
-  const reduced = usePrefersReducedMotion();
-  return (
-    <StepFrame title={t("funnel.place.title")} sub={t("funnel.place.hello")} wide
-      art={<MausAvatar color="purple" gradient={BRAND_LILAC} size={64} state="excited" animated={!reduced} label={DEFAULT_BOT_NAME} />}
-      footer={<>
-        <button type="button" data-funnel-place="server" onClick={onServer} className={QUIET}>{t("funnel.place.server")}</button>
-        {/* help improve: one quiet line on the quick first screen, never on a screen people wait on */}
-      </>}>
-      <div className="grid w-full grid-cols-1 gap-3 sm:grid-cols-2">
-        <PlaceChoice kind="mac" art="mac" title={t("funnel.place.mac")} sub={t("funnel.place.macSub")} tag={t("funnel.place.macTag")} onClick={onMac} />
-        <PlaceChoice kind="cloud" art="cloud" title={t("funnel.place.cloud")} sub={t("funnel.place.cloudSub")} tag={cloudTag ?? t("funnel.place.cloudTag")} note={cloudNote} onClick={onCloud} />
-      </div>
-    </StepFrame>
-  );
-}
-
-type Pairing = { kind: "idle" } | { kind: "busy" } | { kind: "offer"; offer: MobilePairingResponse; before: string[] } | { kind: "linked"; name: string };
-
-/** The phone: one press shows a QR code (after the desktop app checks someone is here), and it says when the phone joins. */
-export function PhoneStep({ onNext }: { onNext: () => void }) {
-  const [pairing, setPairing] = useState<Pairing>({ kind: "idle" });
-  const [error, setError] = useState<string | null>(null);
-  const [now, setNow] = useState(() => Date.now());
-  const live = useRef(true);
-  useEffect(() => () => { live.current = false; }, []);
-
-  const show = useCallback(async () => {
-    setPairing({ kind: "busy" });
-    setError(null);
-    try {
-      const { devices } = await api<{ devices: MobileDevice[] }>("/api/mobile/devices");
-      if (!(await requireUserPresence())) { if (live.current) setPairing({ kind: "idle" }); return; }
-      const request: MobilePairingRequest = {};
-      const companion = companionBridge();
-      if (companion) {
-        try { request.companion = (await companion.start()).endpoints; } catch {}
-      }
-      const offer = await api<MobilePairingResponse>("/api/mobile/pairing", { method: "POST", body: JSON.stringify(request) });
-      if (live.current) { setPairing({ kind: "offer", offer, before: devices.map((device) => device.id) }); setNow(Date.now()); }
-    } catch (cause) {
-      if (!live.current) return;
-      setError(friendlyError(cause, t("settings.mobile.error")));
-      setPairing({ kind: "idle" });
-    }
-  }, []);
-
-  const waiting = pairing.kind === "offer" ? pairing : null;
-  useEffect(() => {
-    if (!waiting) return;
-    const clock = setInterval(() => setNow(Date.now()), 1_000);
-    const poll = setInterval(() => {
-      void api<{ devices: MobileDevice[] }>("/api/mobile/devices").then(({ devices }) => {
-        const added = devices.find((device) => !waiting.before.includes(device.id));
-        if (added && live.current) setPairing({ kind: "linked", name: added.name });
-      }, () => {});
-    }, 2_000);
-    return () => { clearInterval(clock); clearInterval(poll); };
-  }, [waiting]);
-
-  const expired = waiting ? waiting.offer.expiresAt <= now : false;
-  const code = waiting?.offer.code?.replace(/[^a-z0-9]/gi, "").match(/.{1,4}/g)?.join(" ");
-  const showing = pairing.kind === "offer" && !expired;
-  return (
-    <div className="mx-auto my-auto flex w-full max-w-[760px] flex-col items-center gap-10 px-6 pb-12 pt-20 sm:flex-row sm:items-center sm:gap-14">
-      <PhoneFrame />
-      <div className="flex min-w-0 flex-1 flex-col items-center text-center sm:items-start sm:text-start">
-        <h1 id="welcome-title" tabIndex={-1} className="text-balance text-[28px] font-normal leading-[34px] tracking-[-0.02em] text-ink outline-none">
-          {pairing.kind === "linked" ? t("mobile.desktop.linked", { name: pairing.name }) : t("funnel.phone.title")}
-        </h1>
-        <p className="mt-2 max-w-[360px] text-pretty text-[15px] leading-[22px] text-ink-secondary">
-          {pairing.kind === "linked" ? t("mobile.desktop.linkedHint") : showing ? t("funnel.phone.scan") : t("funnel.phone.sub")}
-        </p>
-        {showing && (
-          <div data-phone-offer="" className="place-reveal mt-6 flex flex-col items-center gap-3 sm:items-start">
-            <div role="img" aria-label={t("settings.mobile.qr")} className="rounded-[18px] bg-white p-2.5">
-              <QRCodeSVG value={pairing.offer.link} size={152} level="M" includeMargin={false} bgColor="#ffffff" fgColor="#1b1b1f" aria-hidden="true" />
-            </div>
-            {code && <code aria-label={t("settings.mobile.code")} className="select-all whitespace-nowrap font-mono text-[17px] leading-7 tracking-[0.1em] text-ink">{code}</code>}
-            <p role="status" className="flex items-center gap-2 text-[13px] leading-[18px] text-ink-secondary">
-              <span aria-hidden="true" className="funnel-wait inline-block size-1.5 rounded-full bg-ink" />
-              {t("mobile.desktop.waiting")}
-              <span className="text-ink-tertiary">· {t("settings.mobile.expires", { minutes: minutesLeft(pairing.offer.expiresAt, now) })}</span>
-            </p>
-          </div>
-        )}
-        {pairing.kind === "linked" && <span className="place-mark mt-6 grid size-12 place-items-center rounded-full bg-success/10 text-success"><Check size={24} aria-hidden="true" /></span>}
-        {expired && <p role="status" className="mt-4 text-[13px] text-ink-secondary">{t("settings.mobile.expired")}</p>}
-        {error && <p role="alert" className="mt-4 text-[13px] leading-[18px] text-danger">{error}</p>}
-        <div className="mt-8 flex w-full flex-col items-center gap-2 sm:items-start">
-          {pairing.kind === "linked" || showing
-            ? <button type="button" data-primary="" data-funnel-done="" onClick={onNext} className={PRIMARY}>{pairing.kind === "linked" ? t("funnel.next") : t("funnel.phone.later")}</button>
-            : <>
-              <button type="button" data-primary="" data-funnel-phone="" disabled={pairing.kind === "busy"} onClick={() => void show()} className={PRIMARY}>
-                {expired ? t("settings.mobile.newCode") : t("funnel.phone.show")}
-              </button>
-              <button type="button" data-funnel-skip="" onClick={onNext} className={SECONDARY}>{t("funnel.skip")}</button>
-            </>}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/** The phone app's own home screen (a real capture of its bots list, demo bots), in a plain phone outline. */
-function PhoneFrame() {
-  return (
-    <div aria-hidden="true" className="phone-frame w-[208px] shrink-0 rounded-[38px] bg-[#1b1b1f] p-[6px] shadow-[0_24px_48px_-24px_rgba(27,27,31,0.45)]">
-      <div className="relative overflow-hidden rounded-[32px] bg-white">
-        <img src={phoneHome} alt="" width={196} height={426} draggable={false} className="block h-auto w-full select-none" />
-        <span className="absolute left-1/2 top-[7px] h-[18px] w-[64px] -translate-x-1/2 rounded-full bg-[#1b1b1f]" />
-      </div>
     </div>
   );
 }

@@ -23,6 +23,7 @@ export function syntheticToolNames(prefix: string, count: number): string[] {
 }
 
 const CATALOG_SERVER = `
+import { appendFileSync } from "node:fs";
 import { createInterface } from "node:readline";
 const names = JSON.parse(process.env.CATALOG_TOOLS);
 const reply = (id, result) => process.stdout.write(JSON.stringify({ jsonrpc: "2.0", id, result }) + "\\n");
@@ -30,11 +31,17 @@ createInterface({ input: process.stdin }).on("line", (line) => {
   const request = JSON.parse(line);
   if (request.method === "initialize") reply(request.id, { protocolVersion: "2024-11-05", capabilities: { tools: {} } });
   else if (request.method === "tools/list") reply(request.id, { tools: names.map((name) => ({ name, description: "Synthetic " + name, inputSchema: { type: "object" } })) });
-  else if (request.id !== undefined) reply(request.id, { content: [{ type: "text", text: "ran " + request.params?.name }] });
+  else if (request.id !== undefined) {
+    if (process.env.CATALOG_CALLS) appendFileSync(process.env.CATALOG_CALLS, JSON.stringify(request.params ?? null) + "\\n");
+    const canned = JSON.parse(process.env.CATALOG_RESULTS ?? "{}")[request.params?.name];
+    reply(request.id, canned ?? { content: [{ type: "text", text: "ran " + request.params?.name }] });
+  }
 });
 `;
 
-/** A stdio MCP server, as a turn's integrations take it, that lists exactly `names`. Remove `dir` when done. */
+/** A stdio MCP server, as a turn's integrations take it, that lists exactly `names`. Remove `dir` when done. With
+ * CATALOG_CALLS in its env it appends each tools/call's params to that file, one JSON line each; CATALOG_RESULTS, a JSON
+ * object of tool name to MCP result, answers those tools with that result. */
 export function catalogServer(names: readonly string[]): { dir: string; server: { command: string; args: string[]; env: Record<string, string> } } {
   const dir = mkdtempSync(join(tmpdir(), "dusk-catalog-mcp-"));
   const script = join(dir, "catalog.mjs");

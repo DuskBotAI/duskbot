@@ -123,7 +123,7 @@ export function ConnectAppsButton({ circle, apps: { faces }, engaged = false, on
       // grok's folded pill is a 36px circle (its basis), and widens to its content: 16/12 in, 12/9 beside the logos
       className={circle ? cn(SIMPLE_TOP_BUTTON, "group/apps h-10 min-w-10 w-auto shrink text-[14px] font-medium leading-5 text-ink transition-[flex-grow,padding] duration-300 ease-[cubic-bezier(.2,0,0,1)] motion-reduce:transition-none",
         engaged ? cn("grow basis-auto", logos.length ? "ps-3 pe-[9px]" : "ps-4 pe-3") : "grow-0 basis-10 px-2")
-        : cn("group/apps flex h-10 min-w-0 flex-1 items-center justify-center rounded-full border border-ink/[0.08] bg-composer ps-4 text-[14px] font-medium leading-5 tracking-[0.01em] text-ink", faces.length ? "pe-3" : "pe-4", GROK_HOVER_TINT, GROK_FOCUS)}
+        : cn("group/apps flex h-9 min-w-0 flex-1 items-center justify-center rounded-full border border-ink/[0.08] bg-composer ps-3.5 text-[13px] font-medium leading-5 tracking-[0.01em] text-ink", faces.length ? "pe-3" : "pe-4", GROK_HOVER_TINT, GROK_FOCUS)}
     >
       {circle ? <>
         {/* grok's widened pill trades the grid glyph for the label and the app logos */}

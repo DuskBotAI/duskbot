@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
-import { AlertTriangle, ArrowUpRight, Bug, ChartNoAxesColumn, ChartNoAxesCombined, ChevronDown, Cloud, CreditCard, Gauge, Globe as GlobeIcon, History, Inbox, LayoutDashboard, Menu, MessageSquare, Moon, Repeat, Server, Sun, Table2, Users, X } from "@/icons";
+import { lazy, Suspense, useEffect, useRef, useState, type ComponentType, type ReactNode } from "react";
+import { AlertTriangle, Hourglass, ArrowUpRight, Bug, ChartNoAxesColumn, ChartNoAxesCombined, ChevronDown, Cloud, CreditCard, Gauge, Globe as GlobeIcon, History, Inbox, LayoutDashboard, Menu, MessageSquare, Moon, Repeat, Server, Sun, Table2, Users, X } from "@/icons";
 import { setTheme, useTheme } from "../lib/theme";
 import { ButtonLink, cx } from "../ui/kit";
 import { Modal } from "../ui/controls";
@@ -7,26 +7,80 @@ import { SkyEmpty } from "../ui/Sky";
 import { Link, navigate, useLocation } from "../lib/router";
 import { useToasts } from "../lib/toast";
 import mark from "../../favicon.svg";
-import { AdminRoleContext, useAdmin, type AdminRole } from "./api";
-import { DataSwitch, MoneySwitch, StagingTag, TestSwitch } from "./DataSwitch";
+import { AdminRoleContext, adminMoney, prefetchAdmin, useAdmin, type AdminRole } from "./api";
+import { DataSwitch, StagingTag } from "./DataSwitch";
 import { OverviewPage } from "./Overview";
-import { DetailsPage } from "./Details";
-import { RetentionPage } from "./Retention";
 import { PeoplePage, PersonSheetHost } from "./People";
-import { LivePage } from "./Live";
-import { ProductPage } from "./Product";
-import { RevenuePage } from "./RevenuePage";
-import { UserPage, UsersPage } from "./Users";
-import { CloudsPage } from "./Clouds";
-import { WaitlistPage } from "./Waitlist";
-import { EventsPage } from "./Events";
-import { AuditPage, HealthPage } from "./Health";
-import { OpsPage } from "./Ops";
-import { AccountsUsagePage } from "./OpsAccounts";
-import { FeedbackPage } from "./Feedback";
-import { ExperiencePage } from "./Experience";
-import { BugReportsPage } from "./BugReports";
+import { rangeOf } from "./kit";
 import { Loading, Tabs } from "./ui";
+
+// every page but the overview loads its own code when first opened (or when its link is pointed at), so the panel paints first
+const modules = new Map<() => Promise<unknown>, unknown>();
+/** an import whose module, once here, is kept so its page renders at once instead of through Suspense's reveal delay */
+function code<M>(importer: () => Promise<M>): () => Promise<M> {
+  const run = () => importer().then((m) => { modules.set(run, m); return m; });
+  return run;
+}
+const load = {
+  details: code(() => import("./Details")), retention: code(() => import("./Retention")), live: code(() => import("./Live")), product: code(() => import("./Product")),
+  revenue: code(() => import("./RevenuePage")), users: code(() => import("./Users")), clouds: code(() => import("./Clouds")), waitlist: code(() => import("./Waitlist")),
+  events: code(() => import("./Events")), health: code(() => import("./Health")), ops: code(() => import("./Ops")), opsAccounts: code(() => import("./OpsAccounts")),
+  feedback: code(() => import("./Feedback")), experience: code(() => import("./Experience")), bugReports: code(() => import("./BugReports")), subscribers: code(() => import("./Subscribers")),
+};
+function pageOf<M, P extends object>(from: () => Promise<M>, pick: (m: M) => ComponentType<P>) {
+  const Lazy = lazy(() => from().then((m) => ({ default: pick(m) })));
+  return function Page(props: P) {
+    const ready = modules.get(from) as M | undefined;
+    const Ready = ready ? pick(ready) : null;
+    return Ready ? <Ready {...props} /> : <Lazy {...props} />;
+  };
+}
+const DetailsPage = pageOf(load.details, (m) => m.DetailsPage);
+const RetentionPage = pageOf(load.retention, (m) => m.RetentionPage);
+const LivePage = pageOf(load.live, (m) => m.LivePage);
+const ProductPage = pageOf(load.product, (m) => m.ProductPage);
+const RevenuePage = pageOf(load.revenue, (m) => m.RevenuePage);
+const UsersPage = pageOf(load.users, (m) => m.UsersPage);
+const UserPage = pageOf(load.users, (m) => m.UserPage);
+const CloudsPage = pageOf(load.clouds, (m) => m.CloudsPage);
+const WaitlistPage = pageOf(load.waitlist, (m) => m.WaitlistPage);
+const EventsPage = pageOf(load.events, (m) => m.EventsPage);
+const HealthPage = pageOf(load.health, (m) => m.HealthPage);
+const AuditPage = pageOf(load.health, (m) => m.AuditPage);
+const OpsPage = pageOf(load.ops, (m) => m.OpsPage);
+const AccountsUsagePage = pageOf(load.opsAccounts, (m) => m.AccountsUsagePage);
+const FeedbackPage = pageOf(load.feedback, (m) => m.FeedbackPage);
+const ExperiencePage = pageOf(load.experience, (m) => m.ExperiencePage);
+const BugReportsPage = pageOf(load.bugReports, (m) => m.BugReportsPage);
+const SubscribersPage = pageOf(load.subscribers, (m) => m.SubscribersPage);
+
+/** what a page reads first with its default view, warmed when its link is pointed at so it opens with its data */
+function warm(to: string) {
+  const month = rangeOf("30d"), window = `from=${month.from}&to=${month.to}`;
+  const reads: Record<string, { code?: () => Promise<unknown>; data: () => string[] }> = {
+    "/admin": { data: () => ["/overview?days=30", "/health", "/retention"] },
+    "/admin/live": { code: load.live, data: () => ["/realtime?minutes=30"] },
+    "/admin/people": { code: load.users, data: () => ["/users?q=&filter=all&offset=0&limit=50"] },
+    "/admin/waitlist": { code: load.waitlist, data: () => ["/waitlist?q=&offset=0&limit=50"] },
+    "/admin/revenue": { code: load.revenue, data: () => [`/revenue?days=90&mode=${adminMoney()}`] },
+    "/admin/subscribers": { code: load.subscribers, data: () => ["/subscribers?filter=trial"] },
+    "/admin/product": { code: load.product, data: () => [`/product?${window}`, `/usage?${window}`] },
+    "/admin/experience": { code: load.experience, data: () => [`/experience?${window}`] },
+    "/admin/feedback": { code: load.feedback, data: () => ["/feedback"] },
+    "/admin/bug-reports": { code: load.bugReports, data: () => ["/bug-reports"] },
+    "/admin/retention": { code: load.retention, data: () => ["/retention"] },
+    "/admin/ops": { code: load.ops, data: () => ["/ops", "/ops/relays", "/ops/sharing"] },
+    "/admin/ops/accounts": { code: load.opsAccounts, data: () => [] },
+    "/admin/clouds": { code: load.clouds, data: () => ["/clouds?status=live"] },
+    "/admin/events": { code: load.events, data: () => [] },
+    "/admin/health": { code: load.health, data: () => ["/health"] },
+    "/admin/audit": { code: load.health, data: () => ["/audit"] },
+  };
+  const read = reads[to];
+  if (!read) return;
+  void read.code?.().catch(() => {});
+  for (const path of read.data()) prefetchAdmin(path);
+}
 import { CustomerSheetHost } from "./CustomerSheet";
 import { AnimatePresence, EASE_OUT, GLIDE, m, PageIn, ToastStack } from "../ui/motion";
 
@@ -37,33 +91,34 @@ const GROUPS: Array<{ label: string; items: NavItem[] }> = [
     { to: "/admin", key: "o", label: "overview", icon: <LayoutDashboard {...ICON} />, also: ["/admin/analytics"] },
     { to: "/admin/live", key: "l", label: "live", icon: <GlobeIcon {...ICON} /> },
     { to: "/admin/people", key: "p", label: "people", icon: <Users {...ICON} />, also: ["/admin/users"] },
-    { to: "/admin/waitlist", key: "w", label: "waitlist", icon: <Inbox {...ICON} /> },
+    { to: "/admin/subscribers", key: "s", label: "subscribers", icon: <Hourglass {...ICON} /> },
     { to: "/admin/revenue", key: "m", label: "revenue", icon: <CreditCard {...ICON} /> },
   ] },
   { label: "product", items: [
     { to: "/admin/product", key: "i", label: "product", icon: <ChartNoAxesCombined {...ICON} /> },
-    { to: "/admin/experience", key: "b", label: "experience", icon: <AlertTriangle {...ICON} /> },
     { to: "/admin/feedback", key: "f", label: "feedback", icon: <MessageSquare {...ICON} /> },
     { to: "/admin/bug-reports", key: "d", label: "bug reports", icon: <Bug {...ICON} /> },
     { to: "/admin/retention", key: "r", label: "retention", icon: <Repeat {...ICON} /> },
   ] },
   { label: "operations", items: [
     { to: "/admin/ops", key: "x", label: "ops", icon: <Server {...ICON} /> },
-    { to: "/admin/ops/accounts", key: "u", label: "accounts usage", icon: <Table2 {...ICON} /> },
     { to: "/admin/clouds", key: "c", label: "clouds", icon: <Cloud {...ICON} /> },
   ] },
 ];
 const NAV = GROUPS.flatMap((group) => group.items);
 const SMALL = { size: 15, strokeWidth: 1.75 } as const;
-/** on the overview as a tile each; their full pages stay one click away */
+/** pages looked at now and then: the overview has a tile for some, and each stays one click away */
 const MORE: NavItem[] = [
+  { to: "/admin/waitlist", key: "w", label: "waitlist", icon: <Inbox {...SMALL} /> },
+  { to: "/admin/experience", key: "b", label: "experience", icon: <AlertTriangle {...SMALL} /> },
+  { to: "/admin/ops/accounts", key: "u", label: "accounts usage", icon: <Table2 {...SMALL} /> },
   { to: "/admin/events", key: "e", label: "events", icon: <ChartNoAxesColumn {...SMALL} /> },
   { to: "/admin/health", key: "h", label: "health", icon: <Gauge {...SMALL} /> },
   { to: "/admin/audit", key: "a", label: "audit log", icon: <History {...SMALL} /> },
 ];
 const ALL = [...NAV, ...MORE];
 /** the pages a growth admin sees; the server refuses every other read for that role too */
-const GROWTH_PAGES = new Set(["/admin", "/admin/live", "/admin/waitlist", "/admin/revenue", "/admin/retention"]);
+const GROWTH_PAGES = new Set(["/admin", "/admin/live", "/admin/waitlist", "/admin/revenue", "/admin/retention", "/admin/subscribers"]);
 const opens = (role: AdminRole, path: string) => role === "owner" || GROWTH_PAGES.has(path) || /^\/admin\/analytics\/[a-z]+$/.test(path);
 const groupsFor = (role: AdminRole) => role === "owner" ? GROUPS : GROUPS.map((group) => ({ ...group, items: group.items.filter((item) => GROWTH_PAGES.has(item.to)) })).filter((group) => group.items.length);
 const PEOPLE_TABS = [{ to: "/admin/people", label: "accounts" }, { to: "/admin/people/visitors", label: "visitors and journeys" }];
@@ -88,6 +143,7 @@ function page(path: string, role: AdminRole): ReactNode {
   if (user) return <UserPage id={decodeURIComponent(user[1]!)} />;
   if (path === "/admin/product" || path.startsWith("/admin/product/")) return <ProductPage path={path} />;
   if (path === "/admin/revenue") return <RevenuePage />;
+  if (path === "/admin/subscribers") return <SubscribersPage />;
   if (path === "/admin/ops") return <OpsPage />;
   if (path === "/admin/ops/accounts") return <AccountsUsagePage />;
   if (path === "/admin/retention") return <RetentionPage />;
@@ -161,6 +217,28 @@ export function AdminApp() {
     return () => document.removeEventListener("keydown", key);
   }, [drawer]);
   useEffect(() => { document.title = `${current?.label ?? "admin"} / dusk bot admin`; }, [current]);
+  // once the first page is up, the other pages' code loads quietly and the sidebar's pages read their default view one
+  // after another, so the first switch to each opens with its data
+  const signedIn = !!me.data;
+  // the page opened first reads alongside the sign-in check instead of after it
+  const opened = useRef(path);
+  useEffect(() => { const item = currentItem(opened.current); if (item) warm(item.to); }, []);
+  useEffect(() => {
+    if (!signedIn) return;
+    let stopped = false;
+    const all = async () => {
+      for (const fn of Object.values(load)) void fn().catch(() => {});
+      for (const item of groupsFor(role).flatMap((group) => group.items)) {
+        if (stopped) return;
+        warm(item.to);
+        await new Promise((resolve) => setTimeout(resolve, 250));
+      }
+    };
+    const start = () => void all();
+    if (typeof requestIdleCallback === "function") { const id = requestIdleCallback(start, { timeout: 4000 }); return () => { stopped = true; cancelIdleCallback(id); }; }
+    const id = setTimeout(start, 1500);
+    return () => { stopped = true; clearTimeout(id); };
+  }, [signedIn, role]);
   useEffect(() => { const to = MOVED[path]; if (to) navigate(to, { replace: true }); }, [path]);
   const side = (close?: () => void) => (
     <>
@@ -179,7 +257,7 @@ export function AdminApp() {
               {group.items.map((item) => {
                 const active = current === item;
                 return (
-                  <Link key={item.to} to={item.to} aria-current={active ? "page" : undefined} className={cx("relative flex h-9 items-center gap-3 rounded-full px-3 text-14 transition-colors duration-200 ease-out max-lg:h-11", active ? "bg-pop text-ink" : "hover-side text-ink-2")}>
+                  <Link key={item.to} to={item.to} onMouseEnter={() => warm(item.to)} onFocus={() => warm(item.to)} onTouchStart={() => warm(item.to)} aria-current={active ? "page" : undefined} className={cx("relative flex h-9 items-center gap-3 rounded-full px-3 text-14 transition-colors duration-200 ease-out max-lg:h-11", active ? "bg-pop text-ink" : "hover-side text-ink-2")}>
                     <span className={cx("relative", active ? "text-ink" : "text-ink-3")} aria-hidden>{item.icon}</span>
                     <span className="relative flex-1">{item.label}</span>
                   </Link>
@@ -199,7 +277,7 @@ export function AdminApp() {
                   const active = current === item;
                   return (
                     <li key={item.to}>
-                      <Link to={item.to} aria-current={active ? "page" : undefined} className={cx("relative flex h-8 items-center gap-3 rounded-full px-3 text-13 transition-colors duration-150 max-lg:h-11", active ? "bg-pop font-medium text-ink" : "hover-side text-ink-3")}>
+                      <Link to={item.to} onMouseEnter={() => warm(item.to)} onFocus={() => warm(item.to)} onTouchStart={() => warm(item.to)} aria-current={active ? "page" : undefined} className={cx("relative flex h-8 items-center gap-3 rounded-full px-3 text-13 transition-colors duration-150 max-lg:h-11", active ? "bg-pop font-medium text-ink" : "hover-side text-ink-3")}>
                             <span aria-hidden className="relative text-ink-4">{item.icon}</span><span className="relative flex-1">{item.label}</span>
                       </Link>
                     </li>
@@ -213,9 +291,6 @@ export function AdminApp() {
         <div className="mt-auto flex flex-col gap-1 px-1">
           {me.data?.live && <DataSwitch live={me.data.live} />}
           {me.data && <span className="truncate px-2 text-12 text-ink-3" title={me.data.email}>{me.data.email}</span>}
-          {me.data && <span className="t-meta px-2 !text-[11.5px]">{me.data.environment} · {me.data.version ?? "dev"}</span>}
-          {me.data && <MoneySwitch />}
-          {me.data && <TestSwitch />}
           <button type="button" onClick={() => setTheme(dark ? "light" : "dark")} className="hover-ghost flex h-9 items-center gap-2 rounded-full px-2 text-13 text-ink-3 max-lg:h-11">{dark ? <Sun size={15} strokeWidth={1.75} aria-hidden /> : <Moon size={15} strokeWidth={1.75} aria-hidden />}{dark ? "light mode" : "dark mode"}</button>
           <Link to="/" className="hover-ghost flex h-9 items-center gap-2 rounded-full px-2 text-13 text-ink-3 max-lg:h-11"><ArrowUpRight size={15} strokeWidth={1.75} aria-hidden /> app</Link>
         </div>
@@ -251,7 +326,7 @@ export function AdminApp() {
       <main id="admin-main" className="lg:ps-[232px]">
         <PageIn key={path} id={path} className="mx-auto w-full max-w-[1320px] px-10 pb-24 pt-10 max-lg:px-5 max-lg:pt-6 max-sm:px-4">
           {me.data && <StagingTag environment={me.data.environment} live={me.data.live} />}
-          {me.data ? <AdminRoleContext.Provider value={role}>{page(path, role)}</AdminRoleContext.Provider> : <Loading rows={8} />}
+          {me.data ? <AdminRoleContext.Provider value={role}><Suspense fallback={<Loading rows={8} />}>{page(path, role)}</Suspense></AdminRoleContext.Provider> : <Loading rows={8} />}
         </PageIn>
       </main>
       <Modal open={help} onClose={() => setHelp(false)} title="keyboard shortcuts">

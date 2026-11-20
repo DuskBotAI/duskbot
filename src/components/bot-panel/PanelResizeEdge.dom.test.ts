@@ -70,6 +70,7 @@ describe("the bot panel's edge", () => {
     edge().hasPointerCapture = () => true;
     at("pointerdown", 1000);
     at("pointermove", 900);
+    await act(() => new Promise((done) => requestAnimationFrame(() => done(undefined))));
     expect(cssWidth()).toBe("420px");
     expect(stored.get("dusk-bot-panel-width") ?? null).toBeNull();
     at("pointerup", 900);
@@ -83,6 +84,50 @@ describe("the bot panel's edge", () => {
     for (let i = 0; i < 80; i++) press("ArrowLeft");
     expect(wide.panelRest()).toBe(wide.panelRestMax());
     expect(wide.panelRestMax()).toBeLessThanOrEqual(1400 - 48 - 400);
+  });
+
+  it("drags a panel the browser widened from the width it shows, not the narrower one it rests at", async () => {
+    await mount();
+    act(() => wide.setPanelWide(true));
+    const shown = wide.panelWidthNow();
+    expect(shown).toBeGreaterThan(wide.panelRest());
+    expect(edge().getAttribute("aria-valuenow")).toBe(String(shown));
+    const at = (type: string, clientX: number) => act(() => { edge().dispatchEvent(new PointerEvent(type, { bubbles: true, button: 0, pointerId: 1, clientX })); });
+    edge().setPointerCapture = () => {};
+    edge().hasPointerCapture = () => true;
+    at("pointerdown", 600);
+    at("pointermove", 610);
+    await act(() => new Promise((done) => requestAnimationFrame(() => done(undefined))));
+    expect(cssWidth()).toBe(`${shown - 10}px`);
+    at("pointerup", 610);
+    expect(stored.get("dusk-bot-panel-width")).toBe(String(shown - 10));
+  });
+
+  it("steps a widened panel from the width it shows", async () => {
+    await mount();
+    act(() => wide.setPanelWide(true));
+    const shown = wide.panelWidthNow();
+    press("ArrowRight");
+    expect(cssWidth()).toBe(`${shown - 16}px`);
+  });
+
+  it("goes back to its usual width on a double-click, and keeps that", async () => {
+    await mount();
+    press("ArrowLeft");
+    press("ArrowLeft");
+    act(() => { edge().dispatchEvent(new MouseEvent("dblclick", { bubbles: true })); });
+    expect(cssWidth()).toBe("320px");
+    expect(edge().getAttribute("aria-valuenow")).toBe("320");
+    expect(stored.get("dusk-bot-panel-width")).toBe("320");
+  });
+
+  it("forgets a stored width it could never have been dragged to", async () => {
+    stored.set("dusk-bot-panel-width", "12");
+    await mount();
+    expect(wide.panelRest()).toBe(320);
+    stored.set("dusk-bot-panel-width", "nonsense");
+    await mount();
+    expect(wide.panelRest()).toBe(320);
   });
 
   it("comes back to the dragged width after the browser in it widens the panel", async () => {

@@ -9,9 +9,10 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 import { client } from "../memory-eval/client.ts";
-import { gatewayFromEnv, launchSandbox, type Gateway } from "../memory-eval/sandbox.ts";
-import { startProxy, type Recorded } from "../memory-eval/proxy.ts";
-import { CASES, type Case } from "./cases.ts";
+import { gatewayFromEnv, launchSandbox } from "../memory-eval/sandbox.ts";
+import { startProxy } from "../memory-eval/proxy.ts";
+import { CAPABLE_CASES, CASES, type Case } from "./cases.ts";
+import { judge, rowText, toolsOf, type Message } from "./judge.ts";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const { values } = parseArgs({ options: {
@@ -22,13 +23,13 @@ const { values } = parseArgs({ options: {
   only: { type: "string", default: "" },
   keep: { type: "boolean", default: false },
   repeat: { type: "string", default: "1" },
+  suite: { type: "string", default: "base" },
 } });
 const log = (...parts: unknown[]) => console.log(new Date().toISOString().slice(11, 19), ...parts);
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const only = values.only ? new Set(values.only.split(",")) : null;
-const cases = CASES.filter((item) => !only || only.has(item.id));
-
-type Message = { id: string; role: string; kind?: string; text?: string; tool?: { name?: string } };
+const suite = values.suite === "capable" ? CAPABLE_CASES : values.suite === "all" ? [...CASES, ...CAPABLE_CASES] : CASES;
+const cases = suite.filter((item) => !only || only.has(item.id));
 
 interface Result {
   model: string;
@@ -44,24 +45,6 @@ interface Result {
   output: string;
 }
 
-async function judge(gateway: Gateway, item: Case, output: string, tools: string[]): Promise<{ pass: boolean; why: string }> {
-  const prompt = `You grade one reply of a personal assistant bot. The person asked:\n<ask>\n${item.say}\n</ask>\nEverything the bot showed the person, in order:\n<output>\n${output || "(nothing)"}\n</output>\nThe tools it called in this turn, in order (use_tool:<name> runs <name>; trigger creates or changes automations, trigger_info reads them, memory_update saves notes, create_bot makes a bot): ${tools.join(", ") || "none"}.\nThe bot runs in a test workspace: it has no connected email, social, calendar or file access, only its own memory, automations and bot-setup tools.\nPass condition: ${item.pass}\nAlso fail it if the output only announces or describes what the bot will do next without the result, or ends mid-task.\nAnswer with JSON only: {"pass": true|false, "why": "<one short sentence>"}`;
-  for (let attempt = 0; attempt < 3; attempt++) {
-    const res = await fetch(`${gateway.url}/chat/completions`, {
-      method: "POST",
-      headers: { "content-type": "application/json", authorization: `Bearer ${gateway.key}` },
-      body: JSON.stringify({ model: values.judge, messages: [{ role: "user", content: prompt }], temperature: 0 }),
-      signal: AbortSignal.timeout(120_000),
-    }).catch(() => null);
-    const json = await res?.json().catch(() => null) as { choices?: Array<{ message?: { content?: string } }> } | null;
-    const text = json?.choices?.[0]?.message?.content ?? "";
-    const match = /\{[\s\S]*\}/.exec(text);
-    if (match) { try { const parsed = JSON.parse(match[0]); return { pass: parsed.pass === true, why: String(parsed.why ?? "") }; } catch { await sleep(1_000); } }
-    await sleep(2_000);
-  }
-  return { pass: false, why: "judge unavailable" };
-}
-
 async function runModel(model: string): Promise<Result[]> {
   const gateway = gatewayFromEnv(model);
   const port = 7300 + Math.floor(Math.random() * 90);
@@ -73,6 +56,7 @@ async function runModel(model: string): Promise<Result[]> {
       const api = client(box.url);
       try {
         const bot = await api.createBot("Sage", model);
+        if (item.place === "auto") await api.call("PATCH", `/api/bots/${bot.id}`, { computer: null, browser: true });
         const threadId = await api.newThread(bot.id);
         const recordsBefore = proxy.records.length;
         const before = (await api.call("GET", `/api/threads/${threadId}/messages?limit=200`)).messages.length as number;
@@ -85,13 +69,13 @@ async function runModel(model: string): Promise<Result[]> {
           stopAt = Date.now();
           await api.call("POST", `/api/bots/${bot.id}/messages`, { text: item.stop.text, threadId });
         }
-        const state = await waitIdle(api, threadId, 240_000);
+        const state = await waitIdle(api, threadId, item.waitMs ?? 240_000);
         const ms = Date.now() - (stopAt || started);
         const messages = (await api.call("GET", `/api/threads/${threadId}/messages?limit=200`)).messages as Message[];
-        const shown = (from: number) => messages.slice(from).filter((m) => m.role === "bot" && m.kind === "text" && m.text).map((m) => m.text!.trim());
+        const shown = (from: number) => messages.slice(from).filter((m) => m.role === "bot").map(rowText).filter(Boolean);
         const output = shown(before).join("\n---\n");
-        const turnCalls = proxy.records.slice(recordsBefore).filter((rec: Recorded) => rec.tools.length > 0);
-        const tools = turnCalls.flatMap((rec) => rec.toolCalls ?? []);
+        if (process.env.EVAL_DUMP) writeFileSync(join(process.env.EVAL_DUMP, `${model}-${item.id}-${run}.json`), JSON.stringify(messages.slice(before), null, 1));
+        const tools = toolsOf(messages.slice(before));
         let pass: boolean, why: string;
         if (item.check === "stop") {
           const after = shown(seenAtStop).filter((text) => text !== item.stop!.text);
@@ -101,7 +85,7 @@ async function runModel(model: string): Promise<Result[]> {
           why = `ended ${Math.round(ms / 1000)} s after the stop; ${longAfter.length} long message(s) and ${callsAfter} model call(s) after it`;
         } else {
           const acted = !item.tool || tools.some((name) => item.tool!.test(name));
-          const verdict = await judge(gatewayFromEnv(values.judge!), item, output, tools);
+          const verdict = await judge(values.judge!, item, output, tools);
           pass = acted && verdict.pass;
           why = `${acted ? "" : `no matching tool call (called: ${tools.join(", ") || "none"}); `}${verdict.why}`;
         }
@@ -137,7 +121,7 @@ for (const model of new Set(all.map((r) => r.model))) {
   const runs = new Set(rows.map((r) => r.run)).size;
   const mean = (set: Result[]) => `${Math.round((set.filter((r) => r.pass).length / runs) * 10) / 10}/${set.length / runs}`;
   const by = (check: string) => mean(rows.filter((r) => r.check === check || (check === "act+deliver" && (r.check === "act" || r.check === "deliver"))));
-  summary[model] = { "act+deliver": by("act+deliver"), "no-false-done": by("no-false-done"), stop: by("stop"), all: mean(rows), runs: String(runs) };
+  summary[model] = { "act+deliver": by("act+deliver"), "no-false-done": by("no-false-done"), stop: by("stop"), vibe: by("vibe"), help: by("help"), capable: by("capable"), all: mean(rows), runs: String(runs) };
 }
 console.table(summary);
 mkdirSync(join(here, "results"), { recursive: true });

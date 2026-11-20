@@ -1,5 +1,5 @@
 // Real provider processes with independent per-thread gates, under the disposable-home launcher.
-import { existsSync, mkdtempSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { connect, type Socket } from "node:net";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
@@ -453,7 +453,7 @@ describe("per-bot thread capacity through an isolated HTTP fixture", () => {
     }
   }, 120_000);
 
-  it("dispatches a hand-off into a free slot without waiting for whole-bot idle, and holds the next at capacity", async () => {
+  it("dispatches a hand-off into the bot's idle chat without waiting for whole-bot idle, and holds the next in that chat", async () => {
     await limit(2);
     const target = await botWithThreads(2);
     const source = await botWithThreads(1);
@@ -504,38 +504,42 @@ describe("per-bot thread capacity through an isolated HTTP fixture", () => {
     };
     try {
       // Every turn here runs from its thread's task folder, so the cwd-keyed gates cover the work threads too.
-      expect((await send(target.botId, target.threads[0], "HOLD_ONE_SLOT")).body.queued).toBeUndefined();
+      // One chat per bot (bc47760cb3): a hand-off lands in the thread the person wrote in last, here the idle threads[0].
+      const fresh = (threadId: string) => { rmSync(threadFile(threadId, "gate"), { force: true }); rmSync(threadFile(threadId, "json"), { force: true }); };
+      expect((await send(target.botId, target.threads[1], "HOLD_ONE_SLOT")).body.queued).toBeUndefined();
+      await dump(target.threads[1]);
+      expect((await send(target.botId, target.threads[0], "QUICK_ONE")).body.queued).toBeUndefined();
       await dump(target.threads[0]);
-      expect(await busyThreads(target.botId)).toEqual([target.threads[0]]);
+      finish(target.threads[0]);
+      await expect.poll(() => busyThreads(target.botId), { timeout: 15_000 }).toEqual([target.threads[1]]);
+      fresh(target.threads[0]);
       expect((await botState(target.botId)).busy).toBe(true);
 
       const first = await delegatorTurn();
       const queued = await delegate(first);
-      expect(target.threads).not.toContain(queued.workThread);
+      expect(queued.workThread).toBe(target.threads[0]);
       await dump(queued.workThread);
-      expect((await busyThreads(target.botId)).sort()).toEqual([target.threads[0], queued.workThread].sort());
-      expect((await botState(target.botId)).busy).toBe(true);
+      expect((await busyThreads(target.botId)).sort()).toEqual([...target.threads].sort());
       finish(first.threadId);
       await expect.poll(async () => (await runState(first.runId))?.status, { timeout: 15_000 }).toBe("waiting");
+      expect((await runState(first.runId)).attention).toContain("handed on");
+      fresh(first.threadId);
 
       const second = await delegatorTurn();
       const held = await delegate(second);
-      expect(held.workThread).not.toBe(queued.workThread);
+      expect(held.workThread, "the next hand-off waits in the same chat").toBe(queued.workThread);
       finish(second.threadId);
       await expect.poll(async () => (await runState(second.runId))?.status, { timeout: 15_000 }).toBe("waiting");
       expect((await runState(second.runId)).attention).toContain("handed on");
-      expect((await busyThreads(target.botId)).sort()).toEqual([target.threads[0], queued.workThread].sort());
-      expect(existsSync(threadFile(held.workThread, "json"))).toBe(false);
+      expect((await busyThreads(target.botId)).sort()).toEqual([...target.threads].sort());
 
       finish(queued.workThread);
+      finish(first.threadId);
       await expect.poll(async () => (await runState(first.runId))?.status, { timeout: 20_000 }).toBe("completed");
       await expectWokenByCompletion(first);
-      await dump(held.workThread);
-      expect((await busyThreads(target.botId)).sort()).toEqual([target.threads[0], held.workThread].sort());
-      finish(held.workThread);
       await expect.poll(async () => (await runState(second.runId))?.status, { timeout: 20_000 }).toBe("completed");
       await expectWokenByCompletion(second);
-      expect(await busyThreads(target.botId)).toEqual([target.threads[0]]);
+      await expect.poll(() => busyThreads(target.botId), { timeout: 15_000 }).toEqual([target.threads[1]]);
     } finally {
       for (const bot of [target, source]) {
         for (const threadId of await busyThreads(bot.botId)) finish(threadId);

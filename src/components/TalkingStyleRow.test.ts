@@ -5,7 +5,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { setLocale } from "@/lib/i18n";
 
-const f = vi.hoisted(() => ({ config: {} as Record<string, unknown>, api: vi.fn(), dispatch: vi.fn() }));
+const f = vi.hoisted(() => ({ config: {} as object, api: vi.fn(), dispatch: vi.fn() }));
 vi.mock("@/state/store", () => ({ api: f.api, useStore: () => ({ state: { config: f.config }, dispatch: f.dispatch }) }));
 vi.mock("./SettingsSelect", async () => {
   const { createElement: h } = await import("react");
@@ -66,5 +66,22 @@ describe("the Talking style row", () => {
       select().dispatchEvent(new Event("change", { bubbles: true }));
     });
     expect(host.querySelector('[role="alert"]')?.textContent).toBe("offline");
+  });
+
+  it("keeps the picked style in Spanish when a live config update lands after the save", async () => {
+    setLocale("es");
+    const { configStatusFromFrame } = await vi.importActual<typeof import("@/state/store")>("@/state/store");
+    f.dispatch.mockImplementation((action: { config: object }) => { f.config = action.config; });
+    await show();
+    expect([...select().options].map((option) => option.textContent)).toEqual(["Informal", "Cercano", "Nativo"]);
+    await act(async () => {
+      select().value = "native";
+      select().dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    await show();
+    expect(select().value).toBe("native");
+    f.config = configStatusFromFrame({ language: "es", talkingStyle: "native" } as Parameters<typeof configStatusFromFrame>[0]);
+    await show();
+    expect(select().value).toBe("native");
   });
 });

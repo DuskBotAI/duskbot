@@ -96,6 +96,19 @@ describe("mobile channel registration", () => {
     expect(service.store.channels.size).toBe(0);
   });
 
+  it("moves a phone's channel to another tunnel of the same account only with the same phone credential", async () => {
+    tunnel(other);
+    service.store.tunnels.get(id).acct = "acct-a";
+    service.store.tunnels.get(other).acct = "acct-a";
+    await put([device(second)], other);
+    expect((await put([device(second, wrong)])).status).toBe(409);
+    expect((await put([device(second)])).status).toBe(200);
+    expect(service.store.channels.get(second).tunnel).toBe(id);
+    service.store.tunnels.get(other).acct = "acct-b";
+    await put([device("phoneaaaac")], other);
+    expect((await put([device("phoneaaaac")])).status).toBe(409);
+  });
+
   it("refuses tunnel, session and another tunnel's channel ids atomically", async () => {
     tunnel(other);
     await put();

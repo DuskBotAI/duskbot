@@ -2,6 +2,7 @@
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { pacedMs } from "@/lib/motion-speed";
 
 
 import { FOLLOW, OWN_ENTRANCE, ROW_ENTER_EASE, ROW_ENTER_MS, ROW_RISE_PX, rowEnter, springTiming, useArrivalFlow } from "./use-arrival-flow";
@@ -22,8 +23,9 @@ let scroller: HTMLDivElement, clip: HTMLDivElement, column: HTMLDivElement, slot
 let scrollHeight = 1000;
 const CLIENT = 600;
 
+let holds = 0;
 function Probe({ following, n, thread = "t" }: { following: boolean; n: number; thread?: string }) {
-  useArrivalFlow({ scrollRef: { current: scroller }, clipRef: { current: clip }, columnRef: { current: column }, transcriptKey: thread, following });
+  useArrivalFlow({ scrollRef: { current: scroller }, clipRef: { current: clip }, columnRef: { current: column }, transcriptKey: thread, following, onHold: () => { holds += 1; } });
   return createElement("span", null, n);
 }
 const draw = (following: boolean, n: number, thread?: string) => act(() => root.render(createElement(Probe, { following, n, thread })));
@@ -33,6 +35,7 @@ function addRow(top: number, arrival?: "start" | "end") {
   row.setAttribute("data-message-row", "");
   if (arrival) row.setAttribute("data-arrival", arrival);
   place(row, top, column);
+  row.getBoundingClientRect = () => ({ top: top - scroller.scrollTop }) as DOMRect;
   column.insertBefore(row, slot);
   return row;
 }
@@ -42,6 +45,7 @@ beforeEach(() => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
   recorded = [];
   finishers = [];
+  holds = 0;
   vi.spyOn(HTMLElement.prototype, "animate").mockImplementation(function (this: HTMLElement, keyframes, options) {
     recorded.push({ el: this, keyframes: keyframes as Keyframe[], options: options as KeyframeAnimationOptions });
     return fakeAnimation() as unknown as Animation;
@@ -89,6 +93,30 @@ describe("useArrivalFlow", () => {
     expect(rises(reply)).toHaveLength(0);
     expect(glide?.keyframes.every((frame) => frame.opacity === undefined && frame.clipPath === undefined)).toBe(true);
     expect(rises(slot)).toHaveLength(0);
+  });
+
+  it("stops a reply taller than the view at its top, under the end of the person's message, and stops following", () => {
+    draw(true, 0);
+    const before = scroller.scrollTop;
+    addRow(900, "start");
+    place(slot, 1800, column);
+    scrollHeight = 1900;
+    draw(true, 1);
+
+    expect(scroller.scrollTop).toBe(860);
+    expect(holds).toBe(1);
+    expect(moved(column)[0]?.keyframes[0]?.transform).toBe(`translateY(${860 - before}px)`);
+  });
+
+  it("follows a reply that fits to the end, as before", () => {
+    draw(true, 0);
+    addRow(900, "start");
+    place(slot, 1200, column);
+    scrollHeight = 1300;
+    draw(true, 1);
+
+    expect(scroller.scrollTop).toBe(scrollHeight - CLIENT);
+    expect(holds).toBe(0);
   });
 
   it("gives the person's own bubble the same glide, and clips the column only while it moves", () => {
@@ -157,17 +185,19 @@ describe("useArrivalFlow", () => {
     expect(moved(column)).toHaveLength(2);
   });
 
-  it("keeps the end pinned in the frame the composer changes height, with no glide", () => {
+  it("reads no layout on a render where no row arrives (the composer's own observer keeps the end pinned), and no glide", () => {
     draw(true, 0);
     addRow(900, "end");
     place(slot, 956, column);
     scrollHeight = 1056;
     draw(true, 1);
     const glides = moved(column).length;
-    // the composer's pad grows by 40px under a transcript resting at its end
+    let reads = 0;
+    Object.defineProperty(scroller, "scrollHeight", { configurable: true, get: () => { reads += 1; return scrollHeight; } });
     scrollHeight = 1096;
     draw(true, 2);
-    expect(scroller.scrollTop).toBe(scrollHeight - CLIENT);
+    draw(true, 3);
+    expect(reads, "each read forces the page's style and layout").toBe(0);
     expect(moved(column)).toHaveLength(glides);
   });
 
@@ -222,7 +252,7 @@ describe("the follow", () => {
   const curve = (timing: { easing: string }) => /linear\(([^)]+)\)/.exec(timing.easing)![1]!.split(",").map(Number);
 
   it("is one short ease that stops cleanly, with no spring tail to creep after the row looks landed", () => {
-    expect(FOLLOW.duration).toBeLessThanOrEqual(260);
+    expect(FOLLOW.duration).toBe(pacedMs(240));
     expect(FOLLOW.easing).toMatch(/^cubic-bezier\(/);
   });
 

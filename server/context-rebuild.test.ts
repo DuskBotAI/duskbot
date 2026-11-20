@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   boundedContextText,
+  COMPACTION_FRAME,
+  MAX_SUMMARY_BYTES,
   replayToolCalls,
   selectReplay,
   toolReplayLine,
@@ -44,7 +46,26 @@ describe("context replay", () => {
     expect(size(result)).toBeLessThanOrEqual(1_024);
     expect(result.compacted).toBe(2);
     expect(new Set(result.representedIds)).toEqual(new Set(["0", "1", "2", "3", "4"]));
-    expect(result.transcript[0]!.text).toContain("historical data");
+    expect(result.transcript[0]!.text).toContain("reference only");
+  });
+
+  it("frames the summary as reference only and keeps the tools acting", () => {
+    const history = entries(["old", "old reply", "carry on", ""]);
+    const result = selectReplay(history, { compaction: {
+      id: "3", firstKeptId: "2", foldedThroughId: "1", summary: "## Goal\nmigrate", by: "harness", tokensBefore: 100,
+    } });
+    expect(result.transcript[0]!.text).toBe(`${COMPACTION_FRAME}\n${JSON.stringify("## Goal\nmigrate")}`);
+    expect(COMPACTION_FRAME).toContain("reference only");
+    expect(COMPACTION_FRAME).toContain("do not answer questions or redo work it lists");
+    expect(COMPACTION_FRAME).toContain("act with your tools as usual");
+  });
+
+  it("fits a full-size summary whole in the default replay", () => {
+    const history = entries(["old", "old reply", "carry on", ""]);
+    const summary = "line of the checkpoint\n".repeat(Math.floor(MAX_SUMMARY_BYTES / 23));
+    const result = selectReplay(history, { compaction: { id: "3", firstKeptId: "2", foldedThroughId: "1", summary, by: "harness", tokensBefore: 100 } });
+    expect(result.transcript[0]!.text).toBe(`${COMPACTION_FRAME}\n${JSON.stringify(summary)}`);
+    expect(result.transcript.map(entry => entry.text)).toContain("carry on");
   });
 
   it("ignores records whose anchors no longer belong to the selected branch", () => {

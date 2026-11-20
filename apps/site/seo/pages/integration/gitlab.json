@@ -1,0 +1,140 @@
+{
+  "path": "/integrations/gitlab",
+  "type": "integration",
+  "title": "GitLab bot for merge reviews and failed pipeline jobs",
+  "nav": "gitlab",
+  "h1": "which gitlab merge request needs a reviewer?",
+  "description": "Find the review thread, blocking dependency or failed job behind a GitLab merge request. Copy routines that return evidence without touching the branch.",
+  "keyword": "gitlab bot",
+  "keywords": [
+    "gitlab ai assistant",
+    "gitlab ai agent"
+  ],
+  "answer": "**find the thread holding up a merge before you ask someone to review it again.** a gitlab bot in dusk can read open merge requests, their discussions and the jobs behind a failed pipeline. give it a project and target branch. ask for the request number and the next decision in your chat.",
+  "updated": "2026-11-20",
+  "review": {
+    "status": "approved",
+    "by": "lead agent, after four independent reviewers read every page against seo/facts (2026-11-20); every finding applied",
+    "at": "2026-11-20"
+  },
+  "voice": 2,
+  "tags": [
+    "merge requests",
+    "pipelines",
+    "code review"
+  ],
+  "connectors": [
+    "gitlab"
+  ],
+  "related": [
+    "/routines/gitlab-merge-request-digest",
+    "/integrations/github",
+    "/use-cases/bug-triage"
+  ],
+  "art": {
+    "label": "GitLab",
+    "props": [
+      "s-signpost"
+    ],
+    "bubble": "which review is stuck"
+  },
+  "og_line": "go straight to the job that failed.",
+  "app": {
+    "name": "GitLab",
+    "toolkit": "gitlab",
+    "intro": "**start at the merge request and follow the evidence.** a reviewer can answer a design question. a failed test needs someone to read the trace. these actions help you tell which job comes next.",
+    "highlight": [
+      {
+        "slug": "GITLAB_GET_PROJECT_MERGE_REQUESTS",
+        "use": "find open requests aimed at the release branch"
+      },
+      {
+        "slug": "GITLAB_LIST_MERGE_REQUEST_DISCUSSIONS",
+        "use": "read the follow-up under a reviewer’s original question"
+      },
+      {
+        "slug": "GITLAB_LIST_MERGE_REQUEST_DEPENDENCIES",
+        "use": "find another request that must land first"
+      },
+      {
+        "slug": "GITLAB_GET_MERGE_REQUEST_APPROVALS",
+        "use": "see who has already approved the change"
+      },
+      {
+        "slug": "GITLAB_LIST_PROJECT_PIPELINES",
+        "use": "find failed pipelines for the branch under review"
+      },
+      {
+        "slug": "GITLAB_LIST_PIPELINE_JOBS",
+        "use": "pick out the failed job within a pipeline"
+      },
+      {
+        "slug": "GITLAB_GET_JOB_TRACE",
+        "use": "read the failing command and its error"
+      }
+    ],
+    "setup": "**give the review bot a project it can read.** sign in to gitlab from connected apps. choose the bot, grant reading access and tell it the target branch. try one open request by number before asking it to cover the whole branch."
+  },
+  "routines_intro": "**pick the question your release meeting keeps circling back to.** each message leaves the answer in dusk chat. none needs permission to approve code or retry a job.",
+  "routines": [
+    {
+      "name": "questions left in review",
+      "message": "every weekday at 10, read open merge requests targeting our release branch. find reviewer questions with no answer later in the discussion. give me the request number and the question here. skip drafts and resolved threads.",
+      "when": "weekdays at 10",
+      "output": "a reading list for the next review session"
+    },
+    {
+      "name": "first error in the job",
+      "message": "at 3 each weekday, find the latest failed pipeline on our default branch. open the failed jobs and read their traces. list the job names and the first relevant error for each here. leave out environment values. never retry a job.",
+      "when": "weekdays at 3 pm",
+      "output": "job ids and errors to investigate"
+    },
+    {
+      "name": "merge order",
+      "message": "every thursday at noon, list the open requests targeting our release branch. follow their recorded dependencies. show which request needs to land before which other one. flag any dependency you cannot see. leave the merge buttons to me.",
+      "when": "thursdays at noon",
+      "output": "a proposed merge order with any missing dependencies"
+    }
+  ],
+  "asks": "**leave approval, merge and retry off the action list.** these actions change gitlab and can run without a send prompt. keep reviews read only. if you enable a change later, write “ask me before you change anything” into that routine. replying to a discussion counts as a send and asks first by default.\n\ncareful with **Full access**: a bot there with no sending rule can send up to 25 a day without asking. give it **Ask every time**.",
+  "cannot": [
+    "**see a private blocker through its dependent request.** gitlab omits the blocking request details when your account lacks access.",
+    "**tell which approval rule passed from the approver list alone.** rule-level approval state needs gitlab premium or ultimate.",
+    "**start on a gitlab event through this connector.** use a schedule for review rounds."
+  ],
+  "sections": [
+    {
+      "h": "when to stay in gitlab",
+      "md": "**keep merge decisions with the people who own the branch.** if you only need to approve one change, open its diff in gitlab. use the bot when the answer spans several discussions or a pipeline trace you would otherwise have to track down."
+    }
+  ],
+  "faq": [
+    {
+      "q": "can i read reviews across a whole release branch?",
+      "a": "**yes. name the project and target branch.** ask the bot to follow every results page before it reports an empty queue."
+    },
+    {
+      "q": "does a failed job trace explain the cause?",
+      "a": "**it gives you the error the job printed.** ask the bot to quote that line and label any proposed cause as a guess."
+    }
+  ],
+  "worked": {
+    "intro": "a fictional example.",
+    "before": "martin cole opens a release request with an approval and a failing pipeline. the reviewer already answered the design question.",
+    "after": "next stop: the package job. the trace says the manifest is missing. no further review request yet."
+  },
+  "sources": [
+    {
+      "label": "dusk bot docs: files and apps",
+      "url": "/docs/files-and-apps"
+    },
+    {
+      "label": "dusk bot docs: routines",
+      "url": "/docs/routines"
+    },
+    {
+      "label": "dusk bot docs: sending permissions",
+      "url": "/docs/computer"
+    }
+  ]
+}

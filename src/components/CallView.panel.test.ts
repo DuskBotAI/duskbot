@@ -1,6 +1,5 @@
 // @vitest-environment happy-dom
-// The bot panel's Call button: small, round and named, starting the same call as the composer's, which alone answers
-// the composer's + menu.
+// The bot panel's Call button: small, round and named, starting the same call as the composer's.
 import { createElement } from "react";
 import { flushSync } from "react-dom";
 import { createRoot, type Root } from "react-dom/client";
@@ -23,8 +22,7 @@ vi.mock("./DesktopCapabilities", () => ({
 const track = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/analytics", () => ({ track }));
 
-const { CallButton, CallTargetButton } = await import("./CallView");
-const { requestCallStart } = await import("@/lib/call-start-request");
+const { CallButton } = await import("./CallView");
 const { currentCall, endCall } = await import("@/lib/call");
 const { setCallMode } = await import("@/lib/call-mode");
 
@@ -34,7 +32,6 @@ const atlas: Bot = {
 };
 let root: Root;
 let host: HTMLDivElement;
-const composerStarts = vi.fn();
 
 beforeEach(() => {
   setCallMode("turns");
@@ -47,7 +44,6 @@ afterEach(() => {
   flushSync(() => root.unmount());
   host.remove();
   endCall();
-  composerStarts.mockReset();
   track.mockReset();
   delete window.duskDesktop;
 });
@@ -73,19 +69,5 @@ describe("the bot panel's Call button", () => {
     expect(panelButton().getAttribute("aria-label")).toBe("Hang up on Atlas");
     flushSync(() => panelButton().click());
     expect(currentCall()).toBeNull();
-  });
-
-  it("leaves the composer's + menu to the composer's button, so one choice starts one call", () => {
-    flushSync(() => root.render(createElement("div", null,
-      createElement(CallButton, { bot: atlas, placement: "panel" }),
-      createElement(CallTargetButton, {
-        targetId: "atlas", targetName: "Atlas", threadId: "thread-atlas", voices: ["v"], requireExplicitVoices: false,
-        liveCapable: true, placement: "composer", fill: "#8057C8", onStart: composerStarts,
-      }),
-    )));
-    flushSync(() => requestCallStart("atlas", "turns"));
-    expect(composerStarts).toHaveBeenCalledExactlyOnceWith("turns");
-    expect(track.mock.calls.filter(([event]) => event === "call_started")).toEqual([]);
-    expect(currentCall()).toBe("atlas");
   });
 });

@@ -3,15 +3,13 @@ import { offersSignIn } from "@/components/EngineSetup";
 import { statusActivity } from "@/lib/activity-runs";
 import { t } from "@/lib/i18n";
 import { peerLine } from "@/lib/peer-message";
-import { isTechnicalError, plainErrorKind, plainErrorLine, providerSentence } from "@/lib/plain-error";
 import { isReceipt } from "@/lib/receipts";
 import type { LocaleKey } from "@/locales";
 import type { InstanceInfo, Message } from "@/state/store";
 import { failedTurnCause, type BrowserBlocker } from "../../shared/failed-turn";
 import { isCancelledTranscriptRow } from "../../shared/client-cancel";
 import { freeFallback } from "../../shared/ai-ranking";
-import { hasRawDetail } from "../../shared/raw-detail";
-import { failurePlan, type FailureKind } from "../../shared/failure-plan";
+import { errorKind, rowFailureKind, type ErrorKind, type FailureKind } from "../../shared/failure-plan";
 
 export type FailedReplyKind = FailureKind;
 
@@ -60,8 +58,7 @@ export function trailingRows(messages: readonly Message[], scan = 200, now = Dat
   return { failures: failures.reverse(), notices: notices.reverse() };
 }
 
-// the runtime's own words for a turn a restart cut (server/runtime/tree.ts CUT_TWICE, INTERRUPTED_OUTWARD)
-const RESTART_CUT = /^Interrupted by (?:another |an? )?dusk bot restart\b/i;
+// the runtime's own words for a turn a restart cut, whose steps it lists (server/runtime/tree.ts INTERRUPTED_OUTWARD)
 const RESTART_DID = /\bafter it already (.+?); not resumed\b/;
 
 // the app's names before it became dusk bot, as older stored errors still say them
@@ -79,115 +76,60 @@ export function restartAlreadyDid(cause: string): string | null {
   return RESTART_DID.exec(cause)?.[1]?.trim() || null;
 }
 
-
-const SIGNED_OUT_WORDS = /not logged in|logged out|\/login|not signed in|sign in again|authentication required|unauthori[sz]ed|invalid api key|\b401\b/i;
-const USAGE_WORDS = /usage limit|limit reached|hit your [\w' -]{0,30}limit/i;
-const SESSION_LOST_WORDS = /\bNo conversation found with session ID\b/i;
-const CREDIT_WORDS = /out of credits?|payment required|insufficient (?:funds|balance|credits?)/i;
-
-/** What stopped a failed row: the server's own reading when it stored one, its flags and words for an older row.
- * `ownAi`: an AI the person connected is ready now, so connecting one is no longer the fix. */
 /** What the free backup running out, being rate limited or not answering reads as: with no AI of the person's own none
  * of these is a failure they can fix by trying harder, only by connecting one. */
-const FREE_BACKUP_DOWN: ReadonlySet<FailedReplyKind> = new Set(["credits", "usage_limit", "rate_limit", "overloaded", "timeout", "no_answer", "other",
-  "model_not_found", "bad_request", "provider_down", "cli_missing", "cli_exit"]);
+const FREE_BACKUP_DOWN: ReadonlySet<ErrorKind> = new Set(["out_of_credit", "usage_limit", "busy", "no_reply", "model", "ai_setup", "other"]);
 
+/** What stopped a failed row, read the one way the server reads it, then what this app knows now: an AI signed in again
+ * since is no longer the fix, and `ownAi` (an AI the person connected is ready) means connecting one isn't either. */
 export function failedReplyKind(tool: NonNullable<Message["tool"]>, engine: InstanceInfo | undefined, ownAi = false): FailedReplyKind {
-  const kind = failedKind(tool, engine, ownAi);
-  return !ownAi && FREE_BACKUP_DOWN.has(kind) && (!engine || freeFallback(engine)) ? "no_ai" : kind;
-}
-
-function failedKind(tool: NonNullable<Message["tool"]>, engine: InstanceInfo | undefined, ownAi: boolean): FailedReplyKind {
-  if (tool.rescue) return "no_answer";
-  if (tool.blocker) return "blocker";
-  const cause = failedTurnCause(tool.name) ?? tool.name;
-  if (tool.place) return "place";
-  if (tool.claudeUpdate) return "claude_update";
-  if (RESTART_CUT.test(cause)) return "restart_interrupted";
-  let kind: FailedReplyKind = tool.reason ?? (
-    CREDIT_WORDS.test(cause) ? "credits"
-    : tool.limitResetsAt || USAGE_WORDS.test(cause) ? "usage_limit"
-    : tool.setup && SIGNED_OUT_WORDS.test(cause) ? "signed_out"
-    : SESSION_LOST_WORDS.test(cause) ? "session_lost"
-    : PLAIN_KIND[plainErrorKind(cause) ?? ""] ?? "other");
-  // signed in again since: signing in is no longer the fix
+  let kind = rowFailureKind(tool);
+  // an AI that runs on a key the person pasted is fixed by a new key, never by signing in
+  if (kind === "signed_out" && (engine?.access === "api" || engine?.access === "custom")) kind = "key_rejected";
   if (kind === "signed_out" && engine?.snapshot?.state === "available" && engine.snapshot.authenticated !== false) kind = "other";
   if (kind === "no_ai" && ownAi) kind = "other";
-  return kind;
+  return !ownAi && FREE_BACKUP_DOWN.has(errorKind(kind)) && (!engine || freeFallback(engine)) ? "no_ai" : kind;
 }
-
-const PLAIN_KIND: Partial<Record<string, FailedReplyKind>> = {
-  "error.plain.rateLimited": "rate_limit",
-  "error.plain.busy": "overloaded",
-  "error.plain.timeout": "timeout",
-};
 
 /** What stopped a reply, in the card's plain words, when its engine words say a reason; null for any other failure. */
 export function plainFailureWords(cause: string): string | null {
-  const kind = PLAIN_KIND[plainErrorKind(cause) ?? ""];
-  return kind && kind !== "other" && kind in DETAIL ? t(DETAIL[kind as keyof typeof DETAIL]) : null;
+  const kind = errorKind(rowFailureKind({ name: cause }));
+  return kind === "busy" || kind === "no_reply" ? t(WORDS[kind], { engine: t("failedReply.yourAi") }) : null;
 }
 
 /** Most actionable first: when bots fail for different reasons, the card says the one a person can fix. */
-const PRIORITY: FailedReplyKind[] = ["blocker", "no_ai", "signed_out", "cli_missing", "claude_update", "credits", "usage_limit", "model_not_found", "context", "session_lost", "place",
-  "restart_interrupted", "rate_limit", "overloaded", "provider_down", "timeout", "cli_exit", "bad_request", "no_answer", "other"];
+const PRIORITY: ErrorKind[] = ["repeating", "no_ai", "signed_out", "key_rejected", "ai_setup", "folder", "out_of_credit", "plan", "usage_limit", "model", "chat_full", "computer",
+  "interrupted", "busy", "no_reply", "other"];
 
 export function mostActionable<T extends { kind: FailedReplyKind }>(items: readonly T[]): T | undefined {
-  return [...items].sort((a, b) => PRIORITY.indexOf(a.kind) - PRIORITY.indexOf(b.kind))[0];
+  return [...items].sort((a, b) => PRIORITY.indexOf(errorKind(a.kind)) - PRIORITY.indexOf(errorKind(b.kind)))[0];
 }
 
-/** the kinds whose line names the engine; a plain sentence from the engine itself says more, so it wins */
-const ENGINE_DETAIL: Record<"model_not_found" | "bad_request" | "context" | "provider_down" | "cli_missing" | "cli_exit", LocaleKey> = {
-  model_not_found: "failedReply.modelNotFound",
-  bad_request: "failedReply.badRequest",
-  context: "failedReply.context",
-  provider_down: "failedReply.providerDown",
-  cli_missing: "failedReply.cliMissing",
-  cli_exit: "failedReply.cliExit",
-};
-
-const hasEngineDetail = (kind: FailedReplyKind): kind is keyof typeof ENGINE_DETAIL => Object.hasOwn(ENGINE_DETAIL, kind);
-
-const DETAIL: Record<Exclude<FailedReplyKind, "signed_out" | "credits" | "claude_update" | "place" | "blocker" | keyof typeof ENGINE_DETAIL>, LocaleKey> = {
+/** Each kind's one sentence; a place, a stopped browser run and a Claude update bring their own words. */
+const WORDS: Record<Exclude<ErrorKind, "signed_out" | "computer" | "repeating">, LocaleKey> = {
+  key_rejected: "failedReply.keyRejected",
+  plan: "failedReply.plan",
+  folder: "failedReply.folder",
+  out_of_credit: "failedReply.credits",
   usage_limit: "failedReply.usageLimit",
-  rate_limit: "failedReply.rateLimited",
-  overloaded: "failedReply.overloaded",
-  timeout: "failedReply.timeout",
+  busy: "failedReply.busy",
+  no_reply: "failedReply.noReply",
+  model: "failedReply.model",
+  chat_full: "failedReply.context",
+  ai_setup: "failedReply.cliMissing",
   no_ai: "failedReply.noAi",
-  restart_interrupted: "failedReply.restarted",
-  session_lost: "failedReply.sessionLost",
-  no_answer: "error.plain.generic",
-  other: "error.plain.generic",
+  interrupted: "failedReply.restarted",
+  other: "failedReply.other",
 };
 
-const AI_UNREACHABLE: ReadonlySet<string> = new Set(["error.plain.unreachable", "error.plain.connection"]);
-
-/** The card's one plain line for a kind; place, trial and update failures bring their own words. Any other failure says
- * the server's own cause, as the sidebar does, unless it is technical. */
-export function failedReplyDetail(kind: FailedReplyKind, engineName: string, onServer: boolean, cause = ""): string {
-  // the server's English line for a known reason reads better in the reader's own language
-  const said = cause.trim() === failurePlan(kind).line ? "" : cause;
-  const words = detailWords(kind, engineName, onServer, said);
-  return said && hasRawDetail(words) ? detailWords(kind, engineName, onServer, "") : words;
-}
-
-function detailWords(kind: FailedReplyKind, engineName: string, onServer: boolean, cause: string): string {
-  if (kind === "signed_out") return t(onServer ? "failedReply.signedOutServer" : "failedReply.signedOutHere", { engine: engineName });
-  if (kind === "credits") return t("failedReply.credits", { engine: engineName });
+/** The card's one plain sentence for a kind. Never the engine's or the server's own words: those stay in the server's
+ * log under the row's reference code. */
+export function failedReplyDetail(kind: FailedReplyKind, engineName: string, onServer: boolean): string {
+  const named = errorKind(kind);
+  if (named === "signed_out") return t(onServer ? "failedReply.signedOutServer" : "failedReply.signedOutHere", { engine: engineName });
   if (kind === "claude_update") return t("chat.claudeUpdate.offer");
-  if (kind === "place" || kind === "blocker") return t("error.plain.generic");
-  // an engine's own words for a full context are token counts, never what to do next
-  if (kind === "context") return t(ENGINE_DETAIL.context, { engine: engineName });
-  if (kind === "session_lost") return t(DETAIL.session_lost);
-  if (hasEngineDetail(kind)) {
-    const text = cause.trim();
-    if (text && !isTechnicalError(text)) return currentFailureWords(text);
-    return (text && providerSentence(text)) || t(ENGINE_DETAIL[kind], { engine: engineName });
-  }
-  // a turn's own network failure is its AI's server not answering, never the app: "fetch failed" from a model call
-  if (kind === "other" && AI_UNREACHABLE.has(plainErrorKind(cause.trim()) ?? "")) return t("failedReply.unreachable", { engine: engineName });
-  if (kind === "other" && cause.trim()) return plainErrorLine(cause) ?? currentFailureWords(cause.trim());
-  return t(DETAIL[kind]);
+  if (named === "computer" || named === "repeating") return t("error.plain.generic");
+  return t(WORDS[named], { engine: engineName });
 }
 
 /** Why dusk bot stopped a browser run itself, in one line. */
@@ -195,7 +137,7 @@ function detailWords(kind: FailedReplyKind, engineName: string, onServer: boolea
 export function failurePreviewLine(tool: NonNullable<Message["tool"]>, engine: InstanceInfo | undefined): string {
   const kind = failedReplyKind(tool, engine, true);
   if (kind === "blocker" && tool.blocker) return blockerDetail(tool.blocker);
-  return failedReplyDetail(kind, engine?.displayName ?? t("failedReply.yourAi"), false, failedTurnCause(tool.name) ?? "");
+  return failedReplyDetail(kind, engine?.displayName ?? t("failedReply.yourAi"), false);
 }
 
 export function blockerDetail(blocker: BrowserBlocker): string {

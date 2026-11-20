@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { announcesAction, claimsUnmadeChange, effectfulCall, ownsFailure, leakedReasoning, leakedToolSyntax, LeakHoldback, MAX_RETRY_WAIT_MS, retryDelay, withRetryAfter } from "./openai-chat-habits.ts";
+import { withoutRepeats, announcesAction, claimsUnmadeChange, effectfulCall, ownsFailure, leakedReasoning, leakedToolSyntax, LeakHoldback, MAX_RETRY_WAIT_MS, retryDelay, withRetryAfter } from "./openai-chat-habits.ts";
 
 describe("announcesAction before anything ran", () => {
   it.each([
@@ -94,6 +94,14 @@ describe("withRetryAfter", () => {
     expect((withRetryAfter(new Error("x"), new Headers({ "retry-after": "Thu, 19 Nov 2026 10:00:30 GMT" }), now) as any).retryAfterMs).toBe(30_000);
     expect((withRetryAfter(new Error("x"), new Headers(), now) as any).retryAfterMs).toBeUndefined();
   });
+  it("reads the reset a rate limit's body names, and a far one is waited for, never retried into", () => {
+    const now = Date.now();
+    const body = JSON.stringify({ error: { message: "Rate limit exceeded: free-models-per-day.", code: 429, metadata: { headers: { "X-RateLimit-Reset": String(now + 3_600_000) } } } });
+    const error = withRetryAfter(new Error("429"), new Headers(), now, body);
+    expect((error as any).limitResetAt).toBe(now + 3_600_000);
+    expect(retryDelay(error, { transient: true, reason: "rate_limited" }, 0)).toBeNull();
+    expect((withRetryAfter(new Error("429"), new Headers(), now, "Too Many Requests") as any).limitResetAt).toBeUndefined();
+  });
 });
 
 describe("leakedToolSyntax", () => {
@@ -146,6 +154,19 @@ describe("ownsFailure", () => {
     expect(ownsFailure("Nothing was sent; the page did not load.")).toBe(true);
     expect(ownsFailure("Done.")).toBe(false);
     expect(ownsFailure("I've posted it, though the preview failed to load.")).toBe(false);
+  });
+});
+
+describe("withoutRepeats", () => {
+  const earlier = ["Reminder set for 6pm today to call mom. It will appear here in chat."];
+  it("takes out a message the reply repeats from earlier in the turn, keeping the new part", () => {
+    expect(withoutRepeats("Reminder set for 6pm today to call mom.  It will appear here in chat.\n\nGift ideas:\n- a book\n- a plant", earlier)).toBe("Gift ideas:\n- a book\n- a plant");
+    expect(withoutRepeats("Reminder set for 6pm today to call mom. It will appear here in chat.", earlier)).toBe("");
+  });
+  it("leaves a reply that repeats nothing, or only a short phrase, exactly as it was", () => {
+    const reply = "Gift ideas:\n\n- a book\n- a plant";
+    expect(withoutRepeats(reply, earlier)).toBe(reply);
+    expect(withoutRepeats("Done. Also done.", ["Done."])).toBe("Done. Also done.");
   });
 });
 

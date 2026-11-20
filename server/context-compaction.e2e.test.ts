@@ -1,5 +1,6 @@
 import { spawn, type ChildProcess } from "node:child_process";
-import { closeSync, existsSync, openSync, readFileSync, writeFileSync } from "node:fs";
+import { closeSync, existsSync, openSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { expect, it } from "vitest";
@@ -7,14 +8,14 @@ import { launchVerificationServer, runControlDusk, verificationServerEnvironment
 import { request } from "../scripts/mcp-server.ts";
 import { waitForExit } from "./testing/cleanup.ts";
 
-async function fixture(test: (f: Awaited<ReturnType<typeof setup>>) => Promise<void>, hang = false, fakeEnv: NodeJS.ProcessEnv = {}) {
-  const f = await setup(hang, fakeEnv);
+async function fixture(test: (f: Awaited<ReturnType<typeof setup>>) => Promise<void>, hang = false, fakeEnv: NodeJS.ProcessEnv = {}, scripted = true) {
+  const f = await setup(hang, fakeEnv, scripted);
   try { await test(f); } finally { await f.close(); }
 }
 
-async function setup(hang: boolean, fakeEnv: NodeJS.ProcessEnv) {
+async function setup(hang: boolean, fakeEnv: NodeJS.ProcessEnv, scripted: boolean) {
   const env = { ...process.env, ...fakeEnv, FAKE_CLAUDE_VERSION: "2.1.270", ...(hang ? { FAKE_CLAUDE_TEXT_HANG: "1" } : {}) };
-  const session = await launchVerificationServer(env, undefined, undefined, undefined, { scripted: true });
+  const session = await launchVerificationServer(env, undefined, undefined, undefined, { scripted });
   let ready = false;
   try {
     let restarted: ChildProcess | undefined;
@@ -88,7 +89,7 @@ it("compacts durably, keeps corrections and starts a fresh native session withou
     message.id === previousRequest.id ? { ...message, requestPending: true } : message));
   expect(record.kind).toBe("compaction");
   expect(record.compaction.summary).toContain("CORRECTION");
-  expect(Buffer.byteLength(record.compaction.summary)).toBeLessThanOrEqual(6_000);
+  expect(Buffer.byteLength(record.compaction.summary)).toBeLessThanOrEqual(11_000);
   expect(record.compaction.by).toBe("person");
   expect(f.turns()).toHaveLength(turnsBefore);
   await f.compact();
@@ -124,12 +125,26 @@ it("automatically folds old exchanges while keeping the two latest and the incom
   expect(records).toHaveLength(1);
   expect(records[0].compaction.by).toBe("harness");
   expect(records[0].compaction.summary).not.toContain("INCOMING");
+  expect(records[0].compaction.summary).toContain(`## The person's messages, word for word\n- "FIRST_EXCHANGE historical request"`);
   const prompt = String(f.turns().at(-1).prompt.message.content);
   expect(prompt).toContain("SECOND_EXCHANGE keep verbatim");
   expect(prompt).toContain("THIRD_EXCHANGE correction -5 != 5");
   expect(prompt).toContain("INCOMING do not summarize this request");
   expect(f.turns().at(-1).resumed).toBe(false);
 }), 70_000);
+
+const textLog = join(tmpdir(), `dusk-compaction-text-${process.pid}.jsonl`);
+it("saves the folded part's tool results to a file the summary points at, and hands its turns to memory capture at once", () => fixture(async f => {
+  rmSync(textLog, { force: true });
+  await f.api("/api/config", { context: { compactAt: 1 } }, "PATCH");
+  for (const text of ["ONE count the orders for depot Utrecht", "TWO and the refunds for depot Utrecht", "THREE then sum them for the weekly report", "FOUR go on"]) await f.send(text);
+  const record = (await f.messages()).find(m => m.kind === "compaction");
+  const archive = /^- (\/\S+\.md): (\d+) tool results?/m.exec(record.compaction.summary);
+  expect(archive?.[1]).toContain(join("task-workspaces", f.bot.id, f.thread, "context-archive"));
+  expect(readFileSync(archive![1]!, "utf8")).toContain("ORDERS=1284");
+  // capture otherwise waits two quiet minutes or six turns
+  await expect.poll(() => existsSync(textLog) && readFileSync(textLog, "utf8").split("\n").some(line => line.includes("You are the CAPTURE step") && line.includes("ONE count the orders")), { timeout: 15_000 }).toBe(true);
+}, false, { FAKE_CLAUDE_TOOL_CALLS: JSON.stringify([{ name: "Bash", input: { command: "echo ORDERS=1284" }, ok: true }]), FAKE_CLAUDE_TEXT_LOG: textLog }, false), 70_000);
 
 it("Stop cancels a stalled summary without writing a late record or starting an agent", () => fixture(async f => {
   await f.send("Keep this original chat intact");
@@ -140,7 +155,7 @@ it("Stop cancels a stalled summary without writing a late record or starting an 
   await f.compact();
   await expect.poll(() => {
     const dump = JSON.parse(readFileSync(f.session.fixtureDumpPath, "utf8"));
-    return typeof dump.prompt === "string" && dump.prompt.startsWith("Summarize this conversation");
+    return typeof dump.prompt === "string" && dump.prompt.startsWith("Write a context checkpoint");
   }).toBe(true);
   await expect(f.compact()).rejects.toThrow(/already working/);
   await f.cli("interrupt", "--bot", f.bot.id, "--task", f.thread);

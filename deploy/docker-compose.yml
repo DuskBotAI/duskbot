@@ -30,6 +30,7 @@ services:
       # address the server learns from STUN is the one that reaches it. Closed, screens still work over the relay.
       - "30000-30063:30000-30063/udp"
     environment:
+      DUSK_COMPOSE_IMAGE: ${DUSK_IMAGE:-ghcr.io/duskbotai/duskbot:latest}
       DUSK_PORT: "8799"
       DUSK_WEBHOOK_PORT: "8800"
       # what the app prints as hook URLs — Caddy passes /hooks/* straight through

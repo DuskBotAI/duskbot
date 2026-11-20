@@ -236,7 +236,7 @@ describe("the compact browser in the Computer tab", () => {
     const askFirst = { status: async () => status(), request: async () => { state = "granted"; return status(); } };
     await act(async () => { root.render(createElement(LocalBrowserSection, { bot: BOT, askFirst, after: createElement("p", { "data-cta": "" }, "Keep Nova working") })); });
     await click("[data-local-browser-action=start]");
-    const dialog = () => document.body.querySelector("[data-mac-permissions-dialog]");
+    const dialog = () => [...document.body.querySelectorAll("[data-mac-permissions-dialog]")].find((el) => !el.closest("[data-leaving]")) ?? null;
     expect(dialog()).not.toBeNull();
     expect(q("[data-local-browser=live]")).toBeNull();
     expect(document.body.querySelectorAll("[data-permission-ask]")).toHaveLength(2);

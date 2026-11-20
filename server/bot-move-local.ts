@@ -2,6 +2,9 @@
 // folders' SKILL.md and its routine list), always without following a link and within a size limit. Login, key, session,
 // transcript and history files (.env, auth*.json, credentials/, sessions/, state.db, messages.db) are never listed or
 // opened, and nothing is written to or removed from the app's folder. Token-shaped text in what is read is redacted.
+// One exception, channelLinks, never part of a look: when the person moves a bot in, the server alone reads that bot's Telegram and Discord
+// bot tokens and their allowed ids (the config's channel entries, and only those keys of the folder's .env) to connect
+// the same chat-app bots here; they never reach the renderer, a package or a prompt.
 import { isAbsolute, join, relative, resolve } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { parse as parseYaml } from "yaml";
@@ -187,11 +190,20 @@ function modelName(value: unknown): string {
   return text(value.primary) || text(value.default) || text(value.model) || text(value.name);
 }
 
+function movedChannels(labels: string[], app: string): string {
+  const carried = labels.filter((label) => label === "Telegram" || label === "Discord");
+  const left = labels.filter((label) => label !== "Telegram" && label !== "Discord");
+  return [
+    carried.length ? ` ${carried.join(" and ")} came along: the same bot answers here now. Turn ${carried.length > 1 ? "them" : "it"} off in ${app}, or both apps answer and each gets only some of the messages.` : "",
+    left.length ? ` ${left.join(", ")} stay${left.length > 1 ? "" : "s"} in ${app}.` : "",
+  ].join("");
+}
+
 /** How the bot was set up there, as a topic of its memory: the model, where it answered and its tools, by name. */
 function setupTopic(app: string, parts: { model?: string; provider?: string; channels?: string[]; tools?: string[]; extra?: string[] }): string | null {
   const lines = [
     ...(parts.model ? [`- Model: ${parts.model}${parts.provider ? ` (through ${parts.provider})` : ""}. Here you pick the AI in the bot's settings.`] : []),
-    ...(parts.channels?.length ? [`- Answered on: ${parts.channels.join(", ")}. Those connections and their logins stay in ${app}; connect chat apps again here to answer there.`] : []),
+    ...(parts.channels?.length ? [`- Answered on: ${parts.channels.join(", ")}.${movedChannels(parts.channels, app)}`] : []),
     ...(parts.tools?.length ? [`- Tools (MCP servers): ${parts.tools.join(", ")}. Connect them again in apps.`] : []),
     ...(parts.extra ?? []),
   ];
@@ -326,6 +338,7 @@ function readOpenClaw(machine: SetupMachine, now: number): FoundApp[] {
         ...(main ? { channels: openClawChannels(config).map(channelLabel), tools: bot.apps.map((app) => app.name) } : {}),
       });
       if (setup) bot.memoryFiles = { ...bot.memoryFiles, [`memory/${place.app.toLowerCase()}-setup.md`]: setup };
+      if (main && openClawChannels(config).some((name) => CARRIED.has(name))) bot.channelRef = `openclaw:${place.root}`;
       bot.skills = [...bot.skills, ...shared.filter((skill) => !bot.skills.some((mine) => mine.name === skill.name))];
       bot.routines.push(...(jobs.get(id) ?? []));
       bots.push(bot);
@@ -524,6 +537,7 @@ function readHermes(machine: SetupMachine, now: number): FoundApp[] {
       extra: others.length ? ["", "## Other personalities you kept", "", ...others.map(([name, body]) => `- ${name}: ${body}`)] : [],
     });
     if (setup) bot.memoryFiles = { ...bot.memoryFiles, "memory/hermes-agent-setup.md": setup };
+    if (own.some((name) => CARRIED.has(name)) || machine.fs.lstat(join(home.dir, ".env"))?.isFile()) bot.channelRef = `hermes:${home.dir}`;
     bots.push(bot);
   }
   return bots.length ? [{ source: "hermes", app: "Hermes Agent", where: tilde(machine, root), bots, channels: [...channels], unreadable: reader.unreadable }] : [];
@@ -715,4 +729,61 @@ export function lookForBots(machine: SetupMachine, options: { dataDir?: string; 
     () => readOpenClaw(machine, now), () => readHermes(machine, now), () => readAgentFolders(machine), () => readOwnOld(machine, options.dataDir),
   ];
   return { apps: tries.flatMap((look) => loose(look) as FoundApp[] | undefined ?? []) };
+}
+
+const CARRIED = new Set(["telegram", "discord"]);
+const ENV_KEYS = ["TELEGRAM_BOT_TOKEN", "TELEGRAM_ALLOWED_USERS", "DISCORD_BOT_TOKEN", "DISCORD_ALLOWED_USERS"];
+
+export interface ChannelLink { platform: "telegram" | "discord"; token: string; allowed: string[] }
+
+/** Only the chat-app keys of a .env, read raw: the rest of the file is never kept. */
+function envKeys(machine: SetupMachine, file: string): Map<string, string> {
+  const out = new Map<string, string>();
+  const info = machine.fs.lstat(file);
+  const body = info?.isFile() && info.size <= TEXT_MAX ? utf8(machine.fs.read(file, TEXT_MAX, false)) : null;
+  for (const line of body?.split(/\r?\n/) ?? []) {
+    const match = /^\s*(?:export\s+)?([A-Z_]+)\s*=\s*(.*?)\s*$/.exec(line);
+    if (match && ENV_KEYS.includes(match[1]!)) out.set(match[1]!, match[2]!.replace(/^(['"])(.*)\1$/, "$2"));
+  }
+  return out;
+}
+function hermesEnvKeys(machine: SetupMachine, dir: string): Map<string, string> {
+  const keys = envKeys(machine, join(dir, ".env"));
+  return keys.has("TELEGRAM_BOT_TOKEN") || keys.has("DISCORD_BOT_TOKEN") ? keys : new Map();
+}
+const ids = (value: unknown): string[] => (Array.isArray(value) ? value : typeof value === "string" ? value.split(/[\s,]+/) : [])
+  .map((one) => String(one).replace(/^(?:tg|telegram|discord|user):/i, "").trim()).filter((one) => /^-?\d{1,24}$/.test(one));
+const tokenOf = (value: unknown) => (typeof value === "string" ? value.trim() : "");
+
+/** The Telegram and Discord bots of one place lookForBots marked with a channelRef; [] for any other ref. */
+export function channelLinks(machine: SetupMachine, ref: string): ChannelLink[] {
+  const match = /^(openclaw|hermes):(.+)$/.exec(ref);
+  if (!match || !isAbsolute(match[2]!) || !machine.fs.lstat(match[2]!)?.isDirectory()) return [];
+  const dir = match[2]!;
+  const links: ChannelLink[] = [];
+  const add = (platform: ChannelLink["platform"], token: string, allowed: string[]) => { if (token && !links.some((one) => one.platform === platform)) links.push({ platform, token, allowed: [...new Set(allowed)].slice(0, 200) }); };
+  if (match[1] === "hermes") {
+    const keys = hermesEnvKeys(machine, dir);
+    const info = machine.fs.lstat(join(dir, "config.yaml"));
+    const raw = info?.isFile() && info.size <= CONFIG_MAX ? utf8(machine.fs.read(join(dir, "config.yaml"), CONFIG_MAX, false)) : null;
+    const config = raw ? loose(() => parseYaml(raw, { maxAliasCount: 50 })) : null;
+    const places = isRecord(config) ? [config, config.platforms, isRecord(config.gateway) ? config.gateway.platforms : undefined].filter(isRecord) : [];
+    const entry = (name: string) => places.map((place) => place[name]).find(isRecord) ?? {};
+    add("telegram", keys.get("TELEGRAM_BOT_TOKEN") || tokenOf(entry("telegram").token), ids(keys.get("TELEGRAM_ALLOWED_USERS") ?? entry("telegram").allowed_users));
+    add("discord", keys.get("DISCORD_BOT_TOKEN") || tokenOf(entry("discord").token), ids(keys.get("DISCORD_ALLOWED_USERS") ?? entry("discord").allowed_users));
+    return links;
+  }
+  const configFile = OPENCLAW_CONFIGS.map((name) => join(dir, name)).find((path) => machine.fs.lstat(path)?.isFile());
+  const info = configFile ? machine.fs.lstat(configFile) : null;
+  const raw = configFile && info && info.size <= CONFIG_MAX ? utf8(machine.fs.read(configFile, CONFIG_MAX, false)) : null;
+  const config = raw ? looseJson(raw) : null;
+  const env = envKeys(machine, join(dir, ".env"));
+  const channels = isRecord(config) ? (isRecord(config.channels) ? config.channels : config) : {};
+  const telegram = isRecord(channels.telegram) ? channels.telegram : {};
+  const firstAccount = (section: Record<string, unknown>) => (isRecord(section.accounts) ? Object.values(section.accounts).find(isRecord) : undefined) ?? {};
+  const discord = isRecord(channels.discord) ? channels.discord : {};
+  add("telegram", tokenOf(telegram.botToken) || tokenOf(firstAccount(telegram).botToken) || env.get("TELEGRAM_BOT_TOKEN") || "", ids(telegram.allowFrom ?? firstAccount(telegram).allowFrom));
+  add("discord", tokenOf(discord.token) || tokenOf(firstAccount(discord).token) || env.get("DISCORD_BOT_TOKEN") || "",
+    ids(discord.allowFrom ?? (isRecord(discord.dm) ? discord.dm.allowFrom : undefined) ?? firstAccount(discord).allowFrom));
+  return links;
 }

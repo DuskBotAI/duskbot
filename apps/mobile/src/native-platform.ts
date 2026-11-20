@@ -14,13 +14,19 @@ import { SecureStorage } from "@aparajita/capacitor-secure-storage";
  * loaded wrapper that never answers on Android with Capacitor 8.6, so the phone keeps tokens through these directly. */
 const keystore = SecureStorage as unknown as {
   internalGetItem(options: { prefixedKey: string; sync: boolean }): Promise<{ data: string | null }>;
-  internalSetItem(options: { prefixedKey: string; data: string; sync: boolean }): Promise<void>;
+  internalSetItem(options: { prefixedKey: string; data: string; sync: boolean; access?: number }): Promise<void>;
   internalRemoveItem(options: { prefixedKey: string; sync: boolean }): Promise<{ success: boolean }>;
+  internalGetPrefixedKeys(options: { prefix: string; sync: boolean }): Promise<{ keys: string[] }>;
 };
 const SECRET_PREFIX = "dusk.";
+/** the prefix every Keychain/Keystore item had under the app's first name */
+const LEGACY_SECRET_PREFIX = "omb.";
 import { BarcodeScanner, BarcodeFormat, GoogleBarcodeScannerModuleInstallState } from "@capacitor-mlkit/barcode-scanning";
-import { handleBack, type AppleCredential, type CameraPermission, type CameraScanner, type DeliveredNotification, type MobilePlatform, type OrientationBridge, type ScanOverlay, type TurnActivityBridge } from "@/mobile/platform";
+import { keychainSecrets } from "@/mobile/keychain";
+import { handleBack, type AppleCredential, type BackGestureEvent, type BarConfig, type CameraPermission, type CameraScanner, type DeliveredNotification, type MobileChrome, type MobilePlatform, type OrientationBridge, type ScanOverlay, type SystemMenuAction, type TurnActivityBridge } from "@/mobile/platform";
+import type { ControlPlace, SystemControl } from "@/lib/system-control";
 import type { NativeAction } from "@/mobile/phone-actions";
+import { shortcutAction, type ShortcutBot, type ShortcutsBridge } from "@/mobile/shortcuts";
 import type { TurnActivityAttributes, TurnActivityState } from "../../../shared/phone-activity";
 import type { GlassBridge, GlassEvent, GlassGlyphs, GlassState } from "@/mobile/native-glass";
 import type { HomeGlassState } from "@/mobile/native-home-glass";
@@ -28,7 +34,9 @@ import type { SlidePath } from "@/mobile/NavStack";
 import type { MenuBridge, NativeMenuArm, NativeMenuContent, NativeMenuEvent } from "@/mobile/native-menu";
 import { createVoiceEvents, type VoiceBridge, type VoiceEnd } from "@/lib/voice-input/bridge";
 import { registerPhoneVoice } from "@/lib/voice-input/device";
+import { attachToComposer, setNativeAttach } from "@/lib/native-attach";
 import { appLinkFromUniversal, type MobileOpenTarget } from "../../../shared/mobile-link";
+import { t } from "@/lib/i18n";
 
 /** The app's own scanner on ios (ios/App/App/QrScannerPlugin.swift): the ML Kit plugin ships for CocoaPods only, and this
  * project links its plugins as Swift packages. */
@@ -73,7 +81,53 @@ async function shareFileNatively(file: File): Promise<void> {
   }
 }
 
-/** The app's own dictation (ios/App/App/SpeechRecognizerPlugin.swift, android .../SpeechRecognizerPlugin.java): the
+/** The app's own pull-down menu (ios/App/App/PulldownMenuPlugin.swift): a UIMenu opened over a control in the page. */
+const DuskPulldown = registerPlugin<{ show(options: { x: number; y: number; width: number; height: number; items: SystemMenuAction[]; cancel: string }): Promise<{ key?: string } | undefined> }>("DuskPulldown");
+/** The app's own bar and sheet (ios/App/App/Chrome.swift): the web view's controller in the system's navigation bar and
+ * sheet presentation. */
+interface ChromePlugin {
+  info(): Promise<{ native?: boolean }>;
+  reset(): Promise<void>;
+  setBar(options: Partial<BarConfig> & { hidden: boolean }): Promise<void>;
+  freeze(): Promise<void>;
+  thaw(): Promise<void>;
+  presentSheet(options: { height?: number }): Promise<void>;
+  resizeSheet(options: { height: number }): Promise<void>;
+  dismissSheet(): Promise<void>;
+  addListener(event: "barPress", listener: (event: { id?: string }) => void): Promise<PluginListenerHandle>;
+  addListener(event: "pictureTaken", listener: (event: { key?: string }) => void): Promise<PluginListenerHandle>;
+  addListener(event: "sheetDismissed", listener: () => void): Promise<PluginListenerHandle>;
+}
+const DuskChrome = registerPlugin<ChromePlugin>("DuskChrome");
+
+function nativeChrome(plugin: ChromePlugin): MobileChrome {
+  const quiet = (work: Promise<unknown>) => work.then(() => {}, () => {});
+  return {
+    setBar: (config) => { void quiet(plugin.setBar(config ? { ...config, hidden: false } : { hidden: true, leading: [], trailing: [] })); },
+    onBarPress: (listener) => unsubscribe([plugin.addListener("barPress", ({ id }) => { if (typeof id === "string") listener(id); })]),
+    onPictureTaken: (listener) => unsubscribe([plugin.addListener("pictureTaken", ({ key }) => { if (typeof key === "string") listener(key); })]),
+    freeze: () => quiet(plugin.freeze()),
+    thaw: () => quiet(plugin.thaw()),
+    presentSheet: (height) => quiet(plugin.presentSheet(height === null ? {} : { height })),
+    resizeSheet: (height) => { void quiet(plugin.resizeSheet({ height })); },
+    dismissSheet: () => quiet(plugin.dismissSheet()),
+    onSheetDismissed: (listener) => unsubscribe([plugin.addListener("sheetDismissed", listener)]),
+  };
+}
+
+/** The app's own controls (ios/App/App/ControlsPlugin.swift): UISegmentedControl, UISwitch and UIButton pop-ups over the page. */
+const DuskControls = registerPlugin<{
+  place(options: { id: string } & SystemControl & ControlPlace): Promise<{ tracked?: boolean }>;
+  trigger(options: { id: string }): Promise<{ triggered?: boolean }>;
+  remove(options: { id: string }): Promise<void>;
+  reset(): Promise<void>;
+  addListener(event: "change", listener: (event: { id?: string; selected?: number; on?: boolean; value?: string }) => void): Promise<PluginListenerHandle>;
+}>("DuskControls");
+
+/** The app's own look on the system's surfaces (ios/App/App/AppearancePlugin.swift). */
+const DuskAppearance = registerPlugin<{ set(options: { scheme: "system" | "light" | "dark" }): Promise<void> }>("DuskAppearance");
+
+/** The app's own dictation(ios/App/App/SpeechRecognizerPlugin.swift, android .../SpeechRecognizerPlugin.java): the
  * phone's recognizer, offline where it can be. Events carry the session number `start` was given. */
 export interface SpeechPermissions { microphone: string; speech?: string }
 export interface SpeechPlugin {
@@ -91,9 +145,10 @@ const DuskSpeech = registerPlugin<SpeechPlugin>("DuskSpeech");
 
 /** The app's own Liquid Glass chat chrome (ios/App/App/GlassChromePlugin.swift), iOS 26 and later. */
 interface GlassPlugin {
-  supported(): Promise<{ supported: boolean }>;
+  supported(): Promise<{ supported: boolean; acks?: boolean }>;
   update(state: GlassState): Promise<void>;
   setText(options: { text: string; seq: number }): Promise<void>;
+  clearText(options: { id: number }): Promise<void>;
   setAvatar(options: { data: string | null }): Promise<void>;
   focus(): Promise<void>;
   blur(): Promise<void>;
@@ -101,15 +156,38 @@ interface GlassPlugin {
   slide(options: { path: SlidePath | null; at?: number }): Promise<void>;
   glyphs(): Promise<GlassGlyphs>;
   home(options: { state: HomeGlassState | null }): Promise<void>;
-  addListener(event: "glass", listener: (event: GlassEvent) => void): Promise<PluginListenerHandle>;
+  addListener(event: "glass", listener: (event: GlassEvent | { type: "paste"; files: NativeFile[] }) => void): Promise<PluginListenerHandle>;
 }
 const DuskGlass = registerPlugin<GlassPlugin>("DuskGlass");
 
-export function glassBridge(plugin: GlassPlugin): GlassBridge {
+/** A file the app wrote to its tmp folder for the page (ios/App/App/PickerPlugin.swift). */
+interface NativeFile { path: string; name: string; type: string }
+/** The composer's photo library and Files pickers, each opened straight (ios/App/App/PickerPlugin.swift). */
+const DuskPicker = registerPlugin<{
+  photos(options: { multiple: boolean }): Promise<{ files: NativeFile[] }>;
+  files(options: { multiple: boolean }): Promise<{ files: NativeFile[] }>;
+  camera(): Promise<{ files: NativeFile[] }>;
+}>("DuskPicker");
+
+export async function nativeFiles(list: readonly NativeFile[], read: typeof fetch = fetch): Promise<File[]> {
+  const files = await Promise.all(list.map(async (one) => {
+    try {
+      const response = await read(Capacitor.convertFileSrc(one.path));
+      return response.ok ? new File([await response.blob()], one.name, { type: one.type }) : null;
+    } catch {
+      return null;
+    }
+  }));
+  return files.filter((file): file is File => file !== null);
+}
+
+export function glassBridge(plugin: GlassPlugin, acks = false): GlassBridge {
   const quiet = (work: Promise<unknown>) => { void work.catch(() => {}); };
   return {
+    acks,
     update: (state) => quiet(plugin.update(state)),
     setText: (text, seq) => quiet(plugin.setText({ text, seq })),
+    clearText: (id) => quiet(plugin.clearText({ id })),
     setAvatar: (data) => quiet(plugin.setAvatar({ data })),
     focus: () => quiet(plugin.focus()),
     blur: () => quiet(plugin.blur()),
@@ -117,7 +195,10 @@ export function glassBridge(plugin: GlassPlugin): GlassBridge {
     slide: (path, at) => quiet(plugin.slide({ path, at })),
     glyphs: () => plugin.glyphs().catch(() => ({})),
     home: (state) => quiet(plugin.home({ state })),
-    onEvent: (listener) => unsubscribe([plugin.addListener("glass", listener)]),
+    onEvent: (listener) => unsubscribe([plugin.addListener("glass", (event) => {
+      if (event.type === "paste") void nativeFiles(event.files).then(attachToComposer);
+      else listener(event);
+    })]),
   };
 }
 
@@ -171,11 +252,36 @@ const DuskNotifications = registerPlugin<NotificationsPlugin>("DuskNotifications
  * registration crashes the app */
 const DuskPushSetup = registerPlugin<{ configured(): Promise<{ configured: boolean }> }>("DuskPushSetup");
 const DuskHaptics = registerPlugin<{ play(options: { kind: string }): Promise<void> }>("DuskHaptics");
+interface ShortcutsPlugin {
+  setBots(options: { place: string; placeName: string; bots: ShortcutBot[]; places: string[] }): Promise<void>;
+  forget(): Promise<void>;
+  take(): Promise<{ actions: unknown[] }>;
+  addListener(event: "arrived", listener: () => void): Promise<PluginListenerHandle>;
+}
+const DuskShortcuts = registerPlugin<ShortcutsPlugin>("DuskShortcuts");
+
+/** Each run the native inbox holds goes to `listener` once; a run made before the page loaded is waiting there. */
+function shortcutsBridge(): ShortcutsBridge {
+  return {
+    setBots: (update) => { void DuskShortcuts.setBots(update).catch(() => {}); },
+    forget: () => { void DuskShortcuts.forget().catch(() => {}); },
+    onAction(listener) {
+      const take = () => void DuskShortcuts.take().then(({ actions }) => {
+        for (const raw of actions) { const action = shortcutAction(raw); if (action) listener(action); }
+      }).catch(() => {});
+      const stop = unsubscribe([DuskShortcuts.addListener("arrived", take)]);
+      take();
+      return stop;
+    },
+  };
+}
 /** android only (android/.../InsetsPlugin.java): the window's insets edge to edge, and the keyboard's for the page */
 interface InsetsPlugin {
   setMode(options: { ride: boolean }): Promise<void>;
-  setBars(options: { status: "dark" | "light"; ground: string }): Promise<void>;
+  setBars(options: { status: "dark" | "light"; ground: string; camera?: boolean }): Promise<void>;
+  setBackGesture(options: { on: boolean }): Promise<void>;
   addListener(event: "keyboard", listener: (event: { height: number; settled: boolean; duration?: number; at?: number }) => void): Promise<PluginListenerHandle>;
+  addListener(event: "back", listener: (event: { phase: "start" | "progress" | "cancel" | "commit"; progress?: number }) => void): Promise<PluginListenerHandle>;
 }
 const DuskInsets = registerPlugin<InsetsPlugin>("DuskInsets");
 /** android only (android/.../SseStreamPlugin.java): native HttpURLConnection streaming for cross-origin
@@ -583,7 +689,11 @@ function unsubscribe(handles: PendingHandle[]): () => void {
 
 function setScanning(on: boolean) {
   document.documentElement.classList.toggle("mobile-scanning", on);
+  paintBars?.();
 }
+
+/** Android: puts the bars' icons and the window's ground in step with the page, and with a live scan over it. */
+let paintBars: (() => void) | null = null;
 
 async function ensureBarcodeModule(): Promise<boolean> {
   if ((await BarcodeScanner.isGoogleBarcodeScannerModuleAvailable()).available) return true;
@@ -643,23 +753,40 @@ export async function nativePlatform(): Promise<MobilePlatform> {
     const timer = setTimeout(() => { console.warn(`startup: ${label} did not answer`); resolve(undefined); }, 2000);
     work.then(resolve, () => resolve(undefined)).finally(() => clearTimeout(timer));
   });
-  const [info, launch, , glass, menu, pushSetup] = await Promise.all([
+  const [info, launch, chrome, , , glass, menu, pushSetup] = await Promise.all([
     bounded(App.getInfo(), "app info"),
     bounded(App.getLaunchUrl(), "launch url"),
+    bounded(kind === "ios" && Capacitor.isPluginAvailable("DuskChrome") ? DuskChrome.reset().then(() => DuskChrome.info()) : Promise.resolve(undefined), "chrome"),
+    bounded(kind === "ios" && Capacitor.isPluginAvailable("DuskControls") ? DuskControls.reset() : Promise.resolve(), "controls"),
     bounded(overlayReady ?? Promise.resolve(), "status bar"),
-    kind === "ios" && Capacitor.isPluginAvailable("DuskGlass") ? bounded(DuskGlass.supported(), "glass") : undefined,
+    kind === "ios" && Capacitor.isPluginAvailable("DuskGlass") ? bounded(DuskGlass.clear().then(() => DuskGlass.supported(), () => DuskGlass.supported()), "glass") : undefined,
     kind === "ios" && Capacitor.isPluginAvailable("DuskMenu") ? bounded(DuskMenu.supported(), "menu") : undefined,
     kind === "android" && Capacitor.isPluginAvailable("DuskPushSetup") ? bounded(DuskPushSetup.configured(), "push setup") : undefined,
   ]);
   const pushOn = kind === "ios" || Boolean(pushSetup?.configured);
   let pendingLaunchUrl = launch?.url;
-  const secrets: MobilePlatform["secrets"] = {
+  const prefs: MobilePlatform["prefs"] = {
+    get: async (key) => (await Preferences.get({ key })).value,
+    set: (key, value) => Preferences.set({ key, value }),
+    remove: (key) => Preferences.remove({ key }),
+    keys: async () => (await Preferences.keys()).keys,
+  };
+  const secrets = keychainSecrets({
+    store: {
+      get: async (key) => { const { data } = await keystore.internalGetItem({ prefixedKey: key, sync: false }); return typeof data === "string" ? data : null; },
+      set: (key, value, access) => keystore.internalSetItem({ prefixedKey: key, data: value, sync: false, ...(access === undefined ? {} : { access }) }),
+      remove: async (key) => { await keystore.internalRemoveItem({ prefixedKey: key, sync: false }); },
+    },
+    prefix: SECRET_PREFIX, ios: kind === "ios", active: async () => (await App.getState()).isActive, prefs,
+  });
+  const legacySecrets: MobilePlatform["legacySecrets"] = {
+    keys: async () => (await keystore.internalGetPrefixedKeys({ prefix: LEGACY_SECRET_PREFIX, sync: false })).keys
+      .filter((key) => key.startsWith(LEGACY_SECRET_PREFIX)).map((key) => key.slice(LEGACY_SECRET_PREFIX.length)),
     get: async (key) => {
-      const { data } = await keystore.internalGetItem({ prefixedKey: SECRET_PREFIX + key, sync: false });
+      const { data } = await keystore.internalGetItem({ prefixedKey: LEGACY_SECRET_PREFIX + key, sync: false });
       return typeof data === "string" ? data : null;
     },
-    set: (key, value) => keystore.internalSetItem({ prefixedKey: SECRET_PREFIX + key, data: value, sync: false }),
-    remove: async (key) => { await keystore.internalRemoveItem({ prefixedKey: SECRET_PREFIX + key, sync: false }); },
+    remove: async (key) => { await keystore.internalRemoveItem({ prefixedKey: LEGACY_SECRET_PREFIX + key, sync: false }); },
   };
   const speech = Capacitor.isPluginAvailable("DuskSpeech");
   const turnActivityOn = kind === "ios" && Capacitor.isPluginAvailable("DuskTurnActivity");
@@ -669,12 +796,34 @@ export async function nativePlatform(): Promise<MobilePlatform> {
   let backButton: Promise<PluginListenerHandle> | undefined;
   const atRoot = new WeakSet<() => boolean>();
   let backOn = true;
+  let gestureOwner: (() => boolean) | null = null;
+  let gestureOn = false;
+  const gestures: Array<(event: BackGestureEvent) => boolean> = [];
   const backRoute = () => {
+    const gesture = insetsOn && Boolean(gestureOwner) && backs.at(-1) === gestureOwner;
+    if (gesture !== gestureOn) {
+      gestureOn = gesture;
+      void DuskInsets.setBackGesture({ on: gesture }).catch(() => {});
+    }
     const on = backs.some((one) => !atRoot.has(one));
     if (kind !== "android" || on === backOn) return;
     backOn = on;
     void App.toggleBackButtonHandler({ enabled: on }).catch(() => {});
   };
+  if (insetsOn) {
+    void DuskInsets.addListener("back", ({ phase, progress }) => {
+      const event: BackGestureEvent = phase === "start" || phase === "progress" ? { phase, progress: progress ?? 0 } : { phase };
+      const taken = gestures.reduce((any, listener) => listener(event) || any, false);
+      if (phase === "commit" && !taken && !handleBack(backs)) void App.minimizeApp().catch(() => {});
+    }).catch(() => {});
+  }
+  if (kind === "ios" && Capacitor.isPluginAvailable("DuskPicker")) {
+    setNativeAttach({
+      photos: async () => nativeFiles((await DuskPicker.photos({ multiple: true })).files),
+      files: async () => nativeFiles((await DuskPicker.files({ multiple: true })).files),
+      camera: async () => nativeFiles((await DuskPicker.camera()).files),
+    });
+  }
   registerPhoneVoice({
     os: kind,
     speech: speech ? phoneSpeech(DuskSpeech) : undefined,
@@ -687,7 +836,7 @@ export async function nativePlatform(): Promise<MobilePlatform> {
     native: true,
     appVersion: info?.version || __APP_VERSION__,
     deviceName: () => kind === "ios" ? "iPhone" : "Android phone",
-    glass: glass?.supported ? glassBridge(DuskGlass) : undefined,
+    glass: glass?.supported ? glassBridge(DuskGlass, glass.acks === true) : undefined,
     menu: menu?.supported ? menuBridge(DuskMenu) : undefined,
     orientation: Capacitor.isPluginAvailable("DuskOrientation") ? orientationBridge(DuskOrientation) : undefined,
     haptic(type) {
@@ -706,7 +855,7 @@ export async function nativePlatform(): Promise<MobilePlatform> {
             await Haptics.selectionEnd();
             break;
           case "error":
-            await Haptics.notification({ type: NotificationType.Error });
+            await Haptics.notification({ type: NotificationType.Warning });
             break;
           case "success":
             await Haptics.notification({ type: NotificationType.Success });
@@ -738,9 +887,17 @@ export async function nativePlatform(): Promise<MobilePlatform> {
     },
     keyboardMode: insetsOn ? (ride) => { void DuskInsets.setMode({ ride }).catch(() => {}); } : undefined,
     setStatusBar(style) {
-      if (insetsOn) { void groundHex().then((ground) => DuskInsets.setBars({ status: style, ground })).catch(() => {}); return; }
+      if (insetsOn) {
+        paintBars = () => {
+          const camera = document.documentElement.classList.contains("mobile-scanning");
+          void groundHex().then((ground) => DuskInsets.setBars({ status: style, ground, camera })).catch(() => {});
+        };
+        paintBars();
+        return;
+      }
       void StatusBar.setStyle({ style: style === "dark" ? Style.Light : Style.Dark }).catch(() => {});
     },
+    setAppearance: kind === "ios" && Capacitor.isPluginAvailable("DuskAppearance") ? (scheme) => { void DuskAppearance.set({ scheme }).catch(() => {}); } : undefined,
     onBack(listener) {
       backs.push(listener);
       backButton ??= App.addListener("backButton", () => {
@@ -748,6 +905,14 @@ export async function nativePlatform(): Promise<MobilePlatform> {
       });
       backRoute();
       return () => { const at = backs.indexOf(listener); if (at >= 0) backs.splice(at, 1); backRoute(); };
+    },
+    backGesture(listener, on) {
+      gestureOwner = on ? listener : gestureOwner === listener ? null : gestureOwner;
+      backRoute();
+    },
+    onBackGesture(listener) {
+      gestures.push(listener);
+      return () => { const at = gestures.indexOf(listener); if (at >= 0) gestures.splice(at, 1); };
     },
     backAtRoot(listener, root) {
       if (root) atRoot.add(listener);
@@ -773,12 +938,22 @@ export async function nativePlatform(): Promise<MobilePlatform> {
         if (now !== last) { last = now; listener(); }
       })]);
     },
-    prefs: {
-      get: async (key) => (await Preferences.get({ key })).value,
-      set: (key, value) => Preferences.set({ key, value }),
-      remove: (key) => Preferences.remove({ key }),
-    },
+    prefs,
     secrets,
+    legacySecrets,
+    chrome: chrome?.native ? nativeChrome(DuskChrome) : undefined,
+    controls: chrome?.native && Capacitor.isPluginAvailable("DuskControls") ? {
+      place: async (id, control, place) => { try { return (await DuskControls.place({ id, ...control, ...place })).tracked === true; } catch { return false; } },
+      trigger: async (id) => { try { return (await DuskControls.trigger({ id })).triggered === true; } catch { return false; } },
+      remove: (id) => { void DuskControls.remove({ id }).catch(() => {}); },
+      onChange: (listener) => unsubscribe([DuskControls.addListener("change", ({ id, selected, on, value }) => {
+        const next = typeof selected === "number" ? selected : typeof on === "boolean" ? on : value;
+        if (typeof id === "string" && next !== undefined) listener(id, next);
+      })]),
+    } : undefined,
+    showMenu: kind === "ios" && Capacitor.isPluginAvailable("DuskPulldown") ? async (anchor, items) => {
+      try { return (await DuskPulldown.show({ ...anchor, items, cancel: t("mobile.settings.cancel") }))?.key ?? null; } catch { return null; }
+    } : undefined,
     scanQr: kind === "android" ? async () => {
       try {
         let permission = await BarcodeScanner.checkPermissions();
@@ -835,6 +1010,14 @@ export async function nativePlatform(): Promise<MobilePlatform> {
         return null;
       }
     } : undefined,
+    pushPermission: pushOn ? async () => {
+      try {
+        const { receive } = await PushNotifications.checkPermissions();
+        return receive === "granted" || receive === "denied" ? receive : "prompt";
+      } catch {
+        return "prompt";
+      }
+    } : undefined,
     setViewingThread: notificationsOn ? (threadId) => { void DuskNotifications.setViewing({ threadId }).catch(() => {}); } : undefined,
     async deliveredNotifications() {
       try {
@@ -869,5 +1052,6 @@ export async function nativePlatform(): Promise<MobilePlatform> {
       return unsubscribe(handles);
     },
     turnActivity: turnActivityOn ? turnActivityBridge() : undefined,
+    shortcuts: Capacitor.isPluginAvailable("DuskShortcuts") ? shortcutsBridge() : undefined,
   };
 }

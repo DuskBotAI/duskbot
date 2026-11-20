@@ -60,3 +60,12 @@ it("requires a canonical https origin even with an injected transport", async ()
   }
   expect(fetcher).not.toHaveBeenCalled();
 });
+
+it("sends a link grant beside the entitlement only when it has one", async () => {
+  const bodies: unknown[] = [];
+  const fetcher = vi.fn<typeof fetch>(async (_url, init) => { bodies.push(JSON.parse(String(init?.body))); return Response.json({ ok: true, expiresAt: at + 3_600_000 }); });
+  const client = createHomeClient({ fetch: fetcher, now: () => at });
+  await client.entitle!("https://cloud.example.test", secret, "entitlement-token", "l1.grant");
+  await client.entitle!("https://cloud.example.test", secret, "entitlement-token", null);
+  expect(bodies).toEqual([{ v: 1, token: "entitlement-token", linkGrant: "l1.grant" }, { v: 1, token: "entitlement-token" }]);
+});

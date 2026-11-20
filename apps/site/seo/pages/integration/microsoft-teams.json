@@ -1,0 +1,136 @@
+{
+  "path": "/integrations/microsoft-teams",
+  "type": "integration",
+  "title": "Microsoft Teams bot for decisions buried in channel replies",
+  "nav": "microsoft teams",
+  "h1": "find the decision halfway down a teams thread",
+  "description": "Read a Teams channel thread through its last reply, compare it with meeting notes and find stale pinned instructions without posting to the channel.",
+  "keyword": "microsoft teams bot",
+  "keywords": [
+    "microsoft teams ai assistant",
+    "microsoft teams ai agent"
+  ],
+  "answer": "**bring the decision to the next meeting, even when it sits twelve replies below the original proposal.** give a dusk bot the microsoft teams thread and ask who agreed to what. it can read replies, compare them with an available meeting transcript and return the lines that settle the question in your dusk chat.",
+  "updated": "2026-11-20",
+  "review": {
+    "status": "approved",
+    "by": "lead agent, after four independent reviewers read every page against seo/facts (2026-11-20); every finding applied",
+    "at": "2026-11-20"
+  },
+  "voice": 2,
+  "tags": [
+    "channel replies",
+    "meeting transcripts",
+    "pinned messages"
+  ],
+  "connectors": [
+    "microsoft_teams"
+  ],
+  "related": [
+    "/use-cases/meeting-notes",
+    "/integrations/slack",
+    "/integrations/confluence"
+  ],
+  "art": {
+    "label": "Microsoft Teams",
+    "props": [
+      "p-bubbles"
+    ],
+    "bubble": "what did we decide"
+  },
+  "og_line": "read past the original proposal.",
+  "app": {
+    "name": "Microsoft Teams",
+    "toolkit": "microsoft_teams",
+    "intro": "**name the place where people actually answered.** a channel post, a chat pin and a meeting transcript each have a different id. start with the one that holds the decision. use the others when the team needs to reconcile two versions.",
+    "highlight": [
+      {
+        "slug": "MICROSOFT_TEAMS_GET_CHANNEL_MESSAGE",
+        "use": "open the proposal at the top of a known channel thread"
+      },
+      {
+        "slug": "MICROSOFT_TEAMS_LIST_MESSAGE_REPLIES",
+        "use": "read what colleagues accepted or changed in later replies"
+      },
+      {
+        "slug": "MICROSOFT_TEAMS_LIST_PINNED_MESSAGES",
+        "use": "collect instructions pinned in a particular chat"
+      },
+      {
+        "slug": "MICROSOFT_TEAMS_LIST_MEETING_TRANSCRIPTS",
+        "use": "find transcript records available for the meeting you named"
+      },
+      {
+        "slug": "MICROSOFT_TEAMS_GET_MEETING_TRANSCRIPT_CONTENT",
+        "use": "read the words behind a disputed meeting note"
+      },
+      {
+        "slug": "MICROSOFT_TEAMS_TEAMS_POST_CHANNEL_MESSAGE",
+        "use": "publish a reviewed announcement as a fresh channel post"
+      }
+    ],
+    "setup": "**give the bot the team, channel and parent message ids for a recurring discussion.** connect microsoft teams in connected apps and allow the named read actions. for a chat pin review, give it the chat id instead. channel replies belong to their parent post. put the planning call’s online meeting id in the bot’s job."
+  },
+  "routines_intro": "**agree on what counts as a decision.** some teams use an owner’s yes. others need a date and a named person to act. tell the bot which evidence to bring back.",
+  "routines": [
+    {
+      "name": "decisions in the launch thread",
+      "message": "at 4 each weekday, open our launch thread in teams. read the original message and every page of replies. list decisions made today, the person who agreed and the line that confirms each one. leave suggestions under open questions here.",
+      "when": "weekdays at 4 pm",
+      "output": "confirmed decisions with the replies that support them"
+    },
+    {
+      "name": "meeting promises",
+      "message": "every thursday at 3, read the available transcript for the planning call whose online meeting id is in your job. pick out promises people made in their own words. show the speaker and deadline when the text gives them. bring me any unclear ownership. do not post minutes.",
+      "when": "thursdays at 3 pm",
+      "output": "commitments for the meeting organizer to confirm"
+    },
+    {
+      "name": "instructions pinned in chat",
+      "message": "every monday at 9, read all pinned messages in our operations chat, including their text. find any that name a date already past. quote the instruction and date here so i can decide whether to keep the pin. leave the pins alone.",
+      "when": "mondays at 9 am",
+      "output": "pinned instructions with dates worth revisiting"
+    }
+  ],
+  "asks": "**keep the decision note in dusk until someone chooses its audience.** posting a channel message asks first by default. the post action creates a new top-level message. it will not put the note under the proposal. editing an existing channel message is a change and has no send prompt.\n\ncareful with **Full access**: a bot there with no sending rule can send up to 25 a day without asking. give it **Ask every time**.",
+  "cannot": [
+    "**retrieve a transcript that the meeting does not have.** the transcript content action needs a calendar-backed online meeting with an available transcript.",
+    "**read a whole channel thread from its parent alone.** replies have their own action. it can take several pages to reach the last one.",
+    "**start a routine the moment a teams reply lands through this connector.** choose a review time or ask in dusk when you need the answer."
+  ],
+  "sections": [
+    {
+      "h": "when the team still disagrees",
+      "md": "**a summary cannot break a tie.** if the replies contain two different launch dates, give the owner both lines. if you need a decision in a live conversation, ask the people in teams. use the bot to recover the record once the discussion has moved on."
+    }
+  ],
+  "faq": [
+    {
+      "q": "will this bot join our meeting to take notes?",
+      "a": "**the transcript routine reads a transcript after one exists.** give it a supported meeting id. if there is no transcript to read, it should say so."
+    },
+    {
+      "q": "does a pinned message belong to a channel or a chat here?",
+      "a": "**the pin lookup takes a chat id.** give it the operations chat for that routine. a channel thread needs the team, channel and parent message instead."
+    }
+  ],
+  "worked": {
+    "intro": "a fictional example.",
+    "before": "helen cross proposed tuesday in the first channel post. later she agreed to thursday after the installer changed dates.",
+    "after": "agreed date: thursday. helen confirmed it in the later reply. tuesday was the initial proposal."
+  },
+  "sources": [
+    {
+      "label": "dusk bot docs: files and apps",
+      "url": "/docs/files-and-apps"
+    },
+    {
+      "label": "dusk bot docs: routines",
+      "url": "/docs/routines"
+    },
+    {
+      "label": "dusk bot docs: sending permissions",
+      "url": "/docs/computer"
+    }
+  ]
+}

@@ -1,0 +1,90 @@
+{
+  "path": "/routines/reddit-mentions-watch",
+  "type": "routine",
+  "title": "Watch Reddit for product mentions in the communities you read",
+  "nav": "reddit mentions watch",
+  "h1": "find a product mention buried in a reddit comment",
+  "description": "Look for a product name in posts and recent comments from selected subreddits. Get the thread, the matching words and enough context to decide if it matters.",
+  "keyword": "reddit mentions watch routine",
+  "keywords": [
+    "monitor product mentions on reddit",
+    "subreddit comment mentions",
+    "reddit brand mention digest"
+  ],
+  "answer": "**the question about your product might sit halfway down a thread with an unrelated title.** give your bot a product name and a short list of subreddits. it searches for posts and reads recent comments separately. matching words come back to your dusk chat with a link to the conversation.",
+  "updated": "2026-11-20",
+  "review": {
+    "status": "approved",
+    "by": "lead agent, after four independent reviewers read every page against seo/facts (2026-11-20); every finding applied",
+    "at": "2026-11-20"
+  },
+  "voice": 2,
+  "tags": [
+    "reddit",
+    "research",
+    "mentions"
+  ],
+  "connectors": [
+    "reddit"
+  ],
+  "related": [
+    "/integrations/reddit",
+    "/use-cases/market-research",
+    "/use-cases/customer-support-inbox"
+  ],
+  "art": {
+    "label": "Reddit",
+    "props": [
+      "p-binoculars",
+      "p-bubbles"
+    ],
+    "bubble": "someone asked about it"
+  },
+  "og_line": "find the words that made a thread worth opening.",
+  "routine": {
+    "message": "at 9 am daily, look for mentions from the previous 24 hours on reddit. look in r/paperbinders and r/bookrepair for \"linen tally\" or its aliases \"linentally\" and \"linen-tally\". search for matching posts in each subreddit. separately read its recent comments back to the cutoff.\n\nreturn matching posts or comments here with the post or comment permalink, the matching phrase and what the writer wanted to know or share. group hits from the same thread. skip unrelated uses of the name. count the same item only once.\n\nnever reply, vote or message anyone. stay quiet if you finish every subreddit and find no matches. if a feed ends before you reach the cutoff, name the gap.",
+    "when": "every morning at 9, covering the previous 24 hours",
+    "needs": "reddit read only for post search, recent subreddit comments and thread context[^3]. use your own subreddit list, product name and aliases.",
+    "output": "r/paperbinders · comment by ruthmorris in “tracking short rolls”\nquestion: can linen tally keep two partly used rolls under the same colour?\nmatched words: “linen tally” in the reply about inventory software. the post itself asks about shelving.\ncomment: /r/paperbinders/comments/1abc123/tracking_short_rolls/m2abc34/"
+  },
+  "knobs": [
+    "**add the spelling people actually use.** include an old product name if customers still call it that.",
+    "**disambiguate a common word.** require a nearby term such as “app” or “inventory” when the name also describes an object.",
+    "**choose what earns your attention.** ask for questions only if release announcements crowd out people seeking help."
+  ],
+  "fails": [
+    "**post search misses a reply.** keep the separate recent-comment read. the search action returns posts even when a query looks like a comment search.[^3]",
+    "**a joke sounds like a complaint.** read the parent and the surrounding replies before deciding what the writer meant."
+  ],
+  "sections": [
+    {
+      "h": "draw the boundary around the communities you can read",
+      "md": "**a quiet morning covers only the places you named.** start with the communities where you already hear product questions. keep the subreddit and thread link together so you can read the surrounding conversation.\n\nif you need an immediate alert for every mention across reddit, a daily look through selected communities is the wrong fit."
+    }
+  ],
+  "faq": [
+    {
+      "q": "does a second comment count as another mention?",
+      "a": "**keep both under one thread.** two people can raise different questions there. include the matching comment for each question."
+    },
+    {
+      "q": "can i follow a phrase without following an account?",
+      "a": "**yes.** give the bot the phrase and the communities to read. it can look for the words without building a list of people."
+    }
+  ],
+  "sources": [
+    {
+      "label": "dusk bot docs: routines",
+      "url": "/docs/routines"
+    },
+    {
+      "label": "dusk bot docs: files and apps",
+      "url": "/docs/files-and-apps"
+    },
+    {
+      "label": "composio: reddit actions",
+      "url": "https://docs.composio.dev/toolkits/reddit",
+      "checked": "2026-11-20"
+    }
+  ]
+}

@@ -96,6 +96,15 @@ export function createOutbox(prefs: OutboxPrefs, key: string, now: () => number 
       flushing = false;
       return true;
     },
+    waitBehind(sendId) {
+      const index = entries.findIndex((entry) => entry.sendId === sendId);
+      if (index < 0) return false;
+      const { threadId } = entries[index]!;
+      if (!entries.slice(0, index).some((entry) => entry.threadId === threadId && !inFlight.has(entry.sendId) && fresh(entry))) return false;
+      inFlight.delete(sendId);
+      if (send && !flushing) next();
+      return true;
+    },
     async flush(dispatch) {
       await loaded;
       send = dispatch;

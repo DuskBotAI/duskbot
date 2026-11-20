@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 import { lazyScreen, TeamLibraryPanel } from "../lazy-screens";
+import { phoneApp } from "@/lib/store-app";
 import { warmTeamCatalog } from "@/lib/team-catalog-cache";
 import { markTemplatesHandoff, openTemplates } from "../SidebarTemplates";
 import { closeConnectApps, useConnectApps } from "./open";
@@ -43,11 +44,12 @@ export function ConnectAppsHost() {
     return () => clearTimeout(timer);
   }, [first]);
   if (!first) return null;
+  const portalRoot = phoneApp() ? (document.querySelector?.(".dusk-mobile") ?? document.body) : document.body;
   return (
     <>
       {open && createPortal(
         <ConnectAppsWindow page={page} nonce={nonce} onClose={closeConnectApps} onTemplates={() => { closeConnectApps(); if (!openTemplates(true)) { markTemplatesHandoff(); setTemplates(true); } }} />,
-        document.body,
+        portalRoot,
       )}
       {templates && (
         <TeamLibraryPanel returnFocusRef={back} onClose={() => setTemplates(false)} onImported={() => setTemplates(false)} />

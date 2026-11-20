@@ -31,6 +31,7 @@ export const BROKERED_PROVIDERS: readonly BrokeredProvider[] = [
 export const UNBROKERED_KEY_ENV: readonly string[] = [
   "XAI_API_KEY", "MISTRAL_API_KEY", "CEREBRAS_API_KEY", "GROQ_API_KEY", "GREENFERENCE_API_KEY", "META_API_KEY", "MINIMAX_API_KEY", "KIMI_API_KEY", "MOONSHOT_API_KEY",
   "CURSOR_API_KEY", "CURSOR_AUTH_TOKEN", "FACTORY_API_KEY", "CLINE_API_KEY", "OPENCODE_API_KEY", "OPENROUTER_API_KEY",
+  "CODEX_API_KEY",
 ];
 
 export interface BrokerRewrite {
@@ -40,6 +41,8 @@ export interface BrokerRewrite {
   grants: Record<string, BrokerGrant>;
   /** Keys left raw because their CLI has no base-URL setting. */
   unbrokered: string[];
+  /** The command line, with each Codex provider the broker took over pointed at the broker. */
+  args: string[];
 }
 
 /** A key's value that already is a broker token (a re-wrap, a self-check) is left alone. */
@@ -59,9 +62,10 @@ export function usableUpstream(value: string | undefined, fallback: string): str
  * The rewrite for one spawn: `token` is the per-process token the caller minted (the grants here are what it gets), and
  * `port` the broker's port inside the box. Nothing changes for an environment that holds no brokered key.
  */
-export function brokerRewrite(env: Record<string, string>, token: string, port: number): BrokerRewrite {
+export function brokerRewrite(env: Record<string, string>, token: string, port: number, args: readonly string[] = []): BrokerRewrite {
   const out = { ...env };
   const grants: Record<string, BrokerGrant> = {};
+  const outArgs = codexProviderRewrite(args, out, grants, token, port);
   for (const provider of BROKERED_PROVIDERS) {
     const key = out[provider.keyEnv];
     if (!key || isToken(key)) continue;
@@ -74,5 +78,45 @@ export function brokerRewrite(env: Record<string, string>, token: string, port: 
     out[provider.baseUrlEnv] = brokerUrl(port, token, provider.name);
   }
   const unbrokered = UNBROKERED_KEY_ENV.filter((name) => out[name] && !isToken(out[name]!));
-  return { env: out, grants, unbrokered };
+  return { env: out, grants, unbrokered, args: outArgs };
+}
+
+const CODEX_PROVIDER_SETTING = /^model_providers\.([A-Za-z0-9_-]{1,40})\.(base_url|env_key)=(.*)$/;
+
+function tomlString(raw: string): string | null {
+  try {
+    const value: unknown = JSON.parse(raw);
+    return typeof value === "string" ? value : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Codex (0.171) takes no base URL from the environment: each model provider names its address and its key's variable on
+ * the command line (`-c model_providers.<id>.base_url=…`, `-c model_providers.<id>.env_key=…`). A provider whose key is in
+ * the environment becomes grant `codex-<id>`: the key's variable holds the token and the address is the broker's. */
+function codexProviderRewrite(args: readonly string[], env: Record<string, string>, grants: Record<string, BrokerGrant>, token: string, port: number): string[] {
+  const providers = new Map<string, { base?: { at: number; url: string }; envKey?: string }>();
+  for (let i = 0; i + 1 < args.length; i += 1) {
+    if (args[i] !== "-c") continue;
+    const match = CODEX_PROVIDER_SETTING.exec(args[i + 1]!);
+    const value = match ? tomlString(match[3]!) : null;
+    if (!match || value === null) continue;
+    const provider = providers.get(match[1]!) ?? {};
+    if (match[2] === "base_url") provider.base = { at: i + 1, url: value };
+    else provider.envKey = value;
+    providers.set(match[1]!, provider);
+  }
+  const out = [...args];
+  for (const [id, provider] of providers) {
+    const key = provider.envKey ? env[provider.envKey] : undefined;
+    if (!provider.base || !provider.envKey || !key || isToken(key)) continue;
+    const upstream = usableUpstream(provider.base.url, "");
+    if (!upstream || /^http:\/\/127\.0\.0\.1:\d+\/b\//.test(upstream)) continue;
+    const grant = `codex-${id.toLowerCase()}`;
+    grants[grant] = { upstream, headers: { authorization: `Bearer ${key}` } };
+    env[provider.envKey] = token;
+    out[provider.base.at] = `model_providers.${id}.base_url=${JSON.stringify(brokerUrl(port, token, grant))}`;
+  }
+  return out;
 }

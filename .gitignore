@@ -59,3 +59,5 @@ id_ed25519
 # electron/cloud-seal.mjs deps for the packaged app, made by scripts/bundle-cloud-seal.mjs in package:prepare
 electron/seal/deps.bundle.mjs
 apps/site/seo/art/scenes.json
+
+/deploy/.dusk-updater/

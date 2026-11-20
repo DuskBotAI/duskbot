@@ -74,7 +74,8 @@ it("waits for the person, tells them at once, and stops saying nobody answered t
   await expect.poll(run, { timeout: hostTimeout(15_000) }).toMatchObject({ status: "failed", error: stopped });
   await expect.poll(notified, { timeout: hostTimeout(15_000) }).toContainEqual(expect.objectContaining({ kind: "routine-failed", body: `Inbox brief: ${stopped}` }));
   await expect.poll(async () => (await chat()).find((message) => message.id === card.id)?.card?.answered, { timeout: hostTimeout(15_000) }).toBeTruthy();
-  expect((await chat()).some((message) => message.automation)).toBe(false);
+  // the run ran in the bot's own chat, so its one failure line lands there too
+  expect((await chat()).filter((message) => message.automation)).toEqual([expect.objectContaining({ text: `This run didn't finish: ${stopped}`, automation: expect.objectContaining({ failed: true }) })]);
   await expect.poll(async () => (await api("GET", "/api/bots")).bots.find((candidate: any) => candidate.id === bot.id)?.busy, { timeout: hostTimeout(15_000) }).toBe(false);
   expect(answers.some((answer) => answer.behavior === "deny")).toBe(true);
 }, hostTimeout(90_000));

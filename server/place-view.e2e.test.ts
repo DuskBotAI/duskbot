@@ -112,16 +112,15 @@ describe("a cloud computer that can't start, against the real server", () => {
 
   const NO_VPS = "The VPS computer is unavailable; connect a VPS in Settings and retry.";
 
-  it("Works on Cloud with no VPS says to connect one, and points at the Screen panel", async () => {
+  it("Works on Cloud with no VPS goes on without a computer, with no place card (6c14850881)", async () => {
     await start();
     const { bot } = await apiOk("POST", "/api/bots", { name: "Cloud Bot" });
     await apiOk("PATCH", `/api/bots/${bot.id}`, { computer: "cloud" });
     await send(bot.id, bot.threadId, "Open the desktop.");
-    const row = await failedRow(bot.threadId);
-    expect(row.tool.name).toBe(`error: ${NO_VPS} Check it in the Screen panel.`);
-    expect(row.tool.name).not.toMatch(/\x62oat|box|plan/i);
-    expect(row.tool.place).toEqual({ state: "place-failed", params: { bot: "Cloud Bot", cause: NO_VPS }, source: "works-on" });
+    const answered = (rows: any[]) => rows.slice(rows.findIndex((row) => row.text === "Open the desktop.") + 1).some((row) => row.role === "bot" && row.kind === "text");
+    await until(async () => answered(await messages(bot.threadId)), Boolean, "the turn's answer");
     await idle(bot.id);
+    expect((await messages(bot.threadId)).filter((row) => row.tool?.place)).toEqual([]);
   }, 90_000);
 
   it("an automatic pin that fails is cleared, and the row says the conversation is back on Auto", async () => {

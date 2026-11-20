@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { writeFileAtomic } from "./atomic.ts";
+import { serverLine } from "./server-lines.ts";
 import { DEFAULT_BOT_COLOR, DEFAULT_BOT_NAME, defaultBotPerson } from "../shared/default-bot.ts";
 import { takeImportName } from "../shared/import-name.ts";
 import type { BotRecord, Message, Store } from "./store.ts";
@@ -16,26 +17,38 @@ const LEDGER = "default-bot.json";
 /** The colour a new install gave its Dusk before Chrome, which an adopted Dusk trades for Chrome. */
 const STARTER_COLOR = "silver";
 
-export const HELPER_ASKS = ["What are my bots up to?", "Set up a bot for my inbox", "Make me a morning routine", "How do I connect my email?"];
+export const HELPER_ASKS = ["Help me plan my week", "Watch a price for me", "Research something for me"];
 
-export function defaultBotRefusal(name: string): string {
-  return `${name} can't be deleted or archived. To take it off the sidebar, choose Hide in its menu, or turn off "Show ${name} in the sidebar" in Settings → Models, under New bots.`;
+/** Why this helper may not be deleted or archived yet, or null: it stays while it is the Chief of Staff or its
+ * place's only bot. */
+export function defaultBotRefusal(bot: Pick<BotRecord, "id" | "name" | "defaultBot" | "chiefOfStaff">, bots: readonly Pick<BotRecord, "id" | "hidden" | "movedTo">[]): string | null {
+  if (!bot.defaultBot) return null;
+  if (bot.chiefOfStaff) return `${bot.name} is your Chief of Staff. Make another bot the Chief of Staff first.`;
+  if (!bots.some((other) => other.id !== bot.id && !other.hidden && !other.movedTo)) return `${bot.name} is your only bot. Make another bot first, or choose Hide in its menu to take it off the sidebar.`;
+  return null;
 }
 
 /** Why a PATCH may not change this bot so, or null. */
-export function defaultBotPatchRefusal(bot: BotRecord | null, body: Record<string, unknown>): string | null {
+export function defaultBotPatchRefusal(bot: BotRecord | null, body: Record<string, unknown>, bots: readonly BotRecord[] = []): string | null {
   for (const key of ["sidebarHidden", "welcomed"]) if (body[key] !== undefined && typeof body[key] !== "boolean") return `${key} must be true or false`;
   if ((body.sidebarHidden !== undefined || body.welcomed !== undefined) && !bot?.defaultBot) return "Only your helper is hidden this way; archive or delete other bots.";
-  return body.hidden === true && bot?.defaultBot ? defaultBotRefusal(bot.name) : null;
+  if (body.hidden !== true || !bot?.defaultBot) return null;
+  return defaultBotRefusal(body.chiefOfStaff === false ? { ...bot, chiefOfStaff: false } : bot, bots);
 }
 
 export function ownsDefaultBot(bot: BotRecord | null | undefined, email: string | undefined): boolean {
   return Boolean(email && bot?.defaultBot && defaultBotPerson(bot) === email.trim().toLowerCase());
 }
 
-/** The English intro: who Dusk is, what it does here, and that it is looking around (its follow-up comes after, from
- * helper-followup.ts). Clients that know `helperIntro` say it in the viewer's own language. */
+/** The English intro: who Dusk is, what it does here, and what to start with, its options the first jobs. Clients that
+ * know `helperIntro` say it in the viewer's own language. */
 export function helperIntroMessage(bot: Pick<BotRecord, "name" | "chiefOfStaff">, team?: string | null): Omit<Message, "id" | "at"> {
+  // the Chief's own chat opens on one line and the first jobs, as the app shows it
+  if (bot.chiefOfStaff && !team) {
+    const title = serverLine(undefined, "server.helperIntro.chiefTitle", { name: bot.name });
+    const subtitle = serverLine(undefined, "server.helperIntro.start");
+    return { role: "bot", kind: "options", text: `${title} ${subtitle}`, helperIntro: true, card: { title, subtitle, options: [...HELPER_ASKS], fixedOptions: true } };
+  }
   const title = bot.chiefOfStaff ? `Hey! I'm ${bot.name}. I'm new here.` : `Hi! I'm ${bot.name}, your helper for everything here.`;
   const subtitle = [
     bot.chiefOfStaff
@@ -44,7 +57,7 @@ export function helperIntroMessage(bot: Pick<BotRecord, "name" | "chiefOfStaff">
         ? "Ask me how to do anything here. I can set up bots, apps and routines with you."
         : "Ask me how to do anything here. I can set up bots, apps and routines with you, and keep an eye on your day.",
     team ? `On ${team}, I'm here for you and look after your own bots.` : "",
-    "I'm taking a look around to see if there's anything I can pick up for you. I'll follow up in a moment.",
+    serverLine(undefined, "server.helperIntro.start"),
   ].filter(Boolean).join(" ");
   return { role: "bot", kind: "options", text: `${title} ${subtitle}`, helperIntro: true, card: { title, subtitle, options: [...HELPER_ASKS], fixedOptions: true } };
 }

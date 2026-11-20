@@ -1,0 +1,2302 @@
+{
+  "toolkit": "reddit",
+  "name": "Reddit",
+  "version": "20261116_00",
+  "description": "Reddit is a social news platform with user-driven communities (subreddits), offering content sharing, discussions, and viral marketing opportunities for brands",
+  "managed_sign_in": true,
+  "auth": [
+    "OAuth2"
+  ],
+  "tools_count": 50,
+  "triggers_count": 0,
+  "tools": [
+    {
+      "name": "Configure flair template",
+      "slug": "REDDIT_CONFIGURE_FLAIR_TEMPLATE",
+      "kind": "write",
+      "description": "Create a subreddit flair template, or update one by template ID. Requires the `modflair` OAuth scope (not granted by default) and moderator permissions on the subreddit. Updates overwrite the whole template, so supply every property whose current value must be preserved.",
+      "inputs": [
+        {
+          "name": "text",
+          "type": "string",
+          "required": false,
+          "about": "Template display text, up to 64 characters. Required for both creation and update because updates overwrite the whole template."
+        },
+        {
+          "name": "mod_only",
+          "type": "boolean",
+          "required": false,
+          "about": "Whether only moderators may apply this template."
+        },
+        {
+          "name": "css_class",
+          "type": "string",
+          "required": false,
+          "about": "Legacy subreddit CSS image class associated with the template."
+        },
+        {
+          "name": "subreddit",
+          "type": "string",
+          "required": true,
+          "about": "Moderated subreddit without the 'r/' prefix."
+        },
+        {
+          "name": "flair_type",
+          "type": "string",
+          "required": false,
+          "about": "Whether the template applies to users or posts. Required for both creation and update because updates overwrite the whole template."
+        },
+        {
+          "name": "max_emojis",
+          "type": "integer",
+          "required": false,
+          "about": "Maximum number of emojis allowed in rich-text flair (1-10)."
+        },
+        {
+          "name": "text_color",
+          "type": "string",
+          "required": false,
+          "about": "Color used to render the flair text."
+        },
+        {
+          "name": "text_editable",
+          "type": "boolean",
+          "required": false,
+          "about": "Whether users may edit the template text when applying it."
+        },
+        {
+          "name": "background_color",
+          "type": "string",
+          "required": false,
+          "about": "Background color as 'transparent' or a 6-digit RGB hex color such as '#AABBCC'."
+        },
+        {
+          "name": "allowable_content",
+          "type": "string",
+          "required": false,
+          "about": "Content users may put in the flair: text, emoji, or both."
+        },
+        {
+          "name": "flair_template_id",
+          "type": "string",
+          "required": false,
+          "about": "Existing template ID to update; omit to create a template."
+        }
+      ],
+      "scopes": [
+        "modflair"
+      ],
+      "tags": [
+        "openWorldHint",
+        "createHint",
+        "updateHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Create a Reddit post",
+      "slug": "REDDIT_CREATE_REDDIT_POST",
+      "kind": "send",
+      "description": "Creates a text or link post in a specified subreddit, optionally applying flair. Some subreddit validation failures return `success: false` with details; successful submission does not guarantee the post remains publicly visible.",
+      "inputs": [
+        {
+          "name": "url",
+          "type": "string",
+          "required": false,
+          "about": "The URL for a 'link' post. Required if `kind` is 'link'."
+        },
+        {
+          "name": "kind",
+          "type": "string",
+          "required": false,
+          "about": "The type of the post. Use 'self' for a text-based post (when providing 'text') or 'link' for a post that links to an external URL (when providing 'url'). If omitted, it is automatically inferred: 'self' when 'text' is provided, 'link' when 'url' is provided."
+        },
+        {
+          "name": "text",
+          "type": "string",
+          "required": false,
+          "about": "The markdown-formatted text content for a 'self' post. Required if `kind` is 'self'. Body must not exceed ~40,000 characters."
+        },
+        {
+          "name": "title",
+          "type": "string",
+          "required": true,
+          "about": "The title of the post. Must be 300 characters or less."
+        },
+        {
+          "name": "flair_id",
+          "type": "string",
+          "required": false,
+          "about": "ID of the post flair template (UUID format). Must be a valid flair template ID that exists for this specific subreddit. To get valid flair IDs, first use LIST_SUBREDDIT_POST_FLAIRS action for the target subreddit. Do not pass generic strings like 'general' or 'news' - these are not universal flair I"
+        },
+        {
+          "name": "subreddit",
+          "type": "string",
+          "required": true,
+          "about": "The name of the subreddit (without the 'r/' prefix) where the post will be submitted."
+        }
+      ],
+      "scopes": [
+        "submit"
+      ],
+      "tags": [
+        "openWorldHint",
+        "createHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Delete Reddit comment",
+      "slug": "REDDIT_DELETE_REDDIT_COMMENT",
+      "kind": "write",
+      "description": "Deletes a Reddit comment, identified by its fullname ID, if it was authored by the authenticated user. Deletion is permanent and irreversible.",
+      "inputs": [
+        {
+          "name": "id",
+          "type": "string",
+          "required": true,
+          "about": "The full 'thing ID' (fullname, e.g., 't1_c0s4w1c') of the comment to delete; typically starts with 't1_'."
+        }
+      ],
+      "scopes": [
+        "edit"
+      ],
+      "tags": [
+        "destructiveHint",
+        "openWorldHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Delete a Reddit post",
+      "slug": "REDDIT_DELETE_REDDIT_POST",
+      "kind": "send",
+      "description": "Permanently and irreversibly deletes a Reddit post by its ID. Confirm with the user before calling. Only works on posts authored by the authenticated account; attempting to delete another user's post will fail.",
+      "inputs": [
+        {
+          "name": "id",
+          "type": "string",
+          "required": true,
+          "about": "The full name (fullname) of the Reddit post to be deleted. This ID must start with 't3_' followed by the post's unique base36 identifier."
+        }
+      ],
+      "scopes": [
+        "edit"
+      ],
+      "tags": [
+        "destructiveHint",
+        "openWorldHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Edit comment or post",
+      "slug": "REDDIT_EDIT_REDDIT_COMMENT_OR_POST",
+      "kind": "send",
+      "description": "Edits the body text of the authenticated user's own existing comment or self-post on Reddit; cannot edit link posts or titles.",
+      "inputs": [
+        {
+          "name": "text",
+          "type": "string",
+          "required": true,
+          "about": "The new raw markdown text for the body of the comment or self-post."
+        },
+        {
+          "name": "thing_id",
+          "type": "string",
+          "required": true,
+          "about": "The full name (fullname) of the comment or self-post to edit. This is a combination of a prefix (e.g., 't1_' for comment, 't3_' for post) and the item's ID."
+        }
+      ],
+      "scopes": [
+        "edit"
+      ],
+      "tags": [
+        "important",
+        "openWorldHint",
+        "updateHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Expand More Comments",
+      "slug": "REDDIT_EXPAND_MORE_COMMENTS",
+      "kind": "write",
+      "description": "Resolve up to 20 child IDs from a `more` placeholder returned by Retrieve Comments for a Post. Pass the placeholder's `children`, the post fullname in `link_id`, and optionally its bare `data.id` as `more_id`. Reddit permits only one concurrent request to this endpoint, so call expansions serially.",
+      "inputs": [
+        {
+          "name": "sort",
+          "type": "string",
+          "required": false,
+          "about": "Comment ordering to use while expanding the placeholder. Omit to use Reddit's default."
+        },
+        {
+          "name": "link_id",
+          "type": "string",
+          "required": true,
+          "about": "Fullname of the post whose comment tree is being expanded, including the t3_ prefix."
+        },
+        {
+          "name": "more_id",
+          "type": "string",
+          "required": false,
+          "about": "Bare ID from the source more-comments object's data.id field, sent to Reddit as id."
+        },
+        {
+          "name": "children",
+          "type": "array",
+          "required": true,
+          "about": "One to 20 bare comment IDs from a more-comments placeholder's children array. Do not include t1_ prefixes."
+        }
+      ],
+      "scopes": [
+        "read"
+      ],
+      "tags": [
+        "readOnlyHint",
+        "openWorldHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get Reddit listing by sort",
+      "slug": "REDDIT_GET",
+      "kind": "read",
+      "description": "Tool to retrieve a listing of Reddit posts sorted by the specified criteria (hot, new, top, rising, controversial, best). Use when you need to get posts from the Reddit front page or all of Reddit with a specific sort order. Supports pagination and time filtering for top and controversial sorts. For new controversial-post workflows, prefer GET_CONTROVERSIAL; this action retains controversial support for backward compatibility. Use GET_RANDOM for random posts.",
+      "inputs": [
+        {
+          "name": "show",
+          "type": "string",
+          "required": false,
+          "about": "The string 'all' to show all posts including filtered ones."
+        },
+        {
+          "name": "sort",
+          "type": "string",
+          "required": true,
+          "about": "The sorting method for results. Valid values: hot, new, top, rising, controversial, best. For new controversial-post workflows, prefer the dedicated GET_CONTROVERSIAL action; this action continues to support controversial for backward compatibility. Note: 'random' is NOT supported here - use the GET"
+        },
+        {
+          "name": "after",
+          "type": "string",
+          "required": false,
+          "about": "Fullname of a thing for pagination (loads posts after this item)."
+        },
+        {
+          "name": "count",
+          "type": "integer",
+          "required": false,
+          "about": "A positive integer representing the number of items already seen (default: 0)."
+        },
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "about": "The maximum number of items desired (default: 25, maximum: 100)."
+        },
+        {
+          "name": "before",
+          "type": "string",
+          "required": false,
+          "about": "Fullname of a thing for pagination (loads posts before this item)."
+        },
+        {
+          "name": "time_filter",
+          "type": "string",
+          "required": false,
+          "about": "Time filter for the 'top' and 'controversial' sorts. Valid values: hour, day, week, month, year, all."
+        }
+      ],
+      "scopes": [
+        "read"
+      ],
+      "tags": [
+        "important",
+        "readOnlyHint",
+        "openWorldHint",
+        "browsing_and_discovery"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get authenticated karma breakdown",
+      "slug": "REDDIT_GET_AUTHENTICATED_KARMA_BREAKDOWN",
+      "kind": "read",
+      "description": "Get the connected Reddit account's karma grouped by subreddit. Requires the `mysubreddits` OAuth scope, which is not granted by default. Reconnect with it if you get a 403.",
+      "inputs": [
+        {
+          "name": "0",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "1",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "2",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "3",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "4",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "5",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "6",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "7",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "8",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "9",
+          "type": "",
+          "required": false,
+          "about": ""
+        }
+      ],
+      "scopes": [
+        "mysubreddits"
+      ],
+      "tags": [
+        "readOnlyHint",
+        "openWorldHint",
+        "browsing_and_discovery"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get controversial posts from all subreddits",
+      "slug": "REDDIT_GET_CONTROVERSIAL_POSTS",
+      "kind": "read",
+      "description": "Tool to retrieve controversial posts from all subreddits with time filters. Use when you need to find the most controversial posts across Reddit from a specific time period (hour, day, week, month, year, or all-time). Returns a paginated listing of posts ranked by controversy within the specified time frame.",
+      "inputs": [
+        {
+          "name": "t",
+          "type": "string",
+          "required": false,
+          "about": "Time filter for ranking controversial posts. Accepts 't' or the compatibility alias 'time_filter'. Valid values: 'hour', 'day', 'week', 'month', 'year', or 'all' (default)."
+        },
+        {
+          "name": "show",
+          "type": "string",
+          "required": false,
+          "about": "Display filtering option. Use 'all' to include items Reddit would normally omit, such as hidden posts."
+        },
+        {
+          "name": "after",
+          "type": "string",
+          "required": false,
+          "about": "Fullname of a thing to use as anchor for pagination. Returns results that occur after this fullname in the listing."
+        },
+        {
+          "name": "count",
+          "type": "integer",
+          "required": false,
+          "about": "Number of items already seen, used by Reddit to number paginated listings."
+        },
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "about": "Maximum number of controversial posts to return. Default is 25, maximum is 100."
+        },
+        {
+          "name": "before",
+          "type": "string",
+          "required": false,
+          "about": "Fullname of a thing to use as anchor for pagination. Returns results that occur before this fullname in the listing."
+        }
+      ],
+      "scopes": [
+        "read"
+      ],
+      "tags": [
+        "important",
+        "readOnlyHint",
+        "openWorldHint",
+        "browsing_and_discovery"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get inbox message",
+      "slug": "REDDIT_GET_INBOX_MESSAGE",
+      "kind": "read",
+      "description": "Retrieve one private message from the connected account's Reddit inbox.",
+      "inputs": [
+        {
+          "name": "message_id",
+          "type": "string",
+          "required": true,
+          "about": "Bare base36 ID of the inbox message, without the t4_ prefix."
+        }
+      ],
+      "scopes": [
+        "privatemessages"
+      ],
+      "tags": [
+        "readOnlyHint",
+        "openWorldHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get user preferences",
+      "slug": "REDDIT_GET_ME_PREFS",
+      "kind": "read",
+      "description": "Tool to retrieve preference settings of the logged in user. Use when you need to check user preferences or settings.",
+      "inputs": [
+        {
+          "name": "fields",
+          "type": "string",
+          "required": false,
+          "about": "A comma-separated list of preference fields to return. If not specified, all preference fields are returned. Supported fields include: threaded_messages, hide_downs, hide_ups, activity_relevant_ads, nightmode, compress, beta, media, media_preview, label_nsfw, over_18, search_include_over_18, hide_ad"
+        }
+      ],
+      "scopes": [
+        "identity"
+      ],
+      "tags": [
+        "readOnlyHint",
+        "openWorldHint",
+        "user_accounts_and_profiles"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get modmail conversation",
+      "slug": "REDDIT_GET_MODMAIL_CONVERSATION",
+      "kind": "read",
+      "description": "Retrieve one moderator mail conversation and its related objects.",
+      "inputs": [
+        {
+          "name": "conversation_id",
+          "type": "string",
+          "required": true,
+          "about": "Base36 moderator mail conversation ID."
+        }
+      ],
+      "scopes": [
+        "modmail"
+      ],
+      "tags": [
+        "readOnlyHint",
+        "openWorldHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get new posts from subreddit (Deprecated)",
+      "slug": "REDDIT_GET_NEW",
+      "kind": "read",
+      "description": "DEPRECATED: Use RetrieveRedditPost instead. Tool to retrieve newest posts from a subreddit sorted by creation time. Use when you need to find the most recently submitted posts to discover fresh content. Returns a paginated listing of posts ranked by newest first.",
+      "inputs": [
+        {
+          "name": "after",
+          "type": "string",
+          "required": false,
+          "about": "Fullname of a thing to use as anchor for pagination. Returns results that occur after this fullname in the listing."
+        },
+        {
+          "name": "count",
+          "type": "integer",
+          "required": false,
+          "about": "Used by Reddit to number listings after the first page for pagination. Represents the number of items already seen."
+        },
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "about": "Maximum number of new posts to return. Default is 25, maximum is 100."
+        },
+        {
+          "name": "before",
+          "type": "string",
+          "required": false,
+          "about": "Fullname of a thing to use as anchor for pagination. Returns results that occur before this fullname in the listing."
+        },
+        {
+          "name": "subreddit",
+          "type": "string",
+          "required": true,
+          "about": "Subreddit name (without 'r/' prefix). Must contain only letters, numbers, and underscores. No spaces or special characters allowed. Case-insensitive."
+        }
+      ],
+      "scopes": [
+        "read"
+      ],
+      "tags": [
+        "important",
+        "readOnlyHint",
+        "openWorldHint",
+        "browsing_and_discovery",
+        "deprecated"
+      ],
+      "deprecated": true
+    },
+    {
+      "name": "Get Reddit posts by fullname",
+      "slug": "REDDIT_GET_POSTS_BY_FULLNAME",
+      "kind": "read",
+      "description": "Retrieve Reddit posts directly by their t3 fullnames.",
+      "inputs": [
+        {
+          "name": "fullnames",
+          "type": "array",
+          "required": true,
+          "about": "One to 100 Reddit post fullnames to retrieve."
+        }
+      ],
+      "scopes": [
+        "read"
+      ],
+      "tags": [
+        "important",
+        "readOnlyHint",
+        "openWorldHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get random Reddit post",
+      "slug": "REDDIT_GET_RANDOM",
+      "kind": "read",
+      "description": "Retrieve a randomly selected post from a batch of up to 100 hot posts in a specified subreddit, or from r/all if no subreddit is specified.",
+      "inputs": [
+        {
+          "name": "subreddit",
+          "type": "string",
+          "required": false,
+          "about": "Name of the subreddit to get a random post from. If not specified, returns a random post from all of Reddit. Do not include 'r/' prefix."
+        }
+      ],
+      "scopes": [
+        "read"
+      ],
+      "tags": [
+        "readOnlyHint",
+        "openWorldHint",
+        "browsing_and_discovery"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get user information",
+      "slug": "REDDIT_GET_REDDIT_USER_ABOUT",
+      "kind": "read",
+      "description": "Retrieves information about a specified Reddit user account, including karma scores and gold status. Use when you need to get profile information for any public Reddit user.",
+      "inputs": [
+        {
+          "name": "username",
+          "type": "string",
+          "required": true,
+          "about": "The name of an existing Reddit user to retrieve information about. Do not include 'u/' prefix. Use 'me' to get information about the currently authenticated user."
+        }
+      ],
+      "scopes": [
+        "identity",
+        "read"
+      ],
+      "tags": [
+        "important",
+        "readOnlyHint",
+        "openWorldHint",
+        "user_accounts_and_profiles"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get top posts from subreddit (Deprecated)",
+      "slug": "REDDIT_GET_R_TOP",
+      "kind": "read",
+      "description": "DEPRECATED: Use RetrieveRedditPost with sort='top' and time_filter set instead - it now supports the same hour/day/week/month/year/all time filtering. Tool to retrieve top-rated posts from a subreddit with time filters. Use when you need to find the most popular posts from a specific time period (hour, day, week, month, year, or all-time). Returns a paginated listing of posts ranked by score within the specified time frame.",
+      "inputs": [
+        {
+          "name": "t",
+          "type": "string",
+          "required": false,
+          "about": "Time filter for ranking top posts. Specifies the time period for top posts: 'hour', 'day', 'week', 'month', 'year', or 'all' (default)."
+        },
+        {
+          "name": "show",
+          "type": "string",
+          "required": false,
+          "about": "Display filtering option. Use 'all' to return items that would normally be omitted (e.g., posts you have hidden)."
+        },
+        {
+          "name": "after",
+          "type": "string",
+          "required": false,
+          "about": "Fullname of a thing to use as anchor for pagination. Returns results that occur after this fullname in the listing."
+        },
+        {
+          "name": "count",
+          "type": "integer",
+          "required": false,
+          "about": "Used by Reddit to number listings after the first page for pagination. Represents the number of items already seen."
+        },
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "about": "Maximum number of top posts to return. Default is 25, maximum is 100."
+        },
+        {
+          "name": "before",
+          "type": "string",
+          "required": false,
+          "about": "Fullname of a thing to use as anchor for pagination. Returns results that occur before this fullname in the listing."
+        },
+        {
+          "name": "sr_detail",
+          "type": "boolean",
+          "required": false,
+          "about": "Expand subreddits detail in response. Set to true to get more detailed subreddit information."
+        },
+        {
+          "name": "subreddit",
+          "type": "string",
+          "required": true,
+          "about": "Subreddit name (without 'r/' prefix). Must contain only letters, numbers, and underscores. No spaces or special characters allowed. Case-insensitive."
+        }
+      ],
+      "scopes": [
+        "read"
+      ],
+      "tags": [
+        "important",
+        "readOnlyHint",
+        "openWorldHint",
+        "browsing_and_discovery",
+        "deprecated"
+      ],
+      "deprecated": true
+    },
+    {
+      "name": "Get OAuth scopes",
+      "slug": "REDDIT_GET_SCOPES",
+      "kind": "read",
+      "description": "Tool to retrieve all available OAuth scopes supported by the Reddit API. Use when you need to understand what permissions are available or check scope definitions.",
+      "inputs": [
+        {
+          "name": "0",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "1",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "2",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "3",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "4",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "5",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "6",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "7",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "8",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "9",
+          "type": "",
+          "required": false,
+          "about": ""
+        }
+      ],
+      "scopes": "$undefined",
+      "tags": [
+        "readOnlyHint",
+        "openWorldHint",
+        "authentication_and_authorization"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get subreddit metadata",
+      "slug": "REDDIT_GET_SUBREDDIT_METADATA",
+      "kind": "read",
+      "description": "Retrieve one exact subreddit's public profile metadata, including descriptions, subscriber count, settings, and connected-user relationship fields.",
+      "inputs": [
+        {
+          "name": "subreddit",
+          "type": "string",
+          "required": true,
+          "about": "Subreddit name without the r/ prefix."
+        }
+      ],
+      "scopes": [
+        "read"
+      ],
+      "tags": [
+        "readOnlyHint",
+        "openWorldHint",
+        "browsing_and_discovery"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get subreddit rules",
+      "slug": "REDDIT_GET_SUBREDDIT_RULES",
+      "kind": "read",
+      "description": "Fetch the explicit posting rules for a subreddit to ensure compliance before posting or commenting. Use when you need to verify content meets community guidelines or explain subreddit requirements to users.",
+      "inputs": [
+        {
+          "name": "raw_json",
+          "type": "boolean",
+          "required": false,
+          "about": "If True, prevents HTML encoding of special characters in rule descriptions. Recommended to set to True for cleaner text output."
+        },
+        {
+          "name": "subreddit",
+          "type": "string",
+          "required": true,
+          "about": "Name of the subreddit (without 'r/' prefix) for which to retrieve posting rules."
+        }
+      ],
+      "scopes": [
+        "read"
+      ],
+      "tags": [
+        "readOnlyHint",
+        "openWorldHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Search subreddits",
+      "slug": "REDDIT_GET_SUBREDDITS_SEARCH",
+      "kind": "read",
+      "description": "Tool to search subreddits by title and description. Use when you need to find subreddits matching a specific topic or keyword. Returns a paginated listing of subreddits with their details including subscribers, descriptions, and other metadata.",
+      "inputs": [
+        {
+          "name": "q",
+          "type": "string",
+          "required": true,
+          "about": "A search query term to search subreddit titles and descriptions. Use specific keywords to find relevant subreddits."
+        },
+        {
+          "name": "show",
+          "type": "string",
+          "required": false,
+          "about": "The string 'all' to show all subreddits including those the user might have filtered."
+        },
+        {
+          "name": "sort",
+          "type": "string",
+          "required": false,
+          "about": "Sort order for the search results. 'relevance' sorts by relevance to the query (default). 'activity' sorts by subreddit activity."
+        },
+        {
+          "name": "after",
+          "type": "string",
+          "required": false,
+          "about": "Fullname of a thing - pagination cursor for the next page. Use the 'after' value from the previous response to get the next set of results."
+        },
+        {
+          "name": "count",
+          "type": "integer",
+          "required": false,
+          "about": "A positive integer (default: 0) representing the number of items already seen in previous pages. Used for pagination tracking."
+        },
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "about": "The maximum number of subreddits to return. Default is 25. Maximum allowed value is 100."
+        },
+        {
+          "name": "before",
+          "type": "string",
+          "required": false,
+          "about": "Fullname of a thing - pagination cursor for the previous page. Use the 'before' value from the previous response to get the previous set of results."
+        },
+        {
+          "name": "sr_detail",
+          "type": "boolean",
+          "required": false,
+          "about": "Expand subreddits with additional details. Set to true to get more detailed information about each subreddit."
+        },
+        {
+          "name": "show_users",
+          "type": "boolean",
+          "required": false,
+          "about": "Boolean value to include user results in the search. Set to true to include users matching the search query."
+        }
+      ],
+      "scopes": [
+        "read"
+      ],
+      "tags": [
+        "important",
+        "readOnlyHint",
+        "openWorldHint",
+        "browsing_and_discovery"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get subreddit traffic",
+      "slug": "REDDIT_GET_SUBREDDIT_TRAFFIC",
+      "kind": "read",
+      "description": "Return hourly, daily, and monthly traffic for a moderated subreddit. Requires the `modconfig` OAuth scope (not granted by default) and moderator access to the subreddit.",
+      "inputs": [
+        {
+          "name": "subreddit",
+          "type": "string",
+          "required": true,
+          "about": "Subreddit moderated by the connected account, without the 'r/' prefix."
+        }
+      ],
+      "scopes": [
+        "modconfig"
+      ],
+      "tags": [
+        "readOnlyHint",
+        "openWorldHint",
+        "browsing_and_discovery"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get Reddit user comments RSS",
+      "slug": "REDDIT_GET_USER_COMMENTS_RSS",
+      "kind": "read",
+      "description": "Retrieve a named Reddit user's comments as a raw Atom feed string.",
+      "inputs": [
+        {
+          "name": "show",
+          "type": "string",
+          "required": false,
+          "about": "Set to 'given' to preserve Reddit's given-context display mode."
+        },
+        {
+          "name": "sort",
+          "type": "string",
+          "required": false,
+          "about": "Order in which Reddit returns the user's comments."
+        },
+        {
+          "name": "after",
+          "type": "string",
+          "required": false,
+          "about": "Fullname cursor used to fetch the next page of comments."
+        },
+        {
+          "name": "count",
+          "type": "integer",
+          "required": false,
+          "about": "Number of comments already seen in the paginated feed."
+        },
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "about": "Maximum number of comments to include in the feed (1-100)."
+        },
+        {
+          "name": "before",
+          "type": "string",
+          "required": false,
+          "about": "Fullname cursor used to fetch the previous page of comments."
+        },
+        {
+          "name": "context",
+          "type": "integer",
+          "required": false,
+          "about": "Number of parent comments to include for each comment (2-10)."
+        },
+        {
+          "name": "username",
+          "type": "string",
+          "required": true,
+          "about": "Reddit username whose comments to retrieve, without the 'u/' prefix."
+        },
+        {
+          "name": "item_type",
+          "type": "string",
+          "required": false,
+          "about": "Reddit Thing category filter; sent to Reddit as 'type'."
+        },
+        {
+          "name": "sr_detail",
+          "type": "boolean",
+          "required": false,
+          "about": "Whether to expand subreddit details in feed entries."
+        },
+        {
+          "name": "time_filter",
+          "type": "string",
+          "required": false,
+          "about": "Time window used with applicable sort orders; sent to Reddit as 't'."
+        }
+      ],
+      "scopes": [
+        "history"
+      ],
+      "tags": [
+        "readOnlyHint",
+        "openWorldHint",
+        "user_accounts_and_profiles"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get user flair",
+      "slug": "REDDIT_GET_USER_FLAIR",
+      "kind": "read",
+      "description": "Fetches the list of user flair assignments for a given subreddit. Returns paginated results with user flair details. Returned flair_id values are scoped to the specific subreddit and must not be reused across different subreddits.",
+      "inputs": [
+        {
+          "name": "after",
+          "type": "string",
+          "required": false,
+          "about": "User ID to use as the anchor for fetching the next page of results. Use the 'next' value from a previous response."
+        },
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "about": "Maximum number of user flair entries to return per page. Reddit default is 25, maximum is 1000."
+        },
+        {
+          "name": "before",
+          "type": "string",
+          "required": false,
+          "about": "User ID to use as the anchor for fetching the previous page of results. Use the 'prev' value from a previous response."
+        },
+        {
+          "name": "subreddit",
+          "type": "string",
+          "required": true,
+          "about": "Name of the subreddit (e.g., 'pics', 'gaming') for which to retrieve user flair assignments. Do not include 'r/' prefix or URL paths — bare name only."
+        }
+      ],
+      "scopes": [
+        "modflair"
+      ],
+      "tags": [
+        "readOnlyHint",
+        "openWorldHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Check username availability",
+      "slug": "REDDIT_GET_USERNAME_AVAILABLE",
+      "kind": "read",
+      "description": "Tool to check whether a username is available for registration on Reddit. Use when you need to verify if a username can be used to create a new account.",
+      "inputs": [
+        {
+          "name": "user",
+          "type": "string",
+          "required": true,
+          "about": "The username to check for availability. Must be a valid, unused username string. Usernames are case-insensitive and must be between 3-20 characters."
+        }
+      ],
+      "scopes": [
+        "identity"
+      ],
+      "tags": [
+        "readOnlyHint",
+        "openWorldHint",
+        "user_accounts_and_profiles"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get subreddit wiki page",
+      "slug": "REDDIT_GET_WIKI_PAGE",
+      "kind": "read",
+      "description": "Retrieve a subreddit wiki page's rendered and Markdown content, optionally at a historical revision or as a comparison between two revisions.",
+      "inputs": [
+        {
+          "name": "page",
+          "type": "string",
+          "required": true,
+          "about": "Wiki page path, including nested paths such as config/sidebar. Spaces are normalized to underscores and names are case-insensitive."
+        },
+        {
+          "name": "raw_json",
+          "type": "boolean",
+          "required": false,
+          "about": "Whether Reddit should return raw characters instead of HTML-escaped JSON content."
+        },
+        {
+          "name": "revision",
+          "type": "string",
+          "required": false,
+          "about": "Wiki revision ID to retrieve instead of the current page."
+        },
+        {
+          "name": "subreddit",
+          "type": "string",
+          "required": true,
+          "about": "Subreddit name without the r/ prefix."
+        },
+        {
+          "name": "comparison_revision",
+          "type": "string",
+          "required": false,
+          "about": "Second wiki revision ID to compare with revision. Provide revision as well to retrieve a diff."
+        }
+      ],
+      "scopes": [
+        "wikiread"
+      ],
+      "tags": [
+        "readOnlyHint",
+        "openWorldHint",
+        "browsing_and_discovery"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "List custom Reddit feed",
+      "slug": "REDDIT_LIST_CUSTOM_FEED",
+      "kind": "read",
+      "description": "List posts from a public custom Reddit feed owned by a named user.",
+      "inputs": [
+        {
+          "name": "show",
+          "type": "string",
+          "required": false,
+          "about": "Set to 'all' to include items that would otherwise be filtered."
+        },
+        {
+          "name": "sort",
+          "type": "string",
+          "required": false,
+          "about": "Feed ordering: hot, new, rising, controversial, or top."
+        },
+        {
+          "name": "after",
+          "type": "string",
+          "required": false,
+          "about": "Fullname cursor from data.after in the previous response."
+        },
+        {
+          "name": "count",
+          "type": "integer",
+          "required": false,
+          "about": "Number of items already seen in the listing, starting at 0."
+        },
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "about": "Maximum number of posts to return, from 1 to 100."
+        },
+        {
+          "name": "before",
+          "type": "string",
+          "required": false,
+          "about": "Fullname cursor from data.before in the previous response."
+        },
+        {
+          "name": "username",
+          "type": "string",
+          "required": true,
+          "about": "Username of the custom feed owner, without a 'u/' prefix."
+        },
+        {
+          "name": "sr_detail",
+          "type": "boolean",
+          "required": false,
+          "about": "Whether to include subreddit details with each post."
+        },
+        {
+          "name": "custom_feed",
+          "type": "string",
+          "required": true,
+          "about": "Custom feed name, without '/user/.../m/' path prefixes."
+        },
+        {
+          "name": "time_filter",
+          "type": "string",
+          "required": false,
+          "about": "Time window for top or controversial posts."
+        }
+      ],
+      "scopes": [
+        "read"
+      ],
+      "tags": [
+        "important",
+        "readOnlyHint",
+        "openWorldHint",
+        "browsing_and_discovery"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "List inbox messages",
+      "slug": "REDDIT_LIST_INBOX_MESSAGES",
+      "kind": "read",
+      "description": "List one inbox view for the connected Reddit account. Use `data.after` as `after` on the next call to continue pagination.",
+      "inputs": [
+        {
+          "name": "mid",
+          "type": "string",
+          "required": false,
+          "about": "Message identifier used by Reddit to anchor or select the listing."
+        },
+        {
+          "name": "show",
+          "type": "string",
+          "required": false,
+          "about": "Set to 'all' to include entries Reddit would otherwise filter from the listing."
+        },
+        {
+          "name": "after",
+          "type": "string",
+          "required": false,
+          "about": "Fullname cursor from data.after used to fetch the next page."
+        },
+        {
+          "name": "count",
+          "type": "integer",
+          "required": false,
+          "about": "Number of entries already seen, used by Reddit to number paginated listings."
+        },
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "about": "Maximum number of inbox entries to return (1-100)."
+        },
+        {
+          "name": "before",
+          "type": "string",
+          "required": false,
+          "about": "Fullname cursor from data.before used to fetch the previous page."
+        },
+        {
+          "name": "sr_detail",
+          "type": "boolean",
+          "required": false,
+          "about": "Whether to expand subreddit details in each returned entry."
+        },
+        {
+          "name": "inbox_view",
+          "type": "string",
+          "required": true,
+          "about": "Inbox view to list: all inbox entries, unread entries, sent messages, private messages, or comment notifications."
+        },
+        {
+          "name": "max_replies",
+          "type": "integer",
+          "required": false,
+          "about": "Maximum number of replies to expand for each returned message (0-300)."
+        }
+      ],
+      "scopes": [
+        "privatemessages"
+      ],
+      "tags": [
+        "readOnlyHint",
+        "openWorldHint",
+        "browsing_and_discovery"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "List inbox mentions",
+      "slug": "REDDIT_LIST_INBOX_NOTIFICATIONS",
+      "kind": "read",
+      "description": "List username mentions from the connected account's inbox. Use `data.after` as `after` on the next call to continue pagination.",
+      "inputs": [
+        {
+          "name": "mid",
+          "type": "string",
+          "required": false,
+          "about": "Fullname of the inbox item to target or expand, including its t1_ or t4_ prefix."
+        },
+        {
+          "name": "show",
+          "type": "string",
+          "required": false,
+          "about": "Set to 'all' to include inbox items Reddit would otherwise filter."
+        },
+        {
+          "name": "after",
+          "type": "string",
+          "required": false,
+          "about": "Fullname cursor from data.after used to fetch the next page."
+        },
+        {
+          "name": "count",
+          "type": "integer",
+          "required": false,
+          "about": "Number of inbox items already seen, used by Reddit to number paginated listings."
+        },
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "about": "Maximum number of inbox items to return (1-100)."
+        },
+        {
+          "name": "before",
+          "type": "string",
+          "required": false,
+          "about": "Fullname cursor from data.before used to fetch the previous page."
+        },
+        {
+          "name": "sr_detail",
+          "type": "boolean",
+          "required": false,
+          "about": "Whether to expand subreddit details in returned inbox items."
+        },
+        {
+          "name": "max_replies",
+          "type": "integer",
+          "required": false,
+          "about": "Maximum number of threaded replies to include for each inbox item (0-300)."
+        }
+      ],
+      "scopes": [
+        "privatemessages"
+      ],
+      "tags": [
+        "readOnlyHint",
+        "openWorldHint",
+        "messages_and_notifications"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "List moderation log",
+      "slug": "REDDIT_LIST_MODERATION_LOG",
+      "kind": "read",
+      "description": "List moderation audit events for a subreddit moderated by the account. Requires the `modlog` OAuth scope (not granted by default) and moderator access to the subreddit.",
+      "inputs": [
+        {
+          "name": "show",
+          "type": "string",
+          "required": false,
+          "about": "Set to 'all' to include moderation events Reddit would otherwise filter."
+        },
+        {
+          "name": "after",
+          "type": "string",
+          "required": false,
+          "about": "ModAction cursor from data.after used to fetch the next page."
+        },
+        {
+          "name": "count",
+          "type": "integer",
+          "required": false,
+          "about": "Number of moderation events already seen in the listing."
+        },
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "about": "Maximum number of moderation events to return (1-100)."
+        },
+        {
+          "name": "action",
+          "type": "string",
+          "required": false,
+          "about": "Restrict results to a Reddit moderation action type."
+        },
+        {
+          "name": "before",
+          "type": "string",
+          "required": false,
+          "about": "ModAction cursor from data.before used to fetch the previous page."
+        },
+        {
+          "name": "moderator",
+          "type": "string",
+          "required": false,
+          "about": "Restrict results to one moderator username, without the 'u/' prefix."
+        },
+        {
+          "name": "sr_detail",
+          "type": "boolean",
+          "required": false,
+          "about": "Whether to expand subreddit details in returned moderation events."
+        },
+        {
+          "name": "subreddit",
+          "type": "string",
+          "required": true,
+          "about": "Subreddit moderated by the connected account, without the 'r/' prefix."
+        }
+      ],
+      "scopes": [
+        "modlog"
+      ],
+      "tags": [
+        "readOnlyHint",
+        "openWorldHint",
+        "browsing_and_discovery"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "List moderation queue",
+      "slug": "REDDIT_LIST_MODERATION_QUEUE",
+      "kind": "read",
+      "description": "List one moderator review queue for a subreddit. Use `data.after` as `after` on the next call to continue pagination. The connected account must have the `posts` moderator permission for the requested subreddit.",
+      "inputs": [
+        {
+          "name": "show",
+          "type": "string",
+          "required": false,
+          "about": "Set to 'all' to include content Reddit would otherwise filter from the listing."
+        },
+        {
+          "name": "after",
+          "type": "string",
+          "required": false,
+          "about": "Fullname cursor from data.after used to fetch the next page."
+        },
+        {
+          "name": "count",
+          "type": "integer",
+          "required": false,
+          "about": "Number of items already seen, used by Reddit to number paginated listings."
+        },
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "about": "Maximum number of moderation items to return (1-100)."
+        },
+        {
+          "name": "queue",
+          "type": "string",
+          "required": true,
+          "about": "Moderation view to inspect: items needing review, unmoderated items, reports, removed or spammed items, or recently edited items."
+        },
+        {
+          "name": "before",
+          "type": "string",
+          "required": false,
+          "about": "Fullname cursor from data.before used to fetch the previous page."
+        },
+        {
+          "name": "sr_detail",
+          "type": "boolean",
+          "required": false,
+          "about": "Whether to expand subreddit details in each returned item."
+        },
+        {
+          "name": "subreddit",
+          "type": "string",
+          "required": true,
+          "about": "Subreddit moderated by the connected account, without the 'r/' prefix."
+        },
+        {
+          "name": "content_type",
+          "type": "string",
+          "required": false,
+          "about": "Restrict the listing to posts ('links'), comments, or chat comments."
+        }
+      ],
+      "scopes": [
+        "read"
+      ],
+      "tags": [
+        "readOnlyHint",
+        "openWorldHint",
+        "browsing_and_discovery"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "List modmail conversations",
+      "slug": "REDDIT_LIST_MODMAIL_CONVERSATIONS",
+      "kind": "read",
+      "description": "List moderator mail conversations visible to the connected moderator. Requires the `modmail` OAuth scope (not granted by default) and moderator access to the subreddits.",
+      "inputs": [
+        {
+          "name": "sort",
+          "type": "string",
+          "required": false,
+          "about": "Ordering to apply to the returned conversations."
+        },
+        {
+          "name": "after",
+          "type": "string",
+          "required": false,
+          "about": "Conversation cursor used to fetch the next page. Accepts the operation reference form 'ModmailConversation_<id>' and the bare ID returned in `conversationIds` and used by Reddit's first-party SDK."
+        },
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "about": "Maximum number of modmail conversations to return (1-100)."
+        },
+        {
+          "name": "state",
+          "type": "string",
+          "required": false,
+          "about": "Conversation state to include."
+        },
+        {
+          "name": "subreddits",
+          "type": "array",
+          "required": false,
+          "about": "Subreddit names whose modmail conversations should be returned, without the 'r/' prefix."
+        }
+      ],
+      "scopes": [
+        "modmail"
+      ],
+      "tags": [
+        "readOnlyHint",
+        "openWorldHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "List popular subreddits",
+      "slug": "REDDIT_LIST_POPULAR_SUBREDDITS",
+      "kind": "read",
+      "description": "List communities in Reddit's current activity-based popular ordering.",
+      "inputs": [
+        {
+          "name": "show",
+          "type": "string",
+          "required": false,
+          "about": "Set to 'all' to include subreddits Reddit would otherwise filter from the listing."
+        },
+        {
+          "name": "after",
+          "type": "string",
+          "required": false,
+          "about": "Fullname cursor from data.after used to fetch the next page."
+        },
+        {
+          "name": "count",
+          "type": "integer",
+          "required": false,
+          "about": "Number of subreddits already seen, used by Reddit to number paginated listings."
+        },
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "about": "Maximum number of subreddits to return (1-100)."
+        },
+        {
+          "name": "before",
+          "type": "string",
+          "required": false,
+          "about": "Fullname cursor from data.before used to fetch the previous page."
+        },
+        {
+          "name": "sr_detail",
+          "type": "boolean",
+          "required": false,
+          "about": "Whether to expand subreddit details in the response."
+        }
+      ],
+      "scopes": [
+        "read"
+      ],
+      "tags": [
+        "readOnlyHint",
+        "openWorldHint",
+        "browsing_and_discovery"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "List subreddit comments",
+      "slug": "REDDIT_LIST_SUBREDDIT_COMMENTS",
+      "kind": "read",
+      "description": "List recent comments across all posts in a subreddit. Use `data.after` as `after` on the next call to continue pagination. This is a subreddit-wide feed, not the comment tree for one post.",
+      "inputs": [
+        {
+          "name": "show",
+          "type": "string",
+          "required": false,
+          "about": "Set to 'all' to include comments Reddit would otherwise filter from the listing."
+        },
+        {
+          "name": "after",
+          "type": "string",
+          "required": false,
+          "about": "Fullname cursor from data.after used to fetch the next page."
+        },
+        {
+          "name": "count",
+          "type": "integer",
+          "required": false,
+          "about": "Number of items already seen, used by Reddit to number paginated listings."
+        },
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "about": "Maximum number of comments to return (1-100)."
+        },
+        {
+          "name": "before",
+          "type": "string",
+          "required": false,
+          "about": "Fullname cursor from data.before used to fetch the previous page."
+        },
+        {
+          "name": "sr_detail",
+          "type": "boolean",
+          "required": false,
+          "about": "Whether to expand subreddit details in each returned comment."
+        },
+        {
+          "name": "subreddit",
+          "type": "string",
+          "required": true,
+          "about": "Subreddit name without the 'r/' prefix."
+        }
+      ],
+      "scopes": [
+        "read"
+      ],
+      "tags": [
+        "readOnlyHint",
+        "openWorldHint",
+        "browsing_and_discovery"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "List subreddit moderators",
+      "slug": "REDDIT_LIST_SUBREDDIT_MODERATORS",
+      "kind": "read",
+      "description": "List a subreddit's moderators and each moderator's granted permissions.",
+      "inputs": [
+        {
+          "name": "show",
+          "type": "string",
+          "required": false,
+          "about": "Set to 'all' to include moderators Reddit would otherwise filter from the listing."
+        },
+        {
+          "name": "user",
+          "type": "string",
+          "required": false,
+          "about": "Filter or jump to one moderator username."
+        },
+        {
+          "name": "after",
+          "type": "string",
+          "required": false,
+          "about": "Fullname cursor from a paginated response, when supplied by Reddit."
+        },
+        {
+          "name": "count",
+          "type": "integer",
+          "required": false,
+          "about": "Number of moderator entries already seen."
+        },
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "about": "Requested page size (1-100); Reddit may return the complete roster."
+        },
+        {
+          "name": "before",
+          "type": "string",
+          "required": false,
+          "about": "Previous-page fullname cursor, when supplied by Reddit."
+        },
+        {
+          "name": "sr_detail",
+          "type": "boolean",
+          "required": false,
+          "about": "Whether to expand subreddit details in the response."
+        },
+        {
+          "name": "subreddit",
+          "type": "string",
+          "required": true,
+          "about": "Subreddit name without the 'r/' prefix."
+        }
+      ],
+      "scopes": [
+        "read"
+      ],
+      "tags": [
+        "readOnlyHint",
+        "openWorldHint",
+        "browsing_and_discovery"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "List subreddit post flairs",
+      "slug": "REDDIT_LIST_SUBREDDIT_POST_FLAIRS",
+      "kind": "read",
+      "description": "List available link/post flairs for a subreddit (including flair_template_id) so posts can satisfy flair-required validation. Use when you need to discover valid flair IDs before creating a post in a subreddit that requires flair. Note: Reddit may return empty or deny access if the authenticated user cannot set link flair and is not a moderator.",
+      "inputs": [
+        {
+          "name": "subreddit",
+          "type": "string",
+          "required": true,
+          "about": "The name of the subreddit (without 'r/' prefix) for which to retrieve available post/link flairs."
+        }
+      ],
+      "scopes": [
+        "flair"
+      ],
+      "tags": [
+        "readOnlyHint",
+        "openWorldHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "List subreddit wiki pages",
+      "slug": "REDDIT_LIST_SUBREDDIT_WIKI_PAGES",
+      "kind": "read",
+      "description": "List the visible wiki page names available in a subreddit.",
+      "inputs": [
+        {
+          "name": "subreddit",
+          "type": "string",
+          "required": true,
+          "about": "Subreddit name without the r/ prefix."
+        }
+      ],
+      "scopes": [
+        "wikiread"
+      ],
+      "tags": [
+        "readOnlyHint",
+        "openWorldHint",
+        "browsing_and_discovery"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "List subscribed subreddits",
+      "slug": "REDDIT_LIST_SUBSCRIBED_SUBREDDITS",
+      "kind": "read",
+      "description": "List communities subscribed to by the connected Reddit account.",
+      "inputs": [
+        {
+          "name": "show",
+          "type": "string",
+          "required": false,
+          "about": "Set to 'all' to include communities Reddit would otherwise filter."
+        },
+        {
+          "name": "after",
+          "type": "string",
+          "required": false,
+          "about": "Fullname cursor from data.after used to fetch the next page."
+        },
+        {
+          "name": "count",
+          "type": "integer",
+          "required": false,
+          "about": "Number of communities already seen in the paginated listing."
+        },
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "about": "Maximum number of subscribed communities to return (1-100)."
+        },
+        {
+          "name": "before",
+          "type": "string",
+          "required": false,
+          "about": "Fullname cursor from data.before used to fetch the previous page."
+        },
+        {
+          "name": "sr_detail",
+          "type": "boolean",
+          "required": false,
+          "about": "Whether to expand subreddit details in the response."
+        }
+      ],
+      "scopes": [
+        "mysubreddits"
+      ],
+      "tags": [
+        "readOnlyHint",
+        "openWorldHint",
+        "browsing_and_discovery"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "List user activity",
+      "slug": "REDDIT_LIST_USER_ACTIVITY",
+      "kind": "read",
+      "description": "List a Reddit user's overview, posts, comments, or account-history views. History views include upvoted, downvoted, hidden, saved, and gilded content; Reddit returns private history only when the connected account may access it. Use `data.after` as `after` on the next call to continue pagination.",
+      "inputs": [
+        {
+          "name": "show",
+          "type": "string",
+          "required": false,
+          "about": "Set to 'given' to show only explicitly requested content."
+        },
+        {
+          "name": "sort",
+          "type": "string",
+          "required": false,
+          "about": "Order in which Reddit returns the user's activity."
+        },
+        {
+          "name": "after",
+          "type": "string",
+          "required": false,
+          "about": "Fullname cursor from data.after used to fetch the next page."
+        },
+        {
+          "name": "count",
+          "type": "integer",
+          "required": false,
+          "about": "Number of items already seen, used by Reddit to number paginated listings."
+        },
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "about": "Maximum number of activity items to return (1-100)."
+        },
+        {
+          "name": "before",
+          "type": "string",
+          "required": false,
+          "about": "Fullname cursor from data.before used to fetch the previous page."
+        },
+        {
+          "name": "context",
+          "type": "integer",
+          "required": false,
+          "about": "Number of parent comments to include for each comment result (2-10)."
+        },
+        {
+          "name": "username",
+          "type": "string",
+          "required": true,
+          "about": "Reddit username without the 'u/' prefix."
+        },
+        {
+          "name": "sr_detail",
+          "type": "boolean",
+          "required": false,
+          "about": "Whether to expand subreddit details in each returned item."
+        },
+        {
+          "name": "time_filter",
+          "type": "string",
+          "required": false,
+          "about": "Time window applied to top or controversial sorting."
+        },
+        {
+          "name": "content_type",
+          "type": "string",
+          "required": false,
+          "about": "Restrict results to posts ('links') or comments."
+        },
+        {
+          "name": "activity_type",
+          "type": "string",
+          "required": true,
+          "about": "User activity view to list. Overview mixes posts and comments; submitted and comments select authored content; the other views select account history."
+        }
+      ],
+      "scopes": [
+        "history"
+      ],
+      "tags": [
+        "readOnlyHint",
+        "openWorldHint",
+        "user_accounts_and_profiles"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Manage subreddit subscription",
+      "slug": "REDDIT_MANAGE_SUBREDDIT_SUBSCRIPTION",
+      "kind": "write",
+      "description": "Subscribe or unsubscribe the connected account from one subreddit. Requires the `subscribe` OAuth scope (not granted by default). Subscribing prevents Reddit from adding unrelated default communities unless `skip_initial_defaults` is explicitly set to false.",
+      "inputs": [
+        {
+          "name": "action",
+          "type": "string",
+          "required": true,
+          "about": "Whether to subscribe or unsubscribe the connected Reddit account."
+        },
+        {
+          "name": "subreddit",
+          "type": "string",
+          "required": true,
+          "about": "Subreddit name without the r/ prefix."
+        },
+        {
+          "name": "skip_initial_defaults",
+          "type": "boolean",
+          "required": false,
+          "about": "For subscribe only, whether to prevent Reddit from also adding default communities on the account's first subscription change. Defaults to true."
+        }
+      ],
+      "scopes": [
+        "subscribe"
+      ],
+      "tags": [
+        "openWorldHint",
+        "updateHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Mark all inbox messages read",
+      "slug": "REDDIT_MARK_ALL_INBOX_MESSAGES_READ",
+      "kind": "write",
+      "description": "Queue Reddit to mark all inbox items, or selected item types, as read.",
+      "inputs": [
+        {
+          "name": "filter_types",
+          "type": "string",
+          "required": false,
+          "about": "Optional comma-separated Reddit inbox item types to mark read, such as 'activity,messages'. Omit to mark every type read."
+        }
+      ],
+      "scopes": [
+        "privatemessages"
+      ],
+      "tags": [
+        "openWorldHint",
+        "updateHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Post a comment",
+      "slug": "REDDIT_POST_REDDIT_COMMENT",
+      "kind": "send",
+      "description": "Posts a comment on Reddit, replying to an existing submission (post) or another comment. Fails if the target thread is locked, archived, or restricted — verify thread state beforehand. Rapid successive calls trigger Reddit RATELIMIT errors with explicit cooldown hints (e.g., 'take a break for 9 minutes'); honor the specified wait before retrying. A successful API response does not guarantee public visibility — automod or spam filters may silently remove the comment. Publishes immediately and publicly; confirm target and text before executing.",
+      "inputs": [
+        {
+          "name": "text",
+          "type": "string",
+          "required": true,
+          "about": "REQUIRED. The raw Markdown text of the comment to be submitted. This field must be provided and cannot be empty."
+        },
+        {
+          "name": "thing_id",
+          "type": "string",
+          "required": true,
+          "about": "REQUIRED. The ID of the parent post (link) or comment, prefixed with 't3_' for a post (e.g., 't3_10omtdx') or 't1_' for a comment (e.g., 't1_h2g9w8l'). This field must be provided."
+        }
+      ],
+      "scopes": [
+        "submit",
+        "privatemessages"
+      ],
+      "tags": [
+        "openWorldHint",
+        "createHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Prepare Reddit media upload",
+      "slug": "REDDIT_PREPARE_MEDIA_UPLOAD",
+      "kind": "write",
+      "description": "Registers an image or video with Reddit and returns temporary upload instructions. This does not upload the file or publish a post. Pass every returned upload field and its value unchanged to the upload destination before the temporary signature expires.",
+      "inputs": [
+        {
+          "name": "filename",
+          "type": "string",
+          "required": true,
+          "about": "Filename, including its extension, for the image or video to upload. Provide only a filename, not a local path."
+        },
+        {
+          "name": "mime_type",
+          "type": "string",
+          "required": true,
+          "about": "Reddit-supported MIME type matching the media file."
+        }
+      ],
+      "scopes": [
+        "submit"
+      ],
+      "tags": [
+        "openWorldHint",
+        "createHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Retrieve Comments for a Post",
+      "slug": "REDDIT_RETRIEVE_POST_COMMENTS",
+      "kind": "read",
+      "description": "Retrieves a Reddit post and its comments by article ID, with optional sort, limit and depth. Returns `post_listing` and `comments_listing`, including nested replies and possible `more` placeholders. Do not re-call this action with a larger limit to resolve a placeholder. Call REDDIT_EXPAND_MORE_COMMENTS with `link_id=\"t3_<article>\"`, up to 20 IDs from `more.data.children` as `children`, and `more.data.id` as `more_id`; repeat in batches when a placeholder has more than 20 IDs.",
+      "inputs": [
+        {
+          "name": "sort",
+          "type": "string",
+          "required": false,
+          "about": "Comment sort order. Valid values: confidence (default, 'best'), top, new, controversial, old, random, qa, live. If omitted, Reddit uses the subreddit's or user's default sort."
+        },
+        {
+          "name": "depth",
+          "type": "integer",
+          "required": false,
+          "about": "Maximum nesting depth of the comment tree to return. Deeper replies are collapsed into 'more' placeholders instead of being expanded. Reddit's docs don't state a fixed bound."
+        },
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "about": "Maximum number of comments to return. Reddit's docs don't state a fixed bound for this endpoint; omit to use Reddit's own default."
+        },
+        {
+          "name": "article",
+          "type": "string",
+          "required": true,
+          "about": "Base-36 ID of the Reddit post (e.g., 'q5u7q5'), typically found in the post's URL and not including the 't3_' prefix."
+        }
+      ],
+      "scopes": [
+        "read"
+      ],
+      "tags": [
+        "readOnlyHint",
+        "openWorldHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Retrieve posts from subreddit",
+      "slug": "REDDIT_RETRIEVE_REDDIT_POST",
+      "kind": "read",
+      "description": "Retrieve a paginated listing of posts from a specified subreddit, with sort options and a time-period filter for top or controversial posts. Post data is nested under `data.children[].data`; use `data.after` to continue pagination.",
+      "inputs": [
+        {
+          "name": "show",
+          "type": "string",
+          "required": false,
+          "about": "Display filtering option. Use 'all' to include items Reddit would normally omit, such as hidden posts."
+        },
+        {
+          "name": "sort",
+          "type": "string",
+          "required": false,
+          "about": "Sort order for posts. Options: 'hot' (default, most active posts), 'new' (newest first), 'top' (highest scoring), 'rising' (trending posts), 'controversial' (most controversial)."
+        },
+        {
+          "name": "after",
+          "type": "string",
+          "required": false,
+          "about": "Fullname of a thing to use as an anchor for pagination. Returns results after this fullname."
+        },
+        {
+          "name": "count",
+          "type": "integer",
+          "required": false,
+          "about": "Number of items already seen, used by Reddit to number paginated listings."
+        },
+        {
+          "name": "before",
+          "type": "string",
+          "required": false,
+          "about": "Fullname of a thing to use as an anchor for pagination. Returns results before this fullname."
+        },
+        {
+          "name": "sr_detail",
+          "type": "boolean",
+          "required": false,
+          "about": "Whether to expand subreddit details in the response."
+        },
+        {
+          "name": "subreddit",
+          "type": "string",
+          "required": true,
+          "about": "A subreddit name or plus-separated multireddit from which to retrieve posts (e.g., 'popular' or 'zsh+fishshell'). Do not include 'r/'. Each name must be 3-21 characters containing letters, numbers, or underscores; use '+' only to join names."
+        },
+        {
+          "name": "max_results",
+          "type": "integer",
+          "required": false,
+          "about": "The maximum number of posts to return. Default is 5. Set to 0 to retrieve the maximum allowed by the Reddit API (100 posts). Valid range: 0-100."
+        },
+        {
+          "name": "time_filter",
+          "type": "string",
+          "required": false,
+          "about": "Time period to filter posts by, only meaningful when sort='top' or sort='controversial' (e.g. 'top posts of the week'). Ignored for other sort values. Options: 'hour', 'day', 'week', 'month', 'year', 'all'."
+        }
+      ],
+      "scopes": [
+        "read"
+      ],
+      "tags": [
+        "readOnlyHint",
+        "openWorldHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Retrieve specific comment or post",
+      "slug": "REDDIT_RETRIEVE_SPECIFIC_COMMENT",
+      "kind": "read",
+      "description": "Retrieves selected details for a Reddit comment or post by fullname, without surrounding thread context. An empty listing raises an error; returned items may have partial details.",
+      "inputs": [
+        {
+          "name": "id",
+          "type": "string",
+          "required": true,
+          "about": "Reddit fullname identifier. Format: type prefix (t1_ for comments, t3_ for posts) followed by a base36 ID. Examples: 't1_abc123', 't3_1abc2de'. Note: Share URL tokens from reddit.com/r/.../s/... links are NOT valid fullnames and cannot be used directly. Note: REDDIT_RETRIEVE_POST_COMMENTS expects th"
+        }
+      ],
+      "scopes": [
+        "read"
+      ],
+      "tags": [
+        "readOnlyHint",
+        "openWorldHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Search across subreddits",
+      "slug": "REDDIT_SEARCH_ACROSS_SUBREDDITS",
+      "kind": "read",
+      "description": "Searches Reddit for posts using a query, returning a streamlined `posts` array and pagination cursors. An optional time filter restricts the period; a nonempty result type selection must include `link`, and non-post matches are omitted.",
+      "inputs": [
+        {
+          "name": "sort",
+          "type": "string",
+          "required": false,
+          "about": "The criterion for sorting search results. 'relevance' (default) sorts by relevance to the query. 'hot' sorts by trending posts with recent upvotes and activity. 'new' sorts by newest first. 'top' sorts by highest score (typically all-time). 'comments' sorts by the number of comments."
+        },
+        {
+          "name": "after",
+          "type": "string",
+          "required": false,
+          "about": "Pagination cursor to fetch the next page of results. Use the `after` value from the previous response to get subsequent results."
+        },
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "about": "The maximum number of search results to return. Default is 5. Maximum allowed value is 100. Paginate beyond the first page using the `after` cursor from `data.after` in the response; deduplicate results across pages by post `id`."
+        },
+        {
+          "name": "before",
+          "type": "string",
+          "required": false,
+          "about": "Pagination cursor to fetch the previous page of results. Use the `before` value from the previous response to get preceding results."
+        },
+        {
+          "name": "restrict_sr",
+          "type": "boolean",
+          "required": false,
+          "about": "If True (default), confines the search to posts and comments within subreddits. If False, the search scope is broader and may include matching subreddit names or other Reddit entities."
+        },
+        {
+          "name": "result_type",
+          "type": "array",
+          "required": false,
+          "about": "Restrict results to specific content types: 'sr' (subreddits), 'link' (posts), and 'user' (users). Because this action returns posts only, result_type must include 'link'; non-post matches in mixed searches are omitted. Use GET_SUBREDDITS_SEARCH for subreddit-only search."
+        },
+        {
+          "name": "time_filter",
+          "type": "string",
+          "required": false,
+          "about": "Restrict results to this time period: hour, day, week, month, year, or all. If omitted, Reddit applies its own default (typically 'all' for relevance sort)."
+        },
+        {
+          "name": "search_query",
+          "type": "string",
+          "required": true,
+          "about": "The search query string. Supports Reddit search operators: 'title:', 'author:', 'subreddit:', 'url:', 'site:', 'flair:', 'self:yes/no', 'nsfw:yes/no', and boolean operators (AND, OR, NOT). Raw URLs (starting with http:// or https://) are not allowed - use the 'url:' or 'site:' operators instead (e.g"
+        }
+      ],
+      "scopes": [
+        "read"
+      ],
+      "tags": [
+        "openWorldHint",
+        "readOnlyHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Send private message",
+      "slug": "REDDIT_SEND_PRIVATE_MESSAGE",
+      "kind": "send",
+      "description": "Send a private Reddit message immediately; sending cannot be undone.",
+      "inputs": [
+        {
+          "name": "text",
+          "type": "string",
+          "required": true,
+          "about": "Message body in Reddit Markdown."
+        },
+        {
+          "name": "subject",
+          "type": "string",
+          "required": true,
+          "about": "Message subject, at most 100 characters."
+        },
+        {
+          "name": "recipient",
+          "type": "string",
+          "required": true,
+          "about": "Reddit username without u/, or r/community to message a subreddit's moderators."
+        },
+        {
+          "name": "from_subreddit",
+          "type": "string",
+          "required": false,
+          "about": "Subreddit to send on behalf of when the connected account has permission."
+        }
+      ],
+      "scopes": [
+        "privatemessages"
+      ],
+      "tags": [
+        "openWorldHint",
+        "createHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Enable or disable inbox replies",
+      "slug": "REDDIT_TOGGLE_INBOX_REPLIES",
+      "kind": "write",
+      "description": "Enable or disable inbox replies for a submission or comment. Use when you want to control whether you receive inbox notifications for replies to your own posts or comments.",
+      "inputs": [
+        {
+          "name": "id",
+          "type": "string",
+          "required": true,
+          "about": "The fullname of a thing created by the user. Must be prefixed with the thing type (e.g., 't3_' for a submission/post, 't1_' for a comment). Example: 't3_abc123' for a post."
+        },
+        {
+          "name": "state",
+          "type": "boolean",
+          "required": true,
+          "about": "Boolean value to enable or disable inbox replies. Set to true to enable receiving inbox notifications when users reply to this thing, or false to disable inbox notifications."
+        }
+      ],
+      "scopes": [
+        "edit"
+      ],
+      "tags": [
+        "openWorldHint",
+        "updateHint",
+        "comments_and_replies"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Vote on Reddit content",
+      "slug": "REDDIT_VOTE_ON_CONTENT",
+      "kind": "write",
+      "description": "Cast or clear one vote only when directly instructed by a human. Never infer how to vote, vote autonomously, amplify a vote, or apply one instruction to multiple items.",
+      "inputs": [
+        {
+          "name": "rank",
+          "type": "integer",
+          "required": false,
+          "about": "Optional positive rank of the content in the listing where the vote was cast."
+        },
+        {
+          "name": "thing_id",
+          "type": "string",
+          "required": true,
+          "about": "Fullname of the Reddit post (t3_) or comment (t1_) the human explicitly instructed you to vote on."
+        },
+        {
+          "name": "direction",
+          "type": "integer",
+          "required": true,
+          "about": "Human-directed vote: 1 upvotes, -1 downvotes, and 0 clears the connected user's vote. Do not infer or choose a vote; use only the direction the human directly instructed."
+        }
+      ],
+      "scopes": [
+        "vote"
+      ],
+      "tags": [
+        "openWorldHint",
+        "updateHint"
+      ],
+      "deprecated": false
+    }
+  ],
+  "triggers": [],
+  "source": "https://docs.composio.dev/toolkits/reddit",
+  "fetched_at": "2026-11-20"
+}

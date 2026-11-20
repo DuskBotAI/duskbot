@@ -1,0 +1,136 @@
+{
+  "path": "/integrations/intercom",
+  "type": "integration",
+  "title": "Intercom AI assistant for customers still waiting on a reply",
+  "nav": "intercom",
+  "h1": "find the intercom customer who still needs an answer",
+  "description": "Read the last customer question, find what support promised and draft a reply from a published help article. Keep the answer in dusk until you approve it.",
+  "keyword": "intercom bot",
+  "keywords": [
+    "intercom ai assistant",
+    "intercom ai agent"
+  ],
+  "answer": "**find the customer who answered your question yesterday and never heard back.** an intercom bot can read the conversation, pick out what the customer still needs and draft the next reply in dusk. give it your support team’s queue and the articles you trust. you decide what goes back to the customer.",
+  "updated": "2026-11-20",
+  "review": {
+    "status": "approved",
+    "by": "lead agent, after four independent reviewers read every page against seo/facts (2026-11-20); every finding applied",
+    "at": "2026-11-20"
+  },
+  "voice": 2,
+  "tags": [
+    "support",
+    "conversations",
+    "help center"
+  ],
+  "connectors": [
+    "intercom"
+  ],
+  "related": [
+    "/routines/intercom-unanswered-conversations",
+    "/integrations/zendesk",
+    "/use-cases/customer-support-inbox"
+  ],
+  "art": {
+    "label": "Intercom",
+    "props": [
+      "p-bubbles"
+    ],
+    "bubble": "whose turn is it"
+  },
+  "og_line": "read the last customer question first.",
+  "app": {
+    "name": "Intercom",
+    "toolkit": "intercom",
+    "intro": "**read both sides before calling a conversation unanswered.** an internal handoff can sit below a customer question. read the messages themselves to see whether the customer ever got an answer.",
+    "highlight": [
+      {
+        "slug": "INTERCOM_LIST_TEAMS",
+        "use": "identify the team that handles the inbox you mean"
+      },
+      {
+        "slug": "INTERCOM_SEARCH_CONVERSATIONS",
+        "use": "narrow the queue to conversations your team owns"
+      },
+      {
+        "slug": "INTERCOM_GET_CONVERSATION",
+        "use": "read the customer’s wording and the support replies in context"
+      },
+      {
+        "slug": "INTERCOM_SEARCH_FOR_ARTICLES",
+        "use": "find a published help article using the customer’s phrase"
+      },
+      {
+        "slug": "INTERCOM_RETRIEVE_AN_ARTICLE",
+        "use": "read the actual instructions before drafting a reply"
+      },
+      {
+        "slug": "INTERCOM_REPLY_TO_CONVERSATION",
+        "use": "send the reviewed answer to the original conversation"
+      }
+    ],
+    "setup": "**start with a conversation you know well.** connect intercom under connected apps and give your support bot read access. tell it the team name and conversation id. ask which message reached the customer last. compare that answer with the thread before scheduling a wider review."
+  },
+  "routines_intro": "**use the next shift change as the deadline.** pick a routine based on what the incoming agent needs to do. each one returns its findings to your dusk chat.",
+  "routines": [
+    {
+      "name": "waiting on support",
+      "message": "at 9 each weekday, read open intercom conversations assigned to my support team. find the ones where the customer asked a question and nobody answered them. ignore internal notes when deciding who replied last. give me the conversation ids and questions here, oldest unanswered question first.",
+      "when": "weekday mornings",
+      "output": "a queue ordered by how long customers have waited"
+    },
+    {
+      "name": "promises for the next shift",
+      "message": "every weekday at 4, read conversations our team updated today. look for a promise to get back to the customer. quote the promise, include any deadline the agent actually gave and flag whether a later reply fulfilled it. leave the handoff here.",
+      "when": "weekdays at 4 pm",
+      "output": "open promises with the words the customer saw"
+    },
+    {
+      "name": "answers from the help center",
+      "message": "each tuesday at noon, find open setup questions in our team queue. search published articles for the exact step the customer is stuck on. draft an answer here with the article title. if the article skips that step, give me the gap instead. send nothing.",
+      "when": "tuesdays at noon",
+      "output": "draft answers and questions the help center leaves open"
+    }
+  ],
+  "asks": "**read the draft beside the customer’s latest message.** an intercom reply asks before sending by default. closing and assigning a conversation are changes. keep those actions off a drafting bot’s list so the thread stays open for the next shift.\n\ncareful with **Full access**: a bot there with no sending rule can send up to 25 a day without asking. give it **Ask every time**.",
+  "cannot": [
+    "**read past the conversation action’s limit.** it returns at most 500 conversation parts and offers no next page. mark unusually long threads as incomplete.",
+    "**wake on a new intercom conversation through this connection.** schedule inbox reviews at the times your team picks up work.",
+    "**close a conversation with read-only access.** a draft in dusk leaves the support queue alone."
+  ],
+  "sections": [
+    {
+      "h": "when a customer is waiting right now",
+      "md": "**take an active conversation yourself.** dusk fits a shift handoff or a batch of article lookups. if the customer is typing and you already have the thread open, answer in intercom. a scheduled pass adds another wait."
+    }
+  ],
+  "faq": [
+    {
+      "q": "does an internal note count as answering the customer?",
+      "a": "**look for a customer-facing reply.** an agent can discuss the problem internally while the original question still needs an answer."
+    },
+    {
+      "q": "can the bot use the answer our support team already wrote?",
+      "a": "**give it the relevant help center.** have it open the article and quote the step that applies. ask for a question when the customer describes a different problem."
+    }
+  ],
+  "worked": {
+    "intro": "a fictional example.",
+    "before": "clara wells sent a screenshot after support asked which menu was missing. an agent added an internal note about it.",
+    "after": "waiting on support: clara sent the requested screenshot. the note discusses the menu, but nobody has answered her yet."
+  },
+  "sources": [
+    {
+      "label": "dusk bot docs: files and apps",
+      "url": "/docs/files-and-apps"
+    },
+    {
+      "label": "dusk bot docs: routines",
+      "url": "/docs/routines"
+    },
+    {
+      "label": "dusk bot docs: sending permissions",
+      "url": "/docs/computer"
+    }
+  ]
+}

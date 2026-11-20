@@ -1,11 +1,10 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { usePanelWidth } from "@/lib/panel-wide";
+import { desktopMotion } from "@/lib/desktop-motion";
 
 /** Grok Bot's docked info pane, at its 320px: the column's width grows from 0 (and back) while the chat beside it reflows,
  * its content pinned to the column's left edge so it slides in from the window's right. */
 export const PANEL_WIDTH = 320;
-// a soft start then a long settle: the first frames, where the panel mounts, move it only a little, so nothing jumps
-const DURATION_MS = 260;
 
 /** The chat keeps at least this much beside a docked pane; narrower, the pane cannot dock. */
 export const CHAT_MIN_WIDTH = 520;
@@ -50,7 +49,7 @@ export function PanelSlot({ open, children }: { open: boolean; children: ReactNo
   }, [open, mounted, width]);
   useEffect(() => {
     if (open) return;
-    const timer = setTimeout(() => setMounted(false), DURATION_MS + 50);
+    const timer = setTimeout(() => setMounted(false), desktopMotion().panel.ms + 50);
     return () => clearTimeout(timer);
   }, [open]);
   if (!mounted) return null;

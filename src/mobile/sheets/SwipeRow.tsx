@@ -61,7 +61,7 @@ export function SwipeRow({ children, actions, onOpen }: {
       <motion.div data-swipe-actions className="absolute inset-y-0 right-0 flex" style={{ width, visibility: actionsShown }} inert={!isOpen} aria-hidden={!isOpen}>
         {actions.map((action, index) => <button key={index} data-swipe-control type="button" onClick={action.onPress} className={cn("mobile-press flex min-h-11 w-[132px] items-center justify-center px-3 text-center text-[14px] font-semibold", action.danger ? "bg-danger text-app" : "bg-composer text-ink")}>{action.label}</button>)}
       </motion.div>
-      <motion.div style={{ x }} className="relative flex items-center bg-app" onClickCapture={(event) => { if (opened.current) { event.preventDefault(); event.stopPropagation(); settle(0); } }}>
+      <motion.div style={{ x }} className="relative flex items-center bg-menu" onClickCapture={(event) => { if (opened.current) { event.preventDefault(); event.stopPropagation(); settle(0); } }}>
         {onOpen ? <button type="button" onClick={onOpen} className="mobile-row min-h-11 min-w-0 flex-1 text-left">{children}</button> : <div className="min-w-0 flex-1">{children}</div>}
         {actions.length > 0 && <button type="button" data-swipe-control aria-label={t("mobile.routines.actions")} aria-expanded={isOpen} onClick={() => settle(isOpen ? 0 : -width)} className="mobile-press flex size-11 shrink-0 items-center justify-center rounded-full text-ink-secondary"><MoreHorizontal size={20} /></button>}
       </motion.div>

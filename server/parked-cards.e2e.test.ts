@@ -45,13 +45,15 @@ async function fixture(server: RestartableServer) {
   const turns = () => existsSync(`${planPath}.evidence.jsonl`) ? readFileSync(`${planPath}.evidence.jsonl`, "utf8").trim().split("\n").filter(Boolean).map((line) => JSON.parse(line)) : [];
   const handOff = async () => {
     await say(chief.threadId, "GET-MAIL please", chief.id);
-    let work: any;
+    // one chat per bot: the work runs in Postie's own chat
+    let work: string | undefined;
     await expect.poll(async () => {
-      work = (await owner()).tasks.find((row: any) => row.openedBy?.botId === chief.id);
-      return Boolean(work) && (await cards(work.threadId)).length === 1;
+      work = nodes().find((node) => node.assignee.botId === bot.id)?.assignee.destination.threadId;
+      return Boolean(work) && (await cards(work!)).length === 1;
     }, { timeout: 20_000 }).toBe(true);
+    expect(work).toBe(bot.threadId);
     await expect.poll(() => nodes().find((node) => node.assignee.botId === bot.id)?.status, { timeout: 20_000 }).toBe("needs_input");
-    return work.threadId as string;
+    return work!;
   };
   return { server, api, bot, chief, owner, task, messages, cards, say, said, nodes, turns, handOff, dataDir, plan: (plan: unknown) => writeFileSync(planPath, JSON.stringify(plan)) };
 }

@@ -46,19 +46,18 @@ describe("failed turn text", () => {
   });
 
   it("previews a failure with no sign-in to offer by its card's plain line, not the engine's words", () => {
-    expect(activityPreview(loginRow, engine({}, { authenticated: true }))).toBe("Not logged in · Please run /login");
+    expect(activityPreview(loginRow, engine({}, { authenticated: true }))).toBe("Your bot couldn't finish this reply. Try again.");
     const keyed = engine({ driverKind: "opencode", access: "api" } as Partial<InstanceInfo>, { version: "1" });
-    expect(activityPreview({ ...loginRow, name: "error: Add your key in Settings → API keys" }, keyed)).toBe("Add your key in Settings → API keys");
+    expect(activityPreview({ ...loginRow, name: "error: Add your key in Settings → API keys" }, keyed)).toBe("Your bot couldn't finish this reply. Try again.");
     expect(signedOutEngine(loginRow, keyed)).toBeUndefined();
-    expect(activityPreview({ name: "error: rate limited", ok: false }, engine())).toBe("Your AI is getting too many requests. Try again in a moment.");
+    expect(activityPreview({ name: "error: rate limited", ok: false }, engine())).toBe("Claude is busy right now. Try again in a moment.");
     expect(activityPreview(loginRow, undefined)).toBe("Your AI isn't signed in on this computer. Sign in to keep going.");
     expect(activityPreview({ ...loginRow, name: "error: needs a newer Claude Code", claudeUpdate: true }, engine())).toBe("This model needs a newer Claude Code. I can update Claude for you.");
     expect(signedOutEngine({ ...loginRow, claudeUpdate: true }, engine({ readOnly: true }))).toBeUndefined();
   });
 
-  it("previews a plan-limit refusal whole and leaves ordinary steps alone", () => {
-    const limit = "Your Pro plan includes 2 cloud computers at once. Delete one to start another.";
-    expect(activityPreview({ name: `error: ${limit}`, ok: false }, engine())).toBe(limit);
+  it("previews a plan limit by its kind's one line, never its words, and leaves ordinary steps alone", () => {
+    expect(activityPreview({ name: "error: Your Pro plan includes 2 cloud computers at once. Delete one to start another.", ok: false }, engine())).toBe("Your plan has reached its limit for this. See your plan to keep going.");
     expect(activityPreview({ name: "Bash", ok: true }, engine())).toBe("Run a command");
     expect(activityPreview({ name: "stopped: stopped", ok: true }, engine())).toBe("Stopped");
     expect(activityPreview({ name: "error: The request was cancelled by the client.", ok: false }, engine())).toBe("Stopped");
@@ -80,12 +79,12 @@ describe("failed turn text", () => {
 
   it("previews a chat whose AI session is gone by the card's line, never the session id", () => {
     expect(activityPreview({ name: "error: No conversation found with session ID: e8b9f01e-97e3-4be6-a55c-be988595628a", ok: false }, engine()))
-      .toBe("Your AI lost this chat's memory. Start a new chat to keep going.");
+      .toBe("Your AI can't keep going in this chat. Start a new chat to carry on.");
   });
 
   it("previews a technical cause as its plain line", () => {
     expect(activityPreview({ name: 'error: API Error: 529 {"type":"error","error":{"type":"overloaded_error"}}', ok: false }, engine()))
-      .toBe("Your AI is busy right now. Try again in a moment.");
+      .toBe("Claude is busy right now. Try again in a moment.");
   });
 
   it("finds the engine a bot's turns ran on", () => {

@@ -1,18 +1,19 @@
 {
   "path": "/alternatives/hermes-agent",
   "type": "alternative",
-  "title": "Hermes Agent alternatives: self-run or hosted?",
+  "title": "Hermes Agent alternative: dusk bot for hosted bot teams",
   "nav": "hermes agent",
   "h1": "hermes agent alternatives when upkeep is the question",
-  "description": "Compare Hermes Agent's open source, desktop and Nous cloud options with dusk bot, including the sign-in limits stated in Hermes' provider docs.",
+  "description": "Considering a Hermes Agent alternative? Compare dusk bot’s hosting and AI sign-in rules with Hermes, then see how OpenClaw compares for self-hosting.",
   "keyword": "hermes agent alternative",
   "keywords": [
     "hermes agent alternatives",
     "hermes agent vs openclaw",
-    "hermes agent"
+    "hermes agent",
+    "hermes agent alternative"
   ],
   "answer": "**keep hermes if you want to change the code. pick dusk if you want to brief a teammate.** hermes has mit-licensed code, persistent memory, self-created skills and configurable subagents. it already has desktop apps and cloud hosting on paid nous portal plans. dusk gives named bots separate jobs in an app. compare the ai sign-in rules before comparing monthly bills.[^1][^2][^3]",
-  "updated": "2026-11-12",
+  "updated": "2026-11-20",
   "review": {
     "status": "approved",
     "by": "lead agent: read against seo/facts, automated gate, independent fact-check pass",
@@ -111,7 +112,7 @@
         "label": "chat interfaces",
         "cells": [
           "desktop, terminal, telegram, discord, slack, whatsapp, signal and email",
-          "desktop chats and paired phone browser; separate bots can join a group"
+          "desktop or iphone app, paired browser on android; separate bots can join a group"
         ],
         "src": [
           1,

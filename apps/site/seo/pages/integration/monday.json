@@ -1,0 +1,136 @@
+{
+  "path": "/integrations/monday",
+  "type": "integration",
+  "title": "A monday.com bot for status mismatches and missing signoffs",
+  "nav": "monday.com",
+  "h1": "spot the monday.com item marked ready too soon",
+  "description": "Compare a monday.com item with its subitems and update replies. Find the missing signoff before a client handoff and leave board changes with the owner.",
+  "keyword": "monday.com bot",
+  "keywords": [
+    "monday.com ai assistant",
+    "monday.com ai agent"
+  ],
+  "answer": "**catch the deliverable marked ready while the proof underneath it still needs approval.** a monday.com bot can read parent items, subitem columns and update replies. ask it to bring the mismatch into dusk chat with the item id. the board owner can then ask for a signoff or correct the status.",
+  "updated": "2026-11-20",
+  "review": {
+    "status": "approved",
+    "by": "lead agent, after four independent reviewers read every page against seo/facts (2026-11-20); every finding applied",
+    "at": "2026-11-20"
+  },
+  "voice": 2,
+  "tags": [
+    "board items",
+    "subitems",
+    "client handoffs"
+  ],
+  "connectors": [
+    "monday"
+  ],
+  "related": [
+    "/use-cases/client-onboarding",
+    "/integrations/asana",
+    "/integrations/miro"
+  ],
+  "art": {
+    "label": "monday.com",
+    "props": [
+      "p-briefcase"
+    ],
+    "bubble": "is the proof ready"
+  },
+  "og_line": "read the subitems before the handoff.",
+  "app": {
+    "name": "monday.com",
+    "toolkit": "monday",
+    "intro": "**work from the board’s actual labels.** give the bot the board id, status column and the label your team uses for a handoff. a different board can use the same word for a different stage of work.",
+    "highlight": [
+      {
+        "slug": "MONDAY_LIST_GROUPS",
+        "use": "locate the delivery group and distinguish it from archived groups"
+      },
+      {
+        "slug": "MONDAY_LIST_ITEMS_BY_COLUMN_VALUES",
+        "use": "find parent items carrying the exact handoff label"
+      },
+      {
+        "slug": "MONDAY_GET_ITEMS",
+        "use": "confirm the names and groups for a set of item ids"
+      },
+      {
+        "slug": "MONDAY_LIST_SUBITEMS_BY_PARENT",
+        "use": "read child status values beneath each matching parent"
+      },
+      {
+        "slug": "MONDAY_GET_UPDATES",
+        "use": "open the conversation on a deliverable"
+      },
+      {
+        "slug": "MONDAY_GET_UPDATE_REPLIES",
+        "use": "look for a signoff underneath the original update"
+      },
+      {
+        "slug": "MONDAY_CHANGE_SIMPLE_COLUMN_VALUE",
+        "use": "apply an agreed status using a label already on the board"
+      }
+    ],
+    "setup": "**choose a real deliverable with at least one subitem.** connect monday.com and let your operations bot read it. give the bot the board id and item id. tell it which subitem stands for final signoff and what the finished label says."
+  },
+  "routines_intro": "**run these before someone hands work to the client.** put your board’s group and label names in the bot’s job. the same prompts then work each week without guessing which board you meant.",
+  "routines": [
+    {
+      "name": "ready parents with unfinished work",
+      "message": "at 2 every weekday, find items marked ready for delivery on our client board. read their subitems with status values. list each ready parent with an unfinished required subitem. show both ids here. if a required value is blank, flag it as missing.",
+      "when": "weekdays at 2 pm",
+      "output": "parent and child items that disagree about readiness"
+    },
+    {
+      "name": "proof signoffs",
+      "message": "each thursday at 11, find items marked awaiting signoff on our client board. read their updates and replies. pick out approvals that name a proof version. give me the item id, version and exact approval wording. list unclear versions separately. do not change status.",
+      "when": "thursdays at 11 am",
+      "output": "proof approvals tied to the version the client reviewed"
+    },
+    {
+      "name": "handoff details for production",
+      "message": "each friday at 1, read items marked ready for production in our delivery group. pull the requested quantity and delivery address from their update threads. flag conflicting instructions with the item id. return the packing notes here and leave missing details blank.",
+      "when": "fridays at 1 pm",
+      "output": "packing notes with conflicts for the production lead"
+    }
+  ],
+  "asks": "**a status edit can change the board without asking.** use read only for these routines. if you later enable a column edit, add “ask me before you change anything” to the job. have it show the item, column and existing label before it writes.",
+  "cannot": [
+    "**look up subitems by a board-wide status search alone.** the subitem action needs parent item ids. select the parents first.",
+    "**use a simple column edit for every field.** that action handles text, status and dropdown values. people and timeline fields need the item update action.",
+    "**rely on the status editor to reject a typo.** the simple column action can create missing labels by default. turn label creation off when using an existing label."
+  ],
+  "sections": [
+    {
+      "h": "what counts as a signoff",
+      "md": "**ask the bot to find the version number next to the approval.** a client may love the first proof and request a correction to the next one. if your only task is moving a label on an item you already reviewed, do it on the board."
+    }
+  ],
+  "faq": [
+    {
+      "q": "what if two groups have the same name?",
+      "a": "**use the group id and board id.** the group list includes ids and archive status. confirm which group still holds active work."
+    },
+    {
+      "q": "can the bot leave our board exactly as it found it?",
+      "a": "**give it access only to the reading actions.** the mismatch list and production notes can both stay in dusk. nobody has to undo an automatic status change."
+    }
+  ],
+  "worked": {
+    "intro": "a fictional example.",
+    "before": "louis ford marks a print job ready. the proof subitem still says waiting for signoff. the latest reply approves version one.",
+    "after": "hold for proof review. the delivery item says ready, but approval names version one. confirm which version will go to print."
+  },
+  "sources": [
+    {
+      "label": "dusk bot docs: files and apps",
+      "url": "/docs/files-and-apps"
+    },
+    {
+      "label": "dusk bot docs: routines",
+      "url": "/docs/routines"
+    }
+  ]
+}

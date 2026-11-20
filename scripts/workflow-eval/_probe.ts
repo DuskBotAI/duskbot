@@ -1,0 +1,15 @@
+import { client } from "../memory-eval/client.ts";
+import { gatewayFromEnv } from "../memory-eval/sandbox.ts";
+import { launchServer } from "../stress-eval/server.ts";
+const g = gatewayFromEnv("gpt-6.2-sol");
+const srv = await launchServer(process.cwd(), process.argv[2]!, g, ["gpt-6.2-sol"]);
+const api = client(srv.url);
+const bot = await api.createBot("Sage", "gpt-6.2-sol");
+const t = await api.newThread(bot.id);
+const show = async () => { const m = (await api.call("GET", `/api/threads/${t}/messages?limit=50`)).messages; console.log(m.map((x: any) => `${x.role}/${x.kind}: ${(x.text ?? "").slice(0, 120)}${x.card ? " CARD " + JSON.stringify(x.card).slice(0, 120) : ""}`).join("\n")); };
+console.log(await api.say(bot.id, t, "Use confirm_purchase to ask me to confirm a free $0 'Calendar booking: interview Dec 1 9am' order. Do it now, nothing else."));
+await show();
+console.log(await api.say(bot.id, t, "Cancel that. Instead just tell me a joke."));
+await show();
+const job = await api.call("GET", `/api/threads/${t}/job?scope=turn`); console.log(JSON.stringify(job).slice(0, 800));
+await srv.close();

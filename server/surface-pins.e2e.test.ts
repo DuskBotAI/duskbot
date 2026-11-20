@@ -273,7 +273,8 @@ describe("surface pin provenance against the real server", () => {
     await stop();
     editSavedBot(bot.id, saved => {
       saved.browserProfile = "guest";
-      saved.tasks.find((task: any) => task.threadId === delegated.threadId).openedBy = { botId: "coordinator", name: "Coordinator", kind: "work", at: Date.now() };
+      // a thread a teammate opened in its own folder; a "work" thread would fold into the bot's own chat at start
+      saved.tasks.find((task: any) => task.threadId === delegated.threadId).openedBy = { botId: "coordinator", name: "Coordinator", at: Date.now() };
     });
     const turnIn = async (threadId: string) => {
       resetTurn();

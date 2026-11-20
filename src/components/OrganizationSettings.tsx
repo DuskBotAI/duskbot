@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { AnimatePresence } from "motion/react";
 import type { ManagedDesktopState } from "../../electron/managed-desktop.mjs";
 import { activeLocale, t } from "@/lib/i18n";
 import { Card as RowsCard, CopyRow, FormDialog, FormField, ItemRow, NavRow, NoteRow } from "./ListRows";
@@ -122,7 +123,7 @@ export function OrganizationSettings() {
       {dateLabel && <NoteRow>{t("organization.expires", { date: dateLabel })}</NoteRow>}
       {error && connection && <NoteRow tone="danger">{error}</NoteRow>}
     </RowsCard>
-    {dialog === "custom" && connection?.status === "signed-out" && <FormDialog data-panel-modal="organization-custom" title={t("organization.advanced")} description={t("organization.advancedHelp")}
+    <AnimatePresence>{dialog === "custom" && connection?.status === "signed-out" && <FormDialog key="organization-custom" data-panel-modal="organization-custom" title={t("organization.advanced")} description={t("organization.advancedHelp")}
       saveLabel={t("organization.customSignIn")} canSave={Boolean(address.trim())} busy={busy}
       onSave={async () => { if (address.trim()) { await perform(() => bridge.begin({ portalOrigin: address.trim() })); setDialog(null); } }}
       onClose={() => setDialog(null)}>
@@ -130,10 +131,10 @@ export function OrganizationSettings() {
         <input type="url" required value={address} disabled={busy} onChange={(event) => setAddress(event.target.value)}
           placeholder={DEFAULT_PORTAL_ORIGIN} autoCapitalize="none" autoCorrect="off" autoComplete="off" spellCheck={false} maxLength={2048} className={textFieldCls} />
       </FormField>
-    </FormDialog>}
-    {dialog === "security" && connection?.status === "connecting" && connection.enrollment && <FormDialog data-panel-modal="organization-security" title={t("organization.securityDetails")}
+    </FormDialog>}</AnimatePresence>
+    <AnimatePresence>{dialog === "security" && connection?.status === "connecting" && connection.enrollment && <FormDialog key="organization-security" data-panel-modal="organization-security" title={t("organization.securityDetails")}
       description={t("organization.securityDetailsHelp")} onClose={() => setDialog(null)}>
       <div className="-mx-2"><CopyRow title={t("organization.code")} text={connection.enrollment.userCode} /></div>
-    </FormDialog>}
+    </FormDialog>}</AnimatePresence>
   </>;
 }

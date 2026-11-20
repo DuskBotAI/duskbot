@@ -1,0 +1,2129 @@
+{
+  "toolkit": "googledocs",
+  "name": "Google Docs",
+  "version": "20261116_00",
+  "description": "Google Docs is a cloud-based word processor with real-time collaboration, version history, and integration with other Google Workspace apps",
+  "managed_sign_in": true,
+  "auth": [
+    "OAuth2"
+  ],
+  "tools_count": 48,
+  "triggers_count": 10,
+  "tools": [
+    {
+      "name": "Copy Google Document",
+      "slug": "GOOGLEDOCS_COPY_DOCUMENT",
+      "kind": "write",
+      "description": "Tool to create a copy of an existing Google Document. Use this to duplicate a document, for example, when using an existing document as a template. The copied document will have a default title (e.g., 'Copy of [original title]') if no new title is provided, and will be placed in the user's root Google Drive folder.",
+      "inputs": [
+        {
+          "name": "title",
+          "type": "string",
+          "required": false,
+          "about": "The title for the new copied document. If not provided, the title will be 'Copy of [original document's title]'."
+        },
+        {
+          "name": "document_id",
+          "type": "string",
+          "required": true,
+          "about": "The ID of the Google Document to be copied."
+        },
+        {
+          "name": "include_shared_drives",
+          "type": "boolean",
+          "required": false,
+          "about": "Whether to support copying documents from shared drives. Defaults to True."
+        }
+      ],
+      "scopes": [
+        "https://www.googleapis.com/auth/drive",
+        "https://www.googleapis.com/auth/drive.appdata",
+        "https://www.googleapis.com/auth/drive.file",
+        "https://www.googleapis.com/auth/drive.photos.readonly"
+      ],
+      "tags": [
+        "googledocs",
+        "documents",
+        "copy",
+        "important",
+        "createHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Create and Populate Table in Google Doc",
+      "slug": "GOOGLEDOCS_CREATE_AND_POPULATE_TABLE",
+      "kind": "write",
+      "description": "Creates a table in a Google Document and attempts to populate its cells with the provided text. Table creation and cell population are separate steps, so a failure after creation can leave the table in the document.",
+      "inputs": [
+        {
+          "name": "rows",
+          "type": "integer",
+          "required": true,
+          "about": "The number of rows in the table. Must be between 1 and 20."
+        },
+        {
+          "name": "index",
+          "type": "integer",
+          "required": false,
+          "about": "The zero-based index where the table will be inserted, in UTF-16 code units. The index must be strictly less than the segment's end index. To insert at the end of a segment, omit this parameter and set 'insertAtEndOfSegment' to true instead."
+        },
+        {
+          "name": "tabId",
+          "type": "string",
+          "required": false,
+          "about": "The tab that the location is in. When omitted, the request is applied to the first tab."
+        },
+        {
+          "name": "columns",
+          "type": "integer",
+          "required": true,
+          "about": "The number of columns in the table. Must be between 1 and 20."
+        },
+        {
+          "name": "cellData",
+          "type": "array",
+          "required": true,
+          "about": "A 2D array (list of lists) containing the text content for each cell. The outer list represents rows, and each inner list represents columns. Must match the dimensions specified by 'rows' and 'columns'. Empty strings are allowed for empty cells."
+        },
+        {
+          "name": "segmentId",
+          "type": "string",
+          "required": false,
+          "about": "The ID of the header, footer or footnote the location is in. An empty segment ID signifies the document's body."
+        },
+        {
+          "name": "documentId",
+          "type": "string",
+          "required": true,
+          "about": "The ID of the document to update."
+        },
+        {
+          "name": "insertAtEndOfSegment",
+          "type": "boolean",
+          "required": false,
+          "about": "If true, inserts the table at the end of the segment (document body, header, or footer specified by segment_id). If false or omitted, and 'index' is not provided, it defaults to inserting at the end of the document body."
+        }
+      ],
+      "scopes": [
+        "https://www.googleapis.com/auth/documents",
+        "https://www.googleapis.com/auth/drive",
+        "https://www.googleapis.com/auth/drive.file"
+      ],
+      "tags": [
+        "important",
+        "createHint",
+        "openWorldHint",
+        "table",
+        "insert"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Create a document",
+      "slug": "GOOGLEDOCS_CREATE_DOCUMENT",
+      "kind": "write",
+      "description": "Creates a new Google Docs document using the provided title as filename and inserts the initial text at the beginning if non-empty, returning the document's ID and metadata (excluding body content).",
+      "inputs": [
+        {
+          "name": "text",
+          "type": "string",
+          "required": false,
+          "about": "Optional initial text content to insert at the beginning of the new document. If not provided, an empty document will be created. For very large text (over 50,000 characters), the text will be inserted in chunks to avoid API limits."
+        },
+        {
+          "name": "title",
+          "type": "string",
+          "required": true,
+          "about": "Title for the new document, used as its filename in Google Drive."
+        }
+      ],
+      "scopes": [
+        "https://www.googleapis.com/auth/documents",
+        "https://www.googleapis.com/auth/drive",
+        "https://www.googleapis.com/auth/drive.file"
+      ],
+      "tags": [
+        "openWorldHint",
+        "createHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Create blank document (Deprecated)",
+      "slug": "GOOGLEDOCS_CREATE_DOCUMENT2",
+      "kind": "write",
+      "description": "DEPRECATED: Use GOOGLEDOCS_CREATE_DOCUMENT instead. Tool to create a blank Google Docs document with a specified title. Use when you need to create a new, empty document.",
+      "inputs": [
+        {
+          "name": "title",
+          "type": "string",
+          "required": true,
+          "about": "The title of the document to create. This will be used as the document name in Google Drive."
+        }
+      ],
+      "scopes": [
+        "https://www.googleapis.com/auth/documents",
+        "https://www.googleapis.com/auth/drive",
+        "https://www.googleapis.com/auth/drive.file"
+      ],
+      "tags": [
+        "important",
+        "openWorldHint",
+        "document",
+        "deprecated",
+        "createHint"
+      ],
+      "deprecated": true
+    },
+    {
+      "name": "Create Document Markdown",
+      "slug": "GOOGLEDOCS_CREATE_DOCUMENT_MARKDOWN",
+      "kind": "write",
+      "description": "Creates a new Google Docs document, optionally initializing it with a title and content provided as Markdown text.",
+      "inputs": [
+        {
+          "name": "title",
+          "type": "string",
+          "required": true,
+          "about": "The title for the new Google Docs document."
+        },
+        {
+          "name": "image_assets",
+          "type": "array",
+          "required": false,
+          "about": "Optional uploaded images that Markdown can reference by name. Use Markdown image syntax like ![Alt](attachment://diagram). Public HTTPS image URLs in markdown do not need image_assets."
+        },
+        {
+          "name": "markdown_text",
+          "type": "string",
+          "required": false,
+          "about": "The initial content for the document, formatted as Markdown. Also accepts 'content' as an alias. Supports headings, real Google Docs lists including nested lists, multiple Markdown tables, task-list markers, images via publicly accessible URLs or matching image_assets uploads (max 2KB URL length aft"
+        }
+      ],
+      "scopes": [
+        "https://www.googleapis.com/auth/documents",
+        "https://www.googleapis.com/auth/drive",
+        "https://www.googleapis.com/auth/drive.file"
+      ],
+      "tags": [
+        "openWorldHint",
+        "important",
+        "createHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Create Drive File",
+      "slug": "GOOGLEDOCS_CREATE_DRIVE_FILE",
+      "kind": "write",
+      "description": "Create a metadata-only Google Drive file, folder, or shortcut.",
+      "inputs": [
+        {
+          "name": "name",
+          "type": "string",
+          "required": false,
+          "about": "Name of the Drive item. Google Drive supplies a default when omitted."
+        },
+        {
+          "name": "fields",
+          "type": "string",
+          "required": false,
+          "about": "Drive partial-response field selector."
+        },
+        {
+          "name": "starred",
+          "type": "boolean",
+          "required": false,
+          "about": "Whether the item is starred."
+        },
+        {
+          "name": "mime_type",
+          "type": "string",
+          "required": false,
+          "about": "Drive MIME type, such as application/vnd.google-apps.folder."
+        },
+        {
+          "name": "properties",
+          "type": "object",
+          "required": false,
+          "about": "Public custom properties."
+        },
+        {
+          "name": "description",
+          "type": "string",
+          "required": false,
+          "about": "File description."
+        },
+        {
+          "name": "app_properties",
+          "type": "object",
+          "required": false,
+          "about": "Private app custom properties."
+        },
+        {
+          "name": "parent_folder_id",
+          "type": "string",
+          "required": false,
+          "about": "Parent Drive folder ID."
+        },
+        {
+          "name": "shortcut_target_id",
+          "type": "string",
+          "required": false,
+          "about": "Target ID when creating a Drive shortcut."
+        },
+        {
+          "name": "supports_all_drives",
+          "type": "boolean",
+          "required": false,
+          "about": "Support My Drive and shared drives."
+        }
+      ],
+      "scopes": [
+        "https://www.googleapis.com/auth/drive",
+        "https://www.googleapis.com/auth/drive.file"
+      ],
+      "tags": [
+        "googledocs",
+        "drive",
+        "file",
+        "openWorldHint",
+        "createHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Create Footer",
+      "slug": "GOOGLEDOCS_CREATE_FOOTER",
+      "kind": "write",
+      "description": "Creates a footer in a Google document for the specified type and optional section. If the API reports that a footer already exists, the tool may return the document's existing default footer ID instead.",
+      "inputs": [
+        {
+          "name": "type",
+          "type": "string",
+          "required": true,
+          "about": "The type of footer to create."
+        },
+        {
+          "name": "document_id",
+          "type": "string",
+          "required": true,
+          "about": "The ID of the document to create the footer in."
+        },
+        {
+          "name": "section_break_location",
+          "type": "object",
+          "required": false,
+          "about": "The location of the SectionBreak immediately preceding the section whose SectionStyle this footer should belong to. If this is unset or refers to the first section break in the document, the footer applies to the document style."
+        }
+      ],
+      "scopes": [
+        "https://www.googleapis.com/auth/documents",
+        "https://www.googleapis.com/auth/drive",
+        "https://www.googleapis.com/auth/drive.file"
+      ],
+      "tags": [
+        "important",
+        "document",
+        "footer",
+        "createHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Create Footnote",
+      "slug": "GOOGLEDOCS_CREATE_FOOTNOTE",
+      "kind": "write",
+      "description": "Tool to create a new footnote in a Google Document. Use this when you need to add a footnote at a specific location or at the end of the document body.",
+      "inputs": [
+        {
+          "name": "location",
+          "type": "object",
+          "required": false,
+          "about": "Inserts the footnote reference at a specific index in the document. The segmentId within this Location object must be empty as footnotes can only be inserted in the document body."
+        },
+        {
+          "name": "documentId",
+          "type": "string",
+          "required": true,
+          "about": "The ID of the document to create the footnote in."
+        },
+        {
+          "name": "endOfSegmentLocation",
+          "type": "object",
+          "required": false,
+          "about": "Inserts the footnote reference at the end of the document body. The segmentId within this EndOfSegmentLocation object must be empty."
+        }
+      ],
+      "scopes": [
+        "https://www.googleapis.com/auth/documents",
+        "https://www.googleapis.com/auth/drive",
+        "https://www.googleapis.com/auth/drive.file"
+      ],
+      "tags": [
+        "important",
+        "document",
+        "createHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Create Header",
+      "slug": "GOOGLEDOCS_CREATE_HEADER",
+      "kind": "write",
+      "description": "Creates a header in a Google Document, optionally for a specified section, and can add text. For a document-level default header, it may reuse an existing header; text insertion is attempted separately and its success is reported.",
+      "inputs": [
+        {
+          "name": "text",
+          "type": "string",
+          "required": false,
+          "about": "Optional text content to add to the header after creation. If provided, the text will be inserted into the header at index 0."
+        },
+        {
+          "name": "type",
+          "type": "string",
+          "required": false,
+          "about": "The type of header to create. Use 'DEFAULT' for the standard document header. Only one DEFAULT header can exist per document; if one already exists, the existing header ID will be returned."
+        },
+        {
+          "name": "documentId",
+          "type": "string",
+          "required": true,
+          "about": "The ID of the document to create the header in."
+        },
+        {
+          "name": "sectionBreakLocation",
+          "type": "object",
+          "required": false,
+          "about": "The location of the SectionBreak which begins the section this header should belong to. Only needed for section-specific headers."
+        }
+      ],
+      "scopes": [
+        "https://www.googleapis.com/auth/documents",
+        "https://www.googleapis.com/auth/drive",
+        "https://www.googleapis.com/auth/drive.file"
+      ],
+      "tags": [
+        "important",
+        "document",
+        "createHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Create Named Range",
+      "slug": "GOOGLEDOCS_CREATE_NAMED_RANGE",
+      "kind": "write",
+      "description": "Tool to create a new named range in a Google Document. Use this to assign a name to a specific part of the document for easier reference or programmatic manipulation.",
+      "inputs": [
+        {
+          "name": "name",
+          "type": "string",
+          "required": true,
+          "about": "The name for the new named range. Must be 1-256 characters."
+        },
+        {
+          "name": "tabId",
+          "type": "string",
+          "required": false,
+          "about": "Optional. The ID of the document tab containing this range. When omitted, Google Docs applies the request to the first tab."
+        },
+        {
+          "name": "documentId",
+          "type": "string",
+          "required": true,
+          "about": "The ID of the document where the named range will be created."
+        },
+        {
+          "name": "rangeEndIndex",
+          "type": "integer",
+          "required": true,
+          "about": "The zero-based end index of the range."
+        },
+        {
+          "name": "rangeSegmentId",
+          "type": "string",
+          "required": false,
+          "about": "Optional. The ID of the header, footer, or footnote. Empty for document body."
+        },
+        {
+          "name": "rangeStartIndex",
+          "type": "integer",
+          "required": true,
+          "about": "The zero-based start index of the range."
+        }
+      ],
+      "scopes": [
+        "https://www.googleapis.com/auth/documents",
+        "https://www.googleapis.com/auth/drive",
+        "https://www.googleapis.com/auth/drive.file"
+      ],
+      "tags": [
+        "googledocs",
+        "documents",
+        "ranges",
+        "important",
+        "createHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Create Paragraph Bullets",
+      "slug": "GOOGLEDOCS_CREATE_PARAGRAPH_BULLETS",
+      "kind": "write",
+      "description": "Tool to add bullets to paragraphs within a specified range in a Google Document. Use when you need to format a list or a set of paragraphs as bullet points.",
+      "inputs": [
+        {
+          "name": "tabId",
+          "type": "string",
+          "required": false,
+          "about": "Optional tab ID to apply to createParagraphBullets.range.tabId. When omitted, Google Docs applies the request to the first tab."
+        },
+        {
+          "name": "document_id",
+          "type": "string",
+          "required": true,
+          "about": "The ID of the document to update."
+        },
+        {
+          "name": "createParagraphBullets",
+          "type": "object",
+          "required": true,
+          "about": "The request body for creating paragraph bullets in the document."
+        }
+      ],
+      "scopes": [
+        "https://www.googleapis.com/auth/documents",
+        "https://www.googleapis.com/auth/drive",
+        "https://www.googleapis.com/auth/drive.file"
+      ],
+      "tags": [
+        "googledocs",
+        "important",
+        "updateHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Create Document Tab",
+      "slug": "GOOGLEDOCS_CREATE_TAB",
+      "kind": "write",
+      "description": "Creates a new tab in a Google Docs document. Tabs allow you to organize document content into separate sections within a single document. Use this action when you need to add a new organizational tab to a document. When a tab is added at a specified index, all subsequent tabs' indexes are automatically incremented.",
+      "inputs": [
+        {
+          "name": "document_id",
+          "type": "string",
+          "required": true,
+          "about": "The unique identifier of the Google Docs document where the tab will be created. This ID can be found in the document's URL."
+        },
+        {
+          "name": "tab_properties",
+          "type": "object",
+          "required": false,
+          "about": "Properties of a tab to be created."
+        }
+      ],
+      "scopes": [
+        "https://www.googleapis.com/auth/documents",
+        "https://www.googleapis.com/auth/drive",
+        "https://www.googleapis.com/auth/drive.file"
+      ],
+      "tags": [
+        "important",
+        "createHint",
+        "openWorldHint",
+        "tabs"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Delete Content Range in Document",
+      "slug": "GOOGLEDOCS_DELETE_CONTENT_RANGE",
+      "kind": "write",
+      "description": "Tool to delete a range of content from a Google Document. Use when you need to remove a specific portion of text or other structural elements within a document. Note: Every segment (body, header, footer, footnote) in Google Docs ends with a final newline character that cannot be deleted. Ensure the endIndex does not include this trailing newline.",
+      "inputs": [
+        {
+          "name": "range",
+          "type": "object",
+          "required": true,
+          "about": "The range of content to delete. Deleting text across paragraph boundaries may merge paragraphs and affect styles. Certain deletions can invalidate document structure (e.g., part of a surrogate pair, last newline of critical elements, incomplete deletion of tables/equations). IMPORTANT: The endIndex "
+        },
+        {
+          "name": "document_id",
+          "type": "string",
+          "required": true,
+          "about": "The ID of the document from which to delete content. This ID can be found in the URL of the Google Doc."
+        }
+      ],
+      "scopes": [
+        "https://www.googleapis.com/auth/documents",
+        "https://www.googleapis.com/auth/drive",
+        "https://www.googleapis.com/auth/drive.file"
+      ],
+      "tags": [
+        "googledocs",
+        "document",
+        "content",
+        "delete",
+        "important",
+        "updateHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Delete Footer",
+      "slug": "GOOGLEDOCS_DELETE_FOOTER",
+      "kind": "write",
+      "description": "Tool to delete a footer from a Google Document. Use when you need to remove a footer from a specific section or the default footer.",
+      "inputs": [
+        {
+          "name": "tab_id",
+          "type": "string",
+          "required": false,
+          "about": "The tab that contains the footer to delete. When omitted, the request is applied to the first tab."
+        },
+        {
+          "name": "footer_id",
+          "type": "string",
+          "required": true,
+          "about": "The ID of the footer to delete. Footer IDs are system-generated strings created by Google Docs. Obtain a valid footer ID from: (1) GOOGLEDOCS_CREATE_FOOTER response (footer_id field), or (2) GOOGLEDOCS_GET_DOCUMENT_BY_ID (footers dictionary keys). Do not use made-up or placeholder values. If this fo"
+        },
+        {
+          "name": "document_id",
+          "type": "string",
+          "required": true,
+          "about": "The ID of the document to delete the footer from."
+        }
+      ],
+      "scopes": [
+        "https://www.googleapis.com/auth/documents",
+        "https://www.googleapis.com/auth/drive",
+        "https://www.googleapis.com/auth/drive.file"
+      ],
+      "tags": [
+        "important",
+        "document",
+        "footer",
+        "destructiveHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Delete Header",
+      "slug": "GOOGLEDOCS_DELETE_HEADER",
+      "kind": "write",
+      "description": "Deletes a specified header by ID from a Google Document, optionally targeting a document tab.",
+      "inputs": [
+        {
+          "name": "tab_id",
+          "type": "string",
+          "required": false,
+          "about": "The tab containing the header to delete. When omitted, the request is applied to the first tab."
+        },
+        {
+          "name": "header_id",
+          "type": "string",
+          "required": true,
+          "about": "The ID of the header to delete. If this header is defined on `DocumentStyle`, the reference to this header is removed, resulting in no header of that type for the first section of the document. If this header is defined on a `SectionStyle`, the reference to this header is removed and the header of t"
+        },
+        {
+          "name": "document_id",
+          "type": "string",
+          "required": true,
+          "about": "The ID of the document from which to delete the header."
+        }
+      ],
+      "scopes": [
+        "https://www.googleapis.com/auth/documents",
+        "https://www.googleapis.com/auth/drive",
+        "https://www.googleapis.com/auth/drive.file"
+      ],
+      "tags": [
+        "important",
+        "document",
+        "header",
+        "destructiveHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Delete Named Range",
+      "slug": "GOOGLEDOCS_DELETE_NAMED_RANGE",
+      "kind": "write",
+      "description": "Tool to delete a named range from a Google Document. Use when you need to remove a previously defined named range by its ID or name.",
+      "inputs": [
+        {
+          "name": "document_id",
+          "type": "string",
+          "required": true,
+          "about": "The ID of the document."
+        },
+        {
+          "name": "deleteNamedRange",
+          "type": "object",
+          "required": true,
+          "about": "Specifies the named range to delete."
+        }
+      ],
+      "scopes": [
+        "https://www.googleapis.com/auth/documents",
+        "https://www.googleapis.com/auth/drive",
+        "https://www.googleapis.com/auth/drive.file"
+      ],
+      "tags": [
+        "important",
+        "document",
+        "delete",
+        "destructiveHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Delete Paragraph Bullets",
+      "slug": "GOOGLEDOCS_DELETE_PARAGRAPH_BULLETS",
+      "kind": "write",
+      "description": "Tool to remove bullets from paragraphs within a specified range in a Google Document. Use when you need to clear bullet formatting from a section of a document.",
+      "inputs": [
+        {
+          "name": "range",
+          "type": "object",
+          "required": true,
+          "about": "The range of the document from which to delete paragraph bullets. The range is applied to the document body by default. To specify a different segment (e.g. header, footer), include segment_id in the range object."
+        },
+        {
+          "name": "tab_id",
+          "type": "string",
+          "required": false,
+          "about": "The ID of the tab the range is in. If omitted, it applies to the first tab or the singular tab in a single-tab document."
+        },
+        {
+          "name": "document_id",
+          "type": "string",
+          "required": true,
+          "about": "The ID of the document to update."
+        }
+      ],
+      "scopes": [
+        "https://www.googleapis.com/auth/documents",
+        "https://www.googleapis.com/auth/drive",
+        "https://www.googleapis.com/auth/drive.file"
+      ],
+      "tags": [
+        "important",
+        "googledocs",
+        "document",
+        "edit",
+        "updateHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Delete Tab",
+      "slug": "GOOGLEDOCS_DELETE_TAB",
+      "kind": "write",
+      "description": "Deletes a tab from a Google Document. This action is irreversible — the tab cannot be recovered once removed. Use when you need to remove a tab and all its child tabs from a document's tab structure.",
+      "inputs": [
+        {
+          "name": "tab_id",
+          "type": "string",
+          "required": true,
+          "about": "The ID of the tab to delete. If the tab has child tabs, they will also be deleted."
+        },
+        {
+          "name": "document_id",
+          "type": "string",
+          "required": true,
+          "about": "The ID of the document containing the tab to delete."
+        }
+      ],
+      "scopes": [
+        "https://www.googleapis.com/auth/documents",
+        "https://www.googleapis.com/auth/drive",
+        "https://www.googleapis.com/auth/drive.file"
+      ],
+      "tags": [
+        "important",
+        "destructiveHint",
+        "idempotentHint",
+        "openWorldHint",
+        "tab"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Delete Table Column",
+      "slug": "GOOGLEDOCS_DELETE_TABLE_COLUMN",
+      "kind": "write",
+      "description": "Tool to delete a column from a table in a Google Document. Use this tool when you need to remove a specific column from an existing table within a document.",
+      "inputs": [
+        {
+          "name": "requests",
+          "type": "array",
+          "required": true,
+          "about": "A list of requests to be applied to the document."
+        },
+        {
+          "name": "document_id",
+          "type": "string",
+          "required": true,
+          "about": "The ID of the document to delete the table column from."
+        }
+      ],
+      "scopes": [
+        "https://www.googleapis.com/auth/documents",
+        "https://www.googleapis.com/auth/drive",
+        "https://www.googleapis.com/auth/drive.file"
+      ],
+      "tags": [
+        "important",
+        "googledocs",
+        "table",
+        "updateHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Delete Table Row",
+      "slug": "GOOGLEDOCS_DELETE_TABLE_ROW",
+      "kind": "write",
+      "description": "Tool to delete a row from a table in a Google Document. Use when you need to remove a specific row from an existing table.",
+      "inputs": [
+        {
+          "name": "documentId",
+          "type": "string",
+          "required": true,
+          "about": "The ID of the document."
+        },
+        {
+          "name": "tableCellLocation",
+          "type": "object",
+          "required": true,
+          "about": "The reference table cell location from which the row will be deleted."
+        }
+      ],
+      "scopes": [
+        "https://www.googleapis.com/auth/documents",
+        "https://www.googleapis.com/auth/drive",
+        "https://www.googleapis.com/auth/drive.file"
+      ],
+      "tags": [
+        "important",
+        "table",
+        "updateHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Export Google Doc as PDF",
+      "slug": "GOOGLEDOCS_EXPORT_DOCUMENT_AS_PDF",
+      "kind": "write",
+      "description": "Tool to export a Google Docs file as PDF using the Google Drive API. Use when you need to generate a PDF version of a Google Docs document for download or distribution. Note: Google Drive enforces a 10MB limit on export content.",
+      "inputs": [
+        {
+          "name": "file_id",
+          "type": "string",
+          "required": true,
+          "about": "The ID of the Google Docs file to export as PDF. This is the same as the document ID for Google Docs files - typically a 44-character alphanumeric string. Extract it from a Google Docs URL: https://docs.google.com/document/d/{FILE_ID}/edit"
+        },
+        {
+          "name": "filename",
+          "type": "string",
+          "required": false,
+          "about": "Optional suggested filename for the exported PDF (e.g., 'report.pdf'). If not provided, a default filename will be generated."
+        }
+      ],
+      "scopes": [
+        "https://www.googleapis.com/auth/drive",
+        "https://www.googleapis.com/auth/drive.file",
+        "https://www.googleapis.com/auth/drive.meet.readonly",
+        "https://www.googleapis.com/auth/drive.readonly"
+      ],
+      "tags": [
+        "important",
+        "openWorldHint",
+        "readOnlyHint",
+        "export"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get Drive File Metadata",
+      "slug": "GOOGLEDOCS_GET_DOCS_DRIVE_FILE_METADATA",
+      "kind": "read",
+      "description": "Get selected metadata fields for one Google Drive file by ID.",
+      "inputs": [
+        {
+          "name": "fields",
+          "type": "string",
+          "required": false,
+          "about": "Drive partial-response field selector."
+        },
+        {
+          "name": "fileId",
+          "type": "string",
+          "required": true,
+          "about": "Opaque Google Drive file ID."
+        },
+        {
+          "name": "includeLabels",
+          "type": "string",
+          "required": false,
+          "about": "Comma-separated label IDs to include in labelInfo."
+        },
+        {
+          "name": "supportsAllDrives",
+          "type": "boolean",
+          "required": false,
+          "about": "Whether the request supports files in My Drive and shared drives."
+        },
+        {
+          "name": "includePermissionsForView",
+          "type": "string",
+          "required": false,
+          "about": "Include permissions for the published view."
+        }
+      ],
+      "scopes": [
+        "https://www.googleapis.com/auth/drive",
+        "https://www.googleapis.com/auth/drive.appdata",
+        "https://www.googleapis.com/auth/drive.file",
+        "https://www.googleapis.com/auth/drive.meet.readonly",
+        "https://www.googleapis.com/auth/drive.metadata",
+        "https://www.googleapis.com/auth/drive.metadata.readonly",
+        "https://www.googleapis.com/auth/drive.photos.readonly",
+        "https://www.googleapis.com/auth/drive.readonly"
+      ],
+      "tags": [
+        "file",
+        "idempotentHint",
+        "openWorldHint",
+        "readOnlyHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get Spreadsheet Values",
+      "slug": "GOOGLEDOCS_GET_DOCS_SPREADSHEET_VALUES",
+      "kind": "read",
+      "description": "Read cell values from one range in a Google Sheets spreadsheet.",
+      "inputs": [
+        {
+          "name": "range",
+          "type": "string",
+          "required": true,
+          "about": "An A1 or R1C1 notation range to read, including a sheet name when needed, such as 'Sheet1!A1:D100'."
+        },
+        {
+          "name": "spreadsheet_id",
+          "type": "string",
+          "required": true,
+          "about": "The Google Sheets spreadsheet ID from the spreadsheet URL."
+        },
+        {
+          "name": "major_dimension",
+          "type": "string",
+          "required": false,
+          "about": "Whether the outer values array represents rows or columns."
+        },
+        {
+          "name": "value_render_option",
+          "type": "string",
+          "required": false,
+          "about": "How cell values are represented in the response."
+        },
+        {
+          "name": "date_time_render_option",
+          "type": "string",
+          "required": false,
+          "about": "How dates, times, and durations are represented when value_render_option is UNFORMATTED_VALUE."
+        }
+      ],
+      "scopes": [
+        "https://www.googleapis.com/auth/drive",
+        "https://www.googleapis.com/auth/drive.readonly",
+        "https://www.googleapis.com/auth/drive.file",
+        "https://www.googleapis.com/auth/spreadsheets",
+        "https://www.googleapis.com/auth/spreadsheets.readonly"
+      ],
+      "tags": [
+        "googlesheets",
+        "cell_values",
+        "readOnlyHint",
+        "idempotentHint",
+        "openWorldHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get document by id",
+      "slug": "GOOGLEDOCS_GET_DOCUMENT_BY_ID",
+      "kind": "read",
+      "description": "Retrieves an existing Google Document by its ID; will error if the document is not found.",
+      "inputs": [
+        {
+          "name": "id",
+          "type": "string",
+          "required": true,
+          "about": "The unique identifier for a native Google Docs document (typically a 44-character alphanumeric string). Accepts either a document ID or a full Google Docs URL (e.g., https://docs.google.com/document/d/{DOCUMENT_ID}/edit). When a URL is provided, the document ID will be automatically extracted. IMPOR"
+        },
+        {
+          "name": "includeTabsContent",
+          "type": "boolean",
+          "required": false,
+          "about": "When true, request includeTabsContent=true so the response includes document.tabs with content for all tabs. When false, Google Docs returns the legacy first-tab content fields."
+        }
+      ],
+      "scopes": [
+        "https://www.googleapis.com/auth/documents",
+        "https://www.googleapis.com/auth/documents.readonly",
+        "https://www.googleapis.com/auth/drive",
+        "https://www.googleapis.com/auth/drive.readonly",
+        "https://www.googleapis.com/auth/drive.file"
+      ],
+      "tags": [
+        "idempotentHint",
+        "openWorldHint",
+        "readOnlyHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get Document End Index",
+      "slug": "GOOGLEDOCS_GET_DOCUMENT_END_INDEX",
+      "kind": "read",
+      "description": "Retrieves the end index and paragraph structure of a Google Document or specific segment. Use this action when you need to determine valid insertion points for text operations, especially before using insertText requests. The end index represents the maximum boundary of the document body or specified segment (header, footer, footnote, or tab).",
+      "inputs": [
+        {
+          "name": "tab_id",
+          "type": "string",
+          "required": false,
+          "about": "The ID of the document tab to get the end index from. When omitted, the request is applied to the first tab."
+        },
+        {
+          "name": "segment_id",
+          "type": "string",
+          "required": false,
+          "about": "The ID of the header, footer, or footnote segment to get the end index for. Leave empty or omit to get the end index of the document body."
+        },
+        {
+          "name": "document_id",
+          "type": "string",
+          "required": true,
+          "about": "The ID of the document to retrieve the end index from."
+        }
+      ],
+      "scopes": [
+        "https://www.googleapis.com/auth/documents",
+        "https://www.googleapis.com/auth/documents.readonly",
+        "https://www.googleapis.com/auth/drive",
+        "https://www.googleapis.com/auth/drive.readonly",
+        "https://www.googleapis.com/auth/drive.file"
+      ],
+      "tags": [
+        "readOnlyHint",
+        "idempotentHint",
+        "openWorldHint",
+        "document"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get document plain text",
+      "slug": "GOOGLEDOCS_GET_DOCUMENT_PLAINTEXT",
+      "kind": "read",
+      "description": "Retrieve a Google Doc by ID and return a best-effort plain-text rendering. Converts document structure into plain text including paragraphs, lists, and tables without requiring clients to traverse complex Docs API JSON.",
+      "inputs": [
+        {
+          "name": "tab_ids",
+          "type": "array",
+          "required": false,
+          "about": "Optional tab IDs to include when include_tabs_content=true. Nested child tabs are searched recursively."
+        },
+        {
+          "name": "document_id",
+          "type": "string",
+          "required": true,
+          "about": "The unique identifier for the Google Document. Accepts either a document ID (typically a 44-character alphanumeric string) or a full Google Docs URL. When a URL is provided, the document ID will be automatically extracted. Note: This parameter also accepts 'id' as an alias for consistency with other"
+        },
+        {
+          "name": "include_tables",
+          "type": "boolean",
+          "required": false,
+          "about": "Whether to include table content in the plain text output. Tables are rendered with configurable cell and row delimiters."
+        },
+        {
+          "name": "include_footers",
+          "type": "boolean",
+          "required": false,
+          "about": "Whether to include footer text in the plain text output. Footers are appended with a clear section separator."
+        },
+        {
+          "name": "include_headers",
+          "type": "boolean",
+          "required": false,
+          "about": "Whether to include header text in the plain text output. Headers are appended with a clear section separator."
+        },
+        {
+          "name": "include_footnotes",
+          "type": "boolean",
+          "required": false,
+          "about": "Whether to include footnote text in the plain text output. Footnotes are appended with a clear section separator."
+        },
+        {
+          "name": "table_row_delimiter",
+          "type": "string",
+          "required": false,
+          "about": "The delimiter to use between table rows (default: newline character)."
+        },
+        {
+          "name": "include_tabs_content",
+          "type": "boolean",
+          "required": false,
+          "about": "When true, fetch the document using includeTabsContent=true query parameter to render all tabs. When false, only the main body content is rendered."
+        },
+        {
+          "name": "table_cell_delimiter",
+          "type": "string",
+          "required": false,
+          "about": "The delimiter to use between table cells (default: tab character)."
+        }
+      ],
+      "scopes": [
+        "https://www.googleapis.com/auth/documents",
+        "https://www.googleapis.com/auth/documents.readonly",
+        "https://www.googleapis.com/auth/drive",
+        "https://www.googleapis.com/auth/drive.readonly",
+        "https://www.googleapis.com/auth/drive.file"
+      ],
+      "tags": [
+        "important",
+        "openWorldHint",
+        "readOnlyHint",
+        "idempotentHint",
+        "document"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Insert Image in Table Cell",
+      "slug": "GOOGLEDOCS_INSERT_IMAGE_IN_TABLE_CELL",
+      "kind": "write",
+      "description": "Inserts an image from a URI at a position in a Google Document table cell identified by table start index, row and column. The table lookup searches top-level body content, including the specified top-level tab when provided.",
+      "inputs": [
+        {
+          "name": "uri",
+          "type": "string",
+          "required": true,
+          "about": "The URI of the image to insert. Must be a publicly accessible direct image URL (no redirects or viewer links). Images must be less than 50MB, not exceed 25 megapixels, and be in PNG, JPEG, or GIF format (SVG not supported). The URI can be at most 2 kB in length."
+        },
+        {
+          "name": "document_id",
+          "type": "string",
+          "required": true,
+          "about": "The ID of the document containing the table."
+        },
+        {
+          "name": "object_size",
+          "type": "object",
+          "required": false,
+          "about": "The size of the image. If not specified, the image is rendered at its intrinsic size."
+        },
+        {
+          "name": "cell_content_index",
+          "type": "integer",
+          "required": false,
+          "about": "The zero-based offset within the table cell's content where the image should be inserted. Each table cell contains a paragraph, and this index specifies the position within that paragraph. Use 0 to insert at the beginning of the cell, or a higher value to insert after existing content. If omitted, t"
+        },
+        {
+          "name": "table_cell_location",
+          "type": "object",
+          "required": true,
+          "about": "The location of the table cell where the image should be inserted. Specify the table's start index, row index, and column index to identify the target cell."
+        }
+      ],
+      "scopes": [
+        "https://www.googleapis.com/auth/documents",
+        "https://www.googleapis.com/auth/drive",
+        "https://www.googleapis.com/auth/drive.file"
+      ],
+      "tags": [
+        "important",
+        "createHint",
+        "openWorldHint",
+        "table",
+        "image"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Insert Inline Image",
+      "slug": "GOOGLEDOCS_INSERT_INLINE_IMAGE",
+      "kind": "write",
+      "description": "Tool to insert an image from a given URI at a specified location in a Google Document as an inline image. Use when you need to add an image to a document programmatically.",
+      "inputs": [
+        {
+          "name": "uri",
+          "type": "string",
+          "required": true,
+          "about": "The URI of the image. Must be a publicly accessible direct image URL (no redirects or viewer links like Google Drive preview pages). Images must be less than 50MB, not exceed 25 megapixels, and be in PNG, JPEG, or GIF format (SVG not supported). The URI can be at most 2 kB in length."
+        },
+        {
+          "name": "location",
+          "type": "object",
+          "required": true,
+          "about": "The location in the document to insert the image. The index field is required to specify the insertion point."
+        },
+        {
+          "name": "documentId",
+          "type": "string",
+          "required": true,
+          "about": "The ID of the document to update."
+        },
+        {
+          "name": "objectSize",
+          "type": "object",
+          "required": false,
+          "about": "The size of the image. If not specified, the image is rendered at its intrinsic size."
+        }
+      ],
+      "scopes": [
+        "https://www.googleapis.com/auth/documents",
+        "https://www.googleapis.com/auth/drive",
+        "https://www.googleapis.com/auth/drive.file"
+      ],
+      "tags": [
+        "googledocs",
+        "document",
+        "image",
+        "insert",
+        "important",
+        "createHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Insert Page Break",
+      "slug": "GOOGLEDOCS_INSERT_PAGE_BREAK",
+      "kind": "write",
+      "description": "Tool to insert a page break into a Google Document. Use when you need to start new content on a fresh page, such as at the end of a chapter or section.",
+      "inputs": [
+        {
+          "name": "documentId",
+          "type": "string",
+          "required": true,
+          "about": "The ID of the document to update."
+        },
+        {
+          "name": "insertPageBreak",
+          "type": "",
+          "required": true,
+          "about": "The details for the insertPageBreak request."
+        }
+      ],
+      "scopes": [
+        "https://www.googleapis.com/auth/documents",
+        "https://www.googleapis.com/auth/drive",
+        "https://www.googleapis.com/auth/drive.file"
+      ],
+      "tags": [
+        "googledocs",
+        "document",
+        "important",
+        "createHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Insert Table in Google Doc",
+      "slug": "GOOGLEDOCS_INSERT_TABLE_ACTION",
+      "kind": "write",
+      "description": "Tool to insert a table into a Google Document. Use when you need to add a new table at a specific location or at the end of a segment (like document body, header, or footer) in a document.",
+      "inputs": [
+        {
+          "name": "rows",
+          "type": "integer",
+          "required": true,
+          "about": "The number of rows in the table."
+        },
+        {
+          "name": "index",
+          "type": "integer",
+          "required": false,
+          "about": "The zero-based index where the table will be inserted, in UTF-16 code units. IMPORTANT: The index must be strictly less than the segment's end index (you cannot insert at the exact end position using an index). To insert at the end of a segment, omit this parameter and set 'insertAtEndOfSegment' to "
+        },
+        {
+          "name": "tabId",
+          "type": "string",
+          "required": false,
+          "about": "The tab that the location is in. When omitted, the request is applied to the first tab."
+        },
+        {
+          "name": "columns",
+          "type": "integer",
+          "required": true,
+          "about": "The number of columns in the table."
+        },
+        {
+          "name": "segmentId",
+          "type": "string",
+          "required": false,
+          "about": "The ID of the header, footer or footnote the location is in. An empty segment ID signifies the document's body."
+        },
+        {
+          "name": "documentId",
+          "type": "string",
+          "required": true,
+          "about": "The ID of the document to update."
+        },
+        {
+          "name": "insertAtEndOfSegment",
+          "type": "boolean",
+          "required": false,
+          "about": "If true, inserts the table at the end of the segment (document body, header, or footer specified by segment_id). This is the recommended way to append content to the end of a segment, as using an index equal to the segment's end position will fail. If false or omitted, and 'index' is not provided, i"
+        }
+      ],
+      "scopes": [
+        "https://www.googleapis.com/auth/documents",
+        "https://www.googleapis.com/auth/drive",
+        "https://www.googleapis.com/auth/drive.file"
+      ],
+      "tags": [
+        "googledocs",
+        "table",
+        "insert",
+        "important",
+        "createHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Insert Table Column",
+      "slug": "GOOGLEDOCS_INSERT_TABLE_COLUMN",
+      "kind": "write",
+      "description": "Tool to insert a new column into a table in a Google Document. Use this tool when you need to add a column to an existing table at a specific location.",
+      "inputs": [
+        {
+          "name": "requests",
+          "type": "array",
+          "required": true,
+          "about": "A list of insert table column requests. Multiple requests can be sent in a single call to insert columns at different locations in the document."
+        },
+        {
+          "name": "document_id",
+          "type": "string",
+          "required": true,
+          "about": "The ID of the document to update."
+        }
+      ],
+      "scopes": [
+        "https://www.googleapis.com/auth/documents",
+        "https://www.googleapis.com/auth/drive",
+        "https://www.googleapis.com/auth/drive.file"
+      ],
+      "tags": [
+        "googledocs",
+        "table",
+        "column",
+        "insert",
+        "important",
+        "createHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Insert Table Row",
+      "slug": "GOOGLEDOCS_INSERT_TABLE_ROW",
+      "kind": "write",
+      "description": "Inserts a new row into a table in a Google Document at a specified location. Use this action when you need to add a row to an existing table, either above or below a reference cell location.",
+      "inputs": [
+        {
+          "name": "requests",
+          "type": "array",
+          "required": true,
+          "about": "A list of insert table row requests. Multiple requests can be sent in a single call to insert rows at different locations in the document."
+        },
+        {
+          "name": "document_id",
+          "type": "string",
+          "required": true,
+          "about": "The ID of the document to update."
+        }
+      ],
+      "scopes": [
+        "https://www.googleapis.com/auth/documents",
+        "https://www.googleapis.com/auth/drive",
+        "https://www.googleapis.com/auth/drive.file"
+      ],
+      "tags": [
+        "important",
+        "createHint",
+        "openWorldHint",
+        "table",
+        "row",
+        "insert"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Insert Text into Document",
+      "slug": "GOOGLEDOCS_INSERT_TEXT_ACTION",
+      "kind": "write",
+      "description": "Tool to insert a string of text at a specified location within a Google Document. Use when you need to add new text content to an existing document. IMPORTANT: Two ways to specify insertion location: 1. Use 'insertion_index' to insert at a specific position (index 1 is safe for document start) 2. Use 'append_to_end=true' to append text to the end of the document (recommended for appending) CRITICAL CONSTRAINT: When using insertion_index, the index MUST fall within the bounds of an EXISTING paragraph. You cannot insert text at arbitrary indices or at structural boundaries (e.g., table starts). The index must also be strictly less than the document's end index. To safely append text without index concerns, use append_to_end=true.",
+      "inputs": [
+        {
+          "name": "tab_id",
+          "type": "string",
+          "required": false,
+          "about": "The ID of the document tab to insert text into. When omitted, Google Docs applies the request to the first tab."
+        },
+        {
+          "name": "segment_id",
+          "type": "string",
+          "required": false,
+          "about": "The ID of the header, footer or footnote to insert text into. Leave empty or omit to insert into the document body. Works with both append_to_end and insertion_index modes."
+        },
+        {
+          "name": "document_id",
+          "type": "string",
+          "required": true,
+          "about": "The ID of the document to insert text into."
+        },
+        {
+          "name": "append_to_end",
+          "type": "boolean",
+          "required": false,
+          "about": "Set to true to append text to the end of the document body. When true, the 'insertion_index' parameter is ignored. This is the recommended way to add text at the end of a document as it avoids index boundary issues."
+        },
+        {
+          "name": "text_to_insert",
+          "type": "string",
+          "required": true,
+          "about": "The string of text to insert. Alternatively, you can provide this as 'text'."
+        },
+        {
+          "name": "insertion_index",
+          "type": "integer",
+          "required": false,
+          "about": "The zero-based UTF-16 code unit index where text will be inserted. Alternatively, you can provide this as 'index'. CRITICAL CONSTRAINTS: (1) The index MUST fall within the bounds of an EXISTING paragraph - you cannot insert at arbitrary indices or at structural boundaries like table starts. (2) The "
+        }
+      ],
+      "scopes": [
+        "https://www.googleapis.com/auth/documents",
+        "https://www.googleapis.com/auth/drive",
+        "https://www.googleapis.com/auth/drive.file"
+      ],
+      "tags": [
+        "googledocs",
+        "documents",
+        "text",
+        "important",
+        "createHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Insert Text in Table Cell",
+      "slug": "GOOGLEDOCS_INSERT_TEXT_IN_TABLE_CELL",
+      "kind": "write",
+      "description": "Insert text into a Google Docs table using the table's start index and zero-based row and column positions. Existing table content can cause the text to be inserted outside the requested cell.",
+      "inputs": [
+        {
+          "name": "text",
+          "type": "string",
+          "required": true,
+          "about": "The text to insert into the table cell."
+        },
+        {
+          "name": "tabId",
+          "type": "string",
+          "required": false,
+          "about": "The ID of the document tab containing the table. When omitted, the request is applied to the first tab."
+        },
+        {
+          "name": "row_index",
+          "type": "integer",
+          "required": true,
+          "about": "The zero-based row index of the target cell (0 for first row, 1 for second row, etc.)."
+        },
+        {
+          "name": "document_id",
+          "type": "string",
+          "required": true,
+          "about": "The ID of the document containing the table."
+        },
+        {
+          "name": "column_index",
+          "type": "integer",
+          "required": true,
+          "about": "The zero-based column index of the target cell (0 for first column, 1 for second column, etc.)."
+        },
+        {
+          "name": "table_start_index",
+          "type": "integer",
+          "required": true,
+          "about": "The zero-based index where the target table starts in the document, in UTF-16 code units. To find this index, use GOOGLEDOCS_GET_DOCUMENT_BY_ID to retrieve the document structure and locate the table's startIndex."
+        }
+      ],
+      "scopes": [
+        "https://www.googleapis.com/auth/documents",
+        "https://www.googleapis.com/auth/drive",
+        "https://www.googleapis.com/auth/drive.file"
+      ],
+      "tags": [
+        "important",
+        "createHint",
+        "openWorldHint",
+        "table",
+        "text",
+        "insert"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "List Drive Item Permissions",
+      "slug": "GOOGLEDOCS_LIST_DRIVE_ITEM_PERMISSIONS",
+      "kind": "read",
+      "description": "List permissions for a Google Drive file, folder, or shared drive.",
+      "inputs": [
+        {
+          "name": "fields",
+          "type": "string",
+          "required": false,
+          "about": "Drive partial-response selector for the permission page."
+        },
+        {
+          "name": "fileId",
+          "type": "string",
+          "required": true,
+          "about": "Opaque Drive file or shared drive ID."
+        },
+        {
+          "name": "pageSize",
+          "type": "integer",
+          "required": false,
+          "about": "Maximum number of permissions to return on this page (1-100)."
+        },
+        {
+          "name": "pageToken",
+          "type": "string",
+          "required": false,
+          "about": "Token from a prior next_page_token for the next page."
+        },
+        {
+          "name": "supportsAllDrives",
+          "type": "boolean",
+          "required": false,
+          "about": "Whether the request supports My Drive and shared drives."
+        },
+        {
+          "name": "useDomainAdminAccess",
+          "type": "boolean",
+          "required": false,
+          "about": "Use eligible Workspace administrator access for a shared drive."
+        },
+        {
+          "name": "includePermissionsForView",
+          "type": "string",
+          "required": false,
+          "about": "Include permissions for the published view."
+        }
+      ],
+      "scopes": [
+        "https://www.googleapis.com/auth/drive",
+        "https://www.googleapis.com/auth/drive.file",
+        "https://www.googleapis.com/auth/drive.meet.readonly",
+        "https://www.googleapis.com/auth/drive.metadata",
+        "https://www.googleapis.com/auth/drive.metadata.readonly",
+        "https://www.googleapis.com/auth/drive.photos.readonly",
+        "https://www.googleapis.com/auth/drive.readonly"
+      ],
+      "tags": [
+        "file",
+        "idempotentHint",
+        "openWorldHint",
+        "permission",
+        "readOnlyHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get Charts from Spreadsheet",
+      "slug": "GOOGLEDOCS_LIST_SPREADSHEET_CHARTS",
+      "kind": "read",
+      "description": "Tool to retrieve a list of all charts from a specified Google Sheets spreadsheet. Use when you need to get chart IDs and their specifications for embedding or referencing elsewhere, such as in Google Docs.",
+      "inputs": [
+        {
+          "name": "spreadsheet_id",
+          "type": "string",
+          "required": true,
+          "about": "The ID of the Google Sheets spreadsheet from which to retrieve charts."
+        }
+      ],
+      "scopes": [
+        "https://www.googleapis.com/auth/drive",
+        "https://www.googleapis.com/auth/drive.readonly",
+        "https://www.googleapis.com/auth/drive.file",
+        "https://www.googleapis.com/auth/spreadsheets",
+        "https://www.googleapis.com/auth/spreadsheets.readonly"
+      ],
+      "tags": [
+        "googlesheets",
+        "charts",
+        "important",
+        "readOnlyHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Replace All Text in Document",
+      "slug": "GOOGLEDOCS_REPLACE_ALL_TEXT",
+      "kind": "write",
+      "description": "Replaces occurrences of text in a Google Document, either across the document or in selected tabs. Supports case-sensitive matching and regular expressions.",
+      "inputs": [
+        {
+          "name": "tab_ids",
+          "type": "array",
+          "required": false,
+          "about": "Optional. A list of specific tab IDs to perform the replacement on. If not provided, replacement occurs on all tabs."
+        },
+        {
+          "name": "find_text",
+          "type": "string",
+          "required": true,
+          "about": "The text to search for in the document. Cannot be empty."
+        },
+        {
+          "name": "match_case",
+          "type": "boolean",
+          "required": false,
+          "about": "Indicates whether the search should be case sensitive. Defaults to False (case insensitive)."
+        },
+        {
+          "name": "document_id",
+          "type": "string",
+          "required": true,
+          "about": "The ID of the document to update."
+        },
+        {
+          "name": "replace_text",
+          "type": "string",
+          "required": true,
+          "about": "The text that will replace the matched text."
+        },
+        {
+          "name": "search_by_regex",
+          "type": "boolean",
+          "required": false,
+          "about": "Optional. If True, the find_text is treated as a regular expression. Defaults to False."
+        }
+      ],
+      "scopes": [
+        "https://www.googleapis.com/auth/documents",
+        "https://www.googleapis.com/auth/drive",
+        "https://www.googleapis.com/auth/drive.file"
+      ],
+      "tags": [
+        "important",
+        "googledocs",
+        "text",
+        "updateHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Replace Image in Document",
+      "slug": "GOOGLEDOCS_REPLACE_IMAGE",
+      "kind": "write",
+      "description": "Tool to replace a specific image in a document with a new image from a URI. Use when you need to update an existing image within a Google Doc.",
+      "inputs": [
+        {
+          "name": "document_id",
+          "type": "string",
+          "required": true,
+          "about": "The ID of the document containing the image to replace."
+        },
+        {
+          "name": "replace_image",
+          "type": "object",
+          "required": true,
+          "about": "The details of the image replacement request."
+        }
+      ],
+      "scopes": [
+        "https://www.googleapis.com/auth/documents",
+        "https://www.googleapis.com/auth/drive",
+        "https://www.googleapis.com/auth/drive.file"
+      ],
+      "tags": [
+        "important",
+        "document",
+        "image",
+        "updateHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Search Documents",
+      "slug": "GOOGLEDOCS_SEARCH_DOCUMENTS",
+      "kind": "read",
+      "description": "Search for Google Documents using various filters including name, content, date ranges, and more.",
+      "inputs": [
+        {
+          "name": "query",
+          "type": "string",
+          "required": false,
+          "about": "Search query to filter documents. Provide either: (1) Plain text to search in document content (e.g., 'quarterly report'), which will search fullText, or (2) Drive API query syntax with operators like 'name contains', 'fullText contains', combined with 'and', 'or', 'not'. Leave empty to get all docu"
+        },
+        {
+          "name": "order_by",
+          "type": "string",
+          "required": false,
+          "about": "Order results by field. Common options: 'modifiedTime desc', 'modifiedTime asc', 'name', 'createdTime desc'"
+        },
+        {
+          "name": "page_token",
+          "type": "string",
+          "required": false,
+          "about": "Token for continuing a previous search request on the next page. Use the next_page_token from the previous response to retrieve additional results."
+        },
+        {
+          "name": "max_results",
+          "type": "integer",
+          "required": false,
+          "about": "Maximum number of documents to return per page (1-100). Defaults to 10. Use page_token for pagination when more results are available."
+        },
+        {
+          "name": "starred_only",
+          "type": "boolean",
+          "required": false,
+          "about": "Whether to return only starred documents. Defaults to False."
+        },
+        {
+          "name": "created_after",
+          "type": "string",
+          "required": false,
+          "about": "Return documents created after this date. Use RFC 3339 format like '2024-01-01T00:00:00Z'."
+        },
+        {
+          "name": "modified_after",
+          "type": "string",
+          "required": false,
+          "about": "Return documents modified after this date. Use RFC 3339 format like '2024-01-01T00:00:00Z'."
+        },
+        {
+          "name": "shared_with_me",
+          "type": "boolean",
+          "required": false,
+          "about": "Whether to return only documents shared with the current user. Defaults to False."
+        },
+        {
+          "name": "include_trashed",
+          "type": "boolean",
+          "required": false,
+          "about": "Whether to include documents in trash. Defaults to False."
+        },
+        {
+          "name": "response_detail",
+          "type": "string",
+          "required": false,
+          "about": "Level of detail in the response. 'minimal' returns only essential fields (id, name, modifiedTime, webViewLink) for efficient token usage. 'full' returns comprehensive metadata including permissions, owners, timestamps, and other detailed information."
+        },
+        {
+          "name": "include_shared_drives",
+          "type": "boolean",
+          "required": false,
+          "about": "Whether to include documents from shared drives you have access to. Defaults to True."
+        }
+      ],
+      "scopes": [
+        "https://www.googleapis.com/auth/drive",
+        "https://www.googleapis.com/auth/drive.appdata",
+        "https://www.googleapis.com/auth/drive.file",
+        "https://www.googleapis.com/auth/drive.readonly",
+        "https://www.googleapis.com/auth/drive.meet.readonly",
+        "https://www.googleapis.com/auth/drive.metadata",
+        "https://www.googleapis.com/auth/drive.metadata.readonly",
+        "https://www.googleapis.com/auth/drive.photos.readonly"
+      ],
+      "tags": [
+        "find",
+        "openWorldHint",
+        "query",
+        "readOnlyHint",
+        "search"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Unmerge Table Cells",
+      "slug": "GOOGLEDOCS_UNMERGE_TABLE_CELLS",
+      "kind": "write",
+      "description": "Tool to unmerge previously merged cells in a table. Use this when you need to revert merged cells in a Google Document table back to their individual cell states.",
+      "inputs": [
+        {
+          "name": "documentId",
+          "type": "string",
+          "required": true,
+          "about": "The ID of the document to unmerge table cells in."
+        },
+        {
+          "name": "tableRange",
+          "type": "object",
+          "required": true,
+          "about": "The table range specifying which cells of the table to unmerge."
+        }
+      ],
+      "scopes": [
+        "https://www.googleapis.com/auth/documents",
+        "https://www.googleapis.com/auth/drive",
+        "https://www.googleapis.com/auth/drive.file"
+      ],
+      "tags": [
+        "googledocs",
+        "table",
+        "unmerge",
+        "important",
+        "updateHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Update Document Batch (Deprecated)",
+      "slug": "GOOGLEDOCS_UPDATE_DOCUMENT_BATCH",
+      "kind": "write",
+      "description": "Applies a batch of updates to a Google Document, such as inserting text, updating styles, and modifying tables or document structure. Text-style requests with empty ranges are filtered out before the remaining requests are submitted; optional write control helps manage concurrent edits. DEPRECATED: Use UpdateExistingDocument instead.",
+      "inputs": [
+        {
+          "name": "requests",
+          "type": "array",
+          "required": true,
+          "about": "A list of updates to apply to the document. Each request dict must contain exactly one request type key (e.g., insertText, replaceAllText, updateTextStyle, createParagraphBullets). For updateTextStyle, range must be non-empty (startIndex < endIndex). See https://developers.google.com/docs/api/refere"
+        },
+        {
+          "name": "document_id",
+          "type": "string",
+          "required": true,
+          "about": "The ID of the document to update."
+        },
+        {
+          "name": "write_control",
+          "type": "object",
+          "required": false,
+          "about": "Provides control over how write requests are executed."
+        }
+      ],
+      "scopes": [
+        "https://www.googleapis.com/auth/documents",
+        "https://www.googleapis.com/auth/drive",
+        "https://www.googleapis.com/auth/drive.file"
+      ],
+      "tags": [
+        "important",
+        "openWorldHint",
+        "destructiveHint",
+        "batch",
+        "deprecated"
+      ],
+      "deprecated": true
+    },
+    {
+      "name": "Update Document Markdown",
+      "slug": "GOOGLEDOCS_UPDATE_DOCUMENT_MARKDOWN",
+      "kind": "write",
+      "description": "Replaces the body content of a Google Docs tab with rendered Markdown; requires edit permissions. If no tab is specified, the first tab is updated.",
+      "inputs": [
+        {
+          "name": "id",
+          "type": "string",
+          "required": true,
+          "about": "The unique identifier for the Google Docs document to update. Accepts either a document ID (alphanumeric string, length varies by document age - newer documents typically have 44-character IDs) or a full Google Docs URL (e.g., https://docs.google.com/document/d/{DOCUMENT_ID}/edit). When a URL is pro"
+        },
+        {
+          "name": "tab_id",
+          "type": "string",
+          "required": false,
+          "about": "Optional tab ID to replace with the rendered Markdown. When omitted, the first tab is updated."
+        },
+        {
+          "name": "markdown",
+          "type": "string",
+          "required": true,
+          "about": "Markdown content that will replace the document's entire existing content. Supports standard Markdown features."
+        }
+      ],
+      "scopes": [
+        "https://www.googleapis.com/auth/documents",
+        "https://www.googleapis.com/auth/drive",
+        "https://www.googleapis.com/auth/drive.file"
+      ],
+      "tags": [
+        "openWorldHint",
+        "updateHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Update Document Section Markdown",
+      "slug": "GOOGLEDOCS_UPDATE_DOCUMENT_SECTION_MARKDOWN",
+      "kind": "write",
+      "description": "Insert or replace a section of a Google Docs document with rendered Markdown, using start and optional end indices, or append when no start index is provided. A replacement may leave the original content in place while inserting the new content.",
+      "inputs": [
+        {
+          "name": "tab_id",
+          "type": "string",
+          "required": false,
+          "about": "Optional tab ID to update with the rendered Markdown. When omitted, the first tab is updated."
+        },
+        {
+          "name": "end_index",
+          "type": "integer",
+          "required": false,
+          "about": "Optional one-based end index of the content to replace (exclusive); must be greater than or equal to start_index. If end_index is not provided, the content is inserted at the start_index without replacing existing content. Requires start_index to be provided - if start_index is omitted (append mode)"
+        },
+        {
+          "name": "document_id",
+          "type": "string",
+          "required": true,
+          "about": "The unique ID of the Google Docs document to update. This is the alphanumeric string found in the document URL: https://docs.google.com/document/d/{DOCUMENT_ID}/edit. Valid IDs are typically 44 characters long and contain only letters, numbers, hyphens, and underscores (e.g., '1BxiMVs0XRA5nFMdKvBdBZ"
+        },
+        {
+          "name": "start_index",
+          "type": "integer",
+          "required": false,
+          "about": "One-based UTF-16 code unit index where to insert or start replacement. If not provided, content will be appended to the end of the document. Use 1 to insert at the very beginning of the document. To insert at a specific position, first use GOOGLEDOCS_GET_DOCUMENT_BY_ID to retrieve the document struc"
+        },
+        {
+          "name": "markdown_text",
+          "type": "string",
+          "required": true,
+          "about": "Markdown content to insert or replace in the document section. Large content is automatically split into smaller batches to avoid API limits. Also accepts 'markdown', 'content', 'text', 'body', 'markdownText', or 'markdown_content'."
+        }
+      ],
+      "scopes": [
+        "https://www.googleapis.com/auth/documents",
+        "https://www.googleapis.com/auth/drive",
+        "https://www.googleapis.com/auth/drive.file"
+      ],
+      "tags": [
+        "openWorldHint",
+        "important",
+        "updateHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Update Document Style",
+      "slug": "GOOGLEDOCS_UPDATE_DOCUMENT_STYLE",
+      "kind": "write",
+      "description": "Tool to update the overall document style, such as page size, margins, and default text direction. Use when you need to modify the global style settings of a Google Document.",
+      "inputs": [
+        {
+          "name": "fields",
+          "type": "string",
+          "required": false,
+          "about": "A comma-separated list of fields to update (using camelCase API names like 'marginTop', 'pageSize'). Use '*' to automatically update only fields that have values set in document_style. For example: \"pageSize,marginTop,marginBottom\". When '*' is specified, the action automatically computes the field "
+        },
+        {
+          "name": "tab_id",
+          "type": "string",
+          "required": false,
+          "about": "The ID of the tab to update the style for. If not provided, the first tab is used."
+        },
+        {
+          "name": "document_id",
+          "type": "string",
+          "required": true,
+          "about": "The ID of the document to update."
+        },
+        {
+          "name": "document_style",
+          "type": "object",
+          "required": true,
+          "about": "The DocumentStyle object with the new style settings."
+        }
+      ],
+      "scopes": [
+        "https://www.googleapis.com/auth/documents",
+        "https://www.googleapis.com/auth/drive",
+        "https://www.googleapis.com/auth/drive.file"
+      ],
+      "tags": [
+        "googledocs",
+        "documents",
+        "style",
+        "important",
+        "updateHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Update existing document",
+      "slug": "GOOGLEDOCS_UPDATE_EXISTING_DOCUMENT",
+      "kind": "write",
+      "description": "Applies a batch of edits to a specified Google Doc, such as inserting, deleting, or formatting text.",
+      "inputs": [
+        {
+          "name": "edit_docs",
+          "type": "array",
+          "required": true,
+          "about": "$51"
+        },
+        {
+          "name": "document_id",
+          "type": "string",
+          "required": true,
+          "about": "(Required) The unique identifier of the Google Docs document to be updated."
+        }
+      ],
+      "scopes": [
+        "https://www.googleapis.com/auth/documents",
+        "https://www.googleapis.com/auth/drive",
+        "https://www.googleapis.com/auth/drive.file"
+      ],
+      "tags": [
+        "openWorldHint",
+        "destructiveHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Update Table Row Style",
+      "slug": "GOOGLEDOCS_UPDATE_TABLE_ROW_STYLE",
+      "kind": "write",
+      "description": "Updates the style of selected rows in a Google Document table, including minimum row height and overflow prevention.",
+      "inputs": [
+        {
+          "name": "documentId",
+          "type": "string",
+          "required": true,
+          "about": "The ID of the document to update."
+        },
+        {
+          "name": "updateTableRowStyle",
+          "type": "object",
+          "required": true,
+          "about": "The request body for updating the table row style."
+        }
+      ],
+      "scopes": [
+        "https://www.googleapis.com/auth/documents",
+        "https://www.googleapis.com/auth/drive",
+        "https://www.googleapis.com/auth/drive.file"
+      ],
+      "tags": [
+        "googledocs",
+        "important",
+        "updateHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Update Tab Properties",
+      "slug": "GOOGLEDOCS_UPDATE_TAB_PROPERTIES",
+      "kind": "write",
+      "description": "Updates properties of a document tab such as title, parent tab, index, and icon emoji. Use this action when you need to rename a tab, change its emoji icon, move it within the tab hierarchy, or reorganize tab structure.",
+      "inputs": [
+        {
+          "name": "fields",
+          "type": "string",
+          "required": false,
+          "about": "A comma-separated list of fields to update (using camelCase API names like 'title', 'parentTabId', 'index', 'iconEmoji'). Use '*' to automatically update only fields that have values set in tab_properties. For example: 'title,iconEmoji'. When '*' is specified, the action automatically computes the f"
+        },
+        {
+          "name": "tab_id",
+          "type": "string",
+          "required": true,
+          "about": "The ID of the tab to update. Get valid tab IDs from GOOGLEDOCS_GET_DOCUMENT_BY_ID at tabs[].tabProperties.tabId."
+        },
+        {
+          "name": "document_id",
+          "type": "string",
+          "required": true,
+          "about": "The ID of the document containing the tab to update."
+        },
+        {
+          "name": "tab_properties",
+          "type": "object",
+          "required": true,
+          "about": "The tab properties to update. Only the fields specified in the 'fields' parameter will be updated."
+        }
+      ],
+      "scopes": [
+        "https://www.googleapis.com/auth/documents",
+        "https://www.googleapis.com/auth/drive",
+        "https://www.googleapis.com/auth/drive.file"
+      ],
+      "tags": [
+        "updateHint",
+        "idempotentHint",
+        "openWorldHint",
+        "tabs"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Upload Drive File",
+      "slug": "GOOGLEDOCS_UPLOAD_DRIVE_FILE",
+      "kind": "write",
+      "description": "Upload a file of 5 MiB or less to Google Drive using multipart upload.",
+      "inputs": [
+        {
+          "name": "file",
+          "type": "object",
+          "required": true,
+          "about": "File content to upload using multipart upload; maximum 5 MiB."
+        },
+        {
+          "name": "name",
+          "type": "string",
+          "required": false,
+          "about": "Drive filename. Defaults to the uploaded file's name."
+        },
+        {
+          "name": "fields",
+          "type": "string",
+          "required": false,
+          "about": "Drive partial-response field selector for the created File resource."
+        },
+        {
+          "name": "mime_type",
+          "type": "string",
+          "required": false,
+          "about": "Media MIME type. Defaults to the uploaded file's MIME type or application/octet-stream."
+        },
+        {
+          "name": "description",
+          "type": "string",
+          "required": false,
+          "about": "Description to store in the Drive file metadata."
+        },
+        {
+          "name": "parent_folder_id",
+          "type": "string",
+          "required": false,
+          "about": "ID of the Drive folder that should contain the uploaded file."
+        },
+        {
+          "name": "supports_all_drives",
+          "type": "boolean",
+          "required": false,
+          "about": "Whether the request supports both My Drive and shared drives."
+        }
+      ],
+      "scopes": [
+        "https://www.googleapis.com/auth/drive",
+        "https://www.googleapis.com/auth/drive.file"
+      ],
+      "tags": [
+        "important",
+        "openWorldHint",
+        "createHint"
+      ],
+      "deprecated": false
+    }
+  ],
+  "triggers": [],
+  "source": "https://docs.composio.dev/toolkits/googledocs",
+  "fetched_at": "2026-11-20"
+}

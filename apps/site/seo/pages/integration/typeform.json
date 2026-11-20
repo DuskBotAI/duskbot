@@ -1,0 +1,132 @@
+{
+  "path": "/integrations/typeform",
+  "type": "integration",
+  "title": "Typeform AI assistant for response summaries and intake gaps",
+  "nav": "typeform",
+  "h1": "turn typeform answers into a useful intake brief",
+  "description": "Summarize completed Typeform responses, separate skipped questions from missing answers and review the wording people see when they submit an intake form.",
+  "keyword": "typeform bot",
+  "keywords": [
+    "typeform ai assistant",
+    "typeform ai agent"
+  ],
+  "answer": "**find the intake forms that need a follow-up before you promise anyone a call.** a typeform bot in dusk can read responses alongside the questions and branching rules. ask it to pull out the requested service, timing and missing details. keep each response id beside its summary so you can open the original.",
+  "updated": "2026-11-20",
+  "review": {
+    "status": "approved",
+    "by": "lead agent, after four independent reviewers read every page against seo/facts (2026-11-20); every finding applied",
+    "at": "2026-11-20"
+  },
+  "voice": 2,
+  "tags": [
+    "form responses",
+    "intake",
+    "form logic"
+  ],
+  "connectors": [
+    "typeform"
+  ],
+  "related": [
+    "/routines/typeform-new-responses-summary",
+    "/use-cases/client-onboarding",
+    "/integrations/google-sheets"
+  ],
+  "art": {
+    "label": "Typeform",
+    "props": [
+      "s-notebook"
+    ],
+    "bubble": "was that question shown"
+  },
+  "og_line": "a skipped question can be the right answer.",
+  "app": {
+    "name": "Typeform",
+    "toolkit": "typeform",
+    "intro": "**read the question the respondent saw.** the word “other” means little without its field and choices. use the form definition to match each answer to its prompt. use the response type to decide which submissions belong in the brief.",
+    "highlight": [
+      {
+        "slug": "TYPEFORM_GET_WORKSPACE",
+        "use": "confirm which workspace owns the client intake forms"
+      },
+      {
+        "slug": "TYPEFORM_LIST_FORMS",
+        "use": "find the active intake form among similarly titled copies"
+      },
+      {
+        "slug": "TYPEFORM_GET_FORM",
+        "use": "read field definitions and follow the branches between questions"
+      },
+      {
+        "slug": "TYPEFORM_GET_FORM_RESPONSES",
+        "use": "select completed responses in a date window and page through the results"
+      },
+      {
+        "slug": "TYPEFORM_GET_FORM_MESSAGES",
+        "use": "inspect custom button labels and error messages during a wording review"
+      },
+      {
+        "slug": "TYPEFORM_PATCH_FORM",
+        "use": "apply a chosen change to a form setting without replacing the whole form"
+      }
+    ],
+    "setup": "**use the form id from the live intake form.** connect typeform to your bot and choose read only. give it your reporting time zone and the questions that matter to the handoff. try an answer from a short branch before scheduling the summary."
+  },
+  "routines_intro": "**choose the cutoff before you count responses.** the retrieval action can take up to 30 minutes to show recent submissions. a morning review of yesterday gives late-arriving responses time to appear.",
+  "routines": [
+    {
+      "name": "yesterday’s intake requests",
+      "message": "every morning at 9, read all completed responses to my intake form submitted yesterday in my time zone. group them by requested service. include the response id, requested timing and one detail i need before a call. keep contact details out of the summary here.",
+      "when": "daily at 9 am",
+      "output": "a service-by-service intake brief"
+    },
+    {
+      "name": "why the budget field is empty",
+      "message": "every monday at noon, review last week’s completed intake responses with no budget answer. read the form logic. separate responses whose answers skip the budget question from cases that need a follow-up. if the form changed since submission, mark any uncertain paths as unclear. give me response ids here.",
+      "when": "mondays at noon",
+      "output": "a list of budget gaps worth asking about"
+    },
+    {
+      "name": "form wording before the next cohort",
+      "message": "on fridays at 10, read our intake form’s questions, choices and custom messages. look for error messages that ask for a different format from the question. quote both lines and propose a correction here. leave the live form alone.",
+      "when": "fridays at 10 am",
+      "output": "pairs of conflicting instructions with suggested copy"
+    }
+  ],
+  "asks": "**draft the wording in chat first.** a suggestion can stay entirely in dusk. editing form settings, changing messages and deleting responses are writes without a send prompt. keep the bot read only or give an editing routine the instruction “ask me before you change anything”.",
+  "cannot": [
+    "**guarantee the last few minutes are complete.** recent responses may take up to 30 minutes to appear in a response lookup.",
+    "**recover an unspoken reason for a blank field.** form logic can explain a skipped question. an unexplained blank stays an open question.",
+    "**use the all-files download for just one respondent.** that action retrieves an archive of uploads for the entire form. these reviews need no file download."
+  ],
+  "sections": [
+    {
+      "h": "when to ask the respondent",
+      "md": "**let the person supply the missing fact.** if the client chose a service but left the deadline open, carry that question into the call. if you just need to read one submission, open it in typeform. the bot earns its place when you need to compare submissions and branches."
+    }
+  ],
+  "faq": [
+    {
+      "q": "can i count just the people who finished the form?",
+      "a": "**choose completed responses and a submission window.** ask for all result pages and the total used in the brief. keep partial responses out of that count."
+    },
+    {
+      "q": "can this tell me which question people found confusing?",
+      "a": "**it can identify wording worth reviewing.** a confusing instruction and an empty answer are clues. ask respondents before concluding why they stopped."
+    }
+  ],
+  "worked": {
+    "intro": "a fictional example.",
+    "before": "ruth nolan chooses the consultation option. the intake form only asks for a delivery address on the installation branch.",
+    "after": "consultation request: no address follow-up. ruth’s answer skips installation. ask about the preferred call date instead."
+  },
+  "sources": [
+    {
+      "label": "dusk bot docs: files and apps",
+      "url": "/docs/files-and-apps"
+    },
+    {
+      "label": "dusk bot docs: routines",
+      "url": "/docs/routines"
+    }
+  ]
+}

@@ -14,6 +14,13 @@
     person's words go into the running turn with a note not to answer them on
     their own. An engine that cannot take input mid-turn, or a turn that is
     ending, gets them first in the queue, so its continuation runs them.
+  - **task** (a separate new ask: something else to find, make or check, or a
+    question that needs a lookup): an acknowledgement, and the ask goes into the
+    running turn with a note to do it alongside the first and open each result
+    with which ask it finishes; the first task is never stopped. An engine that
+    cannot take input mid-turn gets it first in the queue, and the reply says it
+    starts once the current task is done. Later quick replies see every ask the
+    turn has taken on.
   - **stop**: the reply, then the person's own Stop.
   - **redirect**: the reply, the new ask queued first, then Stop, so it runs next.
 - No quick reply (no writer, an error, a timeout after 12 s, an unreadable
@@ -79,8 +86,8 @@ turn then says the `ifSteered` text; the stop gets its reply, a
 `stopped: You stopped this.` row and `busy: false`. The server log has one
 `side reply: answer|steer|stop in THREAD after N ms` line per message.
 
-The permanent form is the `replies while working` case in
-`server/steer-e2e.test.ts`; routing, timeouts, ordering and who gets a quick
+The permanent form is the `replies while working` and `several things at once
+in one chat` cases in `server/steer-e2e.test.ts`; routing, timeouts, ordering and who gets a quick
 reply are in `server/host/side-replies.test.ts`, and the writer choice in
 `server/side-jobs.test.ts`.
 

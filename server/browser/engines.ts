@@ -9,6 +9,8 @@ import { browserRefusal, type BrowserRuntime, type BrowserSpawnSpec } from "../b
 import type { StepContext } from "../browser-steps.ts";
 import type { FillLoginDeps } from "../login-fill.ts";
 import { LocalBackend } from "./backends.ts";
+import { pointName, pointNameScript, purchaseGate, withPointNames } from "../purchase-gate.ts";
+import { toolNameOf } from "../browser-runtime-results.ts";
 import { sandboxDisabled } from "./chrome/host-setup.ts";
 import type { HostKind } from "./chrome/flags.ts";
 import { ChromeLauncher } from "./chrome/launcher.ts";
@@ -223,7 +225,8 @@ export class RuntimeRouter {
   }
 
   async agentRpc(session: string, spec: BrowserSpawnSpec, method: "tools/list" | "tools/call", params: unknown, beforeDispatch?: () => void, ctx?: StepContext): Promise<unknown> {
-    const refusal = method === "tools/call" ? this.#refusal?.(session, spec, params) : null;
+    const refusal = method === "tools/call" ? this.#refusal?.(session, spec, params) ?? purchaseGate.check(session, toolNameOf(params), await withPointNames(toolNameOf(params), (params as { arguments?: unknown } | null)?.arguments,
+      async (x, y) => pointName(await this.agentRpc(session, spec, "tools/call", { name: "agent_browser_eval", arguments: { script: pointNameScript(x, y), timeoutMs: 3_000 } }).catch(() => null)))) : null;
     if (refusal) return { isError: true, content: [{ type: "text", text: refusal }] };
     const afterClaim = method === "tools/call" ? this.#afterClaim : undefined;
     const dispatch = afterClaim ? () => {
@@ -242,6 +245,7 @@ export class RuntimeRouter {
       throw error;
     }
     if (method !== "tools/call") return result;
+    purchaseGate.observe(session, result);
     const annotated = this.#annotate ? this.#annotate(spec, result) : result;
     return this.#afterCall ? this.#afterCall(session, spec, annotated) : annotated;
   }

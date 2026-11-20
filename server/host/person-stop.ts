@@ -25,6 +25,11 @@ export interface PersonStopDeps {
   language(threadId: string): string | undefined;
   /** Ends a turn's wait for its AI's limit to reset; true when one waited here. */
   cancelHeld?(threadId: string): boolean;
+  /** The person dropped what they asked in this chat that is still open. */
+  dropAsks?(threadId: string): void;
+  /** Stops what this request started that runs beside it: threads it opened on itself and background jobs it started
+   * without a card. Hand-offs to teammates end through `handoffs`; automations set up earlier are never touched. */
+  stopWorkers?(botId: string, threadId: string): Promise<void>;
 }
 
 export interface TypedStop {
@@ -55,7 +60,8 @@ export function createPersonStop(deps: PersonStopDeps) {
     deps.handoffs().stoppedByPerson(threadId);
     deps.markStopped(threadId, said);
     deps.stopGoal(threadId);
-    await deps.interruptDirectThread(botId, threadId);
+    deps.dropAsks?.(threadId);
+    await Promise.all([deps.interruptDirectThread(botId, threadId), deps.stopWorkers?.(botId, threadId)]);
   }
 
   /** Only a message made of stop words, from a person, acts as Stop: it is recorded, and never reaches the turn it ends. With no

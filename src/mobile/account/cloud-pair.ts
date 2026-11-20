@@ -24,6 +24,6 @@ export async function cloudPairing(account: Pairing, cloud: MobileCloud, options
   return result;
 }
 
-export function cloudPairingPayload(cloud: MobileCloud, grant: { origin: string; code: string; expiresAt: number }): TypedPairing {
+export function cloudPairingPayload(cloud: Pick<MobileCloud, "name">, grant: { origin: string; code: string; expiresAt: number }): TypedPairing {
   return { v: 1, transport: "https", origin: grant.origin, credential: "", code: grant.code.replace(/-/g, ""), name: cloud.name, expiresAt: grant.expiresAt };
 }

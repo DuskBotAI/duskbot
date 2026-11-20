@@ -1,0 +1,91 @@
+{
+  "path": "/routines/github-pr-review-reminder",
+  "type": "routine",
+  "title": "A GitHub reminder for pull requests waiting on your review",
+  "nav": "github review reminder",
+  "h1": "see which github pull requests still need your review",
+  "description": "Get one private review list from a GitHub repository. Find open pull requests that name you as a reviewer and keep drafts and team requests out of the way.",
+  "keyword": "github pr review reminder",
+  "keywords": [
+    "github requested reviews reminder",
+    "pull request review queue",
+    "personal github review digest"
+  ],
+  "answer": "**find the pull requests where someone is waiting for you personally.** a weekday reminder reads the current reviewer list in one github repository. it brings open requests with your handle to dusk chat, with the oldest pull request first. that gives you a review queue without another round of pings for the authors.",
+  "updated": "2026-11-20",
+  "review": {
+    "status": "approved",
+    "by": "lead agent, after four independent reviewers read every page against seo/facts (2026-11-20); every finding applied",
+    "at": "2026-11-20"
+  },
+  "voice": 2,
+  "tags": [
+    "github",
+    "review",
+    "pull requests"
+  ],
+  "connectors": [
+    "github"
+  ],
+  "related": [
+    "/integrations/github",
+    "/routines/github-issue-triage",
+    "/routines/gitlab-merge-request-digest"
+  ],
+  "art": {
+    "label": "GitHub",
+    "logo": "github",
+    "props": [
+      "s-clock",
+      "p-folder"
+    ],
+    "bubble": "your review is due"
+  },
+  "og_line": "the reviews that still have your name on them.",
+  "routine": {
+    "message": "at 10 am every weekday, list all open pull requests in the github repository orchardpress/catalog. my github handle is @owen-pike. skip drafts. for each remaining pull request, read its currently requested reviewers. keep exact matches to my individual handle. skip team-only requests.\n\nput the results in this chat, oldest pull request first. include its number, title, author and opening date. say how many remain if the list runs past five. never submit a review, request another reviewer, comment or merge. stay quiet when the full list has no match. flag any reviewer list you couldn't read.",
+    "when": "weekdays at 10 am, just before your review block",
+    "needs": "github read only for open pull requests, their details and requested reviewers[^3]. enter your repository and reviewer handle in the message.",
+    "output": "review queue · orchardpress/catalog\n#84 · keep leading zeros on stock codes · opened nov 16 by calvin reed\n#89 · align shelf labels on narrow paper · opened nov 19 by june park\nboth currently request your individual review."
+  },
+  "knobs": [
+    "**choose one base branch.** limit the list to changes aimed at the release branch during a release week.",
+    "**move the reminder next to review time.** an afternoon slot works better if you write code through the morning.",
+    "**include a team deliberately.** name its exact handle and put team requests below personal ones."
+  ],
+  "fails": [
+    "**an old pull request looks like an old request for review.** keep the opening date labelled. it does not tell you when someone added you.",
+    "**a request disappears overnight.** open the pull request and read its current reviewers and state. it may have closed or someone may have removed your handle."
+  ],
+  "sections": [
+    {
+      "h": "use the current reviewer list as your queue",
+      "md": "**a mention in a discussion can mean almost anything.** a current review request gives you a concrete next step. the github connection can list the users and teams someone has asked to review.[^3]\n\nif you need a second pair of eyes immediately, ask a teammate directly. a morning list can wait almost a day."
+    }
+  ],
+  "faq": [
+    {
+      "q": "will this remind the author too?",
+      "a": "**the reminder belongs to you.** it comes back to your dusk chat. the routine gives nobody else a notification."
+    },
+    {
+      "q": "what if i reviewed an earlier version?",
+      "a": "**follow the current request.** if your handle appears again, include the pull request. an earlier review alone does not put it back on your list."
+    }
+  ],
+  "sources": [
+    {
+      "label": "dusk bot docs: routines",
+      "url": "/docs/routines"
+    },
+    {
+      "label": "dusk bot docs: files and apps",
+      "url": "/docs/files-and-apps"
+    },
+    {
+      "label": "composio: github actions",
+      "url": "https://docs.composio.dev/toolkits/github",
+      "checked": "2026-11-12"
+    }
+  ]
+}

@@ -1,0 +1,136 @@
+{
+  "path": "/integrations/sentry",
+  "type": "integration",
+  "title": "Sentry AI assistant for error digests and deploy timelines",
+  "nav": "sentry",
+  "h1": "a sentry bot for the engineer taking over on call",
+  "description": "Get an on-call handoff with Sentry issue IDs, production events and deploy times. See where an error first appeared and what still needs investigation.",
+  "keyword": "sentry bot",
+  "keywords": [
+    "sentry ai assistant",
+    "sentry ai agent"
+  ],
+  "answer": "**did the error start before the deploy or after it?** a sentry bot can line up a release's deployment time with the first recorded event in production. you get the issue id and the evidence in your dusk chat. use that timeline to pick the next investigation before handing over on call.",
+  "updated": "2026-11-20",
+  "review": {
+    "status": "approved",
+    "by": "lead agent, after four independent reviewers read every page against seo/facts (2026-11-20); every finding applied",
+    "at": "2026-11-20"
+  },
+  "voice": 2,
+  "tags": [
+    "errors",
+    "deployments",
+    "triage"
+  ],
+  "connectors": [
+    "sentry"
+  ],
+  "related": [
+    "/routines/sentry-error-digest",
+    "/use-cases/bug-triage",
+    "/integrations/github"
+  ],
+  "art": {
+    "logo": "sentry",
+    "props": [
+      "p-magnifier"
+    ],
+    "bubble": "before or after deploy"
+  },
+  "og_line": "put the first error beside the deploy.",
+  "app": {
+    "name": "Sentry",
+    "toolkit": "sentry",
+    "intro": "**choose the project and environment before you count errors.** an issue can include events from staging as well as production. deployment records have their own environment and time. read the matching records together.",
+    "highlight": [
+      {
+        "slug": "SENTRY_RETRIEVE_PROJECT_ISSUES_LIST",
+        "use": "find unresolved issues in the project the next engineer owns"
+      },
+      {
+        "slug": "SENTRY_GET_ORGANIZATION_ISSUE_DETAILS",
+        "use": "open an issue by its short id during handoff"
+      },
+      {
+        "slug": "SENTRY_RETRIEVE_ISSUE_EVENTS_BY_ID",
+        "use": "look for events inside the production handoff window"
+      },
+      {
+        "slug": "SENTRY_GET_OLDEST_EVENT",
+        "use": "find the first recorded event for an issue in production"
+      },
+      {
+        "slug": "SENTRY_LIST_A_TAGS_VALUES_FOR_AN_ISSUE",
+        "use": "compare the browser tags attached to one issue"
+      },
+      {
+        "slug": "SENTRY_GET_ORGANIZATION_RELEASE_VERSION",
+        "use": "identify the release version under investigation"
+      },
+      {
+        "slug": "SENTRY_RETRIEVE_RELEASE_DEPLOYMENTS",
+        "use": "place each recorded deployment on its environment's timeline"
+      }
+    ],
+    "setup": "**use the project slug the on-call team recognizes.** in connected apps, give your triage bot the sentry reads above. tell it your organization slug, production environment name and handoff time zone. try a known issue id before scheduling a digest."
+  },
+  "routines_intro": "**make each handoff answer a question an engineer can act on.** give the bot the issue id and release version for a focused investigation. update those references when the incident changes.",
+  "routines": [
+    {
+      "name": "overnight error digest",
+      "message": "each weekday at 8, list unresolved issues in my sentry project. find those with production events since yesterday at 6 pm. give me the issue id, error title and latest event time here. flag any part of the window you couldn't read. leave issue states alone.",
+      "when": "weekdays at 08:00",
+      "output": "an overnight handoff with specific issues to open"
+    },
+    {
+      "name": "release chronology",
+      "message": "every afternoon at 4, read the deployment records for <release version>. compare the production deploy time with the oldest production event for <issue id>. show both timestamps with their zones. say which came first or which record is missing.",
+      "when": "daily at 16:00",
+      "output": "a timeline to use in the release discussion"
+    },
+    {
+      "name": "browser split",
+      "message": "on wednesdays at 11, read the browser tag values for <issue id> in production. list the most frequent values with their reported counts. describe which browser i'd try first. say when the tag is missing. don't use event counts as user counts.",
+      "when": "wednesdays at 11:00",
+      "output": "a browser to test first, with the tag evidence"
+    }
+  ],
+  "asks": "**keep the issue open while you investigate.** these reads can run without an approval card. resolving or changing an issue is a write. the sending setting doesn't review status edits. keep triage read only, even if the same engineer can resolve issues in sentry.",
+  "cannot": [
+    "**prove the deploy caused an error.** an event timestamp can rule out a first occurrence after deployment. timing alone cannot identify the faulty change.",
+    "**find resolved issues with the default project query.** that listing starts with unresolved issues. use a broader query for a retrospective.",
+    "**give a release time from an absent deployment record.** use the deployment system's record when sentry has no entry for that environment."
+  ],
+  "sections": [
+    {
+      "h": "where the digest stops",
+      "md": "**use your incident alerting system when someone must wake up now.** a scheduled digest answers what happened during a shift. it waits for its run time. on your own computer it also needs dusk bot open and the machine awake."
+    }
+  ],
+  "faq": [
+    {
+      "q": "does a busy issue mean lots of people saw it?",
+      "a": "**one person can trigger several events.** report the event count as events. investigate user impact separately before you describe the size of an incident."
+    },
+    {
+      "q": "can i give the bot a short sentry issue id?",
+      "a": "**yes. pair it with the organization.** the issue details action accepts the short id shown in sentry. use the returned issue details to narrow the event review."
+    }
+  ],
+  "worked": {
+    "intro": "a made-up release investigation.",
+    "before": "imran asks about a checkout error after the 14:10 utc production deploy. the oldest production event shows 13:52 utc.",
+    "after": "checkout error first seen 13:52 utc. deploy 14:10 utc.\nthe error predates this deploy. compare later event volume before ruling out a regression."
+  },
+  "sources": [
+    {
+      "label": "dusk bot docs: connected apps",
+      "url": "/docs/files-and-apps"
+    },
+    {
+      "label": "dusk bot docs: routines",
+      "url": "/docs/routines"
+    }
+  ]
+}

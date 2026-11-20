@@ -196,7 +196,7 @@ function BotRows({ bot }: { bot: Bot }) {
   const editable = bot.yourAccess !== "view";
   const memoryOn = bot.memoryEnabled !== false;
   const skillsOn = skills.skills.filter((skill) => skill.enabled).length;
-  const backups = bot.fallback?.length ?? 0;
+  const backupOn = bot.fallback === undefined || bot.fallback.length > 0;
   const soul = (bot.soul ?? "").trim();
   const row = (page: BotSettingsRow, value?: string, hint: string | undefined = BOT_HINTS[page]?.(), tooltip?: string) => (
     <NavRow data-panel-page={page} title={sheetLabel(page, bot)} value={value} hint={hint} tooltip={tooltip} onClick={() => open(`bot:${page}`, sheetLabel(page, bot))} />
@@ -208,7 +208,7 @@ function BotRows({ bot }: { bot: Bot }) {
         <SettingsRows>
           <ModelSelectRow bot={bot} />
           <ReasoningRow bot={bot} />
-          {row("backups", backups > 0 ? t("settings.bots.panel.botPanelBackupsCount", { count: backups }) : t("settings.bots.panel.botPanelNone"))}
+          {row("backups", backupOn ? t("botPanel.backupAi.valueOn") : t("botPanel.backupAi.valueOff"))}
         </SettingsRows>
       </SettingsGroup>
       <Card label={t("settings.bots.panel.botPanelSectionThisBot")} data-settings-block="bot-knows">

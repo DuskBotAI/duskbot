@@ -311,12 +311,14 @@ describe("server-owned browser MCP runtime", () => {
     expect(readFileSync(`/proc/${listed.pid}/oom_score_adj`, "utf8").trim()).toBe("1000");
   });
 
-  it("never lets agent_browser_read fetch an address itself, around the browser and its egress gate", async () => {
+  it("never lets agent_browser_read fetch an address itself, around the browser and its egress gate: the address opens in the browser first", async () => {
     const value = runtime();
     const daemon = spec();
-    const refused = await value.agentRpc("reader", daemon, "tools/call", { name: "agent_browser_read", arguments: { url: "http://127.0.0.1:8799/api/config" } }) as { isError?: boolean; content: Array<{ text?: string }> };
-    expect(refused.isError).toBe(true);
-    expect(refused.content[0]!.text).toMatch(/Open the address with agent_browser_open first/);
+    const opened = await value.agentRpc("reader", daemon, "tools/call", { name: "agent_browser_read", arguments: { url: "http://127.0.0.1:8799/api/config" } }) as { isError?: boolean; content: Array<{ text?: string }> };
+    const said = opened.content.map((part) => part.text ?? "").join("\n");
+    expect(opened.isError).not.toBe(true);
+    expect(said).toContain(JSON.stringify({ name: "agent_browser_read", arguments: {} }));
+    expect(said).not.toMatch(/"name":"agent_browser_read","arguments":\{"url"/);
     const reads = await value.agentRpc("reader", daemon, "tools/call", { name: "agent_browser_read", arguments: {} }) as { isError?: boolean };
     expect(reads.isError).not.toBe(true);
   });
@@ -582,7 +584,7 @@ describe("server-owned browser MCP runtime", () => {
     expect(other.pid).not.toBe(list.pid);
     await value.take("one", "owner");
     const waiting = value.agentRpc("one", spec(), "tools/call", { name: "echo" });
-    await expect(value.agentRpc("one", spec(), "tools/list", {})).resolves.toMatchObject({ tools: [{ name: "echo" }, { name: BROWSER_UPLOAD_TOOL }, { name: BROWSER_HOVER_TOOL }, { name: "agent_browser_batch" }, { name: "restart_browser" }] });
+    await expect(value.agentRpc("one", spec(), "tools/list", {})).resolves.toMatchObject({ tools: [{ name: "echo" }, { name: BROWSER_UPLOAD_TOOL }, { name: BROWSER_HOVER_TOOL }, { name: "agent_browser_dialog" }, { name: "agent_browser_batch" }, { name: "restart_browser" }] });
     value.release("one", "owner");
     await expect(waiting).resolves.toMatchObject(refusedWith(/The person used the browser/));
   });
@@ -643,7 +645,7 @@ describe("server-owned browser MCP runtime", () => {
         content: [{ text: expect.stringMatching(/restart_browser/) }],
       });
       const listed = await value.agentRpc("s", spec(), "tools/list", {}) as { tools: Array<{ name: string }> };
-      expect(listed.tools.map((tool) => tool.name)).toEqual(["echo", BROWSER_UPLOAD_TOOL, BROWSER_HOVER_TOOL, "agent_browser_batch", "restart_browser"]);
+      expect(listed.tools.map((tool) => tool.name)).toEqual(["echo", BROWSER_UPLOAD_TOOL, BROWSER_HOVER_TOOL, "agent_browser_dialog", "agent_browser_batch", "restart_browser"]);
       const check = vi.fn();
       await expect(value.agentRpc("s", spec(), "tools/call", { name: "restart_browser", arguments: {} }, check))
         .resolves.toMatchObject({ content: [{ text: expect.stringContaining("Browser restarted") }] });

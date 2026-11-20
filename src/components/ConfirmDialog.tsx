@@ -1,10 +1,14 @@
-import { useEffect, useRef, type ReactNode, type RefObject } from "react";
+import { useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 import { createPortal } from "react-dom";
 import { createRoot } from "react-dom/client";
+import { AnimatePresence, useIsPresent, type HTMLMotionProps } from "motion/react";
 
 import { t } from "@/lib/i18n";
+import { dialogMotion } from "@/lib/motion-presets";
+import { phoneApp } from "@/lib/store-app";
+import { wakeSystemControls } from "@/lib/system-control";
 import { confirmCancelCls, mdDangerCls, mdPrimaryCls } from "./ui/GrokDialog";
-import { ScrimMotion, SheetMotion } from "./ui/SheetMotion";
+import { ScrimMotion, SheetMotion, useMotionReduced } from "./ui/SheetMotion";
 
 export type ConfirmTone = "danger" | "neutral";
 
@@ -26,6 +30,8 @@ export interface ConfirmDialogProps {
   layer?: string;
   /** A small pixel picture over the title. */
   art?: ReactNode;
+  /** Its way out has finished playing after `open` turned false. */
+  onClosed?: () => void;
 }
 
 /**
@@ -78,17 +84,44 @@ export function ConfirmDialog(props: ConfirmDialogProps) {
     else confirmRef.current?.focus();
   }, [open, props.pending]);
 
-  if (!open) return null;
-
+  const motion = dialogMotion(useMotionReduced());
+  const [opened, setOpened] = useState(open);
+  useEffect(() => { if (open) setOpened(true); }, [open]);
+  const phone = phoneApp();
+  if ((!open && !opened) || typeof document === "undefined" || !document.body) return null;
+  const portalRoot = phone ? (document.querySelector(".dusk-mobile") ?? document.body) : document.body;
   return createPortal(
+    <AnimatePresence onExitComplete={() => { setOpened(false); wakeSystemControls(); props.onClosed?.(); }}>
+      {open && (
+        <ConfirmLayer key="confirm" phone={phone} layer={props.layer} onCancel={onCancel} scrim={motion.scrim}>
+          <ConfirmDialogCard ref={dialogRef} confirmRef={confirmRef} animated enter={motion.sheet} {...props} />
+        </ConfirmLayer>
+      )}
+    </AnimatePresence>,
+    portalRoot,
+  );
+}
+
+/** The dialog's layer, still drawn while it leaves but no longer taking presses or focus. */
+function ConfirmLayer({ phone, layer, onCancel, scrim, children }: { phone: boolean; layer?: string; onCancel: () => void; scrim: HTMLMotionProps<"div">; children: ReactNode }) {
+  const leaving = !useIsPresent();
+  useEffect(() => {
+    if (!phone) return;
+    wakeSystemControls();
+    return () => wakeSystemControls();
+  }, [phone]);
+  return (
     <div
-      className={`fixed inset-0 ${props.layer ?? "z-50"} flex items-center justify-center p-6`}
-      onMouseDown={(event) => event.target === event.currentTarget && onCancel()}
+      data-phone-modal-layer={phone ? "" : undefined}
+      className={`fixed inset-0 ${phone ? (layer ?? "z-[85]") : (layer ?? "z-50")} flex items-center justify-center p-6`}
+      inert={leaving || undefined}
+      data-leaving={leaving ? "" : undefined}
+      onMouseDown={(event) => !leaving && event.target === event.currentTarget && onCancel()}
+      onClick={(event) => phone && !leaving && event.target === event.currentTarget && onCancel()}
     >
-      <ScrimMotion aria-hidden="true" className="ui-dialog-scrim pointer-events-none absolute inset-0" />
-      <ConfirmDialogCard ref={dialogRef} confirmRef={confirmRef} animated {...props} />
-    </div>,
-    document.body,
+      <ScrimMotion aria-hidden="true" data-raw-dialog="" className="ui-dialog-scrim pointer-events-none absolute inset-0" {...scrim} />
+      {children}
+    </div>
   );
 }
 
@@ -105,17 +138,22 @@ export function ConfirmDialogCard({
   alternative,
   pending = false,
   animated = false,
+  enter,
   art,
 }: ConfirmDialogProps & {
   ref?: React.Ref<HTMLDivElement>;
   confirmRef?: React.Ref<HTMLButtonElement>;
   /** eases in as bencho's modal does; a card drawn inside another surface stays put */
   animated?: boolean;
+  /** the way in and out it plays, in place of the stylesheet's way in */
+  enter?: HTMLMotionProps<"div">;
 }) {
   const danger = tone === "danger";
   const Root = animated ? SheetMotion : "div";
+  const played = animated && enter ? { ...enter, "data-raw-dialog": "" } : {};
   return (
     <Root
+      {...played}
       ref={ref}
       role="alertdialog"
       tabIndex={-1}
@@ -159,10 +197,10 @@ export function askConfirm(request: ConfirmRequest): Promise<boolean> {
     const host = document.createElement("div");
     document.body.append(host);
     const root = createRoot(host);
+    const closed = () => { root.unmount(); host.remove(); };
     const answer = (value: boolean) => {
-      root.unmount();
-      host.remove();
       resolve(value);
+      root.render(<ConfirmDialog open={false} {...request} onCancel={() => {}} onConfirm={() => {}} onClosed={closed} />);
     };
     root.render(<ConfirmDialog open {...request} onCancel={() => answer(false)} onConfirm={() => answer(true)} />);
   });

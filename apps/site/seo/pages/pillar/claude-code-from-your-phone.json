@@ -12,7 +12,7 @@
     "claude code remote control"
   ],
   "answer": "**leave the desk and keep the conversation going from your phone.** remote control reaches claude code on your computer. anthropic cloud sessions run elsewhere. dusk lets you text a named bot using claude code. as of 12 november 2026, all three routes exist. pick where the work lives so you know whether the laptop can come with you.",
-  "updated": "2026-11-12",
+  "updated": "2026-11-20",
   "review": {
     "status": "approved",
     "by": "lead agent: independent reviewer pass against seo/facts (4 reviewers), every finding applied, automated gate",
@@ -110,7 +110,7 @@
     },
     {
       "h": "pair once, then text it from the couch",
-      "md": "**scan the code and send your first message from the phone.** alternatives include a six-digit code, the nearby wi-fi list or tailscale. no account is needed.[^3]\n\niphone and android use the paired browser version today. add it to the home screen. store apps are on their way; this browser version sends no notifications.[^3]\n\nyour paired computer needs dusk running. **settings**, **remote access**, **keep this computer awake** helps it stay reachable. pair to dusk cloud for access with your own computer off.[^3][^5]\n\n[overnight hosting](/run-claude-code-24-7) covers that choice. [telegram, discord and slack](/guides/claude-code-telegram-discord-slack) covers separate chat channels."
+      "md": "**scan the code and send your first message from the phone.** alternatives include a six-digit code, the nearby wi-fi list or tailscale. wi-fi and tailscale pairing need no account. secure pairing asks you to sign in by email.[^3]\n\non iphone, pair the app from the app store. a notification shows the bot's name and “new message” without exposing the text. on android, pair in the browser and choose **install app** until dusk arrives on google play. the android browser sends no notifications.[^3]\n\nyour paired computer needs dusk running. **settings**, **remote access**, **keep this computer awake** helps it stay reachable. pair to dusk cloud for access with your own computer off.[^3][^5]\n\n[overnight hosting](/run-claude-code-24-7) covers that choice. [telegram, discord and slack](/guides/claude-code-telegram-discord-slack) covers separate chat channels."
     },
     {
       "h": "use the small screen for small decisions",
@@ -128,7 +128,7 @@
     },
     {
       "q": "do i need an app store download to pair dusk?",
-      "a": "**use the paired browser version today.** store apps are on their way. add dusk to the home screen and remember that this version has no notifications.[^3]"
+      "a": "**on iphone, get dusk bot from the app store.** on android, pair the browser version for now.[^3]"
     }
   ],
   "sources": [
@@ -207,8 +207,8 @@
       "fix": "leave the host powered on with the right app running."
     },
     {
-      "mistake": "waiting for browser notifications",
-      "fix": "open the paired browser to read replies; it has no notifications."
+      "mistake": "waiting for a reply alert on android",
+      "fix": "open the android browser to read replies. on iphone, the app can notify you."
     }
   ],
   "tip": {

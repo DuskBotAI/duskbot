@@ -33,6 +33,9 @@ describe("visitsOf", () => {
     for (const dim of ["surface", "host", "keyword"] as const) expect(valuesOf(visits[0]!, dim)).toEqual([visits[0]![dim]]);
     expect(matches(visits[1]!, { surface: "account", host: "preview.dusk.bot", keyword: "dusk_bot" })).toBe(true);
     expect(valuesOf(visits[2]!, "keyword")).toEqual(["unknown"]);
+    expect(valuesOf({ ...visits[0]!, referrer: null, source: "launch-thread" }, "referrer"), "a ?ref or utm source stands in for a missing referrer").toEqual(["launch-thread"]);
+    expect(valuesOf({ ...visits[0]!, referrer: null, source: "direct" }, "referrer")).toEqual(["direct"]);
+    expect(valuesOf({ ...visits[0]!, referrer: "news.ycombinator.com", source: "Hacker News" }, "referrer")).toEqual(["news.ycombinator.com"]);
   });
 
   it("groups app sessions by install and day when needed and recognizes phone opens without platform context", () => {

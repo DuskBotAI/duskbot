@@ -30,13 +30,13 @@ export type BotPatch = Partial<
     | "autoApprove"
     | "approvalMode"
     | "outbound"
-    | "fallback"
     | "limitMode"
     | "speakReplies"
     | "replyStyle"
     | "memoryEnabled"
     | "xResearch"
     | "macControl"
+    | "suggestions"
     | "voice"
     | "chiefOfStaff"
     | "approvePeerComms"
@@ -52,6 +52,8 @@ export type BotPatch = Partial<
   connectorScopes?: Bot["connectorScopes"] | null;
   phoneApps?: Bot["phoneApps"] | null;
   peers?: string[] | null;
+  /** null: back to the automatic backup */
+  fallback?: Bot["fallback"] | null;
   acknowledgeLocalAuto?: boolean;
   acknowledgePeerScope?: boolean;
 };

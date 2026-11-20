@@ -1,11 +1,11 @@
 {
   "path": "/integrations/jira",
   "type": "integration",
-  "title": "Jira AI assistant: catch sprint changes before the meeting",
+  "title": "Jira bot for sprint changes, reopened bugs and release reviews",
   "nav": "jira",
-  "h1": "a jira assistant that explains what changed",
-  "description": "Read Jira issue history, sprint changes and release questions with dusk bot. Try three review routines and keep status changes under your control.",
-  "answer": "**walk into the sprint meeting knowing what changed yesterday.** a jira bot reads issues, comments and history, then explains scope and status changes in your dusk chat. schedule that review with the ai you choose.\n\nstart read only. you get the story behind the labels while tickets and the sprint stay where they are.",
+  "h1": "a jira bot that shows what changed in your sprint",
+  "description": "Use a read-only Jira bot to see what changed since yesterday. Get issue keys for scope changes, reasons bugs reopened and questions to raise before release.",
+  "answer": "**a jira bot can read the sprint's issue histories and tell you which tickets changed scope or status.** give it your team's filter and a time window. ask for issue keys beside each change. with read-only access, the bot can explain a reopened ticket in chat and leave its status alone.",
   "tags": [
     "issues",
     "sprints",
@@ -118,6 +118,10 @@
     {
       "q": "what should i give a jira ai agent first?",
       "a": "**one project, one issue selection, one question.** your existing jql helps. for history reviews, include the time window and actual status meanings."
+    },
+    {
+      "q": "why did my jira bot miss the latest change on a ticket?",
+      "a": "**ask it to read every page of the issue history.** jira returns the oldest changes first. a long-running ticket can fill the first page with old activity. have the bot flag incomplete history before it concludes that nothing changed."
     }
   ],
   "sources": [
@@ -137,9 +141,10 @@
   "keyword": "claude jira",
   "keywords": [
     "jira mcp",
-    "jira ai agent"
+    "jira ai agent",
+    "jira bot"
   ],
-  "updated": "2026-11-12",
+  "updated": "2026-11-20",
   "review": {
     "status": "approved",
     "by": "lead agent: independent reviewer pass against seo/facts (4 reviewers), every finding applied, automated gate",

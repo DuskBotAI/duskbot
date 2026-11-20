@@ -52,7 +52,7 @@ export function UsersPage({ tabs }: { tabs?: ReactNode }) {
                       <span className="block truncate text-12 text-ink-3">{user.name ?? "no name"} · {user.methods.join(", ")}{user.optOut ? " · opted out" : ""}</span>
                     </Link>
                   </Td>
-                  <Td>{user.plan ? <Status value={user.plan.status} label={`${user.plan.plan ?? "custom"}${user.plan.status === "active" ? "" : `, ${user.plan.status.replace(/_/g, " ")}`}`} /> : <span className="text-13 text-ink-3">free</span>}</Td>
+                  <Td>{user.plan ? <Status value={user.plan.trial ? "trial" : user.plan.status} label={`${user.plan.plan ?? "custom"}${user.plan.trial ? ", trial" : user.plan.status === "active" ? "" : `, ${user.plan.status.replace(/_/g, " ")}`}`} /> : <span className="text-13 text-ink-3">free</span>}</Td>
                   <Td className="text-end font-mono num">{user.clouds || <Nil />}</Td>
                   <Td className="text-13 text-ink-2">{user.devices ? `${user.devices} · ${user.platforms.join(", ")}` : <Nil />}</Td>
                   <Td className="t-id whitespace-nowrap text-ink-2">{stamp(user.createdAt).slice(0, 10)}</Td>

@@ -1,0 +1,82 @@
+{
+  "path": "/routines/competitor-pricing-page-check",
+  "type": "routine",
+  "title": "Check a competitor’s pricing page against a saved price",
+  "nav": "competitor pricing changes",
+  "h1": "spot a real price change on a competitor’s pricing page",
+  "description": "Compare one public price with a baseline you choose. The browser routine holds the plan, currency, billing term and seat basis steady before it flags a change.",
+  "keyword": "competitor pricing page check",
+  "keywords": [
+    "monitor competitor price changes",
+    "pricing page comparison routine",
+    "track public plan prices"
+  ],
+  "answer": "**an annual discount can look like a price cut if the billing toggle moves.** give your bot one public pricing page and a price you have seen yourself. on its own browser it can compare the same offer each week. the note in chat tells you which figure moved or why the two offers no longer match.",
+  "updated": "2026-11-20",
+  "review": {
+    "status": "approved",
+    "by": "lead agent, after four independent reviewers read every page against seo/facts (2026-11-20); every finding applied",
+    "at": "2026-11-20"
+  },
+  "voice": 2,
+  "tags": [
+    "browser",
+    "pricing",
+    "monitoring"
+  ],
+  "connectors": [],
+  "related": [
+    "/use-cases/price-monitoring",
+    "/use-cases/competitor-monitoring",
+    "/ai-agent-that-controls-your-computer"
+  ],
+  "art": {
+    "props": [
+      "s-computer",
+      "p-magnifier"
+    ],
+    "bubble": "same billing term"
+  },
+  "og_line": "hold the terms steady before comparing prices.",
+  "routine": {
+    "message": "every monday at 10 am, open https://finchpaper.example/pricing in your own browser. baseline (nov 9): studio plan, uk view, monthly billing, gbp 18 per seat per month.\n\nread that plan with those same terms. you may switch the public billing toggle. if the amount changes, report the baseline and current figure here with the terms, url and observation date.\n\nstay quiet on a confirmed match. if the page won't load, the plan disappears or you can't match the terms, tell me which part you couldn't compare. never sign in, start checkout, submit a form or choose a substitute tier.",
+    "when": "mondays at 10 am",
+    "needs": "the bot’s own browser, a public pricing url and your dated baseline. no connected app.[^2] use your pricing url and dated baseline in the message.",
+    "output": "finch paper studio · pricing observed nov 16\nfinchpaper.example/pricing · studio plan · uk · monthly billing · per seat\nnov 9 baseline: gbp 18 per month. current page: gbp 21 per month.\nboth views show the monthly option. difference: gbp 3 per seat per month."
+  },
+  "knobs": [
+    "**name the exact price line.** “from” and “for the first month” can sit beside a regular price. pick the one you would pay.",
+    "**keep one country view.** supply a regional page address if the site has one. leave taxes out of comparisons unless both prices say how they treat tax.",
+    "**edit the routine with the new dated baseline** once you confirm the change. otherwise the old figure will keep triggering the note."
+  ],
+  "fails": [
+    "**the old plan name vanished.** record the missing label. decide yourself whether a new tier offers a fair comparison.",
+    "**the page shows a monthly equivalent.** read the text beside the amount. “per month, billed annually” belongs to the annual offer."
+  ],
+  "sections": [
+    {
+      "h": "decide what counts as the same offer",
+      "md": "**write down the words around the number.** include “per seat” if it appears. a flat team price and a seat price can use the same currency symbol and mean very different things.\n\nif your decision depends on a negotiated rate, use the quote or contract. a bot reading a public pricing page cannot tell you what your account pays."
+    }
+  ],
+  "faq": [
+    {
+      "q": "will i hear about a change the moment it happens?",
+      "a": "**you get a scheduled observation.** an offer can change and change back between monday visits. nothing in that comparison dates the change itself."
+    },
+    {
+      "q": "what if my computer sleeps on monday morning?",
+      "a": "**a local routine waits while the computer sleeps.** if it missed the run by less than 12 hours, it runs once when you return. it skips older runs. dusk cloud runs on time.[^1]"
+    }
+  ],
+  "sources": [
+    {
+      "label": "dusk bot docs: routines",
+      "url": "/docs/routines"
+    },
+    {
+      "label": "dusk bot docs: computer",
+      "url": "/docs/computer"
+    }
+  ]
+}

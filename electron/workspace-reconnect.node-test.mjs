@@ -172,3 +172,30 @@ test("a proxy's own page for a gone server, Cloudflare's tunnel errors included,
   for (const code of [502, 503, 504, 520, 521, 522, 523, 524, 525, 526, 527, 530]) assert.equal(proxyAnswersForDownServer(code), true, String(code));
   for (const code of [200, 204, 301, 401, 403, 404, 500, 501, 505]) assert.equal(proxyAnswersForDownServer(code), false, String(code));
 });
+
+test("a dusk cloud the edge says was deleted is said once, with Remove and the other places, and never looked at again", async (t) => {
+  const served = [];
+  const server = createServer((req, res) => {
+    served.push(req.url);
+    res.writeHead(410, { "content-type": "text/plain", "x-dusk-cloud-power": "gone" }).end("This dusk bot was deleted.");
+  });
+  await new Promise((done) => server.listen(0, "127.0.0.1", done));
+  t.after(() => new Promise((done) => { server.closeAllConnections?.(); server.close(() => done()); }));
+  const w = world({ origin: `http://127.0.0.1:${server.address().port}` });
+  w.reconnect.lost({ ...w.entry, gone: true });
+  for (let i = 0; i < 50 && !w.reconnect.view()?.gone; i++) await new Promise((done) => setTimeout(done, 10));
+  const view = w.reconnect.view();
+  assert.equal(view.gone, true);
+  assert.equal(view.nextAt, null);
+  assert.equal(view.checking, false);
+  assert.deepEqual(view.places.map((place) => place.id), ["local", "office"]);
+  assert.equal(w.loads.at(-1), `${LOCAL}${RECONNECT_PATH}`);
+  assert.equal(w.timers.length, 0, "nothing is scheduled");
+  const asked = served.length;
+  w.reconnect.retry();
+  w.reconnect.lost({ ...w.entry, gone: true });
+  await w.later(10 * 60_000);
+  assert.equal(served.length, asked, "never looked at again");
+  w.reconnect.remove();
+  assert.deepEqual(w.removed, ["vps"]);
+});

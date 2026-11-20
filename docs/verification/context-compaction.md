@@ -10,7 +10,7 @@ when no model wrote the summary, it says the agent continues from recent excerpt
 
 ```sh
 pnpm exec vitest run server/context-compaction.e2e.test.ts
-pnpm exec vitest run server/context-rebuild.test.ts server/compaction-summary.test.ts server/context-budget.test.ts server/delta-context.e2e.test.ts
+pnpm exec vitest run server/context-rebuild.test.ts server/compaction-summary.test.ts server/compaction-archive.test.ts server/context-budget.test.ts server/delta-context.e2e.test.ts
 pnpm exec vitest run server/side-jobs.test.ts server/helper-model.e2e.test.ts
 pnpm exec vitest run server/store.test.ts server/config.test.ts src/components/DigestChip.test.ts
 pnpm test:packaged-server
@@ -24,6 +24,45 @@ busy/idle state. The route accepts no agent-written summary or file path.
 From 80% of a known window, the bot's 1:1 header shows the figure with a
 **Compact now** button that calls this route (hidden again once a compaction
 record is newer than the last reply).
+
+## What a summary holds
+
+A summary is a checkpoint (`server/compaction-summary.ts`):
+
+- **Helper sections:** the helper writes it under fixed headings: Goal,
+  Constraints and preferences, Progress (done, in progress, blocked),
+  Decisions, Open items and next steps, and Critical context (names,
+  numbers, paths, links and ids, copied exactly). With no helper, recent
+  excerpts take that place.
+- **Fixed parts:** three parts follow that no model writes:
+  - every message the person sent in the folded part, word for word (each
+    cut to 700 bytes; past 4,400 bytes the opening ask and the newest stay);
+  - identifiers matched by pattern (links, emails, paths, ids, amounts,
+    dates);
+  - one line per earlier fold naming
+    `task-workspaces/<bot>/<thread>/context-archive/through-<id>.md`. That
+    file holds the folded part's tool calls with their full results (secrets
+    masked). Engines with file tools only. A chat working in a project
+    folder keeps read access to its own folder (`engineReadScope`: Claude
+    gets it as `--add-dir`, and Codex's profile does not hide it). In the bot
+    box only the working folder is mounted, so a boxed chat working outside
+    its own folder gets no archive.
+- **Later folds:** a later fold carries the earlier checkpoint's quotes,
+  identifiers and archive lines forward.
+- **Framing:** the replay labels the summary reference only. It tells the
+  model not to redo what the summary lists, to answer the latest message,
+  and to keep acting with its tools on work in progress.
+- **Memory:** the fold first flushes the thread's waiting memory capture.
+  Turns being folded reach memory through capture's usual trust rules
+  without waiting for the two quiet minutes. The flush adds no extra model
+  call.
+
+Room summaries (`server/host/room-earlier.ts`) use the same checkpoint. They
+quote what people in the room said, up to 2,400 bytes, and are capped at
+7,500 bytes. Rooms have no archive.
+
+`scripts/compaction-eval/` measures recall of early facts and task
+continuation across two folds of a 42-turn chat on a live model.
 
 ## Warm summaries: summarizing while the conversation is idle
 
@@ -358,7 +397,7 @@ their own model-window threshold. The native CLI setting itself is unchanged.
 
 The selected account's tool-free helper can produce a historical summary, with
 a 20-second timeout and source-labelled fallback when unavailable. Summaries
-are capped at 6,000 bytes and retain recent source corrections. The helper may
+are capped at 11,000 bytes and retain recent source corrections. The helper may
 incur provider usage; its one-shot cost is not separately reported by the current
 provider interface. Summaries are not verified facts and can omit details.
 

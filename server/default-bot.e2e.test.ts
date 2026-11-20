@@ -47,7 +47,7 @@ it("makes Dusk a new install's first bot, never deleted, hidden by its switch, w
 
     const refused = await api("DELETE", `/api/bots/${maus.id}`);
     expect(refused.status).toBe(409);
-    expect(refused.body.error).toBe(`${maus.name} can't be deleted or archived. To take it off the sidebar, choose Hide in its menu, or turn off "Show ${maus.name} in the sidebar" in Settings → Models, under New bots.`);
+    expect(refused.body.error).toBe(`${maus.name} is your Chief of Staff. Make another bot the Chief of Staff first.`);
     expect((await api("PATCH", `/api/bots/${maus.id}`, { hidden: true })).status).toBe(400);
     expect((await api("PATCH", `/api/bots/${maus.id}`, { sidebarHidden: true })).status).toBe(200);
     expect((await bots()).find((bot) => bot.id === maus.id)?.sidebarHidden).toBe(true);
@@ -75,6 +75,8 @@ it("makes Dusk a new install's first bot, never deleted, hidden by its switch, w
     expect(after.filter((bot) => bot.chiefOfStaff).map((bot) => bot.id)).toEqual([clive.id]);
     expect(after.filter((bot) => bot.defaultBot).map((bot) => bot.id)).toEqual([maus.id]);
     await control(["interrupt", "--bot", maus.id]);
+    await expect.poll(async () => (await api("DELETE", `/api/bots/${maus.id}`)).status, { timeout: 20_000 }).toBe(200);
+    expect((await bots()).some((bot) => bot.id === maus.id || bot.defaultBot)).toBe(false);
   } finally {
     await fixture.close();
   }

@@ -18,7 +18,7 @@ const dev = generateEntitlementSigner("dev-route");
 const dirs: string[] = [];
 afterEach(() => { for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true }); });
 
-function routes() {
+function routes(linkGrant?: (grant: unknown) => void) {
   let counter = 0;
   const now = () => NOW;
   const dataDir = mkdtempSync(join(tmpdir(), "dusk-signed-entitlement-")); dirs.push(dataDir);
@@ -30,7 +30,7 @@ function routes() {
   });
   const entitlement = createCloudEntitlement({ dataDir, machineId: MACHINE, now, fromSource: true,
     env: { DUSK_CLOUD_ENTITLEMENT: "required", DUSK_ENTITLEMENT_DEV_KEYS: `${dev.publicKey.kid}:${dev.publicKey.x}` } });
-  const handle = createCloudSignedRoutes({ secret, sessions, health, now, entitlement });
+  const handle = createCloudSignedRoutes({ secret, sessions, health, now, entitlement, ...(linkGrant ? { linkGrant } : {}) });
   const send = async (path: string, value: unknown, key = secret) => {
     const body = JSON.stringify(value), timestamp = String(Math.floor(NOW / 1000)), nonce = `nonce-${String(++counter).padStart(12, "0")}`;
     const headers = { "content-type": "application/json", "x-dusk-cloud-timestamp": timestamp, "x-dusk-cloud-nonce": nonce,
@@ -56,5 +56,14 @@ describe("POST /api/cloud/entitlement", () => {
     expect(entitlement.valid()).toBe(false);
     expect(await send("/api/cloud/entitlement", { v: 1, token: token() })).toMatchObject({ status: 200, body: { ok: true, expiresAt: NOW + 3_600_000 } });
     expect((await send("/api/cloud/pairing", { label: "App" })).status).toBe(200);
+  });
+
+  it("hands the link grant sent beside a valid entitlement to the phone relay, and never one beside a refused entitlement", async () => {
+    const grants: unknown[] = [];
+    const { send } = routes((grant) => grants.push(grant));
+    await send("/api/cloud/entitlement", { v: 1, token: token(`c${"4".repeat(24)}`), linkGrant: "refused" });
+    expect(grants).toEqual([]);
+    expect(await send("/api/cloud/entitlement", { v: 1, token: token(), linkGrant: "l1.grant" })).toMatchObject({ status: 200 });
+    expect(grants).toEqual(["l1.grant"]);
   });
 });

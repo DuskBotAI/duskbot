@@ -1,6 +1,6 @@
 // The renderer's JSON request helper. A Cloud home that went to sleep is never woken by a background poll
 // (src/lib/cloud-power.ts), and a page out of sight sends none at all.
-import { asleepAnswer, BACKGROUND_HEADERS, cloudAsleep, markCloudAsleep, markCloudAwake, pageHidden, pageShown, wakingAnswer } from "../lib/cloud-power";
+import { asleepAnswer, BACKGROUND_HEADERS, cloudAsleep, goneAnswer, markCloudAsleep, markCloudAwake, markCloudGone, pageHidden, pageShown, wakingAnswer } from "../lib/cloud-power";
 import { lacksAdminScope } from "../lib/admin-scope";
 import { isBotLimitRefusal, showBotLimit } from "../lib/bot-limit";
 import { noteRefusedRequest } from "../lib/session-ended";
@@ -80,6 +80,7 @@ export async function api<T = any>(path: string, init?: ApiInit): Promise<T> {
 /** What `api` makes of a response, for one whose request started elsewhere (src/state/boot-reads.ts). */
 export async function answerOf<T = any>(res: Response): Promise<T> {
   if (asleepAnswer(res)) markCloudAsleep();
+  if (goneAnswer(res)) markCloudGone();
   if (wakingAnswer(res)) { await res.body?.cancel().catch(() => {}); throw new ApiError("My Cloud is waking up", 503, { error: "waking" }); }
   const body = await res.json().catch(() => ({}));
   if (!res.ok) {

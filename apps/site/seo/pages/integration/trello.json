@@ -1,0 +1,132 @@
+{
+  "path": "/integrations/trello",
+  "type": "integration",
+  "title": "Trello bot for overdue cards and print handoffs",
+  "nav": "trello",
+  "h1": "a trello bot that spots unfinished handoffs",
+  "description": "Find overdue Trello cards, missing print proofs and jobs waiting for a decision. Get card links and the next question without rearranging the board.",
+  "keyword": "trello bot",
+  "keywords": [
+    "trello ai assistant",
+    "trello ai agent"
+  ],
+  "answer": "**the card reached the print queue. did the proof get there too?** a trello bot can read a production board and flag jobs with missing attachments, unfinished steps or overdue dates. give it the lists your crew actually uses. get the card link and the question to ask before the next shift.",
+  "updated": "2026-11-20",
+  "review": {
+    "status": "approved",
+    "by": "lead agent, after four independent reviewers read every page against seo/facts (2026-11-20); every finding applied",
+    "at": "2026-11-20"
+  },
+  "voice": 2,
+  "tags": [
+    "boards",
+    "production",
+    "handoffs"
+  ],
+  "connectors": [
+    "trello"
+  ],
+  "related": [
+    "/routines/trello-overdue-cards",
+    "/integrations/dropbox",
+    "/integrations/asana"
+  ],
+  "art": {
+    "logo": "trello",
+    "props": [
+      "s-signpost"
+    ],
+    "bubble": "ready for print"
+  },
+  "og_line": "find the missing proof before the press runs.",
+  "app": {
+    "name": "Trello",
+    "toolkit": "trello",
+    "intro": "**look inside the card before calling the job late.** the list tells you where it sits. the due date, members and last move tell you who can help. an attached proof and a completed signoff are different pieces of evidence.",
+    "highlight": [
+      {
+        "slug": "TRELLO_GET_BOARDS_LISTS_BY_ID_BOARD",
+        "use": "map the current list names to stages on the shop floor"
+      },
+      {
+        "slug": "TRELLO_GET_BOARDS_CARDS_BY_ID_BOARD",
+        "use": "find open cards with due dates before this shift"
+      },
+      {
+        "slug": "TRELLO_GET_CARDS_MEMBERS_BY_ID_CARD",
+        "use": "see who is on the job when a deadline slips"
+      },
+      {
+        "slug": "TRELLO_GET_CARDS_CHECKLISTS_BY_ID_CARD",
+        "use": "read the proof signoff item on a job in the print queue"
+      },
+      {
+        "slug": "TRELLO_GET_CARDS_ATTACHMENTS_BY_ID_CARD",
+        "use": "look for the proof file named in your handoff rule"
+      },
+      {
+        "slug": "TRELLO_GET_CARDS_ACTIONS_BY_ID_CARD",
+        "use": "find the most recent move into the waiting list"
+      }
+    ],
+    "setup": "**pick the board by its link.** a copy from last season can have exactly the same list names. give the bot read access. tell it which list means finished, which means waiting, and what your crew calls a signed proof."
+  },
+  "routines_intro": "**start with the shift you run.** these messages assume a production board with print and waiting lists. substitute your list names once. the questions then work against the cards that move through them.",
+  "routines": [
+    {
+      "name": "overdue at shift change",
+      "message": "every weekday at 7, find open cards on my production board with a past due date. skip completed dates and our finished list. put the earliest deadline first. give me the card link, the due date and everyone on the card. put unassigned jobs on their own line.",
+      "when": "weekdays at 07:00",
+      "output": "a shift list ordered by missed deadline"
+    },
+    {
+      "name": "proofs for the press",
+      "message": "at 2 each weekday, read the cards in ready for print. look for a proof pdf attachment and a completed proof signoff item. bring me the card link and whichever piece is missing. leave the cards in place.",
+      "when": "weekdays at 14:00",
+      "output": "print jobs missing a file, a signoff or both"
+    },
+    {
+      "name": "waiting on a decision",
+      "message": "every thursday at 3, open each card in waiting. find its last move into that list and the question in its description. list cards waiting over a week here. if the move is missing from history, write date unknown. don't treat an unrelated edit as a fresh move.",
+      "when": "thursdays at 15:00",
+      "output": "old questions with the date each job entered waiting"
+    }
+  ],
+  "asks": "**keep the shift report read only.** the bot can tell you which card needs attention without moving it. changing a due date or moving a card is an edit. if you give it either action, write “ask me before you change anything” in that routine.",
+  "cannot": [
+    "**recover every old card move.** trello can omit very old actions. the earliest visible edit might be well after the job arrived.",
+    "**tell who approved a proof from an attachment alone.** a file called final can still be awaiting signoff.",
+    "**move a job with these read actions.** the report gives the shift lead the link. they decide where the card belongs."
+  ],
+  "sections": [
+    {
+      "h": "when a glance at the board is enough",
+      "md": "**skip the bot if the whole answer is on the face of one card.** it earns its place when a shift lead must open each card to compare an attachment, a due date and a signoff. name the missing piece so the crew knows what to bring."
+    }
+  ],
+  "faq": [
+    {
+      "q": "does every member on a trello card own the deadline?",
+      "a": "**the member list shows who's on the card.** if your crew names the owner somewhere else, give the bot that rule. leave ownership open when the evidence is missing."
+    },
+    {
+      "q": "what about jobs with no due date?",
+      "a": "**give undated work its own queue.** ask for cards in the active list with no due date. mixing them with overdue work makes the shift report harder to act on."
+    }
+  ],
+  "worked": {
+    "intro": "an example from a print board.",
+    "before": "ruben's menu cards sit in ready for print. the proof pdf is attached. the proof signoff item is still open.",
+    "after": "menu cards | proof attached | signoff missing\nask ruben for signoff before the print run."
+  },
+  "sources": [
+    {
+      "label": "dusk bot docs: connected apps",
+      "url": "/docs/files-and-apps"
+    },
+    {
+      "label": "dusk bot docs: routines",
+      "url": "/docs/routines"
+    }
+  ]
+}

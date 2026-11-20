@@ -1222,6 +1222,175 @@
           "confidence": "high"
         }
       }
+    },
+    "grok-bot": {
+      "name": "Grok Bot",
+      "url": "https://x.ai/news/introducing-grok-bot",
+      "fields": {
+        "what_it_is": {
+          "value": "'Your team of always-on agents.' You create several named 'Bots'. They share a persistent cloud computer (browser, terminal, filesystem) and work across apps, websites and tools. Chat is the main interface, and voice calls and voice notes are also supported.",
+          "source_url": "https://docs.x.ai/grok-bot/overview.md",
+          "checked": "2026-11-20",
+          "confidence": "high"
+        },
+        "maker": {
+          "value": "Published by SpaceXSI (footer: SpaceX Super Intelligence LLC, formerly xAI) and built on Cursor infrastructure. Grok Bot signs in with a Cursor account, and its usage, billing, retention and deletion follow Cursor terms. Press calls it a SpaceXAI + Cursor launch.",
+          "source_url": "https://x.ai/news/introducing-grok-bot",
+          "checked": "2026-11-20",
+          "confidence": "high"
+        },
+        "launched": {
+          "value": "Launched in beta on Aug 11, 2026. At launch it was for SuperGrok/Plus/Heavy, Cursor Pro/Pro+/Ultra and Cursor Teams Standard/Premium subscribers, on desktop and iOS. Enterprise customers got a waitlist.",
+          "source_url": "https://x.ai/news/introducing-grok-bot",
+          "checked": "2026-11-20",
+          "confidence": "high"
+        },
+        "runs_where": {
+          "value": "In the cloud. Each user gets one persistent, dedicated, hardware-isolated cloud computer that all of their Bots share (files, browser sessions, logins). Bots are not a security boundary from each other.",
+          "source_url": "https://docs.x.ai/grok-bot/computer-and-apps.md",
+          "checked": "2026-11-20",
+          "confidence": "high"
+        },
+        "works_when_off": {
+          "value": "Yes. 'Bot work runs on the cloud computer. Closing the app, laptop, or phone does not stop a background turn or routine.'",
+          "source_url": "https://docs.x.ai/grok-bot/faq.md",
+          "checked": "2026-11-20",
+          "confidence": "high"
+        },
+        "own_computer": {
+          "value": "Bots run commands on your own desktop only if you allow it under Settings > Computer > 'Execution on this computer', which by default asks every time. An optional 'Route traffic through this computer' setting makes sites see your home connection.",
+          "source_url": "https://docs.x.ai/grok-bot/faq.md",
+          "checked": "2026-11-20",
+          "confidence": "high"
+        },
+        "platforms": {
+          "value": "macOS (Apple silicon and Intel), Windows (x64 and Arm64), Linux (x64 and Arm64 as .deb, .rpm or AppImage), iPhone (iOS 18+, also iPad) and Android 9+. Bots can also be reached in X Chat, by tagging @bot on X, in Slack (Team Bots) and in Microsoft Teams. There is no general web chat app; the web has the dashboard and the marketplace.",
+          "source_url": "https://docs.x.ai/grok-bot/faq.md",
+          "checked": "2026-11-20",
+          "confidence": "high"
+        },
+        "setup": {
+          "value": "Download the app and sign in with a Cursor account; it needs a paid plan that includes Grok Bot (or a one-time trial credit on some accounts).",
+          "source_url": "https://docs.x.ai/grok-bot/faq.md",
+          "checked": "2026-11-20",
+          "confidence": "medium",
+          "note": "combined from the faq (cursor sign-in, trial) and the pricing page"
+        },
+        "ai_models": {
+          "value": "Grok Bot picks the model and there is no model picker. A task may run on a first-party SpaceXSI (Grok) model or on a third-party model from a provider on Cursor's sub-processor list (the docs mention Opus 5.5). The model used is not shown to the user, and you cannot bring your own model or API key.",
+          "source_url": "https://docs.x.ai/grok-bot/faq.md",
+          "checked": "2026-11-20",
+          "confidence": "high"
+        },
+        "pricing": {
+          "value": "On The X Subscription, Grok Bot is included in Premium ($30/mo or $300/yr), Super ($100/mo) and Ultra ($200/mo). It is NOT included in Free or Plus ($8/mo). Team seats cost $30/$100/$200. There is no separate Grok Bot subscription.",
+          "source_url": "https://docs.x.ai/x-subscription/pricing.md",
+          "checked": "2026-11-20",
+          "confidence": "high"
+        },
+        "pricing_legacy": {
+          "value": "On legacy plans, Grok Bot is included with every paid Cursor individual plan (Pro, Pro+, Ultra) and self-serve Teams. Users can instead link an individual SuperGrok, SuperGrok Plus, SuperGrok Heavy or X Premium+ subscription, or use a seat on a self-serve Grok Business plan. SuperGrok Lite and Grok Enterprise cannot link. Linking is permanent, and the two plans do not add together.",
+          "source_url": "https://docs.x.ai/grok-bot/faq.md",
+          "checked": "2026-11-20",
+          "confidence": "high"
+        },
+        "usage_limits": {
+          "value": "There is a weekly usage pool, shared with Grok and Cursor on The X Subscription. It is metered by agent steps and tokens, not by message count. Usage past the pool draws on prepaid credits (X Subscription) or on-demand billing (legacy Cursor). Super gets 15x and Ultra 50x the Plus base, versus 4x on Premium. No absolute numbers are published. Routines must be at least 5 minutes apart.",
+          "source_url": "https://docs.x.ai/x-subscription/usage-limits.md",
+          "checked": "2026-11-20",
+          "confidence": "high"
+        },
+        "trial": {
+          "value": "Some accounts get a 'Start Trial' option: a one-time usage credit that also expires after 7 days. It never converts to a paid plan. Separately, an App Store trial in the iOS app does convert to a paid Apple subscription.",
+          "source_url": "https://docs.x.ai/grok-bot/faq.md",
+          "checked": "2026-11-20",
+          "confidence": "high"
+        },
+        "scheduling": {
+          "value": "A skill is a reusable set of instructions, invoked with '/'. A routine assigns a workflow to one Bot on a schedule (plain-language, time-zone aware, at least 5 minutes apart) or on an event: Slack message, GitHub/Linear/Sentry/PagerDuty event, email, or webhook. 'Teach a task' records a browser demonstration of up to 10 minutes and turns it into a skill (gradual rollout).",
+          "source_url": "https://docs.x.ai/grok-bot/skills-routines-and-automations.md",
+          "checked": "2026-11-20",
+          "confidence": "high"
+        },
+        "computer_use": {
+          "value": "Yes. Bots operate a browser and desktop on the cloud computer, and you can watch or take control. Each Bot gets its own screen, with one computer-use task per Bot at a time. CAPTCHAs, SSO, passkeys and similar steps are handed back to you. Logins come from Vault, 1Password or Secure Forms without the model seeing passwords. Some sites block cloud IPs.",
+          "source_url": "https://docs.x.ai/grok-bot/computer-and-apps.md",
+          "checked": "2026-11-20",
+          "confidence": "high"
+        },
+        "memory": {
+          "value": "Each Bot keeps its own memory (preferences, rules, facts, a dated work log). A few facts, such as your name and time zone, are shared across Bots. Bots decide on their own what to save. There is no memory screen: to view or edit memory you ask the Bot in chat. 'Import Memory' can bring context over from another assistant.",
+          "source_url": "https://docs.x.ai/grok-bot/bots.md",
+          "checked": "2026-11-20",
+          "confidence": "high"
+        },
+        "integrations": {
+          "value": "Connectors include Gmail, Google Calendar, Google Drive, Slack, Notion, Microsoft Teams, Granola, OneDrive/SharePoint and 1Password, among others, via the Cursor marketplace. Custom MCP servers and APIs are supported. Other features: Bots joining meetings, Bot email addresses, and payment wallets (Link, X Money, Shop Pay).",
+          "source_url": "https://docs.x.ai/grok-bot/overview.md",
+          "checked": "2026-11-20",
+          "confidence": "high"
+        },
+        "multi_agent": {
+          "value": "Yes. Users run many Bots in parallel, typically with a 'primary Bot' that reports on the others. Bots can message each other, hand off work, and coordinate in group chats. Team Bots can be shared with coworkers.",
+          "source_url": "https://docs.x.ai/grok-bot/overview.md",
+          "checked": "2026-11-20",
+          "confidence": "high"
+        },
+        "privacy": {
+          "value": "Grok Bot uses Cursor authentication and data settings. It requires cloud data storage, so Cursor's Legacy Privacy Mode is not supported. Training opt-out follows Cursor privacy settings. Data can go to any provider on Cursor's sub-processor list, and team model allowlists do not apply to Grok Bot. Backend retention follows Cursor terms.",
+          "source_url": "https://docs.x.ai/grok-bot/approvals-security-and-privacy.md",
+          "checked": "2026-11-20",
+          "confidence": "high"
+        },
+        "deletion": {
+          "value": "Grok Bot cannot be deleted without deleting your whole Cursor account. Deletion removes Bots, chats, computers and connected apps, and data is purged within 30 days.",
+          "source_url": "https://docs.x.ai/grok-bot/faq.md",
+          "checked": "2026-11-20",
+          "confidence": "high"
+        },
+        "export": {
+          "value": "I found no documented export for Bot conversations, memory or Bots as files. The docs only offer: per-file Download/Download all, exporting a call transcript or recording, and 'Share > Create a copy', which publishes a Bot template (identity, skills, routines, but no history or memory) as a link. Import exists only for memory (a paste-in prompt), Vault logins, and Bot templates. Deleting a Bot is irreversible.",
+          "source_url": "https://docs.x.ai/grok-bot/bots.md",
+          "checked": "2026-11-20",
+          "confidence": "medium"
+        },
+        "open_source": {
+          "value": "No. A closed product from SpaceXSI built on Cursor.",
+          "source_url": "https://x.ai/news/introducing-grok-bot",
+          "checked": "2026-11-20",
+          "confidence": "medium"
+        },
+        "complaints_cost": {
+          "value": "On Nov 1, 2026, Elon Musk posted: 'The cost of serving Grok Bot was unsustainably high relative to revenue', after users reported weekly allowances draining quickly. Many outlets covered it (TechRepublic, IBTimes, etc.).",
+          "source_url": "https://x.com/elonmusk/status/2116992258520064397",
+          "checked": "2026-11-20",
+          "confidence": "high"
+        },
+        "complaints_allowance": {
+          "value": "A Cursor forum thread (Sep 10, 2026) reports a $200 Ultra plan hitting 99% of the weekly allowance in 3 days. Staff replied that billing counts tool and browser use, subagents and re-reading long conversations, and advised starting fresh conversations. In another thread (Aug 2026) a Pro+ user hit 77% in 2 days.",
+          "source_url": "https://forum.cursor.com/t/grok-bot-ultra-users-how-do-you-make-the-weekly-allowance-last-mine-reached-99-in-three-days/171221",
+          "checked": "2026-11-20",
+          "confidence": "high"
+        },
+        "complaints_spill": {
+          "value": "A Cursor forum bug report (Aug 27, 2026) says Grok Bot moves into paid on-demand usage with no warning. Cursor staff said this was 'working as intended right now' and logged a feature request.",
+          "source_url": "https://forum.cursor.com/t/grok-bot-gives-no-warning-before-weekly-usage-spills-into-paid-on-demand/169679",
+          "checked": "2026-11-20",
+          "confidence": "high"
+        },
+        "complaints_models": {
+          "value": "A Cursor forum thread (Oct 14, 2026) says Grok Bot 'now uses a variety of vendor's models, instead of just Grok' and that quality dropped. Other users agreed.",
+          "source_url": "https://forum.cursor.com/t/grok-bot-has-gotten-dumber-since-grok-was-axed-as-its-model/174784",
+          "checked": "2026-11-20",
+          "confidence": "medium"
+        },
+        "status": {
+          "value": "Live; beta label since launch on 11 August 2026. Usage limits were cut in early November 2026 after Musk said serving costs were unsustainably high.",
+          "source_url": "https://x.com/elonmusk/status/2116992258520064397",
+          "checked": "2026-11-20",
+          "confidence": "high"
+        }
+      }
     }
   }
 }

@@ -22,7 +22,8 @@ beforeEach(() => {
 });
 afterEach(() => { act(() => root.unmount()); host.remove(); vi.clearAllMocks(); });
 
-const dialog = () => document.body.querySelector<HTMLElement>("[role=alertdialog], [role=dialog][aria-modal=true]:not([data-accounts-sheet])");
+/** the open question: one on its way out (inert, still drawn) is closed */
+const dialog = () => [...document.body.querySelectorAll<HTMLElement>("[role=alertdialog], [role=dialog][aria-modal=true]:not([data-accounts-sheet])")].find((el) => !el.closest("[data-leaving]")) ?? null;
 const button = (label: string) => [...document.body.querySelectorAll<HTMLButtonElement>("button")].find((node) => node.textContent?.trim() === label);
 
 it("the accounts sheet asks before signing out of dusk cloud, with art and what happens; cancel keeps the account", async () => {

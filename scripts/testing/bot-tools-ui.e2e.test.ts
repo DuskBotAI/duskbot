@@ -174,11 +174,7 @@ describe("bot setup and tools in the real renderer", () => {
     const beforeShortcut = await bots();
     await press("Control+n");
     await expect.poll(snapshot, { timeout: 10_000 }).toContain('dialog "Create new bot"');
-    // the open panel names its own heading Bot name too: type into the dialog's field
-    const nameField = Object.entries((await ui("snapshot", "--interactive")).refs as Record<string, { role: string; name: string }>)
-      .find(([, entry]) => entry.role === "textbox" && entry.name === "Bot name");
-    expect(nameField).toBeDefined();
-    await ui("type", "--ref", `@${nameField![0]}`, "--text", "Third helper");
+    await ui("type", "--name", "Bot name", "--text", "Third helper");
     await press("Enter");
     await expect.poll(async () => (await bots()).length, { timeout: 10_000 }).toBe(beforeShortcut.length + 1);
     // the docked panel stays beside the new bot's chat, as Grok's does; the sheet over it is gone

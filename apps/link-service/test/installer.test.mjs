@@ -145,8 +145,9 @@ describe("installer transport", () => {
 });
 
 describe("basics", () => {
-  // ffmpeg (the bot browser's H.264 live view) is best effort: a server where it cannot be installed still installs
-  it.each([["installs", 0], ["fails", 1]])("asks for ffmpeg and carries on when apt %s", async (_name, fail) => {
+  // ffmpeg (the bot browser's H.264 live view) and poppler-utils (PDF text and page pictures) are best effort: a server
+  // where they cannot be installed still installs
+  it.each([["installs", 0], ["fails", 1]])("asks for ffmpeg and poppler-utils and carries on when apt %s", async (_name, fail) => {
     const dir = await mkdtemp(join(tmpdir(), "omb-install-"));
     try {
       const file = join(dir, "fixture.sh");
@@ -154,7 +155,7 @@ describe("basics", () => {
 set -eu
 calls=$1
 fail=$2
-apt_install() { printf 'apt_install %s\\n' "$*" >> "$calls"; [ "$1" != ffmpeg ] || [ "$fail" = 0 ]; }
+apt_install() { printf 'apt_install %s\\n' "$*" >> "$calls"; case "$1" in ffmpeg|poppler-utils) [ "$fail" = 0 ];; esac; }
 bwrap_userns() { printf 'bwrap\\n' >> "$calls"; }
 do_basics
 printf 'done\\n' >> "$calls"
@@ -163,6 +164,7 @@ printf 'done\\n' >> "$calls"
       await run("sh", [file, calls, String(fail)], { env: { PATH: "/usr/bin:/bin", TERM: "dumb" } });
       const lines = (await readFile(calls, "utf8")).trim().split("\n");
       expect(lines).toContain("apt_install ffmpeg");
+      expect(lines).toContain("apt_install poppler-utils");
       expect(lines.slice(-2)).toEqual(["bwrap", "done"]);
     } finally {
       await rm(dir, { recursive: true, force: true });

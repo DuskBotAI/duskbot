@@ -47,10 +47,14 @@ export async function routeFor(label, env, ctx, { fresh = false } = {}) {
     const hit = await cache.match(key);
     if (hit) {
       const cached = await hit.json();
-      return cached.missing ? null : { ...cached, awake: true };
+      return cached.gone ? { gone: true } : cached.missing ? null : { ...cached, awake: true };
     }
   }
   const route = await lookupRoute(label, env);
+  if (route?.gone) {
+    if (cache) ctx.waitUntil(cache.put(key, new Response(JSON.stringify({ missing: true, gone: true }), { headers: { "cache-control": `max-age=${MISSING_TTL_S}` } })));
+    return route;
+  }
   if (!route) {
     // floods of made-up labels must not each reach the account service
     if (cache) ctx.waitUntil(cache.put(key, new Response(JSON.stringify({ missing: true }), { headers: { "cache-control": `max-age=${MISSING_TTL_S}` } })));
@@ -96,6 +100,12 @@ function waking(status, { asleep = false, wakeable = true } = {}) {
     : asleep ? "This dusk bot is asleep. It wakes when someone uses it." : "This dusk bot is waking up. Try again in a few seconds.";
   return new Response(text, { status: status === 429 ? 429 : 503, headers: { "content-type": "text/plain; charset=utf-8", "retry-after": status === 429 ? "300" : "5", "cache-control": "no-store",
     ...(status === 429 || !wakeable ? {} : { "x-dusk-cloud-power": asleep ? "asleep" : "waking", "x-omb-cloud-power": asleep ? "asleep" : "waking" }) } });
+}
+
+/** a deleted home: final, so the app stops asking (x-dusk-cloud-power: gone, src/lib/cloud-power.ts goneAnswer) */
+function goneHome() {
+  return new Response("This dusk bot was deleted.", { status: 410, headers: { "content-type": "text/plain; charset=utf-8", "cache-control": "no-store",
+    "x-dusk-cloud-power": "gone", "access-control-allow-origin": "*", "access-control-expose-headers": "x-dusk-cloud-power" } });
 }
 
 async function forward(request, url, upstream, body) {
@@ -152,6 +162,7 @@ export default {
     let route;
     try { route = await routeFor(label, env, ctx); } catch { return new Response("Unavailable", { status: 503, headers: { "retry-after": "5" } }); }
     if (!route) { noteMiss(ip, at); return new Response("Not found", { status: 404 }); }
+    if (route.gone) return goneHome();
     const reason = wakeReason(request, url);
     // a webhook's body is read first, so it can still reach the home after a wake, exactly as it was sent
     let body;
@@ -167,6 +178,7 @@ export default {
       ctx.waitUntil(globalThis.caches?.default?.delete(cacheKey(label)) ?? Promise.resolve());
       if (request.body && body === undefined) return response ?? waking(503);
       route = await routeFor(label, env, ctx, { fresh: true }).catch(() => null);
+      if (route?.gone) return goneHome();
       if (!route || route.awake) return response ?? waking(503);
     }
     if (!reason || !route.wakeable) return waking(503, { asleep: !reason && route.wakeable && !route.awake, wakeable: route.wakeable });

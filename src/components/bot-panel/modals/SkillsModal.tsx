@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { AnimatePresence } from "motion/react";
 
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
@@ -90,7 +91,7 @@ function SkillRows({ bot }: { bot: Bot }) {
         <NavRow data-panel-link="connect-apps" title={t("botPanel.ui.sheetRowsConnectApps")} onClick={() => dispatch({ type: "togglePlugins", open: true, surface: "apps" })} />
       </Card>
       {errorRow}
-      {adding && <AddSkillDialog actions={actions} onClose={() => setAdding(false)} />}
+      <AnimatePresence>{adding && <AddSkillDialog key="add-skill-dialog" actions={actions} onClose={() => setAdding(false)} />}</AnimatePresence>
       {review}
     </>
   );

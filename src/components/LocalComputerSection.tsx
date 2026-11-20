@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { AnimatePresence } from "motion/react";
 import { t } from "@/lib/i18n";
 import { waitForLocalVmReady } from "@/lib/local-vm-readiness";
 import type { LocaleKey } from "@/locales";
@@ -442,12 +443,12 @@ export function LocalVmIdleTimeoutSetting({
     <>
       <NavRow data-settings-open="idle-timeout" title={t("vm.idle.label")} value={`${minutes} ${t("vm.idle.minutes")}`} disabled={disabled}
         onClick={() => { setValue(String(minutes)); setError(""); setOpen(true); }} />
-      {open && (
-        <FormDialog data-panel-modal="idle-timeout" title={t("vm.idle.label")} description={t("vm.idle.detail")} busy={saving} error={error || undefined}
+      <AnimatePresence>{open && (
+        <FormDialog key="idle-timeout" data-panel-modal="idle-timeout" title={t("vm.idle.label")} description={t("vm.idle.detail")} busy={saving} error={error || undefined}
           onSave={save} onClose={() => setOpen(false)}>
           <LocalVmIdleTimeoutField value={value} disabled={saving} error={error} onChange={(next) => { setValue(next); setError(""); }} />
         </FormDialog>
-      )}
+      )}</AnimatePresence>
     </>
   );
 }

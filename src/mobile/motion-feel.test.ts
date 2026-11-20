@@ -1,8 +1,8 @@
 // @vitest-environment happy-dom
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { feel, springEasing, springPath } from "./motion";
 import { placeContextMenu } from "./ContextMenu";
-import { pressScale, pressTarget } from "./press";
+import { cardRowTarget, installPress, pressScale, pressTarget } from "./press";
 
 const view = { width: 393, height: 852 };
 
@@ -97,5 +97,43 @@ describe("press", () => {
     expect(pressTarget(document.getElementById("off"), root)).toBeNull();
     expect(pressTarget(document.getElementById("row"), root)).toBeNull();
     expect(pressTarget(document.getElementById("text"), root)).toBeNull();
+  });
+
+  it("highlights grouped card rows after a hold without scaling, and clears immediately when scrolling", () => {
+    vi.useFakeTimers();
+    try {
+      document.body.innerHTML = `<div id="root">
+        <div data-settings-card="">
+          <button id="row" class="mobile-row"><span>Text size</span></button>
+          <button id="sw" role="switch" class="mobile-row">Haptics</button>
+        </div>
+      </div>`;
+      const root = document.getElementById("root")!;
+      const row = document.getElementById("row")!;
+      const sw = document.getElementById("sw")!;
+      expect(pressTarget(row, root)).toBeNull();
+      expect(cardRowTarget(row, root)).toBe(row);
+      expect(cardRowTarget(sw, root)).toBeNull();
+
+      const stop = installPress(root);
+      row.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, button: 0, clientX: 100, clientY: 200 }));
+      expect(row.hasAttribute("data-row-highlighted")).toBe(false);
+      vi.advanceTimersByTime(100);
+      expect(row.hasAttribute("data-row-highlighted")).toBe(true);
+
+      // dragging/scrolling while holding clears the highlight at once
+      window.dispatchEvent(new PointerEvent("pointermove", { bubbles: true, clientX: 100, clientY: 220 }));
+      expect(row.hasAttribute("data-row-highlighted")).toBe(false);
+
+      // quick tap flashes briefly then fades back out
+      row.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, button: 0, clientX: 100, clientY: 200 }));
+      window.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, clientX: 100, clientY: 200 }));
+      expect(row.hasAttribute("data-row-highlighted")).toBe(true);
+      vi.advanceTimersByTime(80);
+      expect(row.hasAttribute("data-row-highlighted")).toBe(false);
+      stop();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

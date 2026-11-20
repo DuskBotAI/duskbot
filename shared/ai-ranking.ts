@@ -37,6 +37,17 @@ export function rankAis<T extends RankableAi>(instances: readonly T[]): T[] {
     .map(({ instance }) => instance);
 }
 
+/** Engines a person signs in to with a subscription: another sign-in to the same one shares its usage limit. */
+export const SUBSCRIPTION_DRIVERS: ReadonlySet<string> = new Set(["claudeAgent", "codex", "grokAgent"]);
+
+/** The automatic order other working AIs carry a bot on in when its own AI (of `kind`) can't: the same kind of AI
+ * first, then the shared ranking, the free backup last. The server and the app both show and use this order. */
+export function backupOrder<T extends RankableAi>(working: readonly T[], kind: string | undefined): T[] {
+  const ranked = rankAis(working);
+  const sameKind = ranked.filter((engine) => kind !== undefined && engine.driverKind === kind && !freeFallback(engine));
+  return [...sameKind, ...ranked.filter((engine) => !sameKind.includes(engine) && !freeFallback(engine)), ...ranked.filter(freeFallback)];
+}
+
 interface SignInSnapshot {
   state: string;
   authenticated?: boolean;

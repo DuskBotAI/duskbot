@@ -370,6 +370,26 @@ export function productReport(input: ProductInput) {
   for (const event of input.events) if (event.at >= input.from && event.at < input.to) productDigest.add(digest, event);
   return productReportOf(digest, input.from, input.to, input.funnel);
 }
+/** the digest with each install or visitor counted as the account it signed in to, so one person before and after sign-in is one */
+export function resolvePeople(digest: ProductDigest, accountOf: (who: string) => string | null): ProductDigest {
+  const as = (who: string) => accountOf(who) ?? who;
+  const app = new Map<string, [number, number]>();
+  for (const [who, [first, last]] of digest.app) {
+    const id = as(who), had = app.get(id);
+    app.set(id, had ? [Math.min(had[0], first), Math.max(had[1], last)] : [first, last]);
+  }
+  const uses = new Map<string, Map<string, Set<number>>>();
+  for (const [feature, per] of digest.uses) {
+    const out = new Map<string, Set<number>>();
+    for (const [who, days] of per) { const id = as(who), had = out.get(id); if (had) for (const day of days) had.add(day); else out.set(id, new Set(days)); }
+    uses.set(feature, out);
+  }
+  const moments = new Map([...digest.moments].map(([name, row]) => [name, { ...row, people: new Set([...row.people].map(as)) }]));
+  return { ...digest, app, uses, moments, messages: { ...digest.messages, senders: new Set([...digest.messages.senders].map(as)) } };
+}
+/** an account for an install id or visitor id, from the identify events */
+export const accountOfWho = (identity: { accountOf: ReadonlyMap<string, string> }) => (who: string) => identity.accountOf.get(`install:${who}`) ?? identity.accountOf.get(who) ?? null;
+
 /** the product report of [from, to) from its digest */
 export function productReportOf(digest: ProductDigest, from: number, to: number, funnel: FunnelStepIn[]) {
   const events = digest.events;

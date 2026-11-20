@@ -163,6 +163,7 @@ describe("bot patch queue", () => {
           computer: patch.computer ?? undefined,
           connectorTools: patch.connectorTools ?? undefined,
           connectorScopes: patch.connectorScopes ?? undefined,
+          fallback: patch.fallback ?? undefined,
           phoneApps: patch.phoneApps ?? undefined,
           peers: patch.peers ?? undefined,
         });

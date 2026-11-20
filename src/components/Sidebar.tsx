@@ -1,7 +1,7 @@
 import { OrganizationIdentity } from "./OrganizationIdentity";
 import { StartFreshHost } from "./bot-panel/StartFresh";
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type Dispatch } from "react";
-import { motion, type MotionStyle } from "motion/react";
+import { motion, type MotionStyle, AnimatePresence } from "motion/react";
 import { createPortal } from "react-dom";
 import { Bot as BotIcon, Check, ClipboardCopy, Crown, FolderPlus, Library, Loader2, MoreHorizontal, Pencil, Phone, Pin, Plus, TextQuote, Trash2, Users, X } from "../icons";
 import { api, useStore, formatTime, visibleMessages, botOpensTo, openBot, openThread, type Action, type AppState, type Bot, type Group, type InstanceInfo, type Message } from "@/state/store";
@@ -1066,7 +1066,7 @@ export function Sidebar({ open, onClose, collapseToIcons = false }: {
       style={{ ...drawer.props?.style, ["--sidebar-width" as string]: `${sizing.width}px` } as MotionStyle}
       className={cn(
         "relative flex h-full shrink-0 flex-col border-r-[0.5px] border-transparent bg-panel max-md:[--scroll-fade-surface:var(--color-app)]",
-        sizing.resizing && !sizing.snapping ? "transition-none" : "transition-[width] duration-500 ease-(--dusk-spring-soft) motion-reduce:transition-none",
+        sizing.resizing && !sizing.snapping ? "transition-none" : "transition-[width] duration-[calc(500ms*var(--motion-scale,1))] ease-(--dusk-spring-soft) motion-reduce:transition-none",
         rail ? "w-[80px]" : "w-[288px] md:w-[var(--sidebar-width)]",
         "md:max-w-[calc(100vw-320px)]",
         // max-md: rather than an md: cancel: Tailwind v4 emits the native `translate`, and any value but `none` makes
@@ -1367,7 +1367,7 @@ export function Sidebar({ open, onClose, collapseToIcons = false }: {
             dispatch({ type: "patchGroup", groupId: roomSectionPicker.groupId, patch: { section } });
           }}
         />
-      {newRoom && <NewRoomPanel onClose={() => setNewRoom(false)} />}
+      <AnimatePresence>{newRoom && <NewRoomPanel key="new-room-panel" onClose={() => setNewRoom(false)} />}</AnimatePresence>
       {!remoteClient && archivedBotsOpen && (
         <ArchivedBotsPanel
           bots={archivedBots}

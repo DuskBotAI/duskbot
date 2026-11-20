@@ -1,17 +1,19 @@
 {
   "path": "/integrations/google-sheets",
   "type": "integration",
-  "title": "Google Sheets AI assistant for rows, ranges and reports",
+  "title": "Google Sheets bot for stock reports, row updates and charts",
   "nav": "google sheets",
-  "h1": "a google sheets bot with a clear range to work in",
-  "description": "Connect Google Sheets to dusk bot for row checks, table updates and charts. Copy focused routines that name their input range and write boundary.",
+  "h1": "a google sheets bot that flags low stock by row",
+  "description": "Give a Google Sheets bot one tab to review. Get low-stock items with row numbers, prepare new intake rows or make a chart from the range you choose.",
   "keyword": "claude google sheets",
   "keywords": [
     "google sheets mcp",
-    "chatgpt google sheets"
+    "chatgpt google sheets",
+    "google sheets bot",
+    "spreadsheet bot"
   ],
-  "answer": "**find the stock that needs ordering before someone sells the last unit.** connect google sheets to a dusk bot, choose your ai and name the file, tab and cells. it can read rows, update values and make charts. get the first report in chat. when you want edits, add an ask-first instruction; cell changes do not automatically wait for approval.",
-  "updated": "2026-11-12",
+  "answer": "**a google sheets bot can tell you which stock lines need reordering and where to find them.** give it the inventory tab and the columns for available units and reorder level. ask for row numbers in chat. for edits, name the destination range and add “ask me before you change anything” to the routine.",
+  "updated": "2026-11-20",
   "review": {
     "status": "approved",
     "by": "lead agent: read against seo/facts, automated gate, independent fact-check pass",
@@ -130,6 +132,10 @@
     {
       "q": "can it just tell me which rows look wrong?",
       "a": "**yes. keep the result in chat.** ask for row numbers and reasons, and tell it to leave source values alone."
+    },
+    {
+      "q": "can a spreadsheet bot find an order if i don't know the row number?",
+      "a": "**give it the order reference and the range to search.** the row lookup returns the first match. if an order can span several rows, ask the bot to read the whole range before it totals the order."
     }
   ],
   "sources": [

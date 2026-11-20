@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { AnimatePresence } from "motion/react";
 
 import { t } from "@/lib/i18n";
 import { useStore, type Bot } from "@/state/store";
@@ -54,7 +55,7 @@ export function IdentityModal({ bot, derived }: { bot: Bot; derived: Derived; on
         </Card>
       )}
       <PackageProvenance bot={bot} rows />
-      {editing && <ProfileDialog bot={bot} focus={editing} onSave={(patch) => { derived.patch(patch); setEditing(null); }} onClose={() => setEditing(null)} />}
+      <AnimatePresence>{editing && <ProfileDialog key="profile-dialog" bot={bot} focus={editing} onSave={(patch) => { derived.patch(patch); setEditing(null); }} onClose={() => setEditing(null)} />}</AnimatePresence>
     </SheetPane>
   );
 }

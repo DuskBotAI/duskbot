@@ -56,6 +56,7 @@ function cleanInput(input: RoutineInput, after: number): CleanRoutine {
   if (asked != null && (!checks || checks.length !== new Set(asked).size)) throw new Error("Choose checks from calendar, mail and runs");
   if (probe && checks!.length > 1) throw new Error("A page, feed or price check runs on its own, without other checks");
   if (probe && input.deliver === "brief") throw new Error("A page, feed or price check reports in its chat, not the brief");
+  if (probe?.kind === "script" && runOn !== "maus") throw new Error("A script check runs on this computer, so its routine runs here too");
   if (checks && (target !== "bot" || runsOnce(schedule))) throw new Error("Checks need a bot routine that repeats");
   if (input.access != null && input.access !== "read-and-draft") throw new Error("Choose read-and-draft access or none");
   if (input.deliver != null && (input.deliver !== "brief" || target !== "bot")) throw new Error("Only a bot routine can deliver to the brief");

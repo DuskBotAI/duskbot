@@ -4,6 +4,7 @@
 // when it calls it.
 import { AGENTS_PROXY_ENV } from "./agents-bridge-switch.ts";
 import { roleToolEnv } from "./chief-level.ts";
+import { supportsWorkspaceFiles } from "./workspace.ts";
 
 /** The facts of a conversation that decide its agents tools. A settings change may change them; a turn never does. */
 export interface AgentsConversation {
@@ -56,6 +57,7 @@ export function agentsServerEnv(conversation: AgentsConversation, turn: AgentsTu
     DUSK_RESEARCH: flag(host.x && host.research && bot.xResearch !== false),
     DUSK_NATIVE_WEB: flag(engineHasNativeWeb(conversation.engine)),
     DUSK_PAGE_READER: flag(conversation.engine !== undefined && !engineHasNativeWeb(conversation.engine)),
+    DUSK_SKILL_READER: flag(conversation.engine !== undefined && !supportsWorkspaceFiles(conversation.engine)),
     ...roleToolEnv(bot),
     DUSK_COMPUTER_SELECTION: flag(!conversation.room && bot.computer !== "off" && !conversation.teamComputer),
     DUSK_SCREEN_ACCESS: flag(!conversation.room && conversation.screenAccessMissing === true),

@@ -4,7 +4,8 @@ import { cronScheduleLabel } from "../../shared/cron-label";
 import { limitResetWhen } from "@/lib/limit-resets";
 import { formatTime } from "@/lib/format-time";
 
-export const DAY_NAMES = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"] as const;
+export const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
+const FULL_DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"] as const;
 
 export function niceTime(at: number): string {
   return formatTime(at);
@@ -60,7 +61,7 @@ export function scheduleLabel(schedule: RoutineSchedule | { type: "once"; at: nu
     : days.join(",") === "1,2,3,4,5"
       ? "every weekday"
       : days.length === 1
-        ? `weekly on ${DAY_NAMES[days[0]!]}`
+        ? `weekly on ${FULL_DAY_NAMES[days[0]!]}`
         : days.map((day) => DAY_NAMES[day]).join(", ");
   return `${label} at ${niceTime(atLocalTime(Date.now(), schedule.time))}`;
 }
@@ -90,7 +91,7 @@ export function scheduleSentence(schedule: RoutineSchedule): string {
     return `every weekday at ${timeStr}`;
   }
   if (days.length === 1) {
-    return `weekly on ${DAY_NAMES[days[0]!]} at ${timeStr}`;
+    return `weekly on ${FULL_DAY_NAMES[days[0]!]} at ${timeStr}`;
   }
 
   return `${days.map((day) => DAY_NAMES[day]).join(", ")} at ${timeStr}`;

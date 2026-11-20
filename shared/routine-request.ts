@@ -6,6 +6,7 @@
 
 import type { LimitResetRepeat } from "./limit-reset.ts";
 import type { RoutineCronSchedule } from "./routine-schedule.ts";
+import type { RoutineProbe } from "./routines.ts";
 
 export type RoutineRequestRunOn = "maus" | "cloud";
 
@@ -61,11 +62,15 @@ export interface RoutineRequestDefinition {
   overlap?: "skip" | "queue";
   /** Also run once each time dusk bot starts. Repeating routines only. */
   runOnStartup?: boolean;
+  /** A plain check before each run: the bot runs only when it found something new. */
+  probe?: RoutineProbe;
 }
 
 export type RoutineRequestChanges =
-  & Omit<Partial<RoutineRequestDefinition>, "schedule" | "timeoutMinutes">
+  & Omit<Partial<RoutineRequestDefinition>, "schedule" | "timeoutMinutes" | "probe">
   & {
+    /** `null` removes the check. */
+    probe?: RoutineProbe | null;
     schedule?: RoutineRequestScheduleChanges;
     /** `null` removes an existing safety cap. */
     timeoutMinutes?: number | null;
@@ -86,7 +91,8 @@ export type RoutineRequestOperation =
   | { action: "update"; routineId: string; expectedUpdatedAt: number; changes: RoutineRequestChanges; forBot?: RoutineRequestTargetBot }
   | { action: "pause"; routineId: string; expectedUpdatedAt: number; forBot?: RoutineRequestTargetBot }
   | { action: "resume"; routineId: string; expectedUpdatedAt: number; forBot?: RoutineRequestTargetBot }
-  | { action: "run_now"; routineId: string; expectedUpdatedAt: number; forBot?: RoutineRequestTargetBot }
+  /** test: a dry run that sends nothing and reports what it would have done. */
+  | { action: "run_now"; routineId: string; expectedUpdatedAt: number; forBot?: RoutineRequestTargetBot; test?: true }
   | { action: "delete"; routineId: string; expectedUpdatedAt: number; forBot?: RoutineRequestTargetBot };
 
 /** A routine as it stood before a change applied without a person, so Undo

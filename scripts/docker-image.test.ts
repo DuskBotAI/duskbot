@@ -129,6 +129,29 @@ describe("container images", () => {
     expect(grokRun(chain("server"))).toBe(-1);
   });
 
+  // A boxed shell cannot write /usr, so what a bot needs to make a PDF, a deck, a sheet, a chart or a video must be in
+  // the image; each was missing in a live run of the cloud home's box.
+  it("gives the Cloud home's bots their file, media and document tools, beneath the engines and the app", () => {
+    const home = chain("cloud-home");
+    const tools = home.findIndex(step => step.op === "RUN" && step.args.includes("$BOT_PYTHON_PACKAGES"));
+    expect(tools).toBeGreaterThan(-1);
+    const { args } = home[tools];
+    for (const pkg of ["python3-pip", "python3-venv", "python-is-python3", "ffmpeg", "imagemagick", "librsvg2-bin", "zip", "libreoffice-writer-nogui", "libreoffice-calc-nogui", "libreoffice-impress-nogui", "fonts-liberation2"]) {
+      expect(args, pkg).toMatch(new RegExp(`\\s${pkg}\\s`));
+    }
+    const pinned = home.find(step => step.op === "ARG" && step.args.startsWith("BOT_PYTHON_PACKAGES="))!.args;
+    for (const name of ["reportlab", "python-docx", "python-pptx", "openpyxl", "matplotlib", "pandas", "pillow", "requests", "beautifulsoup4"]) {
+      expect(pinned, name).toMatch(new RegExp(`\\b${name}==\\d`));
+    }
+    expect(args).toContain("pip install --no-cache-dir --break-system-packages $BOT_PYTHON_PACKAGES");
+    expect(args).toContain("break-system-packages = true");
+    expect(args).toContain('insteadOf "git@github.com:"');
+    expect(args).toContain("rm -rf /var/lib/apt/lists/*");
+    expect(tools).toBeLessThan(home.findLastIndex(npmInstall));
+    expect(tools).toBeLessThan(home.findIndex(step => step.args.includes("--from=build")));
+    expect(chain("server").some(step => step.args.includes("$BOT_PYTHON_PACKAGES"))).toBe(false);
+  });
+
   it("keeps each image's runtime contract", () => {
     const last = (steps: Step[], op: string) => steps.filter(step => step.op === op).at(-1)?.args;
     const server = chain("server");

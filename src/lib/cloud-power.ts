@@ -167,6 +167,35 @@ export function asleepAnswer(response: Pick<Response, "status" | "headers">): bo
   return response.status === 503 && readHeader(response.headers, CLOUD_POWER_HEADER) === "asleep";
 }
 
+/** The edge's answer for a dusk cloud that was deleted: nothing will ever answer at this address again. */
+export function goneAnswer(response: Pick<Response, "status" | "headers">): boolean {
+  return response.status === 410 && readHeader(response.headers, CLOUD_POWER_HEADER) === "gone";
+}
+
+const goneListeners = new Set<() => void>();
+let gone = false;
+
+/** The place this page talks to was deleted: the live stream stops dialing and the page says so. */
+export function cloudGone(): boolean {
+  return gone;
+}
+
+export function markCloudGone(): void {
+  if (gone) return;
+  gone = true;
+  for (const listener of goneListeners) listener();
+}
+
+/** another place is linked now: what the last one said is not about it */
+export function forgetCloudGone(): void {
+  gone = false;
+}
+
+export function onCloudGone(listener: () => void): () => void {
+  goneListeners.add(listener);
+  return () => { goneListeners.delete(listener); };
+}
+
 /** The event stream's frame for it. */
 export function sleepingFrame(frame: { kind: string; state?: unknown }): boolean {
   return frame.kind === "power" && frame.state === "sleeping";
@@ -178,6 +207,7 @@ export function resetCloudPowerForTests(): void {
   detach = null;
   asleep = false;
   paused = false;
+  gone = false;
   waking = false;
   lastActive = 0;
   sendsHeld = 0;

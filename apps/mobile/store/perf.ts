@@ -182,6 +182,10 @@ async function measure(stage: Stage, label: string, act: () => Promise<void>, se
       // the native header taken down and put back: each one swaps the glass pill for the page's own
       glassHeaderSwaps: p.glass.filter(([, , , swap]) => swap).length,
       glassBytes: p.glass.reduce((n, [, , b]) => n + b, 0),
+      // what the page holds once the interaction settles: every element, the open chat's own and its message rows
+      domNodes: document.getElementsByTagName("*").length,
+      chatNodes: document.querySelector("[data-mobile-chat]")?.getElementsByTagName("*").length ?? 0,
+      messageRows: document.querySelectorAll("[data-mobile-chat] [data-message-row]").length,
     };
   })()`);
   const d = (k: string) => Math.round(((after[k] ?? 0) - (before[k] ?? 0)) * (k.endsWith("Duration") ? 1000 : 1));
@@ -227,6 +231,38 @@ async function recordSwitch(stage: Stage, name: string, dir: string) {
 }
 
 const STREAMED = Array.from({ length: 12 }, (_, i) => `${i + 1}. **${["mon", "tue", "wed", "thu", "fri", "sat"][i % 6]}**: the review at ${9 + (i % 8)}:00, then a block for the deck, and the gym after six if the call ends on time.`).join("\n") + "\n\nthat leaves thursday afternoon open for the launch prep. want me to hold it?";
+
+const TYPED = "can you move friday's dinner to saturday?";
+
+/** Types TYPED one character at a time, 120 ms apart, and keeps in window.__typed each keystroke's time from the key to
+ * the end of the frame after it (a rAF, then a task queued from it, which runs once that frame is drawn). The native field
+ * is the iPhone's: its text reaches the page over the glass bridge. The page field is the page's own textarea (Android,
+ * and the iPhone's fallback). */
+async function typeLine(stage: Stage, field: "native" | "page") {
+  await stage.page.evaluate(`(async () => {
+    const field = ${js(field)};
+    const text = ${js(TYPED)};
+    const box = document.querySelector("[data-mobile-chat] [data-tour=composer] textarea");
+    if (field === "page") box.focus();
+    const lat = window.__typed = [];
+    const painted = () => new Promise((done) => requestAnimationFrame(() => { const c = new MessageChannel(); c.port1.onmessage = () => done(); c.port2.postMessage(0); }));
+    for (let i = 1; i <= text.length; i++) {
+      const start = performance.now();
+      if (field === "native") window.__perf.emit({ type: "text", text: text.slice(0, i) });
+      else document.execCommand("insertText", false, text[i - 1]);
+      await painted();
+      lat.push(performance.now() - start);
+      await new Promise((done) => setTimeout(done, 120));
+    }
+  })()`);
+}
+
+async function clearField(stage: Stage, field: "native" | "page") {
+  await stage.page.evaluate(field === "native"
+    ? `window.__perf.emit({ type: "text", text: "" })`
+    : `(() => { const box = document.querySelector("[data-mobile-chat] [data-tour=composer] textarea"); box.focus(); box.select(); document.execCommand("delete"); box.blur(); })()`);
+  await delay(400);
+}
 
 /** a finger drags a bot message 120 px to the right over about 300 ms, past the reply threshold, and lets go */
 async function swipeReply(stage: Stage) {
@@ -326,6 +362,19 @@ try {
     }
     await stage.page.until(`[...document.querySelectorAll("[data-mobile-chat] [data-message-row]")].some((row) => row.textContent.includes("on for tomorrow"))`, 5000);
   }, 5000, true));
+  if (args.only !== "sheet") {
+    // typing at about eight characters a second: each keystroke's time from the key to the frame that draws it
+    for (const field of ANDROID ? ["page"] as const : ["native", "page"] as const) {
+      const result = await measure(stage, `type 40 characters (${field} field)`, () => typeLine(stage, field), 300, true);
+      const lat = (await stage.page.evaluate(`window.__typed`)) as number[];
+      const sorted = [...lat].sort((a, b) => a - b);
+      const at = (q: number) => Math.round(sorted[Math.min(sorted.length - 1, Math.floor(q * sorted.length))]! * 10) / 10;
+      Object.assign(result, { keyToPaintP50: at(0.5), keyToPaintP95: at(0.95), keyToPaintMax: Math.round(Math.max(...sorted)) });
+      console.log(`  keystroke to paint: p50 ${at(0.5)} ms, p95 ${at(0.95)} ms, max ${Math.round(Math.max(...sorted))} ms`);
+      results.push(result);
+      await clearField(stage, field);
+    }
+  }
   if (args.only !== "sheet" && !ANDROID) {
     // a long answer streamed at about 30 tokens a second: what each token costs the page while it reads
     await stage.page.evaluate(`window.__perf.emit({ type: "text", text: "stream probe: plan my week" })`);
@@ -362,6 +411,8 @@ try {
   if (args.profile) {
     // where the page thread's time goes while a long chat opens: self time by function, heaviest first
     await stage.home("light");
+    // a reload reopens the chat that was open
+    if (await stage.page.evaluate(`Boolean(${BACK})`)) { await tap(stage, BACK); await home(stage); await delay(500); }
     await stage.page.send("Emulation.setCPUThrottlingRate", { rate: RATE });
     await stage.page.send("Profiler.enable");
     await stage.page.send("Profiler.setSamplingInterval", { interval: 200 });
@@ -379,6 +430,20 @@ try {
       self.set(key, (self.get(key) ?? 0) + (spent.get(node.id) ?? 0));
     }
     for (const [key, ms] of [...self].sort((a, b) => b[1] - a[1]).slice(0, 30)) console.log(`${ms.toFixed(1).padStart(8)} ms  ${key}`);
+    // and the components that rendered, by the time spent inside them (their own and everything they called)
+    const byId = new Map(profile.nodes.map((node: { id: number }) => [node.id, node]));
+    const total = (node: { id: number; children?: number[] }): number => (spent.get(node.id) ?? 0) + (node.children ?? []).reduce((n, id) => n + total(byId.get(id) as { id: number }), 0);
+    const inside = new Map<string, number>();
+    const walk = (node: { id: number; children?: number[]; callFrame: { functionName: string } }, open: Set<string>) => {
+      const name = node.callFrame.functionName;
+      const component = /^[A-Z][A-Za-z0-9]+$/.test(name) && !open.has(name);
+      if (component) inside.set(name, (inside.get(name) ?? 0) + total(node));
+      const next = component ? new Set([...open, name]) : open;
+      for (const id of node.children ?? []) walk(byId.get(id) as typeof node, next);
+    };
+    walk(profile.nodes[0], new Set());
+    console.log("components, inclusive:");
+    for (const [key, ms] of [...inside].sort((a, b) => b[1] - a[1]).slice(0, 25)) console.log(`${ms.toFixed(1).padStart(8)} ms  ${key}`);
   }
 
   if (args.video) {

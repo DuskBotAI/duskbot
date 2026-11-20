@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { recoveryCapabilityError, startupBackups } from "./automatic-recovery.ts";
+import { automaticBackups, recoveryCapabilityError, startupBackups } from "./automatic-recovery.ts";
+import type { SelectableInstance } from "./default-model-selection.ts";
 
 describe("automatic recovery capabilities", () => {
   const engine = { driverKind: "qwenAgent", capabilities: {
@@ -20,8 +21,9 @@ describe("automatic recovery capabilities", () => {
     expect(recoveryCapabilityError(claude, opencode)).toBeUndefined();
     expect(recoveryCapabilityError(claude, { ...opencode, capabilities: { ...opencode.capabilities, browserMcp: false } })).toMatch(/tools and attachments/);
   });
-  it("does not silently move work to a file-less engine", () => {
+  it("does not silently move work to a file-less engine, but lets one with files carry a chat-only engine on", () => {
     expect(recoveryCapabilityError(engine, { ...engine, driverKind: "openai-compat" })).toMatch(/same workspace/);
+    expect(recoveryCapabilityError({ ...engine, driverKind: "openai-compat" }, engine)).toBeUndefined();
   });
 });
 
@@ -40,5 +42,23 @@ describe("startup backups", () => {
     expect(startupBackups({}, { enabled: false, backup: app })).toEqual([]);
     expect(startupBackups({}, { enabled: false })).toEqual([]);
     expect(startupBackups({})).toEqual([]);
+  });
+});
+
+describe("automatic backups", () => {
+  const ai = (instanceId: string, driverKind: string, snapshot: Partial<SelectableInstance["snapshot"]> = {}, extra: Partial<SelectableInstance> = {}): SelectableInstance => ({
+    instanceId, driverKind, snapshot: { state: "available", authenticated: true, ...snapshot } as SelectableInstance["snapshot"],
+    models: { default: `${instanceId}-default`, options: [] }, ...extra,
+  });
+  const engines = [
+    ai("free", "opencodeGo", { freeFallback: true }), ai("grok", "grokAgent"), ai("codex", "codex"), ai("claude", "claudeAgent"),
+    ai("claude-work", "claudeAgent"), ai("gemini", "geminiAgent", { authenticated: false }), ai("found", "cursorAgent", {}, { found: true }),
+  ];
+  it("takes the same kind of AI first, then the best of the rest, the free backup last, never one signed out or not chosen", () => {
+    expect(automaticBackups({}, engines, { instanceId: "claude" }).map((pick) => pick.instanceId)).toEqual(["claude-work", "codex", "grok", "free"]);
+  });
+  it("leaves a bot that chose its own backups, or No backup, alone", () => {
+    expect(automaticBackups({ fallback: [] }, engines, { instanceId: "claude" })).toEqual([]);
+    expect(automaticBackups({ fallback: [{ instanceId: "codex", model: "x" }] }, engines, { instanceId: "claude" })).toEqual([]);
   });
 });

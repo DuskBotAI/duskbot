@@ -5,13 +5,13 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { SourceError, type CalendarEvent, type ConnectedReads, type EmailHeader, type ReadApp } from "../connected-reads.ts";
 import type { Routine, RoutineRun } from "../routines.ts";
-import { CHECKS_FILE, createRoutineChecks, type CheckReport } from "./routine-checks.ts";
+import { CHECKS_FILE, createRoutineChecks, nextProactiveAt, PROACTIVE_MS, type CheckReport } from "./routine-checks.ts";
 
 const MINUTE = 60_000;
 const dirs: string[] = [];
 afterEach(() => { for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true }); });
 
-function setup(options: { fenced?: boolean; may?: (app: ReadApp) => boolean } = {}) {
+function setup(options: { fenced?: boolean; may?: (app: ReadApp) => boolean; timeZone?: string; busy?: () => boolean } = {}) {
   const dir = mkdtempSync(join(tmpdir(), "dusk-routine-checks-"));
   dirs.push(dir);
   let now = Date.parse("2026-10-22T08:00:00Z");
@@ -38,7 +38,8 @@ function setup(options: { fenced?: boolean; may?: (app: ReadApp) => boolean } = 
   };
   const checks = createRoutineChecks({
     dataDir: dir, reads, now: () => now, mayRead: (_bot, app) => options.may?.(app) ?? true, fenced: () => options.fenced ?? true,
-    timeZone: () => "UTC", runs: () => runs, dismissedFrom: () => [], report: (report) => { reports.push(report); },
+    timeZone: () => options.timeZone ?? "UTC", runs: () => runs, dismissedFrom: () => [], report: (report) => { reports.push(report); },
+    ...(options.busy ? { busy: options.busy } : {}),
   });
   const routine = (extra: Partial<Routine> = {}): Routine => ({
     id: "watch", name: "Keep an eye on my day", prompt: "Check my day.", target: "bot", botId: "chief", runOn: "maus", enabled: true,
@@ -68,7 +69,7 @@ describe("a routine's checks", () => {
   it("nothing new means no run, and the brief still hears what needs no AI", async () => {
     const s = setup();
     const result = await s.checks.check(s.routine(), { manual: false });
-    expect(result).toEqual({});
+    expect(result).toEqual({ wakeAt: s.now() + PROACTIVE_MS });
     expect(s.reports).toHaveLength(1);
     expect(s.reports[0]).toMatchObject({ meetings: [], clashes: [], remind: [], runs: [] });
   });
@@ -119,7 +120,7 @@ describe("a routine's checks", () => {
     s.mail("a", 5);
     s.failing.gmail = "Connected account is not ACTIVE";
     const result = await s.checks.check(s.routine({ checks: ["mail"] }), { manual: false });
-    expect(result).toEqual({ trouble: "Couldn't read Gmail. Reconnect it in Connected apps." });
+    expect(result).toEqual({ trouble: "Couldn't read Gmail. Reconnect it in Connected apps.", wakeAt: s.now() + PROACTIVE_MS });
     expect(s.reports.at(-1)!.trouble).toEqual([{ app: "gmail", signedOut: true }]);
     const reads = s.calls.length;
     s.advance(5 * MINUTE);
@@ -148,7 +149,7 @@ describe("a routine's checks", () => {
   });
 
   it("reports each reminder once, and names the next time a meeting needs it", async () => {
-    const s = setup();
+    const s = setup({ timeZone: "America/Los_Angeles" });
     s.meeting("soon", 8);
     const later = s.meeting("later", 6 * 60);
     const result = await s.checks.check(s.routine({ checks: ["calendar"] }), { manual: false, hold: "capped" });
@@ -191,5 +192,34 @@ describe("a routine's checks", () => {
     s.advance(15 * MINUTE);
     expect((await s.checks.check(own, { manual: false })).run).toBeUndefined();
     expect(s.reports).toEqual([]);
+  });
+});
+
+describe("the day watch's proactive check", () => {
+  it("looks again every 30 minutes in the day and not at night", () => {
+    expect(nextProactiveAt(Date.parse("2026-10-22T08:00:00Z"), "UTC")).toBe(Date.parse("2026-10-22T08:30:00Z"));
+    expect(nextProactiveAt(Date.parse("2026-10-22T21:40:00Z"), "UTC")).toBeUndefined();
+    expect(nextProactiveAt(Date.parse("2026-10-22T03:00:00Z"), "UTC")).toBeUndefined();
+  });
+
+  it("reads nothing while the bot works, and with nothing due starts no run", async () => {
+    let busy = false;
+    const s = setup({ busy: () => busy });
+    const first = await s.checks.check(s.routine(), { manual: false, scheduled: true });
+    expect(first).toEqual({ wakeAt: s.now() + PROACTIVE_MS });
+    s.advance(PROACTIVE_MS);
+    busy = true;
+    const reads = s.calls.length, reports = s.reports.length;
+    expect(await s.checks.check(s.routine(), { manual: false })).toEqual({ wakeAt: s.now() + PROACTIVE_MS, held: true });
+    expect(s.calls.length).toBe(reads);
+    expect(s.reports.length).toBe(reports);
+    busy = false;
+    s.advance(PROACTIVE_MS);
+    const idle = await s.checks.check(s.routine(), { manual: false });
+    expect(idle.run).toBeUndefined();
+    expect(s.calls.length).toBeGreaterThan(reads);
+    s.advance(PROACTIVE_MS);
+    s.mail("new", 1);
+    expect((await s.checks.check(s.routine(), { manual: false })).run).toBeDefined();
   });
 });

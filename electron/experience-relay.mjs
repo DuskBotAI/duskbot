@@ -1,3 +1,4 @@
+import { serviceWord } from "./process-exit.mjs";
 import { ownUtility } from "./utility-names.mjs";
 
 export const EVERY_MS = 30_000;
@@ -41,10 +42,18 @@ export function createExperienceRelay({ localRequest, events, setTimer = setTime
 const CRASHES = new Set(["crashed", "oom", "launch-failed", "integrity-failure", "abnormal-exit", "killed"]);
 /** the crash signal's props for an Electron process-gone event, or null for an ordinary exit, one of our own utility
  * processes (its owner reports it) or any exit while the app quits or the computer's session ends */
-export function crashProps(type, reason, { name, ending = false } = {}) {
+export function crashProps(type, reason, { name, ending = false, exitCode } = {}) {
   if (ending || !CRASHES.has(reason) || ownUtility({ type, name })) return null;
   const kind = type === "page" ? "page" : type === "GPU" ? "gpu" : type === "Utility" ? "utility" : type === "server" ? "server" : "other";
-  return { kind, reason: reason.replace(/-/g, "_") };
+  const service = kind === "utility" || kind === "other" ? serviceWord(name) : null;
+  const exit = exitWord(exitCode);
+  return { kind, reason: reason.replace(/-/g, "_"), ...(service ? { service } : {}), ...(exit ? { exit } : {}) };
+}
+
+/** an exit code as one analytics word: a negative (a Windows status, sign-extended) as its unsigned hex */
+export function exitWord(code) {
+  if (!Number.isInteger(code)) return null;
+  return code < 0 ? `x${(code >>> 0).toString(16)}` : String(code);
 }
 
 /** the stage an app update failed at, from its error message */

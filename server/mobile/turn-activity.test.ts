@@ -61,7 +61,7 @@ describe("turn activities", () => {
 
     activities.event("t1", { type: "done" }, { reply: "**Booked** the 9:40 train\nDetails follow" });
     const end = sent[3]!.push;
-    expect(end).toMatchObject({ event: "end", priority: 10, dismissAt: Math.floor(clock / 1000) + 240, state: { phase: "done" } });
+    expect(end).toMatchObject({ event: "end", priority: 10, dismissAt: Math.floor(clock / 1000) + 20, state: { phase: "done" } });
     expect(JSON.stringify(end)).not.toContain("Booked");
     expect(openLine(phone.privateKey, end.state.sealed!)).toBe("Booked the 9:40 train");
     expect(activityMessage(end)?.state.sealed).toBe(end.state.sealed);

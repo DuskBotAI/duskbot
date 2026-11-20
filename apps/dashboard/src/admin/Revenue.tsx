@@ -11,7 +11,7 @@ import { n } from "./ui";
 
 export type PaymentKind = "new" | "renewal" | "one_time" | "refund";
 /** `expected` is paying plus `conversion` of the trials not set to cancel; `full` counts every trial at its price */
-export interface MrrForecast { expected: number; paying: number; trials: number; full: number; conversion: number }
+export interface MrrForecast { expected: number; paying: number; trials: number; full: number; conversion: number; atRisk?: number; atRiskCount?: number }
 export interface RevenueKpis { net: number; gross: number; refunds: number; payments: number; customers: number; newCustomers: number; renewals: number; mrr: number; mrrForecast?: MrrForecast | null }
 export interface RecentPayment {
   id: string; at: number; amountCents: number; currency: string; kind: PaymentKind; accountId: string; seed: string; email: string | null;

@@ -1,4 +1,4 @@
-import { Pencil, Pin, PinOff, RefreshCw, ShieldAlert, Square, Volume2 } from "../icons";
+import { BellOff, Pencil, Pin, PinOff, RefreshCw, ShieldAlert, Square, Volume2 } from "../icons";
 import { aiReportHandler } from "@/lib/ai-report";
 import { t } from "@/lib/i18n";
 import type { ConfigStatus, Group, Message, useStore } from "@/state/store";
@@ -38,6 +38,7 @@ export function useBotMessageMenu({
   canSpeak,
   onRegenerate,
   pin,
+  onStopSending,
 }: {
   text: string;
   botId?: string;
@@ -48,6 +49,8 @@ export function useBotMessageMenu({
   canSpeak: boolean;
   onRegenerate?: () => void;
   pin?: PinAction;
+  /** A message an automation sent unasked: pause it and remember not to send these. */
+  onStopSending?: () => void;
 }): MessageMenuItem[] {
   const speak = useSpeakAction({ text, botId, messageId, voiceId, tts, localVoice });
   const items: MessageMenuItem[] = [];
@@ -63,6 +66,7 @@ export function useBotMessageMenu({
   }
   if (onRegenerate) items.push({ key: "regenerate", icon: <RefreshCw {...ACTION_ICON} />, label: t("chat.regenerate"), onSelect: onRegenerate });
   items.push(...pinItem(pin));
+  if (onStopSending) items.push({ key: "stop-sending", icon: <BellOff {...ACTION_ICON} />, label: t("chat.stopSending"), onSelect: onStopSending });
   const report = aiReportHandler();
   if (report && text) items.push({ key: "report", icon: <ShieldAlert {...ACTION_ICON} />, label: t("chat.reportReply"), onSelect: () => report({ messageId, text }) });
   return items;

@@ -102,7 +102,7 @@ export function installSwipeReply(chat: HTMLElement): () => void {
       icon.style.scale = String(0.6 + 0.4 * progress);
       icon.toggleAttribute("data-armed", progress >= 1);
     }
-    if (progress >= 1 && !armed) haptic("medium");
+    if (progress >= 1 && !armed) haptic("swipeReply");
     armed = progress >= 1;
   };
   const onEnd = () => {

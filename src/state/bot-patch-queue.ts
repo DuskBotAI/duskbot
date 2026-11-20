@@ -21,13 +21,13 @@ export type BotUpdatePatch = Partial<
     | "autoApprove"
     | "approvalMode"
     | "outbound"
-    | "fallback"
     | "speakReplies"
     | "replyStyle"
     | "voice"
     | "voiceNotes"
     | "xResearch"
     | "macControl"
+    | "suggestions"
     | "pinned"
     | "hidden"
     | "sidebarHidden"
@@ -51,6 +51,8 @@ export type BotUpdatePatch = Partial<
   phoneApps?: Bot["phoneApps"] | null;
   /** null: talks to every bot again. */
   peers?: string[] | null;
+  /** null: back to the automatic backup. */
+  fallback?: Bot["fallback"] | null;
   /** The server's proof the local-auto warning was shown: wire-only, never folded into bot state. */
   acknowledgeLocalAuto?: boolean;
   applyToAllThreads?: boolean;
@@ -63,10 +65,11 @@ export type BotUpdatePatch = Partial<
 
 export type BotStatePatch = Omit<
   BotUpdatePatch,
-  "computer" | "connectorTools" | "connectorScopes" | "phoneApps" | "peers" | "acknowledgeLocalAuto" | "applyToAllThreads" | "keepThreadModels" | "threadId" | "mainThreadChoice"
+  "computer" | "connectorTools" | "connectorScopes" | "phoneApps" | "peers" | "fallback" | "acknowledgeLocalAuto" | "applyToAllThreads" | "keepThreadModels" | "threadId" | "mainThreadChoice"
 > & {
   mainThreadId?: string;
   peers?: string[];
+  fallback?: Bot["fallback"];
   computer?: Bot["computer"];
   connectorTools?: Bot["connectorTools"];
   connectorScopes?: Bot["connectorScopes"];
@@ -130,6 +133,7 @@ const stateOverlay = (patch: BotUpdatePatch): BotStatePatch => {
     connectorScopes,
     phoneApps,
     peers,
+    fallback,
     ...fields
   } = patch;
   const normalized: BotStatePatch = { ...fields };
@@ -142,6 +146,7 @@ const stateOverlay = (patch: BotUpdatePatch): BotStatePatch => {
   if (phoneApps === null) normalized.phoneApps = undefined;
   else if (phoneApps !== undefined) normalized.phoneApps = phoneApps;
   if (peers !== undefined) normalized.peers = peers ?? undefined;
+  if (fallback !== undefined) normalized.fallback = fallback ?? undefined;
   // A pending choice shows as the bot's main thread, so a broadcast during the save does not revert it.
   if (typeof mainThreadChoice === "string") normalized.mainThreadId = mainThreadChoice;
   return normalized;

@@ -50,7 +50,9 @@ const sealedPost = <T>(path: string, provider: string, key: string, body: Record
   sendSealed("model-provider", [provider], { key: key.trim() }, (sealed) =>
     api<T>(path, { method: "POST", body: JSON.stringify({ provider, ...body, ...(sealed ? { sealed } : {}) }) }));
 
-export type ListAnswer = { ok: true; models: string[]; source: "provider" | "catalog" } | { ok: false; reason: "rejected" | "unreachable" | "unexpected"; status?: number };
+/** `result`: what one 1-token reply said about the key, with the model it used and one to use instead. */
+export type ListAnswer = ({ ok: true; models: string[]; source: "provider" | "catalog" } | { ok: false; reason: "rejected" | "unreachable" | "unexpected"; status?: number })
+  & { result?: string; model?: string; suggestedModel?: string };
 
 export function listModels(provider: string, fields: ProviderFields, key: string): Promise<ListAnswer> {
   return sealedPost<ListAnswer>("/api/model-providers/models", provider, key, { fields: cleanFields(fields) });
@@ -67,11 +69,6 @@ function cleanFields(fields: ProviderFields): ProviderFields {
 /** "Saved on this computer", "Saved on your dusk cloud", "Saved on this server". */
 export function placeLine(place: Place): string {
   return t(place === "cloud" ? "models.place.cloud" : place === "server" ? "models.place.server" : "models.place.computer");
-}
-
-export function listVerdict(answer: ListAnswer): { ok: boolean; text: string } {
-  if (answer.ok) return { ok: true, text: answer.models.length ? t("models.check.found", { count: answer.models.length }) : t("models.check.none") };
-  return { ok: false, text: t(answer.reason === "rejected" ? "models.check.rejected" : answer.reason === "unreachable" ? "models.check.unreachable" : "models.check.unexpected") };
 }
 
 /** The search's hits for `query`, after a short pause in typing; null while a search is on its way. */

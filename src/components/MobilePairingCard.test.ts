@@ -3,13 +3,25 @@ import en from "../locales/en.json";
 import { describe, expect, it } from "vitest";
 
 import type { MobileDevice } from "../../shared/mobile-link";
-import { newDeviceSince, platformLabelKey } from "./MobilePairingCard";
+import { desktopAccountBridge, newDeviceSince, noRouteFix, platformLabelKey } from "./MobilePairingCard";
 
 const device = (id: string, name = id): MobileDevice => ({
   id, name, platform: "ios", createdAt: 0, lastSeenAt: 0, expiresAt: 1, relay: false, push: null,
 });
 
 describe("mobile workspace pairing", () => {
+  it("pairs a phone with a server of your own shown in the desktop window by that server's own code, never this computer's account", async () => {
+    const cloudPlan = { phoneSignIn: async () => null, signIn: async () => null, signedIn: async () => true };
+    const page = globalThis as { window?: unknown };
+    try {
+      page.window = { duskDesktop: { app: { ownPage: false }, cloudPlan } };
+      expect(desktopAccountBridge(false, false)).toBeNull();
+      expect(await noRouteFix(false)).toBe("server");
+      page.window = { duskDesktop: { app: { ownPage: true }, cloudPlan } };
+      expect(desktopAccountBridge(false, false)).not.toBeNull();
+    } finally { delete page.window; }
+  });
+
   it("labels the native platforms and falls back to Phone", () => {
     expect(platformLabelKey("ios")).toBe("settings.mobile.ios");
     expect(platformLabelKey("android")).toBe("settings.mobile.android");

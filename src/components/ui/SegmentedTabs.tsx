@@ -1,7 +1,8 @@
-import { useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import { useLayoutEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactNode } from "react";
 import { animate, motion, useMotionValue, useTransform, type Transition } from "motion/react";
 
 import { cn } from "@/lib/cn";
+import { useSystemControl } from "@/lib/system-control";
 
 export interface SegmentedTab<V extends string> {
   value: V;
@@ -24,6 +25,9 @@ export function SegmentedTabs<V extends string>({ tabs, value, onChange, label, 
   // until the fill has measured its tab (a sheet still laying out, a font still loading) the chosen tab wears its own
   // fill, so the first frame already shows it in place
   const [filled, setFilled] = useState(false);
+  const plain = tabs.every((tab) => typeof tab.label === "string");
+  const system = useSystemControl(listRef, plain ? { kind: "segmented", items: tabs.map((tab) => tab.label as string), selected: Math.max(0, tabs.findIndex((tab) => tab.value === value)), label } : null,
+    (index) => { const tab = typeof index === "number" ? tabs[index] : undefined; if (tab && tab.value !== value) onChange(tab.value); });
 
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     const step = event.key === "ArrowRight" ? 1 : event.key === "ArrowLeft" ? -1 : 0;
@@ -36,8 +40,13 @@ export function SegmentedTabs<V extends string>({ tabs, value, onChange, label, 
     listRef.current?.querySelectorAll<HTMLElement>('[role="tab"]')[next]?.focus();
   };
 
+  // the device's own segmented control is drawn in this room, and is what assistive technology meets
+  if (system) return <div ref={listRef} aria-hidden="true" data-segmented-room="" className={cn("h-9 max-w-full", className)} style={{ width: tabs.length * 120 }} />;
   return (
-    <div ref={listRef} role="tablist" aria-label={label} onKeyDown={onKeyDown} className={cn("flex gap-0.5", sliding && "relative", className)}>
+    <div
+      ref={listRef} role="tablist" aria-label={label} onKeyDown={onKeyDown} className={cn("flex gap-0.5", sliding && "relative", className)}
+      data-segmented="" style={{ "--seg-count": tabs.length, "--seg-index": Math.max(0, tabs.findIndex((tab) => tab.value === value)) } as CSSProperties}
+    >
       {sliding && <SlidingFill index={tabs.findIndex((tab) => tab.value === value)} transition={slide} shown={filled} onPlaced={() => setFilled(true)} />}
       {tabs.map((tab) => {
         const selected = tab.value === value;

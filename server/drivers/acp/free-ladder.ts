@@ -19,7 +19,9 @@ const LIGHT_VARIANTS = ["low", "minimal"] as const;
  * FreeUsageLimitError at once), so it ends the ladder; any other 429 is one model's and moves to the next rung. */
 export const FREE_POOL_LIMIT = /FreeUsageLimitError|free usage limit/i;
 
-export type FreeFailure = "pool_limit" | "rate_limited" | "busy" | "timeout" | "empty" | "error";
+export type FreeFailure = "pool_limit" | "rate_limited" | "busy" | "timeout" | "empty" | "unavailable" | "error";
+/** How long a model its provider says it no longer serves is skipped. */
+export const FREE_RUNG_GONE_MS = 6 * 60 * 60_000;
 
 const cooling = new Map<string, { until: number; reason: FreeFailure }>();
 let warm: { model: string; variant?: string; until: number } | null = null;
@@ -28,10 +30,18 @@ export function lightVariant(variants: readonly { id: string }[] | undefined): s
   return LIGHT_VARIANTS.find((id) => variants?.some((variant) => variant.id === id));
 }
 
+/** The variant a model advertises: keep a supported choice, else its own default, else none. */
+export function advertisedVariant(variants: readonly { id: string }[] | undefined, preferred: string | undefined): string | undefined {
+  if (preferred === undefined || !variants) return preferred;
+  if (variants.some((variant) => variant.id === preferred)) return preferred;
+  return variants.some((variant) => variant.id === "default") ? "default" : undefined;
+}
+
 /** Why a free model failed, from its error or the provider error OpenCode logged for it. */
 export function freeFailure(message: string, flags: { limit?: boolean; empty?: boolean; silent?: boolean } = {}): FreeFailure {
   if (flags.limit || FREE_POOL_LIMIT.test(message)) return "pool_limit";
   if (flags.empty) return "empty";
+  if (/no longer (?:available|supported|served)|model (?:not found|does not exist)|unknown model|\b(?:404|410)\b/i.test(message)) return "unavailable";
   if (/\b429\b|rate.?limit|too many requests/i.test(message)) return "rate_limited";
   if (/\b5\d\d\b|overloaded|unavailable|capacity|busy|bad gateway|internal server error/i.test(message)) return "busy";
   if (flags.silent || /time[sd]? ?out/i.test(message)) return "timeout";
@@ -39,7 +49,7 @@ export function freeFailure(message: string, flags: { limit?: boolean; empty?: b
 }
 
 export function coolFreeRung(model: string, reason: FreeFailure, now = Date.now()): void {
-  cooling.set(model, { until: now + FREE_RUNG_COOL_MS, reason });
+  cooling.set(model, { until: now + (reason === "unavailable" ? FREE_RUNG_GONE_MS : FREE_RUNG_COOL_MS), reason });
   if (warm?.model === model) warm = null;
 }
 

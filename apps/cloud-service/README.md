@@ -168,10 +168,11 @@ changes in the server's process spawning.
 ## Updates
 
 A running home takes a new release only when it can't break it (`src/home-update.ts`, `shared/update-guard.ts`): the
-release (`DUSK_MANAGED_HOME_RELEASE_FILE`, `{ sha256, signature, url | file }`, read again when it changes, else the
+release (`DUSK_MANAGED_HOME_RELEASE_FILE`, `{ sha256, signature, url | file, clouds? }`, read again when it changes, else the
 package the service started with) must be signed, newer than what the home runs, at or above the floor and not blocked
 in the signed update policy (`DUSK_UPDATE_POLICY_FILE`, signed with `scripts/sign-update-policy.ts`, read again when it
-changes, served unchanged at `GET /v1/updates/policy`). It goes in only while no turn, routine run, upload or backup
+changes, served unchanged at `GET /v1/updates/policy`), and the policy is not `paused`. With `clouds` (cloud ids, a canary) only
+those clouds are offered it. `scripts/release-all.ts` writes both files ([docs](../../docs/releases-auto-update.md)). It goes in only while no turn, routine run, upload or backup
 runs. The home then self-tests (`server/update-state.ts`: health, a page in the bot's browser, one read per connected
 Google app; only a check that passed on the version before can fail it). A failed self-test, or the next two runs
 failing in a row, rolls it back (`omb-home rollback`), never below the floor; a blocked running version rolls back

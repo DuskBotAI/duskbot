@@ -5,7 +5,8 @@ import { isLoopback } from "../provider-key-check.ts";
 import { lmStudioV1Catalog } from "./local-inject.ts";
 import { isContextName, isOllama, serveWithWindow } from "./ollama-context.ts";
 import { createOpenAIChatRuntime } from "./openai-chat.ts";
-import { geminiEffortLevels, openAiEffortLevels } from "./api-effort.ts";
+import { geminiEffortLevels, openAiEffortLevels, type ModelEffort } from "./api-effort.ts";
+import { EFFORT_LEVELS, isEffortLevel, type EffortLevel } from "../../shared/wire.ts";
 import { isOpenAIAddress } from "./openai-responses.ts";
 import {
   freeDefault, freeFallbackCatalog, freeLabel, freeToolModels, freeToolsFirst, isOpenRouterOrigin, openRouterFreeTier,
@@ -85,10 +86,37 @@ export interface OpenAICompatConfig {
   managedModels?: string[];
   /** How long a turn waits for the next piece of a reply before giving up; unset follows the server's default. */
   replyWaitMinutes?: number;
+  /** The reasoning-effort levels each model takes, by model ID, sent as `reasoning_effort`. A model listed here takes
+   * exactly these levels; one not listed keeps what the server's address implies (OpenAI's and Gemini's own APIs),
+   * which for any other server is none. */
+  effortLevels?: Record<string, EffortLevel[]>;
 }
 
 export const MAX_REPLY_WAIT_MINUTES = 60;
 const isReplyWait = (value: unknown): value is number => Number.isSafeInteger(value) && (value as number) >= 1 && (value as number) <= MAX_REPLY_WAIT_MINUTES;
+
+function decodeEffortLevels(value: unknown): Record<string, EffortLevel[]> | undefined {
+  if (value === undefined) return undefined;
+  const refused = new Error(`effortLevels must map each model ID to a list of ${EFFORT_LEVELS.join(", ")}`);
+  if (!value || typeof value !== "object" || Array.isArray(value)) throw refused;
+  const levels: Record<string, EffortLevel[]> = {};
+  for (const [model, listed] of Object.entries(value)) {
+    if (!model.trim() || !Array.isArray(listed) || !listed.every(isEffortLevel)) throw refused;
+    levels[model] = EFFORT_LEVELS.filter((level) => listed.includes(level));
+  }
+  return levels;
+}
+
+/** Declared levels win for their models; any other model gets what the address implies. */
+function compatEffort(declared: Record<string, EffortLevel[]> | undefined, implied: ModelEffort["forModel"] | undefined): ModelEffort | undefined {
+  const own = Object.entries(declared ?? {}).filter(([, levels]) => levels.length);
+  if (!own.length && !implied) return undefined;
+  const offered = new Set<EffortLevel>([...(implied ? ["low", "medium", "high"] as const : []), ...own.flatMap(([, levels]) => levels)]);
+  return {
+    levels: EFFORT_LEVELS.filter((level) => offered.has(level)),
+    forModel: (model) => declared && Object.hasOwn(declared, model) ? (declared[model]!.length ? declared[model] : undefined) : implied?.(model),
+  };
+}
 
 function positiveTokens(value: unknown): number | undefined {
   return typeof value === "number" && Number.isSafeInteger(value) && value > 0 ? value : undefined;
@@ -133,7 +161,9 @@ function decodeConfig(raw: unknown): OpenAICompatConfig {
   if (config.catalog !== undefined && config.catalog !== "openai" && config.catalog !== "lmstudio") throw new Error("catalog must be \"openai\" or \"lmstudio\"");
   if (config.replyWaitMinutes !== undefined && !isReplyWait(config.replyWaitMinutes)) throw new Error(`replyWaitMinutes must be a whole number from 1 to ${MAX_REPLY_WAIT_MINUTES}`);
   const envUrl = ownKey ? undefined : process.env.OPENAI_COMPAT_URL;
+  const effortLevels = decodeEffortLevels(config.effortLevels);
   return {
+    ...(effortLevels ? { effortLevels } : {}),
     ...(config.tools !== undefined ? { tools: config.tools as boolean } : {}),
     ...(config.managedModels ? { managedModels: config.managedModels as string[] } : {}),
     ...(isReplyWait(config.replyWaitMinutes) ? { replyWaitMinutes: config.replyWaitMinutes } : {}),
@@ -197,7 +227,7 @@ export const OpenAICompatDriver: ProviderDriver<OpenAICompatConfig> = {
       : seeded;
     const openRouter = Boolean(apiKey) && !config.managedModels && isOpenRouterOrigin(config.url);
     const gemini = isGeminiOrigin(config.url);
-    const effortFor = gemini ? geminiEffortLevels : isOpenAIAddress(config.url) ? openAiEffortLevels : undefined;
+    const effort = compatEffort(config.effortLevels, gemini ? geminiEffortLevels : isOpenAIAddress(config.url) ? openAiEffortLevels : undefined);
     const freeTier = () => openRouter ? openRouterFreeTier(apiKey, config.url) : Promise.resolve(null);
 
     const fetchModels = async () => {
@@ -316,7 +346,7 @@ export const OpenAICompatDriver: ProviderDriver<OpenAICompatConfig> = {
       nudgeAnnouncedAction: true,
       models: () => catalog,
       refreshModels: fetchModels,
-      ...(effortFor ? { effort: { levels: ["low", "medium", "high"] as const, forModel: effortFor } } : {}),
+      ...(effort ? { effort } : {}),
       requestBody: (model, messages, stream) => ({
         model,
         messages,

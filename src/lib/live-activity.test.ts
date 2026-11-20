@@ -147,11 +147,11 @@ describe("phraseCycle: the working line's shuffle bag", () => {
     for (let i = 1; i < two.length; i++) expect(two[i]).not.toBe(two[i - 1]);
   });
 
-  it("holds each phrase 2.5 to 3.5 seconds, so a 30 s turn says many", () => {
+  it("holds each phrase 7 to 9 seconds, so a long turn says a few calmly", () => {
     for (let step = 0; step < 50; step++) {
       const hold = rotationHoldMs("turn-1", step);
-      expect(hold).toBeGreaterThanOrEqual(2500);
-      expect(hold).toBeLessThanOrEqual(3500);
+      expect(hold).toBeGreaterThanOrEqual(7000);
+      expect(hold).toBeLessThanOrEqual(9000);
     }
   });
 });

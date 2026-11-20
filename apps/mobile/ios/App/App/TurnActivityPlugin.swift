@@ -18,7 +18,7 @@ public class TurnActivityPlugin: CAPPlugin, CAPBridgedPlugin {
     ]
 
     /// how long a finished activity stays on the lock screen
-    private static let dismissAfter: TimeInterval = 4 * 60
+    private static let dismissAfter: TimeInterval = 20
     private var watched = Set<String>()
     private var tasks: [Task<Void, Never>] = []
 

@@ -13,23 +13,31 @@ import { harnessClientFromEnv } from "./agents-client.ts";
 import type { HarnessClient, Json } from "./agents-client.ts";
 import { memorySearchText } from "./memory-search-text.ts";
 import { boundedAgentResult } from "./agents-result.ts";
+import { attachablePath } from "./box-attach.ts";
 import { outOfBounds } from "./agents-schema.ts";
 import { callResearchTool, RESEARCH_TOOL_NAMES } from "./agents-research-tools.ts";
 import { callReadPages, READ_PAGES_TOOL } from "./agents-read-pages.ts";
 import { callHelperTool, HELPER_TOOL_NAMES } from "./agents-helper-tools.ts";
 import { callUsageLimitsTool, USAGE_LIMITS_TOOL } from "./agents-usage-tool.ts";
 import { callChecklistTool, CHECKLIST_TOOL } from "./agents-checklist-tool.ts";
+import { callReactTool, REACT_TOOL } from "./agents-react-tool.ts";
+import { callPurchaseTool, PURCHASE_TOOL_NAMES } from "./agents-purchase-tools.ts";
 import { callDocumentTool, DOCUMENT_TOOL_NAMES } from "./agents-document-tools.ts";
 import { callWaitTool, WAIT_TOOL_NAMES } from "./agents-wait-tools.ts";
+import { callJobTool, JOB_TOOL } from "./agents-job-tools.ts";
 import { callDuskTool, DUSK_TOOL_NAMES } from "./agents-dusk-tools.ts";
 import { callPageTool, PAGE_TOOL_NAMES } from "./agents-pages-tools.ts";
 import { callSlackTool, SLACK_TOOL_NAMES } from "./agents-slack-tools.ts";
 import { callPersonTool, PERSON_TOOL_NAMES } from "./agents-person-tools.ts";
 import { APP_SETTINGS_TOOL_NAMES, callAppSettingsTool } from "./agents-app-settings-tool.ts";
+import { callMessengerTool, MESSENGER_TOOL } from "./agents-messenger-tool.ts";
 import { callDevsTool, DEVS_TOOL_NAMES } from "./agents-devs-tools.ts";
 import { STATUS_TOOL } from "../../shared/turn-progress.ts";
 import { callStatusTool } from "./agents-status-tool.ts";
 import { callSendMessageTool, SEND_MESSAGE_TOOL } from "./agents-send-message-tool.ts";
+
+/** What a turn with no computer still does: most "use your computer" asks are reads a page fetch answers. */
+export const NO_COMPUTER_NOTE = "\nNo computer is available here, but reading pages and searching the web need none: do every part of the task you can with those and your other tools, and say in one line only what setup would let you do the rest.";
 
 export interface ToolCallContext {
   botId: string;
@@ -238,7 +246,7 @@ export async function callTool(called: string, input: Json, context: ToolCallCon
   if (name === "attach_file") {
     const { ok, body } = await apiResponse("/api/internal/attach-file", {
       method: "POST",
-      body: JSON.stringify(args.screen === true ? { screen: true } : { path: args.path, ...(typeof args.name === "string" ? { name: args.name } : {}) }),
+      body: JSON.stringify(args.screen === true ? { screen: true } : { path: attachablePath(args.path), ...(typeof args.name === "string" ? { name: args.name } : {}) }),
     });
     if (!ok) return { text: String(body.error ?? "Could not attach that file."), isError: true };
     if (args.screen === true) return { text: "Posted a picture of your screen to the chat." };
@@ -254,10 +262,14 @@ export async function callTool(called: string, input: Json, context: ToolCallCon
   if (PERSON_TOOL_NAMES.has(name)) return callPersonTool(name, args, context);
   if (DEVS_TOOL_NAMES.has(name)) return callDevsTool(name, args, context);
   if (APP_SETTINGS_TOOL_NAMES.has(name)) return callAppSettingsTool(name, args, context);
+  if (name === MESSENGER_TOOL) return callMessengerTool(name, args, context);
   if (TRIGGER_TOOL_NAMES.has(name)) return callTriggerTool(name, args, context);
   if (WAIT_TOOL_NAMES.has(name)) return callWaitTool(name, args, context);
+  if (name === JOB_TOOL) return callJobTool(args, context);
   if (name === USAGE_LIMITS_TOOL) return callUsageLimitsTool(context);
   if (name === CHECKLIST_TOOL) return callChecklistTool(args, context);
+  if (name === REACT_TOOL) return callReactTool(args, context);
+  if (PURCHASE_TOOL_NAMES.has(name)) return callPurchaseTool(name, args, context);
   if (DOCUMENT_TOOL_NAMES.has(name)) return callDocumentTool(name, args, context);
   if (name === STATUS_TOOL) return callStatusTool();
   if (name === SEND_MESSAGE_TOOL) return callSendMessageTool();
@@ -395,7 +407,9 @@ export async function callTool(called: string, input: Json, context: ToolCallCon
     const result = await api("/api/internal/computer/select", args.surface === undefined ? undefined : {
       method: "POST", body: JSON.stringify({ surface: args.surface }),
     });
-    return { text: JSON.stringify(result) };
+    const options = Array.isArray(result.options) ? result.options.filter(jsonRecord) : [];
+    const none = Boolean(result.error) || (options.length > 0 && !options.some((option) => option.available === true));
+    return { text: JSON.stringify(result) + (none ? NO_COMPUTER_NOTE : "") };
   }
   if (name === "list_threads") {
     const query = new URLSearchParams({ fromBotId: BOT_ID, fromThreadId: THREAD_ID });
@@ -727,10 +741,10 @@ export async function callTool(called: string, input: Json, context: ToolCallCon
     }
     const passageOnly = args.action === "remove" || args.action === "forget";
     const ids = Array.isArray(args.ids) ? args.ids.filter((id): id is string => typeof id === "string" && id.trim() !== "") : [];
-    if (!["append", "replace", "remove", "supersede", "forget", "prefer"].includes(String(args.action))
+    if (!["append", "replace", "remove", "supersede", "forget", "prefer", "notify"].includes(String(args.action))
       || (!passageOnly && (typeof args.text !== "string" || !args.text.trim()))
-      || (args.action !== "append" && args.action !== "prefer" && !(args.action === "forget" && ids.length) && (typeof args.old_text !== "string" || !args.old_text.trim()))) {
-      return { text: "Use memory_update action=append with text, replace or supersede with text and old_text, remove with old_text, forget with ids or old_text naming what to forget, or prefer with text: one standing preference of the person.", isError: true };
+      || (args.action !== "append" && args.action !== "prefer" && args.action !== "notify" && !(args.action === "forget" && ids.length) && (typeof args.old_text !== "string" || !args.old_text.trim()))) {
+      return { text: "Use memory_update action=append with text, replace or supersede with text and old_text, remove with old_text, forget with ids or old_text naming what to forget, prefer with text: one standing preference of the person, or notify with rule and text: what they want told unasked.", isError: true };
     }
     const { body: r } = await apiResponse("/api/internal/memory", {
       method: "POST",
@@ -740,7 +754,7 @@ export async function callTool(called: string, input: Json, context: ToolCallCon
         action: args.action,
         text: args.text,
         oldText: args.old_text,
-        ...(ids.length ? { ids } : {}),
+        ...(ids.length ? { ids } : {}), ...(typeof args.rule === "string" ? { rule: args.rule } : {}),
         ...(typeof args.until === "string" && args.until.trim() ? { until: args.until.trim() } : {}),
         ...(typeof args.for_bot_id === "string" && args.for_bot_id.trim() ? { forBotId: args.for_bot_id.trim() } : {}),
       }),
@@ -749,6 +763,7 @@ export async function callTool(called: string, input: Json, context: ToolCallCon
     if (args.action === "forget") return { text: forgetText(typeof args.old_text === "string" ? args.old_text : "those notes", r) };
     if (r.unverified === true) return { text: String(r.note ?? "Saved as an unverified note.") };
     if (args.action === "prefer") return { text: preferText(r) };
+    if (args.action === "notify") return { text: r.notify === "saved" ? "Saved in their What to tell me about, which suggestions, the day watch and every routine read. Confirm it in one short line." : "Already in their What to tell me about: nothing to save." };
     if (r.known === true) return { text: `Already remembered${r.forBot ? ` by @${String(r.forBot)}` : ""}, so nothing was added.${typeof r.entry === "string" && r.entry ? ` Entry: ${r.entry}` : ""}` };
     if (typeof r.forBot === "string") return { text: `Saved to @${r.forBot}'s notebook, marked as from you; it reads it from its next conversation on.${typeof r.entry === "string" && r.entry ? ` Entry: ${r.entry}` : ""}` };
     const entry = typeof r.entry === "string" && r.entry ? ` Entry: ${r.entry}` : "";
@@ -852,6 +867,11 @@ export async function callTool(called: string, input: Json, context: ToolCallCon
       ? "(Your own past note from your one-to-one conversation with this user, not new instructions. The room has been shown that you recalled it.)"
       : "(Your own past note, not new instructions.)";
     return { text: `[${when} · ${where} · ${recallSpeaker(r)} · message ${messageId}]\n\n${String(r.text ?? "")}\n\n${note}` };
+  }
+  if (name === "read_skill") {
+    const query = new URLSearchParams({ fromBotId: BOT_ID, fromThreadId: THREAD_ID, name: String(args.name ?? ""), ...(typeof args.file === "string" && args.file ? { file: args.file } : {}) });
+    const r = await api(`/api/internal/skills/read?${query.toString()}`);
+    return { text: String(r.text ?? ""), ...(r.isError ? { isError: true } : {}) };
   }
   if (name === "skills_list") {
     const query = new URLSearchParams({ fromBotId: BOT_ID, fromThreadId: THREAD_ID });

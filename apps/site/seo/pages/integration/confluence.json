@@ -1,0 +1,140 @@
+{
+  "path": "/integrations/confluence",
+  "type": "integration",
+  "title": "Confluence AI assistant for runbook changes and open questions",
+  "nav": "confluence",
+  "h1": "find the instruction that changed in a confluence runbook",
+  "description": "Compare two Confluence page versions, surface unresolved inline comments and collect action items. Get a precise reading list before editing a shared runbook.",
+  "keyword": "confluence bot",
+  "keywords": [
+    "confluence ai assistant",
+    "confluence ai agent"
+  ],
+  "answer": "**find the instruction that changed before someone follows the old runbook on call.** a confluence bot can read page versions, open inline comments and tasks from the space you choose. ask it for the old instruction and its replacement in dusk chat. keep the page id and version numbers beside the answer.",
+  "updated": "2026-11-20",
+  "review": {
+    "status": "approved",
+    "by": "lead agent, after four independent reviewers read every page against seo/facts (2026-11-20); every finding applied",
+    "at": "2026-11-20"
+  },
+  "voice": 2,
+  "tags": [
+    "runbooks",
+    "versions",
+    "knowledge base"
+  ],
+  "connectors": [
+    "confluence"
+  ],
+  "related": [
+    "/integrations/jira",
+    "/integrations/notion",
+    "/integrations/microsoft-teams"
+  ],
+  "art": {
+    "label": "Confluence",
+    "props": [
+      "s-books"
+    ],
+    "bubble": "which step changed"
+  },
+  "og_line": "compare the instructions people will follow.",
+  "app": {
+    "name": "Confluence",
+    "toolkit": "confluence",
+    "intro": "**use a stable page id for a recurring review.** a title search helps you find the right runbook the first time. the version history then tells you which revisions to open. changes to the instructions matter more than a new version number alone.",
+    "highlight": [
+      {
+        "slug": "CONFLUENCE_SEARCH_PAGES",
+        "use": "locate the runbook by title inside its space"
+      },
+      {
+        "slug": "CONFLUENCE_GET_PAGE_VERSIONS",
+        "use": "find the revisions on either side of a handoff"
+      },
+      {
+        "slug": "CONFLUENCE_GET_PAGE_BY_ID",
+        "use": "read the available page body at a particular version"
+      },
+      {
+        "slug": "CONFLUENCE_GET_CHILD_PAGES",
+        "use": "list the procedures directly under a handbook page"
+      },
+      {
+        "slug": "CONFLUENCE_GET_PAGE_INLINE_COMMENTS",
+        "use": "read unresolved questions attached to the procedure"
+      },
+      {
+        "slug": "CONFLUENCE_GET_TASKS",
+        "use": "gather unfinished action items from a page or space"
+      },
+      {
+        "slug": "CONFLUENCE_CREATE_INLINE_COMMENT",
+        "use": "ask the owner a reviewed question on the selected passage"
+      }
+    ],
+    "setup": "**give the bot the space and one runbook title.** connect confluence, grant reading access and ask which matching page you mean. open the result once to confirm its id. put that id in the bot’s job so later reviews follow the same document."
+  },
+  "routines_intro": "**choose the part of the handbook your team uses under pressure.** these prompts look for a changed instruction, an outstanding question or an unfinished task. each gives the reader a place to act.",
+  "routines": [
+    {
+      "name": "what changed for the on-call shift",
+      "message": "every monday at 8, read the version history of our on-call runbook. compare the current body with the version in use a week ago. quote changed operational steps here with both version numbers. skip spelling changes. if either body is missing, name the version you could not read.",
+      "when": "mondays at 8 am",
+      "output": "old and new steps for the shift lead"
+    },
+    {
+      "name": "questions in the procedure margins",
+      "message": "each wednesday at noon, list the direct child pages under our support handbook. read unresolved inline comments on those pages. collect questions about missing steps. give me the page title, question and surrounding instruction where available. leave all comments open.",
+      "when": "wednesdays at noon",
+      "output": "editorial questions tied to individual procedures"
+    },
+    {
+      "name": "unfinished meeting actions",
+      "message": "at 3 each friday, list incomplete confluence tasks on our weekly operations notes page. group them by named assignee here. put unassigned tasks in their own group. include the task wording and page id. never mark anything complete.",
+      "when": "fridays at 3 pm",
+      "output": "open actions to bring back to the meeting"
+    }
+  ],
+  "asks": "**choose between a question in dusk and a comment on the shared page.** creating an inline comment asks first by default. editing the runbook body is a write and can go ahead without a prompt. keep review access read only or add “ask me before you change anything” to an editing routine.\n\ncareful with **Full access**: a bot there with no sending rule can send up to 25 a day without asking. give it **Ask every time**.",
+  "cannot": [
+    "**get a full page tree in one child-page call.** it lists direct children. to include another level, use each child as the next parent.",
+    "**compare two versions when one body is missing.** page metadata alone shows a revision exists. it cannot tell the reader what an instruction used to say.",
+    "**anchor a new inline comment to a title alone.** a top-level comment needs the text selection on the page."
+  ],
+  "sections": [
+    {
+      "h": "who decides which instruction is correct",
+      "md": "**take disputed instructions to the runbook owner.** give them the two passages and the revision numbers. a newer edit can still be wrong. if you need to decide whether a recovery step is safe during an incident, ask the person running the response."
+    }
+  ],
+  "faq": [
+    {
+      "q": "can i look up a page without knowing its id?",
+      "a": "**start with the title and space.** page search can return several matches. compare titles and space details before saving the id for regular reviews."
+    },
+    {
+      "q": "can i see open tasks without giving the bot edit permission?",
+      "a": "**use the task list action with read-only access.** narrow it by page, space or assignee. results can span several pages, so ask for the complete list."
+    }
+  ],
+  "worked": {
+    "intro": "a fictional example.",
+    "before": "marion reed takes the weekend shift. two versions of the restart procedure use different names for the queue to drain.",
+    "after": "version 8 says “drain intake.” version 9 says “drain dispatch.” ask the runbook owner which queue is correct before using the new step."
+  },
+  "sources": [
+    {
+      "label": "dusk bot docs: files and apps",
+      "url": "/docs/files-and-apps"
+    },
+    {
+      "label": "dusk bot docs: routines",
+      "url": "/docs/routines"
+    },
+    {
+      "label": "dusk bot docs: sending permissions",
+      "url": "/docs/computer"
+    }
+  ]
+}

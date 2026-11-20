@@ -986,6 +986,50 @@ describe("OpenAICompatDriver", () => {
     await inst.dispose();
   });
 
+  it("offers and sends the effort levels a custom server's model is declared to take, and none to its other models", async () => {
+    const sent: Array<Record<string, unknown>> = [];
+    vi.stubGlobal("fetch", vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      if (String(input).endsWith("/models")) return Response.json({ data: [{ id: "gpt-6.1-sol" }, { id: "plain-model" }] });
+      sent.push(JSON.parse(String(init?.body)));
+      return new Response('data: {"choices":[{"delta":{"content":"hi"}}]}\ndata: [DONE]\n', { headers: { "content-type": "text/event-stream" } });
+    }));
+    const inst = await OpenAICompatDriver.create({
+      instanceId: "relay-effort", displayName: "Relay", enabled: true,
+      config: OpenAICompatDriver.decodeConfig({ url: "https://relay.example.test/v1", apiKeyEnv: "TEST_KEY", effortLevels: { "gpt-6.1-sol": ["low", "medium", "high", "xhigh", "max"] } }),
+      environment: { TEST_KEY: "secret" },
+    });
+    const recorder = recordEvents(inst.adapter);
+    try {
+      await inst.refreshModels?.();
+      expect(inst.adapter.capabilities.effortLevels).toEqual(["low", "medium", "high", "xhigh", "max"]);
+      expect(inst.adapter.capabilities.effortByModel).toBe(true);
+      const options = inst.models.options;
+      expect(options.find((option) => option.id === "gpt-6.1-sol")?.effortLevels).toEqual(["low", "medium", "high", "xhigh", "max"]);
+      expect(options.find((option) => option.id === "plain-model")?.effortLevels).toBeUndefined();
+      await inst.adapter.sendTurn({ threadId: "effort-a", text: "hi", model: "gpt-6.1-sol", effort: "xhigh" });
+      await recorder.until((e) => e.type === "turn.completed" && e.threadId === "effort-a");
+      await inst.adapter.sendTurn({ threadId: "effort-b", text: "hi", model: "plain-model", effort: "xhigh" });
+      await recorder.until((e) => e.type === "turn.completed" && e.threadId === "effort-b");
+      expect(sent.map((body) => body.reasoning_effort)).toEqual(["xhigh", undefined]);
+    } finally {
+      recorder.stop();
+      await inst.dispose();
+    }
+  });
+
+  it("gives a custom server no effort when none is declared, and refuses a malformed declaration", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => Response.json({ data: [] })));
+    const inst = await OpenAICompatDriver.create({
+      instanceId: "relay-plain", displayName: "Relay", enabled: true,
+      config: OpenAICompatDriver.decodeConfig({ url: "https://relay.example.test/v1", apiKeyEnv: "TEST_KEY" }),
+      environment: { TEST_KEY: "secret" },
+    });
+    expect(inst.adapter.capabilities.effortLevels).toBeUndefined();
+    await inst.dispose();
+    expect(() => OpenAICompatDriver.decodeConfig({ effortLevels: { "gpt-6.1-sol": ["turbo"] } })).toThrow(/effortLevels/);
+    expect(() => OpenAICompatDriver.decodeConfig({ effortLevels: ["low"] })).toThrow(/effortLevels/);
+  });
+
   it("does not treat a lookalike host as OpenRouter", async () => {
     let sentBody: any = null;
     vi.stubGlobal(

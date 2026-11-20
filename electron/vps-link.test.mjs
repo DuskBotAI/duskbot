@@ -131,6 +131,7 @@ function controller({ local, ownHome, store, onChange = () => {}, grant = async 
     label: () => "Sid's MacBook",
     saveServer: ({ origin, name }) => { saved.push({ origin, name }); return `env-${saved.filter((entry) => entry.origin).length}`; },
     forgetServer: (id) => saved.push({ forgot: id }),
+    rehome: (from, to) => saved.push({ rehomed: [from, to.id] }),
     switchTo: () => {},
     ownHome,
     ownHomeReset: () => {},
@@ -286,6 +287,7 @@ describe("Add your VPS", () => {
     expect(store.read().links.map((entry) => entry.id)).toEqual([second]);
     expect(store.read().current).toBe(second);
     expect(saved).toContainEqual({ forgot: "env-1" });
+    expect(saved).toContainEqual({ rehomed: ["env-1", "env-2"] });
     expect(service.store.tunnels.has(first)).toBe(false);
     expect(service.store.tunnels.has(second)).toBe(true);
     await link.forget();
@@ -371,6 +373,23 @@ describe("Add your VPS", () => {
     expect(retargeted).toEqual([["https://old-name.trycloudflare.com", "https://new-name.trycloudflare.com"]]);
     expect(pinned).toContainEqual(["new-name.trycloudflare.com", null]);
     expect(linked.view()).toMatchObject({ via: "cloudflare", server: { origin: "https://new-name.trycloudflare.com" } });
+    await linked.close();
+  });
+
+  it("keeps the server the bots live on: Forget is refused, and moving back runs on this computer's own copy", async () => {
+    const store = memoryStore();
+    store.write({ v: 1, current: "dddddddddd", links: [{ id: "dddddddddd", name: "garage", mode: "relay", origin: "http://vps-dddddddddd.localhost:1", envId: "env-4", keyP: "p:k", tokenP: "p:t" }] });
+    const home = { id: "env-4", origin: "http://vps-dddddddddd.localhost:1", name: "garage" };
+    const held = [];
+    const linked = createVpsLink({
+      ...linkDeps(localServer(), { start: async () => {}, view: () => null, away: () => true, home: () => home, chosen: () => null }, store),
+      holding: async (work) => { held.push("in"); try { return await work(); } finally { held.push("out"); } },
+      proxyFactory: () => ({ start: async () => home.origin, control: async () => ({}), close: async () => {} }),
+    });
+    expect(() => linked.forget()).toThrow(/Your bots live on garage/);
+    expect(store.read().links).toHaveLength(1);
+    await linked.moveBack().catch(() => {});
+    expect(held).toEqual(["in", "out"]);
     await linked.close();
   });
 });

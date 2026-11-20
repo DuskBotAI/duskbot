@@ -11,7 +11,7 @@ import { t } from "@/lib/i18n";
 import type { Place } from "@/lib/place";
 import { desktopShowsOtherServer, useOtherServerName } from "@/lib/other-server";
 import { placeHasIssue } from "@/lib/place-view";
-import { useStore, type Bot } from "@/state/store";
+import { useStore, type Bot, type Group } from "@/state/store";
 import { useDesktopCapabilities } from "../DesktopCapabilities";
 import { LocalComputerAutoWarning } from "../LocalComputerAutoWarning";
 import { usePlaceViews } from "../PlaceChip";
@@ -26,6 +26,7 @@ import { CloudDesktopListRow, useCloudDesktop, type CloudDesktopRow } from "./Cl
 import { AsleepMascot, COMPUTER_FRAME_CLASS, COMPUTER_SCREEN_ASPECT, COMPUTER_WAKE_BUTTON_CLASS, ComputerWaking } from "./ComputerScreenMascot";
 import { queueComputerWake } from "./computer-wake-queue";
 import { LocalBrowserSection } from "./LocalBrowser";
+import { PanelSteps } from "./PanelSteps";
 import "./computer-tab.css";
 
 const ComputerPanel = lazy(() => import("../ComputerPanel").then((module) => ({ default: module.ComputerPanel })));
@@ -270,8 +271,8 @@ export function CloudCtaCard({ bot, group, stage, cloudDesktop }: { bot: Bot; gr
 export { hasDuskCloud } from "@/lib/cloud-move";
 
 /** One small disclosure for what a person rarely needs: the computer's own words for a problem, and its settings. */
-export function ComputerTab({ bot, derived, cloudFor }: {
-  bot: Bot; derived: Derived; onOpen: (page: SimplePageId) => void;
+export function ComputerTab({ bot, derived, cloudFor, room }: {
+  bot: Bot; derived: Derived; onOpen: (page: SimplePageId) => void; room?: Group;
   /** the bots the cloud card speaks for: this bot alone by default, a group chat's bots on one member, none on the rest */
   cloudFor?: readonly Bot[];
 }) {
@@ -294,15 +295,16 @@ export function ComputerTab({ bot, derived, cloudFor }: {
     : stage === "moved" || stage === "open" ? t("runsOn.openCloud")
     : stage === "coming-back" ? t("runsOn.movingBack") : t("runsOn.moveDuskCloud");
   const detail = report?.detail ?? null;
-  // this computer's bot leads with its browser; the dusk cloud card follows it, whatever step the account is at
+  // a bot leads with its browser on this computer, and on a server when its computer is that browser; the dusk cloud card follows it
   const cloudOffer = local && cloudBots.length > 0 && !storeApp() && <CloudCtaCard bot={cloudBots[0]!} group={cloudBots} stage={stage} cloudDesktop={cloudDesktop} />;
-  const ownScreen = !local || current === "vm";
+  const ownScreen = current === "vm" || (!local && current !== "browser");
+  const browserAfter = local ? cloudOffer : toCloud && <CloudDesktopCta bots={cloudBots} stage={stage} label={cloudLabel} />;
   // a bot set to use this Mac asks for the Mac's permissions it lacks when the person starts its browser, never before
   const askFirst = local && current === "local" ? macPermissionsBridge() : null;
 
   return (
     <div data-panel-tabpanel="computer">
-      {!ownScreen ? <LocalBrowserSection bot={bot} askFirst={askFirst} after={cloudOffer} /> : <>
+      {!ownScreen ? <LocalBrowserSection bot={bot} askFirst={askFirst} steps={<PanelSteps bot={bot} room={room} pictures={false} />} after={browserAfter} /> : <>
         <div ref={setScreenBox}>
           <Suspense fallback={<AsleepScreen bot={bot} off={current === "off"} />}>
             <ComputerPanel bot={bot} inline visible={onScreen} onReport={setReport} />
@@ -312,6 +314,7 @@ export function ComputerTab({ bot, derived, cloudFor }: {
           <span data-panel-screen-of="" className="min-w-0 truncate text-[12px] leading-4 tracking-normal text-ink/[0.56]">{screenOf}</span>
         </div>
         {detail && <Card><NoteRow data-sheet-row="problem-detail">{detail}</NoteRow></Card>}
+        <PanelSteps bot={bot} room={room} pictures className="mt-3" />
         {toCloud && <CloudDesktopCta bots={cloudBots} stage={stage} label={cloudLabel} />}
         {cloudOffer}
       </>}

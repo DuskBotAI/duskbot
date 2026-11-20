@@ -50,6 +50,42 @@ export interface ProxyOptions {
    * it synchronously on revoke; the returned disposer is called exactly once. */
   connected?: (deviceId: string, disconnect: () => void) => () => void;
   headersTimeoutMs?: number;
+  /** The harness's webhook receiver. Set, a POST to /hooks/... is passed to it whole, with no device token: its
+   *  address carries its own secret, so apps and phone shortcuts can reach a bot's automation from the internet. */
+  webhookPort?: number;
+}
+
+const HOOK_PATH = /^\/hooks\/[A-Za-z0-9_-]+(?:\/[^/?#]+)*$/;
+
+function forwardHook(req: IncomingMessage, res: ServerResponse, port: number): void {
+  const upstream = httpRequest(
+    { hostname: "127.0.0.1", port, path: req.url, method: "POST", headers: hookHeaders(req), timeout: 30_000 },
+    (receiver) => {
+      res.writeHead(receiver.statusCode ?? 502, {
+        "content-type": receiver.headers["content-type"] ?? "application/json",
+        "cache-control": "no-store",
+        "x-content-type-options": "nosniff",
+      });
+      receiver.pipe(res);
+    },
+  );
+  upstream.once("timeout", () => upstream.destroy(new Error("webhook receiver timed out")));
+  upstream.once("error", () => {
+    if (!res.headersSent) sendJson(res, 502, { error: "dusk bot is not running on this computer" });
+    else res.destroy();
+  });
+  req.pipe(upstream);
+}
+
+/** Only what a webhook sender says about its delivery; never a device's token or a forwarded identity. */
+function hookHeaders(req: IncomingMessage): Record<string, string> {
+  const kept: Record<string, string> = {};
+  for (const name of ["content-type", "content-length", "user-agent", "idempotency-key", "x-webhook-id", "x-github-delivery", "webhook-id",
+    "x-github-event", "x-webhook-event", "x-event-type", "ce-type", "authorization", "x-dusk-secret", "x-dusk-mail-check"]) {
+    const value = req.headers[name];
+    if (typeof value === "string") kept[name] = value;
+  }
+  return kept;
 }
 
 export interface CompanionEndpointSnapshot {
@@ -497,6 +533,7 @@ export function createProxyHandler(options: ProxyOptions) {
     if (!target) return sendJson(res, 400, { error: "invalid request target" });
     const path = (req.url ?? "/").split("?")[0];
     const method = req.method ?? "GET";
+    if (options.webhookPort && method === "POST" && HOOK_PATH.test(path)) return forwardHook(req, res, options.webhookPort);
 
     const token = bearerToken(req.headers.authorization);
     // Native http sends no Origin. Anything with one is a browser, refused before

@@ -1,0 +1,72 @@
+{
+  "path": "/glossary/computer-use-agent",
+  "type": "glossary",
+  "title": "What is a computer-use agent, and when should you use one?",
+  "nav": "computer-use agent",
+  "h1": "what is a computer-use agent?",
+  "description": "See how a computer-use agent works through a screen, how to tell if it clicked the right item, and when doing the job yourself makes more sense.",
+  "keyword": "computer use agent",
+  "keywords": [
+    "what is a computer use agent",
+    "ai that uses a computer"
+  ],
+  "answer": "**a computer-use agent operates software by looking at a screen, clicking and typing.** you give it a result to aim for. after each action, it looks again to decide what comes next. that helps with fiddly desktop work where you know what you need but the steps vary.",
+  "updated": "2026-11-20",
+  "review": {
+    "status": "approved",
+    "by": "lead agent, after four independent reviewers read every page against seo/facts (2026-11-20); every finding applied",
+    "at": "2026-11-20"
+  },
+  "tags": [
+    "computer-use",
+    "desktop",
+    "glossary"
+  ],
+  "connectors": [],
+  "related": [
+    "/ai-agent-that-controls-your-computer",
+    "/glossary/browser-agent",
+    "/guides/is-it-safe-to-let-ai-control-your-computer"
+  ],
+  "art": {
+    "props": [
+      "s-computer",
+      "p-receipt"
+    ],
+    "bubble": "which print layout?"
+  },
+  "og_line": "see what happened after the click.",
+  "definition": "a computer-use agent is an ai that uses the visible controls on a computer to carry out a task.",
+  "example": "**corinne needs to see whether the ticket price will get cut off in print.** in this example, she asks an agent to open the matinee flyer, choose half-sheet paper and inspect the print preview. it should tell her which words fall outside the margin, then close the preview without printing.",
+  "sections": [
+    {
+      "h": "what counts as a finished job?",
+      "md": "**ask for something the agent can see after its last click.** opening print preview says little about the flyer. the useful detail is whether the whole price fits on the selected paper.\n\nif it inspects the evening flyer instead, even a perfect description answers the wrong question. include the filename and the paper size in the request."
+    },
+    {
+      "h": "when a window interrupts",
+      "md": "**tell it where to stop guessing.** a missing font notice can change the layout. ask the agent to report the notice and pause. dismissing it and carrying on could leave you with a convincing answer about the wrong typeface."
+    },
+    {
+      "h": "who has the mouse in dusk bot?",
+      "md": "**you can watch the bot's desktop live in screen.** choose take control to click or type yourself. hand control back when the right window is open. a dusk bot can have a desktop separate from your own.[^1]\n\nif the preview is already on your screen and you can read the price, look at it yourself. setting up dusk bot for that single glance costs more attention than it saves."
+    }
+  ],
+  "faq": [
+    {
+      "q": "does a computer-use agent need my personal screen?",
+      "a": "no. dusk cloud gives the bot its own desktop. on a mac or windows computer, you can deliberately point it at your screen instead.[^1]"
+    },
+    {
+      "q": "can i give it a screenshot?",
+      "a": "a screenshot can answer a question about a visible detail. to open a menu or compare two print settings, the agent needs control of a running app."
+    }
+  ],
+  "sources": [
+    {
+      "label": "dusk bot docs: a bot's computer",
+      "url": "/docs/computer"
+    }
+  ],
+  "voice": 2
+}

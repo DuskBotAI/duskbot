@@ -55,6 +55,23 @@ Ada's and Bob's 👍 sit side by side with their names, Ada's 👎 replaces only
 her own, `GET /api/auth/session` returns each session's `reactor` key, and the
 three replies reach the bot attributed to the person who reacted.
 
+## A bot's reaction
+
+```sh
+pnpm exec vitest run server/bot-reactions.test.ts
+```
+
+The `react` tool (`server/drivers/agents-react-tool.ts`, internal route
+`POST /api/internal/react` in `server/bot-reactions.ts`) lets a bot set one of
+👍 ❤️ 😂 🎉 👀 on the person's latest message in its own chat, or on one of
+their earlier messages by `message_id`. It is stored in the message's
+`reactions` as `{ emoji, by: "bot:<botId>", name, at }`; a new emoji replaces
+the bot's own. It only patches the line: no turn starts, no card is answered,
+and `withReactionNotes` never reads it back. A room, another bot's chat, a
+teammate's ask, a bot line and 👎 are refused; rooms do not list the tool.
+Chips show it under the bot's current name and render it as a label, so the
+person can add their own reaction beside it but never toggle the bot's.
+
 ## Renderer
 
 Launch the headless chat UI, as in [Chat UI, driven headlessly](chat-ui.md),

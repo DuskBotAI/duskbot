@@ -52,3 +52,33 @@ export function useOnCall(): string | null {
     () => current,
   );
 }
+
+let asked: string | null = null;
+let askedAt = 0;
+const ASK_LASTS_MS = 15_000;
+
+/** A call asked for from outside the chat (a Siri shortcut): the target's call button starts it as a press would, if
+ * it shows within a few seconds. */
+export function askForCall(targetId: string, now = Date.now()): void {
+  asked = targetId;
+  askedAt = now;
+  notify();
+}
+
+/** True once, for the button that takes the asked call. */
+export function takeCallAsk(targetId: string, now = Date.now()): boolean {
+  if (asked !== targetId) return false;
+  asked = null;
+  return now - askedAt < ASK_LASTS_MS;
+}
+
+export function useCallAsk(): string | null {
+  return useSyncExternalStore(
+    (fn) => {
+      watchers.add(fn);
+      return () => watchers.delete(fn);
+    },
+    () => asked,
+    () => asked,
+  );
+}

@@ -55,7 +55,7 @@ export function ToolActivity({ tool, place = null, live = false, source }: { too
 type FullOutput = { state: "idle" | "loading" | "done" | "failed"; output?: string };
 
 /** The whole output of a clipped step, fetched when it is opened: kept once it arrives, asked again after a failure. */
-function useFullOutput(source: MessageAttachmentContext | undefined, preview: string | undefined): FullOutput {
+export function useFullOutput(source: MessageAttachmentContext | undefined, preview: string | undefined): FullOutput {
   const url = source && `/api/threads/${encodeURIComponent(source.threadId)}/messages/${encodeURIComponent(source.messageId)}/tool`;
   const key = url && `${url}#${preview?.length ?? 0}`;
   const [full, setFull] = useState<FullOutput & { key?: string }>({ state: "idle" });

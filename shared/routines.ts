@@ -64,15 +64,22 @@ export interface RoutineContextAttachment {
 export type RoutineRunTrigger = "schedule" | "manual" | "webhook" | "startup" | "api";
 
 /** A check a routine runs on each tick before any AI turn, in plain code: `calendar` reads the next 36 hours, `mail`
- * new inbox mail since the last check, `runs` other routines' finished runs, `probe` one public page, feed or price
- * (`Routine.probe`). Nothing new means no AI turn. */
+ * new inbox mail since the last check, `runs` other routines' finished runs, `probe` one public page, feed or price, or
+ * a script's output (`Routine.probe`). Nothing new means no AI turn. */
 export type RoutineCheck = "calendar" | "mail" | "runs" | "probe";
 export const ROUTINE_CHECKS: readonly RoutineCheck[] = ["calendar", "mail", "runs", "probe"];
 
-/** What a `probe` check reads: a page's words, a feed's newest items, or the first price on a page. */
+/** What a `probe` check reads: a page's words (or only the part `selector` names), a feed's newest items, the first
+ * price on a page, or what `command` prints on the computer the routine runs on. A script's output is compared with
+ * the last; a script that prints {"wakeAgent": false} keeps the run asleep and {"wakeAgent": true} always wakes it. */
 export interface RoutineProbe {
-  kind: "page" | "feed" | "price";
+  kind: "page" | "feed" | "price" | "script";
+  /** Empty for a script. */
   url: string;
+  /** page only: `#id`, `.class`, `tag`, `tag#id` or `tag.class`; the first element it names. */
+  selector?: string;
+  /** script only: one shell command line, run without the bot's AI. */
+  command?: string;
 }
 
 /** `around`: the run may move up to ROUTINE_AROUND_MS either way, so a Cloud home can fold it into a wake it has
@@ -222,7 +229,7 @@ export interface RoutineRun {
   dryRun?: true;
   triggerSource?: RoutineRunTrigger;
   /** "app": a connected-app event started it; "wait": a wait's follow-up did. triggerSource is then "webhook" (an outside event). */
-  eventSource?: "app" | "wait";
+  eventSource?: "app" | "wait" | "job";
   webhookId?: string;
   deliveryId?: string;
   /** Room task created for a team-goal run. */

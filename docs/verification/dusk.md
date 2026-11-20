@@ -2,9 +2,11 @@
 
 Dusk is the bot every place and every Team Cloud member gets once: a new
 install's first bot and its Chief of Staff, or, for an install that already has
-bots, a helper beside them. It is never deleted or archived; the person takes it
-off the sidebar with "Show Dusk in the sidebar" in Settings → General, which
-its menu's **Hide from sidebar** also turns off.
+bots, a helper beside them. It can be deleted or archived like any other bot
+once it is not the Chief of Staff and another bot remains, and is not made
+again after that; while it is the Chief or the only bot, the refusal says
+which. The person takes it off the sidebar with "Show Dusk in the sidebar" in
+Settings → Models, which its menu's **Hide from sidebar** also turns off.
 
 ## Automated checks
 
@@ -17,12 +19,14 @@ pnpm exec vitest run server/default-bot.test.ts server/default-bot.e2e.test.ts \
 - `server/default-bot.test.ts`: a fresh install gets one Dusk once; an
   existing install gets one once on update and its Chief is untouched; a new
   install's renamed Dusk is adopted, not duplicated; the intro shows once,
-  not after it was answered or dismissed; delete and archive are refused; a
+  not after it was answered or dismissed; delete and archive are refused
+  while it is the Chief or the only bot and allowed after; a
   move to My Cloud and coming home leave exactly one; each Team Cloud member
   gets their own; a Team User's Dusk holds no Chief tools.
 - `server/default-bot.e2e.test.ts`: on a real fixture server, `DELETE
-  /api/bots/:id` answers 409, the switch hides and shows it, and a Dusk that
-  is not the Chief creates a bot with `create_bot`.
+  /api/bots/:id` answers 409 while it is the Chief, the switch hides and
+  shows it, a Dusk that is not the Chief creates a bot with `create_bot`, and
+  once another bot is the Chief it deletes (200).
 - `server/dusk-notifications.test.ts`, `server/drivers/agents-dusk-tools.test.ts`
   and the second case of `server/default-bot.e2e.test.ts`: Dusk alone gets
   `list_unread_notifications` and `mark_notifications_read`, listed last.
@@ -61,6 +65,7 @@ finish the first-run welcome, then:
 2. Dusk's first message says what it does in the app's language, with
    example asks and, on a new install, only the setup steps still to do. Each
    step opens the app's own flow.
-3. Its sidebar menu offers **Hide from sidebar**, not Archive or Delete; the
-   switch in Settings → General brings it back.
+3. Its sidebar menu offers **Hide from sidebar** and **Delete**; Delete is
+   refused with the reason while it is the Chief or the only bot, and the
+   switch in Settings → Models brings a hidden one back.
 

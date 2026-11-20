@@ -10,7 +10,7 @@ import type { BotRecord, Message } from "../store.ts";
 import type { UsageTrigger } from "../usage-ledger.ts";
 import { resolveYourComputerAsk } from "../your-computer-consent.ts";
 
-export interface QuotaSwitchHostDeps extends Pick<QuotaSwitchDeps, "store" | "coordinator" | "turnStops" | "takeover" | "limitMode" | "hold" | "language"> {
+export interface QuotaSwitchHostDeps extends Pick<QuotaSwitchDeps, "store" | "coordinator" | "turnStops" | "takeover" | "limitMode" | "hold" | "carryOn" | "language"> {
   registry: Pick<ProviderRegistry, "instances" | "access">;
   approvalBus: ApprovalBus;
   providerConfigs(): InstanceConfigMap;
@@ -31,12 +31,12 @@ export interface QuotaSwitchHostDeps extends Pick<QuotaSwitchDeps, "store" | "co
 export function createQuotaSwitchHost(deps: QuotaSwitchHostDeps) {
   const {
     store, coordinator, registry, turnStops, approvalBus, providerConfigs, policyModelRefusal,
-    checkedTaskModelSwitch, threadBusy, directRequestOwners, startOrQueueDirectMessage, takeover, limitMode, hold, language,
+    checkedTaskModelSwitch, threadBusy, directRequestOwners, startOrQueueDirectMessage, takeover, limitMode, hold, carryOn, language,
   } = deps;
 
   const quotaSwitch = createQuotaSwitch({
     store, coordinator, turnStops,
-    registry: { instances: () => connectedOnly(registry.instances(), providerConfigs()) }, takeover, limitMode, hold, language,
+    registry: { instances: () => connectedOnly(registry.instances(), providerConfigs()) }, takeover, limitMode, hold, carryOn, language,
     access: instanceId => providerConfigs()[instanceId]?.access ?? registry.access(instanceId),
     refusal: policyModelRefusal,
     gate: (thread, selection) => checkedTaskModelSwitch(thread, selection, false, false, true),
@@ -46,9 +46,9 @@ export function createQuotaSwitchHost(deps: QuotaSwitchHostDeps) {
   });
 
   /** Settles a card the harness raised itself (a peer approval, a use-your-computer ask or a quota-switch offer); undefined for any other card. */
-  async function harnessCardOutcome(threadId: string, requestId: string, behavior: "allow" | "deny" | "answer", message: unknown): Promise<string | undefined> {
+  async function harnessCardOutcome(threadId: string, requestId: string, behavior: "allow" | "deny" | "answer", message: unknown, always = false): Promise<string | undefined> {
     if (!store.messagesFor(threadId).some(candidate => candidate.card?.requestId === requestId)) return undefined;
-    if (resolvePeerComms(approvalBus, requestId, behavior) || resolveYourComputerAsk(requestId, behavior) || resolveMacAsk(requestId, behavior) || deps.ownCards?.(requestId, behavior)) return behavior === "allow" ? "allowed-once" : "rejected";
+    if (resolvePeerComms(approvalBus, requestId, behavior) || resolveYourComputerAsk(requestId, behavior) || resolveMacAsk(requestId, behavior, always) || deps.ownCards?.(requestId, behavior)) return behavior === "allow" ? "allowed-once" : "rejected";
     return await quotaSwitch.answer(threadId, requestId, behavior, message) ?? undefined;
   }
 

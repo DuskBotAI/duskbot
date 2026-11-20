@@ -1,0 +1,25 @@
+// The mail edge (README.md). The top level is the preview (in-preview.dusk.bot); `--env production` serves in.dusk.bot.
+// MAILBOXES is a KV namespace: create it once (README.md) and put its id here.
+{
+  "$schema": "../../../node_modules/wrangler/config-schema.json",
+  "name": "dusk-inbound-mail-preview",
+  "main": "src/index.js",
+  "compatibility_date": "2026-11-01",
+  "workers_dev": true,
+  "vars": { "MAIL_DOMAIN": "in-preview.dusk.bot" },
+  "kv_namespaces": [{ "binding": "MAILBOXES", "id": "REPLACE_WITH_PREVIEW_KV_ID" }],
+  "routes": [{ "pattern": "in-preview.dusk.bot", "custom_domain": true }],
+  "ratelimits": [{ "name": "REGISTER_LIMITER", "namespace_id": "8261731", "simple": { "limit": 30, "period": 60 } }],
+  "observability": { "enabled": true, "logs": { "enabled": true, "head_sampling_rate": 0.1 } },
+  "env": {
+    "production": {
+      "name": "dusk-inbound-mail",
+      "workers_dev": false,
+      "vars": { "MAIL_DOMAIN": "in.dusk.bot" },
+      "kv_namespaces": [{ "binding": "MAILBOXES", "id": "REPLACE_WITH_PRODUCTION_KV_ID" }],
+      "routes": [{ "pattern": "in.dusk.bot", "custom_domain": true }],
+      "ratelimits": [{ "name": "REGISTER_LIMITER", "namespace_id": "8261732", "simple": { "limit": 30, "period": 60 } }],
+      "observability": { "enabled": true, "logs": { "enabled": true, "head_sampling_rate": 0.1 } }
+    }
+  }
+}

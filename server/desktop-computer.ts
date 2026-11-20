@@ -88,6 +88,13 @@ export function missingScreenPermissions(desktop: DesktopComputer = desktopCompu
   return ["Screen Recording", "Accessibility"].filter((name) => reason.includes(name));
 }
 
+/** macOS withholds this Mac's screen while a bot would work on it: the person put it here (`wants` "local"), or it is on
+ * Auto and this computer comes first for it. */
+export function screenGrantWanted(wants: string | undefined, autoLandsHere: () => boolean, desktop: DesktopComputer = desktopComputer, platform: NodeJS.Platform = process.platform): boolean {
+  if (!missingScreenPermissions(desktop, platform).length) return false;
+  return wants === "local" || (wants === undefined && autoLandsHere());
+}
+
 /** Why a turn cannot use this computer, in words for the person and the bot alike. */
 export function thisComputerNotReady(desktop: DesktopComputer = desktopComputer, platform: NodeJS.Platform = process.platform): string {
   if (!desktop.granted()) return THIS_COMPUTER_NOT_GRANTED;

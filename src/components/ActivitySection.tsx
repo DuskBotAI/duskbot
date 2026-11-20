@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { AnimatePresence } from "motion/react";
 
 import { api } from "@/state/store";
 import { t } from "@/lib/i18n";
@@ -89,15 +90,15 @@ export function ActivitySection() {
         {!error && entries.length === 0 && !loading && <ArtState data-art-state="activity" art="binoculars" title={t("empty.activity.title")} className="py-6">{t("empty.activity.hint")}</ArtState>}
         {entries.length > 0 && <ul className="contents">{entries.map((entry, index) => <ActivityRow key={`${entry.at}-${index}`} entry={entry} />)}</ul>}
       </RowsCard>
-      {editing === "who" && (
-        <FormDialog data-panel-modal="activity-who" title={t("activity.who")} onClose={() => setEditing(null)}>
+      <AnimatePresence>{editing === "who" && (
+        <FormDialog key="activity-who" data-panel-modal="activity-who" title={t("activity.who")} onClose={() => setEditing(null)}>
           <FormField label={t("activity.who")}>
             <input autoFocus value={filters.who} onChange={(e) => set({ who: e.target.value })} placeholder={t("activity.whoPlaceholder")} className={textFieldCls} />
           </FormField>
         </FormDialog>
-      )}
-      {editing === "dates" && (
-        <FormDialog data-panel-modal="activity-dates" title={t("settings.s2.activity.dates")} onClose={() => setEditing(null)}>
+      )}</AnimatePresence>
+      <AnimatePresence>{editing === "dates" && (
+        <FormDialog key="activity-dates" data-panel-modal="activity-dates" title={t("settings.s2.activity.dates")} onClose={() => setEditing(null)}>
           <FormField label={t("activity.from")}>
             <input type="date" value={filters.from} max={filters.to || undefined} onChange={(e) => set({ from: e.target.value })} className={textFieldCls} />
           </FormField>
@@ -105,7 +106,7 @@ export function ActivitySection() {
             <input type="date" value={filters.to} min={filters.from || undefined} onChange={(e) => set({ to: e.target.value })} className={textFieldCls} />
           </FormField>
         </FormDialog>
-      )}
+      )}</AnimatePresence>
     </>
   );
 }

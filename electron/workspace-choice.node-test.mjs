@@ -5,7 +5,7 @@ import test from "node:test";
 import environments from "./environments.cjs";
 import { CHOSEN, GONE, JOINED, localPageStep, settledActive, UNUSABLE } from "./workspace-choice.mjs";
 import { world, LOCAL, TEAM, ACME, connected } from "./fixtures/home-window-world.mjs";
-import { HOME_SCREEN_PATH } from "./home-window.mjs";
+import { CONNECT_GRACE_MS, HOME_SCREEN_PATH } from "./home-window.mjs";
 import { RECONNECT_PATH } from "./workspace-reconnect.mjs";
 
 const VPS = { id: "vps", kind: "remote", name: "Garage server", origin: "https://garage.example.test" };
@@ -64,6 +64,10 @@ test("the sender guard: this app's own screens count while a server is chosen, n
 test("a team's Cloud that can't be reached, then the person picks another server: the screen's own retry never brings the window back", async () => {
   const w = world({ state: { ...connected(), teams: [ACME] }, team: { down: true }, url: `${LOCAL}/` });
   await w.home.show({ place: { team: "team-acme" } });
+  // a switch still connecting keeps the opening loader for its grace, then says it can't reach the team
+  assert.deepEqual(w.home.view(), { screen: "opening", name: "Acme" });
+  w.url = `${LOCAL}${HOME_SCREEN_PATH}`;
+  await w.later(CONNECT_GRACE_MS);
   assert.deepEqual(w.home.view(), { screen: "offline", name: "Acme" });
   // the rail: main's switchEnvironment forgets the remembered team and loads the server's page
   w.remembered = null;

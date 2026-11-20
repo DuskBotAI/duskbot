@@ -139,6 +139,8 @@ it.each(["openaiCompat", "groq", "meta"] as const)("%s runs structured MCP calls
       scenario = mode;
       const artifact = join(fixture.info.dataDir, `${mode}-artifact.txt`);
       const startupMarker = join(fixture.info.dataDir, `${mode}-mcp-started.txt`);
+      // a new shared server joins every bot that already names some (266e265312): earlier scenarios' bots must not take it
+      for (const earlier of (await api("GET", "/api/bots")).bots) await api("PATCH", `/api/bots/${earlier.id}`, { mcpServers: [] });
       await api("POST", "/api/mcp/servers", { name: mode, command: process.execPath, args: [mcpScript], env: { FIXTURE_ARTIFACT: artifact, FIXTURE_STARTED: startupMarker }, enabled: true });
       if (mode === "tools-off") {
         await api("PATCH", `/api/instances/${instanceId}`, { tools: "false" }, 400);

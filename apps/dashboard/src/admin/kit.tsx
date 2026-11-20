@@ -4,7 +4,6 @@ import { Link } from "../lib/router";
 import { Button, cx } from "../ui/kit";
 import { Modal } from "../ui/controls";
 import { AnimatePresence, m, Pill, SwapText, usePill, useSlots } from "../ui/motion";
-import { Figure } from "../ui/Figure";
 import { Mascot } from "../ui/Mascot";
 import { avatarOf, friendlyName } from "./names";
 import { countryName } from "./geo";
@@ -97,7 +96,7 @@ export const CHANNEL: Record<string, string> = { direct: "direct", search: "sear
 /** revenue credited to no visit at all: paid before tracking began, or on a device the tracker never saw */
 export const NO_VISIT = "no_visit";
 export interface Note { id: string; at: number; text: string; by: string; createdAt: number }
-export interface SeriesData { size: number; starts: number[]; visitors: number[]; signups: number[]; paid: number[]; waitlist: number[]; /** cents per bucket */ revenue?: { new: number[]; renewal: number[]; refund: number[]; /** expected mrr at each bucket's end; null with filters */ mrr?: number[] | null } }
+export interface SeriesData { size: number; starts: number[]; visitors: number[]; signups: number[]; paid: number[]; waitlist: number[]; /** cents per bucket */ revenue?: { new: number[]; renewal: number[]; refund: number[]; /** expected mrr at each bucket's end; null with filters */ mrr?: number[] | null }; /** free trials begun per bucket */ trials?: number[] }
 
 /** dollars from cents: whole dollars when even, one decimal in thousands past $10k */
 export function usd(cents: number, compact = false) {
@@ -156,75 +155,93 @@ export function NoteDialog({ note, onClose, onSave, onDelete }: { note: Note | {
 }
 
 export interface RankRow { key: string; visitors: number; signups: number; paid: number }
-/** a tabbed ranked card: visitors as a light bar, the signups they became as a darker bar on top; a row filters the page */
-export function RankCard({ title, tabs, data, label, onPick, active, metric, details, panels, rows: limit = 8, money }: { title: string; tabs: Array<{ id: string; label: string; icon?: ReactNode }>; data: Record<string, RankRow[]>; label?(tab: string, key: string): ReactNode; onPick?(tab: string, key: string): void; active?: Record<string, string | undefined>; /** a single count instead of visitors and signups */ metric?: string;
-  /** the full-page view of a tab, when it has one */ details?(tab: string): string | null; /** a tab drawn its own way, like a map */ panels?: Record<string, ReactNode>; rows?: number;
-  /** revenue in cents per tab and row key, credited to where each payer came from */ money?: Record<string, Record<string, number>> }) {
+/** 17.8k past ten thousand, so a figure always fits its column */
+export const compact = (value: number) => value >= 10_000 ? `${(value / 1000).toFixed(value >= 100_000 ? 0 : 1).replace(/\.0$/, "")}k` : n(value);
+/** rows that are not a real value: kept last, quiet, with what they mean */
+const VAGUE: Record<string, string> = {
+  unknown: "the visit did not say: no referrer, a blocked header, or a browser that hides it",
+  other: "everything that is not one of the named values",
+  [NO_VISIT]: "trials with no visit recorded: begun before tracking, or from a device we never saw",
+};
+type Metric = "visitors" | "trials";
+/** a tabbed ranked card: one quiet bar per row for the chosen measure, and visitors, signups and trials in fixed columns; a row filters the page */
+export function RankCard({ title, tabs, data, label, onPick, active, metric, details, panels, rows: limit = 8, trials }: { title: string; tabs: Array<{ id: string; label: string; icon?: ReactNode }>; data: Record<string, RankRow[]>; label?(tab: string, key: string): ReactNode; onPick?(tab: string, key: string): void; active?: Record<string, string | undefined>; /** a single count instead of visitors and signups */ metric?: string;
+  /** the full-page view of a tab, sorted by a measure, when it has one */ details?(tab: string): string | null; /** a tab drawn its own way, like a map, with the top rows under it */ panels?: Record<string, ReactNode>; rows?: number;
+  /** free trials begun per tab and row key, credited to where each person came from */ trials?: Record<string, Record<string, number>> }) {
   const [tab, setTab] = useState(tabs[0]!.id);
   const [all, setAll] = useState(false);
-  const [byMoney, setByMoney] = useState(false);
+  const [by, setBy] = useState<Metric>("visitors");
   const tabPill = usePill(), sortPill = usePill();
-  const cents = money?.[tab] ?? {};
-  const earned = Object.values(cents).some((v) => v !== 0);
+  const counts = trials?.[tab] ?? {};
   const listed = data[tab] ?? [];
-  const extra = Object.keys(cents).filter((key) => !listed.some((row) => row.key === key)).map((key) => ({ key, visitors: 0, signups: 0, paid: 0 }));
-  // money with no visit behind it goes last whichever way the rows are sorted
-  const last = (row: RankRow) => Number(row.key === NO_VISIT || row.visitors === 0);
-  const rows = [...listed, ...extra].sort((a, b) => last(a) - last(b) || (byMoney && earned ? (cents[b.key] ?? 0) - (cents[a.key] ?? 0) || b.visitors - a.visitors : 0));
-  const max = Math.max(1, ...rows.map((row) => row.visitors));
-  const moneyMax = Math.max(1, ...Object.values(cents));
-  const shown = all ? rows : rows.slice(0, limit);
+  const extra = Object.keys(counts).filter((key) => !listed.some((row) => row.key === key)).map((key) => ({ key, visitors: 0, signups: 0, paid: 0 }));
+  const vague = (row: RankRow) => row.key in VAGUE;
+  const value = (row: RankRow) => by === "trials" ? counts[row.key] ?? 0 : row.visitors;
+  const rows = [...listed, ...extra].sort((a, b) => Number(vague(a)) - Number(vague(b)) || value(b) - value(a) || b.visitors - a.visitors);
+  const max = Math.max(1, ...rows.filter((row) => !vague(row)).map(value));
+  const panel = panels?.[tab];
+  const shown = all ? rows : rows.slice(0, panel ? 5 : limit);
   const slots = useSlots(shown.map((row) => row.key));
   const more = details?.(tab);
-  const moneyCol = Boolean(money);
+  const paidCol = rows.some((row) => row.paid > 0);
+  const toggle = Boolean(trials);
+  const cols = metric ? "w-16" : "w-14";
   return (
     <section className="flex min-w-0 flex-col rounded-[24px] bg-card p-2" aria-label={title}>
-      <div className="flex flex-wrap items-center justify-between gap-2 px-2 pb-1.5 pt-1">
-        <div role="tablist" aria-label={title} className="scroll-x flex max-w-full gap-0.5">
+      <div className="flex items-center justify-between gap-2 px-2 pb-1.5 pt-1">
+        <div role="tablist" aria-label={title} className="scroll-x flex min-w-0 flex-1 gap-0.5">
           {tabs.map((t) => (
             <button key={t.id} type="button" role="tab" aria-selected={tab === t.id} onClick={() => { setTab(t.id); setAll(false); }}
-              className={cx("relative inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full px-3 text-13", tab === t.id ? "font-medium text-ink" : "text-ink-3 hover-link")}>{tab === t.id && <Pill id={tabPill} />}{t.icon && <span aria-hidden className="relative opacity-70">{t.icon}</span>}<span className="relative">{t.label}</span></button>
+              className={cx("relative inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full px-3 text-13", tab === t.id ? "font-medium text-ink" : "text-ink-3 hover-link")}>{tab === t.id && <Pill id={tabPill} />}{t.icon && <span aria-hidden className="relative">{t.icon}</span>}<span className="relative">{t.label}</span></button>
           ))}
         </div>
-        {money ? (
-          <div role="radiogroup" aria-label="sort rows by" className="inline-flex shrink-0 rounded-full bg-card-2 p-0.5">
-            {([[false, "visitors"], [true, "revenue"]] as const).map(([value, text]) => (
-              <button key={text} type="button" role="radio" aria-checked={byMoney === value} onClick={() => setByMoney(value)}
-                className={cx("relative h-7 rounded-full px-2.5 text-12", byMoney === value ? "font-medium text-ink" : "text-ink-3 hover-link")}>{byMoney === value && <Pill id={sortPill} />}<span className="relative">{text}</span></button>
+        {toggle && (
+          <div role="radiogroup" aria-label="rank rows by" className="inline-flex shrink-0 rounded-full bg-card-2 p-0.5">
+            {(["visitors", "trials"] as const).map((text) => (
+              <button key={text} type="button" role="radio" aria-checked={by === text} onClick={() => setBy(text)}
+                className={cx("relative h-7 rounded-full px-2.5 text-12", by === text ? "font-medium text-ink" : "text-ink-3 hover-link")}>{by === text && <Pill id={sortPill} />}<span className="relative">{text}</span></button>
             ))}
           </div>
-        ) : <span className="t-meta hidden shrink-0 sm:inline">{metric ?? "visitors · signups"}</span>}
+        )}
       </div>
-      {panels?.[tab] ? <div role="tabpanel" aria-label={tabs.find((t) => t.id === tab)?.label} className="flex-1 rounded-[18px] bg-pop p-1.5">{panels[tab]}</div> : <ul className="flex flex-1 flex-col gap-px rounded-[18px] bg-pop p-1.5" role="tabpanel" aria-label={tabs.find((t) => t.id === tab)?.label}>
-        <AnimatePresence initial={false} mode="popLayout">
-        {shown.map((row, index) => {
-          const on = active?.[tab] === row.key, ghost = row.key === NO_VISIT;
-          const conversion = row.visitors ? Math.round((row.signups / row.visitors) * 1000) / 10 : 0;
-          const got = cents[row.key] ?? 0;
-          const money = byMoney && earned;
-          const bar = money ? (Math.max(0, got) / moneyMax) * 100 : (row.visitors / max) * 100, coral = !money && row.signups ? Math.max(bar * 0.06, Math.min(bar, bar * (row.signups / Math.max(1, row.visitors)) * 6)) : 0;
-          const clip = (right: number, left = 0) => `inset(0% ${right.toFixed(2)}% 0% ${left.toFixed(2)}% round 10px)`;
-          const grow = { type: "spring", visualDuration: 0.4, bounce: 0 } as const;
-          return (
-            <m.li key={slots[index]} layout="position" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0, transition: { duration: 0.1 } }} transition={{ layout: { type: "spring", visualDuration: 0.3, bounce: 0 }, opacity: { duration: 0.18 } }}>
-              <button type="button" disabled={!onPick || ghost} onClick={() => onPick?.(tab, row.key)} aria-pressed={onPick && !ghost ? on : undefined} title={ghost ? `${usd(got)} from payments with no visit recorded: paid before tracking began, or on a device the tracker never saw` : `${n(row.visitors)} visitors, ${n(row.signups)} signups, ${conversion}% signed up${row.paid ? `, ${n(row.paid)} paid` : ""}${got ? `, ${usd(got)} revenue` : ""}`}
-                className={cx("relative flex h-9 w-full items-center gap-3 overflow-hidden rounded-[10px] px-2.5 text-start text-13 disabled:cursor-default", on ? "bg-card-2" : onPick && !ghost && "hover-ghost")}>
-                <m.span className="absolute inset-0 bg-wash-sky" initial={{ clipPath: clip(100), opacity: 1 }} animate={{ clipPath: clip(100 - bar), opacity: money ? 0 : 1 }} transition={{ clipPath: grow, opacity: { duration: 0.24 } }} aria-hidden />
-                <m.span className="absolute inset-0 bg-wash-lime" initial={{ clipPath: clip(100), opacity: 0 }} animate={{ clipPath: clip(100 - bar), opacity: money ? 1 : 0 }} transition={{ clipPath: grow, opacity: { duration: 0.24 } }} aria-hidden />
-                <m.span className="absolute inset-0 bg-wash-pink" initial={{ clipPath: clip(100, 0) }} animate={{ clipPath: clip(100 - bar, Math.max(0, bar - coral)), opacity: coral > 0 ? 1 : 0 }} transition={{ clipPath: grow, opacity: { duration: 0.24 } }} aria-hidden />
-                <span className={cx("relative min-w-0 flex-1 truncate", ghost ? "text-ink-3" : "text-ink")}>{(() => { const text = ghost ? "no visit recorded" : label ? label(tab, row.key) : row.key; return typeof text === "string" ? <SwapText text={text} className="w-full" /> : text; })()}</span>
-                <span className="relative w-12 text-end font-mono text-ink num">{ghost ? "-" : <Figure value={n(row.visitors)} className="!font-mono !text-13 !leading-5 !tracking-normal" />}</span>
-                {!metric && <span className={cx("relative w-10 text-end font-mono num", row.signups ? "text-coral-deep" : "text-ink-4")}>{ghost ? "-" : n(row.signups)}</span>}
-                {moneyCol && <span className={cx("relative w-16 text-end font-mono num", got > 0 ? "font-medium text-money" : got < 0 ? "text-bad" : "text-ink-4")}>{got ? usd(got, true) : "-"}</span>}
-              </button>
-            </m.li>
-          );
-        })}
-        </AnimatePresence>
-        {!rows.length && <li className="px-2.5 py-6 text-center text-13 text-ink-3">nothing in this window yet.</li>}
-      </ul>}
-      {more && !panels?.[tab] ? <Link to={more} className="text-link mx-auto mt-1.5 inline-flex h-8 items-center gap-1.5 px-3 font-mono text-[11.5px] tracking-[0.06em]"><Maximize size={13} strokeWidth={1.75} aria-hidden /> details</Link>
-        : !panels?.[tab] && rows.length > limit && <button type="button" onClick={() => setAll((v) => !v)} className="text-link mx-auto mt-1.5 h-8 px-3 text-12">{all ? "show fewer" : `show all ${rows.length}`}</button>}
+      <div role="tabpanel" aria-label={tabs.find((t) => t.id === tab)?.label} className="flex flex-1 flex-col rounded-[18px] bg-pop p-1.5">
+        {panel && <div className="mb-1.5">{panel}</div>}
+        <div className="flex h-7 items-center gap-2 px-2.5 text-[11.5px] text-ink-4" aria-hidden>
+          <span className="flex-1" />
+          <span className={cx(cols, "text-end", by === "visitors" && toggle && "text-ink-2")}>{metric ?? "visitors"}</span>
+          {!metric && <span className={cx(cols, "text-end")}>signups</span>}
+          {toggle && <span className={cx(cols, "text-end", by === "trials" && "text-ink-2")}>trials</span>}
+          {toggle && paidCol && <span className="w-9 text-end">paid</span>}
+        </div>
+        <ul className="flex flex-col gap-px">
+          <AnimatePresence initial={false} mode="popLayout">
+          {shown.map((row, index) => {
+            const on = active?.[tab] === row.key, quiet = vague(row), ghost = row.key === NO_VISIT;
+            const bar = quiet ? 0 : (value(row) / max) * 100, trialCount = counts[row.key] ?? 0;
+            const text = ghost ? "no visit recorded" : label ? label(tab, row.key) : row.key;
+            return (
+              <m.li key={slots[index]} layout="position" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0, transition: { duration: 0.1 } }} transition={{ layout: { type: "spring", visualDuration: 0.3, bounce: 0 }, opacity: { duration: 0.18 } }}>
+                <button type="button" disabled={!onPick || ghost} onClick={() => onPick?.(tab, row.key)} aria-pressed={onPick && !ghost ? on : undefined} title={quiet ? VAGUE[row.key] : undefined}
+                  className={cx("flex h-9 w-full items-center gap-2 rounded-[10px] px-2.5 text-start text-13 disabled:cursor-default", on ? "bg-card-2" : onPick && !ghost && "hover-ghost")}>
+                  <span className="relative flex h-7 min-w-0 flex-1 items-center overflow-hidden rounded-[8px]">
+                    <m.span className={cx("absolute inset-y-0 left-0 rounded-[8px]", by === "trials" ? "bg-wash-lime" : "bg-wash-sky")} initial={{ width: 0 }} animate={{ width: `${bar.toFixed(2)}%` }}
+                      transition={{ type: "spring", visualDuration: 0.4, bounce: 0 }} aria-hidden />
+                    <span className={cx("relative min-w-0 truncate px-2", quiet ? "text-ink-4" : "text-ink")}>{typeof text === "string" ? <SwapText text={text} /> : text}</span>
+                  </span>
+                  <span className={cx(cols, "shrink-0 text-end font-mono num", quiet ? "text-ink-4" : "text-ink")}>{ghost ? "-" : compact(row.visitors)}</span>
+                  {!metric && <span className={cx(cols, "shrink-0 text-end font-mono num", row.signups && !quiet ? "text-coral-deep" : "text-ink-4")}>{ghost ? "-" : compact(row.signups)}</span>}
+                  {toggle && <span className={cx(cols, "shrink-0 text-end font-mono num", trialCount && !quiet ? "font-medium text-money" : "text-ink-4")}>{trialCount ? compact(trialCount) : "-"}</span>}
+                  {toggle && paidCol && <span className={cx("w-9 shrink-0 text-end font-mono text-12 num", quiet ? "text-ink-4" : "text-ink-3")}>{row.paid ? compact(row.paid) : ""}</span>}
+                </button>
+              </m.li>
+            );
+          })}
+          </AnimatePresence>
+          {!rows.length && <li className="px-2.5 py-6 text-center text-13 text-ink-3">nothing in this window yet.</li>}
+        </ul>
+      </div>
+      {more ? <Link to={`${more}${more.includes("?") ? "&" : "?"}sort=${by}`} className="text-link mx-auto mt-1.5 inline-flex h-8 items-center gap-1.5 px-3 font-mono text-[11.5px] tracking-[0.06em]"><Maximize size={13} strokeWidth={1.75} aria-hidden /> details</Link>
+        : rows.length > shown.length && <button type="button" onClick={() => setAll((v) => !v)} className="text-link mx-auto mt-1.5 h-8 px-3 text-12">{all ? "show fewer" : `show all ${rows.length}`}</button>}
     </section>
   );
 }

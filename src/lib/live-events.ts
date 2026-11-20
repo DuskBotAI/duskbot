@@ -1,6 +1,6 @@
 // EventSource hides SSE comment keepalives, so liveness comes from the server's visible `ping` frame.
 import type { ServerFrame } from "../../shared/wire";
-import { asleepAnswer, BACKGROUND_HEADERS, cloudAsleep, markCloudAsleep, noteCloudAwake, onCloudPower, sleepingFrame } from "./cloud-power";
+import { asleepAnswer, BACKGROUND_HEADERS, cloudAsleep, cloudGone, goneAnswer, markCloudAsleep, markCloudGone, noteCloudAwake, onCloudGone, onCloudPower, sleepingFrame } from "./cloud-power";
 import { recordBotTextMessage, recordRuntimeEvent } from "./voice-latency-probe";
 import { noteTurnEvent } from "@/state/turn-status";
 import { noteReplyEvent, noteReplyLanded } from "@/state/live-reply";
@@ -11,6 +11,12 @@ export const LIVE_EVENTS_RETRY_MIN_MS = 500;
 export const LIVE_EVENTS_RETRY_MAX_MS = 10_000;
 /** the server pings every 15s: a page hidden this long that heard nothing meanwhile holds a socket the OS suspended */
 export const LIVE_EVENTS_RESUME_SILENT_MS = 15_000;
+/** The server writes its hello as the stream opens. A WKWebView fetch made just after a resume or a network change can
+ * stay pending with no answer and no error, so a dial that has not heard its hello by then is dialed again, each wait
+ * twice the one before, up to the stale limit. */
+export const LIVE_EVENTS_OPEN_MS = 8_000;
+/** a dial this old that has not heard its hello is dialed again when the place is seen answering other requests */
+export const LIVE_EVENTS_KICK_AFTER_MS = 3_000;
 
 export interface LiveFrame {
   kind: string;
@@ -45,7 +51,12 @@ export interface LiveEventsPlatform {
   now: () => number;
   /** A background read that never wakes a sleeping Cloud: true when it answers, so it was woken elsewhere. */
   cloudAnswers?: () => Promise<boolean>;
+  /** A read that tells a deleted dusk cloud from one that is only unreachable: true when the edge says it is gone. */
+  placeGone?: () => Promise<boolean>;
 }
+
+/** a stream that keeps failing asks at most this often whether its place was deleted */
+export const GONE_CHECK_MS = 30_000;
 
 /** How often a page that saw its Cloud go to sleep checks, while shown, whether something else woke it. */
 export const CLOUD_AWAKE_CHECK_MS = 30_000;
@@ -133,12 +144,13 @@ export function isLivePing(frame: Pick<LiveFrame, "kind">): boolean {
   return frame.kind === "ping";
 }
 
+/** A clock set back since the stream was last heard counts as stale: the gap since then is unknown. */
 export function shouldReconnectLiveEvents(
   lastHeardAt: number,
   now: number,
   staleMs = LIVE_EVENTS_STALE_MS,
 ): boolean {
-  return now - lastHeardAt >= staleMs;
+  return now < lastHeardAt || now - lastHeardAt >= staleMs;
 }
 
 function parseLiveFrame(data: string): LiveFrame | null {
@@ -220,6 +232,8 @@ function browserPlatform(overrides: Partial<LiveEventsPlatform>): LiveEventsPlat
     now: overrides.now ?? Date.now,
     cloudAnswers: overrides.cloudAnswers ?? (() => fetch("/api/health", { cache: "no-store", headers: BACKGROUND_HEADERS })
       .then((response) => { void response.body?.cancel().catch(() => {}); return response.ok && !asleepAnswer(response); }, () => false)),
+    placeGone: overrides.placeGone ?? (() => fetch("/api/health", { cache: "no-store", headers: BACKGROUND_HEADERS })
+      .then((response) => { void response.body?.cancel().catch(() => {}); return goneAnswer(response); }, () => false)),
   };
 }
 
@@ -243,6 +257,10 @@ export function openLiveEvents(
   let sourceScreens = screensWanted();
   let retryTimer: ReturnType<typeof setTimeout> | null = null;
   let retryAttempt = 0;
+  let helloTimer: ReturnType<typeof setTimeout> | null = null;
+  let unansweredDials = 0;
+  let dialedAt = 0;
+  let heardHello = false;
   let cursor: string | null = handlers.since ?? null;
   let lastHeardAt = platform.now();
   let hiddenAt: number | null = platform.isVisible() ? null : platform.now();
@@ -260,9 +278,16 @@ export function openLiveEvents(
     retryTimer = null;
   };
 
+  const clearHelloWait = () => {
+    if (helloTimer === null) return;
+    clearTimeout(helloTimer);
+    helloTimer = null;
+  };
+
   const closeSource = () => {
     const current = source;
     source = null;
+    clearHelloWait();
     if (!current) return;
     if (pendingSnapshot?.source === current) {
       snapshotGeneration += 1;
@@ -277,7 +302,7 @@ export function openLiveEvents(
   let connect: () => void;
   const scheduleReconnect = () => {
     // A Cloud home that went to sleep: reconnecting would wake it. The person's next action does (src/lib/cloud-power.ts).
-    if (stopped || retryTimer !== null || !platform.isOnline() || !platform.isVisible() || cloudAsleep()) return;
+    if (stopped || retryTimer !== null || !platform.isOnline() || !platform.isVisible() || cloudAsleep() || cloudGone()) return;
     const exponent = Math.min(retryAttempt, 20);
     const delay = Math.min(retryMaxMs, retryMinMs * 2 ** exponent);
     retryAttempt += 1;
@@ -288,15 +313,24 @@ export function openLiveEvents(
     }, delay);
   };
 
+  let goneCheckedAt = -Infinity;
+  const checkGone = () => {
+    const at = platform.now();
+    if (!platform.placeGone || at - goneCheckedAt < GONE_CHECK_MS) return;
+    goneCheckedAt = at;
+    void platform.placeGone().then((gone) => { if (gone) markCloudGone(); }, () => {});
+  };
+
   const connectionLost = (current: LiveEventSourceLike) => {
     if (stopped || source !== current) return;
     closeSource();
     handlers.onError?.();
+    checkGone();
     scheduleReconnect();
   };
 
   connect = () => {
-    if (stopped || source || !platform.isOnline() || cloudAsleep()) return;
+    if (stopped || source || !platform.isOnline() || cloudAsleep() || cloudGone()) return;
     let current: LiveEventSourceLike;
     try {
       sourceScreens = screensWanted();
@@ -308,7 +342,13 @@ export function openLiveEvents(
     }
 
     source = current;
-    lastHeardAt = platform.now();
+    lastHeardAt = dialedAt = platform.now();
+    heardHello = false;
+    helloTimer = setTimeout(() => {
+      helloTimer = null;
+      unansweredDials += 1;
+      connectionLost(current);
+    }, Math.min(staleMs, LIVE_EVENTS_OPEN_MS * 2 ** Math.min(unansweredDials, 4)));
     current.onopen = () => {
       if (stopped || source !== current) return;
       lastHeardAt = platform.now();
@@ -321,6 +361,11 @@ export function openLiveEvents(
       if (stopped || source !== current) return;
       lastHeardAt = platform.now();
       lastLiveAt = Date.now();
+      if (!heardHello) {
+        heardHello = true;
+        unansweredDials = 0;
+        clearHelloWait();
+      }
 
       const frame = parseLiveFrame(event.data);
       if (!frame) return;
@@ -392,7 +437,7 @@ export function openLiveEvents(
   };
 
   const reconnectNow = (reportDisconnect: boolean) => {
-    if (stopped || !platform.isOnline()) return;
+    if (stopped || !platform.isOnline() || cloudGone()) return;
     clearRetry();
     if (source) {
       closeSource();
@@ -429,13 +474,18 @@ export function openLiveEvents(
     if (stopped || !platform.isOnline() || cloudAsleep()) return;
     retryAttempt = 0;
     if (redial) reconnectNow(false);
-    else if (!source || shouldReconnectLiveEvents(lastHeardAt, platform.now(), staleMs)) reconnectNow(source !== null);
+    else if (!source || shouldReconnectLiveEvents(lastHeardAt, platform.now(), staleMs)
+      || (!heardHello && platform.now() - dialedAt >= LIVE_EVENTS_KICK_AFTER_MS)) reconnectNow(source !== null);
   };
   retryListeners.add(onRetryNow);
   connect();
   const staleTimer = setInterval(recover, staleCheckMs);
   // The person is back after the Cloud slept: reconnect at once, which wakes it.
   const stopPower = onCloudPower((asleep) => { if (!asleep) reconnectNow(false); });
+  const stopGone = onCloudGone(() => {
+    clearRetry();
+    if (source) { closeSource(); handlers.onError?.(); }
+  });
   let checking = false;
   const awakeCheck = setInterval(() => {
     if (stopped || checking || !cloudAsleep() || !platform.isVisible() || !platform.isOnline() || !platform.cloudAnswers) return;
@@ -452,6 +502,7 @@ export function openLiveEvents(
     screenWishListeners.delete(onScreenWish);
     retryListeners.delete(onRetryNow);
     stopPower();
+    stopGone();
     clearInterval(staleTimer);
     clearInterval(awakeCheck);
     clearRetry();

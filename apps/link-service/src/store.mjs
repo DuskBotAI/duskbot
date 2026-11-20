@@ -14,12 +14,11 @@ export const MAX_CHANNELS_PER_TUNNEL = 32;
 /** a tunnel whose server has not polled for this long is dropped, so dead links cannot fill MAX_TUNNELS for good */
 export const TUNNEL_IDLE_MS = 7 * 24 * 60 * 60_000;
 /**
- * a tunnel that carries paired phones' channels waits longer for its server: a phone reads its channel's 404 as "this
- * phone was removed" and unpairs (apps 1.2 and 1.2.1 cannot be changed), so a computer that is off a week must not
- * orphan them. A phone's session ends after 30 days unused (server/sessions.ts SESSION_TTL_MS), so past this the
- * phone is unpaired by its computer anyway.
+ * a tunnel that carries paired phones' channels waits a year for its server: a phone reads its channel's 404 as "this
+ * phone was removed" and unpairs (shipped apps cannot be changed), and a paired phone's session lasts until it is
+ * removed, so a computer that is off for months must still find its phones when it is back.
  */
-export const PHONE_TUNNEL_IDLE_MS = 35 * 24 * 60 * 60_000;
+export const PHONE_TUNNEL_IDLE_MS = 400 * 24 * 60 * 60_000;
 
 /**
  * @param {{ dir?: string | null, now?: () => number, onChannelDelete?: (channel: any) => void, onTunnelDelete?: (tunnel: any) => void, mayExpire?: (tunnel: any) => boolean }} options

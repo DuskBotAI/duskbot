@@ -33,6 +33,15 @@ describe("the waits route", () => {
     expect((await call("GET", "/api/internal/triggers")).outcome).toBe(PASS);
     expect((await call("DELETE", "/api/internal/waits")).outcome).toBe(PASS);
   });
+  it("lists the bot's waits in every chat for the person's own turn, and none of them for anyone else", async () => {
+    const wait = (id: string, threadId: string) => ({ id, threadId, botId: "bot-1", label: `wait ${id}`, condition: { kind: "url_contains", url: "https://x.test", text: "$12" }, createdAt: 0, expiresAt: 0 }) as unknown as WaitRecord;
+    waits.list.mockReturnValueOnce([wait("w1", "thread-1"), wait("w2", "thread-2")]);
+    const all = await call("GET", "/api/internal/waits/all");
+    expect(all.status).toBe(200);
+    expect(all.payload.text).toContain("w1 · wait w1");
+    expect(all.payload.text).toContain("w2 · wait w2");
+    expect(await call("GET", "/api/internal/waits/all", undefined, { sourceRefusal: () => WAIT_MESSAGES.room })).toMatchObject({ status: 403 });
+  });
   it("makes a wait for the capability's bot and chat, never ids from the body", async () => {
     waits.create.mockClear();
     const { status, payload } = await call("POST", "/api/internal/waits", { label: "the report", kind: "file_exists", path: "~/r.txt", botId: "evil", threadId: "evil" });
@@ -192,5 +201,18 @@ describe("the waits route", () => {
     for (const place of ["vm", "cloud"] as const) expect(hostWaitRefusal({ ...own, place })).toBe(WAIT_MESSAGES.otherComputer);
     expect([hostWaitRefusal({ ...own, cloudHome: true }), hostWaitRefusal({ ...own, guest: true })])
       .toEqual([WAIT_MESSAGES.serverHost, WAIT_MESSAGES.guest]);
+  });
+});
+
+describe("a time wait request", () => {
+  const NOW = Date.parse("2026-11-20T10:00:00Z");
+  it("takes minutes from now or an RFC3339 time with its offset, within a week", () => {
+    expect(parseWaitRequest({ label: "the deploy", kind: "time", minutes: 20 }, HOME, NOW)).toMatchObject({ ok: true, request: { kind: "time", at: NOW + 20 * 60_000 } });
+    expect(parseWaitRequest({ label: "standup", kind: "time", at: "2026-11-21T09:00:00+05:30" }, HOME, NOW)).toMatchObject({ ok: true, request: { at: Date.parse("2026-11-21T03:30:00Z") } });
+    expect(parseWaitRequest({ label: "x", kind: "time", at: "2026-11-21T09:00:00" }, HOME, NOW)).toMatchObject({ ok: false, error: expect.stringMatching(/offset/) });
+    expect(parseWaitRequest({ label: "x", kind: "time", at: "2026-11-19T09:00:00Z" }, HOME, NOW)).toMatchObject({ ok: false, error: expect.stringMatching(/already past/) });
+    expect(parseWaitRequest({ label: "x", kind: "time", minutes: 60 * 24 * 8 }, HOME, NOW)).toMatchObject({ ok: false, error: expect.stringMatching(/one-time trigger/) });
+    expect(parseWaitRequest({ label: "x", kind: "time" }, HOME, NOW)).toMatchObject({ ok: false });
+    expect(parseWaitRequest({ label: "x", kind: "file_exists", path: "/tmp/a", minutes: 5 }, HOME, NOW)).toMatchObject({ ok: false, error: expect.stringMatching(/only to time/) });
   });
 });

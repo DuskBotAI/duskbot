@@ -249,7 +249,9 @@ open view re-encodes the screencast, which cuts the stream's bytes by roughly
 before. `DUSK_FFMPEG` names the `ffmpeg` to use (default: the one on PATH);
 `DUSK_BROWSER_VIDEO=off` turns video off. `ffmpeg` is never bundled: `libx264`
 is GPL, so dusk bot only runs one the machine's owner installed. The VPS
-installer adds Debian/Ubuntu's `ffmpeg` when it can and carries on without it.
+installer adds Debian/Ubuntu's `ffmpeg` when it can and carries on without it,
+and the dusk cloud image carries Debian's `ffmpeg` for its bots' shells, so a
+dusk cloud's view is video too.
 
 Video is encoded at 1x (at most 1280 wide and 1.2 megapixels): a 2x screen asks
 the screencast for 1x pictures too. On a machine with two cores or fewer the

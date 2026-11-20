@@ -14,7 +14,8 @@ import { linkKeys } from "../../dashboard/server/clouds/bootstrap.ts";
 import { ProviderBusyError, ProviderError, ProviderLimitError, type MachineProvider, type MachineImage } from "./provider.ts";
 import type { ReleaseKey } from "./release-signing.ts";
 import { homeBackupKey, homeVolumeScan, type BackupStore } from "./backups.ts";
-import { DAY_MS, DEFAULT_DELETE_DELAY_DAYS, DEFAULT_RETENTION_DAYS, deletionVerdict, dueNotice, type Entitlement, type NoticeKind, type Verdict } from "./retention.ts";
+import { volumeLayer } from "./bundle.ts";
+import { DAY_MS, DEFAULT_DELETE_DELAY_DAYS, DEFAULT_RETENTION_DAYS, deletionVerdict, dueNotice, prunableBackups, type Entitlement, type NoticeKind, type Verdict } from "./retention.ts";
 import type { Audit, AuditActor, AuditEntry } from "./audit.ts";
 import { RetryableCloudError } from "../../dashboard/server/clouds/http.ts";
 import { ManagedCloudError } from "../../dashboard/server/clouds/managed.ts";
@@ -36,7 +37,7 @@ export interface ManagedSettings {
   leaseSeconds: number;
   /** a backup at most this often (DUSK_MANAGED_BACKUP_HOURS) */
   backupEveryMs: number;
-  /** generations kept per cloud (DUSK_MANAGED_BACKUP_KEEP), at least 2 */
+  /** days whose newest generation is kept per cloud, besides the long-held oldest (DUSK_MANAGED_BACKUP_KEEP), at least 2 */
   backupKeep: number;
   retentionDays: number;
   deleteDelayDays: number;
@@ -60,7 +61,7 @@ export interface ManagedSettings {
   lostAfterMs: number;
 }
 export const DEFAULT_MANAGED_SETTINGS: ManagedSettings = {
-  idleMinutes: 15, leaseSeconds: 2 * 3600, backupEveryMs: 24 * HOUR, backupKeep: 3, retentionDays: DEFAULT_RETENTION_DAYS,
+  idleMinutes: 15, leaseSeconds: 2 * 3600, backupEveryMs: 24 * HOUR, backupKeep: 2, retentionDays: DEFAULT_RETENTION_DAYS,
   deleteDelayDays: DEFAULT_DELETE_DELAY_DAYS, backupTailMs: 30 * DAY_MS, wakeLeadMs: 2 * MINUTE, edgeWakesPerHour: 20, powerReadMs: MINUTE, package: null, requireSigned: false, publicDomain: null, claims: false, maxBackupBytes: 4 * 1024 ** 3, lostAfterMs: 30 * MINUTE,
 };
 
@@ -88,7 +89,7 @@ export function managedSettingsFromEnv(env: NodeJS.ProcessEnv, options: { loopba
     idleMinutes: number("DUSK_MANAGED_IDLE_MINUTES", 1, 24 * 60, 15),
     leaseSeconds: number("DUSK_MANAGED_LEASE_HOURS", 1, 720, 2) * 3600,
     backupEveryMs: number("DUSK_MANAGED_BACKUP_HOURS", 1, 24 * 7, 24) * HOUR,
-    backupKeep: number("DUSK_MANAGED_BACKUP_KEEP", 2, 30, 3),
+    backupKeep: number("DUSK_MANAGED_BACKUP_KEEP", 2, 30, 2),
     wakeLeadMs: number("DUSK_MANAGED_WAKE_LEAD_MINUTES", 1, 30, 2) * MINUTE,
     edgeWakesPerHour: number("DUSK_MANAGED_EDGE_WAKES_PER_HOUR", 1, 60, 20),
     retentionDays: number("DUSK_MANAGED_RETENTION_DAYS", DEFAULT_RETENTION_DAYS, 3650, DEFAULT_RETENTION_DAYS),
@@ -131,6 +132,8 @@ export interface LifecycleDeps {
   clouds(): StoredCloud[];
   /** a fresh signed entitlement for the cloud's home, or null when none is signed */
   entitle(cloud: StoredCloud): string | null;
+  /** a link grant for the cloud's account, sent beside its entitlement for the home's phone relay */
+  linkGrant?(cloud: StoredCloud): string | null;
   /** the release keys a package must be signed with */
   releaseKeys: readonly ReleaseKey[];
   /** keys the opaque public labels (never on a machine) */
@@ -174,7 +177,7 @@ export function createLifecycle(deps: LifecycleDeps) {
   const dayOf = (at: number) => new Date(at).toISOString().slice(0, 10);
   /** awake time with a reason: work of any kind, a run or check due soon, a wake for the person's own routines (that
    *  whole stretch), staying up for a run ahead, or the person using it in the last half hour or with the app open */
-  const EXPLAINED_BUSY = new Set(["turn", "run", "live-call", "computer", "maintenance", "due-soon", "recent-work", "focus"]);
+  const EXPLAINED_BUSY = new Set(["turn", "run", "job", "live-call", "computer", "maintenance", "due-soon", "recent-work", "focus"]);
   const EXPLAINED_STAY = new Set(["run_soon_cheaper_awake", "cheaper_awake_until_run", "routine_due", "work_buffer"]);
   const explained = (b: HomeLifecycleState, power: HomePower) =>
     power.busy.some(code => EXPLAINED_BUSY.has(code)) || b.wokeFor === "routine" || EXPLAINED_STAY.has(b.stayReason ?? "")
@@ -286,7 +289,7 @@ export function createLifecycle(deps: LifecycleDeps) {
     if (!deps.home.entitle || (!force && c.entitledAt !== undefined && now() - c.entitledAt < HOUR)) return;
     const token = deps.entitle(c);
     if (!token) return;
-    try { await deps.home.entitle(homeOrigin(c), secret(c), token); }
+    try { await deps.home.entitle(homeOrigin(c), secret(c), token, deps.linkGrant?.(c) ?? null); }
     catch { throw new RetryableCloudError("Cloud home refused its entitlement."); }
     c.entitledAt = now(); deps.save(c);
   }
@@ -323,7 +326,8 @@ export function createLifecycle(deps: LifecycleDeps) {
     catch (error) { b.backupProblem = "snapshot_read"; deps.save(c); log(c, "backup_failed", "reconciler", "snapshot_read"); throw error; }
     // streamed to disk as it is read, sealed and hashed on the way, and checked as a tar on the way too: memory stays at
     // a chunk or two whatever the volume's size
-    const scan = homeVolumeScan(c.id), key = keyOf(c);
+    const layers: Record<string, number> = {};
+    const scan = homeVolumeScan(c.id, (name, bytes) => { const key = volumeLayer(name); layers[key] = (layers[key] ?? 0) + bytes; }), key = keyOf(c);
     let size = 0, tooLarge = false;
     const reader = stream.getReader();
     async function* pieces() {
@@ -360,19 +364,24 @@ export function createLifecycle(deps: LifecycleDeps) {
     const verified = opened.problem === null && opened.sha256 === record.sha256;
     b.backups.push({ ...record, verifiedAt: verified ? now() : null, snapshotAt: takenAt });
     b.backupProblem = verified ? null : "unverified";
-    log(c, "backup", "reconciler", reason, { file: record.file, bytes: record.bytes, verified });
-    // keep the newest `backupKeep` verified generations, and the newest one at least a week older than the newest, so a home
-    // that wiped its own data cannot push every good copy out within a few days
-    const verifiedOnes = b.backups.filter(g => g.verifiedAt !== null), newest = verifiedOnes.at(-1);
-    const pinned = newest ? [...verifiedOnes].reverse().find(g => newest.snapshotAt - g.snapshotAt >= 7 * DAY_MS) : undefined;
-    for (const old of verifiedOnes.slice(0, Math.max(0, verifiedOnes.length - settings.backupKeep))) {
-      if (old === pinned) continue;
-      deps.backups.remove(c.id, old.file); b.backups.splice(b.backups.indexOf(old), 1);
-      log(c, "backup_pruned", "reconciler", "generations", { file: old.file });
-    }
+    log(c, "backup", "reconciler", reason, { file: record.file, bytes: record.bytes, verified, ...Object.fromEntries(Object.entries(layers).map(([k, v]) => [`bytes_${k}`, v])) });
+    pruneBackups(c);
     syncBytes(c);
     deps.save(c);
     return verified;
+  }
+
+  /** the generations prunableBackups no longer needs; none while an operator hold is set */
+  function pruneBackups(c: StoredCloud) {
+    const b = state(c);
+    if (b.hold) return;
+    const keep = b.archive && c.serverId === null ? 1 : settings.backupKeep;
+    const drop = prunableBackups(b.backups, { keep, protect: b.restoreFrom ? [b.restoreFrom] : [] });
+    for (const old of drop) {
+      deps.backups.remove(c.id, old.file); b.backups.splice(b.backups.indexOf(old), 1);
+      log(c, "backup_pruned", "reconciler", keep === 1 ? "archived" : "generations", { file: old.file });
+    }
+    if (drop.length) { syncBytes(c); deps.save(c); }
   }
 
   /** a setup step still under way is waiting, not failing: polled again soon, and only a setup past 45 minutes fails */
@@ -598,7 +607,7 @@ export function createLifecycle(deps: LifecycleDeps) {
       if (!rereadStored(c)) return;
       const again = verdictFor(c);
       if (!again.delete) { log(c, "delete_refused", "reconciler", again.reason); return; }
-      if (again.reason === "retention_over" && !neverSetUp(c) && !(await finalBackupOpens(c))) return;
+      if (again.reason === "retention_over" && !neverSetUp(c) && !deps.entitlement(c).unpaid?.trial && !(await finalBackupOpens(c))) return;
       // recorded before the call, so a lost answer is never read as a lost machine (and rebuilt)
       c.status = "destroying"; b.deletion = { serverId: c.serverId, operationId: null, at: now(), reason: verdict.reason, sent: false }; deps.save(c);
       log(c, "delete_requested", "reconciler", verdict.reason);
@@ -618,7 +627,7 @@ export function createLifecycle(deps: LifecycleDeps) {
       if (!rereadStored(c)) return;
       const again = verdictFor(c);
       if (!again.delete) { log(c, "delete_refused", "reconciler", again.reason); return; }
-      if (again.reason === "retention_over" && !neverSetUp(c) && !(await finalBackupOpens(c))) return;
+      if (again.reason === "retention_over" && !neverSetUp(c) && !deps.entitlement(c).unpaid?.trial && !(await finalBackupOpens(c))) return;
       await provider.deleteSnapshot(b.archive.snapshotId);
       log(c, "snapshot_deleted", "reconciler", verdict.reason, { snapshot: b.archive.snapshotId });
       b.archive = null; deps.save(c);
@@ -735,7 +744,7 @@ export function createLifecycle(deps: LifecycleDeps) {
       if (c.origin && up) await deps.home.plan?.(homeOrigin(c), secret(c), { cancelled: true }).catch(() => {});
       deps.save(c);
     }
-    if (verdict.earliestAt !== null) { const kind = dueNotice({ now: now(), earliestAt: verdict.earliestAt, sent: b.notices.map(n => n.kind as NoticeKind) }); if (kind) notice(c, kind, verdict.earliestAt); }
+    if (verdict.earliestAt !== null) { const kind = dueNotice({ now: now(), earliestAt: verdict.earliestAt, sent: b.notices.map(n => n.kind as NoticeKind), quiet: !!entitlement.unpaid }); if (kind) notice(c, kind, verdict.earliestAt); }
   }
 
   /** one step; a step that ran through ends a streak of provider limits */
@@ -752,6 +761,7 @@ export function createLifecycle(deps: LifecycleDeps) {
     const b = state(c);
     if (c.status === "checkout") return;
     if (c.status === "destroyed") { dropBackupsWhenDue(c); return; }
+    pruneBackups(c);
     const entitlement = deps.entitlement(c);
     const verdict = verdictFor(c, entitlement);
     if (verdict.delete || b.deletion) return deleteStep(c, verdict.delete ? verdict : { delete: true, reason: (b.deletion?.reason ?? "retention_over") as "retention_over", earliestAt: now() });
@@ -780,6 +790,9 @@ export function createLifecycle(deps: LifecycleDeps) {
       await planEnded(c, entitlement, verdict, s.state === "running");
       const final = latestVerified(b), covered = neverSetUp(c) || final !== null && (b.lastStopAt === null || final.snapshotAt >= b.lastStopAt);
       if (s.state === "running") {
+        // InstaBox (seen 2026-11-20) reads a machine as running for minutes after its pause was accepted, or refuses the
+        // pause while busy: asked again, with no new stop time that would make the final backup look older than the data
+        if (b.sleepReason === "plan" && b.sleptAt !== null && (b.wakeStartedAt ?? 0) <= b.sleptAt) { await provider.power(c.serverId, "off"); return; }
         // the copy retention relies on is read from the running home, right before it sleeps for good
         const quiet = now();
         if (!covered && (b.lastBackupTryAt ?? 0) + BACKUP_RETRY_MS <= now()) await backup(c, "plan_ended").catch(() => false);
@@ -791,9 +804,10 @@ export function createLifecycle(deps: LifecycleDeps) {
         if (covered && !b.hold && c.suspended === null && verdict.earliestAt !== null) return archiveEnded(c);
         // asleep with no final backup as new as its data: woken once to take it (a start costs nothing, only seconds)
         // each such wake that brought no backup doubles the wait to the next, up to a day: a home whose backup cannot succeed
-        // (too large, refused) is not woken every few minutes until the operator looks
-        const finalWakes = b.finalWakes ?? 0;
-        if (!covered && verdict.earliestAt !== null && (b.lastBackupTryAt ?? 0) + Math.min(BACKUP_RETRY_MS * 2 ** finalWakes, DAY_MS) <= now()) {
+        // (too large, refused) is not woken every few minutes until the operator looks. the wait also runs from the wake
+        // itself: InstaBox (seen 2026-11-20) reads a resuming machine as paused for minutes
+        const finalWakes = b.finalWakes ?? 0, lastTry = Math.max(b.lastBackupTryAt ?? 0, b.wakeStartedAt ?? 0);
+        if (!covered && verdict.earliestAt !== null && lastTry + Math.min(BACKUP_RETRY_MS * 2 ** finalWakes, DAY_MS) <= now()) {
           if (finalWakes === 3) console.warn(`managed: ALERT cloud ${c.id}: its plan ended and its final backup keeps failing (${b.backupProblem ?? "unknown"})`);
           await start(c, "wake", () => provider.power(c.serverId!, "on")); b.finalWakes = finalWakes + 1; b.wakeStartedAt = now(); log(c, "wake", "reconciler", "final_backup"); deps.save(c);
         }
@@ -970,6 +984,11 @@ export function createLifecycle(deps: LifecycleDeps) {
     /** the edge's lookup: the machine's own hosted URL behind a public label */
     upstreamFor(value: string): string | null { return edgeCloud(value)?.managed?.upstream ?? null; },
     cloudOfLabel(value: string): string | undefined { return edgeCloud(value)?.id; },
+    /** the label was a home that has been deleted, and no live home has it: the edge says gone, never "not found yet" */
+    edgeGone(value: string): boolean {
+      if (!/^d[0-9a-f]{20}$/.test(value) || edgeCloud(value)) return false;
+      return deps.clouds().some(x => x.managed?.label === value && (x.status === "destroyed" || x.status === "destroying"));
+    },
     /** the same, and whether the home answers now: the edge forwards to an awake home and wakes a sleeping one */
     edgeRoute(value: string): { upstream: string; awake: boolean; wakeable: boolean } | null {
       const c = edgeCloud(value), upstream = c?.managed?.upstream;

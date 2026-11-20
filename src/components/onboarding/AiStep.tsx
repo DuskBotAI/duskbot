@@ -1,24 +1,68 @@
-// Connecting an AI, as one step of the first run: the grid of AIs people already use (AiCards), and the free model or
-// later when none is connected yet. More ways opens every other provider and API keys. An AI already signed in here
-// that answers its test message is used without asking: the step says so for a moment and goes on, with Continue to go at once
-// and Skip while it is still being checked.
-import { useCallback, useEffect, useRef, useState } from "react";
-import { Check, LoaderCircle, RefreshCw } from "../../icons";
+// The first run's one AI choice: the AI already signed in on this computer in one tap, free models, or a plan the
+// person already has (the grid of AIs, AiCards). More ways opens every other provider and API keys.
+import { useEffect, useState, type ReactNode } from "react";
+import { ChevronLeft, LoaderCircle, RefreshCw, Sparkles } from "../../icons";
 import { engineReady } from "@/components/EngineLibrary";
+import { PresetProviderMark, ProviderMark } from "@/components/ProviderIcons";
+import { cn } from "@/lib/cn";
 import { activeLocale, t } from "@/lib/i18n";
 import { useStore } from "@/state/store";
 import { AiCards } from "./AiCards";
 import { ConnectAiDialog } from "./ConnectAi";
 import { aiName, aiTileOf, aiTiles, freeModel, type AiTileId } from "./funnel";
-import { PRIMARY, SECONDARY, StepArt, StepFrame } from "./FunnelSteps";
+import { PRIMARY, QUIET, SECONDARY, StepArt, StepFrame, TILE } from "./FunnelSteps";
 import type { WelcomeAiNow } from "./welcome-ai";
 
-/** `onNext` says how the person went on (an AI connected, the free model, or later), for the funnel's numbers. `cloud`:
- * the person's dusk cloud is being made meanwhile, which the line says, with the AIs whose sign-in goes along. `auto`:
- * an AI that already works is used without asking; off: the person always picks an AI here, never a "found" screen. */
-export function AiStep({ tested, cloud = false, computerAis = [], onNext }: { tested: WelcomeAiNow | null; cloud?: boolean; auto?: boolean;
+export type AiChoice = "own" | "free" | "connected" | "later";
+
+function ChoiceTile({ kind, icon, title, sub, busy = false, wide = false, autoFocus = false, onClick }: {
+  kind: string; icon: ReactNode; title: string; sub: ReactNode; busy?: boolean; wide?: boolean; autoFocus?: boolean; onClick: () => void;
+}) {
+  return (
+    <button type="button" {...{ [`data-funnel-${kind}`]: "" }} disabled={busy} aria-busy={busy || undefined} autoFocus={autoFocus} onClick={onClick}
+      className={cn(TILE, "flex min-h-11 min-w-0 flex-col items-start gap-3 p-5 text-start disabled:cursor-default disabled:hover:bg-ink/[0.035]", wide && "sm:col-span-2")}>
+      <span aria-hidden="true" className="flex h-7 items-center gap-1.5">{icon}</span>
+      <span className="text-[15px] font-semibold leading-5 text-ink">{title}</span>
+      <span className="text-[13px] leading-[18px] text-ink-secondary">{sub}</span>
+    </button>
+  );
+}
+
+/** `onNext` says what the person chose, for the funnel's numbers. `cloud`: the person's dusk cloud is being made meanwhile,
+ * which the line says, with the AIs whose sign-in goes along. */
+export function AiStep({ tested, cloud = false, computerAis = [], onNext }: { tested: WelcomeAiNow | null; cloud?: boolean;
   /** on a cloud the desktop app set up: the AIs signed in on that computer, by instance id */
-  computerAis?: readonly string[]; onNext: (how: "connected" | "free" | "later") => void }) {
+  computerAis?: readonly string[]; onNext: (how: AiChoice) => void }) {
+  const [plan, setPlan] = useState(false);
+  const own = tested && tested.state !== "failed" ? tested : null;
+  if (plan) return <PlanStep tested={tested} cloud={cloud} computerAis={computerAis} onNext={onNext} onBack={() => setPlan(false)} />;
+  const ownName = own ? aiName(own.instance) : "";
+  const checking = own?.state === "testing";
+  return (
+    <StepFrame art={<StepArt art="plug" />} title={t("funnel.ai.chooseTitle")} sub={cloud ? t("funnel.ai.chooseCloud") : t("funnel.ai.chooseSub")} wide>
+      <div role="group" aria-label={t("funnel.ai.chooseTitle")} className="grid w-full grid-cols-1 gap-3 sm:grid-cols-2">
+        {own && (
+          <ChoiceTile kind="own" wide autoFocus={!checking} busy={checking} onClick={() => onNext("own")}
+            icon={<ProviderMark driverKind={own.instance.driverKind} size={24} />}
+            title={t("funnel.ai.useOwn", { name: ownName })}
+            sub={checking
+              ? <span role="status" className="flex items-center gap-1.5"><LoaderCircle size={13} aria-hidden="true" className="shrink-0 animate-spin motion-reduce:animate-none" />{t("onboarding.engines.checkingAnswer", { name: ownName })}</span>
+              : t("funnel.ai.useOwnSub")} />
+        )}
+        <ChoiceTile kind="free" autoFocus={!own} onClick={() => onNext("free")}
+          icon={<Sparkles size={22} strokeWidth={1.5} className="text-ink-secondary" />}
+          title={t("funnel.ai.useFree")} sub={t("funnel.ai.useFreeSub")} />
+        <ChoiceTile kind="plan" onClick={() => setPlan(true)}
+          icon={<><ProviderMark driverKind="claudeAgent" size={20} /><ProviderMark driverKind="codex" size={20} /><PresetProviderMark preset="google" size={20} /></>}
+          title={t("funnel.ai.usePlan")} sub={t("funnel.ai.usePlanSub")} />
+      </div>
+    </StepFrame>
+  );
+}
+
+/** A plan the person already has: the grid, Continue once one is connected, free models instead, or back to the choice. */
+function PlanStep({ tested, cloud, computerAis, onNext, onBack }: { tested: WelcomeAiNow | null; cloud: boolean; computerAis: readonly string[];
+  onNext: (how: AiChoice) => void; onBack: () => void }) {
   const { state } = useStore();
   const [more, setMore] = useState(false);
   const free = freeModel(state.instances, engineReady);
@@ -32,33 +76,14 @@ export function AiStep({ tested, cloud = false, computerAis = [], onNext }: { te
     ? t("funnel.ai.subComputer", { ais: list(usedLeft) })
     : cloud && carried && connected.length ? carriedLine(connected, staysHere)
     : connected.length ? t("funnel.ai.subMore") : cloud ? t(free ? "funnel.ai.subCloud" : "funnel.ai.subCloudNoFree") : t("funnel.ai.sub");
-  const { using, goOn, skip } = useFoundAi(null, onNext);
-
-  if (using !== "none") {
-    const name = tested ? aiName(tested.instance) : "";
-    return (
-      <StepFrame art={<StepArt art="plug" />} title={using === "found" ? t("funnel.ai.using", { name }) : t("funnel.ai.looking")}
-        footer={using === "found"
-          ? <button type="button" data-primary="" data-funnel-ai-continue="" onClick={goOn} className={PRIMARY}>{t("funnel.next")}</button>
-          : <button type="button" data-funnel-ai-skip="" onClick={skip} className={SECONDARY}>{t("funnel.skip")}</button>}>
-        {using === "checking"
-          ? <p role="status" data-ai-checking="" className="flex items-center gap-2 text-[14px] text-ink-secondary">
-              <LoaderCircle size={15} aria-hidden="true" className="shrink-0 animate-spin motion-reduce:animate-none" />
-              {t("onboarding.engines.checkingAnswer", { name })}
-            </p>
-          : <p role="status" data-ai-found="" className="flex items-center gap-2 text-[14px] text-success">
-              <Check size={15} strokeWidth={2.5} aria-hidden="true" className="shrink-0" />
-              {t("funnel.ai.usingSub")}
-            </p>}
-      </StepFrame>
-    );
-  }
-
   return (
     <StepFrame art={<StepArt art="plug" />} title={t("funnel.ai.title")} sub={sub} wide
       footer={<>
         <button type="button" data-primary="" data-funnel-ai-continue="" disabled={connected.length === 0} onClick={() => onNext("connected")} className={PRIMARY}>{t("funnel.next")}</button>
-        {connected.length === 0 && <button type="button" data-funnel-later="" onClick={() => onNext(free ? "free" : "later")} className={SECONDARY}>{t(cloud && free ? "funnel.ai.free" : "funnel.ai.later")}</button>}
+        {connected.length === 0 && <button type="button" data-funnel-free="" onClick={() => onNext("free")} className={SECONDARY}>{t("funnel.ai.useFreeInstead")}</button>}
+        <button type="button" data-funnel-choices="" onClick={onBack} className={cn(QUIET, "inline-flex items-center gap-0.5")}>
+          <ChevronLeft size={14} strokeWidth={1.5} aria-hidden="true" className="rtl:-scale-x-100" />{t("funnel.ai.otherChoices")}
+        </button>
       </>}>
       <AiCards tested={tested} onMore={() => setMore(true)} suggested={used} staysHere={staysHere} />
 
@@ -107,35 +132,4 @@ function useCarriedTiles(on: boolean, connected: string): AiTileId[] | null {
 export function computerTiles(ids: readonly string[], instances: readonly { instanceId: string; driverKind: string }[]): AiTileId[] {
   const tiles = ids.map((id) => aiTileOf(instances.find((instance) => instance.instanceId === id) ?? { instanceId: id, driverKind: "" }));
   return [...new Set(tiles.filter((tile): tile is AiTileId => Boolean(tile)))];
-}
-
-/** On arriving at the step: "checking" while an AI already signed in here gets its test message, "found" once it
- * answered (then the step goes on by itself, or at once with `goOn`), "none" for the cards, also after `skip`. Only on
- * arrival, so Back to this step stays. */
-function useFoundAi(tested: WelcomeAiNow | null, onNext: (how: "connected") => void): { using: "checking" | "found" | "none"; goOn(): void; skip(): void } {
-  const decided = useRef<"checking" | "found" | "none">(tested?.state === "testing" || tested?.state === "passed" ? "checking" : "none");
-  const [, rerender] = useState(0);
-  if (decided.current === "checking") {
-    if (tested?.state === "passed") decided.current = "found";
-    else if (tested?.state !== "testing") decided.current = "none";
-  }
-  const found = decided.current === "found";
-  const next = useRef(onNext);
-  next.current = onNext;
-  const gone = useRef(false);
-  const goOn = useCallback(() => {
-    if (gone.current) return;
-    gone.current = true;
-    next.current("connected");
-  }, []);
-  useEffect(() => {
-    if (!found) return;
-    const timer = window.setTimeout(goOn, 1_400);
-    return () => window.clearTimeout(timer);
-  }, [found, goOn]);
-  const skip = useCallback(() => {
-    decided.current = "none";
-    rerender((n) => n + 1);
-  }, []);
-  return { using: decided.current, goOn, skip };
 }

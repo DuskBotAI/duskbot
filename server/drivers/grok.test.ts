@@ -208,7 +208,7 @@ describe("GrokDriver turns (fake fetch)", () => {
 
   it("sends the bot's thinking level only to a model that takes one, and lists levels on those models alone", async () => {
     await create();
-    expect(instance.adapter.capabilities).toMatchObject({ effortLevels: ["low", "medium", "high", "xhigh"], effortByModel: true });
+    expect(instance.adapter.capabilities).toMatchObject({ effortLevels: ["low", "medium", "high", "xhigh"], effortByModel: true, computerMcp: true, localComputerMcp: true, browserMcp: true });
     const levels = Object.fromEntries(instance.models.options.map((option) => [option.id, option.effortLevels]));
     expect(levels).toEqual({ "grok-4.7": ["low", "medium", "high", "xhigh"], "grok-4": undefined, "grok-4-fast": undefined, "grok-3-mini": ["low", "high"] });
 

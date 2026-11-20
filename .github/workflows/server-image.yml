@@ -86,9 +86,10 @@ jobs:
       - name: Build linux/${{ matrix.arch }}
         env:
           ARCH: ${{ matrix.arch }}
+          IMAGE: ${{ needs.tag.outputs.image }}
         run: |
           docker buildx build --platform "linux/$ARCH" --provenance=false \
-            -f deploy/docker/Dockerfile --target server --build-arg ENGINES="$ENGINES" \
+            -f deploy/docker/Dockerfile --target server --build-arg ENGINES="$ENGINES" --build-arg RELEASE_IMAGE="$IMAGE" \
             -t duskbot-server:built --load .
       - name: The server starts and answers its health check
         run: |

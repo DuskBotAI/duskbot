@@ -29,9 +29,11 @@ export function slotColors(color: Bot["color"] | undefined, room: boolean): { fi
   return { fill: grok ? `var(--grok-cta, ${tone.fill})` : tone.fill, ink: tone.ink, button: { className: cn(BOT_BUTTON, grok && "grok-cta"), style: { ...botButtonStyle(own), ...vars } }, vars };
 }
 
-export function composerPlaceholder({ locked, approval, attaching, attached = false, listening, replying, busy, group, members, goal, botName, setupHint, question = false }: {
+export function composerPlaceholder({ locked, approval, attaching, attached = false, listening, replying, busy, group, members, goal, botName, setupHint, question = false, narrow = false }: {
   /** A question card waits for the person's answer: grok says the field answers it, or talks past it. */
   question?: boolean;
+  /** A phone's field: too narrow for the longer hints, so it keeps to the short ones. */
+  narrow?: boolean;
   locked: boolean;
   approval: boolean;
   attaching: boolean;
@@ -46,12 +48,12 @@ export function composerPlaceholder({ locked, approval, attaching, attached = fa
   setupHint: string | null | undefined;
 }): string {
   if (locked) return t("composer.placeholder.lockedChat");
-  if (approval) return t("composer.placeholder.approval");
+  if (approval) return t(narrow ? "mobile.composer.approval" : "composer.placeholder.approval");
   if (attaching) return t("composer.placeholder.attaching");
   if (listening) return t("composer.placeholder.listening");
   if (replying && !busy) return t("composer.placeholder.reply");
-  if (question) return t("composer.placeholder.question");
-  if (attached) return t("composer.placeholder.attached");
+  if (question) return t(narrow ? "question.answerPlaceholder" : "composer.placeholder.question");
+  if (attached && !narrow) return t("composer.placeholder.attached");
   if (!busy && goal) return group ? t("composer.placeholder.goal", { name: group.name }) : t("composer.placeholder.goalSolo", { name: botName });
   if (!busy && !group && setupHint) return setupHint;
   if (group && !group.dm && effectiveDefaultResponder(group, members).kind === "mentions") {

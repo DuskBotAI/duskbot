@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { RuntimeEvent } from "./contracts.ts";
 import { classifyError } from "./drivers/retry.ts";
 import type { Message } from "./store.ts";
-import { TurnStops, outwardActions, stoppedTurnOutcome, turnEvidence } from "./turn-outcome.ts";
+import { TurnStops, cutTurnProgress, outwardActions, stoppedTurnOutcome, turnEvidence } from "./turn-outcome.ts";
 
 const event = (fields: Record<string, unknown>): RuntimeEvent =>
   ({ eventId: "e", provider: "fake", threadId: "t1", createdAt: "", ...fields }) as unknown as RuntimeEvent;
@@ -177,5 +177,33 @@ describe("turnEvidence", () => {
     expect(evidence).toMatchObject({ toolCalls: 2, okToolCalls: 1 });
     expect(evidence.outward).toBeUndefined();
     expect(turnEvidence([])).toEqual({ toolCalls: 0, okToolCalls: 0, errors: [] });
+  });
+});
+
+describe("cutTurnProgress", () => {
+  it("lists each step of the cut turn in order with how it ended, then its last words, and leaves notices out", () => {
+    const step = (name: string, ok: boolean | undefined, summary?: string): Message =>
+      ({ id: `m-${name}`, role: "bot", kind: "activity", at: 1, tool: { name, ...(ok === undefined ? {} : { ok }), itemId: `i-${name}`, ...(summary ? { summary } : {}) } }) as Message;
+    const rows = [
+      step("web_search", true, "fares to   Lisbon"),
+      { id: "n", role: "bot", kind: "activity", at: 1, tool: { name: "notice: the computer is busy", ok: true } } as Message,
+      step("audit_write", false),
+      { id: "t", role: "bot", kind: "text", at: 1, text: "Found three fares, saving them now." } as Message,
+      step("write_file", undefined, "notes.md"),
+    ];
+    expect(cutTurnProgress(rows)).toEqual([
+      "web_search (fares to Lisbon): done",
+      "audit_write: failed",
+      "write_file (notes.md): cut off, may not have finished",
+      'its last words: "Found three fares, saving them now."',
+    ]);
+  });
+
+  it("keeps the last fifteen steps and says how many came before", () => {
+    const rows = Array.from({ length: 18 }, (_, index) => ({ id: `m${index}`, role: "bot", kind: "activity", at: 1, tool: { name: `step_${index}`, ok: true, itemId: `i${index}` } }) as Message);
+    const lines = cutTurnProgress(rows);
+    expect(lines[0]).toBe("3 earlier steps");
+    expect(lines).toHaveLength(16);
+    expect(lines.at(-1)).toBe("step_17: done");
   });
 });

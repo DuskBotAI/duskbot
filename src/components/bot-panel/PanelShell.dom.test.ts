@@ -225,7 +225,7 @@ describe("the panel's top", () => {
     render(null);
     await settle();
     const top = [...host.querySelectorAll("button")].slice(0, 2);
-    expect(top.map((button) => button.getAttribute("aria-label") ?? button.getAttribute("title"))).toEqual(["Share and more", "Close"]);
+    expect(top.map((button) => button.getAttribute("aria-label") ?? button.getAttribute("title"))).toEqual(["Share and more", "Close panel"]);
     expect(top[0]!.getAttribute("title")).toBe("Share");
     for (const button of [moreButton()!, top[1]!]) expect(button.querySelector("span, svg, i")).not.toBeNull();
     click(moreButton());
@@ -259,6 +259,8 @@ describe("the panel's top", () => {
     await settle();
     const row = host.querySelector("[data-panel-name-row]")!;
     expect(row.querySelector("[data-panel-rename]")!.textContent).toBe("Scout");
+    expect(row.querySelector("[data-panel-rename]")!.hasAttribute("aria-label")).toBe(false);
+    expect(row.querySelector("[data-panel-rename]")!.getAttribute("title")).toBe("Rename Scout");
     expect(host.querySelector("[data-panel-avatar]")!.nextElementSibling).toBe(row);
     expect(host.querySelector("[data-call-button]")).toBeNull();
   });

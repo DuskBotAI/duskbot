@@ -17,6 +17,7 @@ import { mongoInfraStore } from "./admin/infra.ts";
 import { mongoOpsStore } from "./admin/ops/store.ts";
 import { mongoWaitlist } from "./admin/waitlist.ts";
 import { openLiveData } from "./admin/live.ts";
+import { mongoWarmStore } from "./admin/web-warm.ts";
 import { parseAdminEmails } from "./admin/index.ts";
 import { emailConfig } from "./email/templates.ts";
 import { createIncidents } from "./incidents/index.ts";
@@ -24,10 +25,29 @@ import { memoryIncidentStore, mongoIncidentStore } from "./incidents/store.ts";
 import { mongoBugReportStore } from "./bug-reports/store.ts";
 import { tapConsole, watchDatabase, watchProcess } from "./incidents/process.ts";
 import { stateBackend } from "./persistence/backend.ts";
+import { gracefulStop, listenWhenFree, readyGate } from "./serve.ts";
 
 const port = Number(process.env.DUSK_DASHBOARD_PORT ?? 7480);
 if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error("Invalid dashboard port.");
 const host = process.env.DUSK_DASHBOARD_HOST ?? "127.0.0.1";
+// the port is taken as soon as it is free; requests that come while this start waits for the writer lease and loads
+// are held until the app is ready instead of refused
+const gate = readyGate();
+const server = createServer((req, res) => gate.handle(req, res));
+const listening = listenWhenFree(server, { port, host, log: line => console.warn(line) });
+let databaseRef: { close(flushMs?: number): Promise<void> } | null = null;
+const closers: Array<() => void> = [];
+let stopping = false;
+async function stop(why: string) {
+  if (stopping) return;
+  stopping = true;
+  console.log(`dashboard service stopping (${why})`);
+  // the supervisor (autorunner) sends SIGKILL 5 s after SIGTERM: the pending writes and the lease release fit before it
+  const how = await gracefulStop({ server, closeApp: () => { for (const close of closers) close(); }, closeDatabase: () => databaseRef?.close(3_000) ?? Promise.resolve(), hardMs: 4_500,
+    log: line => console.warn(line) });
+  process.exit(how === "clean" ? 0 : 1);
+}
+for (const signal of ["SIGINT", "SIGTERM"] as const) process.once(signal, () => void stop(signal));
 const publicUrl = process.env.DUSK_DASHBOARD_PUBLIC_URL ?? `http://127.0.0.1:${port}`;
 const home = process.env.HOME ?? process.env.USERPROFILE;
 if (!process.env.DUSK_DASHBOARD_DATA && !home) throw new Error("Set DUSK_DASHBOARD_DATA.");
@@ -44,9 +64,10 @@ const page = createErrorReporter({ dsn: process.env.DUSK_ERROR_DSN, component: "
 
 if (!process.env.MONGODB_URI && !dev) throw new Error("MONGODB_URI is required outside local development (docs/mongodb.md).");
 const database = process.env.MONGODB_URI
-  ? await openMongoBackend({ uri: process.env.MONGODB_URI, db: process.env.MONGODB_DB || "dusk",
+  ? await openMongoBackend({ uri: process.env.MONGODB_URI, db: process.env.MONGODB_DB || "dusk", acquireWaitMs: Infinity,
     onLeaseLost: error => { console.error(error.message); process.exit(1); } })
   : null;
+databaseRef = database;
 if (database) { useStateBackend(database.backend); console.log("state: mongodb"); } else console.log("state: json files (development)");
 // the waitlist the admin shows: DUSK_WAITLIST_DB names the database the dusk.bot site writes, "off" shows none
 const waitlistDb = process.env.DUSK_WAITLIST_DB?.trim();
@@ -87,7 +108,7 @@ const bugReportStore = database ? await mongoBugReportStore(database.db) : undef
 const app = createDashboardApp({ errors: { service, page }, incidents, bugReports: { store: bugReportStore, mail: { on: alertsOn && process.env.DUSK_BUG_REPORT_MAIL === "1", to: () => alertEmails, mailers: fallbackMailer ? [mailer, fallbackMailer] : [mailer] } }, version, dataDir, publicUrl, mailer, testMail, oauth: providersFromEnv(process.env), dev,
   signupOpen: process.env.DUSK_AUTH_SIGNUP_OPEN !== "0", trustProxy: process.env.DUSK_TRUST_PROXY === "1", staticDir: staticDir || null,
   pageBase: process.env.DUSK_DASHBOARD_PAGE_BASE || "", waitlistOnly: process.env.DUSK_PRELAUNCH_WAITLIST_ONLY === "1", mailPerHour: process.env.DUSK_AUTH_MAIL_PER_HOUR ? Number(process.env.DUSK_AUTH_MAIL_PER_HOUR) : undefined, mailPerDay: process.env.DUSK_AUTH_MAIL_PER_DAY ? Number(process.env.DUSK_AUTH_MAIL_PER_DAY) : undefined, siteUpstream: process.env.DUSK_SITE_UPSTREAM || null, linkUpstream: process.env.DUSK_LINK_UPSTREAM || null,
-  analytics, admin: { emails: adminEmails, environment, live, readCacheMs: 30_000, backupDir: process.env.DUSK_BACKUP_DIR || (database ? "/root/backups/mongo-dusk" : null) } });
+  analytics, admin: { emails: adminEmails, environment, live, readCacheMs: 30_000, warm: database ? { store: await mongoWarmStore(database.db) } : null, backupDir: process.env.DUSK_BACKUP_DIR || (database ? "/root/backups/mongo-dusk" : null) } });
 
 /** a client hears an answer only once what the request changed is written; when that fails it gets a dropped
  *  connection, never a success that was not kept */
@@ -112,15 +133,7 @@ function durable(req: IncomingMessage, res: ServerResponse) {
   }
   return app.handle(req, res);
 }
-const server = createServer(traced);
-server.listen(port, host, () => console.log(`dashboard service listening on http://${host}:${port}`));
-let stopping = false;
-for (const signal of ["SIGINT", "SIGTERM"] as const) process.once(signal, () => {
-  if (stopping) return;
-  stopping = true;
-  app.close();
-  void incidents.close();
-  server.close();
-  server.closeIdleConnections();
-  void (database?.close() ?? Promise.resolve()).finally(() => process.exit(0));
-});
+closers.push(() => app.close(), () => void incidents.close());
+gate.open(traced);
+await listening;
+console.log(`dashboard service listening on http://${host}:${port}`);

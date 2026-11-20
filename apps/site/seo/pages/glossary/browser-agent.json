@@ -1,0 +1,72 @@
+{
+  "path": "/glossary/browser-agent",
+  "type": "glossary",
+  "title": "What is a browser agent? Follow one through a booking site",
+  "nav": "browser agent",
+  "h1": "what is a browser agent?",
+  "description": "Follow a browser agent through a date picker and learn how to spot a result from the wrong day before you rely on an apparent opening.",
+  "keyword": "browser agent",
+  "keywords": [
+    "what is a browser agent",
+    "ai browser automation"
+  ],
+  "answer": "**a browser agent uses a web browser to carry out a task for you.** it can follow links, choose a filter and read the results that appear. this matters when the answer depends on choices a search result can't show, like which beginner tennis lessons still have space on a particular saturday.",
+  "updated": "2026-11-20",
+  "review": {
+    "status": "approved",
+    "by": "lead agent, after four independent reviewers read every page against seo/facts (2026-11-20); every finding applied",
+    "at": "2026-11-20"
+  },
+  "tags": [
+    "browser",
+    "computer-use",
+    "glossary"
+  ],
+  "connectors": [],
+  "related": [
+    "/glossary/computer-use-agent",
+    "/glossary/prompt-injection",
+    "/ai-agent-that-controls-your-computer"
+  ],
+  "art": {
+    "props": [
+      "p-magnifier",
+      "s-map"
+    ],
+    "bubble": "which date is showing?"
+  },
+  "og_line": "look at the filters behind the answer.",
+  "definition": "a browser agent is an ai that interacts with websites and uses what it finds to choose its next step.",
+  "example": "**cecil wants a saturday tennis lesson that includes a loan racket.** in this example, the booking site resets the date when someone switches venues. a result worth keeping names the venue, the saturday date and the class type shown together. a list copied from the default weekday view is useless.",
+  "sections": [
+    {
+      "h": "what should come back from a search?",
+      "md": "**ask for the evidence you would use to choose a session.** a class title alone tells cecil little. ask whether the listing includes racket hire or asks players to bring their own. if the listing leaves that open, keep it as a question for the coach.\n\ngive the agent a stopping point. for this search, the class listing is far enough. reserving a place or filling in attendee details goes beyond finding options."
+    },
+    {
+      "h": "when the site asks you to sign in",
+      "md": "**in dusk bot, you can take over the browser for a sign-in.** watch through screen, choose take control, then hand control back. you enter the password yourself. the bot stays signed in and never sees the password.[^1]\n\nuse a public listing without signing in when it already shows the answer."
+    },
+    {
+      "h": "when a bookmark will do",
+      "md": "**skip dusk bot for a timetable you can read at a glance.** a browser agent makes more sense when answering the question means opening several views. even then, look at the current listing before heading out. someone else may have taken the last place."
+    }
+  ],
+  "faq": [
+    {
+      "q": "how is a browser agent different from web search?",
+      "a": "search can find the club's site. a browser agent can work through its date and location controls to reach the particular listing you need."
+    },
+    {
+      "q": "does the agent need access to my other tabs?",
+      "a": "no. a dusk bot can use its own browser and desktop, separate from yours. hand it the club's web address to start.[^1]"
+    }
+  ],
+  "sources": [
+    {
+      "label": "dusk bot docs: the bot's browser and desktop",
+      "url": "/docs/computer"
+    }
+  ],
+  "voice": 2
+}

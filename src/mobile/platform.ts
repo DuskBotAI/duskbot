@@ -1,3 +1,4 @@
+import type { ShortcutsBridge } from "./shortcuts";
 import { createContext, useContext } from "react";
 import type { MobileOpenTarget } from "../../shared/mobile-link";
 import type { TurnActivityAttributes, TurnActivityState } from "../../shared/phone-activity";
@@ -5,6 +6,7 @@ import type { NativeAction } from "./phone-actions";
 import { friendlyError } from "@/lib/plain-error";
 import type { GlassBridge } from "./native-glass";
 import type { MenuBridge } from "./native-menu";
+import type { SystemControls } from "@/lib/system-control";
 
 export type HapticKind = "light" | "soft" | "medium" | "selection" | "error" | "success";
 
@@ -21,6 +23,10 @@ export interface KeyboardFrame {
    * is that move stopped, for the page to take the space itself. */
   lift?: number;
 }
+
+export type BackGestureEvent =
+  | { phase: "start" | "progress"; progress: number }
+  | { phase: "cancel" | "commit" };
 
 export interface ScanResult {
   text: string;
@@ -69,6 +75,42 @@ export interface CameraScanner {
   }): Promise<CameraSession>;
 }
 
+/** One entry of a system menu. `symbol` is an SF Symbol name; `separated` starts a new group. */
+export interface SystemMenuAction { key: string; label: string; detail?: string; symbol?: string; danger?: boolean; disabled?: boolean; checked?: boolean; separated?: boolean }
+
+/** One button in the system's bar. `symbol` is an SF Symbol name; `picture` is a part of the page the device keeps a
+ * snapshot of under `key` (a bot's face), shown beside `title`. */
+export interface BarItem {
+  id: string;
+  label: string;
+  symbol?: string;
+  title?: string;
+  role?: "close";
+  badge?: number;
+  disabled?: boolean;
+  picture?: { key: string; x?: number; y?: number; width?: number; height?: number };
+}
+
+export interface BarConfig { title?: string; status?: string; leading: BarItem[]; trailing: BarItem[] }
+
+/** The system's own bar and sheet around the page (iOS 26): bar buttons in the system's glass, and a sheet that is the
+ * page itself, presented by the system over a picture of what it left. */
+export interface MobileChrome {
+  /** Null takes the bar away. */
+  setBar(config: BarConfig | null): void;
+  onBarPress(listener: (id: string) => void): () => void;
+  onPictureTaken(listener: (key: string) => void): () => void;
+  /** Holds a picture of the screen over the page, so the page can redraw itself underneath unseen, until `thaw`. */
+  freeze(): Promise<void>;
+  thaw(): Promise<void>;
+  /** `height` is the content's height in css px for a sheet that hugs it; null fills the screen. */
+  presentSheet(height: number | null): Promise<void>;
+  resizeSheet(height: number): void;
+  dismissSheet(): Promise<void>;
+  /** The person swiped the sheet away. */
+  onSheetDismissed(listener: () => void): () => void;
+}
+
 /** Everything the phone layer asks of the device. The native app supplies Capacitor plugins; the web preview and a
  * plain browser get the fallbacks in `webPlatform`. Capability flags, never user-agent guesses. */
 export interface OrientationBridge {
@@ -92,6 +134,24 @@ export interface TurnActivityBridge {
   lineKey(): Promise<string | null>;
 }
 
+/** The Keychain could not be read just now (the phone is locked): what it holds is unknown, never "nothing". */
+export class SecretsLocked extends Error {
+  constructor() {
+    super("the keychain is locked");
+    this.name = "SecretsLocked";
+  }
+}
+
+/** Calls `again` once the app comes back in front, or after a few seconds if no resume is heard; returns a stop. */
+export function waitForFront(platform: Pick<MobilePlatform, "onResume">, again: () => void, fallbackMs = 3_000): () => void {
+  let done = false;
+  const fire = () => { if (done) return; done = true; stop(); again(); };
+  const stopResume = platform.onResume?.(fire);
+  const timer = setTimeout(fire, fallbackMs);
+  const stop = () => { clearTimeout(timer); stopResume?.(); };
+  return () => { done = true; stop(); };
+}
+
 export interface MobilePlatform {
   kind: "ios" | "android" | "web";
   native: boolean;
@@ -103,12 +163,19 @@ export interface MobilePlatform {
    * of full height, or another, for which the window ends at the keyboard. */
   keyboardMode?(ride: boolean): void;
   setStatusBar?(style: "dark" | "light"): void;
+  /** The look the system's own surfaces take over the app (its menus, the keyboard): the app's, or the phone's for "system". */
+  setAppearance?(scheme: "system" | "light" | "dark"): void;
   /** Android's back; return true when handled. The newest listener is asked first and an older one only when it
    * declines (`handleBack`); when none takes it the app goes to the background. */
   onBack?(listener: () => boolean): () => void;
   /** A back listener is on its first screen and would decline (default: it is not). While every listener is, back goes
    * to the system, which plays its predictive back-to-home. */
   backAtRoot?(listener: () => boolean, atRoot: boolean): void;
+  /** Android 14+: while `on` and this back listener is the newest, the back gesture drives the page itself. */
+  backGesture?(listener: () => boolean, on: boolean): void;
+  /** The back gesture's start, its progress (0 to 1 of the way the system lets it go), a cancel, and its commit. A
+   * listener returns true for a commit it plays itself; a commit nobody takes (a back button) goes to `onBack`. */
+  onBackGesture?(listener: (event: BackGestureEvent) => boolean): () => void;
   /** Links the OS hands the app: duskbot://pair, duskbot://open, the desktop's thread links. A listener returns
    * true when the link was its kind; the link that launched the app waits for the first listener that takes it. */
   onAppUrl?(listener: (url: string) => boolean): () => void;
@@ -122,6 +189,8 @@ export interface MobilePlatform {
     get(key: string): Promise<string | null>;
     set(key: string, value: string): Promise<void>;
     remove(key: string): Promise<void>;
+    /** every key kept, where the storage can list them */
+    keys?(): Promise<string[]>;
   };
   /** Keychain/Keystore. The web fallback keeps secrets in session memory only. */
   secrets: {
@@ -129,6 +198,19 @@ export interface MobilePlatform {
     set(key: string, value: string): Promise<void>;
     remove(key: string): Promise<void>;
   };
+  /** Keychain/Keystore items a build from before the rename to dusk bot kept under its own prefix, by their key past it;
+   * a phone updated from such a build still holds its sign-ins and place tokens there. */
+  legacySecrets?: {
+    keys(): Promise<string[]>;
+    get(key: string): Promise<string | null>;
+    remove(key: string): Promise<void>;
+  };
+  /** The system's pull-down menu (iOS) opened from a control at `anchor` (its frame in the viewport, css px). Resolves the
+   * key picked, or null when the menu was closed without a pick. */
+  showMenu?(anchor: { x: number; y: number; width: number; height: number }, items: SystemMenuAction[]): Promise<string | null>;
+  chrome?: MobileChrome;
+  /** The system's own segmented control and switch (iOS 26), in the page. */
+  controls?: SystemControls;
   scanQr?(): Promise<ScanResult | null>;
   camera?: CameraScanner;
   readClipboard?(): Promise<string | null>;
@@ -144,6 +226,8 @@ export interface MobilePlatform {
   /** Push registration; resolves the device token or null when refused or unsupported. Without `prompt` it never shows
    * the system's question: a phone not yet asked resolves null. */
   registerPush?(options?: { prompt?: boolean }): Promise<{ token: string; platform: "apns" | "fcm" } | null>;
+  /** Whether the system lets this app show notifications: `prompt` until the person has been asked. */
+  pushPermission?(): Promise<"granted" | "denied" | "prompt">;
   onNotificationOpen?(listener: (target: MobileOpenTarget) => void): () => void;
   /** The conversation on screen, null for none: a push about it shows nothing while the app is open, any other shows
    * the system's own banner. */
@@ -162,6 +246,8 @@ export interface MobilePlatform {
   menu?: MenuBridge;
   /** The phone may turn sideways while a remote screen is open; everywhere else the app stays upright. */
   orientation?: OrientationBridge;
+  /** Siri, Spotlight and the Shortcuts app: message, call or open a bot, where the app has them. */
+  shortcuts?: ShortcutsBridge;
   deviceName(): string;
   appVersion: string;
 }

@@ -1,0 +1,398 @@
+{
+  "path": "/alternatives/grok-bot",
+  "type": "alternative",
+  "title": "Grok Bot alternatives for different jobs and budgets",
+  "nav": "grok bot alternatives",
+  "h1": "which grok bot alternative fits the job?",
+  "description": "Compare Grok Bot, OpenClaw, Hermes Agent, Poke and dusk bot on price, model choice, computer use and what you can take with you.",
+  "keyword": "grok bot alternative",
+  "keywords": [
+    "free grok bot alternative",
+    "best grok bot alternatives",
+    "grok bot alternatives",
+    "alternative to grok bot"
+  ],
+  "answer": "**if you already pay for an ai, dusk bot lets you use it for personal jobs without another subscription.** openclaw suits people who want their assistant in existing chats. hermes can make its own skills. poke works like a text contact. keep grok bot if your bots need the same signed-in browser after you close your laptop.[^2][^9][^13][^15][^19][^21]",
+  "tags": [
+    "grok bot",
+    "alternatives",
+    "hosting",
+    "model choice"
+  ],
+  "related": [
+    "/vs/grok-bot",
+    "/guides/move-from-grok-bot",
+    "/guides/grok-bot-pricing",
+    "/alternatives/openclaw",
+    "/alternatives/hermes-agent"
+  ],
+  "competitor": {
+    "key": "grok-bot",
+    "name": "Grok Bot",
+    "url": "https://x.ai/news/introducing-grok-bot"
+  },
+  "art": {
+    "label": "Grok Bot",
+    "props": [
+      "s-signpost",
+      "p-binoculars"
+    ],
+    "bubble": "keep the right parts"
+  },
+  "og_line": "keep the parts of grok bot you use.",
+  "verdict": {
+    "them_title": "grok bot",
+    "them": [
+      "**your bots hand off work in one place.** they can coordinate in a group and use the same files and logins.[^1][^2]",
+      "**you move between devices all day.** grok bot has native mac, windows, linux, iphone and android apps. the cloud computer stays at work between them.[^3]"
+    ],
+    "dusk": [
+      "**you want a different ai for each job.** change a bot's model and keep its chats and memory.[^22]",
+      "**you already own the machine.** run personal jobs there for free. pay for hosting only if you need it.[^20][^21]"
+    ]
+  },
+  "compare": {
+    "h": "what you get if you switch",
+    "intro": "**start with the row that made you look elsewhere.** grok bot facts are from 20 november 2026. openclaw, hermes and poke facts are from 12 november. prices below use monthly billing.",
+    "cols": [
+      "Grok Bot",
+      "OpenClaw",
+      "Hermes Agent",
+      "Poke",
+      "dusk bot"
+    ],
+    "rows": [
+      {
+        "label": "what it is",
+        "cells": [
+          "a team of bots with group chat and voice calls",
+          "an open-source assistant in your chat apps",
+          "an agent that builds reusable skills",
+          "a personal assistant you text like a contact",
+          "teammates with separate jobs, chats and memory"
+        ],
+        "src": [
+          1,
+          9,
+          13,
+          15,
+          22
+        ]
+      },
+      {
+        "label": "where it runs",
+        "cells": [
+          "a dedicated cloud machine your bots share",
+          "your laptop or server",
+          "your hardware or nous portal",
+          "poke’s cloud",
+          "your computer, your server or dusk cloud"
+        ],
+        "src": [
+          2,
+          9,
+          13,
+          16,
+          20
+        ]
+      },
+      {
+        "label": "with your computer off",
+        "cells": [
+          "cloud work continues",
+          "yes on a running server",
+          "yes on a server or nous cloud",
+          "yes",
+          "yes on dusk cloud or a running server"
+        ],
+        "src": [
+          3,
+          9,
+          13,
+          16,
+          20
+        ]
+      },
+      {
+        "label": "which ai and who pays",
+        "cells": [
+          "service picks the model within your plan",
+          "choose a provider and pay it, or run locally",
+          "connect a provider, run locally or pay nous",
+          "the plan covers ai",
+          "pick the ai per bot. your provider bills you"
+        ],
+        "src": [
+          3,
+          10,
+          14,
+          17,
+          21,
+          22
+        ]
+      },
+      {
+        "label": "entry price and paid options",
+        "cells": [
+          "premium $30, super $100, ultra $200",
+          "free mit software, hosting costs extra if rented",
+          "free mit software, paid nous hosting from $20",
+          "free tier, pro $19, ultra $199",
+          "personal desktop $0, cloud plus $20, pro with work license $50"
+        ],
+        "src": [
+          4,
+          9,
+          13,
+          17,
+          20,
+          21
+        ]
+      },
+      {
+        "label": "usage limits",
+        "cells": [
+          "weekly steps and tokens, then prepaid credits or legacy on-demand charges",
+          "depends on the model connection",
+          "depends on provider or nous tier",
+          "ultra allows paid usage beyond credits",
+          "your ai plan can run out. wait or switch models"
+        ],
+        "src": [
+          5,
+          10,
+          13,
+          14,
+          17,
+          22
+        ]
+      },
+      {
+        "label": "scheduled jobs",
+        "cells": [
+          "timed or event-based routines, five minutes minimum between scheduled runs",
+          "recurring jobs, webhooks and chat delivery",
+          "describe a schedule to its gateway",
+          "reminders and scheduled tasks",
+          "ask for a routine and review its next runs"
+        ],
+        "src": [
+          6,
+          11,
+          13,
+          15,
+          23
+        ]
+      },
+      {
+        "label": "computer use",
+        "cells": [
+          "watch the cloud desktop or take the controls",
+          "browse, work on files and run commands",
+          "a terminal for each subagent",
+          "sources cover app connections only",
+          "watch a bot’s desktop and take over when needed"
+        ],
+        "src": [
+          2,
+          9,
+          13,
+          15,
+          24
+        ]
+      },
+      {
+        "label": "memory",
+        "cells": [
+          "ask in chat to read or change a bot’s notes",
+          "separate workspaces and sessions per agent",
+          "persistent memory",
+          "no memory details in the sources below",
+          "edit a bot’s markdown notes directly"
+        ],
+        "src": [
+          7,
+          12,
+          13,
+          15,
+          25
+        ]
+      },
+      {
+        "label": "getting your setup out",
+        "cells": [
+          "download files. template copies omit history and memory",
+          "workspaces live on your host. export format unclear",
+          "can run locally. export format unclear",
+          "no export details in the sources below",
+          "export a password-protected backup. sign-ins and keys stay behind"
+        ],
+        "src": [
+          7,
+          9,
+          12,
+          13,
+          15,
+          26
+        ]
+      }
+    ]
+  },
+  "sections": [
+    {
+      "h": "when the shared computer earns its price",
+      "md": "**keep grok bot if a handoff depends on the browser staying signed in.** each bot gets its own screen on the same cloud computer. one can pick up work using files another left there. the trade-off matters for private accounts too. separate bot names do not separate those logins.[^1][^2]\n\nif the only job is a reminder in apple messages, poke can do that without a new desktop to learn.[^15][^18]"
+    },
+    {
+      "h": "when the weekly pool changes the decision",
+      "md": "**a message count won't tell you how much grok bot you have left.** tool steps and tokens draw from a weekly pool shared with grok and cursor. usage limits fell in early november after elon musk said serving costs were too high for the revenue.[^5][^8]\n\nif you need to choose the model doing that work, consider openclaw, hermes or dusk. read your provider's sign-in terms before choosing a connection.[^10][^14][^22]"
+    },
+    {
+      "h": "bring a grok bot into dusk",
+      "md": "**try the move while you still have the original.** settings → import → **Move from Grok Bot** previews the skills, routines and memories in a setup file your grok bot writes. follow the [move guide](/guides/move-from-grok-bot) before touching your cursor account. deleting grok bot as a service means deleting that account too.[^3]"
+    }
+  ],
+  "method": "**we compared what you can buy, operate and take with you.** we make dusk bot. the sources list carries the date for each outside product. a gap in a cell means the cited material did not settle that question. we did not time jobs or rank answer quality.",
+  "faq": [
+    {
+      "q": "which alternatives to grok bot can i host for free?",
+      "a": "**openclaw and hermes have free mit-licensed software.** dusk also runs on a computer or server you own for personal use. budget separately for any server you rent and any paid model you connect.[^9][^13][^20][^21]"
+    },
+    {
+      "q": "can i bring an api key to grok bot instead of switching?",
+      "a": "**grok bot does not accept your key.** it chooses the model and does not show which one handled a task. dusk and both self-hosted open-source options support model keys.[^3][^10][^14][^19]"
+    }
+  ],
+  "updated": "2026-11-20",
+  "review": {
+    "status": "approved",
+    "by": "lead agent, after four independent reviewers read every page against seo/facts (2026-11-20); every finding applied",
+    "at": "2026-11-20"
+  },
+  "voice": 2,
+  "connectors": [],
+  "sources": [
+    {
+      "label": "grok bot overview",
+      "url": "https://docs.x.ai/grok-bot/overview.md",
+      "checked": "2026-11-20"
+    },
+    {
+      "label": "grok bot computer and apps",
+      "url": "https://docs.x.ai/grok-bot/computer-and-apps.md",
+      "checked": "2026-11-20"
+    },
+    {
+      "label": "grok bot faq",
+      "url": "https://docs.x.ai/grok-bot/faq.md",
+      "checked": "2026-11-20"
+    },
+    {
+      "label": "x subscription prices",
+      "url": "https://docs.x.ai/x-subscription/pricing.md",
+      "checked": "2026-11-20"
+    },
+    {
+      "label": "x weekly usage and credits",
+      "url": "https://docs.x.ai/x-subscription/usage-limits.md",
+      "checked": "2026-11-20"
+    },
+    {
+      "label": "grok bot skills and routines",
+      "url": "https://docs.x.ai/grok-bot/skills-routines-and-automations.md",
+      "checked": "2026-11-20"
+    },
+    {
+      "label": "grok bot memory and copies",
+      "url": "https://docs.x.ai/grok-bot/bots.md",
+      "checked": "2026-11-20"
+    },
+    {
+      "label": "elon musk on serving costs, 1 november",
+      "url": "https://x.com/elonmusk/status/2116992258520064397",
+      "checked": "2026-11-20"
+    },
+    {
+      "label": "openclaw hosting and license",
+      "url": "https://openclaw.ai/",
+      "checked": "2026-11-12"
+    },
+    {
+      "label": "openclaw model sign-in",
+      "url": "https://docs.openclaw.ai/concepts/oauth",
+      "checked": "2026-11-12"
+    },
+    {
+      "label": "openclaw scheduler",
+      "url": "https://docs.openclaw.ai/automation/cron-jobs",
+      "checked": "2026-11-12"
+    },
+    {
+      "label": "openclaw agent workspaces",
+      "url": "https://docs.openclaw.ai/concepts/multi-agent",
+      "checked": "2026-11-12"
+    },
+    {
+      "label": "hermes agent and nous portal",
+      "url": "https://hermes-agent.nousresearch.com/",
+      "checked": "2026-11-12"
+    },
+    {
+      "label": "hermes model providers",
+      "url": "https://hermes-agent.nousresearch.com/docs/integrations/providers",
+      "checked": "2026-11-12"
+    },
+    {
+      "label": "poke reminders and schedules",
+      "url": "https://poke.com/",
+      "checked": "2026-11-12"
+    },
+    {
+      "label": "cognition on where poke runs",
+      "url": "https://cognition.com/blog/interaction",
+      "checked": "2026-11-12"
+    },
+    {
+      "label": "poke plans and credits",
+      "url": "https://poke.com/pricing",
+      "checked": "2026-11-12"
+    },
+    {
+      "label": "poke messaging apps",
+      "url": "https://poke.com/docs",
+      "checked": "2026-11-12"
+    },
+    {
+      "label": "dusk bot desktop setup",
+      "url": "/docs/getting-started"
+    },
+    {
+      "label": "where dusk bots run",
+      "url": "/docs/dusk-cloud"
+    },
+    {
+      "label": "dusk billing and licenses",
+      "url": "/docs/account-and-billing"
+    },
+    {
+      "label": "dusk bot models",
+      "url": "/docs/bots"
+    },
+    {
+      "label": "dusk schedules",
+      "url": "/docs/routines"
+    },
+    {
+      "label": "dusk computer controls",
+      "url": "/docs/computer"
+    },
+    {
+      "label": "dusk memory files",
+      "url": "/docs/memory"
+    },
+    {
+      "label": "dusk backups",
+      "url": "/docs/privacy-and-data"
+    }
+  ]
+}

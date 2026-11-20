@@ -93,7 +93,7 @@ async function readApps(): Promise<AppsSnapshot> {
 export function AppFace({ entry }: { entry: Pick<AppEntry, "label" | "icon"> }) {
   const { glyph, glyphPaint: _glyphPaint, ...art } = entry.icon;
   return (
-    <span aria-hidden className="relative flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-[11px] bg-ink/[0.06] text-ink-secondary">
+    <span aria-hidden data-app-face="" className="relative flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-[11px] bg-ink/[0.06] text-ink-secondary">
       {glyph ? <Icon name={glyph} size={21} /> : <ServiceTile card={{ label: entry.label, ...art }} size={40} className="absolute inset-0" />}
     </span>
   );
@@ -169,21 +169,21 @@ export function ConnectorsSheet({ open, onClose }: SheetPageProps<"connectors">)
   const empty = snapshot !== null && !loading && (searching ? found.length === 0 : snapshot.entries.length === 0);
   return (
     <Sheet open={open} onClose={onClose} title={t("mobile.connectors.title")} full>
-      <div className="px-2 pt-2">
-        <label htmlFor={id} className="mb-4 flex h-11 items-center gap-2 rounded-full bg-ink/[0.06] px-4 text-ink-secondary">
+      <div className="px-4 pt-2">
+        <label htmlFor={id} className="mb-4 flex h-11 items-center gap-2 rounded-full bg-menu px-4 text-ink-secondary">
           <Search aria-hidden size={19} /><span className="sr-only">{t("mobile.connectors.search")}</span>
           <input id={id} type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t("mobile.connectors.search")} className="h-full min-w-0 flex-1 border-0 bg-transparent text-[16px] text-ink placeholder:text-ink-tertiary" />
         </label>
-        {error && <div className="mb-4 rounded-[20px] bg-ink/[0.045] px-4 py-3"><p role="alert" className="text-[15px] leading-[22px] text-ink">{t("mobile.connectors.error")}</p><button type="button" disabled={loading} onClick={() => void load()} className="mobile-press mt-2 min-h-11 rounded-full bg-ink px-5 text-[15px] font-semibold text-app disabled:opacity-40">{t("mobile.connectors.retry")}</button></div>}
+        {error && <div className="mb-4 rounded-[16px] bg-menu px-4 py-3"><p role="alert" className="text-[15px] leading-[22px] text-ink">{t("mobile.connectors.error")}</p><button type="button" disabled={loading} onClick={() => void load()} className="mobile-press mt-2 min-h-11 rounded-full bg-ink px-5 text-[15px] font-semibold text-app disabled:opacity-40">{t("mobile.connectors.retry")}</button></div>}
         {!snapshot ? (
-          loading && <div role="status" aria-label={t("mobile.connectors.loading")} className="overflow-hidden rounded-[20px] bg-ink/[0.045]">
+          loading && <div role="status" aria-label={t("mobile.connectors.loading")} data-settings-card="" className="flex flex-col gap-[2px] overflow-hidden rounded-[16px] [&>*]:bg-menu [&_.mobile-row]:rounded-none">
             {Array.from({ length: SKELETON_ROWS }, (_, key) => <div key={key} aria-hidden className={APP_ROW}><span className="size-10 shrink-0 rounded-[11px] bg-ink/[0.06]" /><span className="flex-1 space-y-2"><span className="block h-4 w-1/2 rounded-full bg-ink/[0.06]" /><span className="block h-3 w-3/4 rounded-full bg-ink/[0.05]" /></span></div>)}
           </div>
         ) : (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: reduced ? 0 : dur.base, ease: ease.out }}>
             {groups.map((group) => <section key={group.key} aria-labelledby={`${id}-${group.key}`} className="mb-6">
-              <h2 id={`${id}-${group.key}`} className={searching ? "sr-only" : "px-4 pb-2 text-[15px] font-semibold text-ink-secondary"}>{searching ? t("mobile.connectors.search") : group.key === "connected" || group.key === "popular" ? t(`mobile.connectors.${group.key}`) : t(CATEGORY_LABEL[group.key])}</h2>
-              <ul className="overflow-hidden rounded-[20px] bg-ink/[0.045]">
+              <h2 id={`${id}-${group.key}`} className={searching ? "sr-only" : "px-4 pb-1 text-[14px] font-medium text-ink-secondary"}>{searching ? t("mobile.connectors.search") : group.key === "connected" || group.key === "popular" ? t(`mobile.connectors.${group.key}`) : t(CATEGORY_LABEL[group.key])}</h2>
+              <ul data-settings-card="" className="flex flex-col gap-[2px] overflow-hidden rounded-[16px] [&>*]:bg-menu [&_.mobile-row]:rounded-none">
                 {group.entries.map((entry) => {
                   const added = appIsAdded(entry, snapshot.added);
                   return <li key={entry.id}><button type="button" onClick={() => openConnectApps(connectPageFor(entry))} className={cn(APP_ROW, "mobile-row w-full text-left")}>

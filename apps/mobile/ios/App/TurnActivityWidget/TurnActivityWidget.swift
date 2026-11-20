@@ -10,7 +10,7 @@ struct TurnActivityWidgets: WidgetBundle {
 
 /// The dusk palette (the app's Dusk look) and each bot colour as the app paints it.
 private enum Palette {
-    static let ground = Color(hex: 0x19161C)
+    static let ground = Color(hex: 0x0C0B0E)
     static let raised = Color(hex: 0x2B2630)
     static let ink = Color(hex: 0xF4EFF6)
     static let secondary = Color(hex: 0xB9AFBD)
@@ -141,6 +141,26 @@ struct AskButton: View {
     }
 }
 
+/// Ends this thread's activity now. The glyph stays small; the tap area reaches 44pt without growing the layout.
+struct CloseButton: View {
+    let attributes: DuskTurnAttributes
+
+    var body: some View {
+        Button(intent: CloseTurnActivityIntent(threadId: attributes.threadId)) {
+            Image(systemName: "xmark")
+                .font(.system(size: 11, weight: .bold))
+                .foregroundStyle(Palette.secondary)
+                .frame(width: 26, height: 26)
+                .background(Palette.raised, in: Circle())
+                .padding(9)
+                .contentShape(Rectangle())
+                .padding(-9)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Close")
+    }
+}
+
 struct Elapsed: View {
     let state: DuskTurnAttributes.ContentState
 
@@ -178,6 +198,7 @@ struct TurnLockScreen: View {
                     Elapsed(state: state).frame(maxWidth: 64, alignment: .trailing)
                     if let steps = state.stepLine, !state.ended { Text(steps).font(.system(size: 12)).foregroundStyle(Palette.secondary) }
                 }
+                CloseButton(attributes: attributes)
             }
             if state.needsYou, let ask = state.ask { AskButton(attributes: attributes, ask: ask) }
         }
@@ -204,7 +225,11 @@ struct TurnActivityWidget: Widget {
                     MascotView(shape: context.attributes.body, color: context.attributes.color, size: 36).padding(.leading, 4)
                 }
                 DynamicIslandExpandedRegion(.trailing) {
-                    Elapsed(state: state).frame(maxWidth: 64, alignment: .trailing).padding(.trailing, 4)
+                    HStack(spacing: 10) {
+                        Elapsed(state: state).frame(maxWidth: 64, alignment: .trailing)
+                        CloseButton(attributes: context.attributes)
+                    }
+                    .padding(.trailing, 4)
                 }
                 DynamicIslandExpandedRegion(.center) {
                     VStack(spacing: 2) {

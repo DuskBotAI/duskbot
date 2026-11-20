@@ -1,6 +1,6 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 const fixture = vi.hoisted(() => ({ report: null as unknown }));
 vi.mock("react", async (original) => ({
@@ -8,10 +8,13 @@ vi.mock("react", async (original) => ({
   useState: (initial: unknown) => [initial === null ? fixture.report : initial === true ? false : typeof initial === "function" ? (initial as () => unknown)() : initial, () => {}],
 }));
 vi.mock("@/state/store", () => ({ api: vi.fn() }));
+import { setUsageDisplay } from "@/lib/usage-display";
 import { PlanUsage } from "./PlanUsage";
 
 describe("Plan usage presentation", () => {
-  it("distinguishes remaining account allowance, per-model usage, and unavailable windows", () => {
+  afterEach(() => setUsageDisplay("used"));
+
+  it("shows the share of each window used, per-model usage, and unavailable windows", () => {
     fixture.report = {
       fetchedAt: "2026-10-02T09:00:00Z",
       providers: [{
@@ -22,12 +25,35 @@ describe("Plan usage presentation", () => {
       }],
     };
     const html = renderToStaticMarkup(createElement(PlanUsage));
-    expect(html).toContain("68% left");
+    expect(html).toContain("32% used");
+    expect(html).not.toContain("68% left");
     expect(html).toContain("70% used");
     expect(html).toContain("Not reported by this plan");
     expect(html).not.toContain("100% left");
     expect(html).toContain('aria-valuenow="32"');
     expect(html).toContain('aria-valuenow="70"');
+  });
+
+  it("shows what is left of every window, with its meter, for someone who reads usage as remaining", () => {
+    fixture.report = {
+      fetchedAt: "2026-10-02T09:00:00Z",
+      providers: [{
+        id: "fixture", name: "Fixture provider", driver: "claude", plan: "Pro", ok: true, error: null,
+        fiveHour: { available: true, remainingPercent: 68, usedPercent: 32, resetsAt: null },
+        weekly: { available: false, remainingPercent: null, usedPercent: null, resetsAt: null },
+        extra: [{ label: "Monthly spend", remainingPercent: 90.7, usedPercent: 9.3, resetsAt: null, spend: { usedMinor: 4_631, limitMinor: 50_000, currency: "USD", exponent: 2 } }],
+        models: [{ name: "Sonnet", windows: [{ label: "Weekly", remainingPercent: 30, usedPercent: 70, resetsAt: null }] }],
+      }],
+    };
+    setUsageDisplay("left");
+    const html = renderToStaticMarkup(createElement(PlanUsage));
+    for (const left of [68, 91, 30]) {
+      expect(html).toContain(`${left}% left`);
+      expect(html).toContain(`aria-valuenow="${left}"`);
+      expect(html).toContain(`width:${left}%`);
+    }
+    expect(html).not.toContain("% used");
+    expect(html).toContain("$46.31 of $500.00 spent");
   });
 
   it("shows a monthly budget's amounts beside how much of it is used", () => {
@@ -59,9 +85,9 @@ describe("Plan usage presentation", () => {
   });
 
   it("shows an account error without inventing zero usage", () => {
-    fixture.report = { providers: [{ id: "fixture", name: "Fixture provider", ok: false, error: "sign in to this account." }] };
+    fixture.report = { providers: [{ id: "fixture", name: "Fixture provider", ok: false, error: "Sign in to this account." }] };
     const html = renderToStaticMarkup(createElement(PlanUsage));
-    expect(html).toContain("sign in to this account.");
+    expect(html).toContain("Sign in to this account.");
     expect(html).not.toContain('role="meter"');
     expect(html).not.toContain("100% left");
   });

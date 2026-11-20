@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
-  createPartsDownloader, downloadPart, installPart, parsePartsManifest, partInstalled, partSources, verifyMacSignatures, type PartSpec,
+  createPartsDownloader, downloadPart, installPart, parsePartsManifest, partInstalled, partLock, partSources, verifyMacSignatures, type PartSpec,
 } from "./app-parts.ts";
 import { browserPartPending, browserEngineStatus, resolveAgentBrowserBinary } from "./browser-engine.ts";
 import { createBrowserPartHost, type BrowserPartFrame } from "./host/browser-part.ts";
@@ -182,6 +182,34 @@ describe("createPartsDownloader", () => {
     expect(states).toContain("failed");
     expect(states.at(-1)).toBe("ready");
     downloader.stop();
+  });
+
+  it("two app processes sharing the parts folder download it once; the second waits and finds it installed", async () => {
+    const root = temp();
+    const zip = bundleZip();
+    const { fetchImpl, calls } = server(zip);
+    const make = () => createPartsDownloader({ manifest: { v: 1, parts: [spec(zip)] }, root, platform: "linux", fetchImpl, retryMs: [10] });
+    const first = make(), second = make();
+    first.start(); second.start();
+    const [a, b] = await Promise.all([first.ready("browser"), second.ready("browser")]);
+    expect([a, b]).toEqual([true, true]);
+    expect(calls).toHaveLength(1);
+    expect(partInstalled(root, spec(zip))).toBe(true);
+    first.stop(); second.stop();
+  });
+
+  it("takes over the download lock of a process that died", async () => {
+    const root = temp();
+    const zip = bundleZip();
+    mkdirSync(join(root, ".downloads"), { recursive: true });
+    writeFileSync(join(root, ".downloads", `${sha(zip)}.lock`), "999999999\n");
+    const lock = await partLock(root, spec(zip), { pollMs: 10 });
+    expect(lock.kind).toBe("mine");
+    if (lock.kind === "mine") {
+      expect(readFileSync(join(root, ".downloads", `${sha(zip)}.lock`), "utf8").trim()).toBe(String(process.pid));
+      await lock.release();
+    }
+    expect(existsSync(join(root, ".downloads", `${sha(zip)}.lock`))).toBe(false);
   });
 
   it("GitHub failing for a downloads-repo part takes dusk.bot's copy on the next try, resuming the kept bytes", async () => {

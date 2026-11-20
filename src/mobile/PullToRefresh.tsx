@@ -26,7 +26,7 @@ export function PullToRefresh({ scrollRef, onRefresh, indicator, children, top =
 
   useMotionValueEvent(pull, "change", (value) => {
     if (busy.current) return;
-    if (value >= THRESHOLD && !armed.current) { armed.current = true; haptic("selection"); }
+    if (value >= THRESHOLD && !armed.current) { armed.current = true; haptic("refresh"); }
     else if (value < THRESHOLD - 12 && armed.current) armed.current = false;
   });
 

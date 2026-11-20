@@ -43,6 +43,11 @@ export function panelRest(): number {
   return rest;
 }
 
+/** The width the panel shows: its rest, or wider while the browser in it is expanded. */
+export function panelWidthNow(): number {
+  return width;
+}
+
 /** The widest a drag leaves the panel: never squeezing the chat beside it under CHAT_KEEPS. */
 export function panelRestMax(): number {
   return Math.max(PANEL_MIN, Math.min(WIDE_MAX, Math.round(sharedRoom() - CHAT_KEEPS)));

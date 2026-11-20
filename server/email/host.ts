@@ -12,6 +12,7 @@ import { appendDecision } from "../decision-log.ts";
 import { boxUploadsDir } from "../bot-box/plan.ts";
 import { harnessMcpTokenEnv } from "../harness-mcp-token.ts";
 import { AGENTS_NODE_FLAG, SPAWNED_PROXIES } from "../proxy-paths.ts";
+import { emailAttachments } from "./attachments.ts";
 import { EmailError, LIST_MAX, listMailboxes, listMessages, readMessage, searchMessages, sendMessage } from "./client.ts";
 import { EMAIL_INSTRUCTIONS, EMAIL_NOT_CONNECTED_TEXT, EMAIL_PROMPT, EMAIL_TO_CONNECT_PROMPT } from "./instructions.ts";
 import type { EmailService } from "./service.ts";
@@ -35,6 +36,8 @@ export interface EmailHostDeps {
   bot(id: string): EmailBot | undefined | null;
   inRoom(threadId: string): boolean;
   appendMessage(threadId: string, message: Record<string, unknown>): void;
+  /** The bot's own folders a message it sends may attach files from. */
+  attachableRoots?(botId: string, threadId: string): string[];
   /** Mail is outside text: the conversation that read some is outside work from then on (server/host/outside-lineage.ts). */
   markOutside(threadId: string): void;
   /** An organisation's policy can keep this app off. */
@@ -108,7 +111,9 @@ export function createEmailHost(deps: EmailHostDeps) {
           const original = await run.readMessage(mailbox, guard, { mailbox: box, uid: args.reply_to_uid });
           if (original.messageId) threading = { inReplyTo: original.messageId };
         }
-        return emailText({ account: from, ...await run.sendMessage(mailbox, guard, { to: args.to, subject: args.subject, text: args.text, ...pick(args, ["cc", "bcc"]), ...threading }) });
+        const attached = emailAttachments(args.attachments, [...(deps.attachableRoots?.(capability.botId, capability.threadId) ?? []), boxUploadsDir(deps.dataDir, capability.botId, capability.threadId)]);
+        if (!attached.ok) return emailError(attached.error);
+        return emailText({ account: from, ...await run.sendMessage(mailbox, guard, { to: args.to, subject: args.subject, text: args.text, ...pick(args, ["cc", "bcc"]), ...threading, ...(attached.files.length ? { attachments: attached.files } : {}) }), ...(attached.files.length ? { attached: attached.files.map((file) => file.filename) } : {}) });
       }
     }
   }

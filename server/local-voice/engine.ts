@@ -1,4 +1,6 @@
+import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
+import path from "node:path";
 import { nativeRequire } from "../data/engine.ts";
 import { normalizeLoudness, normalizePeak } from "./wav.ts";
 import { createG2p, type LexiconTable } from "./g2p.ts";
@@ -28,6 +30,16 @@ export const DEFAULT_VOICE: BuiltInVoice = "af_heart";
 
 export function isBuiltInVoice(value: unknown): value is BuiltInVoice {
   return BUILT_IN_VOICES.some((voice) => voice.id === value);
+}
+
+/** Whether this platform's ONNX Runtime binding is installed, without loading it. */
+export function ortInstalled(): boolean {
+  try {
+    const root = path.dirname(nativeRequire().resolve("onnxruntime-node/package.json"));
+    return existsSync(path.join(root, "bin", "napi-v6", process.platform, process.arch, "onnxruntime_binding.node"));
+  } catch {
+    return false;
+  }
 }
 
 let ortLoad: Promise<Ort | null> | null = null;

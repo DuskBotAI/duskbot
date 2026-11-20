@@ -114,7 +114,7 @@ export function PanelHero({ bot, activeState, patch, editorOpen, onToggleEditor 
               ref={name.buttonRef}
               type="button"
               data-panel-rename
-              aria-label={t("botPanel.nameField")}
+              title={t("rename.named", { name: bot.name })}
               onClick={() => name.start(bot.name)}
               className={cn(nameCls, "cursor-text truncate focus-visible:border-focus focus-visible:outline-none!")}
             >

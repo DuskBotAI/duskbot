@@ -77,7 +77,7 @@ describe("this computer belongs to the desktop app's own server", () => {
         HOME: home, USERPROFILE: home, DUSK_DATA_DIR: data,
         APPDATA: join(home, "appdata"), LOCALAPPDATA: join(home, "localappdata"),
         TEMP: home, TMP: home, TMPDIR: home,
-        DUSK_PORT: String(port), DUSK_WEBHOOK_PORT: String(port + 1), DUSK_STATIC_DIR: ui, DUSK_TEST_VM_STATE: stateFile,
+        DUSK_PORT: String(port), DUSK_WEBHOOK_PORT: String(port + 1), DUSK_STATIC_DIR: ui, DUSK_TEST_VM_STATE: stateFile, DUSK_TEST_SEALED_PATH: "1",
         // The app's record, where the app keeps it and where this server is pointed: neither lets it in.
         DUSK_USER_DATA: join(home, "user-data"),
         ...(desktop ? { DUSK_TEST_DESKTOP_CUA_CONNECTION: join(home, "user-data", "cua-connection.json") } : {}),
@@ -207,7 +207,8 @@ describe("this computer belongs to the desktop app's own server", () => {
     expect(sent.mcpConfig?.mcpServers?.browser).toBeDefined();
     const prompt = JSON.stringify(sent);
     expect(prompt).toContain("go straight to your built-in browser and do it; never say you cannot open a website");
-    expect(prompt).toContain("controlling a computer's apps also comes with dusk cloud plans");
+    expect(prompt).toContain("After calling it, say in one short line that you will carry on as soon as it is allowed, and meanwhile do what you can, in your built-in browser when that could work.");
+    expect(prompt).not.toContain("dusk cloud plans");
     expect(prompt).not.toMatch(/notice above the message box, and the person|allow it from the notice/);
     expect(prompt).toContain("macOS has not given dusk bot Screen Recording on this Mac yet");
     expect(prompt).toContain("Never call it for web work");
@@ -222,6 +223,32 @@ describe("this computer belongs to the desktop app's own server", () => {
     await idle(bot.id, task.threadId);
     const lines = (await rows(task.threadId)).join("\n");
     expect(lines).not.toMatch(/can't use this computer yet|failed/i);
+  });
+
+  itHost("a bot on Auto on this computer without screen permission can ask for it, with its browser and no screen tools", async () => {
+    writeFileAtomic(join(home, "user-data", "cua-connection.json"), JSON.stringify({
+      mode: "unavailable", reason: "embedded host failed: Accessibility and Screen Recording required; grant access in System Settings and restart dusk bot",
+    }));
+    const browser = join(home, "agent-browser");
+    writeFileSync(browser, "#!/bin/sh\necho '{\"success\":true,\"data\":{\"sessions\":[]}}'\n", { mode: 0o755 });
+    await start(true, { DUSK_AGENT_BROWSER_PATH: browser });
+    const { bot } = await apiOk("POST", "/api/bots", { name: "Auto No Permission Bot" });
+    const { task } = await apiOk("POST", `/api/bots/${bot.id}/tasks`, {});
+    resetTurn();
+    await apiOk("POST", `/api/bots/${bot.id}/messages`, { text: "use my computer to open Keynote", threadId: task.threadId });
+    const sent = await dump();
+    expect(sent.mcpConfig?.mcpServers?.computer).toBeUndefined();
+    expect(sent.mcpConfig?.mcpServers?.browser).toBeDefined();
+    expect(JSON.stringify(sent)).toContain("macOS has not given dusk bot Screen Recording or Accessibility on this Mac yet");
+    const agents = sent.mcpConfig.mcpServers.agents;
+    expect(agents.env.DUSK_SCREEN_ACCESS).toBe("1");
+    const asked = await fetch(`${base}/api/internal/request-screen-access`, {
+      method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${agents.env.DUSK_COMMS_TOKEN}` },
+      body: JSON.stringify({ reason: "Open Keynote" }),
+    });
+    expect(await asked.json()).toEqual({ shown: true, missing: ["Screen Recording", "Accessibility"] });
+    writeFileSync(finishFile, "finish");
+    await idle(bot.id, task.threadId);
   });
 
   itHost("Stop during helper startup prevents a late ready grant from starting the turn", async () => {

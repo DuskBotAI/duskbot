@@ -48,6 +48,42 @@ export const contentMove = { ms: 250, css: "cubic-bezier(0.1992, 0.0106, 0.2792,
 /** A long press as Telegram iOS answers it: still for 120ms, then the held thing shrinks by 15pt of its width over 200ms. */
 export const holdPress = { stillMs: 120, shrinkMs: 200, inset: 15 } as const;
 
+export interface PhoneTabMove {
+  direction: number;
+  span: number;
+}
+
+/** Synchronized with iOS 26 UISegmentedControl's Liquid Glass thumb travel (~280ms across one segment, ~340ms across two):
+ * outgoing yields while the lens leaves its segment, then incoming glides cleanly into place as the lens arrives and settles. */
+export const phoneTabSlide = {
+  enter: ({ direction, span }: PhoneTabMove) => ({
+    opacity: 0,
+    x: direction * (span > 1 ? 44 : 32),
+  }),
+  center: ({ span }: PhoneTabMove) => ({
+    opacity: 1,
+    x: 0,
+    transition: {
+      x: { duration: span > 1 ? 0.26 : 0.22, delay: span > 1 ? 0.1 : 0.08, ease: [0.22, 1, 0.36, 1] as const },
+      opacity: { duration: span > 1 ? 0.21 : 0.18, delay: span > 1 ? 0.11 : 0.09, ease: [0.25, 0.1, 0.25, 1] as const },
+    },
+  }),
+  exit: ({ direction, span }: PhoneTabMove) => ({
+    opacity: 0,
+    x: -direction * (span > 1 ? 28 : 20),
+    transition: {
+      x: { duration: span > 1 ? 0.13 : 0.11, ease: [0.32, 0, 0.67, 0] as const },
+      opacity: { duration: span > 1 ? 0.11 : 0.09, ease: [0.32, 0, 0.67, 0] as const },
+    },
+  }),
+};
+
+export const phoneTabFade = {
+  enter: { opacity: 0 },
+  center: { opacity: 1, transition: { duration: 0.18, delay: 0.09, ease: [0.25, 0.1, 0.25, 1] as const } },
+  exit: { opacity: 0, transition: { duration: 0.1, ease: [0.32, 0, 0.67, 0] as const } },
+};
+
 /** A spring as a WAAPI/CSS duration and linear() easing, for things that must not wait on React. */
 export function springEasing(stiffness: number, damping: number): { duration: number; easing: string } {
   const w = Math.sqrt(stiffness);

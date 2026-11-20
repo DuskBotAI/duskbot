@@ -4,9 +4,10 @@ import { createPortal } from "react-dom";
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
 import {
-  limitLine, loadLimits, reportsUsage, resetTime, usageBars, usageRows, usageTone, useEngineLimits, USAGE_BARS, windowLabel,
+  limitLine, loadLimits, reportsUsage, resetTime, rowShare, usageBars, usageRows, usageTone, useEngineLimits, USAGE_BARS, windowLabel,
   type EngineLimit, type UsageTone,
 } from "@/lib/limit-resets";
+import { useUsageDisplay } from "@/lib/usage-display";
 import type { Routine } from "@/lib/routines";
 import { api, useStore } from "@/state/store";
 import { openBotSettings } from "./bot-panel/panel-link";
@@ -67,9 +68,10 @@ export function UsageGlyph({ limit, className }: { limit: EngineLimit; className
   );
 }
 
-/** Each window's share left, its reset and a thin bar; at the limit, how it clears and a fresh check. */
+/** Each window's share used or left, its reset and a thin bar; at the limit, how it clears and a fresh check. */
 export function UsageRows({ limit }: { limit: EngineLimit }) {
   const [checking, setChecking] = useState(false);
+  const display = useUsageDisplay();
   const now = Date.now();
   return (
     <div data-usage-rows className="flex flex-col gap-2">
@@ -79,14 +81,14 @@ export function UsageRows({ limit }: { limit: EngineLimit }) {
           <div className="flex items-baseline gap-2 text-[12px] leading-4">
             <span className="text-ink-secondary">{windowLabel(row.window)}</span>
             <span className={cn("font-medium tabular-nums", row.tone === "fine" ? "text-ink" : "text-warning")}>
-              {row.tone === "out" ? t("limits.windowAtLimit") : t("planUsage.left", { remaining: row.left })}
+              {row.tone === "out" ? t("limits.windowAtLimit") : display === "left" ? t("planUsage.left", { remaining: row.left }) : t("planUsage.used", { used: 100 - row.left })}
             </span>
             {row.resetsAt !== null && row.resetsAt > now && (
               <span className="ms-auto shrink-0 tabular-nums text-ink-tertiary">{t("limits.resets", { time: resetTime(row.resetsAt, now) })}</span>
             )}
           </div>
           <div aria-hidden="true" className="h-1 overflow-hidden rounded-full bg-ink/[0.08]">
-            <div className={cn("h-full rounded-full", row.tone === "fine" ? "bg-ink-tertiary" : "bg-warning")} style={{ width: `${row.left}%` }} />
+            <div className={cn("h-full rounded-full", row.tone === "fine" ? "bg-ink-tertiary" : "bg-warning")} style={{ width: `${rowShare(row, display)}%` }} />
           </div>
         </div>
       ))}
@@ -131,6 +133,7 @@ function UsageCard({ limit, anchor, onEnter, onLeave }: { limit: EngineLimit; an
  * same rows open at the top of the model menu for keyboard and touch. */
 export function UsageBars({ engine, compact = false, hover = true, className }: { engine: string | undefined; compact?: boolean; hover?: boolean; className?: string }) {
   const limit = useEngineUsage(engine);
+  const display = useUsageDisplay();
   const [anchor, setAnchor] = useState<DOMRect | null>(null);
   const spot = useRef<HTMLSpanElement>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -151,7 +154,7 @@ export function UsageBars({ engine, compact = false, hover = true, className }: 
     <span ref={spot} title="" data-usage-bars={tone} data-usage-warn={tone === "fine" ? undefined : ""} className={cn("flex shrink-0 items-center", className)}
       onPointerEnter={enter} onPointerLeave={leave} onPointerDown={() => later(() => setAnchor(null), 0)}>
       <UsageGlyph limit={limit} className={compact && tone === "fine" ? "@max-4xl/chathead:hidden" : undefined} />
-      <span className="sr-only">{limitLine(limit, Date.now(), ", ")}</span>
+      <span className="sr-only">{limitLine(limit, Date.now(), ", ", display)}</span>
       {anchor && createPortal(<UsageCard limit={limit} anchor={anchor} onEnter={() => enter()} onLeave={leave} />, document.body)}
     </span>
   );
@@ -161,8 +164,9 @@ export function UsageBars({ engine, compact = false, hover = true, className }: 
 export function UsageAlert({ engine }: { engine: string | undefined }) {
   const { dispatch } = useStore();
   const limit = useEngineUsage(engine);
+  const display = useUsageDisplay();
   if (!limit || usageTone(limit) === "fine") return null;
-  const line = limitLine(limit, Date.now(), ", ");
+  const line = limitLine(limit, Date.now(), ", ", display);
   return (
     <button type="button" data-usage-alert aria-label={line} title={line} onClick={() => openBotSettings(dispatch, "model")}
       className="flex size-9 shrink-0 items-center justify-center rounded-full border border-transparent bg-card">

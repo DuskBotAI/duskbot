@@ -12,6 +12,8 @@ import { PhoneChatMenu } from "./PhoneChatMenu";
 import { usePlatform } from "./platform";
 import { installMessageTimes } from "./message-times";
 import { installSwipeReply } from "./swipe-reply";
+import { BAR_RANK, useNativeBar } from "./chrome";
+import { useNavLeaving } from "./NavStack";
 
 const PRESS_CLICK_MS = 1000;
 
@@ -29,6 +31,8 @@ export function ChatScreen({ bot, group, members, onBack, onProfile, onComputer 
   const name = group?.name ?? bot?.name ?? "";
   const live = Boolean(bot && (bot.busy || state.computerControl[bot.id]?.held));
   const link = useLiveConnection();
+  const leaving = useNavLeaving();
+  useNativeBar(BAR_RANK.chat, leaving ? null : "none", {});
   const pressedAt = useRef(-Infinity);
   // the native glass header draws back, title and computer only, from where these sit on the page
   const glass = usePlatform().glass;

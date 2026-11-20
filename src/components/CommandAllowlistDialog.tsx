@@ -5,6 +5,8 @@ import type { CommandAllowRule, CommandAllowlistResponse } from "../../shared/co
 import { api, useStore } from "@/state/store";
 import { t } from "@/lib/i18n";
 import { cn } from "@/lib/cn";
+import { phoneApp } from "@/lib/store-app";
+import { wakeSystemControls } from "@/lib/system-control";
 import { dialogPrimaryCls, fieldLabelCls, footnoteCls, formBodyCls, formCloseCls, formHeaderCls, formSheetCls, formTitleCls, listCardCls, rowHintCls, textAreaCls, textFieldCls } from "./ui/GrokDialog";
 import { friendlyError } from "@/lib/plain-error";
 
@@ -41,6 +43,13 @@ export function CommandAllowlistDialog({ botId, botName, threadId, onClose }: {
   const basePath = `/api/bots/${encodeURIComponent(botId)}/command-allowlist`;
   const query = threadId ? `?threadId=${encodeURIComponent(threadId)}` : "";
   const providerName = (id: string) => state.instances.find((instance) => instance.instanceId === id)?.displayName ?? id;
+  const phone = phoneApp();
+
+  useEffect(() => {
+    if (!phone) return;
+    wakeSystemControls();
+    return () => wakeSystemControls();
+  }, [phone]);
 
   useEffect(() => {
     mounted.current = true;
@@ -110,9 +119,11 @@ export function CommandAllowlistDialog({ botId, botName, threadId, onClose }: {
   const overlay = (
     <div
       data-thread-overlay
-      style={overlayStyle}
-      className="ui-dialog-scrim fixed inset-0 z-50 flex items-center justify-center p-4"
+      data-phone-modal-layer={phone ? "" : undefined}
+      style={phone ? { ...overlayStyle, paddingTop: "max(var(--m-safe-top, 0px), 16px)", paddingBottom: "max(calc(var(--m-kb, 0px) + 12px), var(--m-safe-bottom, 0px), 16px)" } : overlayStyle}
+      className={cn("ui-dialog-scrim fixed inset-0 flex items-center justify-center p-4", phone ? "z-[80]" : "z-50")}
       onMouseDown={(event) => { event.stopPropagation(); if (event.target === event.currentTarget) onClose(); }}
+      onClick={(event) => { if (phone && event.target === event.currentTarget) onClose(); }}
       onKeyDown={(event) => {
         if (event.key !== "Tab") return;
         const controls = dialogRef.current?.querySelectorAll<HTMLElement>(
@@ -136,7 +147,7 @@ export function CommandAllowlistDialog({ botId, botName, threadId, onClose }: {
         aria-describedby={scopeId}
         aria-busy={loading || Boolean(saving) || undefined}
         tabIndex={-1}
-        className={cn(formSheetCls, "max-h-[85dvh] max-w-[520px]", "focus-visible:outline-none!")}
+        className={cn(formSheetCls, phone ? "max-h-full!" : "max-h-[85dvh]", "max-w-[520px]", "focus-visible:outline-none!")}
       >
         <header className={formHeaderCls}>
           <h2 id={titleId} className={formTitleCls}>{t("commandAllowlist.title")}</h2>
@@ -190,5 +201,6 @@ export function CommandAllowlistDialog({ botId, botName, threadId, onClose }: {
       </div>
     </div>
   );
-  return createPortal(overlay, document.body);
+  const portalRoot = phone ? (document.querySelector?.(".dusk-mobile") ?? document.body) : document.body;
+  return createPortal(overlay, portalRoot);
 }

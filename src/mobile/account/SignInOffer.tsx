@@ -74,7 +74,7 @@ export function SignInOffer({ paused = false }: { paused?: boolean }) {
       </div>
       {signingIn && (
         <div role="dialog" aria-modal aria-label={t("mobile.entry.signInTitle")} className="dusk-mobile fixed inset-0 z-50 flex flex-col overflow-y-auto bg-app text-ink">
-          <div className="flex h-[calc(var(--m-safe-top)+60px)] shrink-0 items-end px-4 pb-2"><BackButton close onClick={() => setSigningIn(false)} /></div>
+          <div className="mobile-screen-top flex h-[calc(var(--m-safe-top)+60px)] shrink-0 items-end px-4 pb-2"><BackButton close onClick={() => setSigningIn(false)} /></div>
           <div className="flex flex-1 flex-col items-center px-7 pb-[calc(var(--m-safe-bottom)+16px)] pt-4 text-center">
             <MobileSignIn onSignedIn={dismiss} />
           </div>

@@ -313,6 +313,7 @@ final class ChatGlassChrome: NSObject, UITextViewDelegate {
     private var bottom: NSLayoutConstraint!
 
     private var headerShown = false
+    private var headerPopping = false
     private var composerShown = false
     /// the page draws its own chrome in the same place (a sheet over the chat), or did until now: the two swap at once,
     /// never crossfade, or both show (or neither) for the length of the fade
@@ -562,7 +563,10 @@ final class ChatGlassChrome: NSObject, UITextViewDelegate {
     }
 
     /// The chat's page is gone: Home's bar is the list's again, whole and in place.
-    func pageGone() { home.follow(page: nil) }
+    func pageGone() {
+        headerPopping = false
+        home.follow(page: nil)
+    }
 
     func applyHome(_ state: [String: Any]?) {
         home.apply(state)
@@ -599,6 +603,17 @@ final class ChatGlassChrome: NSObject, UITextViewDelegate {
         setOffset(to, homeFollows: false)
         CATransaction.commit()
         slideEnd = now + duration - skipped
+        let popping = to > 0.5
+        if popping && headerShown {
+            headerPopping = true
+            UIView.animate(withDuration: 0.14, delay: 0, options: [.curveEaseOut, .beginFromCurrentState, .allowUserInteraction]) {
+                self.header.alpha = 0
+            }
+        } else if !popping && headerPopping {
+            headerPopping = false
+            stopFades(header)
+            if headerShown { header.alpha = 1 }
+        }
     }
 
     /// a message older than this is a stalled page, not a bridge hop: the chrome plays the rest from where it is due
@@ -616,6 +631,11 @@ final class ChatGlassChrome: NSObject, UITextViewDelegate {
         let drawn = (header.layer.presentation()?.value(forKeyPath: "transform.translation.x") as? NSNumber).map { CGFloat($0.doubleValue) }
         for view in [header, composer] { view.layer.removeAnimation(forKey: Self.slideKey) }
         slideEnd = 0
+        if headerPopping {
+            headerPopping = false
+            stopFades(header)
+            if headerShown { header.alpha = 1 }
+        }
         setOffset(drawn ?? offset)
     }
 
@@ -928,7 +948,7 @@ final class ChatGlassChrome: NSObject, UITextViewDelegate {
 
     /// The page says this view shows: whatever hid it since (an animation cut short, a view put over it) is undone.
     private func reassert(_ view: UIView) {
-        guard let host else { return }
+        guard let host, !(view === header && headerPopping) else { return }
         let lost = view.superview !== host || view.isHidden || (view.alpha < 1 && view.layer.animationKeys()?.isEmpty != false)
         guard lost else { return }
         KeyboardTrace.log("reassert", ["hidden": view.isHidden ? 1 : 0, "alpha": view.alpha, "attached": view.superview === host ? 1 : 0])

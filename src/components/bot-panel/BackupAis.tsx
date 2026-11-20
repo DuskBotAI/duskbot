@@ -9,7 +9,9 @@ import type { Typeahead } from "@/lib/menu-keys";
 import { pickerPlacement, type PickerPlacement } from "@/lib/picker-placement";
 import { shortModelLabel } from "@/lib/model-friendly";
 import { modelName, providerName, simpleModelMenu } from "@/lib/simple-model-menu";
+import { phoneApp } from "@/lib/store-app";
 import { usePopoverDismiss } from "@/hooks/use-popover-dismiss";
+import { SheetPush } from "@/mobile/SheetPush";
 import { useStore, type Bot, type InstanceInfo } from "@/state/store";
 import { useMenuMotion } from "../MenuMotion";
 import { modelMenuKey, modelMenuPointerMove } from "../model-menu-keys";
@@ -55,12 +57,13 @@ export function BackupChooser({ bot, current, exclude, onPick, label, title, but
   const typed = useRef<Typeahead | null>(null);
   const focusOnPlace = useRef(false);
   const menuId = useId();
+  const phone = phoneApp();
   const motion = useMenuMotion(open);
   const inside = useRef({ contains: (target: unknown) => [triggerRef.current, menuRef.current].some((node) => node?.contains(target as Node)) });
-  usePopoverDismiss(open, inside, () => setOpen(false));
+  usePopoverDismiss(open && !phone, inside, () => setOpen(false));
 
   useLayoutEffect(() => {
-    if (!open) return;
+    if (!open || phone) return;
     const place = (event?: Event) => {
       if (event?.type === "scroll" && event.target instanceof Node && menuRef.current?.contains(event.target)) return;
       const anchor = triggerRef.current?.getBoundingClientRect();
@@ -76,16 +79,16 @@ export function BackupChooser({ bot, current, exclude, onPick, label, title, but
       window.removeEventListener("resize", place);
       window.removeEventListener("scroll", place, true);
     };
-  }, [open, triggerRef]);
+  }, [open, phone, triggerRef]);
 
   useEffect(() => {
-    if (!open || !placement || !focusOnPlace.current) return;
+    if (!open || phone || !placement || !focusOnPlace.current) return;
     focusOnPlace.current = false;
     const menu = menuRef.current;
     const target = menu?.querySelector<HTMLElement>("[data-menu-search]") ?? menu?.querySelector<HTMLElement>("[data-current-model]")
       ?? menu?.querySelector<HTMLElement>("[data-menu-row]:not(:disabled)") ?? menu;
     target?.focus({ preventScroll: true });
-  }, [open, placement]);
+  }, [open, phone, placement]);
 
   const close = (refocus: boolean) => {
     setOpen(false);
@@ -160,7 +163,35 @@ export function BackupChooser({ bot, current, exclude, onPick, label, title, but
       >
         {children}
       </button>
-      {motion.shown && createPortal(
+      {phone ? (
+        <SheetPush open={open} onClose={() => close(false)} title={t("botPanel.backups.choose")} flush>
+          <div data-model-picker-content="" data-presented="" className="flex min-h-0 flex-1 flex-col">
+            <SimpleModelMenu
+              menu={menuFor()}
+              query={query}
+              bot={bot}
+              botModel={{ label: "", title: "" }}
+              idPrefix={menuId}
+              onQuery={setQuery}
+              onPick={(instance, model) => {
+                if (instance.policy) return;
+                onPick({ instanceId: instance.instanceId, model });
+                close(false);
+              }}
+              onPickCurrent={() => close(false)}
+              onFollowBot={() => close(false)}
+              onToggle={(instance) => setExpanded((shown) => {
+                const next = new Set(shown);
+                if (!next.delete(instance.instanceId)) next.add(instance.instanceId);
+                return next;
+              })}
+              onSetUp={manage}
+              onCheckAgain={checkAgain}
+              onMore={manage}
+            />
+          </div>
+        </SheetPush>
+      ) : motion.shown && createPortal(
         <div
           ref={menuRef}
           id={menuId}

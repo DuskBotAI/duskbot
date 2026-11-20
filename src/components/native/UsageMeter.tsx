@@ -4,7 +4,8 @@ import { cn } from "@/lib/cn";
 import { PixelIcon } from "../ui/PixelIcon";
 import { t } from "@/lib/i18n";
 import { upperFirst } from "@/lib/lower-first";
-import { reportsUsage, usageRows, useEngineLimits, windowLabel, type EngineLimit } from "@/lib/limit-resets";
+import { reportsUsage, rowShare, usageRows, useEngineLimits, windowLabel, type EngineLimit } from "@/lib/limit-resets";
+import { shownShare, useUsageDisplay } from "@/lib/usage-display";
 import { NEAR_LIMIT_PERCENT } from "../../../shared/limit-reset";
 import { Icon } from "../Icon";
 
@@ -32,13 +33,11 @@ function windowLine(window: Parameters<typeof windowLabel>[0], resetsAt: number 
   return resetsAt !== null && resetsAt > now ? resetsIn(resetsAt, now, window) : windowName(window);
 }
 
-const usedOf = (left: number) => 100 - left;
-
 /** Grok's 4px meter: a 6% ink track and the switch blue fill, red only at the limit. */
-export function UsageBar({ used, warn, className }: { used: number; warn?: boolean; className?: string }) {
+export function UsageBar({ share, warn, className }: { share: number; warn?: boolean; className?: string }) {
   return (
     <div aria-hidden="true" data-usage-meter="" className={cn("h-1 overflow-hidden rounded-full bg-ink/[0.06]", className)}>
-      <div className={cn("h-full rounded-full", warn ? "bg-danger" : "bg-accent-border")} style={{ width: `${Math.min(100, Math.max(0, used))}%` }} />
+      <div className={cn("h-full rounded-full", warn ? "bg-danger" : "bg-accent-border")} style={{ width: `${Math.min(100, Math.max(0, share))}%` }} />
     </div>
   );
 }
@@ -48,9 +47,10 @@ function windowName(window: Parameters<typeof windowLabel>[0]) {
 }
 
 /** One engine as Grok's weekly usage card: the deciding window large, any other window as a compact meter under it. On a
- * phone it is Grok's phone anatomy instead: the name over a stack of segments, the share used beside its reset on a
- * thick bar, then one segment per other window. */
+ * phone it is Grok's phone anatomy instead: the name over a stack of segments, the share used or left beside its reset
+ * on a thick bar, then one segment per other window. */
 export function UsageMeterCard({ limit, now = Date.now() }: { limit: EngineLimit; now?: number }) {
+  const display = useUsageDisplay();
   const rows = usageRows(limit);
   const lead = rows.find((row) => row.window === limit.window) ?? rows[0];
   if (!lead) return null;
@@ -68,23 +68,23 @@ export function UsageMeterCard({ limit, now = Date.now() }: { limit: EngineLimit
               <span className="text-[17px] leading-6 tracking-normal text-ink max-sm:text-[26px] max-sm:font-medium max-sm:leading-8">{t("nativeUsage.atLimit")}</span>
             ) : (
               <>
-                <span className="text-[17px] leading-6 tracking-normal text-ink tabular-nums max-sm:text-[26px] max-sm:font-medium max-sm:leading-8 max-sm:tracking-normal">{usedOf(lead.left)}%</span>
-                <span className="text-[13px] leading-[18px] text-ink/[0.56] max-sm:text-[16px] max-sm:leading-[22px]">{t("nativeUsage.used")}</span>
+                <span className="text-[17px] leading-6 tracking-normal text-ink tabular-nums max-sm:text-[26px] max-sm:font-medium max-sm:leading-8 max-sm:tracking-normal">{rowShare(lead, display)}%</span>
+                <span className="text-[13px] leading-[18px] text-ink/[0.56] max-sm:text-[16px] max-sm:leading-[22px]">{t(display === "left" ? "nativeUsage.left" : "nativeUsage.used")}</span>
               </>
             )}
             <span className="ms-auto shrink-0 text-[14px] leading-5 text-ink-secondary sm:hidden">{windowLine(lead.window, lead.resetsAt, now)}</span>
           </div>
-          <UsageBar used={usedOf(lead.left)} warn={lead.tone !== "fine"} className="mt-2 max-sm:mt-3 max-sm:h-[18px] max-sm:rounded-[5px] max-sm:bg-ink/[0.05] max-sm:[&>div]:rounded-[5px]" />
+          <UsageBar share={rowShare(lead, display)} warn={lead.tone !== "fine"} className="mt-2 max-sm:mt-3 max-sm:h-[18px] max-sm:rounded-[5px] max-sm:bg-ink/[0.05] max-sm:[&>div]:rounded-[5px]" />
           <div className="mt-1.5 text-[11px] leading-[14px] tracking-[0.07px] text-ink-secondary max-sm:hidden">
             {windowLine(lead.window, lead.resetsAt, now)}
           </div>
         </div>
         {rest.map((row) => (
           <div key={row.window} data-usage-window={row.window} data-usage-segment="" className={cn("mt-3 flex flex-col max-sm:mt-0 max-sm:min-h-[52px] max-sm:justify-center max-sm:gap-2 max-sm:py-3", segment)}>
-            <UsageBar used={usedOf(row.left)} warn={row.tone !== "fine"} className="max-sm:order-1 max-sm:h-1.5" />
+            <UsageBar share={rowShare(row, display)} warn={row.tone !== "fine"} className="max-sm:order-1 max-sm:h-1.5" />
             <div className="mt-1.5 flex items-baseline justify-between gap-3 text-[11px] leading-[14px] tracking-[0.07px] text-ink-secondary max-sm:mt-0 max-sm:text-[15px] max-sm:leading-5 max-sm:tracking-normal">
               <span className="min-w-0 truncate max-sm:text-ink">{windowLine(row.window, row.resetsAt, now)}</span>
-              <span className="shrink-0 tabular-nums">{row.tone === "out" ? t("nativeUsage.atLimit") : t("nativeUsage.percentUsed", { percent: usedOf(row.left) })}</span>
+              <span className="shrink-0 tabular-nums">{row.tone === "out" ? t("nativeUsage.atLimit") : t(display === "left" ? "nativeUsage.percentLeft" : "nativeUsage.percentUsed", { percent: rowShare(row, display) })}</span>
             </div>
           </div>
         ))}
@@ -93,9 +93,10 @@ export function UsageMeterCard({ limit, now = Date.now() }: { limit: EngineLimit
   );
 }
 
-/** The panel row under the model: "Usage", its window and reset, the share used on the right, then the meter. */
+/** The panel row under the model: "Usage", its window and reset, the share used or left on the right, then the meter. */
 export function UsageMeterRow({ engine }: { engine: string | undefined }) {
   const limit = useEngineLimits().find((candidate) => candidate.engine === engine);
+  const display = useUsageDisplay();
   if (!reportsUsage(limit)) return null;
   const rows = usageRows(limit);
   const lead = rows.find((row) => row.window === limit.window) ?? rows[0];
@@ -109,10 +110,10 @@ export function UsageMeterRow({ engine }: { engine: string | undefined }) {
           <div className="truncate text-[13px] leading-[18px] tracking-[0.015em] text-ink-secondary">{hint}</div>
         </div>
         <span className={cn("shrink-0 text-[13px] leading-[18px] tabular-nums", lead.tone === "out" ? "text-danger" : "text-ink-secondary")}>
-          {lead.tone === "out" ? t("nativeUsage.atLimit") : t("nativeUsage.percentUsed", { percent: usedOf(lead.left) })}
+          {lead.tone === "out" ? t("nativeUsage.atLimit") : t(display === "left" ? "nativeUsage.percentLeft" : "nativeUsage.percentUsed", { percent: rowShare(lead, display) })}
         </span>
       </div>
-      <UsageBar used={usedOf(lead.left)} warn={lead.tone === "out"} />
+      <UsageBar share={rowShare(lead, display)} warn={lead.tone === "out"} />
     </div>
   );
 }
@@ -123,6 +124,7 @@ const dismissKey = (limit: EngineLimit) => `${limit.engine}:${limit.resetsAt ?? 
 /** Grok's composer-dock usage warning, shown near or at the engine's limit until dismissed for that reset. */
 export function UsageBanner({ engine, onSeeUsage }: { engine: string | undefined; onSeeUsage: () => void }) {
   const limit = useEngineLimits().find((candidate) => candidate.engine === engine);
+  const display = useUsageDisplay();
   const [, setHidden] = useState(0);
   if (!reportsUsage(limit) || dismissed.has(dismissKey(limit))) return null;
   const used = Math.round(limit.usedPercent ?? 0);
@@ -136,7 +138,8 @@ export function UsageBanner({ engine, onSeeUsage }: { engine: string | undefined
       <PixelIcon name={out ? "batteryFull" : "battery"} />
       <div className="min-w-0 flex-1">
         <div className="text-[13px] leading-[18px] tracking-[-0.08px] text-ink">
-          {out ? t("nativeUsage.banner.out", { engine: limit.name }) : t("nativeUsage.banner.near", { engine: limit.name, percent: used })}
+          {out ? t("nativeUsage.banner.out", { engine: limit.name })
+            : t(display === "left" ? "nativeUsage.banner.nearLeft" : "nativeUsage.banner.near", { engine: limit.name, percent: shownShare(used, display) })}
         </div>
         {reset && <div className="text-[13px] leading-[18px] tracking-[-0.08px] text-ink-secondary">{reset}</div>}
       </div>

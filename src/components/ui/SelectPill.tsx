@@ -2,8 +2,10 @@ import { Fragment, useEffect, useId, useLayoutEffect, useRef, useState, type Rea
 import { createPortal } from "react-dom";
 
 import { cn } from "@/lib/cn";
+import { triggerSystemControl, useSystemControl } from "@/lib/system-control";
 import { Icon, type IconName } from "../Icon";
 import { useMenuMotion } from "../MenuMotion";
+import { systemMenu } from "@/lib/system-menu";
 
 export interface SelectPillOption<V extends string> {
   value: V;
@@ -56,6 +58,30 @@ export function SelectPill<V extends string>({ value, options, onChange, disable
   const trigger = useRef<HTMLButtonElement>(null);
   const list = useRef<HTMLDivElement>(null);
   const id = useId();
+  const plain = options.every((option) => typeof option.label === "string");
+  const system = useSystemControl(
+    trigger,
+    plain
+      ? {
+          kind: "popup",
+          title: String(selected?.label ?? value),
+          value,
+          options: options.map((option) => ({
+            key: option.value,
+            label: option.label as string,
+            disabled: option.disabled,
+            separated: option.separated,
+          })),
+          disabled,
+          label,
+        }
+      : null,
+    (next) => {
+      if (typeof next !== "string") return;
+      const option = options.find((item) => item.value === next);
+      if (option && !option.disabled && option.value !== value) onChange(option.value);
+    },
+  );
 
   const close = (refocus = true) => {
     setOpen(false);
@@ -69,8 +95,22 @@ export function SelectPill<V extends string>({ value, options, onChange, disable
   };
   const show = () => {
     if (disabled) return;
-    setActive(Math.max(0, options.findIndex((option) => option.value === value)));
-    setOpen(true);
+    const openFallback = () => {
+      const menu = systemMenu();
+      if (menu && trigger.current && options.every((option) => typeof option.label === "string")) {
+        void menu(trigger.current.getBoundingClientRect(), options.map((option) => ({
+          key: option.value, label: option.label as string, checked: option.value === value, disabled: option.disabled, separated: option.separated,
+        }))).then((key) => { if (key !== null) choose(options.findIndex((option) => option.value === key)); });
+        return;
+      }
+      setActive(Math.max(0, options.findIndex((option) => option.value === value)));
+      setOpen(true);
+    };
+    if (system && trigger.current) {
+      void triggerSystemControl(trigger.current).then((triggered) => { if (!triggered) openFallback(); });
+      return;
+    }
+    openFallback();
   };
 
   useLayoutEffect(() => {
@@ -120,10 +160,13 @@ export function SelectPill<V extends string>({ value, options, onChange, disable
         type="button"
         role="combobox"
         data-select-pill=""
+        data-system-popup={system ? "" : undefined}
         aria-label={label}
+        aria-hidden={system || undefined}
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-controls={open ? `${id}-list` : undefined}
+        tabIndex={system ? -1 : undefined}
         title={title}
         disabled={disabled}
         onClick={() => (open ? close() : show())}
@@ -143,10 +186,11 @@ export function SelectPill<V extends string>({ value, options, onChange, disable
           "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus",
           "disabled:cursor-default disabled:opacity-50 disabled:hover:bg-transparent",
           className,
+          system && "m-0 h-auto min-h-6 max-w-[62%] gap-1.5 rounded-none border-0 bg-transparent p-0 text-[17px] leading-[22px] opacity-0",
         )}
       >
         <span className="min-w-0 flex-1 truncate text-start">{selected?.label ?? value}</span>
-        <Icon name="chevron-down" size={10} className="shrink-0 text-ink-secondary" />
+        <Icon name="chevron-down" size={system ? 16 : 10} className="shrink-0 text-ink-secondary" />
       </button>
       {typeof document !== "undefined" && createPortal(
           motion.shown && place && (

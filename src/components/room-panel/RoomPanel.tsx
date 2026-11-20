@@ -15,6 +15,8 @@ import { Icon } from "../Icon";
 import { ManageMembersPanel } from "../ManageMembersPanel";
 import { TAB_LABEL, type PanelTab } from "../bot-panel/page-registry";
 import { panelTabs, phoneApp, screenViewAllowed } from "@/lib/store-app";
+import { wakeSystemControls } from "@/lib/system-control";
+import { feel, phoneTabFade, phoneTabSlide } from "@/mobile/motion";
 import { pageSurfaceCls } from "../bot-panel/pages";
 import { roundButtonCls } from "../bot-panel/rows";
 import { PanelResizeEdge } from "../bot-panel/PanelResizeEdge";
@@ -72,6 +74,7 @@ export function RoomPanel({ group, overlay = false, initialTab = "details" }: { 
   // only a tab picked from the tabs swaps in; coming back from a page, the list is simply there under the wipe
   const [tabSwapped, setTabSwapped] = useState(false);
   const openTab = (next: PanelTab) => {
+    wakeSystemControls();
     setTab(next);
     setTabSwapped(true);
     bodyRef.current?.scrollTo({ top: 0 });
@@ -121,8 +124,22 @@ export function RoomPanel({ group, overlay = false, initialTab = "details" }: { 
   const reduced = prefersReduced || (typeof document !== "undefined" && document.documentElement.dataset.reducedMotion === "true");
   const viewKey = page === null ? "tabs" : `1:${page}`;
   const backLabel = t(TAB_LABEL[tab]);
+  const order = panelTabs();
+  const tabMove = useRef({ tab, direction: 1, span: 1 });
+  if (tabMove.current.tab !== tab) {
+    const delta = order.indexOf(tab) - order.indexOf(tabMove.current.tab);
+    tabMove.current = { tab, direction: delta >= 0 ? 1 : -1, span: Math.max(1, Math.abs(delta)) };
+  }
+  const phone = phoneApp();
 
   const rowProps = { group, members, onOpen: open, onMembers: () => setMembersOpen(true), membersRef: membersRowRef };
+  const tabContent = (
+    <>
+      {tab === "details" && <RoomDetailsTab {...rowProps} />}
+      {tab === "computer" && screenViewAllowed() && <TabBoundary name={group.name}><RoomComputerTab members={members} /></TabBoundary>}
+      {tab === "advanced" && <RoomAdvancedTab {...rowProps} />}
+    </>
+  );
   const tabsView = (
     <>
       <div data-panel-head className="contents">
@@ -139,19 +156,34 @@ export function RoomPanel({ group, overlay = false, initialTab = "details" }: { 
             value={tab}
             onChange={openTab}
             tabs={panelTabs().map((id) => ({ value: id, label: t(TAB_LABEL[id]) }))}
+            slide={phone ? (reduced ? null : feel.soft) : undefined}
           />
         </div>
       </div>
-      <MotionDiv
-        key={tab}
-        role="tabpanel" aria-label={t(TAB_LABEL[tab])} className="pt-2.5"
-        initial={reduced || !tabSwapped ? false : SWAP.initial}
-        animate={SWAP.animate}
-      >
-        {tab === "details" && <RoomDetailsTab {...rowProps} />}
-        {tab === "computer" && screenViewAllowed() && <TabBoundary name={group.name}><RoomComputerTab members={members} /></TabBoundary>}
-        {tab === "advanced" && <RoomAdvancedTab {...rowProps} />}
-      </MotionDiv>
+      {phone ? (
+        <AnimatePresence initial={false} mode="popLayout" custom={tabMove.current}>
+          <MotionDiv
+            key={tab}
+            role="tabpanel" aria-label={t(TAB_LABEL[tab])} className="pt-2.5"
+            custom={tabMove.current}
+            variants={reduced ? phoneTabFade : phoneTabSlide}
+            initial={tabSwapped ? "enter" : false}
+            animate="center"
+            exit="exit"
+          >
+            {tabContent}
+          </MotionDiv>
+        </AnimatePresence>
+      ) : (
+        <MotionDiv
+          key={tab}
+          role="tabpanel" aria-label={t(TAB_LABEL[tab])} className="pt-2.5"
+          initial={reduced || !tabSwapped ? false : SWAP.initial}
+          animate={SWAP.animate}
+        >
+          {tabContent}
+        </MotionDiv>
+      )}
     </>
   );
 
@@ -163,7 +195,7 @@ export function RoomPanel({ group, overlay = false, initialTab = "details" }: { 
     </div>
   );
 
-  const viewCls = "@container absolute inset-0 flex flex-col overflow-y-auto overscroll-contain bg-app px-4 pb-8 [scrollbar-gutter:stable] [scrollbar-width:thin]";
+  const viewCls = "@container absolute inset-0 flex flex-col overflow-x-hidden overflow-y-auto overscroll-contain bg-app px-4 pb-8 [scrollbar-gutter:stable] [scrollbar-width:thin]";
   const setBody = (element: HTMLDivElement | null) => { if (element) bodyRef.current = element; };
   const view = (content: ReactNode) => reduced ? (
     <div key={viewKey} ref={setBody} className={viewCls}>{content}</div>
@@ -196,7 +228,7 @@ export function RoomPanel({ group, overlay = false, initialTab = "details" }: { 
       >
         <span id="room-panel-title" className="sr-only">{group.name}</span>
         <PanelResizeEdge />
-        <div {...dragProps} className="relative ms-2 flex h-[60px] shrink-0 items-center gap-2 p-3 ps-1">
+        <div {...dragProps} data-panel-bar className="relative ms-2 flex h-[60px] shrink-0 items-center gap-2 p-3 ps-1">
           {page === null ? (
             <span className="ms-auto" />
           ) : (

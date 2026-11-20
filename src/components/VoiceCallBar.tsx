@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type CSSProperties, type ReactNode } from "react";
 import { Check, MessageSquareText, Mic, MicOff, PhoneOff, RotateCcw, Settings } from "../icons";
 
 import { deferCallCleanup, endCall } from "@/lib/call";
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
+import { useSystemControl } from "@/lib/system-control";
 import { haptic } from "@/mobile/haptics";
 import { localVoiceCallKnown, markLocalVoiceUnavailable } from "@/lib/voice-call/availability";
 import { ease } from "@/lib/voice-call/meter";
@@ -387,6 +388,21 @@ function CallSettings({ voice, speed, closing, narrow, account, onVoice, onSpeed
   onVoice: (id: CallVoiceId) => void;
   onSpeed: (value: number) => void;
 }) {
+  const speedRef = useRef<HTMLDivElement>(null);
+  const speedIndex = Math.max(0, CALL_SPEEDS.findIndex((entry) => entry.value === speed));
+  const systemSpeed = useSystemControl(
+    speedRef,
+    {
+      kind: "segmented",
+      items: CALL_SPEEDS.map((entry) => t(entry.label)),
+      selected: speedIndex,
+      label: t("call.voice.speed"),
+    },
+    (index) => {
+      const picked = typeof index === "number" ? CALL_SPEEDS[index] : undefined;
+      if (picked && picked.value !== speed) onSpeed(picked.value);
+    },
+  );
   return (
     <div
       role="dialog"
@@ -428,20 +444,31 @@ function CallSettings({ voice, speed, closing, narrow, account, onVoice, onSpeed
         ))}
       </div>
       <div className="px-2.5 pb-1 pt-2.5 text-[12px] font-medium text-ink-secondary">{t("call.voice.speed")}</div>
-      <div role="radiogroup" aria-label={t("call.voice.speed")} className="flex gap-0.5 rounded-xl bg-ink/[0.06] p-0.5">
-        {CALL_SPEEDS.map((entry) => (
-          <button
-            key={entry.value}
-            type="button"
-            role="radio"
-            aria-checked={speed === entry.value}
-            onClick={() => onSpeed(entry.value)}
-            className={cn("voice-call-press flex-1 rounded-[10px] py-1.5 text-[12px] font-medium transition-colors", speed === entry.value ? "bg-app text-ink" : "text-ink-secondary hover:text-ink")}
-          >
-            {t(entry.label)}
-          </button>
-        ))}
-      </div>
+      {systemSpeed ? (
+        <div ref={speedRef} aria-hidden="true" data-segmented-room="" className="h-9 w-full" />
+      ) : (
+        <div
+          role="radiogroup"
+          aria-label={t("call.voice.speed")}
+          data-segmented=""
+          style={{ "--seg-count": CALL_SPEEDS.length, "--seg-index": speedIndex } as CSSProperties}
+          className="flex gap-0.5 rounded-xl bg-ink/[0.06] p-0.5"
+        >
+          {CALL_SPEEDS.map((entry) => (
+            <button
+              key={entry.value}
+              type="button"
+              role="radio"
+              aria-checked={speed === entry.value}
+              aria-pressed={speed === entry.value}
+              onClick={() => onSpeed(entry.value)}
+              className={cn("voice-call-press flex-1 rounded-[10px] py-1.5 text-[12px] font-medium transition-colors", speed === entry.value ? "bg-app text-ink" : "text-ink-secondary hover:text-ink")}
+            >
+              {t(entry.label)}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

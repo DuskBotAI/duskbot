@@ -9,6 +9,7 @@ import { THEME_SKINS } from "@/lib/skins";
 import { pairSignIn, universalSignInLink, type MobileConnectionRecord, type PairSignIn } from "../../../shared/mobile-link";
 import { haptic } from "../haptics";
 import { PixelArt, PixelMascot } from "../Illustration";
+import { useKeyboardSync } from "../keyboard";
 import { usePlatform, type CameraPermission } from "../platform";
 import { LINK_DEADLINE_MS, linkDeadline, PairError, readScanned, redeemPairing, resolveTypedCode, type TypedPairing } from "../connection/pair";
 import { followSignInService, signInServiceSwitch } from "../account/environment";
@@ -133,6 +134,8 @@ export function Onboarding({ initial = null, initialSignIn, reason = null, start
     caret.current = null;
     if (at !== null && input && document.activeElement === input) input.setSelectionRange(at, at);
   }, [value]);
+  const mainRef = useRef<HTMLElement>(null);
+  useKeyboardSync(platform, mainRef);
 
   useEffect(() => {
     platform.setStatusBar?.(step === "scan" || document.documentElement.dataset.skin === THEME_SKINS.dark ? "light" : "dark");
@@ -345,7 +348,7 @@ export function Onboarding({ initial = null, initialSignIn, reason = null, start
   );
 
   return (
-    <main className="dusk-mobile relative size-full overflow-hidden bg-app text-ink" data-scan-clear aria-busy={busy}>
+    <main ref={mainRef} className="dusk-mobile relative size-full overflow-hidden bg-app text-ink" data-scan-clear aria-busy={busy}>
       <AnimatePresence mode="wait" initial={false}>
         {step === "welcome" && (
           <StepPane id="welcome">
@@ -420,11 +423,11 @@ export function Onboarding({ initial = null, initialSignIn, reason = null, start
           <StepPane id={step}>
             <form className="flex min-h-0 flex-1 flex-col" noValidate onSubmit={(event) => { event.preventDefault(); if (value.trim()) void redeem(value, step); }}>
               <div className="flex h-[calc(var(--m-safe-top)+60px)] shrink-0 items-end px-4 pb-2">{back(step === "paste" ? "code" : home)}</div>
-              <div className="flex min-h-0 flex-1 flex-col items-center overflow-y-auto px-6 pt-4 text-center">
-                <PixelArt name="computer" size={76} className="mb-5" />
+              <div className="flex min-h-0 flex-1 flex-col items-center overflow-y-auto px-6 pt-4 in-data-[keyboard=open]:pt-0 text-center">
+                <PixelArt name="computer" size={76} className="mb-5 in-data-[keyboard=open]:hidden" />
                 <h1 className={HEADLINE}>{t(step === "code" ? "mobile.onboarding.codeTitle" : "mobile.onboarding.pasteTitle")}</h1>
                 <p className={LINE}>{t(step === "code" ? "mobile.entry.codeBody" : "mobile.onboarding.pasteBody")}</p>
-                <div className="mt-7 w-full text-left">
+                <div className="mt-7 w-full text-left in-data-[keyboard=open]:mt-4">
                   <label htmlFor={fieldId} className="mb-1.5 block px-1 text-[15px] font-medium text-ink">{t(step === "code" ? "mobile.onboarding.codeLabel" : "mobile.onboarding.pasteLabel")}</label>
                   {step === "code" ? (
                     <input ref={codeField} id={fieldId} autoFocus value={value} readOnly={busy}
@@ -453,7 +456,7 @@ export function Onboarding({ initial = null, initialSignIn, reason = null, start
                   {cameraLine}
                 </div>
               </div>
-              <div className="flex shrink-0 flex-col items-center gap-1 px-6 pb-[calc(var(--m-safe-bottom)+16px)] pt-4">
+              <div className="flex shrink-0 flex-col items-center gap-1 px-6 pb-[calc(max(var(--m-kb,0px),var(--m-safe-bottom))+12px)] pt-3">
                 {scanFailed && !value.trim() && !busy
                   ? <button type="button" data-scan-again="" className={PRIMARY} onClick={() => void openScanner()}><QrCode size={20} />{t("mobile.onboarding.scanAgain")}</button>
                   : <button type="submit" disabled={busy || !value.trim() || (step === "code" && !typedCodeComplete(value))} className={PRIMARY}>{busy ? <WorkingDots /> : t(failure ? "mobile.onboarding.retry" : "mobile.pair.link")}</button>}

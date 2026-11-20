@@ -1,5 +1,6 @@
-import { useLayoutEffect, useRef, useState, type HTMLAttributes, type ReactNode } from "react";
+import { useLayoutEffect, useRef, useState, type CSSProperties, type HTMLAttributes, type ReactNode } from "react";
 import { cn } from "@/lib/cn";
+import { useSystemControl } from "@/lib/system-control";
 import { useStretch } from "@/lib/use-stretch";
 import { MotionSpan, useMotionReduced } from "./SheetMotion";
 
@@ -16,10 +17,11 @@ export interface SlidingPill<V extends string> {
  * where it is), the words crossfade their ink, and a press barely gives. Nothing picked leaves the thumb faded out.
  * Reduced motion: the thumb jumps, the ink still fades.
  * (ui/Segmented is the settings pages' version: a lifted card on a soft track, sized to its labels.) */
-export function SlidingPills<V extends string>({ options, value, onPick, className, pillClassName = "px-2", ...rest }: {
+export function SlidingPills<V extends string>({ options, value, onPick, label, className, pillClassName = "px-2", ...rest }: {
   options: readonly SlidingPill<V>[];
   value: V | undefined;
   onPick: (value: V) => void;
+  label?: string;
   className?: string;
   /** The pills' side padding: narrower where more of them share the track. */
   pillClassName?: string;
@@ -27,9 +29,26 @@ export function SlidingPills<V extends string>({ options, value, onPick, classNa
   const at = options.findIndex((option) => option.value === value);
   const tabStop = Math.max(0, at);
   const group = useRef<HTMLDivElement>(null);
+  const plain = options.every((option) => typeof option.label === "string");
+  const system = useSystemControl(
+    group,
+    plain
+      ? {
+          kind: "segmented",
+          items: options.map((option) => option.label as string),
+          selected: at,
+          label: label ?? rest["aria-label"],
+        }
+      : null,
+    (index) => {
+      const option = typeof index === "number" ? options[index] : undefined;
+      if (option && option.value !== value) onPick(option.value);
+    },
+  );
   const reduced = useMotionReduced();
   const [thumb, setThumb] = useState<{ start: number; end: number; at: number; moved: boolean } | null>(null);
   useLayoutEffect(() => {
+    if (system) return;
     const root = group.current;
     if (!root) return;
     const place = () => {
@@ -44,11 +63,38 @@ export function SlidingPills<V extends string>({ options, value, onPick, classNa
     const watch = new ResizeObserver(place);
     watch.observe(root);
     return () => watch.disconnect();
-  }, [at, options.length]);
+  }, [at, options.length, system]);
   const stretch = useStretch(thumb, reduced || !thumb?.moved);
+  if (system) {
+    return (
+      <div
+        ref={group}
+        {...rest}
+        aria-hidden="true"
+        data-segmented-room=""
+        className={cn("m-1 grid h-9 items-center", className)}
+        style={{ gridTemplateColumns: `repeat(${options.length}, minmax(0, 1fr))` }}
+      >
+        {options.map((option) => (
+          <span key={option.value} className="invisible whitespace-nowrap px-3 text-center text-[15px] font-medium">
+            {option.label}
+          </span>
+        ))}
+      </div>
+    );
+  }
   return (
-    <div ref={group} role="group" {...rest} className={cn("relative isolate m-1 grid rounded-full bg-ink/[0.05] p-[3px]", className)}
-      style={{ gridTemplateColumns: `repeat(${options.length}, minmax(0, 1fr))` }}>
+    <div
+      ref={group}
+      role="group"
+      {...rest}
+      data-segmented={at >= 0 ? "" : undefined}
+      className={cn("relative isolate m-1 grid rounded-full bg-ink/[0.05] p-[3px]", className)}
+      style={{
+        gridTemplateColumns: `repeat(${options.length}, minmax(0, 1fr))`,
+        ...(at >= 0 ? { "--seg-count": options.length, "--seg-index": at } : {}),
+      } as CSSProperties}
+    >
       <MotionSpan
         aria-hidden="true"
         data-segmented-pill=""

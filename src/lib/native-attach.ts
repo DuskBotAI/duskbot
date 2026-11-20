@@ -3,6 +3,7 @@
 export interface NativeAttach {
   photos(): Promise<File[]>;
   files(): Promise<File[]>;
+  camera?(): Promise<File[]>;
 }
 
 let native: NativeAttach | null = null;

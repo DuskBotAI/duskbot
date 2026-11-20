@@ -8,7 +8,8 @@ import { ThreadRefsProvider } from "@/components/ThreadRefs";
 import { DesktopCapabilitiesProvider } from "@/components/DesktopCapabilities";
 import { LiveCallHost } from "@/components/LiveCallHost";
 import { liveCallEnabled } from "@/lib/feature-flags";
-import { ConnectAppsHost } from "@/components/connect-apps";
+import { ConnectAppsHost, connectAppsPageFor, openConnectApps } from "@/components/connect-apps";
+import { closeConnectApps, connectAppsState } from "@/components/connect-apps/open";
 import { openChatLink } from "@/components/ThreadRefs";
 import { parseBotRefUrl, parseThreadRefUrl } from "@/lib/thread-refs"; import { completeSlackOAuth } from "@/lib/slack-oauth-link"; import { parseSlackOAuthLink } from "../../shared/slack";
 import { effectiveLanguage, useLanguageChoice, usePageLanguage } from "@/lib/language-preference";
@@ -95,13 +96,16 @@ function Shell() {
   const skin = useSyncExternalStore(subscribeSkin, readSkinChoice, () => "system");
   useEffect(() => {
     // an open sheet steps the page back onto a dark ground, so the clock turns light over it
-    const apply = () => platform.setStatusBar?.(sheetOpen || document.documentElement.dataset.skin === THEME_SKINS.dark ? "light" : "dark");
+    // (the system's sheet dims the page itself and the status bar follows it)
+    const apply = () => platform.setStatusBar?.((sheetOpen && !platform.chrome) || document.documentElement.dataset.skin === THEME_SKINS.dark ? "light" : "dark");
     apply();
     const system = window.matchMedia?.("(prefers-color-scheme: dark)");
     const later = () => setTimeout(apply, 0);
     system?.addEventListener("change", later);
     return () => system?.removeEventListener("change", later);
   }, [platform, skin, sheetOpen]);
+
+  useEffect(() => platform.setAppearance?.(skin === THEME_SKINS.dark ? "dark" : skin === THEME_SKINS.light ? "light" : "system"), [platform, skin]);
 
   // with the list in front, the chat last opened is not being read: its replies stay unread and still notify
   useEffect(() => { setChatCovered(chatId === null); return () => setChatCovered(false); }, [chatId]);
@@ -149,6 +153,18 @@ function Shell() {
     if (state.appSettingsSection === "voice") openSheet({ kind: "settings", page: "voice" });
     else setDesktopOnly(true);
   }, [state.appSettingsOpen, state.appSettingsSection, dispatch, openSheet]);
+
+  useEffect(() => {
+    if (!state.pluginsOpen) return;
+    openConnectApps(connectAppsPageFor(state.pluginsSurface));
+    dispatch({ type: "togglePlugins", open: false });
+  }, [state.pluginsOpen, state.pluginsSurface, dispatch]);
+
+  const wasSheetOpen = useRef(sheetOpen);
+  useEffect(() => {
+    if (wasSheetOpen.current && !sheetOpen && connectAppsState().open) closeConnectApps();
+    wasSheetOpen.current = sheetOpen;
+  }, [sheetOpen]);
 
   const openTarget = useCallback((target: MobileOpenTarget) => {
     const id = target.botId ?? target.groupId;

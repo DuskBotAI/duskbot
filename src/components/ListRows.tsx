@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useId, useLayoutEffect, useRef, useState, type FormEvent, type ReactElement, type ReactNode, type Ref } from "react";
+import { createContext, useContext, useEffect, useId, useLayoutEffect, useRef, useState, type FormEvent, type MouseEventHandler, type ReactElement, type ReactNode, type Ref } from "react";
 import { Check, ChevronRight, Copy, type GlyphIcon } from "../icons";
 
 import { cn } from "@/lib/cn";
@@ -184,6 +184,7 @@ export function ItemRow({ title, hint, value, icon, pixel, tone, children, ...re
   pixel?: SettingGlyphName | ReactElement;
   tone?: "danger" | "warn";
   children?: ReactNode;
+  onClick?: MouseEventHandler<HTMLDivElement>;
   "data-panel-row"?: string;
   "data-sheet-row"?: string;
 }) {

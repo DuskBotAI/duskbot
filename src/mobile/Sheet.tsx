@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { animate, motion, useMotionValue, useMotionValueEvent, useReducedMotion, useTransform, type MotionValue } from "motion/react";
 import { X } from "../icons";
 import { cn } from "@/lib/cn";
@@ -7,6 +8,8 @@ import { canScroll, ownsDrag, useDrag } from "./gesture";
 import { haptic } from "./haptics";
 import { dur, ease, projectRelease, rubberband, settleTo, springPath, system } from "./motion";
 import { BackGlyph, RoundButton } from "./RoundButton";
+import { BAR_RANK, frames, sheetStep, sheetsUp, useChrome, useNativeBar } from "./chrome";
+import type { MobileChrome } from "./platform";
 
 const SYSTEM = { stiffness: system.stiffness, damping: system.damping };
 
@@ -83,7 +86,10 @@ export function closeTopSheet(): boolean {
   return true;
 }
 
-type SheetProps = {
+/** A button beside the sheet's title. `symbol` is the SF Symbol the system's bar draws for it. */
+export interface SheetAction { key: string; label: string; symbol: string; onPress: () => void; disabled?: boolean }
+
+interface SheetProps {
   open: boolean;
   onClose: () => void;
   title?: ReactNode;
@@ -95,22 +101,27 @@ type SheetProps = {
   /** A back chevron in place of the close button, for a page inside a sheet. */
   back?: () => void;
   trailing?: ReactNode;
+  /** What `trailing` offers, for the system's bar, which draws its own buttons. */
+  actions?: SheetAction[];
   bodyClassName?: string;
   /** No header row: the content draws its own. */
   flush?: boolean;
+  /** A flush sheet whose title, back and actions the system's bar shows where there is one. */
+  systemBar?: boolean;
   /** False for a sheet over another sheet: the page behind already stepped back for the first one. */
   recede?: boolean;
-};
+}
 
 /** Inside a stack of pages (Settings), a sheet page is pushed in place instead of opening over it: `back` pops it. */
 export const SheetStack = createContext<{ back: () => void } | null>(null);
 
-/** A bottom sheet with Grok's 28pt top corners. It follows the finger down from anywhere whose scroller is at its top,
- * rubber-bands up, and on release dismisses or springs back by where the flick would land. Inside a SheetStack it is a
- * page of that stack instead. */
+/** A sheet over the page: a page of the stack it is in, else the system's own sheet where the device presents one, else
+ * the phone shell's. */
 export function Sheet(props: SheetProps) {
   const stack = useContext(SheetStack);
-  return stack ? <StackPage {...props} back={props.back ?? stack.back} /> : <ModalSheet {...props} />;
+  const chrome = useChrome();
+  if (stack) return <StackPage {...props} back={props.back ?? stack.back} />;
+  return chrome ? <SystemSheet chrome={chrome} {...props} /> : <ModalSheet {...props} />;
 }
 
 /** iOS's sheet header: back on the left of a pushed page, the title, its actions, and close on the right. */
@@ -125,18 +136,147 @@ function SheetHeader({ title, back, onClose, trailing, className }: Pick<SheetPr
   );
 }
 
-/** One page of a stack inside a sheet: its own header (back, title, an action) over its own scroller. */
-export function StackPage({ title, label, children, back, onClose, trailing, bodyClassName, flush = false }: SheetProps) {
+/** The sheet's title, back and actions in the system's bar, where the device has one. A sheet that goes back to another
+ * keeps its close beside the actions; a page of a stack has only its back, since closing it is going back. */
+function useSheetBar(rank: number, show: "bar" | "none" | null, { title, back, actions, onClose }: Pick<SheetProps, "title" | "back" | "actions" | "onClose">, closeBesideBack = true): boolean {
+  const closeItem = { id: "close", role: "close" as const, label: t("mobile.sheet.close") };
+  return useNativeBar(rank, show !== "bar" ? show : {
+    title: typeof title === "string" ? title : undefined,
+    leading: back ? [{ id: "back", symbol: "chevron.backward", label: t("mobile.sheet.back") }] : [closeItem],
+    trailing: [...(actions ?? []).map((action) => ({ id: `action:${action.key}`, symbol: action.symbol, label: action.label, disabled: action.disabled })), ...(back && closeBesideBack ? [closeItem] : [])],
+  }, {
+    close: onClose,
+    back: () => back?.(),
+    ...Object.fromEntries((actions ?? []).map((action) => [`action:${action.key}`, action.onPress])),
+  });
+}
+
+/** The system's sheet. The page draws only the sheet's content, filling the web view, and the system presents the web
+ * view itself as the sheet: its detents, grabber, bar and swipe are the system's. */
+function SystemSheet({ chrome, open, onClose, title, label, children, full = false, back, actions, bodyClassName, flush = false, systemBar = false }: SheetProps & { chrome: MobileChrome }) {
+  // a sheet that opens while the system's sheet is up is drawn in it at once: no frame of the page in between
+  const [shown, setShown] = useState(() => open && sheetsUp.system);
+  const [scrolled, setScrolled] = useState(false);
+  const up = useRef(false);
+  const sheetRef = useRef<HTMLDivElement>(null);
+  const bodyRef = useRef<HTMLDivElement>(null);
+  const closeRef = useRef(onClose);
+  closeRef.current = onClose;
+  const fullRef = useRef(full);
+  fullRef.current = full;
+
+  const contentHeight = useCallback(() => {
+    const sheet = sheetRef.current, body = bodyRef.current;
+    if (!sheet || !body) return 320;
+    const style = getComputedStyle(body);
+    return Math.ceil(body.scrollHeight - Number.parseFloat(style.paddingTop) - Number.parseFloat(style.paddingBottom));
+  }, []);
+
+  useEffect(() => {
+    if (!open) return;
+    let live = true;
+    sheetsUp.opening += 1;
+    sheetStep(async () => {
+      sheetsUp.opening -= 1;
+      if (!live) return;
+      if (!sheetsUp.system) await chrome.freeze();
+      if (!live) return;
+      setShown(true);
+      if (!sheetsUp.system) await frames(3);
+      if (!live) return;
+      up.current = true;
+      sheetsUp.count += 1;
+      if (sheetsUp.system) return;
+      sheetsUp.system = true;
+      await chrome.presentSheet(fullRef.current ? null : contentHeight());
+    });
+    return () => {
+      live = false;
+      sheetStep(async () => {
+        if (up.current) { up.current = false; sheetsUp.count -= 1; }
+        if (sheetsUp.count > 0 || sheetsUp.opening > 0) { setShown(false); return; }
+        if (sheetsUp.system) { sheetsUp.system = false; await chrome.dismissSheet(); }
+        setShown(false);
+        await frames(2);
+        await chrome.thaw();
+      });
+    };
+  }, [open, chrome, contentHeight]);
+
+  useEffect(() => chrome.onSheetDismissed(() => {
+    if (!up.current) return;
+    up.current = false;
+    sheetsUp.count -= 1;
+    sheetsUp.system = false;
+    closeRef.current();
+  }), [chrome]);
+
+  useEffect(() => {
+    const body = bodyRef.current;
+    if (!shown || full || !body) return;
+    const observer = new ResizeObserver(() => { if (up.current) chrome.resizeSheet(contentHeight()); });
+    for (const child of Array.from(body.children)) observer.observe(child);
+    return () => observer.disconnect();
+  }, [shown, full, chrome, contentHeight]);
+
+  useEffect(() => {
+    if (!open) return;
+    return closesOnBack(() => closeRef.current());
+  }, [open]);
+
+  const hasBack = Boolean(back);
+  useEffect(() => { setScrolled(false); }, [open, shown, title, hasBack]);
+
+  useSheetBar(BAR_RANK.sheet, !shown ? null : flush && !systemBar ? "none" : "bar", { title, back, actions, onClose });
+
+  if (!shown) return null;
+  // into the shell, whoever opened it: a sheet opened from outside it (the consent a provider shows) still gets the
+  // shell's safe areas and styles
+  return createPortal(
+    <div
+      className="mobile-sheet-layer fixed inset-0 z-40 bg-(--m-sheet-page)"
+      onKeyDown={(event) => { if (event.key === "Escape") { event.stopPropagation(); onClose(); } }}
+      onScrollCapture={(event) => { const area = event.target as HTMLElement; if (area.scrollHeight > area.clientHeight + 1) setScrolled(area.scrollTop > 2); }}
+    >
+      <div ref={sheetRef} role="dialog" aria-modal="true" aria-label={label ?? (typeof title === "string" ? title : undefined)} tabIndex={-1} className={cn("mobile-sheet relative flex flex-col outline-none", full ? "h-full" : "max-h-full")}>
+        {(!flush || systemBar) && <div aria-hidden className={cn("mobile-edge mobile-sheet-edge pointer-events-none absolute inset-x-0 top-0 z-50 h-[calc(var(--m-safe-top)+20px)] transition-opacity duration-150", scrolled ? "opacity-100" : "opacity-0")} />}
+        <div ref={bodyRef} className={cn("mobile-sheet-body relative min-h-0 overflow-x-hidden overflow-y-auto overscroll-contain pb-[max(var(--m-safe-bottom),16px)] pt-[max(var(--m-safe-top),16px)]", full && "flex-1", bodyClassName)}>
+          {children}
+        </div>
+      </div>
+    </div>,
+    document.querySelector(".dusk-mobile") ?? document.body,
+  );
+}
+
+/** One page of a stack inside a sheet: its own header (back, title, an action) over its own scroller. Where the device
+ * has a bar of its own, the page's title and buttons are in it instead. */
+export function StackPage({ title, label, children, back, onClose, trailing, actions, bodyClassName, flush = false }: SheetProps) {
+  const pushed = useContext(SheetStack) !== null;
+  const [scrolled, setScrolled] = useState(false);
+  const systemBar = useSheetBar(pushed ? BAR_RANK.sheetPushed : BAR_RANK.sheetPage, flush ? null : "bar", { title, back, actions, onClose }, false);
   return (
-    <section aria-label={label ?? (typeof title === "string" ? title : undefined)} className="flex h-full flex-col bg-(--m-sheet-page)">
-      {!flush && <SheetHeader title={title} back={back} onClose={onClose} trailing={trailing} className="pt-[22px]" />}
-      <div className={cn("mobile-sheet-body relative min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain pb-[max(var(--m-safe-bottom),16px)]", bodyClassName)}>
+    <section
+      aria-label={label ?? (typeof title === "string" ? title : undefined)}
+      className="relative flex h-full flex-col bg-(--m-sheet-page)"
+      onScrollCapture={(event) => {
+        const area = event.target as HTMLElement;
+        if (area.scrollHeight > area.clientHeight + 1) setScrolled(area.scrollTop > 2);
+      }}
+    >
+      {!flush && systemBar && (
+        <div aria-hidden className={cn("mobile-edge mobile-sheet-edge pointer-events-none absolute inset-x-0 top-0 z-50 h-[calc(var(--m-safe-top)+20px)] transition-opacity duration-150", scrolled ? "opacity-100" : "opacity-0")} />
+      )}
+      {!flush && !systemBar && <SheetHeader title={title} back={back} onClose={onClose} trailing={trailing} className="pt-[22px]" />}
+      <div className={cn("mobile-sheet-body relative min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain pb-[max(var(--m-safe-bottom),16px)]", !flush && systemBar && "pt-[max(var(--m-safe-top),16px)]", bodyClassName)}>
         {children}
       </div>
     </section>
   );
 }
 
+/** A bottom sheet with Grok's 28pt top corners. It follows the finger down from anywhere whose scroller is at its top,
+ * rubber-bands up, and on release dismisses or springs back by where the flick would land. */
 function ModalSheet({ open, onClose, title, label, children, full = false, back, trailing, bodyClassName, flush = false, recede = full }: SheetProps) {
   const [mounted, setMounted] = useState(open);
   const closing = useRef(false);
@@ -284,6 +424,7 @@ function ModalSheet({ open, onClose, title, label, children, full = false, back,
         aria-modal="true"
         aria-label={label ?? (typeof title === "string" ? title : undefined)}
         tabIndex={-1}
+        data-sheet-fit={full ? undefined : ""}
         className={cn(
           "mobile-sheet absolute inset-x-0 bottom-0 flex flex-col overflow-hidden rounded-t-[28px] bg-(--m-sheet-page) outline-none",
           full ? "top-[calc(var(--m-safe-top)+10px)]" : "max-h-[calc(100%-var(--m-safe-top)-10px)]",

@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
+import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
 import { installAiConsentGate } from "@/lib/ai-consent-gate";
 import { useStore } from "@/state/store";
@@ -107,7 +108,7 @@ function ConsentBody({ providers, covered, onAllow, onDecline, onDone }: { provi
       <div className="mt-6 flex flex-col gap-1">
         {covered ? <>
           <button type="button" className={PRIMARY} onClick={onDone}>{t("mobile.consent.done")}</button>
-          <button type="button" className={`${QUIET} text-danger`} onClick={onDecline}>{t("mobile.consent.turnOff")}</button>
+          <button type="button" className={cn(QUIET, "text-danger")} onClick={onDecline}>{t("mobile.consent.turnOff")}</button>
         </> : <>
           <button type="button" className={PRIMARY} onClick={onAllow}>{t("mobile.consent.allow")}</button>
           <button type="button" className={QUIET} onClick={onDecline}>{t("mobile.consent.decline")}</button>

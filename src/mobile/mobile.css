@@ -32,8 +32,8 @@
   transition-duration: .16s, .15s, .15s;
   transition-timing-function: var(--m-ease-out), ease, ease;
 }
-/* the shared phone layout dims every pressed control; the shell's own controls scale instead */
-.dusk-mobile .mobile-press:active { opacity: 1; }
+/* the shared phone layout dims every pressed control; the shell's own controls scale or tint instead */
+.dusk-mobile :is(.mobile-press, .mobile-row):not(:disabled):active { opacity: 1; }
 
 .dusk-mobile .mobile-float {
   box-shadow: 0 4px 14px -2px rgb(28 28 28 / .10), 0 1px 3px rgb(28 28 28 / .06);
@@ -82,8 +82,18 @@ html[data-mobile-app][data-skin="grok-dark"] { --color-menu: #2a2a2d; }
 /* the shared chat header row keeps its height as the spacer under the shell's floating nav */
 .dusk-mobile [data-mobile-chat] :is([data-chathead-row], [data-roomhead-row]) { visibility: hidden; }
 .dusk-mobile [data-mobile-chat] main { padding-top: var(--m-safe-top); }
+.dusk-mobile .mobile-switch { position: relative; flex-shrink: 0; width: 51px; height: 31px; border-radius: 9999px; background-color: color-mix(in srgb, var(--color-ink) 14%, transparent); transition: background-color .42s ease; }
+.dusk-mobile .mobile-switch[data-on] { background-color: var(--color-ink); }
+.dusk-mobile .mobile-switch > span {
+  position: absolute; left: 2px; top: 2px; width: 27px; height: 27px; border-radius: 9999px; background-color: var(--color-app);
+  box-shadow: 0 1px 2px rgb(0 0 0 / .05);
+  transition: translate .34s var(--m-ease-release), scale .16s var(--m-ease-out);
+}
+.dusk-mobile .mobile-switch[data-on] > span { translate: 20px 0; }
+.dusk-mobile [role="switch"]:active .mobile-switch > span { scale: 1.11 .9; }
 
 @media (prefers-reduced-motion: reduce) {
+  .dusk-mobile .mobile-switch, .dusk-mobile .mobile-switch > span { transition-duration: .01s; scale: 1; }
   .dusk-mobile .mobile-press, .dusk-mobile .mobile-press:active { scale: 1; }
   .dusk-mobile[data-kb-moving] [data-mobile-chat] .glass-scroller,
   .dusk-mobile[data-kb-moving] [data-mobile-chat] [data-grok-inset] { transition-duration: .01s; transition-delay: 0s; }
@@ -93,6 +103,10 @@ html[data-mobile-app][data-skin="grok-dark"] { --color-menu: #2a2a2d; }
 [data-phone-frame] .dusk-mobile { --m-safe-top: 54px; --m-safe-bottom: 34px; }
 
 .dusk-mobile .mobile-press[data-opening] { scale: .96; }
+
+/* under the system's bar the safe area already ends below its button: the row that held the page's own is only a gap */
+html[data-native-chrome] .dusk-mobile .mobile-screen-top { height: calc(var(--m-safe-top) + 6px); padding-bottom: 0; }
+html[data-native-bar-hidden] { --m-home-bar-fallback: calc(var(--m-safe-top) + 54px); }
 
 /* the native camera draws behind the webview */
 html.mobile-scanning,

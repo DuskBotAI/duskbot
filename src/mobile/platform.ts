@@ -6,6 +6,7 @@ import type { NativeAction } from "./phone-actions";
 import { friendlyError } from "@/lib/plain-error";
 import type { GlassBridge } from "./native-glass";
 import type { MenuBridge } from "./native-menu";
+import type { SystemControls } from "@/lib/system-control";
 
 export type HapticKind = "light" | "soft" | "medium" | "selection" | "error" | "success";
 
@@ -74,6 +75,42 @@ export interface CameraScanner {
   }): Promise<CameraSession>;
 }
 
+/** One entry of a system menu. `symbol` is an SF Symbol name; `separated` starts a new group. */
+export interface SystemMenuAction { key: string; label: string; detail?: string; symbol?: string; danger?: boolean; disabled?: boolean; checked?: boolean; separated?: boolean }
+
+/** One button in the system's bar. `symbol` is an SF Symbol name; `picture` is a part of the page the device keeps a
+ * snapshot of under `key` (a bot's face), shown beside `title`. */
+export interface BarItem {
+  id: string;
+  label: string;
+  symbol?: string;
+  title?: string;
+  role?: "close";
+  badge?: number;
+  disabled?: boolean;
+  picture?: { key: string; x?: number; y?: number; width?: number; height?: number };
+}
+
+export interface BarConfig { title?: string; status?: string; leading: BarItem[]; trailing: BarItem[] }
+
+/** The system's own bar and sheet around the page (iOS 26): bar buttons in the system's glass, and a sheet that is the
+ * page itself, presented by the system over a picture of what it left. */
+export interface MobileChrome {
+  /** Null takes the bar away. */
+  setBar(config: BarConfig | null): void;
+  onBarPress(listener: (id: string) => void): () => void;
+  onPictureTaken(listener: (key: string) => void): () => void;
+  /** Holds a picture of the screen over the page, so the page can redraw itself underneath unseen, until `thaw`. */
+  freeze(): Promise<void>;
+  thaw(): Promise<void>;
+  /** `height` is the content's height in css px for a sheet that hugs it; null fills the screen. */
+  presentSheet(height: number | null): Promise<void>;
+  resizeSheet(height: number): void;
+  dismissSheet(): Promise<void>;
+  /** The person swiped the sheet away. */
+  onSheetDismissed(listener: () => void): () => void;
+}
+
 /** Everything the phone layer asks of the device. The native app supplies Capacitor plugins; the web preview and a
  * plain browser get the fallbacks in `webPlatform`. Capability flags, never user-agent guesses. */
 export interface OrientationBridge {
@@ -108,6 +145,8 @@ export interface MobilePlatform {
    * of full height, or another, for which the window ends at the keyboard. */
   keyboardMode?(ride: boolean): void;
   setStatusBar?(style: "dark" | "light"): void;
+  /** The look the system's own surfaces take over the app (its menus, the keyboard): the app's, or the phone's for "system". */
+  setAppearance?(scheme: "system" | "light" | "dark"): void;
   /** Android's back; return true when handled. The newest listener is asked first and an older one only when it
    * declines (`handleBack`); when none takes it the app goes to the background. */
   onBack?(listener: () => boolean): () => void;
@@ -141,6 +180,12 @@ export interface MobilePlatform {
     set(key: string, value: string): Promise<void>;
     remove(key: string): Promise<void>;
   };
+  /** The system's pull-down menu (iOS) opened from a control at `anchor` (its frame in the viewport, css px). Resolves the
+   * key picked, or null when the menu was closed without a pick. */
+  showMenu?(anchor: { x: number; y: number; width: number; height: number }, items: SystemMenuAction[]): Promise<string | null>;
+  chrome?: MobileChrome;
+  /** The system's own segmented control and switch (iOS 26), in the page. */
+  controls?: SystemControls;
   scanQr?(): Promise<ScanResult | null>;
   camera?: CameraScanner;
   readClipboard?(): Promise<string | null>;

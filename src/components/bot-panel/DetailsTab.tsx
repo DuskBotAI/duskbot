@@ -2,6 +2,7 @@ import { useContext, useEffect, useState, type ReactNode } from "react";
 
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
+import { systemMenu } from "@/lib/system-menu";
 import { api, useStore, type Bot } from "@/state/store";
 import { PackageProvenance } from "../bot-settings/PackageProvenance";
 import type { useBotSettingsDerived } from "../bot-settings/useBotSettingsDerived";
@@ -38,7 +39,16 @@ function useVoiceOptions(bot: Bot, enabled: boolean) {
 
 function VoiceChatRow({ label, children, row }: { label: string; children: ReactNode; row: string }) {
   return (
-    <div data-panel-row={row} className={cn(rowCls, "gap-1.5")}>
+    <div
+      data-panel-row={row}
+      data-select-row=""
+      className={cn(rowCls, "relative gap-1.5")}
+      onClick={(event) => {
+        if (!systemMenu()) return;
+        const pill = event.currentTarget.querySelector<HTMLButtonElement>("[data-select-pill]");
+        if (pill && !pill.contains(event.target as Node)) pill.click();
+      }}
+    >
       <RowText title={label} />
       {children}
     </div>

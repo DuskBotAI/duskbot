@@ -19,7 +19,8 @@ const keystore = SecureStorage as unknown as {
 };
 const SECRET_PREFIX = "dusk.";
 import { BarcodeScanner, BarcodeFormat, GoogleBarcodeScannerModuleInstallState } from "@capacitor-mlkit/barcode-scanning";
-import { handleBack, type AppleCredential, type BackGestureEvent, type CameraPermission, type CameraScanner, type DeliveredNotification, type MobilePlatform, type OrientationBridge, type ScanOverlay, type TurnActivityBridge } from "@/mobile/platform";
+import { handleBack, type AppleCredential, type BackGestureEvent, type BarConfig, type CameraPermission, type CameraScanner, type DeliveredNotification, type MobileChrome, type MobilePlatform, type OrientationBridge, type ScanOverlay, type SystemMenuAction, type TurnActivityBridge } from "@/mobile/platform";
+import type { ControlPlace, SystemControl } from "@/lib/system-control";
 import type { NativeAction } from "@/mobile/phone-actions";
 import { shortcutAction, type ShortcutBot, type ShortcutsBridge } from "@/mobile/shortcuts";
 import type { TurnActivityAttributes, TurnActivityState } from "../../../shared/phone-activity";
@@ -31,6 +32,7 @@ import { createVoiceEvents, type VoiceBridge, type VoiceEnd } from "@/lib/voice-
 import { registerPhoneVoice } from "@/lib/voice-input/device";
 import { attachToComposer, setNativeAttach } from "@/lib/native-attach";
 import { appLinkFromUniversal, type MobileOpenTarget } from "../../../shared/mobile-link";
+import { t } from "@/lib/i18n";
 
 /** The app's own scanner on ios (ios/App/App/QrScannerPlugin.swift): the ML Kit plugin ships for CocoaPods only, and this
  * project links its plugins as Swift packages. */
@@ -75,7 +77,53 @@ async function shareFileNatively(file: File): Promise<void> {
   }
 }
 
-/** The app's own dictation (ios/App/App/SpeechRecognizerPlugin.swift, android .../SpeechRecognizerPlugin.java): the
+/** The app's own pull-down menu (ios/App/App/PulldownMenuPlugin.swift): a UIMenu opened over a control in the page. */
+const DuskPulldown = registerPlugin<{ show(options: { x: number; y: number; width: number; height: number; items: SystemMenuAction[]; cancel: string }): Promise<{ key?: string } | undefined> }>("DuskPulldown");
+/** The app's own bar and sheet (ios/App/App/Chrome.swift): the web view's controller in the system's navigation bar and
+ * sheet presentation. */
+interface ChromePlugin {
+  info(): Promise<{ native?: boolean }>;
+  reset(): Promise<void>;
+  setBar(options: Partial<BarConfig> & { hidden: boolean }): Promise<void>;
+  freeze(): Promise<void>;
+  thaw(): Promise<void>;
+  presentSheet(options: { height?: number }): Promise<void>;
+  resizeSheet(options: { height: number }): Promise<void>;
+  dismissSheet(): Promise<void>;
+  addListener(event: "barPress", listener: (event: { id?: string }) => void): Promise<PluginListenerHandle>;
+  addListener(event: "pictureTaken", listener: (event: { key?: string }) => void): Promise<PluginListenerHandle>;
+  addListener(event: "sheetDismissed", listener: () => void): Promise<PluginListenerHandle>;
+}
+const DuskChrome = registerPlugin<ChromePlugin>("DuskChrome");
+
+function nativeChrome(plugin: ChromePlugin): MobileChrome {
+  const quiet = (work: Promise<unknown>) => work.then(() => {}, () => {});
+  return {
+    setBar: (config) => { void quiet(plugin.setBar(config ? { ...config, hidden: false } : { hidden: true, leading: [], trailing: [] })); },
+    onBarPress: (listener) => unsubscribe([plugin.addListener("barPress", ({ id }) => { if (typeof id === "string") listener(id); })]),
+    onPictureTaken: (listener) => unsubscribe([plugin.addListener("pictureTaken", ({ key }) => { if (typeof key === "string") listener(key); })]),
+    freeze: () => quiet(plugin.freeze()),
+    thaw: () => quiet(plugin.thaw()),
+    presentSheet: (height) => quiet(plugin.presentSheet(height === null ? {} : { height })),
+    resizeSheet: (height) => { void quiet(plugin.resizeSheet({ height })); },
+    dismissSheet: () => quiet(plugin.dismissSheet()),
+    onSheetDismissed: (listener) => unsubscribe([plugin.addListener("sheetDismissed", listener)]),
+  };
+}
+
+/** The app's own controls (ios/App/App/ControlsPlugin.swift): UISegmentedControl, UISwitch and UIButton pop-ups over the page. */
+const DuskControls = registerPlugin<{
+  place(options: { id: string } & SystemControl & ControlPlace): Promise<{ tracked?: boolean }>;
+  trigger(options: { id: string }): Promise<{ triggered?: boolean }>;
+  remove(options: { id: string }): Promise<void>;
+  reset(): Promise<void>;
+  addListener(event: "change", listener: (event: { id?: string; selected?: number; on?: boolean; value?: string }) => void): Promise<PluginListenerHandle>;
+}>("DuskControls");
+
+/** The app's own look on the system's surfaces (ios/App/App/AppearancePlugin.swift). */
+const DuskAppearance = registerPlugin<{ set(options: { scheme: "system" | "light" | "dark" }): Promise<void> }>("DuskAppearance");
+
+/** The app's own dictation(ios/App/App/SpeechRecognizerPlugin.swift, android .../SpeechRecognizerPlugin.java): the
  * phone's recognizer, offline where it can be. Events carry the session number `start` was given. */
 export interface SpeechPermissions { microphone: string; speech?: string }
 export interface SpeechPlugin {
@@ -114,6 +162,7 @@ interface NativeFile { path: string; name: string; type: string }
 const DuskPicker = registerPlugin<{
   photos(options: { multiple: boolean }): Promise<{ files: NativeFile[] }>;
   files(options: { multiple: boolean }): Promise<{ files: NativeFile[] }>;
+  camera(): Promise<{ files: NativeFile[] }>;
 }>("DuskPicker");
 
 export async function nativeFiles(list: readonly NativeFile[], read: typeof fetch = fetch): Promise<File[]> {
@@ -538,11 +587,13 @@ export async function nativePlatform(): Promise<MobilePlatform> {
     const timer = setTimeout(() => { console.warn(`startup: ${label} did not answer`); resolve(undefined); }, 2000);
     work.then(resolve, () => resolve(undefined)).finally(() => clearTimeout(timer));
   });
-  const [info, launch, , glass, menu, pushSetup] = await Promise.all([
+  const [info, launch, chrome, , , glass, menu, pushSetup] = await Promise.all([
     bounded(App.getInfo(), "app info"),
     bounded(App.getLaunchUrl(), "launch url"),
+    bounded(kind === "ios" && Capacitor.isPluginAvailable("DuskChrome") ? DuskChrome.reset().then(() => DuskChrome.info()) : Promise.resolve(undefined), "chrome"),
+    bounded(kind === "ios" && Capacitor.isPluginAvailable("DuskControls") ? DuskControls.reset() : Promise.resolve(), "controls"),
     bounded(overlayReady ?? Promise.resolve(), "status bar"),
-    kind === "ios" && Capacitor.isPluginAvailable("DuskGlass") ? bounded(DuskGlass.supported(), "glass") : undefined,
+    kind === "ios" && Capacitor.isPluginAvailable("DuskGlass") ? bounded(DuskGlass.clear().then(() => DuskGlass.supported(), () => DuskGlass.supported()), "glass") : undefined,
     kind === "ios" && Capacitor.isPluginAvailable("DuskMenu") ? bounded(DuskMenu.supported(), "menu") : undefined,
     kind === "android" && Capacitor.isPluginAvailable("DuskPushSetup") ? bounded(DuskPushSetup.configured(), "push setup") : undefined,
   ]);
@@ -589,6 +640,7 @@ export async function nativePlatform(): Promise<MobilePlatform> {
     setNativeAttach({
       photos: async () => nativeFiles((await DuskPicker.photos({ multiple: true })).files),
       files: async () => nativeFiles((await DuskPicker.files({ multiple: true })).files),
+      camera: async () => nativeFiles((await DuskPicker.camera()).files),
     });
   }
   registerPhoneVoice({
@@ -664,6 +716,7 @@ export async function nativePlatform(): Promise<MobilePlatform> {
       }
       void StatusBar.setStyle({ style: style === "dark" ? Style.Light : Style.Dark }).catch(() => {});
     },
+    setAppearance: kind === "ios" && Capacitor.isPluginAvailable("DuskAppearance") ? (scheme) => { void DuskAppearance.set({ scheme }).catch(() => {}); } : undefined,
     onBack(listener) {
       backs.push(listener);
       backButton ??= App.addListener("backButton", () => {
@@ -711,6 +764,19 @@ export async function nativePlatform(): Promise<MobilePlatform> {
       keys: async () => (await Preferences.keys()).keys,
     },
     secrets,
+    chrome: chrome?.native ? nativeChrome(DuskChrome) : undefined,
+    controls: chrome?.native && Capacitor.isPluginAvailable("DuskControls") ? {
+      place: async (id, control, place) => { try { return (await DuskControls.place({ id, ...control, ...place })).tracked === true; } catch { return false; } },
+      trigger: async (id) => { try { return (await DuskControls.trigger({ id })).triggered === true; } catch { return false; } },
+      remove: (id) => { void DuskControls.remove({ id }).catch(() => {}); },
+      onChange: (listener) => unsubscribe([DuskControls.addListener("change", ({ id, selected, on, value }) => {
+        const next = typeof selected === "number" ? selected : typeof on === "boolean" ? on : value;
+        if (typeof id === "string" && next !== undefined) listener(id, next);
+      })]),
+    } : undefined,
+    showMenu: kind === "ios" && Capacitor.isPluginAvailable("DuskPulldown") ? async (anchor, items) => {
+      try { return (await DuskPulldown.show({ ...anchor, items, cancel: t("mobile.settings.cancel") }))?.key ?? null; } catch { return null; }
+    } : undefined,
     scanQr: kind === "android" ? async () => {
       try {
         let permission = await BarcodeScanner.checkPermissions();

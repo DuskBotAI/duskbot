@@ -20,6 +20,10 @@
 		D05C00032F00000100B07D05 /* QrScannerPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = D05C00042F00000100B07D05 /* QrScannerPlugin.swift */; };
 		D05C00092F00000100B07D05 /* AppleSignInPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = D05C000A2F00000100B07D05 /* AppleSignInPlugin.swift */; };
 		D05C000B2F00000100B07D05 /* SpeechRecognizerPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = D05C000C2F00000100B07D05 /* SpeechRecognizerPlugin.swift */; };
+		D05EF2BD1D3767199A4C8171 /* ControlsPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = D05DF2BD1D3767199A4C8171 /* ControlsPlugin.swift */; };
+		D05E4C346D67B1393C017725 /* PulldownMenuPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = D05D4C346D67B1393C017725 /* PulldownMenuPlugin.swift */; };
+		D05E9240CB6504DB8342267F /* Chrome.swift in Sources */ = {isa = PBXBuildFile; fileRef = D05D9240CB6504DB8342267F /* Chrome.swift */; };
+		D05E7A3B11C0FFEE00000001 /* AppearancePlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = D05D7A3B11C0FFEE00000001 /* AppearancePlugin.swift */; };
 		D05C000D2F00000100B07D05 /* GlassChromePlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = D05C000E2F00000100B07D05 /* GlassChromePlugin.swift */; };
 		D05C000F2F00000100B07D05 /* NativeMenuPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = D05C00102F00000100B07D05 /* NativeMenuPlugin.swift */; };
 		D05C00F12F00000100B07D05 /* HapticsPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = D05C00F22F00000100B07D05 /* HapticsPlugin.swift */; };
@@ -79,6 +83,10 @@
 		D05C00042F00000100B07D05 /* QrScannerPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QrScannerPlugin.swift; sourceTree = "<group>"; };
 		D05C000A2F00000100B07D05 /* AppleSignInPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleSignInPlugin.swift; sourceTree = "<group>"; };
 		D05C000C2F00000100B07D05 /* SpeechRecognizerPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeechRecognizerPlugin.swift; sourceTree = "<group>"; };
+		D05DF2BD1D3767199A4C8171 /* ControlsPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ControlsPlugin.swift; sourceTree = "<group>"; };
+		D05D4C346D67B1393C017725 /* PulldownMenuPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PulldownMenuPlugin.swift; sourceTree = "<group>"; };
+		D05D9240CB6504DB8342267F /* Chrome.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Chrome.swift; sourceTree = "<group>"; };
+		D05D7A3B11C0FFEE00000001 /* AppearancePlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppearancePlugin.swift; sourceTree = "<group>"; };
 		D05C000E2F00000100B07D05 /* GlassChromePlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlassChromePlugin.swift; sourceTree = "<group>"; };
 		D05C00102F00000100B07D05 /* NativeMenuPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeMenuPlugin.swift; sourceTree = "<group>"; };
 		D05C00F22F00000100B07D05 /* HapticsPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HapticsPlugin.swift; sourceTree = "<group>"; };
@@ -166,6 +174,10 @@
 				D05C00042F00000100B07D05 /* QrScannerPlugin.swift */,
 				D05C000A2F00000100B07D05 /* AppleSignInPlugin.swift */,
 				D05C000C2F00000100B07D05 /* SpeechRecognizerPlugin.swift */,
+				D05DF2BD1D3767199A4C8171 /* ControlsPlugin.swift */,
+				D05D4C346D67B1393C017725 /* PulldownMenuPlugin.swift */,
+				D05D9240CB6504DB8342267F /* Chrome.swift */,
+				D05D7A3B11C0FFEE00000001 /* AppearancePlugin.swift */,
 				D05C000E2F00000100B07D05 /* GlassChromePlugin.swift */,
 				D05C00102F00000100B07D05 /* NativeMenuPlugin.swift */,
 				D05C00F22F00000100B07D05 /* HapticsPlugin.swift */,
@@ -333,6 +345,10 @@
 				D05C00032F00000100B07D05 /* QrScannerPlugin.swift in Sources */,
 				D05C00092F00000100B07D05 /* AppleSignInPlugin.swift in Sources */,
 				D05C000B2F00000100B07D05 /* SpeechRecognizerPlugin.swift in Sources */,
+				D05EF2BD1D3767199A4C8171 /* ControlsPlugin.swift in Sources */,
+				D05E4C346D67B1393C017725 /* PulldownMenuPlugin.swift in Sources */,
+				D05E9240CB6504DB8342267F /* Chrome.swift in Sources */,
+				D05E7A3B11C0FFEE00000001 /* AppearancePlugin.swift in Sources */,
 				D05C000D2F00000100B07D05 /* GlassChromePlugin.swift in Sources */,
 				D05C000F2F00000100B07D05 /* NativeMenuPlugin.swift in Sources */,
 				D05C00F12F00000100B07D05 /* HapticsPlugin.swift in Sources */,

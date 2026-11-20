@@ -10,6 +10,7 @@ import {
 } from "@/lib/approval-mode-options";
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
+import { systemMenu } from "@/lib/system-menu";
 import { useMenuMotion } from "./MenuMotion";
 import { nextMenuIndex, SidebarPopoverMenu, type SidebarMenuItem } from "./SidebarPopoverMenu";
 import type { ApprovalChoice } from "./thread-approval";
@@ -167,6 +168,8 @@ export function ComposerPlusMenu({ onAttach, attachChoices, circle = false }: {
     );
   }
   if (!circle) return <ComposerMenu items={items} renderTrigger={trigger} triggerClass={plusClass} />;
+  const native = systemMenu();
+  if (native) return <NativePlusButton items={items} native={native}>{trigger(false)}</NativePlusButton>;
   return (
     <SidebarPopoverMenu
       items={items}
@@ -175,6 +178,44 @@ export function ComposerPlusMenu({ onAttach, attachChoices, circle = false }: {
       triggerClassName="flex shrink-0 rounded-full"
       renderTrigger={({ open }) => trigger(open)}
     />
+  );
+}
+
+const ATTACH_SYMBOL: Record<string, string> = {
+  "attach:photos": "photo.on.rectangle",
+  "attach:camera": "camera",
+  attach: "paperclip",
+};
+
+function NativePlusButton({ items, native, children }: {
+  items: SidebarMenuItem[];
+  native: NonNullable<ReturnType<typeof systemMenu>>;
+  children: ReactNode;
+}) {
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  return (
+    <button
+      ref={buttonRef}
+      type="button"
+      aria-haspopup="menu"
+      aria-label={t("composer.add")}
+      title={t("composer.add")}
+      className="flex shrink-0 rounded-full"
+      onClick={() => {
+        const anchor = buttonRef.current?.getBoundingClientRect();
+        if (!anchor) return;
+        void native(anchor, items.map((item) => ({
+          key: item.key,
+          label: item.label,
+          symbol: ATTACH_SYMBOL[item.key],
+          disabled: item.disabled,
+        }))).then((key) => {
+          if (key !== null) items.find((item) => item.key === key)?.onSelect();
+        });
+      }}
+    >
+      {children}
+    </button>
   );
 }
 

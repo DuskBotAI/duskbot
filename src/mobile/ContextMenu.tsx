@@ -235,7 +235,7 @@ export function ContextMenu({ open, anchor, preview, actions, label, onClose, re
   return createPortal(
     <AnimatePresence onExitComplete={reveal}>
       {open && anchor && layout && (
-        <div className="dusk-mobile-overlay fixed inset-0 z-50" key="context">
+        <div className="dusk-mobile-overlay fixed inset-0 z-[75]" key="context">
           <motion.div
             aria-hidden
             className="absolute inset-0 bg-[rgb(23_24_26/0.22)] [-webkit-backdrop-filter:blur(8px)] [backdrop-filter:blur(8px)]"
@@ -292,7 +292,7 @@ export function ContextMenu({ open, anchor, preview, actions, label, onClose, re
             ref={menuRef}
             role="menu"
             aria-label={label}
-            className="absolute overflow-hidden rounded-[16px] bg-menu py-1.5 shadow-[0_12px_40px_-8px_rgb(10_10_12/0.30)]"
+            className="mobile-glass absolute overflow-hidden rounded-[16px] bg-menu py-1.5 shadow-[0_12px_40px_-8px_rgb(10_10_12/0.30)]"
             style={{ left: layout.menuLeft, top: layout.menuTop, width: MENU_W, transformOrigin: `${layout.end ? "right" : "left"} ${layout.above ? "bottom" : "top"}` }}
             initial={{ opacity: 0, scale: reduced ? 1 : 0.9, y: reduced ? 0 : layout.above ? 6 : -6 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}

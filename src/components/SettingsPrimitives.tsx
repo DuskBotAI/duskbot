@@ -1,6 +1,7 @@
-import { useId, type ComponentProps, type ReactNode } from "react";
+import { useId, useRef, type ComponentProps, type ReactNode } from "react";
 import { cn } from "@/lib/cn";
 import { useOptimisticSwitch } from "./ui/optimistic-switch";
+import { SYSTEM_SWITCH_ROOM, useSystemControl } from "@/lib/system-control";
 import { HeadArt, type ArtName } from "./ui/Art";
 import { SettingGlyph, type SettingGlyphName } from "./ui/SettingGlyph";
 
@@ -23,9 +24,14 @@ export function Switch({
   ...props
 }: Omit<ComponentProps<"button">, "children" | "role" | "aria-checked"> & { checked: boolean }) {
   const { checked, disabled, busy, onClick } = useOptimisticSwitch(owned, ownedDisabled, ownedClick);
+  const room = useRef<HTMLButtonElement>(null);
+  // where the device draws its own switch, this button is its room: unseen, and pressed for it so every owner's click runs
+  const system = useSystemControl(room, { kind: "switch", on: checked, disabled, label: props["aria-label"] }, (on) => { if (on !== checked) room.current?.click(); });
   return (
     <button
       {...props}
+      ref={room}
+      style={system ? { ...props.style, ...SYSTEM_SWITCH_ROOM } : props.style}
       disabled={disabled}
       aria-busy={busy || undefined}
       onClick={onClick}

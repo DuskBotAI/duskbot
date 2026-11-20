@@ -70,6 +70,12 @@ export function problemCopy(notice: ConnectionNotice, place: LivePlace): { title
 }
 
 /** The floating status: a short word while it reconnects, and once that has gone on too long, a button to try again. */
+/** The notice in words, as the pill and the system's bar both say it. */
+export function connectionNoticeLabel(notice: NonNullable<ConnectionNotice>, trying: boolean): string {
+  if (isConnectionProblem(notice)) return t(trying ? "mobile.connection.trying" : "mobile.connection.notConnected");
+  return notice === "offline" ? t("mobile.home.offline") : t(notice === "waking" ? "cloudAsleep.waking" : "mobile.home.reconnecting");
+}
+
 export function ConnectionPill({ notice, trying, onRetry, testId, className = "h-11 px-4" }: { notice: ConnectionNotice; trying: boolean; onRetry(): void; testId: string; className?: string }) {
   if (!notice) return null;
   const base = `mobile-float bg-composer pointer-events-auto flex min-w-0 items-center gap-2 whitespace-nowrap rounded-full text-[13px] font-medium ${className}`;
@@ -77,13 +83,13 @@ export function ConnectionPill({ notice, trying, onRetry, testId, className = "h
     return (
       <button type="button" data-testid={testId} data-notice={notice} disabled={trying} onClick={onRetry} className={`${base} mobile-press text-ink`}>
         {trying ? <WorkingDots size={3} /> : <RotateCcw size={14} aria-hidden />}
-        {t(trying ? "mobile.connection.trying" : "mobile.connection.notConnected")}
+        {connectionNoticeLabel(notice, trying)}
       </button>
     );
   }
   return (
     <span role="status" data-testid={testId} data-notice={notice} className={`${base} text-ink-secondary`}>
-      {notice === "offline" ? t("mobile.home.offline") : <><LoadingMascot size={20} />{t(notice === "waking" ? "cloudAsleep.waking" : "mobile.home.reconnecting")}</>}
+      {notice !== "offline" && <LoadingMascot size={20} />}{connectionNoticeLabel(notice, trying)}
     </span>
   );
 }

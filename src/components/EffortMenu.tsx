@@ -3,6 +3,7 @@ import { Check, ChevronDown } from "../icons";
 import type { EffortLevel } from "../../shared/wire";
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
+import { triggerSystemControl, useSystemControl } from "@/lib/system-control";
 import { effortLabel } from "./ModelPicker";
 import { useMenuMotion } from "./MenuMotion";
 
@@ -23,6 +24,26 @@ export function EffortMenu({ levels, current, onPick, onReset }: EffortMenuProps
   const id = useId();
   const choices: Array<EffortLevel | undefined> = [undefined, ...levels];
   const name = current ? effortLabel(current) : t("model.effort.default");
+  const system = useSystemControl(
+    trigger,
+    {
+      kind: "popup",
+      title: name,
+      value: current ?? "",
+      options: choices.map((level) => ({
+        key: level ?? "",
+        label: level ? effortLabel(level) : t("model.effort.default"),
+      })),
+      label: `${t("botSettings.simple.thinking")}: ${name}`,
+    },
+    (next) => {
+      if (typeof next !== "string") return;
+      const picked = choices.find((level) => (level ?? "") === next);
+      if (picked === current) return;
+      if (picked) onPick(picked);
+      else onReset();
+    },
+  );
 
   const close = (refocus = true) => {
     setOpen(false);
@@ -36,6 +57,15 @@ export function EffortMenu({ levels, current, onPick, onReset }: EffortMenuProps
     else onReset();
   };
   const show = () => {
+    if (system && trigger.current) {
+      void triggerSystemControl(trigger.current).then((triggered) => {
+        if (!triggered) {
+          setActive(Math.max(0, choices.indexOf(current)));
+          setOpen(true);
+        }
+      });
+      return;
+    }
     setActive(Math.max(0, choices.indexOf(current)));
     setOpen(true);
   };
@@ -69,6 +99,9 @@ export function EffortMenu({ levels, current, onPick, onReset }: EffortMenuProps
         ref={trigger}
         type="button"
         data-effort-trigger
+        data-system-popup={system ? "" : undefined}
+        aria-hidden={system || undefined}
+        tabIndex={system ? -1 : undefined}
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-controls={open ? `${id}-list` : undefined}
@@ -79,7 +112,10 @@ export function EffortMenu({ levels, current, onPick, onReset }: EffortMenuProps
           if (event.key === "ArrowDown" || event.key === "ArrowUp") { event.preventDefault(); event.stopPropagation(); show(); }
           else if (event.key !== "Escape" && event.key !== "Tab") event.stopPropagation();
         }}
-        className="flex h-6 items-center gap-1 rounded-md px-2 text-[12px] leading-4 text-ink-secondary transition-colors hover:bg-ink/[0.06] hover:text-ink aria-expanded:bg-ink/[0.08] aria-expanded:text-ink focus-visible:outline-none focus-visible:ring-[1.5px] focus-visible:ring-focus motion-reduce:transition-none touch:h-8"
+        className={cn(
+          "flex h-6 items-center gap-1 rounded-md px-2 text-[12px] leading-4 text-ink-secondary transition-colors hover:bg-ink/[0.06] hover:text-ink aria-expanded:bg-ink/[0.08] aria-expanded:text-ink focus-visible:outline-none focus-visible:ring-[1.5px] focus-visible:ring-focus motion-reduce:transition-none touch:h-8",
+          system && "h-auto min-h-6 rounded-none bg-transparent p-0 text-[17px] leading-[22px] opacity-0",
+        )}
       >
         <span>{name}</span>
         <ChevronDown size={12} aria-hidden="true" className="shrink-0" />

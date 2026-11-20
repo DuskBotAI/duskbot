@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useMemo, useRef, useState, useSyncExternalStore, type ComponentType } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState, useSyncExternalStore, type ComponentType, type CSSProperties } from "react";
 import { motion, useReducedMotion } from "motion/react";
 import { Bell, CalendarClock, Check, FileText, Globe, KeyRound, LayoutDashboard, LifeBuoy, Lock, LogOut, Mail, Mic, MonitorX, Palette, Plug, Plus, ShieldCheck, UserPlus, UserRound, Hand, Server, ZoomIn } from "../../icons";
 import { accountDashboardUrl } from "@/lib/account-dashboard";
@@ -25,6 +25,7 @@ import { VoiceInputSettings } from "@/components/VoiceInputSettings";
 import { usePlatform } from "../platform";
 import { Sheet, SheetStack, StackPage } from "../Sheet";
 import { NavStack } from "../NavStack";
+import { useSystemControl } from "@/lib/system-control";
 import { NotificationsSheet } from "./NotificationsSheet";
 import { NotificationSettings } from "./NotificationSettings";
 import { RoutinesSheet } from "./RoutinesSheet";
@@ -39,6 +40,8 @@ import { SettingsRow, SettingsSection, SettingsSwitch } from "./SettingsRow";
 import { PixelArt } from "../Illustration";
 import type { SheetPageProps } from "./registry";
 import type { MobileConnectionRecord } from "../../../shared/mobile-link";
+
+const APPEARANCES = ["system", THEME_SKINS.light, THEME_SKINS.dark] as const;
 
 /** The account rows Settings shows. The account dashboard sells plans, so the store apps never link to it (App Store
  * guideline 3.1.1, Play payments policy); a phone on an account (its session, or a dusk cloud of it) signs out here, and
@@ -132,7 +135,7 @@ export const SettingsSheet: ComponentType<SheetPageProps<"settings">> = ({ sheet
     : page === "voice" ? <Sheet open onClose={pop} title={t("settings.voice.title")}><div data-settings-look="simple" className={`flex flex-col gap-6 px-4 pt-2 ${SIMPLE_BUTTONS}`}><VoiceInputSettings /></div></Sheet>
     : null;
   return (
-    <Sheet open={open} onClose={onClose} full flush label={t("mobile.settings.title")} bodyClassName="overflow-hidden pb-0">
+    <Sheet open={open} onClose={onClose} full flush label={t("mobile.settings.title")} bodyClassName="overflow-hidden pt-0! pb-0">
       <NavStack
         base={<StackPage open title={t("mobile.settings.title")} onClose={onClose}><SettingsList onClose={onClose} push={setPage} /></StackPage>}
         page={shown && <SheetStack value={stack}>{shown}</SheetStack>}
@@ -158,6 +161,13 @@ function SettingsList({ onClose, push }: { onClose: () => void; push: (page: Set
   const [opening, setOpening] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const appearanceId = useId();
+  const appearanceRef = useRef<HTMLDivElement>(null);
+  const systemAppearance = useSystemControl(appearanceRef, {
+    kind: "segmented",
+    items: [t("mobile.settings.system"), t("mobile.settings.light"), t("mobile.settings.dark")],
+    selected: Math.max(0, APPEARANCES.indexOf(skin as typeof APPEARANCES[number])),
+    label: t("mobile.settings.appearance"),
+  }, (index) => { if (typeof index === "number" && APPEARANCES[index]) { haptic("segment"); applySkinChoice(APPEARANCES[index]); } });
   const computer = shownComputer(connections, activeId);
   const who = phoneIdentity({ account: account?.account, connections, activeId });
   const email = who.kind === "account" ? who.email : undefined;
@@ -242,14 +252,14 @@ function SettingsList({ onClose, push }: { onClose: () => void; push: (page: Set
       <SettingsSection card title={t("mobile.settings.phone")}>
         <div role="group" aria-label={t("mobile.settings.appearance")} className="flex items-center gap-3 px-4 py-2">
           <Palette aria-hidden className="size-5 shrink-0 text-ink-secondary" />
-          <div className="flex flex-1 rounded-full bg-ink/[0.06] p-1">
+          {systemAppearance ? <div ref={appearanceRef} aria-hidden="true" data-segmented-room="" className="h-9 flex-1" /> : <div className="flex flex-1 rounded-full bg-ink/[0.06] p-1" data-segmented="" style={{ "--seg-count": APPEARANCES.length, "--seg-index": Math.max(0, APPEARANCES.indexOf(skin as typeof APPEARANCES[number])) } as CSSProperties}>
             {([{ choice: "system", label: t("mobile.settings.system") }, { choice: THEME_SKINS.light, label: t("mobile.settings.light") }, { choice: THEME_SKINS.dark, label: t("mobile.settings.dark") }] as const).map(({ choice, label }) => (
               <button key={choice} type="button" aria-pressed={skin === choice} onClick={() => { haptic("segment"); applySkinChoice(choice); }} className="mobile-press relative flex min-h-10 flex-1 items-center justify-center rounded-full px-2 text-[15px] font-semibold">
-                {skin === choice && <motion.span aria-hidden layoutId={`${appearanceId}-selection`} className="absolute inset-0 rounded-full bg-app shadow-sm [:root[data-skin=grok-dark]_&]:bg-ink/[0.16]" transition={spring.settle} />}
+                {skin === choice && <motion.span aria-hidden data-segmented-pill="" layoutId={`${appearanceId}-selection`} className="absolute inset-0 rounded-full bg-app shadow-sm [:root[data-skin=grok-dark]_&]:bg-ink/[0.16]" transition={spring.settle} />}
                 <span className={skin === choice ? "relative text-ink" : "relative text-ink-secondary"}>{label}</span>
               </button>
             ))}
-          </div>
+          </div>}
         </div>
         <SettingsSwitch icon={<Hand />} label={t("mobile.settings.haptics")} checked={hapticsEnabled} onChange={(enabled) => { setHapticsEnabled(enabled); haptic("toggle"); }} />
         <SettingsRow icon={<Mic />} label={t("settings.voice.title")} onClick={() => push("voice")} />

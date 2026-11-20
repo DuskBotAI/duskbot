@@ -41,7 +41,7 @@ export function useComposerFilePickers(onPick: (files: ArrayLike<File> | null) =
     files: native ? () => void native.files().then(onPick, () => {}) : () => files.current?.click(),
     choices: touch ? {
       photos: native ? () => void native.photos().then(onPick, () => {}) : () => photos.current?.click(),
-      camera: () => camera.current?.click(),
+      camera: native?.camera ? () => void native.camera!().then(onPick, () => {}) : () => camera.current?.click(),
     } satisfies AttachChoices : undefined,
   };
 }

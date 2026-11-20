@@ -50,6 +50,7 @@ import { cloudPlanLabel, trialRunning } from "@/lib/cloud-plan";
 import { cloudColor } from "@/lib/cloud-look";
 import { cn } from "@/lib/cn";
 import { meterPercent, resetLine } from "@/lib/usage-meter";
+import { shownShare, useUsageDisplay, type UsageDisplay } from "@/lib/usage-display";
 import type { CloudPlanSnapshot } from "../../electron/cloud-account.mjs";
 import { activeLocale, t } from "@/lib/i18n";
 import { HELP_CENTER_URL, appVersion, openExternalLink } from "@/lib/app-links";
@@ -398,37 +399,40 @@ export function resetsIn(at: number | null, now: number): string | undefined {
   return t("sidebar.menu.resets", { when: hours < 24 ? format.format(Math.max(1, Math.round(hours)), "hour") : format.format(Math.round(hours / 24), "day") });
 }
 
-export function planUsageSummary(report: PlanUsageWindows | null, now = Date.now()): UsageSummary | null {
+const usageValue = (usedPercent: number, display: UsageDisplay) =>
+  t(display === "left" ? "sidebar.menu.usageLeft" : "sidebar.menu.usageUsed", { percent: shownShare(usedPercent, display) });
+
+export function planUsageSummary(report: PlanUsageWindows | null, now = Date.now(), display: UsageDisplay = "used"): UsageSummary | null {
   const signedIn = report?.providers.filter((provider) => provider.ok) ?? [];
   for (const window of ["weekly", "fiveHour"] as const) {
     const known = signedIn.map((provider) => provider[window]).filter((entry) => entry.available && entry.usedPercent !== null);
     if (known.length === 0) continue;
     const tightest = known.reduce((most, entry) => (entry.usedPercent! > most.usedPercent! ? entry : most));
     const resets = resetsIn(tightest.resetsAt ? Date.parse(tightest.resetsAt) : null, now);
-    return { value: t("sidebar.menu.usageUsed", { percent: Math.round(tightest.usedPercent!) }), weekly: window === "weekly", ...(resets ? { resets } : {}) };
+    return { value: usageValue(tightest.usedPercent!, display), weekly: window === "weekly", ...(resets ? { resets } : {}) };
   }
   const budgets = signedIn.flatMap((provider) => provider.extra?.filter((extra) => extra.label === "Monthly spend") ?? []);
-  return budgets.length ? { value: t("sidebar.menu.usageUsed", { percent: Math.round(Math.max(...budgets.map((budget) => budget.usedPercent))) }) } : null;
+  return budgets.length ? { value: usageValue(Math.max(...budgets.map((budget) => budget.usedPercent)), display) } : null;
 }
 
-export function cloudUsageSummary(plan: CloudPlanSnapshot | null): UsageSummary | null {
+export function cloudUsageSummary(plan: CloudPlanSnapshot | null, display: UsageDisplay = "used"): UsageSummary | null {
   if (plan?.status !== "paid") return null;
   const usage = plan.usage;
-  if (usage?.meters.length) return { value: t("sidebar.menu.usageUsed", { percent: Math.max(...usage.meters.map(meterPercent)) }), resets: resetLine(usage) };
+  if (usage?.meters.length) return { value: usageValue(Math.max(...usage.meters.map(meterPercent)), display), resets: resetLine(usage) };
   return null;
 }
 
-function usePlanUsageSummary(enabled: boolean): UsageSummary | null {
-  const [summary, setSummary] = useState<UsageSummary | null>(null);
+function usePlanUsageSummary(enabled: boolean, display: UsageDisplay): UsageSummary | null {
+  const [report, setReport] = useState<PlanUsageWindows | null>(null);
   useEffect(() => {
     if (!enabled) return;
     let alive = true;
     void api<PlanUsageWindows>("/api/plan-usage", { background: true })
-      .then((report) => { if (alive) setSummary(planUsageSummary(report)); })
+      .then((next) => { if (alive) setReport(next); })
       .catch(() => {});
     return () => { alive = false; };
   }, [enabled]);
-  return summary;
+  return planUsageSummary(report, Date.now(), display);
 }
 
 export function profileMenuItems({
@@ -614,9 +618,10 @@ export function SidebarProfileMenu({ iconOnly = false, rail = false, circle = fa
   const { state, dispatch } = useStore();
   const simple = account !== undefined;
   const [menuOpen, setMenuOpen] = useState(false);
+  const usageDisplay = useUsageDisplay();
   const cloudPlan = useCloudPlanSnapshot(simple ? usageBridge(state.config?.cloudHome === true) : undefined);
-  const cloudUsage = cloudUsageSummary(cloudPlan);
-  const engineUsage = usePlanUsageSummary(simple && menuOpen && cloudUsage === null && window.duskDesktop?.remoteClient?.active !== true);
+  const cloudUsage = cloudUsageSummary(cloudPlan, usageDisplay);
+  const engineUsage = usePlanUsageSummary(simple && menuOpen && cloudUsage === null && window.duskDesktop?.remoteClient?.active !== true, usageDisplay);
   const phone = useSidebarPhoneStatus();
   const connectPhone = useConnectPhoneEntry(state.config?.cloudHome === true);
   const cloudPhone = useCloudPhoneDestination(connectPhone?.target === "computer");

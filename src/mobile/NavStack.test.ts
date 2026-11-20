@@ -2,7 +2,7 @@
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { NavStack } from "./NavStack";
+import { NavStack, useNavLeaving } from "./NavStack";
 import { PlatformContext, type BackGestureEvent, type MobilePlatform } from "./platform";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -166,6 +166,37 @@ describe("going back", () => {
     land();
     expect(shown()).toBe("other");
     expect(log).not.toContain("out");
+  });
+
+  it("marks the leaving page immediately on pop and clears it if reopened mid-pop", async () => {
+    const states: boolean[] = [];
+    function Probe() {
+      const leaving = useNavLeaving();
+      states.push(leaving);
+      return createElement("div", { id: "probe", "data-state": leaving ? "leaving" : "shown" });
+    }
+    const renderProbe = (open: boolean) => act(() => root.render(createElement(PlatformContext.Provider, { value: gesturePlatform }, createElement(NavStack, {
+      base: createElement("p", null, "home"),
+      page: open ? createElement(Probe) : null,
+      pageKey: open ? "chat" : null,
+      onBack: () => {},
+    }))));
+    renderProbe(true);
+    await act(async () => {});
+    land();
+    expect(states.at(-1)).toBe(false);
+    expect(host.querySelector(".mobile-page")?.hasAttribute("data-leaving")).toBe(false);
+
+    frames = [];
+    renderProbe(false);
+    expect(states.at(-1)).toBe(true);
+    expect(host.querySelector(".mobile-page")?.hasAttribute("data-leaving")).toBe(true);
+
+    renderProbe(true);
+    expect(states.at(-1)).toBe(false);
+    expect(host.querySelector(".mobile-page")?.hasAttribute("data-leaving")).toBe(false);
+    nextFrame();
+    land();
   });
 
   it("fades the page out in place with reduced motion, without moving the list", async () => {

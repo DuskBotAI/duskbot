@@ -1,6 +1,5 @@
 import { botAccentScope } from "@/lib/bot-accent";
-import { useState, type ReactNode } from "react";
-import { createPortal } from "react-dom";
+import { useState } from "react";
 import { Check, ChevronRight } from "../icons";
 import { effortLabel, ModelPicker } from "@/components/ModelPicker";
 import { effortLevelsFor } from "@/components/model-picker-reasoning";
@@ -9,15 +8,13 @@ import { useOwnerOrAdmin } from "@/lib/use-owner-or-admin";
 import { useStore, type Bot } from "@/state/store";
 import type { EffortLevel } from "../../shared/wire";
 import { haptic } from "./haptics";
-import { Sheet } from "./Sheet";
+import { SheetPush } from "./SheetPush";
 import { SettingsSection } from "./sheets/SettingsRow";
 
 const ROW = "mobile-row flex min-h-[52px] w-full items-center gap-3 rounded-[inherit] px-4 py-2 text-left text-ink";
 
-const presentOver = (sheet: ReactNode) => createPortal(sheet, document.querySelector(".dusk-mobile") ?? document.body);
-
-/** The bot's model as a phone settings row: Model on the left, the model on the right, and the picker in its own sheet
- * over the bot's. Under it, Thinking, when the model takes a thinking level. */
+/** The bot's model as a phone settings row: Model on the left, the model on the right, and the picker pushed over the
+ * bot's sheet. Under it, Thinking, when the model takes a thinking level. */
 export function PhoneModelRow({ bot }: { bot: Bot }) {
   return (
     <>
@@ -29,8 +26,10 @@ export function PhoneModelRow({ bot }: { bot: Bot }) {
         label={<span className="block truncate text-[16px] font-medium text-ink">{t("botPanel.page.model")}</span>}
         asRow={{
           className: ROW,
-          present: ({ open, close, content }) => presentOver(
-            <Sheet open={open} onClose={close} title={t("model.choose")} recede={false}><div {...botAccentScope(bot.color)} className="contents">{content}</div></Sheet>,
+          present: ({ open, close, content }) => (
+            <SheetPush open={open} onClose={close} title={t("model.choose")} flush>
+              <div {...botAccentScope(bot.color)} className="contents">{content}</div>
+            </SheetPush>
           ),
         }}
       />
@@ -66,21 +65,19 @@ export function PhoneThinkingRow({ bot }: { bot: Bot }) {
         <span className="min-w-0 max-w-[55%] shrink-0 truncate text-[15px] text-ink-secondary">{current ? effortLabel(current) : t("model.effort.default")}</span>
         <ChevronRight aria-hidden="true" size={18} className="shrink-0 text-ink-tertiary" />
       </button>
-      {presentOver(
-        <Sheet open={open} onClose={() => setOpen(false)} title={t("botSettings.simple.thinking")} recede={false}>
-          <div {...botAccentScope(bot.color)} className="contents">
+      <SheetPush open={open} onClose={() => setOpen(false)} title={t("botSettings.simple.thinking")}>
+        <div {...botAccentScope(bot.color)} className="contents">
           <SettingsSection card hint={current ? t("model.simple.thinkingLevel", { level: effortLabel(current) }) : t("model.simple.thinkingDefault")}>
             {[undefined, ...levels].map((level) => (
               <button key={level ?? "default"} type="button" aria-pressed={level === current} data-phone-thinking-option={level ?? "default"}
                 onClick={() => choose(level)} className="mobile-row flex min-h-[52px] w-full items-center gap-3 px-4 py-2 text-left text-[16px] font-medium text-ink">
                 <span className="min-w-0 flex-1">{level ? effortLabel(level) : t("model.effort.default")}</span>
-                {level === current && <Check aria-hidden size={20} />}
+                {level === current && <Check aria-hidden size={20} data-row-check="" className="shrink-0 text-accent" />}
               </button>
             ))}
           </SettingsSection>
-          </div>
-        </Sheet>,
-      )}
+        </div>
+      </SheetPush>
     </>
   );
 }

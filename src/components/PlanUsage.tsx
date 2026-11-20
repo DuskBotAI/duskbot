@@ -9,6 +9,7 @@ import { UsageSummaryCard } from "./CloudUsageMeter";
 import { formatPlanSpend, type PlanSpend } from "@/lib/plan-spend";
 import { friendlyError } from "@/lib/plain-error";
 import { ArtState } from "./ui/Art";
+import { shownShare, useUsageDisplay, type UsageDisplay } from "@/lib/usage-display";
 
 interface PlanWindow {
   available: boolean;
@@ -108,25 +109,29 @@ function providerError(provider: Pick<PlanProvider, "error">): string | null {
   return signIn ? t("planUsage.signInAgain", { provider: providerLabel({ name: signIn[1]! }) }) : message;
 }
 
+/** "32% used", or "68% left" for someone who reads their usage as what remains. */
+function shareLine(usedPercent: number, display: UsageDisplay): string {
+  const percent = shownShare(usedPercent, display);
+  return display === "left" ? t("planUsage.left", { remaining: percent }) : t("planUsage.used", { used: percent });
+}
+
 function WindowRow({
   label,
   window,
   now,
-  usedHeadline = false,
+  display,
   detail,
 }: {
   label: string;
   window: PlanWindow;
   now: number;
-  usedHeadline?: boolean;
+  display: UsageDisplay;
   detail?: string;
 }) {
   const when = window.available ? formatResetDistance(window.resetsAt, now) : null;
   const used = window.usedPercent ?? 0;
-  const headline = usedHeadline
-    ? window.usedPercent == null ? null : t("planUsage.used", { used: Math.round(window.usedPercent) })
-    : window.remainingPercent == null ? null : t("planUsage.left", { remaining: Math.round(window.remainingPercent) });
-  // one row: the window's name, then how much is left (or used) and when it resets, a thin meter under the figures
+  const headline = window.usedPercent == null ? null : shareLine(window.usedPercent, display);
+  const share = shownShare(used, display);
   return (
     <div className={cn(rowCls, "items-start")}>
       <div data-row-title="" className="w-20 shrink-0 text-[13px] leading-[18px] text-ink">{label}</div>
@@ -143,9 +148,9 @@ function WindowRow({
             aria-label={label}
             aria-valuemin={0}
             aria-valuemax={100}
-            aria-valuenow={Math.round(Math.min(100, Math.max(0, used)))}
+            aria-valuenow={share}
           >
-            <div className={cn("h-full rounded-full", usageTone(used))} style={{ width: `${Math.min(100, Math.max(0, used))}%` }} />
+            <div className={cn("h-full rounded-full", usageTone(used))} style={{ width: `${share}%` }} />
           </div>
         </div>
       ) : (
@@ -216,13 +221,14 @@ export function busiestWeekly(report: Pick<PlanUsageReport, "providers"> | null)
 
 export function PlanUsageSummary() {
   const { report, now } = usePlanUsage();
+  const display = useUsageDisplay();
   if (!report) return null;
   const busiest = busiestWeekly(report);
   const spending = busiest ? null : monthlySpend(report);
   if (spending) {
     const name = providerLabel(spending.provider);
     const used = Math.round(Math.min(100, Math.max(0, spending.budget.usedPercent)));
-    return <UsageSummaryCard kind="plan" title={t("settings.simple.billing.monthlySpend", { provider: name })} percent={used} label={`${name}: ${t("planUsage.used", { used })}`}
+    return <UsageSummaryCard kind="plan" title={t("settings.simple.billing.monthlySpend", { provider: name })} usedPercent={used} label={`${name}: ${shareLine(used, display)}`}
       note={spending.budget.spend ? formatPlanSpend(spending.budget.spend) : null} />;
   }
   if (!busiest) {
@@ -232,13 +238,14 @@ export function PlanUsageSummary() {
   const when = formatResetDistance(busiest.provider.weekly.resetsAt, now);
   const name = providerLabel(busiest.provider);
   return (
-    <UsageSummaryCard kind="plan" title={t("settings.simple.billing.weekly", { provider: name })} percent={percent} label={`${name}: ${t("planUsage.used", { used: percent })}`}
+    <UsageSummaryCard kind="plan" title={t("settings.simple.billing.weekly", { provider: name })} usedPercent={percent} label={`${name}: ${shareLine(percent, display)}`}
       note={when ? t("planUsage.resetsIn", { when }) : null} />
   );
 }
 
 export function PlanUsage() {
   const { report, loading, error, now, load } = usePlanUsage();
+  const display = useUsageDisplay();
   const refresh = (
     <button type="button" onClick={() => void load(true)} disabled={loading} aria-label={t("planUsage.refresh")} title={t("planUsage.refresh")}
       className="-my-1 flex size-6 cursor-pointer items-center justify-center rounded-md text-ink-secondary hover:bg-ink/[0.035] hover:text-ink focus-visible:outline-2 focus-visible:outline-focus disabled:opacity-50">
@@ -258,14 +265,14 @@ export function PlanUsage() {
       </RowsCard>
       {report?.providers.filter((provider) => provider.ok).map((provider) => (
         <RowsCard key={provider.id} label={provider.plan ? `${providerLabel(provider)} · ${provider.plan}` : providerLabel(provider)}>
-          <WindowRow label={t("planUsage.fiveHour")} window={provider.fiveHour} now={now} />
-          <WindowRow label={t("planUsage.weekly")} window={provider.weekly} now={now} />
+          <WindowRow label={t("planUsage.fiveHour")} window={provider.fiveHour} now={now} display={display} />
+          <WindowRow label={t("planUsage.weekly")} window={provider.weekly} now={now} display={display} />
           {provider.extra.map((extra, index) => (
             <WindowRow
               key={`${extra.label}-${index}`}
               label={windowLabel(extra.label)}
               now={now}
-              usedHeadline={Boolean(extra.spend)}
+              display={display}
               detail={extra.spend ? formatPlanSpend(extra.spend) : undefined}
               window={{ available: true, remainingPercent: extra.remainingPercent, usedPercent: extra.usedPercent, resetsAt: extra.resetsAt }}
             />
@@ -275,7 +282,7 @@ export function PlanUsage() {
               key={`${model.name}-${entry.label}-${index}`}
               label={model.name}
               now={now}
-              usedHeadline
+              display={display}
               detail={windowLabel(entry.label)}
               window={{ available: true, remainingPercent: entry.remainingPercent, usedPercent: entry.usedPercent, resetsAt: entry.resetsAt }}
             />

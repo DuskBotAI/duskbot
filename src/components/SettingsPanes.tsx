@@ -51,6 +51,7 @@ import { PeopleSection } from "./PeopleSection";
 import { PlanUsageSummary } from "./PlanUsage";
 import { BatteryCard } from "./usage/BatteryCard";
 import { ProviderSummary } from "./usage/ProviderSummary";
+import { UsageDisplayRow } from "./usage/UsageDisplayRow";
 import { UsageGraph } from "./usage/UsageGraph";
 import { ProfileAvatar, ProfileFields } from "./ProfileSettings";
 import { SettingRow, SettingsGroup, SettingsRows } from "./SettingsPrimitives";
@@ -447,6 +448,7 @@ export function UsagePane({ has, cloudAccount }: { has: Has; cloudAccount: React
   // while the plan row offers dusk cloud, a second dusk cloud row would only repeat it; a subscriber manages it there
   const subscribed = plan !== null && plan.view.kind !== "signed-out" && plan.view.kind !== "removed" && !buyOfferAllowed(plan.view);
   const limits = useEngineLimits().filter(reportsUsage);
+  const showsFigures = limits.length > 0 || Boolean(usage);
   if (at === "breakdown") {
     return (
       <div className="flex flex-col gap-5">
@@ -462,12 +464,10 @@ export function UsagePane({ has, cloudAccount }: { has: Has; cloudAccount: React
       <ProviderSummary limits={limits} />
       {has("usage") && <AdminOnly note="settings.adminOnly.usage"><BatteryCard version={0} /><UsageGraph /></AdminOnly>}
       {/* no limits yet: one quiet line in the same card as the breakdown, never a greyed-out row */}
-      {((!limits.length && !usage) || usage || has("usage")) && (
-        <RowsCard label={t("settings.docs.usageMore")} data-settings-block={!limits.length && !usage ? "usage" : undefined}>
-          {!limits.length && !usage && <ItemRow title={t("settings.usage.empty.title")} hint={t("settings.s2.usage.emptyHint")} />}
-          {(usage || has("usage")) && <PageRow page="breakdown" title={t("settings.usage.breakdown")} hint={t("settings.hint.breakdown")} />}
-        </RowsCard>
-      )}
+      <RowsCard label={t("settings.docs.usageMore")} data-settings-block={showsFigures ? undefined : "usage"}>
+        {showsFigures ? <UsageDisplayRow /> : <ItemRow title={t("settings.usage.empty.title")} hint={t("settings.s2.usage.emptyHint")} />}
+        {(usage || has("usage")) && <PageRow page="breakdown" title={t("settings.usage.breakdown")} hint={t("settings.hint.breakdown")} />}
+      </RowsCard>
       {usage && <div data-settings-block="cloudUsage" className="scroll-mt-4"><CloudUsageSummaryView usage={usage} upgrade={upgrade}>{dialog}</CloudUsageSummaryView></div>}
       {has("cloudAccount") && (
         <SettingsGroup label={t("settings.simple.billing.plan")} block="cloudAccount">

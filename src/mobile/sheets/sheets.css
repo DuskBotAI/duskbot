@@ -61,7 +61,6 @@
 .dusk-mobile[data-scheme="dark"] .mobile-panel-sheet [data-panel-tabpanel="computer"] [data-panel-screen] {
   background-color: color-mix(in srgb, #000 38%, var(--color-app));
 }
-
 /* every sheet is iOS Settings' grouped page: a grey page, and each group a stack of white rows 2px apart inside 16px
    corners, as the bot's sheet draws its own */
 html[data-mobile-app] { --m-sheet-page: color-mix(in srgb, var(--color-ink) 5%, var(--color-app)); }
@@ -70,7 +69,19 @@ html[data-mobile-app] { --m-sheet-page: color-mix(in srgb, var(--color-ink) 5%, 
 .dusk-mobile [data-settings-card] > :is(ul, [role="status"]) { display: flex; flex-direction: column; gap: 2px; }
 
 /* in dark, an app's logo sits on a light plate: most marks (GitHub's, Notion's) are drawn for a light ground */
-html[data-skin="grok-dark"] .dusk-mobile [data-app-face] { background-color: #ececee; color: #3a3a3e; }
+html[data-mobile-glass] .dusk-mobile [data-service-tile-bare] { background-color: var(--m-ios-card); }
+:is(
+  html[data-skin="grok-dark"],
+  html[data-skin="midnight"],
+  html[data-skin="dusk"],
+  html[data-skin="foundry"],
+  html[data-skin="graphite"],
+  html[data-skin="halloween"]
+) .dusk-mobile :is([data-app-face], [data-service-tile-bare]),
+.dusk-mobile[data-scheme="dark"] :is([data-app-face], [data-service-tile-bare]) {
+  background-color: #ececee;
+  color: #3a3a3e;
+}
 
 /* a row's dropdown is a tonal pill, no hairline, as every other control on the phone */
 .dusk-mobile .mobile-panel-sheet [data-panel-select] { border-color: transparent; background-color: color-mix(in srgb, var(--color-ink) 6%, transparent); }
@@ -80,3 +91,607 @@ html[data-skin="grok-dark"] .dusk-mobile [data-app-face] { background-color: #ec
 .dusk-mobile [data-bot-accent] [data-ui-toggle][aria-checked="true"] { background-color: var(--bot-accent); }
 .dusk-mobile [data-bot-accent] [data-ui-toggle] > span { background-color: #fdfdfd; }
 .dusk-mobile .mobile-panel-sheet [data-panel-tabs] [role="tab"][aria-selected="true"] { color: var(--color-ink); }
+
+/* under the system's sheet the panel's own top row is the system's bar: the row keeps its buttons to be pressed from
+   there (and to anchor the share menu) but takes no room and draws nothing */
+html[data-native-chrome] .dusk-mobile .mobile-panel-sheet [data-panel-bar] { height: 0; padding: 0; visibility: hidden; }
+html[data-native-chrome] .dusk-mobile .mobile-panel-sheet [data-panel-head] > div:first-child { padding-top: 20px; }
+html[data-native-chrome] .dusk-mobile .mobile-panel-sheet [data-panel-page-view] { padding-top: calc(max(var(--m-safe-top), 16px) + 8px); }
+
+/* what scrolls under the system's bar softens there, in the page colour of the sheet it is in */
+.dusk-mobile .mobile-sheet-edge { background: linear-gradient(to bottom, var(--m-sheet-page, var(--color-app)) 60%, transparent); }
+html[data-mobile-glass] .dusk-mobile .mobile-sheet .mobile-sheet-edge,
+html[data-mobile-glass] .dusk-mobile [data-phone-pushed-page] .mobile-sheet-edge {
+  background: linear-gradient(
+    to bottom,
+    var(--m-sheet-page, var(--color-app)) 0%,
+    var(--m-sheet-page, var(--color-app)) 52%,
+    color-mix(in srgb, var(--m-sheet-page, var(--color-app)) 72%, transparent) 78%,
+    transparent 100%
+  );
+}
+/* the system's segmented control follows the page's scrolling, which a row stuck to the top does not do */
+html[data-native-chrome] .dusk-mobile .mobile-panel-sheet [data-panel-tabs] { position: static; }
+
+.dusk-mobile .mobile-panel-sheet [data-panel-row="usage"] {
+  padding-block: 12px;
+  gap: 8px;
+}
+.dusk-mobile .mobile-panel-sheet [data-panel-row="usage"] > div:first-child > div:first-child > div:first-child {
+  font-size: 16px;
+  line-height: 22px;
+  font-weight: 500;
+}
+
+.dusk-mobile .mobile-panel-sheet [data-local-browser="closed"] { width: 100%; }
+.dusk-mobile .mobile-panel-sheet [data-local-browser="closed"] [data-local-browser-action="start"] {
+  width: 100%;
+  height: auto;
+  min-height: 52px;
+  padding: 12px 16px;
+  border-radius: 16px;
+  background-color: var(--color-menu);
+  font-size: 16px;
+  line-height: 22px;
+}
+.dusk-mobile .mobile-panel-sheet [data-local-browser="closed"] [data-local-browser-action="start"] > span {
+  font-size: 16px;
+  line-height: 22px;
+}
+
+.dusk-mobile .mobile-panel-sheet [data-select-pill]:not([data-system-popup]),
+.dusk-mobile [data-phone-bot-page] [data-select-pill]:not([data-system-popup]),
+.dusk-mobile [data-settings-look="simple"] [data-settings-select]:not([data-segmented], [data-system-popup]) {
+  height: auto;
+  min-height: 28px;
+  margin: 0;
+  padding: 4px 0;
+  border: 0;
+  border-radius: 0;
+  background-color: transparent;
+  color: var(--color-ink-secondary);
+  font-size: 15px;
+  line-height: 20px;
+}
+
+.dusk-mobile [data-phone-bot-page] .settings-pane-header { display: none; }
+.dusk-mobile [data-phone-bot-page] .settings-wipe { background-color: var(--m-sheet-page); }
+.dusk-mobile [data-phone-bot-page] .settings-pane { padding: 8px 16px 32px; gap: 24px; }
+html[data-native-chrome] .dusk-mobile [data-phone-bot-page] .settings-pane {
+  padding: calc(max(var(--m-safe-top), 16px) + 8px) 16px calc(max(var(--m-safe-bottom), 16px) + 24px);
+}
+.dusk-mobile [data-phone-bot-page] [data-panel-sections] { gap: 24px; }
+
+.dusk-mobile :is([data-phone-bot-page], [data-settings-look="simple"]) [data-settings-group-head] {
+  padding-inline: 16px;
+  margin-bottom: 8px;
+}
+.dusk-mobile :is([data-phone-bot-page], [data-settings-look="simple"]) [data-settings-heading] {
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 20px;
+  color: color-mix(in srgb, var(--color-ink) 60%, transparent);
+}
+.dusk-mobile :is([data-phone-bot-page], [data-settings-look="simple"]) [data-settings-footnote] {
+  margin-top: 8px;
+  padding-inline: 16px;
+  font-size: 13px;
+  line-height: 18px;
+  color: color-mix(in srgb, var(--color-ink) 56%, transparent);
+}
+.dusk-mobile :is([data-phone-bot-page], [data-settings-look="simple"]) :is([data-panel-card-surface], [data-settings-rows]) {
+  gap: 2px;
+  padding: 0;
+  border: 0;
+  outline: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  overflow: visible;
+}
+.dusk-mobile :is([data-phone-bot-page], [data-settings-look="simple"]) :is([data-panel-card-surface], [data-settings-rows]) > :is(button, a, div, label):not(.contents, [hidden], [data-settings-rows]),
+.dusk-mobile :is([data-phone-bot-page], [data-settings-look="simple"]) [data-panel-card-surface] > .contents > :is(button, a, div, label):not([hidden]),
+.dusk-mobile :is([data-phone-bot-page], [data-settings-look="simple"]) [data-panel-card-surface] > ol > li {
+  min-height: 52px;
+  padding: 12px 16px;
+  border-radius: 4px;
+  background-color: var(--color-menu);
+}
+.dusk-mobile :is([data-phone-bot-page], [data-settings-look="simple"]) [data-panel-card-surface] > ol { gap: 2px; }
+.dusk-mobile :is([data-phone-bot-page], [data-settings-look="simple"]) [data-panel-card-surface] > :is(button, a, div, label):not(.contents, [hidden]):first-child,
+.dusk-mobile :is([data-phone-bot-page], [data-settings-look="simple"]) [data-settings-rows] > :is(button, a, div, label):not(.contents, [hidden]):first-child,
+.dusk-mobile :is([data-phone-bot-page], [data-settings-look="simple"]) [data-panel-card-surface] > .contents:first-child > :is(button, a, div, label):not([hidden]):first-child,
+.dusk-mobile :is([data-phone-bot-page], [data-settings-look="simple"]) [data-panel-card-surface] > ol:first-child > li:first-child {
+  border-top-left-radius: 16px;
+  border-top-right-radius: 16px;
+}
+.dusk-mobile :is([data-phone-bot-page], [data-settings-look="simple"]) [data-panel-card-surface] > :is(button, a, div, label):not(.contents, [hidden]):last-child,
+.dusk-mobile :is([data-phone-bot-page], [data-settings-look="simple"]) [data-settings-rows] > :is(button, a, div, label):not(.contents, [hidden]):last-child,
+.dusk-mobile :is([data-phone-bot-page], [data-settings-look="simple"]) [data-panel-card-surface] > .contents:last-child > :is(button, a, div, label):not([hidden]):last-child,
+.dusk-mobile :is([data-phone-bot-page], [data-settings-look="simple"]) [data-panel-card-surface] > ol:last-child > li:last-child {
+  border-bottom-left-radius: 16px;
+  border-bottom-right-radius: 16px;
+}
+.dusk-mobile :is([data-phone-bot-page], [data-settings-look="simple"]) :is([data-panel-card-surface], [data-settings-rows]) > :is(button, a):enabled:active,
+.dusk-mobile :is([data-phone-bot-page], [data-settings-look="simple"]) [data-panel-card-surface] > .contents > :is(button, a):enabled:active {
+  background-color: color-mix(in srgb, var(--color-ink) 4%, var(--color-menu));
+}
+.dusk-mobile :is([data-phone-bot-page], [data-settings-look="simple"]) :is([data-row-title], [data-setting-title]) {
+  font-size: 16px;
+  line-height: 22px;
+  font-weight: 500;
+}
+.dusk-mobile :is([data-phone-bot-page], [data-settings-look="simple"]) :is([data-row-hint], [data-setting-hint]) {
+  font-size: 14px;
+  line-height: 20px;
+}
+.dusk-mobile [data-settings-look="simple"] [data-row-hint] {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+}
+.dusk-mobile [data-settings-look="simple"] .ui-button {
+  min-height: 34px;
+  padding-inline: 14px;
+  font-size: 15px;
+  font-weight: 500;
+}
+.dusk-mobile :is([data-phone-bot-page], [data-settings-look="simple"]) [data-panel-value] {
+  font-size: 15px;
+  line-height: 20px;
+}
+.dusk-mobile [data-phone-bot-page] [data-instructions-card] {
+  border: 0;
+  border-radius: 16px;
+  background-color: var(--color-menu);
+}
+.dusk-mobile [data-phone-bot-page] [data-instructions-card] textarea {
+  font-size: 16px;
+  line-height: 22px;
+  padding: 14px 16px 8px;
+}
+
+/* Matches UIKit UITableView.Style.insetGrouped metrics on iOS 26/27 */
+html[data-mobile-glass] {
+  --m-sheet-page: #f2f2f7;
+  --m-ios-card: #ffffff;
+  --m-ios-separator: rgb(60 60 67 / .12);
+  --m-ios-row-active: #e5e5ea;
+  --m-ios-chevron: rgb(60 60 67 / .30);
+}
+html[data-mobile-glass][data-skin="grok-dark"],
+html[data-mobile-glass][data-skin="midnight"],
+html[data-mobile-glass][data-skin="dusk"],
+html[data-mobile-glass][data-skin="foundry"],
+html[data-mobile-glass][data-skin="graphite"],
+html[data-mobile-glass][data-skin="halloween"],
+html[data-mobile-glass] .dusk-mobile[data-scheme="dark"] {
+  --m-sheet-page: #1c1c1e;
+  --m-ios-card: #2c2c2e;
+  --m-ios-separator: rgb(84 84 88 / .45);
+  --m-ios-row-active: #3a3a3c;
+  --m-ios-chevron: rgb(235 235 245 / .30);
+}
+
+html[data-mobile-glass] .dusk-mobile .side-panel {
+  --panel-phone-page: var(--m-sheet-page);
+}
+
+html[data-mobile-glass] .dusk-mobile .mobile-panel-sheet [data-panel-card-surface],
+html[data-mobile-glass] .dusk-mobile [data-phone-bot-page] [data-panel-card-surface],
+html[data-mobile-glass] .dusk-mobile [data-settings-look="simple"] [data-panel-card-surface],
+html[data-mobile-glass] .dusk-mobile [data-settings-look="simple"] [data-settings-rows] {
+  gap: 0;
+  padding: 0;
+  border: 0;
+  outline: 0;
+  border-radius: 26px;
+  clip-path: inset(0 round 26px);
+  background-color: var(--m-ios-card);
+  box-shadow: none;
+  overflow: hidden;
+  isolation: isolate;
+}
+
+html[data-mobile-glass] .dusk-mobile .mobile-panel-sheet [data-panel-card-surface] > :not(.contents, ol, [hidden], :empty),
+html[data-mobile-glass] .dusk-mobile .mobile-panel-sheet [data-panel-card-surface] > .contents > :not([hidden], :empty),
+html[data-mobile-glass] .dusk-mobile [data-phone-bot-page] [data-panel-card-surface] > :not(.contents, ol, [hidden], :empty),
+html[data-mobile-glass] .dusk-mobile [data-phone-bot-page] [data-panel-card-surface] > .contents > :not([hidden], :empty),
+html[data-mobile-glass] .dusk-mobile [data-phone-bot-page] [data-panel-card-surface] > ol > li,
+html[data-mobile-glass] .dusk-mobile [data-settings-look="simple"] [data-panel-card-surface] > :not(.contents, ol, [hidden], :empty),
+html[data-mobile-glass] .dusk-mobile [data-settings-look="simple"] [data-settings-rows] > :not(.contents, [hidden], :empty) {
+  min-height: 52px;
+  padding: 12px 16px;
+  border-radius: 0;
+  background-color: transparent;
+  font-size: 17px;
+  line-height: 22px;
+  letter-spacing: -0.024em;
+  transition: background-color 220ms ease-out;
+}
+html[data-mobile-glass] .dusk-mobile [data-phone-bot-page] [data-panel-card-surface] > ol {
+  gap: 0;
+}
+
+html[data-mobile-glass] .dusk-mobile .mobile-panel-sheet [data-panel-card-surface] > :not(.contents, [hidden], :empty) ~ :not(.contents, ol, [hidden], :empty),
+html[data-mobile-glass] .dusk-mobile .mobile-panel-sheet [data-panel-card-surface] > .contents > :not([hidden], :empty) ~ :not([hidden], :empty),
+html[data-mobile-glass] .dusk-mobile [data-phone-bot-page] [data-panel-card-surface] > :not(.contents, [hidden], :empty) ~ :not(.contents, ol, [hidden], :empty),
+html[data-mobile-glass] .dusk-mobile [data-phone-bot-page] [data-panel-card-surface] > .contents > :not([hidden], :empty) ~ :not([hidden], :empty),
+html[data-mobile-glass] .dusk-mobile [data-phone-bot-page] [data-panel-card-surface] > ol > li + li,
+html[data-mobile-glass] .dusk-mobile [data-settings-look="simple"] [data-panel-card-surface] > :not(.contents, [hidden], :empty) ~ :not(.contents, ol, [hidden], :empty),
+html[data-mobile-glass] .dusk-mobile [data-settings-look="simple"] [data-settings-rows] > :not(.contents, [hidden], :empty) ~ :not(.contents, [hidden], :empty) {
+  background-image: linear-gradient(var(--m-ios-separator), var(--m-ios-separator));
+  background-size: calc(100% - var(--m-sep-start, 16px) - var(--m-sep-end, 16px)) 0.5px;
+  background-position: var(--m-sep-start, 16px) top;
+  background-repeat: no-repeat;
+}
+
+html[data-mobile-glass] .dusk-mobile .mobile-panel-sheet [data-panel-card-surface] > :is(button, a):active,
+html[data-mobile-glass] .dusk-mobile [data-phone-bot-page] [data-panel-card-surface] > :is(button, a):enabled:active,
+html[data-mobile-glass] .dusk-mobile [data-phone-bot-page] [data-panel-card-surface] > .contents > :is(button, a):enabled:active,
+html[data-mobile-glass] .dusk-mobile [data-settings-look="simple"] :is([data-panel-card-surface], [data-settings-rows]) > :is(button, a):enabled:active {
+  background-color: transparent;
+}
+
+html[data-mobile-glass] .dusk-mobile .mobile-panel-sheet [data-panel-card-surface] > [data-row-highlighted],
+html[data-mobile-glass] .dusk-mobile [data-phone-bot-page] [data-panel-card-surface] > [data-row-highlighted],
+html[data-mobile-glass] .dusk-mobile [data-phone-bot-page] [data-panel-card-surface] > .contents > [data-row-highlighted],
+html[data-mobile-glass] .dusk-mobile [data-settings-look="simple"] :is([data-panel-card-surface], [data-settings-rows]) > [data-row-highlighted] {
+  background-color: var(--m-ios-row-active);
+  background-image: none;
+  transition-duration: 0ms;
+}
+html[data-mobile-glass] .dusk-mobile [data-panel-card-surface] > [data-row-highlighted] + *,
+html[data-mobile-glass] .dusk-mobile [data-panel-card-surface] > .contents > [data-row-highlighted] + *,
+html[data-mobile-glass] .dusk-mobile [data-settings-rows] > [data-row-highlighted] + * {
+  background-image: none;
+}
+
+html[data-mobile-glass] .dusk-mobile .mobile-panel-sheet [data-row-title],
+html[data-mobile-glass] .dusk-mobile [data-phone-bot-page] [data-row-title],
+html[data-mobile-glass] .dusk-mobile [data-settings-look="simple"] [data-row-title],
+html[data-mobile-glass] .dusk-mobile [data-settings-look="simple"] [data-setting-title],
+html[data-mobile-glass] .dusk-mobile .mobile-panel-sheet [data-panel-row="usage"] > div:first-child > div:first-child > div:first-child,
+html[data-mobile-glass] .dusk-mobile .mobile-panel-sheet [data-phone-thinking-row] > span:first-child,
+html[data-mobile-glass] .dusk-mobile .mobile-panel-sheet [data-panel-card-surface] [data-tour="model"] > span:first-child,
+html[data-mobile-glass] .dusk-mobile .mobile-panel-sheet [data-panel-card-surface] .mobile-row > span:first-child > span:first-child {
+  font-size: 17px;
+  line-height: 22px;
+  font-weight: 400;
+  letter-spacing: -0.024em;
+}
+html[data-mobile-glass] .dusk-mobile .mobile-panel-sheet [data-row-hint],
+html[data-mobile-glass] .dusk-mobile [data-phone-bot-page] [data-row-hint],
+html[data-mobile-glass] .dusk-mobile [data-settings-look="simple"] [data-row-hint],
+html[data-mobile-glass] .dusk-mobile [data-settings-look="simple"] [data-setting-hint] {
+  font-size: 13px;
+  line-height: 18px;
+  font-weight: 400;
+  letter-spacing: -0.006em;
+}
+html[data-mobile-glass] .dusk-mobile .mobile-panel-sheet [data-panel-value],
+html[data-mobile-glass] .dusk-mobile [data-phone-bot-page] [data-panel-value],
+html[data-mobile-glass] .dusk-mobile [data-settings-look="simple"] [data-panel-value],
+html[data-mobile-glass] .dusk-mobile [data-settings-look="simple"] [data-voice-mic],
+html[data-mobile-glass] .dusk-mobile .mobile-panel-sheet [data-phone-thinking-row] > span:nth-child(2),
+html[data-mobile-glass] .dusk-mobile .mobile-panel-sheet [data-panel-card-surface] .mobile-row > span:nth-child(2) {
+  font-size: 17px;
+  line-height: 22px;
+  font-weight: 400;
+  letter-spacing: -0.024em;
+}
+html[data-mobile-glass] .dusk-mobile .mobile-panel-sheet [data-settings-group-head],
+html[data-mobile-glass] .dusk-mobile [data-phone-bot-page] [data-settings-group-head],
+html[data-mobile-glass] .dusk-mobile [data-settings-look="simple"] [data-settings-group-head] {
+  padding-inline: 16px;
+  margin-bottom: 8px;
+}
+html[data-mobile-glass] .dusk-mobile .mobile-panel-sheet [data-settings-heading],
+html[data-mobile-glass] .dusk-mobile [data-phone-bot-page] [data-settings-heading],
+html[data-mobile-glass] .dusk-mobile [data-settings-look="simple"] [data-settings-heading] {
+  font-size: 13px;
+  line-height: 18px;
+  font-weight: 600;
+  letter-spacing: -0.006em;
+  color: color-mix(in srgb, var(--color-ink) 56%, transparent);
+}
+html[data-mobile-glass] .dusk-mobile [data-phone-bot-page] [data-settings-heading] {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+}
+html[data-mobile-glass] .dusk-mobile .mobile-panel-sheet [data-settings-footnote],
+html[data-mobile-glass] .dusk-mobile [data-phone-bot-page] [data-settings-footnote],
+html[data-mobile-glass] .dusk-mobile [data-settings-look="simple"] [data-settings-footnote] {
+  margin-top: 8px;
+  padding-inline: 16px;
+  font-size: 13px;
+  line-height: 18px;
+  color: color-mix(in srgb, var(--color-ink) 56%, transparent);
+}
+html[data-mobile-glass] .dusk-mobile [data-panel-card-surface] button > svg:last-child,
+html[data-mobile-glass] .dusk-mobile [data-panel-card-surface] a > svg:last-child,
+html[data-mobile-glass] .dusk-mobile [data-panel-card-surface] button:not([role="radio"], [role="checkbox"], [role="option"]) > span:last-child > svg:only-child {
+  color: var(--m-ios-chevron);
+}
+html[data-mobile-glass] .dusk-mobile [data-panel-modal="backups"] :is([data-backup-main], [data-panel-action="backup-change"], [data-panel-action="backup-add"]) > span:not([aria-hidden="true"]) {
+  font-size: 17px;
+  line-height: 22px;
+  font-weight: 400;
+  letter-spacing: -0.024em;
+}
+html[data-mobile-glass] .dusk-mobile [data-panel-card-surface] :is([role="radio"][aria-checked="true"], [role="checkbox"][aria-checked="true"], [role="option"][aria-selected="true"]) > span:last-child {
+  width: 20px;
+  color: var(--color-accent);
+}
+html[data-mobile-glass] .dusk-mobile [data-panel-card-surface] :is([role="radio"][aria-checked="true"], [role="checkbox"][aria-checked="true"], [role="option"][aria-selected="true"]) > span:last-child svg {
+  width: 18px;
+  height: 18px;
+}
+
+html[data-mobile-glass] .dusk-mobile section:has(> [data-settings-card]):not(:first-child) {
+  margin-top: 24px;
+}
+html[data-mobile-glass] .dusk-mobile section:has(> [data-settings-card]) > h2:not(.sr-only) {
+  padding: 0 16px 8px;
+  font-size: 13px;
+  line-height: 18px;
+  font-weight: 600;
+  letter-spacing: -0.006em;
+  color: color-mix(in srgb, var(--color-ink) 56%, transparent);
+}
+html[data-mobile-glass] .dusk-mobile [data-settings-card] {
+  gap: 0;
+  border-radius: 26px;
+  clip-path: inset(0 round 26px);
+  background-color: var(--m-ios-card);
+  overflow: hidden;
+  isolation: isolate;
+}
+html[data-mobile-glass] .dusk-mobile [data-settings-card] > :not(ul, [role="status"]),
+html[data-mobile-glass] .dusk-mobile [data-settings-card] > ul > *,
+html[data-mobile-glass] .dusk-mobile [data-settings-card] > [role="status"] > * {
+  background-color: transparent;
+}
+html[data-mobile-glass] .dusk-mobile [data-settings-card] > ul,
+html[data-mobile-glass] .dusk-mobile [data-settings-card] > [role="status"] {
+  gap: 0;
+}
+html[data-mobile-glass] .dusk-mobile [data-settings-card] > :not(ul, [role="status"], [hidden], :empty) ~ :not(ul, [role="status"], [hidden], :empty),
+html[data-mobile-glass] .dusk-mobile [data-settings-card] > ul ~ :not(ul, [role="status"], [hidden], :empty),
+html[data-mobile-glass] .dusk-mobile [data-settings-card] > [role="status"] ~ :not(ul, [role="status"], [hidden], :empty),
+html[data-mobile-glass] .dusk-mobile [data-settings-card] > ul > * + *,
+html[data-mobile-glass] .dusk-mobile [data-settings-card] > [role="status"] > * + * {
+  background-image: linear-gradient(var(--m-ios-separator), var(--m-ios-separator));
+  background-size: calc(100% - var(--m-sep-start, 16px) - var(--m-sep-end, 16px)) 0.5px;
+  background-position: var(--m-sep-start, 16px) top;
+  background-repeat: no-repeat;
+}
+html[data-mobile-glass] .dusk-mobile [data-panel-card-surface] > :is(*:dir(rtl)),
+html[data-mobile-glass] .dusk-mobile [data-settings-rows] > :is(*:dir(rtl)),
+html[data-mobile-glass] .dusk-mobile [data-settings-card] > :is(*:dir(rtl)),
+html[data-mobile-glass] .dusk-mobile [data-settings-card] > ul > :is(*:dir(rtl)) {
+  background-position: right var(--m-sep-start, 16px) top;
+}
+html[data-mobile-glass] .dusk-mobile [data-settings-card] > :is(button, a, div):has(> span[aria-hidden]:first-child > svg),
+html[data-mobile-glass] .dusk-mobile [data-settings-card] > :is(button, a, div):has(> svg:first-child) {
+  --m-sep-start: 48px;
+}
+html[data-mobile-glass] .dusk-mobile [data-settings-card] > li:has([data-app-face]),
+html[data-mobile-glass] .dusk-mobile [data-settings-card] > ul > li:has([data-app-face]),
+html[data-mobile-glass] .dusk-mobile [data-settings-card] > li:has(> button > span.size-10:first-child) {
+  --m-sep-start: 68px;
+}
+html[data-mobile-glass] .dusk-mobile [data-settings-card] :is(button, a).mobile-row:not([role="switch"]) {
+  transition: background-color 220ms ease-out;
+}
+html[data-mobile-glass] .dusk-mobile [data-settings-card] [role="switch"] {
+  cursor: default;
+}
+html[data-mobile-glass] .dusk-mobile [data-settings-card] [data-row-highlighted] {
+  background-color: var(--m-ios-row-active);
+  background-image: none;
+  transition-duration: 0ms;
+}
+html[data-mobile-glass] .dusk-mobile [data-settings-card] > [data-row-highlighted] + *,
+html[data-mobile-glass] .dusk-mobile [data-settings-card] > li:has(> [data-row-highlighted]),
+html[data-mobile-glass] .dusk-mobile [data-settings-card] > li:has(> [data-row-highlighted]) + *,
+html[data-mobile-glass] .dusk-mobile [data-settings-card] > ul > li:has(> [data-row-highlighted]),
+html[data-mobile-glass] .dusk-mobile [data-settings-card] > ul > li:has(> [data-row-highlighted]) + * {
+  background-image: none;
+}
+html[data-mobile-glass] .dusk-mobile [data-settings-card] .mobile-row > span.flex-1 > span:first-child,
+html[data-mobile-glass] .dusk-mobile [data-settings-card] [data-phone-thinking-option] > span:first-child {
+  font-size: 17px;
+  line-height: 22px;
+  font-weight: 400;
+  letter-spacing: -0.024em;
+}
+html[data-mobile-glass] .dusk-mobile [data-settings-card] .mobile-row > span.truncate:not(.flex-1) {
+  font-size: 17px;
+  line-height: 22px;
+  font-weight: 400;
+  letter-spacing: -0.024em;
+}
+html[data-mobile-glass] .dusk-mobile [data-settings-card] .mobile-row:not([aria-pressed]) > svg:last-child {
+  width: 15px;
+  height: 15px;
+  stroke-width: 2.25;
+  color: var(--m-ios-chevron);
+}
+html[data-mobile-glass] .dusk-mobile [data-settings-card] .mobile-row[aria-pressed="true"] > svg:last-child {
+  color: var(--color-accent);
+}
+
+html[data-mobile-glass] .dusk-mobile [data-phone-pushed-page] {
+  --simple-menu-bg: var(--m-sheet-page);
+}
+html[data-mobile-glass] .dusk-mobile [data-phone-pushed-page] [data-model-picker-content][data-presented] {
+  flex: 1 1 0%;
+  min-height: 0;
+}
+html[data-mobile-glass] .dusk-mobile [data-phone-pushed-page] [data-simple-model-search] {
+  height: auto;
+  min-height: 40px;
+  margin: 4px 16px 8px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 14px;
+  background-color: color-mix(in srgb, var(--color-ink) 7%, transparent);
+}
+html[data-mobile-glass] .dusk-mobile [data-phone-pushed-page] [data-simple-model-search] input {
+  font-size: 17px;
+  line-height: 22px;
+}
+html[data-mobile-glass] .dusk-mobile [data-phone-pushed-page] [data-simple-models] > div {
+  padding: 4px 12px 24px;
+}
+html[data-mobile-glass] .dusk-mobile [data-phone-pushed-page] [data-simple-models] [data-menu-row] {
+  min-height: 46px;
+  border-radius: 14px;
+  font-size: 17px;
+  line-height: 22px;
+  font-weight: 400;
+  letter-spacing: -0.024em;
+}
+html[data-mobile-glass] .dusk-mobile [data-phone-pushed-page] [data-simple-models] [data-simple-route],
+html[data-mobile-glass] .dusk-mobile [data-phone-pushed-page] [data-simple-models] [data-simple-org-blocked] {
+  font-size: 13px;
+  line-height: 18px;
+}
+html[data-mobile-glass] .dusk-mobile [data-phone-pushed-page] [data-simple-effort-band] {
+  border-top: 0.5px solid var(--m-ios-separator);
+  gap: 8px;
+  padding: 10px 16px calc(20px - min(20px, var(--m-safe-bottom)));
+}
+html[data-mobile-glass] .dusk-mobile [data-phone-pushed-page] [data-simple-effort-band] > div > span:first-child,
+html[data-mobile-glass] .dusk-mobile [data-phone-pushed-page] [data-simple-effort-band] [data-simple-thinking] > div:first-child {
+  height: auto;
+  padding: 0 4px 6px;
+  font-size: 13px;
+  line-height: 18px;
+  font-weight: 600;
+  color: color-mix(in srgb, var(--color-ink) 56%, transparent);
+}
+html[data-mobile-glass] .dusk-mobile [data-phone-pushed-page] [data-simple-effort-band] :is([data-picker-scope], [data-simple-effort]) {
+  margin: 0;
+}
+
+html[data-mobile-glass] .dusk-mobile .mobile-panel-sheet [data-local-browser="closed"] [data-local-browser-action="start"] {
+  border-radius: 26px;
+  background-color: var(--m-ios-card);
+  font-size: 17px;
+  line-height: 22px;
+  font-weight: 400;
+}
+html[data-mobile-glass] .dusk-mobile .mobile-panel-sheet [data-local-browser="closed"] [data-local-browser-action="start"] > span {
+  font-size: 17px;
+  line-height: 22px;
+  font-weight: 400;
+}
+html[data-mobile-glass] .dusk-mobile [data-phone-bot-page] [data-instructions-card] {
+  border-radius: 26px;
+  background-color: var(--m-ios-card);
+}
+html[data-mobile-glass] .dusk-mobile [data-phone-bot-page] [data-instructions-card] textarea {
+  font-size: 17px;
+  line-height: 23px;
+  padding: 16px 16px 8px;
+}
+html[data-mobile-glass] .dusk-mobile [data-phone-bot-page] [data-instructions-card] [data-modal-action="save"] {
+  min-height: 36px;
+  padding-inline: 16px;
+  font-size: 15px;
+  font-weight: 600;
+}
+html[data-mobile-glass] .dusk-mobile .mobile-panel-sheet [data-panel-page-view="instructions"] [data-panel-card-surface] label {
+  display: none;
+}
+html[data-mobile-glass] .dusk-mobile .mobile-panel-sheet [data-panel-page-view="instructions"] [data-panel-card-surface] textarea {
+  border: 0;
+  background-color: transparent;
+  padding: 4px 0;
+  font-size: 17px;
+  line-height: 23px;
+  box-shadow: none;
+}
+
+/* >= 16px prevents WKWebView/Safari auto-zoom when focusing inputs */
+html[data-mobile-glass] .dusk-mobile [data-phone-modal-layer]:not([data-native-bar]) [role="dialog"] {
+  border-radius: 26px;
+  background-color: var(--m-ios-card);
+  box-shadow: 0 20px 50px rgb(0 0 0 / .22);
+}
+html[data-mobile-glass] .dusk-mobile [data-phone-modal-layer]:not([data-native-bar]) [role="dialog"] header {
+  padding: 18px 18px 10px 20px;
+}
+html[data-mobile-glass] .dusk-mobile [data-phone-modal-layer]:not([data-native-bar]) [role="dialog"] header h2 {
+  font-size: 17px;
+  line-height: 22px;
+  font-weight: 600;
+}
+html[data-mobile-glass] .dusk-mobile [data-phone-modal-layer]:not([data-native-bar]) [role="dialog"] header button {
+  width: 32px;
+  height: 32px;
+  border-radius: 9999px;
+  background-color: color-mix(in srgb, var(--color-ink) 7%, transparent);
+}
+html[data-mobile-glass] .dusk-mobile [data-phone-modal-layer]:not([data-native-bar]) [role="dialog"] form label > span {
+  font-size: 13px;
+  line-height: 18px;
+  font-weight: 500;
+  padding-inline: 2px;
+}
+html[data-mobile-glass] .dusk-mobile [data-phone-modal-layer]:not([data-native-bar]) [role="dialog"] input,
+html[data-mobile-glass] .dusk-mobile [data-phone-modal-layer]:not([data-native-bar]) [role="dialog"] textarea {
+  min-height: 44px;
+  border-radius: 12px;
+  background-color: color-mix(in srgb, var(--color-ink) 6%, transparent);
+  padding: 10px 12px;
+  font-size: 17px;
+  line-height: 22px;
+}
+html[data-mobile-glass] .dusk-mobile [data-phone-modal-layer]:not([data-native-bar]) [role="dialog"] > div:last-child {
+  padding: 12px 18px 18px;
+  gap: 10px;
+}
+html[data-mobile-glass] .dusk-mobile [data-phone-modal-layer]:not([data-native-bar]) [role="dialog"] > div:last-child button {
+  min-height: 40px;
+  padding-inline: 18px;
+  font-size: 16px;
+  font-weight: 500;
+}
+
+html[data-mobile-glass] .dusk-mobile [data-phone-modal-layer] [role="alertdialog"] {
+  max-width: min(320px, calc(100vw - 48px));
+  border-radius: 26px;
+  background-color: var(--m-ios-card);
+  box-shadow: 0 20px 50px rgb(0 0 0 / .24);
+  padding: 6px 4px;
+}
+html[data-mobile-glass] .dusk-mobile [data-phone-modal-layer] [role="alertdialog"] h2 {
+  font-size: 17px;
+  line-height: 22px;
+  font-weight: 600;
+}
+html[data-mobile-glass] .dusk-mobile [data-phone-modal-layer] [role="alertdialog"] #confirm-dialog-body {
+  font-size: 15px;
+  line-height: 20px;
+}
+html[data-mobile-glass] .dusk-mobile [data-phone-modal-layer] [role="alertdialog"] > div:last-child button {
+  min-height: 44px;
+  font-size: 16px;
+  font-weight: 500;
+}
+
+html[data-mobile-glass] .dusk-mobile .mobile-panel-sheet [data-panel-scrim] {
+  background-color: rgb(10 10 12 / .10);
+}
+html[data-mobile-glass] .dusk-mobile .mobile-panel-sheet [data-panel-avatar-editor] {
+  inset-inline: 0;
+  top: 100px;
+  border: 0;
+  border-radius: 26px;
+  background-color: var(--m-ios-card);
+  box-shadow: 0 20px 50px rgb(0 0 0 / .20);
+}

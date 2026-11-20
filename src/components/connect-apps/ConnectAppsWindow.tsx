@@ -2,7 +2,9 @@ import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent a
 
 import { api, useStore, type Action } from "@/state/store";
 import type { LocaleKey } from "@/locales";
+import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
+import { useConnectAppsPhoneBar } from "./use-phone-bar";
 import { connectorDescription } from "@/lib/app-catalog";
 import { closeExternalPage } from "@/lib/app-links";
 import { listLogins } from "@/lib/logins";
@@ -598,6 +600,10 @@ export function ConnectAppsWindow({ page: requested, nonce, onClose, onTemplates
   const gmailShown = detailEntry?.id === GMAIL && ownShown
     && (detailComposioLeads || !(composioConnected(detailEntry) && gmailConnected !== true));
   const sub = page.kind === "detail" || page.kind === "yours";
+  const phoneBarTitle = page.kind === "yours" ? t("connectApps.manage")
+    : page.kind === "detail" ? (page.id === MCP_PAGE ? t("connectApps.mcp") : page.id === CUSTOM_MCP ? t("connectApps.customMcp") : detailEntry?.label ?? t("connectApps.title"))
+      : t("connectApps.title");
+  const { phone, nativeBar } = useConnectAppsPhoneBar(phoneBarTitle, trail.length > 0, back, onClose);
 
   const body = (() => {
     if (page.kind === "detail" && (page.id === MCP_PAGE || page.id === CUSTOM_MCP)) {
@@ -737,9 +743,18 @@ export function ConnectAppsWindow({ page: requested, nonce, onClose, onTemplates
   })();
 
   return (
-    <div className="ca-scrim" data-connect-apps="" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
+    <div
+      className="ca-scrim"
+      data-connect-apps=""
+      data-phone-modal-layer={phone ? "" : undefined}
+      data-native-bar={nativeBar ? "" : undefined}
+      onMouseDown={(event) => event.target === event.currentTarget && onClose()}
+    >
       <div ref={dialog} data-tour="apps-panel" role="dialog" aria-modal="true" aria-label={t("connectApps.title")} tabIndex={-1} className="ca-dialog" onKeyDown={onDialogKey}>
         <div className="ca-layout" data-fit={page.kind === "detail" ? "" : undefined}>
+          {nativeBar && (
+            <div aria-hidden className={cn("mobile-edge mobile-sheet-edge pointer-events-none absolute inset-x-0 top-0 z-50 h-[calc(var(--m-safe-top)+10px)] transition-opacity duration-150", scrolled ? "opacity-100" : "opacity-0")} />
+          )}
           <button type="button" data-tour="apps-close" className="ca-icon-button ca-close" aria-label={t("connectApps.close")} onClick={onClose}>
             <Icon name="close" size={16} />
           </button>

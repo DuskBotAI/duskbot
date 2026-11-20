@@ -80,12 +80,13 @@ final class PastingTextView: UITextView {
 /// The composer's + choices opened straight on their own system picker: the photo library on PHPicker, Files on the
 /// document picker. A web file input on iOS always asks first (take a photo, the library or Files), even with `accept`.
 @objc(PickerPlugin)
-public class PickerPlugin: CAPPlugin, CAPBridgedPlugin, PHPickerViewControllerDelegate, UIDocumentPickerDelegate {
+public class PickerPlugin: CAPPlugin, CAPBridgedPlugin, PHPickerViewControllerDelegate, UIDocumentPickerDelegate, UIImagePickerControllerDelegate, UINavigationControllerDelegate {
     public let identifier = "PickerPlugin"
     public let jsName = "DuskPicker"
     public let pluginMethods: [CAPPluginMethod] = [
         CAPPluginMethod(name: "photos", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "files", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "camera", returnType: CAPPluginReturnPromise),
     ]
 
     private var pending: CAPPluginCall?
@@ -122,6 +123,21 @@ public class PickerPlugin: CAPPlugin, CAPBridgedPlugin, PHPickerViewControllerDe
             guard let self, let presenter = self.bridge?.viewController else { self?.finish([]); return }
             let picker = UIDocumentPickerViewController(forOpeningContentTypes: [.item], asCopy: true)
             picker.allowsMultipleSelection = multiple
+            picker.delegate = self
+            presenter.present(picker, animated: true)
+        }
+    }
+
+    @objc func camera(_ call: CAPPluginCall) {
+        begin(call)
+        DispatchQueue.main.async { [weak self] in
+            guard let self, let presenter = self.bridge?.viewController, UIImagePickerController.isSourceTypeAvailable(.camera) else {
+                self?.finish([])
+                return
+            }
+            let picker = UIImagePickerController()
+            picker.sourceType = .camera
+            picker.mediaTypes = [UTType.image.identifier]
             picker.delegate = self
             presenter.present(picker, animated: true)
         }
@@ -166,6 +182,20 @@ public class PickerPlugin: CAPPlugin, CAPBridgedPlugin, PHPickerViewControllerDe
     }
 
     public func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) {
+        finish([])
+    }
+
+    public func imagePickerController(_ picker: UIImagePickerController, didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey: Any]) {
+        picker.dismiss(animated: true)
+        guard let image = info[.originalImage] as? UIImage, let file = PickedFiles.image(image, index: 0) else {
+            finish([])
+            return
+        }
+        finish([file])
+    }
+
+    public func imagePickerControllerDidCancel(_ picker: UIImagePickerController) {
+        picker.dismiss(animated: true)
         finish([])
     }
 }

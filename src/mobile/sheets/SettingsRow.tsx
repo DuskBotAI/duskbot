@@ -1,8 +1,7 @@
-import { useId, type ReactNode } from "react";
-import { motion, useReducedMotion } from "motion/react";
+import { useId, useRef, type ReactNode } from "react";
 import { ChevronRight } from "../../icons";
 import { cn } from "@/lib/cn";
-import { dur, spring } from "../motion";
+import { SYSTEM_SWITCH_ROOM, useSystemControl } from "@/lib/system-control";
 
 /** A group of rows, iOS Settings' inset group: a quiet label over white rows, a hint under it. A `card` stands on the
  * sheet's own edge; without it the group sits in a list that already insets its content (search, notifications). */
@@ -44,17 +43,16 @@ export function SettingsRow({ icon, label, detail, value, onClick, href, chevron
 
 export function SettingsSwitch({ icon, label, detail, checked, onChange }: { icon?: ReactNode; label: string; detail?: string; checked: boolean; onChange: (checked: boolean) => void }) {
   const id = useId();
-  const reduced = useReducedMotion();
+  const room = useRef<HTMLSpanElement>(null);
+  const system = useSystemControl(room, { kind: "switch", on: checked, label }, (on) => { if (on !== checked) onChange(Boolean(on)); });
   return (
-    <motion.button type="button" role="switch" aria-checked={checked} aria-labelledby={id} aria-describedby={detail ? `${id}-detail` : undefined} onClick={() => onChange(!checked)} whileTap={reduced ? undefined : "pressed"} className="mobile-row flex min-h-[52px] w-full items-center gap-3 rounded-2xl px-4 py-2 text-left text-ink">
+    <button type="button" role="switch" aria-checked={checked} aria-labelledby={id} aria-describedby={detail ? `${id}-detail` : undefined} onClick={() => onChange(!checked)} className="mobile-row flex min-h-[52px] w-full items-center gap-3 rounded-2xl px-4 py-2 text-left text-ink">
       {icon && <span aria-hidden className="shrink-0 text-ink-secondary [&>svg]:size-5">{icon}</span>}
       <span className="min-w-0 flex-1">
         <span id={id} className="block text-[16px] font-medium">{label}</span>
         {detail && <span id={`${id}-detail`} className="mt-0.5 block text-[13px] leading-[18px] text-ink-secondary">{detail}</span>}
       </span>
-      <span aria-hidden className={cn("relative h-[31px] w-[51px] shrink-0 rounded-full transition-colors motion-reduce:transition-none", checked ? "bg-ink" : "bg-ink/[0.14]")} style={{ transitionDuration: reduced ? "0s" : `${dur.slow}s` }}>
-        <motion.span className="absolute left-0.5 top-0.5 block size-[27px] rounded-full bg-app shadow-sm" initial={false} animate={{ x: checked ? 20 : 0 }} transition={reduced ? { duration: 0 } : { ...spring.settle, stiffness: 420, damping: 28 }} variants={{ pressed: { scaleX: 1.11, scaleY: 0.9 } }} />
-      </span>
-    </motion.button>
+      {system ? <span ref={room} aria-hidden className="shrink-0" style={SYSTEM_SWITCH_ROOM} /> : <span ref={room} aria-hidden className="mobile-switch" data-on={checked ? "" : undefined}><span /></span>}
+    </button>
   );
 }

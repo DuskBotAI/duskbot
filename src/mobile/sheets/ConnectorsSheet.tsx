@@ -176,14 +176,14 @@ export function ConnectorsSheet({ open, onClose }: SheetPageProps<"connectors">)
         </label>
         {error && <div className="mb-4 rounded-[16px] bg-menu px-4 py-3"><p role="alert" className="text-[15px] leading-[22px] text-ink">{t("mobile.connectors.error")}</p><button type="button" disabled={loading} onClick={() => void load()} className="mobile-press mt-2 min-h-11 rounded-full bg-ink px-5 text-[15px] font-semibold text-app disabled:opacity-40">{t("mobile.connectors.retry")}</button></div>}
         {!snapshot ? (
-          loading && <div role="status" aria-label={t("mobile.connectors.loading")} className="flex flex-col gap-[2px] overflow-hidden rounded-[16px] [&>*]:bg-menu [&_.mobile-row]:rounded-none">
+          loading && <div role="status" aria-label={t("mobile.connectors.loading")} data-settings-card="" className="flex flex-col gap-[2px] overflow-hidden rounded-[16px] [&>*]:bg-menu [&_.mobile-row]:rounded-none">
             {Array.from({ length: SKELETON_ROWS }, (_, key) => <div key={key} aria-hidden className={APP_ROW}><span className="size-10 shrink-0 rounded-[11px] bg-ink/[0.06]" /><span className="flex-1 space-y-2"><span className="block h-4 w-1/2 rounded-full bg-ink/[0.06]" /><span className="block h-3 w-3/4 rounded-full bg-ink/[0.05]" /></span></div>)}
           </div>
         ) : (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: reduced ? 0 : dur.base, ease: ease.out }}>
             {groups.map((group) => <section key={group.key} aria-labelledby={`${id}-${group.key}`} className="mb-6">
               <h2 id={`${id}-${group.key}`} className={searching ? "sr-only" : "px-4 pb-1 text-[14px] font-medium text-ink-secondary"}>{searching ? t("mobile.connectors.search") : group.key === "connected" || group.key === "popular" ? t(`mobile.connectors.${group.key}`) : t(CATEGORY_LABEL[group.key])}</h2>
-              <ul className="flex flex-col gap-[2px] overflow-hidden rounded-[16px] [&>*]:bg-menu [&_.mobile-row]:rounded-none">
+              <ul data-settings-card="" className="flex flex-col gap-[2px] overflow-hidden rounded-[16px] [&>*]:bg-menu [&_.mobile-row]:rounded-none">
                 {group.entries.map((entry) => {
                   const added = appIsAdded(entry, snapshot.added);
                   return <li key={entry.id}><button type="button" onClick={() => openConnectApps(connectPageFor(entry))} className={cn(APP_ROW, "mobile-row w-full text-left")}>

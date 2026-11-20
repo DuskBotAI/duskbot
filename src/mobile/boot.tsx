@@ -11,8 +11,11 @@ import "./styles.css";
 import "@/styles/overlays.css";
 import "@/styles/motion.css";
 import "./mobile.css";
+import "./glass.css";
 import { installHaptics } from "./haptics";
 import { installLiveActivitySetting } from "./live-activity-setting";
+import { installSystemMenu } from "@/lib/system-menu";
+import { installSystemControls } from "@/lib/system-control";
 import { followSystemTextSize } from "./text-scale";
 import { PlatformContext, type MobilePlatform } from "./platform";
 import { AccountGate } from "./account/AccountGate";
@@ -40,9 +43,14 @@ export function mountMobile(platform: MobilePlatform): void {
   if (!platform.native) watchStaleChunks();
   else installNativeAbort();
   followSystemTextSize(platform);
+  if (platform.chrome) document.documentElement.dataset.nativeChrome = "";
+  installSystemControls(platform.controls ?? null);
+  const showMenu = platform.showMenu;
+  if (showMenu) installSystemMenu((anchor, items) => showMenu({ x: anchor.left, y: anchor.top, width: anchor.width, height: anchor.height }, items));
   document.documentElement.dataset.mobileApp = platform.kind;
   // the app never zooms: webkit's pinch gestures are stopped, a double tap never scales
   for (const type of ["gesturestart", "gesturechange", "gestureend"]) document.addEventListener(type, (event) => event.preventDefault(), { passive: false });
+  if (platform.kind === "ios" || params.has("frame")) document.documentElement.dataset.mobileGlass = "";
   applySkinChoice(phoneSkin(params));
   applyFont(readFont());
   applyMotionSpeed(document.documentElement);

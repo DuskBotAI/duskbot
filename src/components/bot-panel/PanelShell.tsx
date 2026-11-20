@@ -11,7 +11,8 @@ import type { useBotSettingsDerived } from "../bot-settings/useBotSettingsDerive
 import { ComputerTab } from "./ComputerTab";
 import { TabBoundary } from "./TabBoundary";
 import { panelTabs, phoneApp, screenViewAllowed } from "@/lib/store-app";
-import { dur, ease, feel } from "@/mobile/motion";
+import { wakeSystemControls } from "@/lib/system-control";
+import { feel, phoneTabFade, phoneTabSlide } from "@/mobile/motion";
 import { PAGES, resolveTarget, TAB_LABEL, type PanelTab, type PanelTarget, type SimplePageId } from "./page-registry";
 import { lazyScreen } from "../lazy-screen";
 import { linkTarget, usePanelLink, type PanelLink } from "./panel-link";
@@ -66,11 +67,13 @@ export function BotPanel({ bot, derived, linkedSection, computerRequest = 0, onC
   // only a tab picked from the tabs swaps in; coming back from a page, the list is simply there under the wipe
   const [tabSwapped, setTabSwapped] = useState(false);
   const openTab = (next: PanelTab) => {
+    wakeSystemControls();
     go({ tab: next });
     setTabSwapped(true);
   };
   const openPage = (next: SimplePageId) => {
     if (next === "settings") return go({ tab: "advanced" });
+    wakeSystemControls();
     setStack((current) => [...current, next]);
     setEditorOpen(false);
     setEditingInstructions(false);
@@ -78,10 +81,12 @@ export function BotPanel({ bot, derived, linkedSection, computerRequest = 0, onC
   };
   const closeEditor = () => {
     setEditorOpen(false);
+    wakeSystemControls();
     // The card held focus: hand it back to the avatar that opened it, before the card goes, not to the page body.
     editorRef.current?.querySelector<HTMLElement>("[data-panel-avatar]")?.focus();
   };
   const back = () => {
+    wakeSystemControls();
     setTabSwapped(false);
     setStack((current) => current.slice(0, -1));
     scrollTop();
@@ -130,8 +135,11 @@ export function BotPanel({ bot, derived, linkedSection, computerRequest = 0, onC
   const reduced = prefersReduced || (typeof document !== "undefined" && document.documentElement.dataset.reducedMotion === "true");
   const viewKey = page === null ? "tabs" : `${depth}:${page}`;
   const order = panelTabs();
-  const tabMove = useRef({ tab, direction: 1 });
-  if (tabMove.current.tab !== tab) tabMove.current = { tab, direction: order.indexOf(tab) >= order.indexOf(tabMove.current.tab) ? 1 : -1 };
+  const tabMove = useRef({ tab, direction: 1, span: 1 });
+  if (tabMove.current.tab !== tab) {
+    const delta = order.indexOf(tab) - order.indexOf(tabMove.current.tab);
+    tabMove.current = { tab, direction: delta >= 0 ? 1 : -1, span: Math.max(1, Math.abs(delta)) };
+  }
   const phone = phoneApp();
 
   const tabContent = (
@@ -151,7 +159,7 @@ export function BotPanel({ bot, derived, linkedSection, computerRequest = 0, onC
             activeState={derived.activeState}
             patch={derived.patch}
             editorOpen={editorOpen}
-            onToggleEditor={() => setEditorOpen((open) => !open)}
+            onToggleEditor={() => { wakeSystemControls(); setEditorOpen((open) => !open); }}
           />
           {editorOpen && (
             <>
@@ -175,12 +183,12 @@ export function BotPanel({ bot, derived, linkedSection, computerRequest = 0, onC
         </div>
       </div>
       {phone ? (
-        <AnimatePresence initial={false} mode="popLayout" custom={tabMove.current.direction}>
+        <AnimatePresence initial={false} mode="popLayout" custom={tabMove.current}>
           <MotionDiv
             key={tab}
             role="tabpanel" aria-label={t(TAB_LABEL[tab])} className="pt-2.5"
-            custom={tabMove.current.direction}
-            variants={reduced ? PHONE_TAB_FADE : PHONE_TAB_SLIDE}
+            custom={tabMove.current}
+            variants={reduced ? phoneTabFade : phoneTabSlide}
             initial={tabSwapped ? "enter" : false}
             animate="center"
             exit="exit"
@@ -217,7 +225,7 @@ export function BotPanel({ bot, derived, linkedSection, computerRequest = 0, onC
     </div>
   );
 
-  const viewCls = "@container absolute inset-0 flex flex-col overflow-y-auto overscroll-contain bg-app px-4 pb-8 [scrollbar-gutter:stable] [scrollbar-width:thin]";
+  const viewCls = "@container absolute inset-0 flex flex-col overflow-x-hidden overflow-y-auto overscroll-contain bg-app px-4 pb-8 [scrollbar-gutter:stable] [scrollbar-width:thin]";
   const setBody = (element: HTMLDivElement | null) => { if (element) bodyRef.current = element; };
   const view = (content: ReactNode) => reduced ? (
     <div key={viewKey} ref={setBody} className={viewCls}>{content}</div>
@@ -288,19 +296,6 @@ export function BotPanel({ bot, derived, linkedSection, computerRequest = 0, onC
     </div>
   );
 }
-
-// the phone's tab swap: the new tab comes in from the side it sits on, the old one leaves the other way, faster
-const PHONE_TAB_SHIFT = 24;
-const PHONE_TAB_SLIDE = {
-  enter: (direction: number) => ({ opacity: 0, x: direction * PHONE_TAB_SHIFT }),
-  center: { opacity: 1, x: 0, transition: { x: { duration: dur.base, ease: ease.out }, opacity: { duration: dur.fast, ease: ease.out } } },
-  exit: (direction: number) => ({ opacity: 0, x: -direction * PHONE_TAB_SHIFT, transition: { duration: feel.exit.fade, ease: ease.out } }),
-};
-const PHONE_TAB_FADE = {
-  enter: { opacity: 0 },
-  center: { opacity: 1, transition: { duration: dur.fast, ease: ease.out } },
-  exit: { opacity: 0, transition: { duration: feel.exit.fade, ease: ease.out } },
-};
 
 const HEAD_IN = { duration: 0.15, ease: EASE_OUT } as const;
 const HEAD_OUT = { duration: 0.12, ease: EASE_OUT } as const;

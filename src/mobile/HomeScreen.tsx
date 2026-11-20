@@ -23,7 +23,8 @@ import { PullToRefresh } from "./PullToRefresh";
 import { revealOnce, useListFlip } from "./list-motion";
 import { refreshSnapshot } from "./refresh";
 import { usePlatform } from "./platform";
-import { ConnectionPill, ConnectionProblemCard, useLiveConnection } from "./connection/ConnectionProblem";
+import { ConnectionPill, ConnectionProblemCard, connectionNoticeLabel, useLiveConnection } from "./connection/ConnectionProblem";
+import { BAR_RANK, useNativeBar } from "./chrome";
 import { listTime } from "./time";
 import { EmptyState } from "./Illustration";
 import { useOffline } from "./network";
@@ -56,6 +57,8 @@ function sameEntry(a: Entry, b: Entry): boolean {
 
 const BAR_TOP = "var(--m-safe-top)";
 const LIST_TOP = "calc(var(--m-safe-top) + 58px)";
+/** Under the system's bar the safe area already ends below its buttons; keep that height while a chat hides the bar. */
+const LIST_TOP_UNDER_BAR = "calc(max(var(--m-safe-top), var(--m-home-bar-top, var(--m-home-bar-fallback, 0px))) + 8px)";
 
 function lastAt(owner: Bot | Group): number {
   return lastPreviewable(sidebarPreviewMessages(owner))?.at ?? owner.tasks?.reduce((max, task) => Math.max(max, task.createdAt ?? 0), 0) ?? 0;
@@ -147,8 +150,19 @@ export function HomeScreen({ onOpenChat, onOpenSheet }: { onOpenChat: (id: strin
 
   const openMenu = useCallback((entry: Entry, rect: DOMRect, source: HTMLElement | null, pinnedTile = false) => setMenu({ entry, rect, pinnedTile, source }), []);
 
+  const systemBar = useNativeBar(BAR_RANK.home, platform.chrome ? {
+    status: live.notice ? connectionNoticeLabel(live.notice, live.trying) : undefined,
+    leading: [{ id: "you", label: t("mobile.home.you"), ...(you?.initials && !face ? { title: you.initials } : { symbol: "person" }) }],
+    trailing: [{ id: "search", symbol: "magnifyingglass", label: t("mobile.home.search") }, { id: "new", symbol: "plus", label: t("mobile.home.newBot") }],
+  } : null, {
+    you: () => onOpenSheet({ kind: "settings" }),
+    search: () => onOpenSheet({ kind: "search" }),
+    new: () => onOpenSheet({ kind: "create" }),
+  });
+  const listTop = systemBar ? LIST_TOP_UNDER_BAR : LIST_TOP;
+
   return (
-    <div className="relative h-full bg-app">
+    <div data-bar-screen className="relative h-full bg-app">
       <div
         ref={scrollRef}
         className="h-full overflow-y-auto overflow-x-hidden overscroll-y-contain"
@@ -157,10 +171,10 @@ export function HomeScreen({ onOpenChat, onOpenSheet }: { onOpenChat: (id: strin
         <PullToRefresh
           scrollRef={scrollRef}
           onRefresh={() => refreshSnapshot(state, dispatch)}
-          top={LIST_TOP}
+          top={listTop}
           indicator={(progress, refreshing) => <RefreshMark bot={primary} progress={progress} refreshing={refreshing} />}
         >
-          <div ref={listRef} style={{ paddingTop: LIST_TOP }} className="pb-[calc(var(--m-safe-bottom)+24px)]">
+          <div ref={listRef} style={{ paddingTop: listTop }} className="pb-[calc(var(--m-safe-bottom)+24px)]">
             {state.hydrated && <ConnectionProblemCard notice={live.notice} place={live.place} trying={live.trying} onRetry={live.retry} />}
             {!state.hydrated || !listIn ? (state.loadFailed ? (
               <EmptyState tone="error" art="signpost" className="pt-16" title={t("mobile.home.loadFailedTitle")} body={t(offline ? "mobile.home.loadFailedOffline" : "mobile.home.loadFailedBody")}
@@ -171,11 +185,13 @@ export function HomeScreen({ onOpenChat, onOpenSheet }: { onOpenChat: (id: strin
             ) : (
               <div ref={reveal}>
                 {pinned.length > 0 && (
-                  <section aria-labelledby="home-pinned" data-no-swipe>
+                  <section aria-labelledby="home-pinned">
                   <h2 id="home-pinned" className="px-5 pb-1 text-[15px] text-ink-secondary">{t("sidebar.section.pinned")}</h2>
-                  <div className="no-scrollbar flex gap-3 overflow-x-auto px-3 pb-2 pt-1">
+                  <div className="flex flex-wrap justify-center gap-y-2 px-3 pb-2 pt-1">
                     {pinnedEntries.map((entry) => (
-                      <PinnedTile key={entry.id} entry={entry} onOpen={onOpenChat} onMenu={openMenu} native={native} />
+                      <div key={entry.id} className="flex w-1/3 justify-center">
+                        <PinnedTile entry={entry} onOpen={onOpenChat} onMenu={openMenu} native={native} />
+                      </div>
                     ))}
                   </div>
                   </section>
@@ -233,8 +249,8 @@ export function HomeScreen({ onOpenChat, onOpenSheet }: { onOpenChat: (id: strin
           <MascotLoader naps={false} leaving={state.hydrated === true} waking={state.loadWaking === true} onExit={() => setListIn(true)} onGone={() => setLoaderGone(true)} />
         </div>
       )}
-      <div aria-hidden className={cn("pointer-events-none absolute inset-x-0 top-0 z-[5] h-[calc(var(--m-safe-top)+72px)] bg-gradient-to-b from-app from-60% to-transparent transition-opacity duration-150", scrolled ? "opacity-100" : "opacity-0")} />
-      <header data-home-bar="" className="pointer-events-none absolute inset-x-0 top-0 z-10 flex items-center gap-2 px-4" style={{ paddingTop: BAR_TOP }}>
+      <div aria-hidden className={cn("mobile-edge pointer-events-none absolute inset-x-0 top-0 z-[5] bg-gradient-to-b", systemBar ? "h-[calc(var(--m-safe-top)+16px)]" : "h-[calc(var(--m-safe-top)+72px)]", "from-app from-60% to-transparent transition-opacity duration-150", scrolled ? "opacity-100" : "opacity-0")} />
+      {!systemBar && <header data-home-bar="" className="pointer-events-none absolute inset-x-0 top-0 z-10 flex items-center gap-2 px-4" style={{ paddingTop: BAR_TOP }}>
         <RoundButton floating label={t("mobile.home.you")} onClick={() => onOpenSheet({ kind: "settings" })} className="pointer-events-auto overflow-visible">
           {face
             ? <UserFace account={face} size={40} className="size-full" />
@@ -244,7 +260,7 @@ export function HomeScreen({ onOpenChat, onOpenSheet }: { onOpenChat: (id: strin
         <ConnectionPill notice={live.notice} trying={live.trying} onRetry={live.retry} testId="mobile-connection-status" />
         <RoundButton floating glass data-home-glass="search" label={t("mobile.home.search")} onClick={() => onOpenSheet({ kind: "search" })} className="pointer-events-auto"><Search size={19} strokeWidth={1.9} /></RoundButton>
         <RoundButton floating glass data-home-glass="newBot" label={t("mobile.home.newBot")} onClick={() => onOpenSheet({ kind: "create" })} className="pointer-events-auto"><Plus size={21} strokeWidth={1.9} /></RoundButton>
-      </header>
+      </header>}
 
       <ContextMenu
         open={Boolean(menu)}

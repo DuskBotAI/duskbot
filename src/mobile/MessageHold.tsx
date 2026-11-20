@@ -1,5 +1,9 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
+import { Copy, ExternalLink, Scan, Share } from "../icons";
+import { copyText } from "@/lib/copy-text";
 import { t } from "@/lib/i18n";
+import { phoneBridge } from "@/lib/phone-bridge";
+import { inAppLink } from "./viewers/ViewerHost";
 import { ContextMenu, holdSink, type ContextAction, type ContextReaction } from "./ContextMenu";
 import { haptic } from "./haptics";
 import { useNativeHold, type HeldMenu, type NativeHold } from "./native-menu";
@@ -86,7 +90,38 @@ export async function readMessageActions(row: HTMLElement): Promise<{ actions: C
     }
     await settle(() => true);
   })();
+  const copy = actions.findIndex((action) => action.label === t("chat.copyMessage")) + 1;
+  actions.splice(copy || actions.length, 0, ...textActions(row));
   return { actions, reactions };
+}
+
+/** What a message's words read as, without the marks drawn beside them (a link's site icon, a code block's keys). */
+export function messageText(bubble: HTMLElement): string {
+  const copy = bubble.cloneNode(true) as HTMLElement;
+  for (const el of copy.querySelectorAll("[data-copy-skip], [data-code-plate], [data-code-label], .sr-only, [aria-hidden='true'], button")) el.remove();
+  return (copy.innerText || copy.textContent || "").trim();
+}
+
+/** The phone's own way into a message's words: select them in a sheet, or hand them to another app. */
+function textActions(row: HTMLElement): ContextAction[] {
+  const bubble = row.querySelector<HTMLElement>("[data-chat-bubble]");
+  const phone = phoneBridge();
+  const text = bubble ? messageText(bubble) : "";
+  if (!phone || !text) return [];
+  const actions: ContextAction[] = [{ key: "phone:select", label: t("mobile.select.title"), icon: <Scan size={18} />, onSelect: () => phone.view({ kind: "text", text }) }];
+  if (phone.share) actions.push({ key: "phone:share", label: t("mobile.message.share"), icon: <Share size={18} />, onSelect: () => void phone.share!({ text }).catch(() => {}) });
+  return actions;
+}
+
+/** A link held in a message: open it, copy its address or share it, as a held link does in Safari. */
+export function linkActions(url: string): ContextAction[] {
+  const phone = phoneBridge();
+  const actions: ContextAction[] = [
+    { key: "link:open", label: t("mobile.link.open"), icon: <ExternalLink size={18} />, onSelect: () => phone?.openLink(url) },
+    { key: "link:copy", label: t("mobile.link.copy"), icon: <Copy size={18} />, onSelect: () => void copyText(url) },
+  ];
+  if (phone?.share) actions.push({ key: "link:share", label: t("mobile.link.share"), icon: <Share size={18} />, onSelect: () => void phone.share!({ url }).catch(() => {}) });
+  return actions;
 }
 
 export function pickReaction(row: HTMLElement, label: string): void {
@@ -112,13 +147,18 @@ function symbolFor(label: string): string | undefined {
     [t("chat.unpinMessage")]: "pin.slash",
     [t("chat.editMessage")]: "pencil",
     [t("chat.reportReply")]: "exclamationmark.bubble",
+    [t("mobile.select.title")]: "selection.pin.in.out",
+    [t("mobile.message.share")]: "square.and.arrow.up",
+    [t("mobile.link.open")]: "safari",
+    [t("mobile.link.copy")]: "link",
+    [t("mobile.link.share")]: "square.and.arrow.up",
   };
   return symbols[label];
 }
 
 /** A message's actions and reactions for the system menu: the same ones its own bar offers, each pressing that control. */
-export async function nativeMessageMenu(row: HTMLElement): Promise<HeldMenu | null> {
-  const { actions, reactions } = await readMessageActions(row);
+export async function nativeMessageMenu(row: HTMLElement, link?: string | null): Promise<HeldMenu | null> {
+  const { actions, reactions } = link ? { actions: linkActions(link), reactions: [] } : await readMessageActions(row);
   if (!actions.length && !reactions.length) return null;
   return {
     content: {
@@ -137,7 +177,7 @@ const NATIVE_PREFETCH_MS = 280;
 export function heldBubble(target: EventTarget | null): { bubble: HTMLElement; row: HTMLElement } | null {
   const el = target instanceof Element ? target : null;
   const bubble = el?.closest<HTMLElement>(BUBBLE);
-  if (!bubble || el?.closest("button, input, textarea, [contenteditable='true'], [aria-hidden='true']")) return null;
+  if (!bubble || el?.closest("button, input, textarea, [contenteditable='true'], [aria-hidden='true'], [data-selectable]")) return null;
   const row = bubble.closest<HTMLElement>("[data-message-row]");
   if (!row?.querySelector("[data-testid='message-actions']")) return null;
   return { bubble, row };
@@ -157,7 +197,8 @@ function useNativeMessageHold(rootRef: RefObject<HTMLElement | null>, hold: Nati
       const held = heldBubble(event.target);
       if (!held) return;
       start = { x: event.touches[0].clientX, y: event.touches[0].clientY };
-      hold.press(held.bubble, () => nativeMessageMenu(held.row), {
+      const link = inAppLink(event.target);
+      hold.press(held.bubble, () => nativeMessageMenu(held.row, link), {
         prefetchMs: NATIVE_PREFETCH_MS,
         // the bar's own long press would also bring up its pill
         onOpen: () => held.row.dispatchEvent(new PointerEvent("pointercancel", { bubbles: true, pointerType: "touch" })),
@@ -217,6 +258,7 @@ export function MessageHold({ rootRef }: { rootRef: RefObject<HTMLElement | null
       const found = heldBubble(event.target);
       if (!found) return;
       const { bubble, row } = found;
+      const link = inAppLink(event.target);
       start = { x: event.touches[0].clientX, y: event.touches[0].clientY };
       sink = holdSink(bubble);
       sink(true);
@@ -227,9 +269,9 @@ export function MessageHold({ rootRef }: { rootRef: RefObject<HTMLElement | null
         sink = null;
         // the bar's own long press would also bring up its pill
         row.dispatchEvent(new PointerEvent("pointercancel", { bubbles: true, pointerType: "touch" }));
-        haptic("medium");
+        haptic("hold");
         const rect = bubble.getBoundingClientRect();
-        const { actions, reactions } = await readMessageActions(row);
+        const { actions, reactions } = link ? { actions: linkActions(link), reactions: [] } : await readMessageActions(row);
         if (!actions.length && !reactions.length) return;
         setHeld({ bubble, rect, radius: getComputedStyle(bubble).borderRadius, end: row.classList.contains("items-end"), actions, reactions });
         setOpen(true);

@@ -54,7 +54,7 @@ it("starts the person's own line ahead of a hand-off that was already waiting fo
   expect(f.ended().indexOf(person.id)).toBeLessThan(f.ended().indexOf(second.id));
 }), 120_000);
 
-it("on Starter with 13 bots, hand-offs to busy bots start at once: one thread per bot holds only what a person or a routine starts", () => fixture(async (f) => {
+it("on Starter with 13 bots, a hand-off to a busy bot waits in its one chat while one to a free bot runs, and both finish", () => fixture(async (f) => {
   // A team made before it moved to Starter: the plan limits the bots it makes, never those it has.
   const bots: any[] = [];
   for (let at = 0; at < 13; at += 1) bots.push(await f.bot(`Teammate ${at}`));
@@ -74,7 +74,9 @@ it("on Starter with 13 bots, hand-offs to busy bots start at once: one thread pe
   await f.cli("send", "--bot", chief.id, "--task", chief.activeTaskId, "--text", "Hand these out.");
   const nodes = () => readHandoffs(f.dataDir).filter((node: any) => node.parentId);
   await expect.poll(() => nodes().length, { timeout: 40_000 }).toBe(2);
-  await expect.poll(() => nodes().map((node: any) => node.status), { timeout: 5_000, interval: 100 }).toEqual(["running", "running"]);
+  // one chat per bot (bc47760cb3): the busy target's hand-off queues behind the person's turn in its chat
+  await expect.poll(() => nodes().find((node: any) => node.botId === target.id)?.status, { timeout: 5_000, interval: 100 }).toBe("queued");
+  await expect.poll(() => nodes().find((node: any) => node.botId === other.id)?.status, { timeout: 20_000 }).toBe("completed");
   writeFileSync(gate, "finish");
   await expect.poll(() => nodes().map((node: any) => node.status), { timeout: 60_000 }).toEqual(["completed", "completed"]);
 }), 180_000);

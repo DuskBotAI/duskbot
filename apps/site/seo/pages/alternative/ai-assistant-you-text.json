@@ -13,7 +13,7 @@
     "personal ai assistant whatsapp"
   ],
   "answer": "**texting your assistant from the couch should start with the chat app you already open.** poke feels like a contact; it's joining cognition, announced 23 july 2026.[^3] openclaw and hermes connect chat apps to agents you can run. genspark claw offers cloud or local work. dusk has its own app. choose where to text, then which computer stays awake.",
-  "updated": "2026-11-12",
+  "updated": "2026-11-20",
   "review": {
     "status": "approved",
     "by": "lead agent: independent reviewer pass against seo/facts (4 reviewers), every finding applied, automated gate",
@@ -29,7 +29,8 @@
     "/alternatives/poke",
     "/alternatives/openclaw",
     "/alternatives/hermes-agent",
-    "/alternatives/genspark"
+    "/alternatives/genspark",
+    "/integrations/whatsapp"
   ],
   "competitor": {
     "key": "ai-assistant-you-text",
@@ -55,7 +56,7 @@
     "dusk": [
       "**give each bot a job.** you want separate names, memories and conversations.",
       "**choose the ai per bot.** switch models while keeping its chats.",
-      "**pair to your own machine.** use your computer, server or dusk cloud through the dusk phone browser."
+      "**pair to your own machine.** reach your bots on your computer, server or dusk cloud from a paired phone."
     ]
   },
   "compare": {
@@ -76,7 +77,7 @@
           "whatsapp, telegram, imessage, discord, slack, signal and other channels",
           "telegram, whatsapp, discord, slack, signal, email, desktop or terminal",
           "whatsapp, slack, teams, telegram and others; also its own email address",
-          "dusk desktop app or paired phone browser; store apps on the way"
+          "dusk desktop or iphone app; paired browser on android"
         ],
         "src": [
           1,
@@ -180,7 +181,7 @@
   "sections": [
     {
       "h": "if imessage is the requirement, start there",
-      "md": "**want a contact in imessage? start with poke or openclaw.** poke lists apple messages, whatsapp, telegram and rcs.[^1] openclaw also lists imessage.[^4] compare their setup and hosting before choosing.\n\ndusk uses its own app. pair its browser version on iphone or android and add it to your home screen. store apps are on the way. the browser version sends no notifications.[^12]\n\nif imessage decides it for you, read the [poke comparison](/alternatives/poke)."
+      "md": "**want a contact in imessage? start with poke or openclaw.** poke lists apple messages, whatsapp, telegram and rcs.[^1] openclaw also lists imessage.[^4] compare their setup and hosting before choosing.\n\ndusk uses its own app. on iphone, get dusk from the app store and pair it for reply notifications. on android, use the browser until dusk arrives on google play. the android browser sends no notifications.[^12]\n\nif imessage decides it for you, read the [poke comparison](/alternatives/poke)."
     },
     {
       "h": "whatsapp and telegram leave you another decision",
@@ -206,7 +207,7 @@
     },
     {
       "q": "does dusk bot work in whatsapp?",
-      "a": "**you talk to dusk bots in their own app.** phone access uses a paired browser version today. store apps are on their way.[^12][^13]"
+      "a": "**you talk to dusk bots in their own app.** pair the iphone app or, on android, open the browser version.[^12][^13]"
     }
   ],
   "sources": [
@@ -334,8 +335,8 @@
       "fix": "find which machine does the work. a chat bubble can hide a sleeping laptop."
     },
     {
-      "mistake": "expecting browser notifications from dusk",
-      "fix": "the current paired phone browser sends none. choose with that limit in mind."
+      "mistake": "waiting for dusk to notify you on android",
+      "fix": "on android, open the paired browser to read replies. the iphone app can notify you."
     }
   ],
   "tip": {

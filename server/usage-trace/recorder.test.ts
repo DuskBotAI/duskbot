@@ -33,6 +33,18 @@ const completed = (thread: string, turn: string, ms: number, ok = true, extra: R
   event(thread, turn, ms, { type: "turn.completed", ok, usage: { input: 900, output: 60, cachedInput: 400 }, ...extra });
 
 describe("trace recorder", () => {
+  it("names the app actions a connected-apps runner call ran, so a failed Gmail call counts as Gmail", () => {
+    const recorder = createTraceRecorder({ dataDir: dataDir() });
+    recorder.observe(started("apps", "t1", 0));
+    recorder.observe(tool("apps", "t1", 100, "c1", "mcp__composio__COMPOSIO_MULTI_EXECUTE_TOOL", { tools: [{ tool_slug: "GMAIL_SEND_EMAIL", arguments: { to: "x" } }, { tool_slug: "SLACK_SEND_MESSAGE" }] }));
+    recorder.observe(done("apps", "t1", 300, "c1", false, "connection expired"));
+    recorder.observe(tool("apps", "t1", 400, "c2", "mcp__composio__COMPOSIO_SEARCH_TOOLS", { queries: [{ use_case: "send email" }] }));
+    recorder.observe(done("apps", "t1", 500, "c2"));
+    recorder.observe(completed("apps", "t1", 600));
+    expect(recorder.toolNames("apps")).toEqual(["GMAIL_SEND_EMAIL", "SLACK_SEND_MESSAGE", "mcp__composio__COMPOSIO_SEARCH_TOOLS"]);
+    expect(recorder.turnDetail("apps").failedNames).toEqual(["GMAIL_SEND_EMAIL", "SLACK_SEND_MESSAGE"]);
+  });
+
   it("reads a failed turn's whole error and the driver's code into a usage failure", () => {
     const recorder = createTraceRecorder({ dataDir: dataDir() });
     recorder.observe(started("api", "t1", 0));

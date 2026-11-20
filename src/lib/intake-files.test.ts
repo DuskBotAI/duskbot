@@ -148,13 +148,13 @@ describe("intakeFiles", () => {
       allowImages: true,
       getPath: onDisk,
       uploadImage: async (f) => {
-        if (f.size > IMAGE_MAX_BYTES) throw new Error(`${f.name} exceeds 10 MB`);
+        if (f.size > IMAGE_MAX_BYTES) throw new Error(`${f.name} is over 10 MB.`);
         return upload(f);
       },
       imageSlots: 1,
     });
     expect(out.attachments.map((a) => "name" in a ? a.name : "")).toEqual(["ok.png"]);
-    expect(out.notice).toBe("huge.png: huge.png exceeds 10 MB");
+    expect(out.notice, "the name once, as a sentence").toBe("huge.png is over 10 MB.");
   });
 
   it("splits pasted images by the slots left, passing oversized ones through", () => {
@@ -177,7 +177,7 @@ describe("intakeFiles", () => {
     });
     expect(out.attachments).toEqual([]);
     expect(out.notice).toBe(
-      "unable to attach run.exe. choose a supported image, document, or audio file. archives can't be attached: unzip 아카이브.zip and attach the files inside.",
+      "Unable to attach run.exe. Choose a supported image, document, or audio file. Archives can't be attached: unzip 아카이브.zip and attach the files inside.",
     );
   });
 

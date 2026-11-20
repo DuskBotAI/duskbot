@@ -1,0 +1,92 @@
+{
+  "path": "/integrations/gmail/update-google-contact",
+  "type": "action",
+  "title": "Update a Google contact and keep the numbers you need",
+  "nav": "update a saved contact",
+  "h1": "replace an old number on a saved google contact",
+  "description": "Change one phone number on a saved Google contact while keeping its other numbers. Review the complete phone field and protect a colleague’s recent edit.",
+  "keyword": "update google contact with ai",
+  "keywords": [
+    "chatgpt change google contact phone number",
+    "claude edit google contacts",
+    "replace one number on a google contact"
+  ],
+  "answer": "**changing a desk number can wipe the mobile number on the same contact.** the bot replaces the phone field as a whole. have it read the saved google contact, swap the old desk number and carry every number you still need into the replacement. review that list before it writes.",
+  "updated": "2026-11-20",
+  "review": {
+    "status": "approved",
+    "by": "lead agent, after four independent reviewers read every page against seo/facts (2026-11-20); every finding applied",
+    "at": "2026-11-20"
+  },
+  "tags": [
+    "gmail",
+    "update a saved contact"
+  ],
+  "connectors": [
+    "gmail"
+  ],
+  "related": [
+    "/integrations/gmail",
+    "/integrations/gmail/search-people"
+  ],
+  "art": {
+    "logo": "gmail",
+    "label": "Gmail",
+    "props": [
+      "s-phone",
+      "s-notebook"
+    ],
+    "bubble": "keep the mobile too"
+  },
+  "og_line": "new desk number, same mobile.",
+  "action": {
+    "toolkit": "gmail",
+    "slug": "GMAIL_UPDATE_CONTACT"
+  },
+  "what": "**pick the person first, then choose the fields to replace.** have the bot search saved contacts by a known email. it needs the saved record's `people/` id and its contact source details. a name from an email exchange alone won't do.\n\nask it to include the contact's current version tag, called an `etag`. that helps protect a change someone else makes between the read and the update.",
+  "uses": [
+    "change the workshop landline while keeping the owner's mobile",
+    "correct a surname on a saved supplier card without replacing its email addresses",
+    "replace an obsolete address after comparing it with a signed change notice"
+  ],
+  "routine": {
+    "message": "at 10 on the first tuesday each month, read approved number changes under the gmail label \"supplier corrections\". match each old number and email to one saved google contact. bring the old and proposed phone lists here with labels, keeping every other number.\n\nask me before you change anything. use the contact's current version tag and never create a contact for a missing match.",
+    "when": "first tuesday of the month at 10",
+    "needs": "gmail connected with read and write. use your corrections label in the message.",
+    "output": "irene frost, supplier card\nwork: replace number ending 0142 with number ending 0184.\nmobile: keep ending 0196.\nready for review."
+  },
+  "steps": [
+    "in **Connected apps**, choose the google account containing the saved contact.",
+    "start with the saved card. request its source details and the complete field you plan to change.",
+    "give the bot **read and write** for the update. approve the replacement values together.",
+    "after a version conflict, read the card again and compare the new proposal before proceeding."
+  ],
+  "watch": [
+    "**other contacts can include people you never saved.** require a saved contact source before attempting the edit.",
+    "**fields to return and fields to replace mean different things.** ask for the edited field back so you can compare it with your instruction."
+  ],
+  "faq": [
+    {
+      "q": "can the bot update just one of two phone numbers?",
+      "a": "**yes, if it carries the other number forward.** replacing the phone field with only the new number drops its siblings."
+    },
+    {
+      "q": "what if two saved contacts have the same name?",
+      "a": "**use a second detail you already trust.** if neither the existing email nor the old number settles the match, pick the card yourself."
+    }
+  ],
+  "sources": [
+    {
+      "label": "dusk bot docs: files and apps",
+      "url": "/docs/files-and-apps"
+    },
+    {
+      "label": "dusk bot docs: routines",
+      "url": "/docs/routines"
+    }
+  ],
+  "voice": 2,
+  "tip": {
+    "text": "for a single correction on a contact you already have open, edit the card there. the comparison pays off when changes arrive in a separate file."
+  }
+}

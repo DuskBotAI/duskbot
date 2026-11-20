@@ -29,6 +29,13 @@ export function resolveFollowUp(input: {
   return preferred;
 }
 
+/** The follow-up a send asks the server for: the person's choice, never narrowed by what the composer believes the
+ * running engine takes. That belief can lag the turn (a model picked for the next message, a backup AI carrying the chat),
+ * and the server's direct-busy admission queues a steer the engine actually running cannot take. */
+export function sentFollowUp(input: { running: boolean; alternate: boolean; preferred?: FollowUpDefault }): FollowUp | null {
+  return resolveFollowUp({ ...input, canSteer: true });
+}
+
 /** The send menu while a turn runs: what Enter does first, then the other one where the turn can be steered, then restart. */
 export function followUpChoices(preferred: FollowUpDefault, canSteer: boolean): FollowUp[] {
   const first = resolveFollowUp({ running: true, alternate: false, preferred, canSteer })!;

@@ -1,6 +1,7 @@
 // a local dashboard service for development and verification: a memory mailer, the service on a temporary
 // data folder, an optional signed-in session and an optional demo workspace that reports made-up numbers.
-//   node apps/dashboard/scripts/fixture.ts [--port 7480] [--email you@example.test] [--demo] [--team] [--session-file path] [--alerts someone@qa.dusk.test]
+//   node apps/dashboard/scripts/fixture.ts [--port 7480] [--email you@example.test] [--demo] [--team] [--billing payment-problem|ended] [--session-file path] [--alerts someone@qa.dusk.test]
+// --billing buys the starter plan and then fails its renewal (payment-problem) or ends it (ended), for the billing notices;
 // --team buys the team plan for the account (fake payments); mail to @qa.dusk.test (invites, their codes) is printed, never sent
 // the demo workspace is fixture data only; real workspaces connect from the app (POST /api/dashboard/link).
 import { createHash, generateKeyPairSync, sign, type KeyObject } from "node:crypto";
@@ -22,7 +23,7 @@ import { assertFixtureStore, seedAdminAuth, seedAdminData, seedWaitlist } from "
 // a fixture is local and made up: it never starts with a real database in its environment
 assertFixtureStore();
 
-const { values } = parseArgs({ options: { port: { type: "string", default: "7480" }, email: { type: "string", default: "sid@duskbot.test" }, demo: { type: "boolean", default: false }, team: { type: "boolean", default: false }, "session-file": { type: "string" }, alerts: { type: "string" } } });
+const { values } = parseArgs({ options: { port: { type: "string", default: "7480" }, email: { type: "string", default: "sid@duskbot.test" }, demo: { type: "boolean", default: false }, team: { type: "boolean", default: false }, billing: { type: "string" }, "session-file": { type: "string" }, alerts: { type: "string" } } });
 // --alerts mails each new @devs report to a test address, which stays in this process (printed below)
 if (values.alerts && !isTestAddress(values.alerts)) throw new Error("--alerts takes a test address (@qa.dusk.test) only.");
 const port = Number(values.port);
@@ -68,6 +69,17 @@ if (values.team) {
   const checkout = await post("/v1/billing/checkout", { kind: "cart", cart, source: "fixture" }, cookie);
   const done = await post("/v1/billing/fake/complete", { checkoutId: checkout.data.checkoutId }, cookie);
   console.log(`team plan: ${done.res.ok ? "active" : `failed ${JSON.stringify(checkout.data)}`}; its cloud starts in about a minute`);
+}
+
+if (values.billing === "payment-problem" || values.billing === "ended") {
+  const catalog = await (await fetch(`${url}/v1/billing/catalog`)).json() as { bundles: Array<{ id: string; cart: Record<string, unknown> }> };
+  const cart = { ...catalog.bundles.find(bundle => bundle.id === "starter")!.cart, interval: "month" };
+  const checkout = await post("/v1/billing/checkout", { kind: "cart", cart, source: "fixture" }, cookie);
+  await post("/v1/billing/fake/complete", { checkoutId: checkout.data.checkoutId }, cookie);
+  const sub = app.billing.store.state.subscriptions.find(row => row.checkoutId === checkout.data.checkoutId)!;
+  const deliveries = [...app.billing.fake!.fail(sub.providerSubscriptionId!), ...(values.billing === "ended" ? app.billing.fake!.expire(sub.providerSubscriptionId!) : [])];
+  for (const delivery of deliveries) await fetch(`${url}/v1/billing/webhooks/dodo`, { method: "POST", headers: { "content-type": "application/json", ...delivery.headers }, body: new Uint8Array(delivery.body) });
+  console.log(`starter plan: ${sub.status}`);
 }
 
 if (values.demo) { await seedAdminData(app, seeded, Date.now()); console.log("admin panel: /admin"); void demo(cookie); }

@@ -53,7 +53,7 @@ export const SERVER = { host: "127.0.0.1", port: Number(process.env.LINK_SERVER_
 export const LINK_PROTOCOL = 2;
 export const LINK_MIN_APP = 1;
 export const LINK_MIN_SERVER = 1;
-export const AGENT_VERSION = "2.4.4";
+export const AGENT_VERSION = "2.4.7";
 export const AGENT_CAPS = Object.freeze(["direct-ssh", "direct-wss", "direct-rtc", "direct-cf", "egress", "egress-lane", "self-update", "cloud-relay"]);
 /** what this agent says about itself, in its direct hello and its answer to the app's `hello` */
 export const agentHello = () => ({ protocol: LINK_PROTOCOL, minApp: LINK_MIN_APP, minServer: LINK_MIN_SERVER, agent: AGENT_VERSION, caps: [...AGENT_CAPS] });
@@ -72,6 +72,8 @@ export function noteRelayDate(value, now = Date.now()) {
   relayOffsetMs = Math.abs(offset) < RELAY_CLOCK_SLACK_MS ? 0 : offset;
 }
 export const relayNow = () => Date.now() + relayOffsetMs;
+/** a time this computer stamped (a pairing grant's end from the harness beside it), as the link service reads it */
+const inRelayTime = (at) => at + relayOffsetMs;
 const CHUNK = 128 * 1024;
 /** one post stays well under a proxy's usual 1 MB body limit (nginx's default) */
 const BATCH_BYTES = 700 * 1024;
@@ -1527,7 +1529,7 @@ export const installedAgent = () => process.env.DUSK_LINK_LAUNCHER || fileURLToP
 const releasesDir = () => join(configDir(), "releases");
 /** ed25519 public keys (base64, raw 32 bytes) a release must be signed by; with none, the link service's tls and hash vouch, as for the install */
 export const RELEASE_KEYS = Object.freeze(["beeDw16fb1PcswmcgHOGG4Dic9r/6Vpnvbwc9+v5m6E="]);
-const UPDATE_EVERY_MS = 6 * 60 * 60_000;
+const UPDATE_EVERY_MS = 60 * 60_000;
 const UPDATE_FIRST_MS = 5 * 60_000;
 /** no request, stream byte or egress stream from the app for this long, and nothing open on egress: an update may restart the tunnel */
 export const UPDATE_IDLE_MS = 5 * 60_000;
@@ -1654,10 +1656,10 @@ export function createUpdater({ base, dir = releasesDir(), current = AGENT_VERSI
  * same install.sh pins. this check only saves a wasted download: root's updater checks everything again
  */
 export const SERVER_RELEASE_KEYS = Object.freeze(["rel-2026-11:wtwZypDwVPBXZ25XsZOVpd0PZPBbVMhugheUj5_NLIM"]);
-const SERVER_UPDATE_EVERY_MS = 60 * 60_000;
-const SERVER_UPDATE_FIRST_MS = 10 * 60_000;
+const SERVER_UPDATE_EVERY_MS = 10 * 60_000;
+const SERVER_UPDATE_FIRST_MS = 2 * 60_000;
 /** each check lands somewhere in this much more, so servers that started together do not ask the link service together */
-const SERVER_UPDATE_JITTER_MS = 20 * 60_000;
+const SERVER_UPDATE_JITTER_MS = 5 * 60_000;
 const SIGNATURE = /^r1\.[a-z0-9-]{1,32}\.[A-Za-z0-9_-]{1,4000}\.[A-Za-z0-9_-]{40,200}$/;
 export const serverReleaseDir = () => join(configDir(), "server-release");
 
@@ -1700,10 +1702,11 @@ export function createServerUpdater({ base, id, token, dir = serverReleaseDir(),
   }
 
   async function stage() {
-    const answer = await fetchImpl(`${base}/v1/tunnels/${id}/server`, { headers: auth, signal: AbortSignal.timeout(30_000) });
+    const running = await current().catch(() => null);
+    const answer = await fetchImpl(`${base}/v1/tunnels/${id}/server`, { headers: { ...auth, "x-dusk-agent-version": AGENT_VERSION, ...(running ? { "x-dusk-server-version": String(running) } : {}) }, signal: AbortSignal.timeout(30_000) });
     if (answer.status === 404) {
-      await answer.body?.cancel().catch(() => {});
-      tell("link: no server build is published on the link service (it answered 404); the server stays as it is");
+      const code = await answer.json().then((body) => body?.code, () => null);
+      tell(code === "paused" ? "link: server updates are paused on the link service; the server stays as it is" : "link: no server build is published on the link service (it answered 404); the server stays as it is");
       return null;
     }
     if (!answer.ok) throw new Error(`the link service answered ${answer.status} for the server release`);
@@ -1714,7 +1717,6 @@ export function createServerUpdater({ base, id, token, dir = serverReleaseDir(),
     const signed = signature ? serverReleaseSigned(signature, sha256, keys) : null;
     if (!signed) throw new Error("the server release is not signed by a pinned key");
     const version = signed.version;
-    const running = await current().catch(() => null);
     if (running && compareVersions(version, running) <= 0) {
       tell(`link: server ${running} is up to date (the link service offers ${version})`);
       return null;
@@ -2285,7 +2287,7 @@ export function envProxy(env = process.env) {
 export const STANDBY_WAIT_S = 55;
 const STANDBY_AHEAD_MS = 51_000;
 
-export function createTunnelAgent({ base, id, key: keyText, token, origin = null, server = SERVER, fetchImpl: given, log = (line) => console.error(line), stallMs = STREAM_STALL_MS, egress: egressOptions = null, update: updateOptions = null, waitS = STANDBY_WAIT_S, aheadMs = STANDBY_AHEAD_MS }) {
+export function createTunnelAgent({ base, id, key: keyText, token, origin = null, server = SERVER, fetchImpl: given, log = (line) => console.error(line), stallMs = STREAM_STALL_MS, egress: egressOptions = null, update: updateOptions = null, waitS = STANDBY_WAIT_S, aheadMs = STANDBY_AHEAD_MS, othersUsedAt = () => 0 }) {
   const context = { id, origin };
   // the app's last use of this link: anything but liveness, the handshake and the update op itself
   let lastUse = Date.now();
@@ -2351,7 +2353,7 @@ export function createTunnelAgent({ base, id, key: keyText, token, origin = null
   const hub = createDirectHub({ id, key: keyText, server, guard, egress, log, context, onFrame: used });
   context.hub = hub;
   const handle = (frame) => { used(frame); return egress?.handle(frame) ? undefined : serving.handle(frame); };
-  const idle = () => Date.now() - lastUse >= UPDATE_IDLE_MS && (egress?.stats().active ?? 0) === 0;
+  const idle = () => Date.now() - Math.max(lastUse, othersUsedAt()) >= UPDATE_IDLE_MS && (egress?.stats().active ?? 0) === 0;
   const updater = updateOptions ? createUpdater({ base, idle, apply: () => stop("update"), log, ...updateOptions }) : null;
   if (updater) context.updater = updater;
 
@@ -2466,9 +2468,28 @@ async function readChannelBatches(response, onBatch) {
   if (text.trim()) onBatch(JSON.parse(text));
 }
 
-export function createPhoneHub({ base, id, token, keys, server = SERVER, sync = harnessSync(server), origin = null, spki = null, fetchImpl: given, log = (line) => console.error(line), waitS = 25, aheadMs = STREAM_AHEAD_MS }) {
-  const fetchImpl = given ?? relayFetch({ proxy: envProxy() }), stream = streamChoice(), startedAt = relayNow();
+const PHONES_AGAIN_MS = 30_000;
+
+/** Runs the phone hub for as long as the tunnel does: a hub the relay refused (a 404 while the tunnel still works) is
+ * made again after `againMs`, so phones are not off until the agent next restarts. */
+export function keepHubRunning(make, { againMs = PHONES_AGAIN_MS, log = () => {} } = {}) {
+  let stopped = false, hub = null, pause = null;
+  const done = (async () => {
+    while (!stopped) {
+      hub = make();
+      await hub.run();
+      if (stopped) return;
+      log("link: the phone relay stopped while the tunnel runs; starting it again shortly");
+      await new Promise((resolve) => { pause = resolve; setTimeout(resolve, againMs).unref?.(); });
+    }
+  })();
+  return { done, usedAt: () => hub?.usedAt?.() ?? 0, stop() { stopped = true; hub?.stop(); pause?.(); } };
+}
+
+export function createPhoneHub({ base, id, token, keys, server = SERVER, sync = harnessSync(server), origin = null, spki = null, where = null, proxy = envProxy(), fetchImpl: given, log = (line) => console.error(line), waitS = 25, aheadMs = STREAM_AHEAD_MS }) {
+  const fetchImpl = given ?? relayFetch({ proxy }), stream = streamChoice(), startedAt = relayNow();
   const abort = new AbortController(), channels = new Map();
+  let usedAt = 0;
   // a channel the relay dropped and the sync brought back keeps its replay guard, or the relay could replay its frames
   const guards = new Map();
   const guardFor = (cid, key) => {
@@ -2542,7 +2563,7 @@ export function createPhoneHub({ base, id, token, keys, server = SERVER, sync = 
         if (channels.get(channel.id) !== channel || channel.abort.signal.aborted) return null;
         // a phone keeps one peer; a newer one (a network change) replaces the oldest
         for (const old of channel.direct) { if (channel.direct.size < PHONE_DIRECT_MAX) break; channel.direct.delete(old); old.stop(); }
-        const session = serveDirect({ input, output, id: channel.id, key: channel.key.toString("base64url"), server, log, guard: channel.guard, context: { id: channel.id }, serving: channel.limits });
+        const session = serveDirect({ input, output, id: channel.id, key: channel.key.toString("base64url"), server, log, guard: channel.guard, context: { id: channel.id }, serving: channel.limits, onFrame: () => { usedAt = Date.now(); } });
         channel.direct.add(session);
         void session.done.then(() => channel.direct.delete(session));
         return session;
@@ -2550,6 +2571,7 @@ export function createPhoneHub({ base, id, token, keys, server = SERVER, sync = 
     };
   }
   function handle(channel, frame) {
+    usedAt = Date.now();
     const served = serving(channel);
     if (frame.t === "ctl" && frame.op === "direct-rtc" && channel.kind === "device") {
       void directRtc(frame.data, { hub: phoneDirect(channel) })
@@ -2563,6 +2585,8 @@ export function createPhoneHub({ base, id, token, keys, server = SERVER, sync = 
     let applied = 0, failed = [], first = true, failures = 0;
     while (!stopped) {
       try {
+        const address = where ? await where().catch(() => null) : null;
+        if (address) ({ origin, spki } = address.mode === "direct" ? address : { origin: null, spki: null });
         const answer = await sync({ base, tunnel: id, pub: keys.pub, origin, spki, applied, failed, wait: first ? 0 : waitS, signal: abort.signal });
         if (stopped) break;
         first = false;
@@ -2571,16 +2595,16 @@ export function createPhoneHub({ base, id, token, keys, server = SERVER, sync = 
           try { return [{ ...channel, key: channel.kind === "grant" ? Buffer.from(channel.key, "base64url") : sealKeyOf(keys.priv, keys.pub, channel.pub, channel.id) }]; }
           catch { unusable.push(channel.id); return []; }
         });
-        const register = () => fetchImpl(route, { method: "PUT", headers, body: JSON.stringify({ channels: wanted.map(({ id, verifier, kind, expiresAt }) => ({ id, verifier, kind, ...(kind === "grant" ? { expiresAt } : {}) })) }), signal: AbortSignal.any([abort.signal, AbortSignal.timeout(40_000)]) });
+        const register = () => fetchImpl(route, { method: "PUT", headers, body: JSON.stringify({ channels: wanted.map(({ id, verifier, kind, expiresAt }) => ({ id, verifier, kind, ...(kind === "grant" ? { expiresAt: inRelayTime(expiresAt) } : {}) })) }), signal: AbortSignal.any([abort.signal, AbortSignal.timeout(40_000)]) });
         let response = await register();
         const refused = [...unusable];
-        if (response.status === 409) {
-          const conflict = await response.json();
-          if (conflict.code === "taken" && wanted.some((channel) => channel.id === conflict.id)) {
-            refused.push(conflict.id);
-            wanted = wanted.filter((channel) => channel.id !== conflict.id);
-            response = await register();
-          }
+        // each taken id (still held by a tunnel this computer made before) is left out in turn, so the rest still register
+        while (response.status === 409) {
+          const conflict = await response.json().catch(() => null);
+          if (conflict?.code !== "taken" || !wanted.some((channel) => channel.id === conflict.id)) throw new Error("phone channel registration failed");
+          refused.push(conflict.id);
+          wanted = wanted.filter((channel) => channel.id !== conflict.id);
+          response = await register();
         }
         if (response.status === 404) { await response.body?.cancel(); stop(); break; }
         await response.text();
@@ -2658,6 +2682,8 @@ export function createPhoneHub({ base, id, token, keys, server = SERVER, sync = 
       finally { unwarm(); stop(); }
     },
     stop,
+    /** when a phone last sent anything through this hub, relayed or direct */
+    usedAt: () => usedAt,
   };
 }
 
@@ -2768,6 +2794,7 @@ export const RELAY_HEARTBEAT_MS = 25_000;
 const RELAY_BACKOFF_MS = [1000, 2000, 5000, 15_000, 30_000, 60_000, 120_000];
 /** the relay does not know this tunnel yet (the app registers it): asked again this often */
 const RELAY_UNKNOWN_MS = 5 * 60_000;
+const RELAY_UNKNOWN_FIRST_MS = 10_000;
 
 /** a websocket handshake to `url` (http(s) origin + path); resolves the raw socket and what came after the 101 */
 export function wsConnect(url, { headers = {}, timeoutMs = 15_000, tls: tlsOptions = {} } = {}) {
@@ -2812,7 +2839,7 @@ export function wsConnect(url, { headers = {}, timeoutMs = 15_000, tls: tlsOptio
  * socket of its own that carries the direct path's byte stream into `hub` (createDirectHub), so the frames, sealing,
  * replay guard and flow control are exactly the direct path's. it reconnects with backoff (a relay deploy drops sockets).
  */
-export function createCloudRelay({ url, id, key, hub, log = (line) => console.error(line), connect = wsConnect, heartbeatMs = RELAY_HEARTBEAT_MS, backoff = RELAY_BACKOFF_MS, unknownMs = RELAY_UNKNOWN_MS }) {
+export function createCloudRelay({ url, id, key, hub, log = (line) => console.error(line), connect = wsConnect, heartbeatMs = RELAY_HEARTBEAT_MS, backoff = RELAY_BACKOFF_MS, unknownMs = RELAY_UNKNOWN_MS, unknownFirstMs = RELAY_UNKNOWN_FIRST_MS }) {
   const headers = { authorization: `Bearer ${relayTokenOf(key, id)}` };
   const abort = new AbortController();
   let ctl = null, up = false, sessions = 0;
@@ -2829,7 +2856,7 @@ export function createCloudRelay({ url, id, key, hub, log = (line) => console.er
     } catch (error) { log(`link: an app's cloud relay session did not open (${error?.message ?? error})`); }
   }
   async function run() {
-    let attempt = 0, quietUnknown = false;
+    let attempt = 0, unknown = 0, quietUnknown = false;
     while (!abort.signal.aborted) {
       const started = Date.now();
       let wait;
@@ -2845,6 +2872,7 @@ export function createCloudRelay({ url, id, key, hub, log = (line) => console.er
         ctl.resume();
         up = true;
         quietUnknown = false;
+        unknown = 0;
         log("link: the cloud relay is connected");
         await new Promise((resolve) => { ctl.once("close", resolve); abort.signal.addEventListener("abort", resolve, { once: true }); });
         up = false;
@@ -2854,7 +2882,8 @@ export function createCloudRelay({ url, id, key, hub, log = (line) => console.er
         if (error?.status === 404) {
           if (!quietUnknown) log("link: the cloud relay does not know this link yet; the app sets it up");
           quietUnknown = true;
-          wait = unknownMs;
+          // the app registers the link moments after linking: ask again soon at first, then rarely
+          wait = Math.min(unknownMs, unknownFirstMs * 2 ** unknown++);
         } else if (attempt === 0 || attempt % 10 === 0) log(`link: the cloud relay is not reachable (${error?.message ?? error})`);
       }
       if (Date.now() - started > 60_000) attempt = 0;
@@ -3064,10 +3093,10 @@ async function tunnel() {
   if (placed?.url) { try { writePrivate(nodesFile(), JSON.stringify({ v: 1, home: placed.url, nodes: placed.nodes })); } catch {} }
   const home = placed?.url ?? (origin(cache?.home) && known.some((node) => node.url === cache.home) ? cache.home : saved.base);
   const nodesKnown = placed?.nodes ?? known;
-  const agent = createTunnelAgent({ ...saved, base: home, ...(updates ? { update: { base: saved.base } } : {}), egress: {
+  let phoneHub = null, phoneRun = null;
+  const agent = createTunnelAgent({ ...saved, base: home, ...(updates ? { update: { base: saved.base } } : {}), othersUsedAt: () => phoneRun?.usedAt() ?? 0, egress: {
     report: async (state) => { const answer = await local("POST", "/api/computer/egress/agent", state); return answer.status === 200 ? answer.body : null; },
   } });
-  let phones = null;
   if (process.env.DUSK_LINK_PHONES !== "off") {
     const file = join(configDir(), "phone-keys.json");
     let keys = null;
@@ -3078,7 +3107,7 @@ async function tunnel() {
       else console.error("link: phone keys could not be read; phones are off until the file is fixed or removed");
     }
     if (keys && (typeof keys.pub !== "string" || typeof keys.priv !== "string")) { console.error("link: phone keys are not valid; phones are off"); keys = null; }
-    if (keys) phones = createPhoneHub({ base: home, id: saved.id, token: saved.token, keys, origin: saved.mode === "direct" ? saved.origin : null, spki: null, sync: harnessSync(SERVER) });
+    if (keys) phoneHub = () => createPhoneHub({ base: home, id: saved.id, token: saved.token, keys, origin: saved.mode === "direct" ? saved.origin : null, spki: null, where: currentAddress, sync: harnessSync(SERVER) });
   }
   const serverUpdates = process.env.DUSK_LINK_SERVER_UPDATES === "off" ? null : createServerUpdater({ base: saved.base, id: saved.id, token: saved.token, log: (line) => console.error(line) });
   serverUpdates?.start();
@@ -3099,7 +3128,7 @@ async function tunnel() {
   const relayUrl = cloudRelayUrl();
   const cloud = relayUrl ? createCloudRelay({ url: relayUrl, id: saved.id, key: saved.key, hub: agent.direct }) : null;
   cloud?.start();
-  for (const signal of ["SIGINT", "SIGTERM"]) process.on(signal, () => { backupTunnel?.stop(); addressBook.stop(); cloud?.stop(); serverUpdates?.stop(); phones?.stop(); agent.stop(); directSocket?.close(); directWs?.close(); process.exit(0); });
+  for (const signal of ["SIGINT", "SIGTERM"]) process.on(signal, () => { backupTunnel?.stop(); addressBook.stop(); cloud?.stop(); serverUpdates?.stop(); phoneRun?.stop(); agent.stop(); directSocket?.close(); directWs?.close(); process.exit(0); });
   // the node watch: silent, or full, and another node is known: ask where to go (at most every NODE_ASK_MS); a
   // different answer restarts the agent (systemd brings it back in seconds) so everything reconnects there at once
   let moving = false, askedAt = 0;
@@ -3119,8 +3148,9 @@ async function tunnel() {
     } finally { moving = false; }
   }, NODE_WATCH_MS) : null;
   watch?.unref();
-  const phoneRun = phones?.run();
+  phoneRun = phoneHub ? keepHubRunning(phoneHub, { log: (line) => console.error(line) }) : null;
   let how = await agent.run();
+  phoneRun?.stop();
   // a node it moved to says unlinked: only the node it was linked through decides that
   if (how === "unlinked" && origin(home) !== origin(saved.base)) {
     const linked = await stillLinked({ base: saved.base, id: saved.id, token: saved.token });
@@ -3134,8 +3164,8 @@ async function tunnel() {
   backupTunnel?.stop();
   addressBook.stop();
   cloud?.stop();
-  phones?.stop();
-  await phoneRun;
+  phoneRun?.stop();
+  await phoneRun?.done;
   // unlinked: stay quiet instead of letting systemd restart a tunnel that no longer exists
   if (how === "unlinked") {
     directSocket?.close();

@@ -65,6 +65,11 @@ export function gateChromeFlags(port: number, platform: NodeJS.Platform = proces
 const LOOPBACK_NAMES: ResolvedAddress[] = [{ address: "127.0.0.1", family: 4 }, { address: "::1", family: 6 }];
 
 /** Chrome sends names, address literals included, for the proxy to resolve. */
+/** Node's per-address connect window when a name has several (Node 24 default 250 ms). A first address farther away than
+ * that (340 ms to sa-east-1 from Mumbai) was abandoned for the next, and a machine with no IPv6 route then failed the
+ * connection outright, so a slow first address gets this long before the next is tried. */
+export const FAMILY_ATTEMPT_MS = 2_000;
+
 export async function resolveTarget(host: string): Promise<ResolvedAddress[]> {
   const literal = isIP(host);
   if (literal) return [{ address: host, family: literal }];
@@ -178,6 +183,7 @@ export function openGate(options: GateOptions): Promise<EgressGate> {
           host: target.host,
           port: target.port,
           autoSelectFamily: true,
+          autoSelectFamilyAttemptTimeout: FAMILY_ATTEMPT_MS,
           lookup: (_host, lookupOptions, callback) => lookupOptions.all
             ? callback(null, addresses)
             : callback(null, addresses[0]!.address, addresses[0]!.family),

@@ -9,6 +9,7 @@ import { writeFileAtomic } from "../atomic.ts";
 import { batchNote } from "./batch-continue.ts";
 import { counts, type Checklist } from "../batch-checklist.ts";
 import { quoteInNote } from "../peer-provenance.ts";
+import { RESUME_CAUSE, RESUME_OPENS } from "../limit-resume.ts";
 import { serverLine } from "../server-lines.ts";
 import type { RuntimeEvent } from "../contracts.ts";
 import type { LimitHoldState } from "../../shared/wire.ts";
@@ -78,9 +79,17 @@ export interface LimitHoldDeps {
   language?(threadId: string): string | undefined;
 }
 
-export function resumeNote(held: Pick<HeldTurn, "engineName" | "request">, list: Checklist | null): string {
+const WAITING_SCOPES: ReadonlySet<string> = new Set(["engine", "model"]);
+
+/** Whether a turn its AI's usage limit refused before it began waits for the reset, as one refused mid-turn does: the
+ * person's own request, or a held turn's resume (which then backs off). */
+export function refusedStartWaits(scope: string | undefined, turn: { person: boolean; resuming: boolean }): boolean {
+  return scope !== undefined && WAITING_SCOPES.has(scope) && (turn.person || turn.resuming);
+}
+
+export function resumeNote(held: Pick<HeldTurn, "engineName" | "request">, list: Checklist | null, cause: string = RESUME_CAUSE): string {
   const asked = held.request ? ` The person's request was: "${quoteInNote(held.request, REQUEST_QUOTE_MAX)}".` : "";
-  const base = `[dusk bot: your previous turn here was cut off because ${held.engineName}'s usage limit was reached. The limit has reset.${asked} ` +
+  const base = `${RESUME_OPENS}${held.engineName}${cause}${asked} ` +
     "Read the conversation, pick up exactly where you left off and finish that request; do not redo anything already done. This adds no approval for anything else.]";
   return list && counts(list).open > 0 ? `${base}\n${batchNote(list)}` : base;
 }
@@ -240,6 +249,11 @@ export function createLimitHold(deps: LimitHoldDeps) {
     /** Ends the wait: the person pressed Stop, sent another message, or chose another way on. */
     cancel(threadId: string): boolean {
       return Boolean(drop(threadId));
+    },
+
+    /** A resume of this conversation's held turn is under way. */
+    resuming(threadId: string): boolean {
+      return turns.get(threadId)?.resuming === true;
     },
 
     held(threadId: string): HeldTurn | undefined {

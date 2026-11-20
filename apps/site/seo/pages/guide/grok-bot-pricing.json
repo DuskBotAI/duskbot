@@ -1,0 +1,200 @@
+{
+  "path": "/guides/grok-bot-pricing",
+  "type": "guide",
+  "title": "Grok Bot pricing, weekly limits and overage charges",
+  "nav": "grok bot pricing",
+  "h1": "how much does grok bot cost?",
+  "description": "Grok Bot starts at $30 a month on The X Subscription. See eligible X and legacy Cursor plans, how the trials end and what happens when the weekly pool runs out.",
+  "keyword": "grok bot pricing",
+  "keywords": [
+    "grok bot price",
+    "is grok bot free",
+    "grok bot subscription",
+    "grok bot usage limits"
+  ],
+  "answer": "**grok bot starts at $30 a month on The X Subscription.** as of 20 november 2026, x premium, super and ultra include it. free and the $8 plus plan leave it out. some legacy subscribers already have access. your subscription buys a weekly allowance, and work beyond it can cost extra.[^1][^2][^3]",
+  "tags": [
+    "grok bot",
+    "pricing",
+    "usage limits",
+    "cursor"
+  ],
+  "related": [
+    "/vs/grok-bot",
+    "/guides/grok-tasks",
+    "/guides/how-much-does-an-ai-agent-cost",
+    "/alternatives/grok-bot"
+  ],
+  "art": {
+    "label": "Grok Bot",
+    "props": [
+      "p-receipt",
+      "s-coins"
+    ],
+    "bubble": "what counts as usage"
+  },
+  "og_line": "find the plan and the cost after the pool.",
+  "table": {
+    "h": "x subscription plans on 20 november 2026",
+    "intro": "**premium is the first tier with grok bot.** the usage multiples use plus as the baseline. plus itself does not include the bot.[^1][^3]",
+    "cols": [
+      "plan",
+      "monthly price",
+      "grok bot access",
+      "weekly pool"
+    ],
+    "rows": [
+      {
+        "label": "free",
+        "cells": [
+          "$0",
+          "no",
+          "not applicable"
+        ],
+        "src": [
+          1
+        ]
+      },
+      {
+        "label": "plus",
+        "cells": [
+          "$8",
+          "no",
+          "baseline for plan comparisons"
+        ],
+        "src": [
+          1,
+          3
+        ]
+      },
+      {
+        "label": "premium",
+        "cells": [
+          "$30, or $300 per year",
+          "yes",
+          "4 times the plus base"
+        ],
+        "src": [
+          1,
+          3
+        ]
+      },
+      {
+        "label": "super",
+        "cells": [
+          "$100",
+          "yes",
+          "15 times the plus base"
+        ],
+        "src": [
+          1,
+          3
+        ]
+      },
+      {
+        "label": "ultra",
+        "cells": [
+          "$200",
+          "yes",
+          "50 times the plus base"
+        ],
+        "src": [
+          1,
+          3
+        ]
+      },
+      {
+        "label": "team seats",
+        "cells": [
+          "$30, $100 or $200 per seat",
+          "on the corresponding paid tier",
+          "no separate team allowance in the cited pricing"
+        ],
+        "src": [
+          1,
+          3
+        ]
+      }
+    ]
+  },
+  "sections": [
+    {
+      "h": "look at your current bill before buying premium",
+      "md": "**your old subscription may already cover the bot.** legacy cursor pro, pro+ and ultra include it, as do self-serve cursor teams. you can also use a seat on a self-serve grok business plan.[^2]\n\nlegacy individual supergrok, supergrok plus, supergrok heavy and x premium+ can link to cursor. supergrok lite and grok enterprise cannot. linking is permanent. if you pay for both eligible plans, their allowances do not add together.[^2]"
+    },
+    {
+      "h": "which trial can turn into a bill?",
+      "md": "**look at who offers the trial before you accept it.** some cursor accounts show **start trial**, a one-time credit. it expires after seven days even if you have credit left. using it up ends the trial credit sooner. this offer never turns into a paid plan.[^2]\n\nthe ios app store trial does convert to a paid apple subscription. if you want only the trial, read the renewal date on the apple offer. the seven-day credit and the apple subscription are different offers.[^2]"
+    },
+    {
+      "h": "why a short conversation can cost more than you expect",
+      "md": "**the meter counts steps and tokens, not messages.** grok bot, grok and cursor draw from the same weekly pool on the x subscription. the published multiples describe the size of that pool. they do not tell you how many browser tasks it will finish.[^3]\n\nonce the pool runs out, the x subscription draws on prepaid credits. legacy cursor uses on-demand billing. on 27 august 2026, a cursor user reported crossing into paid usage without warning. staff said the behavior was intentional at the time and logged a request for a warning.[^3][^4]"
+    },
+    {
+      "h": "what changed in november",
+      "md": "**usage limits fell in early november 2026.** on 1 november, elon musk said grok bot cost too much to serve relative to its revenue. the post explains the reason for the cut. it gives no new allowance in steps or tokens.[^5]\n\ncomplaints predate the cut. on 10 september, an ultra subscriber reported using 99% of a weekly pool in three days. cursor staff pointed to browser actions, tools, subagents and the cost of rereading long threads. they suggested starting a fresh conversation.[^6]\n\nthat report describes one account before the change. use your own usage history to decide whether a bigger tier would help."
+    },
+    {
+      "h": "when a lower monthly price makes sense",
+      "md": "**if personal work can wait until your computer is awake, dusk bot costs $0 there.** it uses the ai you already pay for. dusk cloud plus costs $20 monthly. pro costs $50 and includes a work license. your provider still bills for ai.[^7][^8]\n\nif you already need x premium and stay inside its allowance, grok bot adds no separate subscription. compare the [monthly bills](/vs/grok-bot) before paying for another hosted machine.[^1]"
+    }
+  ],
+  "faq": [
+    {
+      "q": "can i buy just a grok bot subscription?",
+      "a": "**there is no standalone bot plan.** new customers get it through the x subscription. x premium costs $30 on monthly billing or $300 up front for a year.[^1]"
+    },
+    {
+      "q": "does ultra remove the grok bot usage limit?",
+      "a": "**ultra still has a weekly pool.** it gives you 50 times the plus baseline. x publishes no absolute step or token allowance, and usage past the pool can draw on paid credits.[^3]"
+    }
+  ],
+  "updated": "2026-11-20",
+  "review": {
+    "status": "approved",
+    "by": "lead agent, after four independent reviewers read every page against seo/facts (2026-11-20); every finding applied",
+    "at": "2026-11-20"
+  },
+  "voice": 2,
+  "connectors": [],
+  "sources": [
+    {
+      "label": "x subscription pricing",
+      "url": "https://docs.x.ai/x-subscription/pricing.md",
+      "checked": "2026-11-20"
+    },
+    {
+      "label": "grok bot faq on plans, linking and trials",
+      "url": "https://docs.x.ai/grok-bot/faq.md",
+      "checked": "2026-11-20"
+    },
+    {
+      "label": "x weekly allowances and overage",
+      "url": "https://docs.x.ai/x-subscription/usage-limits.md",
+      "checked": "2026-11-20"
+    },
+    {
+      "label": "cursor forum on on-demand billing, 27 august 2026",
+      "url": "https://forum.cursor.com/t/grok-bot-gives-no-warning-before-weekly-usage-spills-into-paid-on-demand/169679",
+      "checked": "2026-11-20"
+    },
+    {
+      "label": "elon musk on grok bot serving costs, 1 november 2026",
+      "url": "https://x.com/elonmusk/status/2116992258520064397",
+      "checked": "2026-11-20"
+    },
+    {
+      "label": "cursor forum on ultra usage, 10 september 2026",
+      "url": "https://forum.cursor.com/t/grok-bot-ultra-users-how-do-you-make-the-weekly-allowance-last-mine-reached-99-in-three-days/171221",
+      "checked": "2026-11-20"
+    },
+    {
+      "label": "dusk personal and work billing",
+      "url": "/docs/account-and-billing"
+    },
+    {
+      "label": "dusk cloud plans",
+      "url": "/docs/dusk-cloud"
+    }
+  ]
+}

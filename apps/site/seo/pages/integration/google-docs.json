@@ -1,0 +1,132 @@
+{
+  "path": "/integrations/google-docs",
+  "type": "integration",
+  "title": "Google Docs AI assistant for drafts and editorial review",
+  "nav": "google docs",
+  "h1": "a google docs bot for the draft that needs a second read",
+  "description": "Turn dated notes into a weekly draft, find conflicting promises across briefs, and catch leftover instructions before a Google Doc reaches a client.",
+  "keyword": "google docs bot",
+  "keywords": [
+    "google docs ai assistant",
+    "google docs ai agent"
+  ],
+  "answer": "**catch the delivery date that changed between the brief and the proposal.** give a dusk bot the google docs links for the brief and the proposal. ask it to quote both passages so you can settle the date. the same bot can turn dated notes into a weekly draft or find instructions left over from a template.",
+  "updated": "2026-11-20",
+  "review": {
+    "status": "approved",
+    "by": "lead agent, after four independent reviewers read every page against seo/facts (2026-11-20); every finding applied",
+    "at": "2026-11-20"
+  },
+  "voice": 2,
+  "tags": [
+    "editing",
+    "briefs",
+    "reports"
+  ],
+  "connectors": [
+    "googledocs"
+  ],
+  "related": [
+    "/routines/google-docs-weekly-report-draft",
+    "/integrations/google-drive",
+    "/use-cases/client-onboarding"
+  ],
+  "art": {
+    "logo": "docs",
+    "props": [
+      "s-notebook"
+    ],
+    "bubble": "which date is final"
+  },
+  "og_line": "catch the old promise before the client does.",
+  "app": {
+    "name": "Google Docs",
+    "toolkit": "googledocs",
+    "intro": "**start with the source paragraph.** a sentence is easier to fix when you know which document and tab it came from. use plain text for a first read and the document structure when headings or tabs matter.",
+    "highlight": [
+      {
+        "slug": "GOOGLEDOCS_SEARCH_DOCUMENTS",
+        "use": "find briefs with the working title and narrow them by modification date"
+      },
+      {
+        "slug": "GOOGLEDOCS_GET_DOCUMENT_BY_ID",
+        "use": "read the tabs and headings behind a disputed passage"
+      },
+      {
+        "slug": "GOOGLEDOCS_GET_DOCUMENT_PLAINTEXT",
+        "use": "pull wording from a chosen tab, including text in tables"
+      },
+      {
+        "slug": "GOOGLEDOCS_GET_DOCS_DRIVE_FILE_METADATA",
+        "use": "look up the title for a specific file id"
+      },
+      {
+        "slug": "GOOGLEDOCS_COPY_DOCUMENT",
+        "use": "make a named working copy of the approved template"
+      },
+      {
+        "slug": "GOOGLEDOCS_UPDATE_DOCUMENT_SECTION_MARKDOWN",
+        "use": "append an approved report to the working copy"
+      }
+    ],
+    "setup": "**give the bot the master and the working draft as separate links.** label them in chat. connect google docs under connected apps and choose the bot that edits with you. try a read first. ask which tab contains the delivery promise and have it quote the line."
+  },
+  "routines_intro": "**decide which document has the final say.** paste the links into chat before starting a routine. tell the bot what you call each document so the instructions below refer to the right files.",
+  "routines": [
+    {
+      "name": "weekly report from dated notes",
+      "message": "every friday at 2, read this week's entries in <notes doc link>. draft the weekly report here under shipped, delayed and awaiting a decision. put the source heading beside each item. leave out undated notes unless i confirm the week.",
+      "when": "fridays at 14:00",
+      "output": "a report you can trace to the original notes"
+    },
+    {
+      "name": "proposal against the signed brief",
+      "message": "on tuesdays at 10, compare the delivery dates and included revisions in <proposal link> with those in <signed brief link>. quote each conflicting pair here with its tab and heading. ask which wording wins. leave both files alone.",
+      "when": "tuesdays at 10:00",
+      "output": "pairs of promises for the account owner to settle"
+    },
+    {
+      "name": "template leftovers",
+      "message": "each weekday at 4, read <proposal link> including its tables and footers. find bracketed instructions, sample client names and blank fee fields. quote the surrounding words here so i can find them. keep the master intact.",
+      "when": "weekdays at 16:00",
+      "output": "a punch list for the last editorial pass"
+    }
+  ],
+  "asks": "**decide where a draft can become an edit.** a draft in chat leaves the document alone. copying the master and inserting text are writes. neither comes with a send approval. for hands-on editing, put “ask me before you change anything” in the routine and name the working copy.",
+  "cannot": [
+    "**promise a clean replacement on the first try.** the section update can insert new text while leaving the old passage. read the result before retrying.",
+    "**preserve page layout in plain text.** that action gives a best-effort rendering. open the actual document for a final layout review.",
+    "**approve a disputed fee.** if two sources disagree, the account owner needs both quotes. choosing a number requires their decision."
+  ],
+  "sections": [
+    {
+      "h": "when to open the document yourself",
+      "md": "**do the final visual proof in google docs.** a text review can find a missing fee. it can't tell you from plain text how a table breaks across pages. if your only job is lining up the signature block, skip the bot."
+    }
+  ],
+  "faq": [
+    {
+      "q": "where does a copy of my report template go?",
+      "a": "**the copy starts in the root of your google drive.** give it a distinct title when you ask for it. use its link for subsequent edits."
+    },
+    {
+      "q": "can it review a draft without writing in it?",
+      "a": "**yes. give the bot read access to docs.** ask for the exact sentence, the source heading and a proposed replacement in chat."
+    }
+  ],
+  "worked": {
+    "intro": "an example from a proposal review.",
+    "before": "elise's brief says “delivery by 18 june.” the proposal's timing table still says “11 june.”",
+    "after": "timing table: 11 june. signed brief, delivery: 18 june.\nwhich date belongs in the proposal?"
+  },
+  "sources": [
+    {
+      "label": "dusk bot docs: connected apps",
+      "url": "/docs/files-and-apps"
+    },
+    {
+      "label": "dusk bot docs: routines",
+      "url": "/docs/routines"
+    }
+  ]
+}

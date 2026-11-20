@@ -19,11 +19,25 @@ export function byteRange(header, size) {
   return start > end || start >= size ? false : { start, end };
 }
 
+// the built-in voice's model files, one folder per sha256 (scripts/mirror-voice-models.sh), so a first call never
+// depends on Hugging Face or GitHub; the app checks every byte against the same hash it asked for
+export const VOICE_MODEL = /^\/voice\/([0-9a-f]{64})\/([A-Za-z0-9_][A-Za-z0-9_.-]*\.(?:onnx|json|bin))$/;
+
 /** answers a mirrored release file and returns true, or returns false for any other address */
 export function serveMirrored(req, res, urlPath, root = process.env.DUSK_RELEASE_MIRROR || '/var/lib/dusk-releases') {
   const m = MIRRORED.exec(urlPath);
   if (!m) return false;
-  const file = path.join(root, m[1], m[2]);
+  return serveFile(req, res, path.join(root, m[1], m[2]), m[2]);
+}
+
+/** answers a mirrored voice model file and returns true, or returns false for any other address */
+export function serveVoiceModel(req, res, urlPath, root = process.env.DUSK_VOICE_MIRROR || '/var/lib/dusk-voice') {
+  const m = VOICE_MODEL.exec(urlPath);
+  if (!m) return false;
+  return serveFile(req, res, path.join(root, m[1], m[2]), m[2]);
+}
+
+function serveFile(req, res, file, name) {
   const st = fs.statSync(file, { throwIfNoEntry: false });
   if (!st?.isFile()) {
     res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' });
@@ -36,7 +50,7 @@ export function serveMirrored(req, res, urlPath, root = process.env.DUSK_RELEASE
     'Accept-Ranges': 'bytes',
     // a release file never changes under its versioned name
     'Cache-Control': 'public, max-age=31536000, immutable',
-    'Content-Disposition': `attachment; filename="${m[2]}"`,
+    'Content-Disposition': `attachment; filename="${name}"`,
     'Last-Modified': st.mtime.toUTCString(),
   };
   if (range === false) {

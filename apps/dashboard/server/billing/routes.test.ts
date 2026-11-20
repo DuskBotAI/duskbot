@@ -566,8 +566,16 @@ it("walks the cancel flow over HTTP: steps, the one-time discount, then an onlin
   expect(f.billing.fake!.discountCalls).toHaveLength(1);
   const again = await f.page(`/v1/billing/subscriptions/${subId}/discount`, { reason: "price" }, cookie);
   expect(again.status).toBe(409); expect(await again.json()).toMatchObject({ code: "discount_used", error: "This account already used its discount." });
-  await f.answer(`/v1/billing/subscriptions/${subId}/cancel`, { survey: { answer: "price" } }, cookie);
+  expect(await f.answer(`/v1/billing/subscriptions/${subId}/retention`, { reason: "switching", step: "reason", outcome: "kept", offer: "note", note: "  a linux app " }, cookie)).toEqual({ ok: true });
+  expect((await f.page(`/v1/billing/subscriptions/${subId}/retention`, { reason: "price", step: "reason", outcome: "kept", offer: "pause" }, cookie)).status).toBe(400);
+  expect((await f.page(`/v1/billing/subscriptions/${subId}/cancel`, { survey: { answer: "price", offer: "free_year" } }, cookie)).status).toBe(400);
+  await f.answer(`/v1/billing/subscriptions/${subId}/cancel`, { survey: { answer: "price", offer: "discount", improve: "too much for me" } }, cookie);
   overview = await f.answer<BillingOverview>("/v1/billing/overview", undefined, cookie);
   expect(overview.subscriptions[0].cancelAtPeriodEnd).toBe(true);
-  expect(f.saved().retention?.map(row => `${row.step}:${row.outcome}`)).toEqual(["reason:shown", "help:discount", "confirm:cancelled"]);
+  expect(f.saved().retention?.map(row => `${row.step}:${row.outcome}`)).toEqual(["reason:shown", "help:discount", "reason:kept", "confirm:cancelled"]);
+  expect(f.saved().feedback.map(({ answer, offer, outcome, improve }) => ({ answer, offer, outcome, improve }))).toEqual([
+    { answer: "price", offer: "discount", outcome: "discount", improve: undefined },
+    { answer: "switching", offer: "note", outcome: "kept", improve: "a linux app" },
+    { answer: "price", offer: "discount", outcome: "cancelled", improve: "too much for me" },
+  ]);
 });

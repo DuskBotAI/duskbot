@@ -55,6 +55,13 @@ describe("a failure card always offers a way on", () => {
     expect(fixture.dispatch).toHaveBeenCalledWith(expect.objectContaining({ type: "toggleSettings", open: true, section: "model", botId: "echo" }));
   });
 
+  it("a folder that was moved or deleted: Working folder, which opens the bot's folder setting", async () => {
+    const buttons = await show(failed("This bot's folder client-site was moved or deleted. Pick a folder in the bot's settings."), vi.fn());
+    expect(labels(buttons)).toEqual(["Working folder", "Try again"]);
+    await act(async () => buttons[0]!.click());
+    expect(fixture.dispatch).toHaveBeenCalledWith(expect.objectContaining({ type: "toggleSettings", open: true, section: "access", botId: "echo" }));
+  });
+
   it("a usage limit with no known reset: switch AI", async () => {
     expect(labels(await show(failed("You've hit your usage limit")))).toEqual(["Switch AI"]);
   });
@@ -74,13 +81,22 @@ describe("a failure card always offers a way on", () => {
   });
 });
 
+describe("a refusal a setting fixes", () => {
+  it("offers the setting that fixes it, never the generic sentence", async () => {
+    expect(labels(await show(failed("The provider rejected this key. Change it in Settings → API keys.", { reason: "key_rejected" }), vi.fn()))).toEqual(["Update key", "Try again"]);
+    expect(labels(await show(failed("This Cloud's Starter plan includes 5 bots and has no room for another", { reason: "plan_limit" }), vi.fn()))).toEqual(["See your plan"]);
+    expect(labels(await show(failed("This bot's folder launch was moved or deleted. Pick a folder in the bot's settings.", { reason: "folder_gone" }), vi.fn()))).toEqual(["Working folder", "Try again"]);
+  });
+});
+
 describe("the card says what really stopped the reply", () => {
   const text = () => document.querySelector("[data-chat-error]")?.textContent ?? "";
 
-  it("a plain server cause is said as it is, not as Something went wrong", async () => {
-    await show(failed("The workspace was restored from a backup before this finished."), vi.fn());
-    expect(text()).toContain("The workspace was restored from a backup before this finished.");
-    expect(text()).not.toContain("Something went wrong");
+  it("says its kind's one sentence, never the cause, with the code support finds the cause by", async () => {
+    await show(failed("The workspace was restored from a backup before this finished.", { errorRef: "D-7F3K" }), vi.fn());
+    expect(text()).toContain("Your bot couldn't finish this reply. Try again.");
+    expect(text()).toContain("Ref D-7F3K");
+    expect(text()).not.toContain("restored from a backup");
   });
 
   it("a turn a restart cut says so, and Try again warns before it can repeat what already ran", async () => {

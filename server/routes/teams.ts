@@ -62,6 +62,7 @@ export function createTeamRoutes(deps: TeamRouteDeps): RouteHandler {
     const orgLibrary = deps.orgLibrary();
     if (method === "POST" && path === "/api/teams/export") {
       const body = await readBody(req, 8 * 1024 * 1024);
+      if (!body || typeof body !== "object" || Array.isArray(body)) return json(res, 400, { error: "Send what to export as a JSON object" });
       const profileName = deps.authorName(auth);
       if (body.format === "package" && body.version === 2 && body.kind === "library") {
         const optional = (value: unknown) => (typeof value === "string" ? value : undefined);

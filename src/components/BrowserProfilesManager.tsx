@@ -1,4 +1,5 @@
 import { useEffect, useId, useState } from "react";
+import { AnimatePresence } from "motion/react";
 import { Globe, Plus, Trash2 } from "../icons";
 import { api, ApiError, useStore, type Bot, type BotAnnouncement, type BrowserProfile, type ConfigStatus } from "@/state/store";
 import { browserProfileDeletionBlockReason, browserProfilesMutation, newBrowserProfileId } from "@/lib/browser-profiles";
@@ -167,14 +168,14 @@ export function BrowserProfilesManager({ bot, onProfileChanged, disabled = false
   // In Settings (no bot): the shared profiles as rows, each opening its own page; names are typed in a small form
   if (!currentBot) {
     const errorRow = error ? <NoteRow tone="danger">{error}</NoteRow> : null;
-    const renameDialog = renaming && (
-      <FormDialog data-panel-modal="rename-profile" title={t("settings.profiles.rename")} canSave={Boolean(renaming.name.trim())} busy={busy}
+    const renameDialog = <AnimatePresence>{renaming && (
+      <FormDialog key="rename-profile" data-panel-modal="rename-profile" title={t("settings.profiles.rename")} canSave={Boolean(renaming.name.trim())} busy={busy}
         error={error || undefined} onSave={rename} onClose={() => setRenaming(null)}>
         <FormField label={t("settings.profiles.nameAria")}>
           <input autoFocus value={renaming.name} onChange={(event) => setRenaming({ id: renaming.id, name: event.target.value })} maxLength={40} required disabled={locked} className={textFieldCls} />
         </FormField>
       </FormDialog>
-    );
+    )}</AnimatePresence>;
     const pageId = sub.at?.startsWith(PROFILE_PAGE) ? sub.at.slice(PROFILE_PAGE.length) : null;
     if (pageId !== null) {
       const profile = profiles.find((candidate) => candidate.id === pageId);
@@ -233,14 +234,14 @@ export function BrowserProfilesManager({ bot, onProfileChanged, disabled = false
             onClick={() => { setError(""); setName(""); setAdding(true); }} />
           {!adding && errorRow}
         </RowsCard>
-        {adding && (
-          <FormDialog data-panel-modal="new-profile" title={t("settings.s2.profiles.new")} saveLabel={t("settings.profiles.create")} canSave={Boolean(name.trim())} busy={busy}
+        <AnimatePresence>{adding && (
+          <FormDialog key="new-profile" data-panel-modal="new-profile" title={t("settings.s2.profiles.new")} saveLabel={t("settings.profiles.create")} canSave={Boolean(name.trim())} busy={busy}
             error={error || undefined} onSave={create} onClose={() => setAdding(false)}>
             <FormField label={t("settings.profiles.newName")}>
               <input autoFocus value={name} onChange={(event) => setName(event.target.value)} maxLength={40} required disabled={locked} className={textFieldCls} />
             </FormField>
           </FormDialog>
-        )}
+        )}</AnimatePresence>
       </div>
     );
   }

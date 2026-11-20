@@ -2,10 +2,15 @@ import { createPublicKey, verify } from "node:crypto";
 import { existsSync } from "node:fs";
 import { join, sep } from "node:path";
 
-export const LATEST_RELEASE_URL = "https://api.github.com/repos/DuskBotAI/duskbot/releases/latest";
+import type { InstallKind, UpdateCheck } from "../shared/server-update.ts";
+export type { InstallKind, UpdateCheck } from "../shared/server-update.ts";
 
-/** "managed" is a hosted or Cloud server that is updated for its owner. */
-export type InstallKind = "desktop" | "managed" | "docker" | "podman" | "npm" | "git" | "unknown";
+export const OFFICIAL_SERVER_IMAGE = "ghcr.io/duskbotai/duskbot";
+export function tracksOfficialLatest(image: string | undefined): boolean {
+  return image === OFFICIAL_SERVER_IMAGE || image === `${OFFICIAL_SERVER_IMAGE}:latest`;
+}
+
+export const LATEST_RELEASE_URL = "https://api.github.com/repos/DuskBotAI/duskbot/releases/latest";
 
 export function installKind(input: {
   desktopManaged: boolean;
@@ -21,16 +26,6 @@ export function installKind(input: {
   if (input.serverRoot.split(sep).includes("node_modules")) return "npm";
   if (exists(join(input.serverRoot, "..", ".git"))) return "git";
   return "unknown";
-}
-
-export interface UpdateCheck {
-  current: string;
-  install: InstallKind;
-  latest?: string;
-  available: boolean;
-  releaseUrl?: string;
-  command?: string;
-  restart?: boolean;
 }
 
 /** the signed desktop release manifest: `{ v: 1, signature: "r1.<kid>.<manifest>.<sig>" }`, written by scripts/release-manifest.ts */
@@ -69,13 +64,9 @@ export function newerVersion(a: string, b: string): boolean {
   return false;
 }
 
-const DESKTOP_CHECK_TTL_MS = 60 * 60_000;
+const RELEASE_CHECK_TTL_MS = 60 * 60_000;
 let desktopCache: { at: number; latest: string | null } | null = null;
 
-/**
- * The desktop app asks dusk.bot's signed manifest whether a newer release exists and only ever points at the download
- * page: nothing is downloaded or installed for the person. Other installs are updated by whoever runs them.
- */
 export function createUpdateChecker(options: {
   current: string;
   install: InstallKind;
@@ -83,12 +74,40 @@ export function createUpdateChecker(options: {
   now?: () => number;
   manifestUrl?: string;
   keys?: readonly { kid: string; x: string }[];
+  composeImage?: string;
+  releaseImage?: string;
 }) {
   const now = options.now ?? Date.now;
+  let release: { expires: number; result: Promise<string> } | undefined;
+  function stableRelease() {
+    if (release && release.expires > now()) return release.result;
+    const result = (options.fetch ?? fetch)(LATEST_RELEASE_URL, {
+      redirect: "error", signal: AbortSignal.timeout(10_000), headers: { accept: "application/vnd.github+json" },
+    }).then(async response => {
+      if (!response.ok) throw new Error(`GitHub releases answered ${response.status}. Try again later.`);
+      const body = await response.json() as { tag_name?: unknown; draft?: unknown; prerelease?: unknown } | null;
+      const tag = typeof body?.tag_name === "string" && /^v(\d+\.\d+\.\d+)$/.exec(body.tag_name);
+      if (!tag || body.draft !== false || body.prerelease !== false) throw new Error("GitHub did not return a stable dusk bot release.");
+      return tag[1]!;
+    }).catch(error => { release = undefined; throw error; });
+    release = { expires: now() + RELEASE_CHECK_TTL_MS, result };
+    return result;
+  }
   return async function check(): Promise<UpdateCheck> {
     const base: UpdateCheck = { current: options.current, install: options.install, available: false };
+    const image = options.composeImage;
+    const official = image ? /^ghcr\.io\/duskbotai\/duskbot(?::[\w][\w.-]{0,127})?(?:@sha256:[0-9a-f]{64})?$/.test(image) : options.releaseImage === OFFICIAL_SERVER_IMAGE;
+    if (options.install === "docker" && official) {
+      const latest = await stableRelease();
+      const result = { ...base, latest, available: newerVersion(latest, options.current),
+        releaseUrl: `https://github.com/DuskBotAI/duskbot/releases/tag/v${latest}` };
+      if (!image) return result;
+      return tracksOfficialLatest(image)
+        ? { ...result, command: "docker compose pull dusk && docker compose up -d" }
+        : { ...result, pinned: image };
+    }
     if (options.install !== "desktop") return base;
-    if (!desktopCache || now() - desktopCache.at >= DESKTOP_CHECK_TTL_MS) {
+    if (!desktopCache || now() - desktopCache.at >= RELEASE_CHECK_TTL_MS) {
       const response = await (options.fetch ?? fetch)(options.manifestUrl ?? DESKTOP_MANIFEST_URL, { redirect: "error", signal: AbortSignal.timeout(10_000), headers: { accept: "application/json" } });
       if (response.status === 404) desktopCache = { at: now(), latest: null };
       else if (!response.ok) throw new Error(`the release manifest answered ${response.status}`);

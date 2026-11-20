@@ -77,7 +77,7 @@ it("hands a Cloud on an older image the ChatGPT login alone when it refuses the 
   f.home.signIns.mockRejectedValueOnce(Object.assign(new Error("refused"), { status: 400 }));
   for (let n = 0; n < 20 && c.status === "provisioning"; n++) await f.service.reconcile();
   await f.service.reconcile();
-  expect(f.home.signIns.mock.calls.map(call => call[2])).toEqual([[{ kind: "codex-auth", auth }, grok], [{ kind: "codex-auth", auth }]]);
+  expect(f.home.signIns.mock.calls.map(call => (call as unknown[])[2])).toEqual([[{ kind: "codex-auth", auth }, grok], [{ kind: "codex-auth", auth }]]);
   expect(await f.store.pending()).toEqual([]);
 });
 

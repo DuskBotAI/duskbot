@@ -1,19 +1,23 @@
 {
   "path": "/guides/openclaw-clawdbot-moltbot-explained",
   "type": "guide",
-  "title": "Did OpenAI buy OpenClaw? The names and timeline",
+  "title": "When did OpenClaw come out, and who owns Clawdbot now?",
   "nav": "openclaw, clawdbot and moltbot",
-  "h1": "did openai buy openclaw?",
-  "description": "What changed from Clawd and Moltbot to OpenClaw, when its creator joined OpenAI, and what the independent foundation says about the project.",
+  "h1": "when did openclaw come out, and did openai buy it?",
+  "description": "The project began as Clawd in November 2025. See when it became OpenClaw, what its creator announced about OpenAI and who looks after it today.",
   "keyword": "openclaw bought by openai",
   "keywords": [
     "clawdbot vs moltbot",
     "openclaw founder",
     "openclaw foundation",
-    "cloudbot ai"
+    "cloudbot ai",
+    "when did openclaw come out",
+    "when was clawdbot released",
+    "who owns clawdbot",
+    "openclaw bought"
   ],
-  "answer": "**openclaw remains independent; its creator joined openai.** peter steinberger's new job and the project's move to a foundation are separate events. clawd, clawdbot and moltbot appear in the same project's history. as of 12 november 2026, the foundation says openclaw remains open and independent.[^1] the dates below untangle the names and the acquisition headlines.",
-  "updated": "2026-11-12",
+  "answer": "**the openclaw name came out on 29 january 2026. the project began as clawd in november 2025.** moltbot was the name in between.[^2] on 14 february 2026, creator peter steinberger announced he was joining openai.[^3] openai didn't buy the project. the independent openclaw foundation launched on 8 july 2026.[^1]",
+  "updated": "2026-11-20",
   "review": {
     "status": "approved",
     "by": "lead agent: independent reviewer pass against seo/facts (4 reviewers), every finding applied, automated gate",
@@ -72,6 +76,10 @@
     {
       "q": "is openclaw still independent?",
       "a": "**the foundation says yes.** its announcement calls the project open and independent and describes openai's commitment to that. this remained its position on 12 november 2026.[^1]"
+    },
+    {
+      "q": "when was clawdbot first released?",
+      "a": "**the project's history gives november 2025 for clawd, without an exact release day for clawdbot.** the repository dates to 24 november 2025. that dates the repository, not a public release. the 29 january announcement introduced the openclaw name.[^5][^2]"
     }
   ],
   "sources": [

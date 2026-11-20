@@ -77,6 +77,8 @@ UPDATER=/usr/local/lib/duskbot/install.sh
 PKGS=/var/lib/duskbot-link/packages
 SERVER_RELEASE=/var/lib/omb-link/.config/duskbot-link/server-release
 PORT=8799
+# `duskbot` for whoever is logged in: the server's own build lives in the server account's home, off root's PATH
+CLI=/usr/local/bin/duskbot
 UNITS=/etc/systemd/system
 CADDY_SITE=/etc/caddy/duskbot.caddy
 CADDY_MAIN=/etc/caddy/Caddyfile
@@ -772,6 +774,9 @@ do_basics() {
   # the bot browser's live view goes as H.264 through this ffmpeg (server/browser/viewers/h264-encoder.ts); best effort:
   # without it the view stays JPEG, so it never fails the install
   apt_install ffmpeg || echo "ffmpeg could not be installed; the live browser view stays JPEG"
+  # pdftotext and pdftoppm: a PDF someone sends a bot is read as text, and a scanned one rendered to pictures for engines
+  # that see images; best effort: without them such a PDF reaches the bot as a file only
+  apt_install poppler-utils || echo "poppler-utils could not be installed; bots get scanned PDFs as files only"
   bwrap_userns
 }
 
@@ -1112,6 +1117,23 @@ note_failed() { # version
 get_package() { # file
   verified_download "$LINK_BASE/pkg/$LINK_ID/$PKG_SHA.tgz" "$1" "$PKG_SHA" "$PKG_SIZE" 1800 "dusk bot"
 }
+# the wrapper switches to the server account before it runs anything from that account's home, so root never executes
+# a file the server account can write
+put_command() {
+  if [ -e "$CLI" ] && ! grep -qs "managed by duskbot-link" "$CLI"; then echo "left $CLI as it is: it is not ours"; return 0; fi
+  _run="env HOME=$SVC_HOME PATH=$SVC_HOME/.local/bin:/usr/local/bin:/usr/bin:/bin $SVC_HOME/.local/bin/duskbot"
+  cat > "$TMP/cli" <<EOF
+#!/bin/sh
+# managed by duskbot-link: this server's dusk bot, run as $SVC_USER
+if [ "\$(id -un)" = $SVC_USER ]; then exec $_run "\$@"; fi
+if [ "\$(id -u)" -eq 0 ]; then exec runuser -u $SVC_USER -- $_run "\$@"; fi
+exec sudo -u $SVC_USER -- $_run "\$@"
+EOF
+  if [ -f "$CLI" ] && cmp -s "$TMP/cli" "$CLI"; then return 0; fi
+  install -o root -g root -m 0755 "$TMP/cli" "$CLI"
+  echo "duskbot now runs from any login on this server"
+}
+
 do_app() {
   bin="$SVC_HOME/.local/bin/duskbot"
   if [ -n "$DUSK_PACKAGE" ]; then
@@ -1280,6 +1302,10 @@ Environment=DOCKER_HOST=unix://$GATE_SOCK
 Environment=DUSK_PREINSTALL_FREE_BACKUP=1
 EnvironmentFile=-$ETC/engines.env
 ExecStart=$SVC_HOME/.local/bin/duskbot serve --port $PORT --no-pair --label $NAME$public
+# the link stops when the server is stopped, but stays up through a restart (an update, an engine sign-in) and a crash,
+# so the app's tunnel and the phones' links never drop: systemd propagates restarts along PartOf= and PropagatesStopTo=
+# alike, and only a running stop job shows as "stop" in list-jobs
+ExecStopPost=+/bin/sh -c 'systemctl list-jobs --no-legend duskbot.service 2>/dev/null | grep -qw stop && systemctl stop --no-block duskbot-link.service || true'
 Restart=always
 RestartSec=5
 # when memory runs out the kernel takes a bot computer (docker --oom-score-adj 500) long before the server
@@ -1359,7 +1385,6 @@ EOF
 Description=Link for dusk bot
 After=network-online.target duskbot.service
 Wants=network-online.target
-PartOf=duskbot.service
 
 [Service]
 User=$LINK_USER
@@ -1603,6 +1628,7 @@ ts_field() { # BackendState | DNSName
 ts_https_443() { # dnsname
   ts serve status --json 2>/dev/null | /usr/bin/node -e 'let t="";process.stdin.on("data",(c)=>t+=c).on("end",()=>{try{const s=JSON.parse(t);if(!s.TCP?.["443"]){console.log("free");return}const h=s.Web?.[process.argv[1]+":443"]?.Handlers??{};console.log(Object.keys(h).join()==="/"&&h["/"].Proxy===process.argv[2]?"ours":"taken")}catch{console.log("free")}})' "$1" "http://127.0.0.1:$PORT" 2>/dev/null || echo free
 }
+TS_INSTALL_SECS=600 TS_WAIT_SECS=900
 tailscale_install() {
   command -v tailscale >/dev/null 2>&1 && return 0
   echo "installing Tailscale (its own installer, from tailscale.com)"
@@ -1610,7 +1636,10 @@ tailscale_install() {
   new_file /etc/apt/sources.list.d/tailscale.list
   new_file /usr/share/keyrings/tailscale-archive-keyring.gpg
   installed_pkgs > "$TMP/pkgs-before"
-  x sh "$TMP/tailscale.sh"
+  set -- sh "$TMP/tailscale.sh"
+  if command -v timeout >/dev/null 2>&1; then set -- timeout -k 15 "$TS_INSTALL_SECS" "$@"; fi
+  if command -v setsid >/dev/null 2>&1; then set -- setsid -w "$@"; fi
+  x "$@" || echo "Tailscale's installer did not finish in $((TS_INSTALL_SECS / 60)) minutes or failed"
   installed_pkgs | comm -13 "$TMP/pkgs-before" - | while read -r _p; do manifest_add "pkg $_p"; done
   command -v tailscale >/dev/null 2>&1
 }
@@ -1642,7 +1671,7 @@ ts_with_link() { # kind seconds pattern words... -- command...
     _url=$(grep -o "$_pat" "$TMP/ts.out" 2>/dev/null | head -n 1)
     if [ -n "$_url" ] && [ "$_url" != "$_asked" ]; then
       _asked=$_url
-      printf '%s\n  %s\n\nWaiting for you...\n' "$_words" "$_url" | ask "{\"kind\":\"$_kind\",\"url\":\"$_url\",\"state\":\"waiting\"}"
+      printf '%s\n  %s\n\nWaiting for you, up to %s minutes. After that this server uses the private relay instead.\n' "$_words" "$_url" "$(((_secs + 59) / 60))" | ask "{\"kind\":\"$_kind\",\"url\":\"$_url\",\"state\":\"waiting\"}"
     fi
     sleep 1; _t=$((_t + 1))
     if [ "$_t" -ge "$_secs" ]; then kill "$_pid" 2>/dev/null || true; wait "$_pid" 2>/dev/null || true; redact < "$TMP/ts.out"; return 1; fi
@@ -1659,19 +1688,19 @@ address_tailscale() {
       show tailscale up --auth-key=[redacted]
       ts up --auth-key="$TS_KEY" --timeout=2m 2>&1 | redact || true
     else
-      ts_with_link tailscale-login 1800 'https://login\.tailscale\.com/[A-Za-z0-9/._?=&-]*' \
-        "Sign in to Tailscale to put this server on your tailnet. Open this link on any device:" -- ts up --timeout=30m || true
+      ts_with_link tailscale-login "$TS_WAIT_SECS" 'https://login\.tailscale\.com/[A-Za-z0-9/._?=&-]*' \
+        "Sign in to Tailscale to put this server on your tailnet. Open this link on any device:" -- ts up --timeout="${TS_WAIT_SECS}s" || true
     fi
   fi
-  [ "$(ts_field BackendState)" = Running ] || { relay_address "Tailscale is not signed in; using the private relay"; return 11; }
+  [ "$(ts_field BackendState)" = Running ] || { relay_address "Tailscale is not signed in; using the private relay. To use Tailscale later, sign in with: tailscale up, then paste the line again"; return 11; }
   dns=$(ts_field DNSName)
   [ -n "$dns" ] || { relay_address "this server has no MagicDNS name; turn MagicDNS on for your tailnet. Using the private relay"; return 11; }
   echo "on the tailnet as $dns"
   [ "$(ts_https_443 "$dns")" != taken ] || { relay_address "tailnet https port 443 already serves something else here; leaving it alone and using the private relay"; return 11; }
   # https for the tailnet: `tailscale serve` prints the one admin link that turns it on and waits for it
-  if ! ts_with_link tailscale-https 1800 'https://login\.tailscale\.com/[A-Za-z0-9/._?=&-]*' \
+  if ! ts_with_link tailscale-https "$TS_WAIT_SECS" 'https://login\.tailscale\.com/[A-Za-z0-9/._?=&-]*' \
     "Turn on HTTPS for your tailnet (one click), so this server gets an https address:" -- ts serve --bg --https=443 "http://127.0.0.1:$PORT"; then
-    relay_address "Tailscale HTTPS is not on; using the private relay"; return 11
+    relay_address "Tailscale HTTPS is not on; using the private relay. To use Tailscale later, turn HTTPS on in its admin console, then paste the line again"; return 11
   fi
   manifest_add "tailscale-serve 443"
   ask_clear
@@ -2222,7 +2251,7 @@ update_server() {
     [ "$_rc" != 0 ] || state_set server-update-refused "$PKG_SHA"
     return 0
   fi
-  if [ "$_rc" = 0 ]; then refresh_updater "$_f"; refresh_gate "$_f"; fi
+  if [ "$_rc" = 0 ]; then refresh_updater "$_f"; refresh_gate "$_f"; put_command >/dev/null 2>&1 || true; fi
   restart_wait || return 0
   restart_settle
 }
@@ -2457,6 +2486,7 @@ main() {
   phase prepare; step check do_check; step basics do_basics; step docker do_docker; step user do_user; phase_end
   phase runtime; step node do_node; phase_end
   phase omb; step app do_app; step engines do_engines; step service do_service; phase_end
+  [ -n "$DEMO" ] || put_command >>"$LOGS/command.log" 2>&1 || true
   phase computer; step sandbox do_sandbox; step fence do_fence; step desktop do_desktop; phase_end
   phase link; step address do_address
   if [ "$OFFLINE" = 1 ]; then

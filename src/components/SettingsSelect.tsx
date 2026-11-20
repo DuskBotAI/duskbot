@@ -1,6 +1,8 @@
 import { Children, isValidElement, useEffect, useId, useLayoutEffect, useRef, useState, type ReactElement, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { cn } from "@/lib/cn";
+import { triggerSystemControl, useSystemControl } from "@/lib/system-control";
+import { systemMenu } from "@/lib/system-menu";
 import { Icon } from "./Icon";
 import { useMenuMotion } from "./MenuMotion";
 import { Segmented } from "./ui/Segmented";
@@ -63,6 +65,29 @@ function SelectMenu({ value, onChange, options: given, children, disabled, class
   const trigger = useRef<HTMLButtonElement>(null);
   const list = useRef<HTMLDivElement>(null);
   const id = useId();
+  const plain = options.every((option) => typeof option.label === "string" && !option.preview);
+  const system = useSystemControl(
+    trigger,
+    plain
+      ? {
+          kind: "popup",
+          title: String(selected?.label ?? value),
+          value,
+          options: options.map((option) => ({
+            key: option.value,
+            label: option.label as string,
+            disabled: option.disabled,
+          })),
+          disabled,
+          label,
+        }
+      : null,
+    (next) => {
+      if (typeof next !== "string") return;
+      const option = options.find((item) => item.value === next);
+      if (option && !option.disabled && option.value !== value) onChange({ target: { value: option.value } });
+    },
+  );
 
   // the menu stays where it opened while it fades out, as Grok's does
   const motion = useMenuMotion(open);
@@ -79,8 +104,22 @@ function SelectMenu({ value, onChange, options: given, children, disabled, class
   const pressed = useRef(false);
   const show = () => {
     if (disabled) return;
-    setActive(Math.max(0, options.findIndex((option) => option.value === value)));
-    setOpen(true);
+    const openFallback = () => {
+      const menu = systemMenu();
+      if (menu && trigger.current && plain) {
+        void menu(trigger.current.getBoundingClientRect(), options.map((option) => ({
+          key: option.value, label: option.label as string, checked: option.value === value, disabled: option.disabled,
+        }))).then((key) => { if (key !== null) choose(options.findIndex((option) => option.value === key)); });
+        return;
+      }
+      setActive(Math.max(0, options.findIndex((option) => option.value === value)));
+      setOpen(true);
+    };
+    if (system && trigger.current) {
+      void triggerSystemControl(trigger.current).then((triggered) => { if (!triggered) openFallback(); });
+      return;
+    }
+    openFallback();
   };
 
   useLayoutEffect(() => {
@@ -127,11 +166,14 @@ function SelectMenu({ value, onChange, options: given, children, disabled, class
         type="button"
         role="combobox"
         aria-label={label}
+        aria-hidden={system || undefined}
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-controls={open ? `${id}-list` : undefined}
+        tabIndex={system ? -1 : undefined}
         disabled={disabled}
         data-settings-select={rest["data-settings-select"] ?? ""}
+        data-system-popup={system ? "" : undefined}
         onPointerDown={(event) => {
           if (event.pointerType !== "mouse" || event.button !== 0) return;
           pressed.current = true;
@@ -155,11 +197,12 @@ function SelectMenu({ value, onChange, options: given, children, disabled, class
           "outline-none focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-focus",
           "disabled:cursor-default disabled:opacity-50 disabled:hover:bg-ink/4",
           className,
+          system && "h-auto min-h-6 max-w-[200px] rounded-none bg-transparent p-0 text-[17px] leading-[22px] opacity-0",
         )}
       >
         {selected?.preview && <span data-select-preview="" className="flex shrink-0 items-center">{selected.preview}</span>}
         <span className="min-w-0 flex-1 truncate text-start">{selected?.label ?? value}</span>
-        <Icon name="chevron-down" size={10} className="shrink-0 text-ink/[0.66] transition-[rotate] duration-150 ease-out group-aria-expanded:rotate-180 group-aria-expanded:text-ink motion-reduce:transition-none" />
+        <Icon name="chevron-down" size={system ? 16 : 10} className="shrink-0 text-ink/[0.66] transition-[rotate] duration-150 ease-out group-aria-expanded:rotate-180 group-aria-expanded:text-ink motion-reduce:transition-none" />
       </button>
       {motion.shown && place && createPortal(
         <div

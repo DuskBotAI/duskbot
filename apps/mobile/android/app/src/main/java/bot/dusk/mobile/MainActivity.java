@@ -2,6 +2,7 @@ package bot.dusk.mobile;
 
 import android.content.pm.PackageManager;
 import android.os.Bundle;
+import androidx.activity.EdgeToEdge;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 import com.getcapacitor.BridgeActivity;
@@ -15,7 +16,11 @@ public class MainActivity extends BridgeActivity {
     public void onCreate(Bundle savedInstanceState) {
         registerPlugin(SpeechRecognizerPlugin.class);
         registerPlugin(PushSetupPlugin.class);
+        registerPlugin(HapticsPlugin.class);
+        registerPlugin(InsetsPlugin.class);
+        registerPlugin(ShortcutsPlugin.class);
         super.onCreate(savedInstanceState);
+        EdgeToEdge.enable(this);
         requestLocalNetworkPermissionIfSupported();
     }
 

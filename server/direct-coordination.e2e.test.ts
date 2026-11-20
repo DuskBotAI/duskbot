@@ -448,7 +448,7 @@ it("returns nested results after Claude rejects the source's prior resume cursor
   expect(transcript.some((message: any) => message.tool?.name === `notice: ${rebuiltSessionNotice()}`)).toBe(true);
 }, { FAKE_CLAUDE_MODE: "dead-session", FAKE_CLAUDE_EXIT_AFTER_TURN: "1" }), 45_000);
 
-it("runs a teammate's work with the recipient chat's own settings, and never writes the Chief's level onto that chat", () => fixture(async f => {
+it("runs a teammate's work with the recipient chat's own model, and never writes the Chief's level onto that chat", () => fixture(async f => {
   const models = await f.cli("models");
   const options = models.instances.find((instance: any) => instance.instanceId === f.lead.modelSelection.instanceId).models.options;
   const selected = options.find((model: any) => model.id !== f.lead.modelSelection.model);
@@ -459,7 +459,8 @@ it("runs a teammate's work with the recipient chat's own settings, and never wri
   expect(node.threadId).toBe(f.lead.activeTaskId);
   expect(lead.tasks).toHaveLength(1);
   expect(lead.tasks[0]).toMatchObject({ modelSelection: { model: selected.id }, approvalMode: "edits" });
-  expect(f.evidence().filter((turn: any) => turn.botId === f.lead.id).every((turn: any) => turn.model === selected.id && turn.permissionMode !== "bypassPermissions")).toBe(true);
+  // the Chief's level rides only the hand-off's own turn (aa13f2c8c7); the chat keeps "edits" above
+  expect(f.evidence().filter((turn: any) => turn.botId === f.lead.id).every((turn: any) => turn.model === selected.id)).toBe(true);
 }), 45_000);
 
 const sendReceipts = (f: any, botId: string) => f.evidence().filter((turn: any) => turn.botId === botId)

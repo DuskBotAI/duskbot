@@ -4,6 +4,7 @@ import { useUpsellShown } from "@/lib/cloud-upsell";
 import { activeLocale, t } from "@/lib/i18n";
 import type { LateRoutineRun } from "@/lib/late-routine";
 import { routineDateTime } from "@/lib/routine-display";
+import { sleepDevice, type RoutineSleep } from "@/lib/routine-sleep";
 import { NoticeCard, NotNowButton, PRIMARY_BUTTON } from "./NoticeCard";
 import { deviceWord } from "./vps-link/parts";
 import { deviceHourCycle } from "@/lib/format-time";
@@ -42,6 +43,25 @@ export function AsleepWorkCard({ slept, onStart, onNotNow }: { slept: AsleepWork
     <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
       <button type="button" data-asleep-work-start="" className={PRIMARY_BUTTON} onClick={onStart}>{t("routines.late.start")}</button>
       <NotNowButton onClick={onNotNow} />
+    </div>
+  </NoticeCard>;
+}
+
+export const sleepDeviceWord = () => t(`vpsLink.device.${sleepDevice(typeof window === "undefined" ? undefined : window.duskDesktop?.platform)}`);
+
+/** This computer's sleep is costing its routines: run them on dusk cloud, or keep it awake while plugged in. Shown once,
+ * in the corner, never over a chat. */
+export function RoutineSleepCard({ sleep, onCloud, onKeepAwake, onDismiss }: { sleep: RoutineSleep; onCloud: () => void; onKeepAwake: () => void; onDismiss: () => void }) {
+  useUpsellShown("app_late_routine");
+  const device = sleepDeviceWord();
+  return <NoticeCard titleId="routine-sleep-title" notice="routine-sleep" icon={AlarmClock} pixel="laptop"
+    title={t("routines.sleep.title", { device })} onDismiss={onDismiss}>
+    <p className="mt-2 text-[13px] leading-relaxed text-ink-secondary">
+      {sleep.reason === "missed" ? t("routines.sleep.bodyMissed", { count: sleep.count }) : t("routines.sleep.bodySlept")}
+    </p>
+    <div className="mt-3 flex flex-col items-stretch gap-2">
+      <button type="button" data-routine-sleep-cloud="" className={PRIMARY_BUTTON} onClick={onCloud}>{t("routines.sleep.cloud")}</button>
+      <button type="button" data-routine-sleep-awake="" className="ui-button min-h-9 px-3 py-1.5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus" onClick={onKeepAwake}>{t("routines.sleep.awake", { device })}</button>
     </div>
   </NoticeCard>;
 }

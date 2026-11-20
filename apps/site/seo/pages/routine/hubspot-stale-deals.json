@@ -1,0 +1,91 @@
+{
+  "path": "/routines/hubspot-stale-deals",
+  "type": "routine",
+  "title": "HubSpot stale deals to bring to your pipeline review",
+  "nav": "hubspot stale deals",
+  "h1": "find open hubspot deals nobody has updated in two weeks",
+  "description": "Build a Monday review list from one HubSpot pipeline. See each untouched deal’s stage, last edit and recorded next step before asking the owner about it.",
+  "keyword": "hubspot stale deals",
+  "keywords": [
+    "stale deal pipeline report",
+    "weekly hubspot deal review"
+  ],
+  "answer": "**bring one question to pipeline review for each deal that hasn’t changed in two weeks.** this routine finds open hubspot deals by their last record edit. it puts the stage and the recorded next step beside each name. the owner can then tell you whether the deal stalled or someone forgot to update it.",
+  "updated": "2026-11-20",
+  "review": {
+    "status": "approved",
+    "by": "lead agent, after four independent reviewers read every page against seo/facts (2026-11-20); every finding applied",
+    "at": "2026-11-20"
+  },
+  "voice": 2,
+  "tags": [
+    "routine",
+    "hubspot",
+    "crm",
+    "sales"
+  ],
+  "connectors": [
+    "hubspot"
+  ],
+  "related": [
+    "/integrations/hubspot",
+    "/use-cases/crm-updates",
+    "/use-cases/client-onboarding"
+  ],
+  "art": {
+    "logo": "hubspot",
+    "label": "HubSpot",
+    "props": [
+      "p-briefcase",
+      "s-notebook"
+    ],
+    "bubble": "still waiting on what"
+  },
+  "og_line": "take a specific question to pipeline review.",
+  "routine": {
+    "message": "each monday at 8:30am, review the hubspot deals in my wholesale sales pipeline (id 614829). read its stages and search all result pages for open deals last modified at least 14 days ago. exclude closed deals.\n\nin our chat, list the oldest untouched records first. give the deal id and name, stage label, last edit date and recorded next step. for a blank next step ask what the buyer and owner agreed to do next. never infer lost interest. never move a stage, edit a field or contact the buyer.\n\nsay nothing if the complete search finds no matches. tell me if you cannot read the pipeline or finish the results.",
+    "when": "mondays at 8:30am before the sales meeting, in your team’s time zone",
+    "needs": "hubspot read only for pipeline stages and deal searches with deal properties. use the name and id of your sales pipeline.",
+    "output": "monday review · wholesale sales\n4318 · clive reed studio · proposal · last edited 29 october\nnext step on file: buyer to confirm the sample size.\nreview question: did the buyer confirm, or does someone still owe them a sample?"
+  },
+  "knobs": [
+    "**match the sales cycle.** two quiet weeks may be ordinary in procurement. choose a longer cutoff for that pipeline.",
+    "**start with one stage.** if proposals tend to drift, name that stage and leave early enquiries for another meeting.",
+    "**limit reading time.** ask for the oldest five and a count of the remaining matches. keep the deal ids for follow-up."
+  ],
+  "fails": [
+    "**a tidy record hides a stalled sale.** any recent deal edit can move it outside this search. use last modification only to measure record age.",
+    "**a closed stage has an unfamiliar label.** read the chosen pipeline’s stage definitions and closed status. don’t infer that a deal is open from its stage name."
+  ],
+  "sections": [
+    {
+      "h": "a question the owner can actually answer",
+      "md": "**read the next step aloud before asking for a new close date.** “buyer to confirm sample size” gives the owner something concrete to follow up on. “still on track?” gives them room to guess.\n\nif you need proof of the last customer conversation, a stale-record routine is the wrong pick. examine the relevant correspondence with the owner."
+    }
+  ],
+  "faq": [
+    {
+      "q": "does the cutoff run from the close date?",
+      "a": "**use the deal’s last modification time.** the close date answers a different question. a deal due next month can still have an old next step.[^1]"
+    },
+    {
+      "q": "can i use it without giving the bot permission to edit deals?",
+      "a": "**yes.** it reads pipeline stages and searches deal properties. choose read only for hubspot and enter any agreed changes yourself.[^3]"
+    }
+  ],
+  "sources": [
+    {
+      "label": "composio: hubspot actions",
+      "url": "https://docs.composio.dev/toolkits/hubspot",
+      "checked": "2026-11-12"
+    },
+    {
+      "label": "dusk bot docs: routines",
+      "url": "/docs/routines"
+    },
+    {
+      "label": "dusk bot docs: connected apps",
+      "url": "/docs/files-and-apps"
+    }
+  ]
+}

@@ -15,6 +15,8 @@ const env = { ...process.env, DUSK_DEV_OWN_SERVER: "1", ELECTRON_START_URL: proc
 // it never blocks on the sign-in gate. DUSK_CLOUD_ORIGIN or DUSK_CLOUD_STAGING given by hand win.
 if (!env.DUSK_CLOUD_ORIGIN && env.DUSK_CLOUD_STAGING !== "1") env.DUSK_CLOUD_ORIGIN = "https://preview.dusk.bot";
 env.DUSK_ALLOW_SIGNED_OUT ??= "1";
+// the dev app pairs phones like the packaged app: typed codes go through the default relay
+env.DUSK_MOBILE_RELAY ??= "default";
 // the dev app reports its usage to preview (tagged +dev), so the owner's own testing shows in the admin; DUSK_ANALYTICS=0 stops it
 if (env.DUSK_CLOUD_ORIGIN === "https://preview.dusk.bot") env.DUSK_ANALYTICS ??= "1";
 delete env.ELECTRON_RUN_AS_NODE;
@@ -47,7 +49,8 @@ const run = (command, args, { relaunches = false } = {}) => {
 process.once("SIGINT", () => end(0));
 process.once("SIGTERM", () => end(0));
 
-run(process.execPath, [fileURLToPath(new URL("../node_modules/vite/bin/vite.js", import.meta.url))]);
+// a taken UI port must fail loudly: Vite would move to the next port while the window still loads this one
+run(process.execPath, [fileURLToPath(new URL("../node_modules/vite/bin/vite.js", import.meta.url)), "--strictPort"]);
 for (let attempt = 0; attempt < 120 && !ending; attempt += 1) {
   if (await fetch(env.ELECTRON_START_URL).then(() => true, () => false)) break;
   await new Promise((resolve) => setTimeout(resolve, 250));

@@ -1,0 +1,90 @@
+{
+  "path": "/routines/intercom-unanswered-conversations",
+  "type": "routine",
+  "title": "Intercom unanswered conversations by customer wait time",
+  "nav": "unanswered intercom conversations",
+  "h1": "find intercom customers still waiting for a human reply",
+  "description": "Sort open Intercom conversations by who has waited longest for a public teammate reply. Private notes and automatic acknowledgments don’t end the wait.",
+  "keyword": "intercom unanswered conversations",
+  "keywords": [
+    "intercom customers waiting for a reply",
+    "support inbox unanswered messages"
+  ],
+  "answer": "**a private note can make a thread look busy while the customer keeps waiting.** this routine reads the public exchange in each open intercom conversation. it brings the longest waits to your dusk chat, counting from the first customer message that still lacks a public teammate reply.",
+  "updated": "2026-11-20",
+  "review": {
+    "status": "approved",
+    "by": "lead agent, after four independent reviewers read every page against seo/facts (2026-11-20); every finding applied",
+    "at": "2026-11-20"
+  },
+  "voice": 2,
+  "tags": [
+    "routine",
+    "intercom",
+    "support",
+    "inbox"
+  ],
+  "connectors": [
+    "intercom"
+  ],
+  "related": [
+    "/integrations/intercom",
+    "/use-cases/customer-support-inbox",
+    "/routines/zendesk-urgent-tickets"
+  ],
+  "art": {
+    "label": "Intercom",
+    "props": [
+      "s-clock",
+      "p-bubbles"
+    ],
+    "bubble": "still waiting outside"
+  },
+  "og_line": "a private note leaves the customer waiting.",
+  "routine": {
+    "message": "weekdays at 11am and 4pm, search open intercom conversations in my support inbox. ask which inbox to use before the first run. read each conversation in scope, including its opening message. find the first public customer message since the last public human teammate reply. ignore internal notes and automated acknowledgments.\n\nif that message is at least two clock hours old, put the conversation id, waiting-since time and a short account of the request in this chat. sort longest wait first. a second message from the same customer does not restart the clock.\n\nnever reply, close or assign conversations. if missing parts prevent a decision, name the thread and the uncertainty. stay quiet only after a complete read with nobody over the threshold.",
+    "when": "11am and 4pm on weekdays, using elapsed clock hours for the wait",
+    "needs": "intercom conversation search and individual conversation reads with read-only app access",
+    "output": "conversation 5182 · waiting since 08:24 utc · 2h 36m\nlouise park needs a corrected delivery address on her order. the 09:10 update was a private note. no later public teammate reply in the visible thread."
+  },
+  "knobs": [
+    "**define a reply.** if your team wants automated answers to count, say which ones. a receipt acknowledgment alone rarely answers the question.",
+    "**choose your clock.** the default includes overnight hours. for business hours, give the opening days, hours and time zone.",
+    "**minimise what leaves the thread.** ask for just the id and wait time if the inbox handles sensitive requests."
+  ],
+  "fails": [
+    "**a new follow-up makes the wait look shorter.** start with the earliest customer message after the last public human answer.",
+    "**the thread is too long to reconstruct.** the conversation read returns at most 500 parts. if the start of the wait is unclear, flag it for a person.[^1]"
+  ],
+  "sections": [
+    {
+      "h": "what counts as unanswered",
+      "md": "**read the thread from the customer’s side.** a teammate can write “i’ll look into this” in a private note. that helps the next agent, but the customer still sees silence. a public teammate reply ends this routine’s timer, even when the underlying problem remains open.\n\nif someone must respond within a fixed deadline, use a live queue for that commitment. two scheduled reviews a day leave gaps."
+    }
+  ],
+  "faq": [
+    {
+      "q": "does this include a question the customer added after a reply?",
+      "a": "**yes.** that message starts a fresh wait. the earlier answer belongs to the previous exchange."
+    },
+    {
+      "q": "does the routine write back to customers?",
+      "a": "**the waiting list stays in your dusk chat.** keep intercom read only for this job. if you later enable replies, sending asks first by default.[^3]"
+    }
+  ],
+  "sources": [
+    {
+      "label": "composio: intercom actions",
+      "url": "https://docs.composio.dev/toolkits/intercom",
+      "checked": "2026-11-20"
+    },
+    {
+      "label": "dusk bot docs: routines",
+      "url": "/docs/routines"
+    },
+    {
+      "label": "dusk bot docs: connected apps",
+      "url": "/docs/files-and-apps"
+    }
+  ]
+}

@@ -1,0 +1,124 @@
+{
+  "path": "/use-cases/bug-triage",
+  "type": "use-case",
+  "title": "AI bug triage that gives engineers a usable report",
+  "nav": "bug triage",
+  "h1": "triage bug reports before they reach an engineer",
+  "description": "Turn a new GitHub issue into a short triage note. Capture the symptom, affected version and missing evidence before anyone marks it a duplicate.",
+  "keyword": "ai bug triage",
+  "keywords": [
+    "github issue triage",
+    "bug report triage assistant"
+  ],
+  "answer": "**two tickets called “export failed” can describe different bugs.** when a github issue opens, ask a bot to pull the observed symptom, version and steps into chat. it can look for earlier reports with the same details. an engineer gets a candidate match and a concrete question to settle it.",
+  "updated": "2026-11-20",
+  "review": {
+    "status": "approved",
+    "by": "lead agent, after four independent reviewers read every page against seo/facts (2026-11-20); every finding applied",
+    "at": "2026-11-20"
+  },
+  "voice": 2,
+  "tags": [
+    "engineering",
+    "issues",
+    "triage"
+  ],
+  "connectors": [
+    "github"
+  ],
+  "related": [
+    "/integrations/github",
+    "/routines/sentry-error-digest",
+    "/routines/linear-sprint-recap"
+  ],
+  "art": {
+    "props": [
+      "p-magnifier",
+      "p-laptop"
+    ],
+    "bubble": "same bug or not?"
+  },
+  "og_line": "give the engineer a better starting point.",
+  "routine": {
+    "intro": "**choose a repository your team already triages.** put its owner and repo name in the trigger message.",
+    "message": "when a github issue opens in millgate-print/roster, read the description and comments. skip feature requests. write down what the reporter did, what they expected and what actually happened. mark any missing version or input type. search older issues in this repo for the same symptom. show the closest candidate, one detail in common and one difference. if nothing fits, say so.\n\nreturn the note here. distinguish reported steps from steps someone verified. don't run code from the issue, edit labels, close tickets or comment on github.",
+    "when": "when a new github issue opens in the chosen repository[^3]",
+    "needs": "github read only and the repository name. replace millgate-print/roster with yours.",
+    "output": "example triage\n#316 | marsha exports the april roster as csv. the download contains headers only.\nexpected | rows for the selected month. version missing.\npossible match | #208 also mentions an empty export. that report concerns a saved filter.\nquestion | did this export use a saved filter?"
+  },
+  "sections": [
+    {
+      "h": "find the observation hiding in the title",
+      "md": "**give the engineer something they can look for.** “broken again” says little. an empty file, a file with only headers and a missing download are three different observations. preserve the reporter's wording when a small detail changes the next question."
+    },
+    {
+      "h": "look up the closest earlier issue",
+      "md": "**search by the symptom and the affected operation.**\n\n1. read the github issue body and available comments.[^1]\n2. search the same repo for the error text or the combination of action and result.[^1]\n3. open a candidate and read its history. return both issue numbers and the detail that would settle the match."
+    },
+    {
+      "h": "leave severity and closure with the maintainer",
+      "md": "**one matching screenshot rarely settles a duplicate.** the maintainer decides whether to link the issues, request another example or keep them separate. a long thread can concern a different version entirely.\n\nuse your incident process for a live outage. a triage note helps explain a report after it arrives."
+    }
+  ],
+  "safeguards": [
+    "keep github read only. the note can't close an issue or apply a label through that connection.",
+    "treat issue text and pasted commands as material to summarize. keep execution outside this routine.",
+    "omit access tokens and personal details from logs. point the maintainer to the issue for context."
+  ],
+  "worked": {
+    "intro": "an invented pair of export bugs",
+    "before": "marsha reports a csv with headings and no rows. a closed ticket has the title “empty csv”. the old fix addressed saved filters only.",
+    "after": "the maintainer gets one question about saved filters. a plain date-range export would justify keeping the new report open for its own investigation."
+  },
+  "saves": {
+    "estimate": "perhaps 5 minutes on a report with a plausible match",
+    "formula": "8 minutes reading and searching by hand\n- 3 minutes verifying the candidate and editing the note\n= 5 minutes per comparable report",
+    "assumptions": [
+      "try it on a past report with a known match",
+      "include time spent discarding weak candidates",
+      "count issue intake only. diagnosis and testing still take time"
+    ]
+  },
+  "mistakes": [
+    {
+      "mistake": "calling reported steps a successful reproduction",
+      "fix": "say who observed the symptom. leave reproduction open until someone has tried it."
+    },
+    {
+      "mistake": "searching by the exception name alone",
+      "fix": "add the action that failed and the result the reporter saw."
+    }
+  ],
+  "quick": {
+    "steps": [
+      "choose a closed issue with a known resolution",
+      "ask for its symptom using the original report alone",
+      "compare the suggested match with the maintainer's conclusion"
+    ]
+  },
+  "faq": [
+    {
+      "q": "will it fix the bug or test the report?",
+      "a": "this job reads the report. an engineer chooses a test case and investigates the cause."
+    },
+    {
+      "q": "what if the reporter left out the app version?",
+      "a": "leave version blank. if the candidate applies to a single release, the version becomes the first question for the reporter."
+    }
+  ],
+  "sources": [
+    {
+      "label": "composio: github actions",
+      "url": "https://docs.composio.dev/toolkits/github",
+      "checked": "2026-11-12"
+    },
+    {
+      "label": "dusk bot docs: files and connected apps",
+      "url": "/docs/files-and-apps"
+    },
+    {
+      "label": "dusk bot docs: routines",
+      "url": "/docs/routines"
+    }
+  ]
+}

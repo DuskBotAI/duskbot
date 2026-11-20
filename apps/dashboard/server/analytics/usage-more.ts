@@ -4,6 +4,7 @@ import { LATENCY_EDGES, REASON_WORDS, type PersonDay, type RoutineSpan, type Sna
 import type { StoredEvent } from "./sink.ts";
 import type { FocusItem } from "./usage-summary.ts";
 import { ACCOUNT_SIGN_IN_STEPS } from "../../../../shared/product-signals.ts";
+import { cancelledFeedback, type RetentionOutcome } from "../../../../shared/billing-api.ts";
 
 const DAY = 86_400_000;
 export interface Count { key: string; count: number }
@@ -12,7 +13,7 @@ export interface MoreAnswer {
   setup: { onboarding: Array<{ step: string; reached: number; medianMs: number | null }>; signIn: RateRow[]; account: AccountFunnel; handoff: HandoffStep[] };
   reliability: { firstP50: number | null; firstP90: number | null; engines: Array<{ key: string; turns: number; p50: number | null; p90: number | null; firstP50: number | null }>;
     models: Array<{ key: string; turns: number; p50: number | null; firstP50: number | null; failRate: number | null }>; toolErrors: Array<{ kind: "tool" | "app"; key: string; errors: number; turns: number; rate: number | null }>;
-    crashes: { count: number; people: number; top: Count[] }; wake: { count: number; p50Ms: number | null; p90Ms: number | null } };
+    toolFailures: ToolFailureRow[]; crashes: { count: number; people: number; top: Count[] }; wake: { count: number; p50Ms: number | null; p90Ms: number | null } };
   engagement: { sessionsPerPersonDay: number | null; sessionMedianMs: number | null; hours: number[]; weekdays: number[]; turnsPerChat: number | null; chatsPerPersonDay: number | null;
     attachments: Count[]; attachmentSizes: Count[]; chatsDeleted: number; archivedShare: number | null; settings: Count[] };
   bots: { perPerson: number | null; engines: Count[]; topBotShare: number | null; memory: Count[]; roles: Count[] };
@@ -22,6 +23,9 @@ export interface MoreAnswer {
   discovery: Array<{ feature: string; people: number; share: number | null; medianDays: number | null }>;
   setups: Record<"version" | "os" | "arch" | "locale" | "screen" | "theme" | "skin" | "notifications", Count[]>;
 }
+/** one failed tool (`browser.navigate`, `computer.click` or a tool kind) and error class: turns it failed in, failed
+ *  calls, and people it happened to. `schema_invalid` rows are the model's bad arguments and sort after real breakage */
+export interface ToolFailureRow { tool: string; error: string; turns: number; calls: number; people: number }
 /** the first run's account sign-in: installs that reached each step, attempts by method, and why attempts failed */
 export interface AccountFunnel { steps: Array<{ step: string; reached: number }>; methods: RateRow[]; errors: Count[] }
 /** one step of the sign-up handoff from the app's account step to the website and back: people who reached it, and the
@@ -30,7 +34,7 @@ export interface HandoffStep { step: string; side: "app" | "web"; from: string |
 export interface MoreInput {
   days: string[]; daily: Map<string, Record<string, number>>; people: PersonDay[]; snapshots: SnapshotRow[]; routines: RoutineSpan[]; events: StoredEvent[];
   billing: { checkouts: Array<{ accountId: string; status: string; createdAt: number }>; subscriptions: Array<{ accountId: string; totalCents: number; createdAt: number; status: string }>;
-    feedback: Array<{ answer: string; at: number }> };
+    feedback: Array<{ answer: string; at: number; outcome?: RetentionOutcome }> };
   accounts: ReadonlyArray<{ id: string; createdAt: number }>; from: number; to: number; now: number;
   /** cloud wake times as the slack edge measures them, per desktop kind */
   wake?: { count: number; p50Ms: number | null; p90Ms: number | null };
@@ -72,6 +76,11 @@ export function moreOf(input: MoreInput): MoreAnswer {
     ...keys("tool_err:").map(key => ({ kind: "tool" as const, key, errors: total(`tool_err:${key}`), turns: total(`tool:${key}`) })),
     ...keys("app_err:").map(key => ({ kind: "app" as const, key, errors: total(`app_err:${key}`), turns: total(`app:${key}`) })),
   ].map(row => ({ ...row, rate: rate(row.errors, row.turns) })).sort((a, b) => b.errors - a.errors);
+  const toolFailures = keys("tfail:").map(key => {
+    const split = key.lastIndexOf("|");
+    return { tool: key.slice(0, split).replace(":", "."), error: key.slice(split + 1), turns: total(`tfail:${key}`), calls: total(`tfail_calls:${key}`),
+      people: new Set(input.people.filter(row => (row.fails?.[key] ?? 0) > 0).map(row => row.accountId)).size };
+  }).sort((a, b) => Number(a.error === "schema_invalid") - Number(b.error === "schema_invalid") || b.turns - a.turns);
   const errors = byName("app_error");
   const crashes = { count: errors.length, people: new Set(errors.map(event => event.accountId ?? event.ctx?.install).filter(Boolean)).size, top: counts(errors.map(event => `${event.props.kind}:${event.props.code}`)).slice(0, 8) };
   const people = input.people.filter(row => row.turns > 0), personDays = people.length;
@@ -131,7 +140,7 @@ export function moreOf(input: MoreInput): MoreAnswer {
   const setupsOf = (key: string) => counts(env.map(event => String(event.props[key] ?? "")).filter(Boolean));
   return {
     setup: { onboarding, signIn: signInRows(events), account: accountFunnel(events), handoff: handoffFunnel(events) },
-    reliability: { firstP50: bucketQuantile(buckets("first:"), 0.5), firstP90: bucketQuantile(buckets("first:"), 0.9), engines, models: models.slice(0, 15), toolErrors: toolErrors.slice(0, 20), crashes,
+    reliability: { firstP50: bucketQuantile(buckets("first:"), 0.5), firstP90: bucketQuantile(buckets("first:"), 0.9), engines, models: models.slice(0, 15), toolErrors: toolErrors.slice(0, 20), toolFailures: toolFailures.slice(0, 30), crashes,
       wake: input.wake ?? { count: 0, p50Ms: null, p90Ms: null } },
     engagement: { sessionsPerPersonDay: rate(opens.length, openDays), sessionMedianMs: median(closes.map(event => Number(event.props.ms)).filter(ms => ms > 0)), hours, weekdays,
       turnsPerChat: median(chatTurns), chatsPerPersonDay: rate(sum(chatsPerDay), personDays), attachments: keys("sig:attachment:kind:").map(key => ({ key, count: total(`sig:attachment:kind:${key}`) })).sort((a, b) => b.count - a.count),
@@ -143,7 +152,7 @@ export function moreOf(input: MoreInput): MoreAnswer {
     routines: { every: keys("every:").map(key => { const n = total(`every:${key}`), bad = total(`every_fail:${key}`); return { key, total: n, good: n - bad, bad, rate: rate(n - bad, n) }; }).sort((a, b) => b.total - a.total),
       runP50: bucketQuantile(buckets("run_ms:"), 0.5), survival: { eligible: eligible.length, survived: survived.length, share: rate(survived.length, eligible.length) } },
     money: { planViews, checkouts: { started: checkouts.length, paid, abandoned, rate: rate(paid, checkouts.length) },
-      cancelReasons: counts(input.billing.feedback.filter(entry => entry.at >= input.from && entry.at < input.to).map(entry => entry.answer)), upgrades, downgrades },
+      cancelReasons: counts(input.billing.feedback.filter(entry => entry.at >= input.from && entry.at < input.to && cancelledFeedback(entry)).map(entry => entry.answer)), upgrades, downgrades },
     discovery,
     setups: { version: counts(opens.map(event => String(event.props.appVersion ?? "")).filter(Boolean)).slice(0, 8), os: setupsOf("os"), arch: setupsOf("arch"), locale: setupsOf("locale"), screen: setupsOf("screen"),
       theme: setupsOf("theme"), skin: setupsOf("skin"), notifications: setupsOf("notifications") },

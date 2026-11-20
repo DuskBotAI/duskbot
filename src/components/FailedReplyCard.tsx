@@ -9,6 +9,7 @@ import { providerName } from "@/lib/simple-model-menu";
 import { openPlaceAction, placeRowViewFor, usePlaceSeat, worksOnSimpleLabel } from "@/lib/place-view";
 import { useStore, type Message, type ModelSelection } from "@/state/store";
 import { failedTurnCause } from "../../shared/failed-turn";
+import { failurePlan, type FailureAction } from "../../shared/failure-plan";
 import { freeFallback } from "../../shared/ai-ranking";
 import { engineReady } from "./EngineLibrary";
 import { ConnectAiDialog } from "./onboarding/ConnectAi";
@@ -55,7 +56,10 @@ export function foldedNoticeIds(rows: TrailingRows | null): ReadonlySet<string> 
 
 const noticeText = (m: Message) => (m.bugReport && bugReportFixedText(m.bugReport)) ?? statusActivity(m)?.text ?? "";
 const openEngines = { type: "toggleAppSettings", open: true, section: "engines" } as const;
+const openKeys = { type: "toggleAppSettings", open: true, section: "connections" } as const;
+const openPlan = { type: "toggleAppSettings", open: true, section: "cloudAccount" } as const;
 
+type CardAction = { label: string; onClick: () => void };
 
 /** grok's failed-reply card: one card just above the composer for every reply the newest turn lost, gone once anything
  * newer lands or it is closed. In a group it names who couldn't reply and says the reason a person can fix. */
@@ -158,9 +162,9 @@ export function FailedReplyCard({ rows, group = false, botId: ownBotId, threadId
   const onServer = aiRunsOnServer(state.config, capabilities);
   const engineName = lead.engine?.displayName ?? t("failedReply.yourAi");
   const cause = failedTurnCause(tool.name) ?? "";
-  let detail: string | null = failedReplyDetail(lead.kind, engineName, onServer, cause);
+  let detail: string | null = failedReplyDetail(lead.kind, engineName, onServer);
   let did: string | null = null;
-  const actions: Array<{ label: string; onClick: () => void }> = [];
+  const actions: CardAction[] = [];
   const retry = onRetry;
   let update = null;
   if (lead.kind === "place" && tool.place && leadBotId) {
@@ -178,11 +182,6 @@ export function FailedReplyCard({ rows, group = false, botId: ownBotId, threadId
   } else if (lead.kind === "claude_update") {
     const target = claudeUpdateTarget(lead.engine);
     if (target) { detail = null; update = <ClaudeUpdatePrompt instance={target} onRetry={retry} />; }
-  } else if (lead.kind === "signed_out") {
-    // Connect an AI, opened on this AI's card; the person presses it to sign in
-    const tile = lead.engine && aiTileOf(lead.engine);
-    if (canOfferSignIn(lead.kind, lead.engine) || signInNotice) actions.push({ label: t("chat.notice.signIn"), onClick: () => tile ? setConnecting(tile) : dispatch(openEngines) });
-    if (retry) actions.push({ label: t("failedReply.tryAgain"), onClick: retry });
   } else if (lead.kind === "restart_interrupted") {
     did = restartAlreadyDid(cause);
     if (retry && confirming === lead.message.id) {
@@ -190,8 +189,6 @@ export function FailedReplyCard({ rows, group = false, botId: ownBotId, threadId
       actions.push({ label: t("failedReply.retryAnyway"), onClick: () => { setConfirming(null); retry(); } });
       actions.push({ label: t("failedReply.retryCancel"), onClick: () => setConfirming(null) });
     } else if (retry) actions.push({ label: t("failedReply.tryAgain"), onClick: () => setConfirming(lead.message.id) });
-  } else if (lead.kind === "usage_limit") {
-    if (resume) actions.push(resume);
   } else if (lead.kind === "no_answer" && !group && tool.rescue) {
     // the first reply never came: what the person can change is the AI, or whose subscription it runs on
     const { rescue } = tool;
@@ -199,24 +196,55 @@ export function FailedReplyCard({ rows, group = false, botId: ownBotId, threadId
     detail = t("chat.rescue.over", { bot: lead.bot?.name ?? "", ai });
     actions.push({ label: t("chat.rescue.switchAi"), onClick: () => openBotSettings(dispatch, "model", { botId: rescue.botId }) });
     actions.push({ label: t("chat.rescue.connect"), onClick: () => dispatch(openEngines) });
-  } else if (lead.kind !== "credits" && retry) {
-    actions.push({ label: t("failedReply.tryAgain"), onClick: retry });
+  } else {
+    const offer = (action: FailureAction | undefined): CardAction | null => {
+      if (action === "retry") return retry ? { label: t("failedReply.tryAgain"), onClick: retry } : null;
+      if (action === "continue_after_reset") return resume ?? null;
+      if (action === "sign_in") {
+        // Connect an AI, opened on this AI's card; an AI the flow can't sign in opens at its place in settings
+        const tile = (canOfferSignIn(lead.kind, lead.engine) || signInNotice) && lead.engine && aiTileOf(lead.engine);
+        return { label: t("chat.notice.signIn"), onClick: () => tile ? setConnecting(tile) : dispatch(openEngines) };
+      }
+      if (action === "update_key") return { label: t("failedReply.updateKey"), onClick: () => dispatch(openKeys) };
+      if (action === "open_plan") return { label: t("failedReply.seePlan"), onClick: () => dispatch(openPlan) };
+      if (action === "open_folder") return leadBotId ? { label: t("botPanel.page.folder"), onClick: () => openBotSettings(dispatch, "access", { botId: leadBotId, page: "folder" }) } : null;
+      if (action === "set_up_engine") return { label: t("failedReply.setUp", { engine: engineName }), onClick: () => dispatch(openEngines) };
+      if (action === "new_chat") return !group && leadBotId ? { label: t("failedReply.newChat"), onClick: () => { close(); dispatch({ type: "newTask", botId: leadBotId }); } } : null;
+      if (action === "switch_ai") return leadBotId ? { label: t("chat.rescue.switchAi"), onClick: () => openBotSettings(dispatch, "model", { botId: leadBotId }) } : null;
+      return null;
+    };
+    const plan = failurePlan(lead.kind);
+    const first = offer(plan.action) ?? offer(plan.instead);
+    const after = first && offer(plan.after);
+    if (first) actions.push(first);
+    if (after) actions.push(after);
   }
   if (actions.length === 0 && !update && lead.kind !== "place" && leadBotId) actions.push({ label: t("chat.rescue.switchAi"), onClick: () => openBotSettings(dispatch, "model", { botId: leadBotId }) });
   // a sign-out notice beside a failure for another reason: still one card, its Sign in a pill on it
   const signInTile = lead.engine && aiTileOf(lead.engine);
   if (signInNotice && !actions.some((action) => action.label === t("chat.notice.signIn"))) actions.unshift({ label: t("chat.notice.signIn"), onClick: () => signInTile ? setConnecting(signInTile) : dispatch(openEngines) });
+  // a usage limit is a wait, not a failure: a calm notice that says until when
+  const limited = lead.kind === "usage_limit";
+  const limitAi = lead.engine ? providerName(lead.engine) : t("failedReply.limitHold.anAi");
+  const title = limited ? (tool.limitResetsAt ? t("failedReply.limitHit", { ai: limitAi, time: resetTime(tool.limitResetsAt) }) : t("failedReply.limitHitUnknown", { ai: limitAi }))
+    : lead.kind === "blocker" ? t("chat.blocker.title") : failedReplyTitle(items.map((item) => item.bot?.name ?? item.message.from?.name ?? ""), group);
   return (
-    <div className="mb-2 w-full px-5" data-failed-reply="">
+    <div className="mb-2 w-full px-5" data-failed-reply="" {...(limited ? { "data-limit-notice": "" } : {})}>
       <ChatErrorCard
-        icon={lead.kind === "usage_limit" ? "batteryFull" : signInNotice ? "key" : lead.kind === "place" ? "offline" : undefined}
-        title={lead.kind === "blocker" ? t("chat.blocker.title") : failedReplyTitle(items.map((item) => item.bot?.name ?? item.message.from?.name ?? ""), group)}
+        tone={limited ? "info" : undefined}
+        icon={limited ? "batteryFull" : signInNotice ? "key" : lead.kind === "place" ? "offline" : undefined}
+        title={title}
         onDismiss={close}
-        actions={actions.length > 0 && actions.slice(0, lead.kind === "blocker" ? 3 : 2).map((action) => (
-          <button key={action.label} type="button" onClick={action.onClick} className={CARD_ACTION}>{action.label}</button>
+        actions={actions.length > 0 && actions.slice(0, lead.kind === "blocker" ? 3 : 2).map((action, index) => (
+          <button key={action.label} type="button" onClick={action.onClick} className={index > 0 && lead.kind !== "blocker" ? QUIET_CARD_ACTION : CARD_ACTION}>{action.label}</button>
         ))}
       >
-        {detail && <p dir="auto" className="text-ink-secondary">{detail}</p>}
+        {detail && (
+          <p dir="auto" className="text-ink-secondary">
+            {detail}
+            {tool.errorRef && !limited && <span data-error-ref="" title={t("failedReply.refTitle")} className="ms-1.5 whitespace-nowrap text-[12px] text-ink-tertiary tabular-nums">{t("failedReply.ref", { ref: tool.errorRef })}</span>}
+          </p>
+        )}
         {did && <p dir="auto" className="text-ink-secondary">{t("failedReply.restartedDid", { done: did })}</p>}
         {update}
       </ChatErrorCard>

@@ -47,3 +47,19 @@ test("watches the main process and page crashes", () => {
   app.emit("render-process-gone", {}, {}, { reason: "clean-exit", exitCode: 0 });
   assert.deepEqual(calls.map(call => call.body.message), ["bad", "page process crashed (exit 9)"]);
 });
+
+test("a gone child names its process and reads its Windows exit code", () => {
+  const { errors, calls } = setup();
+  const app = new EventEmitter();
+  let quitting = false;
+  errors.watch(app, new EventEmitter(), { ending: () => quitting, platform: "win32" });
+  app.emit("child-process-gone", {}, { type: "Utility", name: "dusk bot companion", reason: "crashed", exitCode: -36861 });
+  app.emit("child-process-gone", {}, { type: "Utility", name: "Network Service", reason: "crashed", exitCode: -1073741819 });
+  quitting = true;
+  app.emit("child-process-gone", {}, { type: "GPU", reason: "crashed", exitCode: -1073740791 });
+  assert.deepEqual(calls.map(call => call.body.message), [
+    "Utility process dusk bot companion crashed (exit -36861 0xFFFF7003)",
+    "Utility process Network Service crashed (exit 0xC0000005 access violation)",
+    "GPU process crashed (exit 0xC0000409 fail-fast) while quitting",
+  ]);
+});

@@ -15,8 +15,12 @@ export function compareVersions(a: string | null | undefined, b: string | null |
   return 0;
 }
 
-/** the signed update policy (our account service serves it): the lowest version anything may run, and versions pulled */
-export interface UpdatePolicy { serial: number; floor: string | null; blocked: string[] }
+/**
+ * the signed update policy (our account service serves it): the lowest version anything may run, and versions pulled.
+ * `paused`: nothing installs a new version while set (rollbacks still run). `rollout`: a version's share of desktops
+ * (0 to 100) that may take it; a version not named goes to every one. Installs from before these two ignore them.
+ */
+export interface UpdatePolicy { serial: number; floor: string | null; blocked: string[]; paused?: boolean; rollout?: Record<string, number> }
 export const NO_POLICY: UpdatePolicy = Object.freeze({ serial: 0, floor: null, blocked: [] }) as UpdatePolicy;
 
 /** a policy body as signed; throws on anything else */
@@ -25,11 +29,21 @@ export function parsePolicy(value: unknown): UpdatePolicy {
   if (!body || typeof body !== "object" || !Number.isSafeInteger(body.serial) || (body.serial as number) < 1) throw new Error("Invalid update policy.");
   if (body.floor !== null && !(typeof body.floor === "string" && SEMVER.test(body.floor))) throw new Error("Invalid update policy floor.");
   if (!Array.isArray(body.blocked) || body.blocked.length > 500 || !body.blocked.every(v => typeof v === "string" && SEMVER.test(v))) throw new Error("Invalid update policy block list.");
-  return { serial: body.serial as number, floor: body.floor, blocked: [...new Set(body.blocked)] };
+  if (body.paused !== undefined && typeof body.paused !== "boolean") throw new Error("Invalid update policy pause.");
+  const rollout = body.rollout;
+  if (rollout !== undefined && (!rollout || typeof rollout !== "object" || Array.isArray(rollout) || Object.keys(rollout).length > 50
+    || !Object.entries(rollout).every(([v, share]) => SEMVER.test(v) && Number.isInteger(share) && share >= 0 && share <= 100))) throw new Error("Invalid update policy rollout.");
+  return { serial: body.serial as number, floor: body.floor, blocked: [...new Set(body.blocked)], ...(body.paused ? { paused: true } : {}), ...(rollout && Object.keys(rollout).length ? { rollout: { ...rollout } } : {}) };
+}
+
+/** whether an install in `bucket` (0 to 99, fixed per install) may take `version` under the policy's staged rollout */
+export function inRollout(policy: Pick<UpdatePolicy, "rollout"> | null, version: string, bucket: number): boolean {
+  const share = policy?.rollout?.[version];
+  return share === undefined || bucket < share;
 }
 
 export interface Release { version: string; sha256: string }
-export type Refusal = "invalid" | "not_newer" | "below_floor" | "blocked" | "failed_here";
+export type Refusal = "invalid" | "paused" | "not_newer" | "below_floor" | "blocked" | "failed_here";
 
 /** busy codes (server/cloud-power.ts) that hold an update: a turn, a routine run, an upload or a backup (both
  * "maintenance"), a live call, a bot computer in use */
@@ -64,6 +78,7 @@ const allowed = (version: string, policy: UpdatePolicy) => !policy.blocked.inclu
 /** why `offer` may not be installed over what runs now, or null when it may */
 export function refusal(record: UpdateRecord, offer: Release): Refusal | null {
   if (!SEMVER.test(offer.version) || !/^[a-f0-9]{64}$/.test(offer.sha256)) return "invalid";
+  if (record.policy.paused) return "paused";
   if (record.policy.blocked.includes(offer.version)) return "blocked";
   if (record.policy.floor !== null && compareVersions(offer.version, record.policy.floor) < 0) return "below_floor";
   if (record.failed.includes(offer.version)) return "failed_here";
@@ -74,7 +89,7 @@ export function refusal(record: UpdateRecord, offer: Release): Refusal | null {
 /** a newer signed policy replaces the one held; an older or equal serial is ignored (a replayed policy never loosens it) */
 export function acceptPolicy(record: UpdateRecord, policy: UpdatePolicy): boolean {
   if (policy.serial <= record.policy.serial) return false;
-  record.policy = { serial: policy.serial, floor: policy.floor, blocked: [...policy.blocked] };
+  record.policy = { serial: policy.serial, floor: policy.floor, blocked: [...policy.blocked], ...(policy.paused ? { paused: true } : {}), ...(policy.rollout ? { rollout: { ...policy.rollout } } : {}) };
   return true;
 }
 

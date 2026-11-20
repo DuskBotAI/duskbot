@@ -244,8 +244,9 @@ export function ServerPairingCard({ initialSession = null, cloudHome = false, fo
           <div data-pairing-offer={live ? "" : undefined} className="flex flex-col items-start gap-2 px-2.5 py-2">
             {live && <code aria-label={t("settings.w6.pairing.code")} className="select-all whitespace-nowrap font-mono text-[22px] leading-8 tracking-[0.1em] text-ink">{live.code}</code>}
             <p className="m-0 text-[13px] leading-[18px] text-ink-secondary">
-              {live ? t("settings.elsewhere.codeLive", { minutes: minutesLeft(live.expiresAt, now) }) : expired ? t("remote.serverPairing.expired") : t("settings.elsewhere.codeHint")}
+              {live ? t(live.url ? "settings.elsewhere.codeLive" : "remote.serverPairing.expires", { minutes: minutesLeft(live.expiresAt, now) }) : expired ? t("remote.serverPairing.expired") : t("settings.elsewhere.codeHint")}
             </p>
+            {live && !live.url && <p data-pairing-no-address="" className="m-0 text-[13px] leading-[18px] text-ink-secondary [text-wrap:pretty]">{t("settings.elsewhere.noAddress")}</p>}
             <div className="flex flex-wrap items-center gap-2">
               {live && (
                 <button type="button" data-pairing-copy="" className="ui-button ui-button-primary" onClick={() => void copyCode()}>

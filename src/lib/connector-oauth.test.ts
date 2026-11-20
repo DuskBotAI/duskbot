@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { reserveConnectionPage, reusableConnectionUrl } from "./connector-oauth";
+import { closeExternalPage, openExternalLink, setExternalPages } from "./app-links";
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -58,6 +59,28 @@ describe("OAuth tab reservation", () => {
     expect(open).not.toHaveBeenCalled();
     expect(await launch.open("https://auth.example.test/flow")).toBe(true);
     expect(openExternal).toHaveBeenCalledWith("https://auth.example.test/flow");
+  });
+
+  it("opens a phone app's sign-in in its in-app browser, never a tab it cannot open, and puts it away after", async () => {
+    const show = vi.fn(async () => {});
+    const close = vi.fn();
+    const open = vi.fn(() => null);
+    vi.stubGlobal("window", { open });
+    setExternalPages({ open: show, close });
+    try {
+      const launch = reserveConnectionPage();
+      expect(open).not.toHaveBeenCalled();
+      expect(await launch.open("https://auth.example.test/flow")).toBe(true);
+      expect(show).toHaveBeenCalledWith("https://auth.example.test/flow");
+      await openExternalLink("https://mcp.example.test/authorize");
+      expect(show).toHaveBeenLastCalledWith("https://mcp.example.test/authorize");
+      closeExternalPage();
+      expect(close).toHaveBeenCalledTimes(1);
+    } finally {
+      setExternalPages(null);
+    }
+    expect(reserveConnectionPage()).toBeTruthy();
+    expect(open).toHaveBeenCalledWith("", "_blank");
   });
 
   it("opens the real link in a desktop workspace page, whose window.open is always handed to the system browser", async () => {

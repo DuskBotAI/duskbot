@@ -23,7 +23,7 @@ function nativelyRequired() {
 
 describe("packaged native modules", () => {
   it("finds the Data engine, chart rendering, 1Password and direct screen loads in the server", () => {
-    expect(nativelyRequired()).toEqual(["@1password/sdk", "@duckdb/node-api", "@resvg/resvg-js", "node-datachannel"]);
+    expect(nativelyRequired()).toEqual(["@1password/sdk", "@duckdb/node-api", "@resvg/resvg-js", "node-datachannel", "onnxruntime-node"]);
   });
 
   it("declares every natively required package in the npm manifest at the app's exact pin", () => {
@@ -39,6 +39,7 @@ describe("packaged native modules", () => {
     copyFileSync(join(root, "scripts", "build-npm-package.mjs"), join(checkout, "scripts", "build-npm-package.mjs"));
     execFileSync(process.execPath, [join(checkout, "scripts", "build-npm-package.mjs")], { stdio: "pipe" });
     const manifest = JSON.parse(readFileSync(join(checkout, "release", "npm", "package.json"), "utf8"));
-    expect(manifest.dependencies).toEqual(pins);
+    expect({ ...manifest.dependencies, ...manifest.optionalDependencies }).toEqual(pins);
+    expect(manifest.optionalDependencies).toEqual({ "onnxruntime-node": pins["onnxruntime-node"] });
   });
 });

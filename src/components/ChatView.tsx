@@ -1,8 +1,8 @@
 import { createContext, memo, startTransition, use, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type Dispatch, type RefObject } from "react";
-import { PHONE_LAYOUT, useMediaQuery } from "@/lib/use-media-query";
+import { usePhoneLayout } from "@/lib/use-media-query";
 import { phoneApp } from "@/lib/store-app";
 import { ThreadLinkContext } from "@/components/ThreadLinkMenu";
-import { ChevronLeft, ChevronRight, Copy, Monitor, RefreshCw, Square, Webhook } from "../icons";
+import { ChevronRight, Copy, Monitor, RefreshCw, Square, Webhook } from "../icons";
 import { WorkingDots } from "@/components/WorkingIndicator";
 import { ACTION_ICON, ChatBusyContext, MESSAGE_ROW, MessageActions, messageActionClass, ReplyAction, type MessageMenuItem } from "@/components/MessageActions";
 import { copyMessage } from "@/lib/message-copy";
@@ -13,6 +13,7 @@ import { localSystemVoiceActive } from "@/lib/local-voice";
 import { computerStartLine, useScreensWhile } from "@/lib/computer-start";
 import { useCaptionChrome, useDesktopCapabilities } from "@/components/DesktopCapabilities";
 import {
+  api,
   currentTaskBot,
   shownTranscript,
   useStore,
@@ -38,7 +39,10 @@ import { ScreenAccessNotice } from "./ScreenAccessNotice";
 import { ComposerNoticeSlot } from "./ComposerNoticeSlot";
 import { macCuaPermissionMessage, missingMacCuaPermissions } from "@/lib/mac-cua-permissions";
 import { claudeUpdateTarget, failedTurnCause, signedOutEngine } from "@/lib/failed-turn";
-import { plainErrorLine } from "@/lib/plain-error";
+import { blockerDetail, failedReplyDetail, failedReplyKind } from "@/lib/failed-reply";
+import { resetTime } from "@/lib/limit-resets";
+import { openBotSettings } from "./bot-panel/panel-link";
+import { providerName } from "@/lib/simple-model-menu";
 import { lowerFirst } from "@/lib/lower-first";
 import { openPlaceAction, placeRowViewFor, usePlaceSeat, worksOnSimpleLabel } from "@/lib/place-view";
 import type { PlaceRow } from "../../shared/place-view";
@@ -52,26 +56,30 @@ import { BotAvatar } from "./Avatar";
 import type { MarkState } from "./mascot-engine";
 import { poolWords } from "@/lib/friendly-activity";
 import type { LiveStatus } from "@/state/turn-status";
-import { STATUS_DONE_EXIT_MS, STATUS_EXIT_MS, TurnPresence, TYPING_PHASE } from "./TurnPresence";
+import { STATUS_EXIT_MS, TurnPresence, TYPING_PHASE } from "./TurnPresence";
+import { TranscriptCardSlot } from "./TranscriptCardSlot";
 import { workingMood } from "@/lib/working-mood";
+import { WorkingMascot } from "./WorkingMascot";
 import { BrowserPartLine } from "./BrowserPartLine";
 import { browserPartFor } from "@/lib/browser-part";
-import { WorkingMascot } from "./WorkingMascot";
-import { liveCallEnabled, showToolCallsEnabled } from "@/lib/feature-flags";
+import { liveCallEnabled, voiceCallsEnabled, showToolCallsEnabled } from "@/lib/feature-flags";
 import { normalizeState } from "@/lib/mascot";
 import { peerLine, peerRequest, type PeerLine } from "@/lib/peer-message";
-import { showWorkingDots } from "@/lib/turn-tail";
+import { replyHidesLine, showWorkingDots } from "@/lib/turn-tail";
+import { useLandedReply } from "@/hooks/use-landed-reply";
 import { useNotesWork } from "@/lib/notes-arrival";
 import { useTypingHold } from "@/hooks/use-typing-hold";
 import { OWN_ENTRANCE } from "@/hooks/use-arrival-flow";
+import { useChatSwitchMotion } from "@/hooks/use-chat-switch-motion";
 import { usePrefersReducedMotion } from "@/components/mascot-clock";
 import { enterFromComposer, growFromMascot, hasSendLaunch } from "./bubble-entrance";
 import { STATUS_MOUNT_MS, useReached } from "@/hooks/use-reached";
-import { lifeDraw, lifeSpan } from "@/lib/reply-life";
-import { presenceKind, turnWorked, useHeldPresence } from "@/lib/presence-mark";
+import { lifeDraw } from "@/lib/reply-life";
 import { lastNonReceipt } from "@/lib/receipts";
-import { routineStartName } from "./RoutineStartLine"; import { useTurnLive } from "@/state/turn-status"; import { useLiveReplyActive } from "@/state/live-reply"; import { useTurnNow } from "./NowCard"; import { useThreadRoutineRun } from "@/state/older-routine-runs";
+import { routineStartName } from "./RoutineStartLine"; import { SILENT_LINE } from "../../shared/routine-run.ts"; import { useTurnLive } from "@/state/turn-status"; import { useLiveReplyActive } from "@/state/live-reply"; import { useTurnNow } from "./NowCard"; import { useThreadRoutineRun } from "@/state/older-routine-runs";
 import { followSentTurn, sentTurn, useSentTurn } from "@/state/sent-turn";
+import { waitsForNetwork } from "@/state/network-wait";
+import { useOffline } from "@/mobile/network";
 import { forgetLateRow, isLateRow, isSettledRow, noteLateRow, noteSettledRow, useStopPress, type StopPress } from "@/lib/stop-turn";
 import { shownReplyText } from "@/state/live-reply";
 import { ChatMarkdown } from "./ChatMarkdown";
@@ -94,7 +102,7 @@ import { CARD_ACTION, ChatErrorBanner, ChatErrorCard, ChatNotice } from "./ChatE
 import { ThreadContextWarning } from "./ContextWarning";
 import { UsageAlert, useLimitResetContinue } from "./EngineUsage";
 import { ChatFindBar } from "./ChatFindBar";
-import { QuotedText, ReplyQuote } from "./ReplyQuote";
+import { QuotedText, ReplyQuote } from "./ReplyQuote"; import { useQuotedMessage } from "@/lib/quoted-messages";
 import { ConnectorCard } from "./ConnectorCard";
 import { SecretRequestCard } from "./SecretRequestCard";
 import { SignInRequestCard } from "./SignInRequestCard";
@@ -130,6 +138,7 @@ import { splitTranscriptAttachments } from "@/lib/composer-attachments";
 import { useComposerDockPad } from "@/lib/composer-dock";
 import { GlassBar, GlassScrollFrame } from "./GlassScrollFrame";
 import { useTranscriptViewport } from "@/hooks/use-transcript-viewport";
+import { tailWindowStart } from "@/lib/transcript-window";
 import { useUnreadDivider } from "@/hooks/use-unread-divider";
 import { NewMessagesDivider } from "./NewMessagesDivider";
 import { PeerExchangeLine } from "./PeerExchangeLine";
@@ -199,9 +208,13 @@ export function ErrorRow({
   action,
   setupInstance,
   claudeUpdateInstance,
+  plain,
 }: {
   message: string;
   headline?: string;
+  /** a failed reply read by the one classifier: its sentence alone, a notice for a usage limit, the reference code beside
+   * it, and never the raw words or a Copy details */
+  plain?: { tone?: "info"; errorRef?: string };
   onRetry?: () => void;
   action?: { label: string; onClick: () => void } | null;
   setupInstance?: InstanceInfo;
@@ -234,10 +247,13 @@ export function ErrorRow({
     <div className="flex justify-start">
       <ChatErrorCard
         className="w-fit max-w-[min(var(--chat-bubble-max),var(--chat-bubble-pct))]"
+        tone={plain?.tone}
+        icon={plain?.tone === "info" ? "batteryFull" : undefined}
         title={headline}
-        details={headline !== message ? details : null}
+        details={!plain && headline !== message ? details : null}
         actions={button}
       >
+        {plain?.errorRef && <span data-error-ref="" title={t("failedReply.refTitle")} className="block text-[12px] text-ink-tertiary tabular-nums">{t("failedReply.ref", { ref: plain.errorRef })}</span>}
         {macCuaReason && <MacCuaRecoveryActions reason={message} />}
         {!usageUrl && claudeUpdateInstance ? (
           <ClaudeUpdatePrompt instance={claudeUpdateInstance} onRetry={onRetry} />
@@ -281,17 +297,31 @@ export function FailedTurnRow({ tool, engine, onRetry, botId, threadId }: {
   threadId?: string;
 }) {
   const resume = useLimitResetContinue(botId, threadId, tool.limitResetsAt);
+  const { dispatch } = useStore();
   if (tool.place && botId) return <PlaceFailedRow place={tool.place} botId={botId} threadId={threadId} onRetry={onRetry} />;
   const cause = failedTurnCause(tool.name) ?? tool.name;
-  if (tool.partial) return <PartlyDoneRow cause={cause} onRetry={onRetry} />;
-  const signedOut = signedOutEngine(tool, engine);
+  if (tool.partial) return tool.owned ? null : <PartlyDoneRow cause={cause} onRetry={onRetry} />;
+  const kind = failedReplyKind(tool, engine, true);
+  const signedOut = kind === "signed_out" ? signedOutEngine(tool, engine) : undefined;
+  // the kinds a setting fixes: the button opens that setting
+  const fix = kind === "key_rejected" ? { label: t("failedReply.updateKey"), onClick: () => dispatch({ type: "toggleAppSettings", open: true, section: "connections" }) }
+    : kind === "plan_limit" ? { label: t("failedReply.seePlan"), onClick: () => dispatch({ type: "toggleAppSettings", open: true, section: "cloudAccount" }) }
+    : kind === "folder_gone" && botId ? { label: t("botPanel.page.folder"), onClick: () => openBotSettings(dispatch, "access", { botId, page: "folder" }) }
+    : undefined;
+  const limited = kind === "usage_limit";
+  const ai = engine ? providerName(engine) : t("failedReply.limitHold.anAi");
+  const headline = signedOut ? t("chat.error.signedOut", { name: signedOut.displayName })
+    : limited ? (tool.limitResetsAt ? t("failedReply.limitHit", { ai, time: resetTime(tool.limitResetsAt) }) : t("failedReply.limitHitUnknown", { ai }))
+    : tool.blocker ? blockerDetail(tool.blocker)
+    : failedReplyDetail(kind, engine?.displayName ?? t("failedReply.yourAi"), false);
   return (
     <ErrorRow
       message={cause}
-      headline={signedOut ? t("chat.error.signedOut", { name: signedOut.displayName }) : plainErrorLine(cause)}
+      headline={headline}
+      plain={{ ...(limited ? { tone: "info" as const } : {}), ...(tool.errorRef && !limited ? { errorRef: tool.errorRef } : {}) }}
       onRetry={onRetry}
-      action={resume}
-      setupInstance={tool.setup ? engine : undefined}
+      action={fix ?? resume}
+      setupInstance={tool.setup && !fix ? engine : undefined}
       claudeUpdateInstance={tool.claudeUpdate ? claudeUpdateTarget(engine) : undefined}
     />
   );
@@ -317,7 +347,7 @@ const Bubble = memo(function Bubble({
   onCancelEdit,
   onSubmitEdit,
   onRegenerate,
-  replyTarget,
+  replyTarget: loadedReplyTarget,
   onReply,
   underExchangeLine = false,
 }: {
@@ -340,7 +370,7 @@ const Bubble = memo(function Bubble({
   onReply: (message: Message) => void;
 }) {
   const { botId, threadId, botName, voiceId, tts, localVoice, bots, mentionPeers, mentionPerson, focus, dispatch, bubbleStyle, conversational, canReact, openedAt, speakerViewer } = useChatRows(), busy = onRegenerate || versions ? use(ChatBusyContext) : false;
-  const remoteClient = window.duskDesktop?.remoteClient?.active === true;
+  const remoteClient = window.duskDesktop?.remoteClient?.active === true, replyTarget = useQuotedMessage(threadId, message.replyToId, loadedReplyTarget);
   const peer = peerLine(message) ?? peerRequest(message, botId);
   const user = message.role === "user" && !peer;
   const speaker = user ? otherSpeaker(message, speakerViewer ?? null) : null;
@@ -363,7 +393,7 @@ const Bubble = memo(function Bubble({
     pin: remoteClient ? undefined : {
       pinned,
       onToggle: () => dispatch({ type: "updateTask", botId, threadId, patch: { pinnedMessageId: pinned ? "" : message.id } }),
-    },
+    }, onStopSending: message.automation && !remoteClient ? () => void api("/api/proactive/stop", { method: "POST", body: JSON.stringify({ threadId, messageId: message.id }) }).catch(() => {}) : undefined,
   });
   noteMediaSizes(message.media);
   const attached = useMemo(() => splitMessageAttachments(message.attachments), [message.attachments]);
@@ -415,8 +445,7 @@ const Bubble = memo(function Bubble({
     const parts = own.current;
     if (parts.entered || !entrance || !parts.bubble) return;
     parts.entered = true;
-    // on the phone the words come with the bubble, so no frame shows an empty one where the typing line just was
-    if (entrance === "grow") growFromMascot(parts.bubble, reduced, phoneApp());
+    if (entrance === "grow") growFromMascot(parts.bubble, reduced);
     else enterFromComposer(parts.bubble, message.sendId, reduced);
   }, [entrance, reduced, message.sendId]);
 
@@ -437,11 +466,6 @@ const Bubble = memo(function Bubble({
   const mediaReactions = floatReactions && mediaSplit;
   const reactionsOnBubble = floatReactions && !mediaSplit && !tabled;
   const mediaChips = mediaReactions && <ReactionChips float threadId={threadId} message={message} bots={bots} align="start" canReact={canReact} />;
-  const forks = user && versions ? versions : [message];
-  const versionIndex = forks.findIndex((v) => v.id === message.id);
-  const switchTo = (v: Message | undefined) => {
-    if (v && !busy && !v.id.startsWith("optimistic-")) dispatch({ type: "switchBranch", botId, threadId, messageId: v.id });
-  };
   const togglePin = () =>
     dispatch({ type: "updateTask", botId, threadId, patch: { pinnedMessageId: pinned ? "" : message.id } });
   const botActions = !user && (
@@ -453,7 +477,7 @@ const Bubble = memo(function Bubble({
   );
 
   return (
-    <div {...{ [MESSAGE_ROW]: "", ...(entrance ? { [OWN_ENTRANCE]: "" } : {}) }} data-arrival={fresh ? (user ? "end" : "start") : undefined} className={cn("group relative flex w-full flex-col", (reactionsOnBubble || (mediaReactions && !group)) && "pt-[26px]", user ? "items-end" : "items-start", join?.above && SIMPLE_STACKED)}>
+    <div {...{ [MESSAGE_ROW]: "", ...(entrance ? { [OWN_ENTRANCE]: "" } : {}) }} data-sent-at={message.at || undefined} data-arrival={fresh ? (user ? "end" : "start") : undefined} className={cn("group relative flex w-full flex-col", (reactionsOnBubble || (mediaReactions && !group)) && "pt-[26px]", user ? "items-end" : "items-start", join?.above && SIMPLE_STACKED)}>
       {message.relay ? <RelayLabel message={message} /> : peer && !underExchangeLine && <PeerLabel peer={peer} />}
       {speaker && <div className="mb-0.5 px-1 text-[12px] font-medium text-ink-secondary">{speaker}</div>}
       {imagesAbove && <AttachmentGallery media={message.media} images={imagesAbove.images} files={imagesAbove.files} message={{ threadId, messageId: message.id }} eager={eagerAttachments} align="end" className="mb-1" />}
@@ -492,6 +516,7 @@ const Bubble = memo(function Bubble({
             join && !split && !attachmentsOnly && !tabled && !mediaSplit && joinedCorners(user ? "end" : "start", join),
           )}
           data-emoji-only={bigEmoji ? "" : undefined}
+          data-bubble-group={attachmentsOnly || split || tabled || mediaSplit ? "" : undefined}
           data-quotable={user ? undefined : ""}
           data-sending={user && message.id.startsWith("optimistic-") ? t("chat.sending") : undefined}
           style={user && !webhookView && !attachmentsOnly && !bigEmoji ? ownBubbleStyle : undefined}
@@ -554,8 +579,8 @@ const Bubble = memo(function Bubble({
                 </div>
               )}
               {!group && (mediaChips && (generatedPaths.length + linkedFiles.length > 0)
-                ? <div className="relative">{mediaChips}<AttachmentGallery media={message.media} images={generatedPaths} files={linkedFiles} message={{ threadId, messageId: message.id }} eager={eagerAttachments} /></div>
-                : <AttachmentGallery media={message.media} images={generatedPaths} files={linkedFiles} message={{ threadId, messageId: message.id }} eager={eagerAttachments} />)}
+                ? <div className="relative">{mediaChips}<AttachmentGallery media={message.media} images={attached.pictures} files={linkedFiles} message={{ threadId, messageId: message.id }} eager={eagerAttachments} /></div>
+                : <AttachmentGallery media={message.media} images={attached.pictures} files={linkedFiles} message={{ threadId, messageId: message.id }} eager={eagerAttachments} />)}
               {split ? (
                 <ConversationalReply join={join} segments={reply.segments} firstNew={reply.firstNew}
                   renderSegment={(segment) => <ChatMarkdown text={segment} mentionPeers={mentionPeers} mentionPerson={mentionPerson} message={{ threadId, messageId: message.id }} delivered={group?.delivered} />} />
@@ -569,8 +594,8 @@ const Bubble = memo(function Bubble({
                 <ChatMarkdown text={text} mentionPeers={mentionPeers} mentionPerson={mentionPerson} message={{ threadId, messageId: message.id }} delivered={group?.delivered} />
               ) : null}
               {group && (mediaChips
-                ? <div className="relative mt-[26px]">{mediaChips}<AttachmentGallery media={message.media} images={group.images} files={group.files} message={{ threadId, messageId: message.id }} eager={eagerAttachments} /></div>
-                : <AttachmentGallery media={message.media} images={group.images} files={group.files} message={{ threadId, messageId: message.id }} eager={eagerAttachments} />)}
+                ? <div className="relative mt-[26px]">{mediaChips}<AttachmentGallery media={message.media} images={group.pictures} files={group.files} message={{ threadId, messageId: message.id }} eager={eagerAttachments} /></div>
+                : <AttachmentGallery media={message.media} images={group.pictures} files={group.files} message={{ threadId, messageId: message.id }} eager={eagerAttachments} />)}
             </MessageBoundary>
           )}
           {reactionsOnBubble && <ReactionChips float threadId={threadId} message={message} bots={bots} align={user ? "end" : "start"} canReact={canReact} />}
@@ -579,33 +604,6 @@ const Bubble = memo(function Bubble({
       </div>
       <time dateTime={new Date(message.at).toISOString()} className="chat-row-ts" aria-label={new Date(message.at).toLocaleTimeString()}>{formatTime(message.at)}</time>
       {!floatReactions && <ReactionChips threadId={threadId} message={message} bots={bots} align={user ? "end" : "start"} canReact={canReact} />}
-      {forks.length > 1 && (
-        <div className="mt-1 flex items-center gap-0.5 pr-1 text-[12px] text-ink-secondary">
-          <button
-            onClick={() => switchTo(forks[versionIndex - 1])}
-            disabled={versionIndex <= 0 || busy}
-            type="button"
-            className="rounded p-0.5 hover:bg-raised hover:text-ink disabled:opacity-30 disabled:hover:bg-transparent pointer-coarse:p-2.5"
-            title={t("chat.previousVersion")}
-            aria-label={t("chat.previousVersion")}
-          >
-            <ChevronLeft size={14} />
-          </button>
-          <span className="tabular-nums">
-            {versionIndex + 1}/{forks.length}
-          </span>
-          <button
-            onClick={() => switchTo(forks[versionIndex + 1])}
-            disabled={versionIndex >= forks.length - 1 || busy}
-            type="button"
-            className="rounded p-0.5 hover:bg-raised hover:text-ink disabled:opacity-30 disabled:hover:bg-transparent pointer-coarse:p-2.5"
-            title={t("chat.nextVersion")}
-            aria-label={t("chat.nextVersion")}
-          >
-            <ChevronRight size={14} />
-          </button>
-        </div>
-      )}
     </div>
   );
 });
@@ -728,24 +726,32 @@ export const SIMPLE_STATUS_SLOT = 40;
 /** How many of a window's newest rows an opened chat paints in its first frame, and how many older ones each later step adds. */
 export const FIRST_PAINT_ROWS = 16;
 export const MOUNT_STEP_ROWS = 24;
+/** A phone's screen holds far fewer rows, and its slower CPU pays for each one before the chat can start sliding in. */
+export const PHONE_FIRST_PAINT_ROWS = 8;
+const firstPaintRows = () => phoneApp() ? PHONE_FIRST_PAINT_ROWS : FIRST_PAINT_ROWS;
 
 /** A chat opened on a long window paints its newest rows first, then mounts the older ones above them a step at a time in
  * interruptible renders, so switching into it never blocks a frame. A search jump or a window off the latest rows
  * (`hold`) mounts whole, since it scrolls to a row that may sit above the tail. */
 export function useFirstPaintRows(key: string, rows: Message[], hold: boolean, scrollRef?: RefObject<HTMLElement | null>, pinned = false): Message[] {
-  const [shown, setShown] = useState({ key, count: FIRST_PAINT_ROWS });
-  if (shown.key !== key) setShown({ key, count: FIRST_PAINT_ROWS });
+  const first = firstPaintRows();
+  const [shown, setShown] = useState({ key, count: first });
+  if (shown.key !== key) setShown({ key, count: first });
   // a chat whose rows all showed once keeps showing all of them as it grows, without another render to say so
   const whole = useRef<string | null>(null);
-  const count = hold || whole.current === key ? Infinity : shown.key === key ? shown.count : FIRST_PAINT_ROWS;
+  const count = hold || whole.current === key ? Infinity : shown.key === key ? shown.count : first;
   const total = rows.length;
   // Sixteen messages can fold into a few rows (a turn's tool steps are one): a first paint shorter than the viewport sits at
   // the top, then the chat jumps down as the older rows land. Such a paint grows before the browser shows it.
+  // once a paint fills the view, a bigger one does too: the check reads the transcript's height, which forces its whole
+  // style and layout, so it stops there instead of running again at each step the rows grow by
+  const filled = useRef<string | null>(null);
   useLayoutEffect(() => {
     const el = scrollRef?.current;
-    if (!el || count >= total || el.scrollHeight > el.clientHeight + 1) return;
-    setShown({ key, count: count + MOUNT_STEP_ROWS >= total ? Infinity : count + MOUNT_STEP_ROWS });
-  }, [key, count, total, scrollRef]);
+    if (!el || count >= total || filled.current === key) return;
+    if (el.scrollHeight > el.clientHeight + 1) { filled.current = key; return; }
+    setShown({ key, count: count + first >= total ? Infinity : count + first });
+  }, [key, count, total, scrollRef, first]);
   // older rows mount above the ones on screen: a chat held at its newest row stays there in the same frame, rather than
   // a frame later when the transcript's resize is noticed, which would show the rows jumping down and back
   useLayoutEffect(() => {
@@ -768,6 +774,38 @@ export function useFirstPaintRows(key: string, rows: Message[], hold: boolean, s
 const transcriptRows = (item: TranscriptItem): readonly Message[] => item.kind === "message" ? [item.message] : item.messages;
 const noneTransparent = () => false;
 const hiddenSteps = (item: TranscriptItem) => item.kind !== "message";
+
+function hiddenChatRow(message: Message, botId: string, showToolCalls: boolean): boolean {
+  if (message.reaction || message.quietRun || isCancelledTranscriptRow(message)) return true;
+  if (message.role === "bot" && message.kind === "text" && !message.attachments?.length && SILENT_LINE.test(message.text ?? "")) return true;
+  switch (richRowKind(message)) {
+    case "activity":
+      return Boolean(message.peerResume) || (!message.dataResult && !isStatusActivity(message) && quietRow(message, showToolCalls));
+    case "compaction":
+      return true;
+    case "digest":
+    case "screen":
+      return !showToolCalls;
+    case "secret":
+      return !message.secret;
+    case "signin":
+      return !message.signIn;
+    case "connector":
+      return !message.connector;
+    case "call":
+      return !message.call;
+    case "options":
+      return Boolean(message.helperFollowup || (settledCardGoes(message) && !showsSettledChange(message.card)));
+    case "widget":
+    case "app":
+    case "routine.run":
+      return false;
+    default:
+      if (message.publishedPage || message.document) return false;
+      if (message.role === "user" && !peerLine(message) && !peerRequest(message, botId)) return routineStartName(message) !== null;
+      return !message.attachments?.length && isPureLeakedBotText(message.text);
+  }
+}
 
 const MessagesList = memo(function MessagesList({
   messages,
@@ -878,7 +916,7 @@ const MessagesList = memo(function MessagesList({
         const m = item.message;
         const row = (() => {
           // the chat talks in bubbles: stops, finished steps and settled cards leave no technical rows behind
-          if (isCancelledTranscriptRow(m)) return null;
+          if (hiddenChatRow(m, botId, showToolCalls)) return null;
           switch (richRowKind(m)) {
             case "secret":
               return m.secret ? <SecretRequestCard botId={botId} color={botColor} threadId={threadId} message={m} /> : null;
@@ -898,12 +936,10 @@ const MessagesList = memo(function MessagesList({
             case "call":
               return m.call ? <CallRecordRow message={m} transcript={transcript} botName={botName} threadId={threadId} busy={busy} hasMore={hasMore} /> : null;
             case "activity": {
-              if (m.peerResume) return null;
               if (m.dataResult) return <DataResultChip message={m} />;
               if (isStatusActivity(m)) return <StatusActivityRow message={m} />;
               if (m.tool && failedTurnCause(m.tool.name) !== null) {
                 // a reply that never came is said once, in the card above the composer
-                if (!m.tool.partial) return null;
                 return (
                   <FailedTurnRow
                     tool={m.tool}
@@ -914,22 +950,17 @@ const MessagesList = memo(function MessagesList({
                   />
                 );
               }
-              if (!showToolCalls && !m.comm && !m.threadRef && !m.relay && !m.dataResult) return null;
               return <ActivityChip message={m} place={place} />;
             }
             case "digest":
-              return showToolCalls ? <DigestChip message={m} /> : null;
+              return <DigestChip message={m} />;
             case "compaction":
               return null;
             case "screen":
-              return showToolCalls ? <ScreenFrame threadId={threadId} message={m} /> : null;
+              return <ScreenFrame threadId={threadId} message={m} />;
             default: {
               if (m.publishedPage) return <PublishedPageCard message={m} />;
               if (m.document) return <DocumentCard message={m} />;
-              const peer = peerLine(m) ?? peerRequest(m, botId);
-              const user = m.role === "user" && !peer;
-              if (user && routineStartName(m) !== null) return null;
-              if (!user && isPureLeakedBotText(m.text) && !m.attachments?.length) return null;
               return (
                 <Bubble
                   message={m}
@@ -977,7 +1008,7 @@ export function ChatView({ bot: profile }: { bot: Bot }) {
   const { dragProps: headerDragProps, noDragStyle: headerNoDragStyle } = useCaptionChrome();
   const composerDockRef = useRef<HTMLDivElement>(null);
   const composerDock = useComposerDockPad(composerDockRef, () => scrollRef.current);
-  const phone = useMediaQuery(PHONE_LAYOUT);
+  const phone = usePhoneLayout();
   const phoneMenu = phone && !remoteClient;
   const simpleHead = !remoteClient;
   const canWrite = useCanWriteIn(bot.threadId, bot.yourAccess);
@@ -1018,6 +1049,9 @@ export function ChatView({ bot: profile }: { bot: Bot }) {
   const messages = stopCut ? shownMessages : hold.rows;
   const lookups = useMemo(() => transcriptLookups(allMessages, messages), [allMessages, messages]);
   const liveTools = useLiveToolIds(messages, bot);
+  const showToolCalls = showToolCallsEnabled(state.config);
+  const latestVisibleIndex = useMemo(() => messages.findLastIndex((message) => !hiddenChatRow(message, bot.id, showToolCalls)), [messages, bot.id, showToolCalls]);
+  const focus = state.focusMessage?.threadId === bot.threadId ? state.focusMessage : null;
 
   const {
     scrollRef,
@@ -1039,8 +1073,19 @@ export function ChatView({ bot: profile }: { bot: Bot }) {
     messages,
     pinOn: [bot.busy, composerDock.pad],
     hasMore: bot.hasMore,
+    latestVisibleIndex: latestVisibleIndex >= 0 ? latestVisibleIndex : undefined,
   });
   useTimestampPeek(scrollRef);
+
+  const oldestId = allMessages[0]?.id;
+  const historyKey = `${transcriptKey}:${state.transcriptGeneration[bot.threadId] ?? 0}:${oldestId}`;
+  const attemptedEarlier = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    if (!following || (focus && !focus.consumed) || transcriptPending || bot.transcriptStale || olderPending ||
+        latestVisibleIndex >= 0 || !bot.hasMore || !oldestId || attemptedEarlier.current === historyKey) return;
+    attemptedEarlier.current = historyKey;
+    dispatch({ type: "loadOlderMessages", threadId: bot.threadId });
+  }, [following, focus, transcriptPending, bot.transcriptStale, olderPending, latestVisibleIndex, bot.hasMore, oldestId, historyKey, bot.threadId, dispatch]);
 
   const lastBotTextId = useMemo(
     () => [...messages].reverse().find((m) => m.role === "bot" && m.kind === "text")?.id,
@@ -1050,8 +1095,6 @@ export function ChatView({ bot: profile }: { bot: Bot }) {
 
   const bots = useDrawnBots(state.bots);
   const teammates = useTeammates(); const mentionPeers = useMemo(() => [...bots.filter((peer) => peer.id !== bot.id), ...teammates.peers], [bots, bot.id, teammates]);
-  const focus = state.focusMessage?.threadId === bot.threadId ? state.focusMessage : null;
-  const showToolCalls = showToolCallsEnabled(state.config);
   const tts = state.config?.tts;
   const localVoice = localSystemVoiceActive();
   const locale = activeLocale();
@@ -1105,18 +1148,25 @@ export function ChatView({ bot: profile }: { bot: Bot }) {
   // a send from this window is the turn's start here: its row shows with the bubble, before the server answers the send
   const sent = useSentTurn(bot.threadId);
   useEffect(() => { if (bot.threadId) followSentTurn(bot.threadId, Boolean(bot.busy)); }, [bot.threadId, bot.busy]);
+  const networkWait = waitsForNetwork(messages, useOffline());
   const turnBusy = Boolean(bot.busy) || sent?.phase === "sending";
   const turnStartedAt = sent?.at ?? bot.turnStartedAt;
-  // The mascot and its status line stay for the whole turn, through every bubble it sends; only its end hides them.
-  const waiting = Boolean(turnBusy && bot.activity !== "waiting-on-you" && showWorkingDots(turnBusy, lastMessage, undefined, sent?.phase === "sending" ? false : live.ended));
+  const landed = useLandedReply(`${bot.id}:${bot.threadId ?? ""}`, messages);
+  // a reply takes the line's place in the frame it lands, even before the turn's end reaches this client; the line comes
+  // back under it for a named step or once the turn has gone on a while
+  const waiting = Boolean(turnBusy && bot.activity !== "waiting-on-you" && showWorkingDots(turnBusy, lastMessage, undefined, sent?.phase === "sending" ? false : live.ended))
+    && !replyHidesLine(landed.sinceMs, now.phase);
   const teammatesWorking = !bot.busy && Boolean(bot.waitingForTeammates);
   // the reply is written whole; while the engine types it the mark only looks like it is answering
   const streamingReply = useLiveReplyActive(bot.threadId);
-  const [busySince, setBusySince] = useState<number | null>(null);
+  const chatKey = `${bot.id}:${bot.threadId ?? ""}`;
+  useChatSwitchMotion(scrollRef, chatKey);
+  const [busyMark, setBusyMark] = useState<{ chat: string; at: number } | null>(null);
   useEffect(() => {
-    setBusySince(turnBusy ? turnStartedAt ?? Date.now() : null);
-  }, [turnBusy, bot.id, bot.threadId, turnStartedAt]);
-  const presenceSeed = `${bot.id}:${bot.threadId ?? ""}:${busySince ?? ""}`;
+    setBusyMark(turnBusy ? { chat: chatKey, at: turnStartedAt ?? Date.now() } : null);
+  }, [turnBusy, chatKey, turnStartedAt]);
+  const busySince = busyMark?.chat === chatKey ? busyMark.at : null;
+  const presenceSeed = `${chatKey}:${busySince ?? ""}`;
   // grok's line comes 0.55 to 1.2 s after a send, wordless; a bubble waiting on its typing beat brings it at once
   // a turn whose start this client does not know (a chat opened mid-turn from an older server) shows its line at once,
   // and so does a new bot's hello in a chat with nothing in it yet: there is no send for the wait to follow
@@ -1125,21 +1175,23 @@ export function ChatView({ bot: profile }: { bot: Bot }) {
   const mountDue = useReached(!turnBusy ? null : turnStartedAt && messages.length > 0 ? turnStartedAt + mountDelay : 0);
   // notes from another AI being brought in: the import's own steps are this bot's working row until its summary lands
   const importing = useNotesWork(bot.id);
-  const presenceVisible = !stopCut && (hold.typing || (waiting && mountDue) || teammatesWorking || Boolean(importing));
+  const presenceVisible = !stopCut && (hold.typing || (waiting && mountDue) || teammatesWorking || Boolean(importing) || networkWait);
   // while the turn runs its notices are the working row's to say, not the chat's too; once it ends, what it left is one
   // card above the composer
   const trailing = useTrailingRows(messages, !bot.busy);
-  // a turn that ended on its own, with nothing failed, sends the mascot off with a happy hop
-  const turnDone = !presenceVisible && !turnBusy && !stopCut && !teammatesWorking && !importing && !trailing?.failures.length;
   // the bubble the line hangs under keeps its pinched corner until the line has finished leaving, as grok's does
-  const presenceLingers = useLingering(presenceVisible, turnDone ? STATUS_DONE_EXIT_MS : STATUS_EXIT_MS);
-  const paintedMessages = useFirstPaintRows(transcriptKey, windowedMessages, Boolean(focus && !focus.consumed) || laterCount > 0, scrollRef, following);
+  const presenceLingers = useLingering(presenceVisible, STATUS_EXIT_MS);
+  const expandedTail = following && latestVisibleIndex >= 0 && latestVisibleIndex < tailWindowStart(messages.length);
+  const paintedMessages = useFirstPaintRows(transcriptKey, windowedMessages, expandedTail || Boolean(focus && !focus.consumed) || laterCount > 0, scrollRef, following);
   const lastShownRow = windowedMessages.findLast((message) => !quietRow(message, showToolCalls));
   const lastRowIsBubble = Boolean(lastShownRow && isBotTextRow(lastShownRow, bot.id));
   const presenceUnderBubble = lastRowIsBubble;
-  // on the phone a landing reply takes the typing line's place in the same frame: the line fading on under it, pushed
-  // below the new bubble, read as a flicker
-  const presenceShown = presenceLingers && !(phoneApp() && !presenceVisible && lastRowIsBubble);
+  const lastRowUnderLine = useRef<string | undefined>(undefined);
+  if (presenceVisible) lastRowUnderLine.current = lastShownRow?.id;
+  const replyTookLine = lastRowIsBubble && lastShownRow?.id !== lastRowUnderLine.current;
+  // a reply landing as the line leaves takes its place in the same frame: the line fading on under it, pushed below the
+  // new bubble, read as a flicker
+  const presenceShown = presenceLingers && (presenceVisible || !replyTookLine);
   // grok keeps the status line's slot at the end of the conversation whether it shows or not, so it never moves a row
   const statusSlot = windowedMessages.length > 0 || busy;
   const announcement = useMemo((): TranscriptSnapshot => {
@@ -1151,30 +1203,19 @@ export function ChatView({ bot: profile }: { bot: Bot }) {
       approval: approval ? { id: approval.requestId, name: bot.name } : undefined,
     };
   }, [messages, bot.busy, bot.name]);
-  const worked = useMemo(() => turnWorked(messages), [messages]);
   const writing = !stopCut && (streamingReply || live.status?.activity === "reply" || hold.typing);
   // the person's Stop, said once and quietly where the working line was, until the next turn
   const stoppedShown = (stopCut || personStoppedLast(messages)) && !(turnBusy && !stopCut) && !presenceVisible;
   const typingPhrases = useMemo(() => poolWords("typing"), [locale]);
   // the bot's own label stays on the line while it leaves, after the turn's end has cleared it
-  const shownLabel = useRef<{ seed: string; label?: string }>({ seed: presenceSeed });
+  const shownLabel = useRef<{ chat: string; seed: string; label?: string }>({ chat: chatKey, seed: presenceSeed });
   // a new turn starts clean; the end of this one (busySince gone) keeps it
-  if (busySince !== null && shownLabel.current.seed !== presenceSeed) shownLabel.current = { seed: presenceSeed };
+  if (shownLabel.current.chat !== chatKey || (busySince !== null && shownLabel.current.seed !== presenceSeed)) shownLabel.current = { chat: chatKey, seed: presenceSeed };
   if (live.label) shownLabel.current.label = live.label;
   const turnLabel = live.label ?? shownLabel.current.label;
-  const presence = useHeldPresence(turnBusy && bot.activity !== "waiting-on-you" ? presenceKind({ writing, activity: live.status?.activity, worked }) : null);
-  // every turn opens the same way, the working mascot alone for a beat before its first word, even when a step has
-  // already started
-  const openingEnd = turnBusy && turnStartedAt
-    ? turnStartedAt + mountDelay + lifeSpan(presenceSeed, 0) + lifeSpan(presenceSeed, 1)
-    : null;
-  const opening = !useReached(openingEnd) && openingEnd !== null && presence === "working";
-  const mood = workingMood({
-    phase: writing ? TYPING_PHASE : now.phase,
-    waiting: teammatesWorking || pendingApprovals(messages).length > 0,
-    failed: lastForLine?.kind === "activity" && lastForLine.tool?.ok === false,
-    done: turnDone,
-  });
+  const waitingOnSomeone = teammatesWorking || pendingApprovals(messages).length > 0;
+  const stepFailed = lastForLine?.kind === "activity" && lastForLine.tool?.ok === false;
+  const moodOfShownWords = (shown: string | null) => workingMood({ phase: shown && !shown.startsWith("label:") ? shown : writing ? TYPING_PHASE : now.phase, waiting: waitingOnSomeone, failed: stepFailed });
   const rescuing = useRescueGrace(Boolean(bot.busy), mayTakeOver(bot, state.instances), `${bot.id}:${bot.threadId}`);
   const answering = answeringModel(profile, bot.threadId, bot.modelSelection);
   const folded = useMemo(() => {
@@ -1208,7 +1249,7 @@ export function ChatView({ bot: profile }: { bot: Bot }) {
   return (
     <ThreadLinkContext value={threadLink}>
     <main className="relative flex h-full min-w-0 flex-1 flex-col bg-app">
-      {liveCallEnabled() && <CallOverlay bot={bot} />}
+      {(liveCallEnabled() || voiceCallsEnabled()) && <CallOverlay bot={bot} />}
       <GlassScrollFrame className="flex-1 [--glass-tint:var(--color-app)]">
       {/* z-[25]: above the room set-up card (z-20), below the CallOverlay (z-30). */}
       <GlassBar edge="top" fade={!remoteClient} className="z-[25]">
@@ -1337,6 +1378,7 @@ export function ChatView({ bot: profile }: { bot: Bot }) {
           // groups sit 16px apart
           data-simple-rows=""
           className="glass-scroller-content chat-column relative flex w-full flex-col gap-4 rounded-[18px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+          data-dock-pad=""
           // 64px between the last row and the composer (grok leaves 54), so the working line has room above the message box
           style={{ paddingBottom: `calc(${composerDock.pad} + ${SIMPLE_TRAILING_GAP - (statusSlot ? SIMPLE_STATUS_SLOT : 0)}px)` }}
           role="log"
@@ -1404,23 +1446,23 @@ export function ChatView({ bot: profile }: { bot: Bot }) {
               </div>
             </div>
           )}
+          <TranscriptCardSlot key={transcriptKey}><FailedReplyCard rows={rescuing ? null : trailing} botId={bot.id} threadId={bot.threadId} onRetry={lastUserMessage ? regenerate : undefined} /></TranscriptCardSlot>
           <div className={statusSlot ? cn("turn-status-slot h-9 shrink-0", presenceUnderBubble && SIMPLE_STACKED) : "contents"}>
           {(presenceVisible || presenceShown) && <TurnPresence
-            avatar={
-              <WorkingMascot bot={bot} size={phoneApp() ? 30 : 22} seed={presenceSeed} mood={mood} />
-            }
+            key={chatKey}
+            avatar={(shown) => <WorkingMascot bot={bot} size={phoneApp() ? 24 : 26} seed={presenceSeed} mood={moodOfShownWords(shown)} />}
+            wordsAtOnce
             simple
-            done={turnDone}
             className={cn(!statusSlot && presenceUnderBubble && SIMPLE_STACKED)}
-            label={teammatesWorking ? t("chat.teammatesWorking") : importing && !turnBusy ? importing : undefined}
+            label={networkWait ? t("mobile.chat.waitingForConnection") : teammatesWorking ? t("chat.teammatesWorking") : importing && !turnBusy ? importing : undefined}
             visible={presenceVisible}
             {...now}
             // grok shows no steps in the chat: the list under the line only with tool calls shown
             card={showToolCalls ? now.card : undefined}
-            phrases={teammatesWorking || (importing && !turnBusy) ? undefined : writing ? typingPhrases : opening ? undefined : turnLabel ? [turnLabel] : now.phrases}
+            phrases={networkWait || teammatesWorking || (importing && !turnBusy) ? undefined : writing ? typingPhrases : turnLabel ? [turnLabel] : now.phrases}
             phase={writing ? TYPING_PHASE : turnLabel ? `label:${turnLabel}` : now.phase}
             seed={presenceSeed}
-            since={busySince}
+            since={busySince ?? (turnBusy ? turnStartedAt ?? null : null)}
           />}
           {stoppedShown && !presenceShown && (
             <div data-turn-stopped role="status" className={cn("turn-stopped flex h-9 items-center ps-3 text-[13px] text-ink-tertiary", !statusSlot && presenceUnderBubble && SIMPLE_STACKED)}>
@@ -1455,7 +1497,6 @@ export function ChatView({ bot: profile }: { bot: Bot }) {
             into the transcript's first time stamp */}
         <div className="pointer-events-auto"><ChatNotice notice={state.notice} /></div>
         <div className="pointer-events-auto"><ChatErrorBanner message={state.error} onDismiss={() => dispatch({ type: "error", message: null })} /></div>
-        <div className="pointer-events-auto"><FailedReplyCard rows={rescuing ? null : trailing} botId={bot.id} threadId={bot.threadId} onRetry={lastUserMessage ? regenerate : undefined} /></div>
         <div className="pointer-events-auto">{canWrite !== false && !trailing?.failures.length && !trailing?.notices.length && <ComposerSignInNotice bot={bot} />}</div>
         <div className="pointer-events-auto">{!trailing?.failures.length && <ScreenAccessNotice bot={bot} />}</div>
       </ComposerNoticeSlot>

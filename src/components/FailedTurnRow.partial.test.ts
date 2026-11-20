@@ -41,6 +41,11 @@ describe("a turn whose reply came back but a step failed", () => {
     expect(html).toContain("Retry");
   });
 
+  it("shows nothing under a reply that already said what failed", () => {
+    expect(show(failedTurnTool(cause, { terminal: true, partial: true, owned: true }))).toBe("");
+    expect(failedTurnTool(cause, { owned: true })).not.toHaveProperty("owned");
+  });
+
   it("is still the red failure row when the turn did not finish", () => {
     const html = show(failedTurnTool(cause, { terminal: true }));
     expect(html).toContain('data-pixel-icon="stop"');

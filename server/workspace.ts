@@ -14,9 +14,7 @@ import { DATA_DIR } from "./config.ts";
 export const WORKSPACES_DIR = join(DATA_DIR, "workspaces");
 export const TASK_WORKSPACES_DIR = join(DATA_DIR, "task-workspaces");
 
-export function supportsWorkspaceFiles(driverKind: string): boolean {
-  return !["grok", "openai-compat", "minimax", "mistral", "cerebras", "groq", "greenference", "meta"].includes(driverKind);
-}
+export { supportsWorkspaceFiles } from "../shared/workspace-files.ts";
 
 /** Directory organization, not a shell sandbox. */
 export function ensureTaskWorkspace(botId: string, threadId: string): string {
@@ -137,7 +135,7 @@ function memoryEntryStat(path: string) {
   return regularMemoryFilesOnly ? lstatSync(path) : statSync(path);
 }
 
-export function workspaceLocationsPrompt(botId: string, cwd: string | undefined, botCwd?: string, opts: { attachFile?: boolean } = {}): string {
+export function workspaceLocationsPrompt(botId: string, cwd: string | undefined, botCwd?: string, opts: { attachFile?: boolean; lostFolder?: string } = {}): string {
   return "\n\nFile locations for this bot (absolute paths): " + JSON.stringify({
     currentWorkingFolder: cwd ?? "Provider default; inspect the working directory before using relative paths",
     sharedBotFolder: workspaceDir(botId),
@@ -149,7 +147,8 @@ export function workspaceLocationsPrompt(botId: string, cwd: string | undefined,
     " Chat links and inline images open only files in currentWorkingFolder and sharedBotFolder." +
     (opts.attachFile
       ? " When you save a file or picture for the person somewhere else, also attach it with attach_file in the same turn so it opens from chat. For many files, attach the few that matter most, such as a preview."
-      : " Save a file or picture you want to show in chat there.");
+      : " Save a file or picture you want to show in chat there.") +
+    (opts.lostFolder ? ` The folder ${JSON.stringify(opts.lostFolder)} this conversation worked in was moved or deleted, so this turn runs in currentWorkingFolder. Say so to the person in one short sentence and that they can pick a folder in your settings.` : "");
 }
 
 export function memoryLineCount(text: string): number {
@@ -406,6 +405,13 @@ function sameFact(text: string): string {
   return text.toLowerCase().replace(/\s+/g, " ").replace(/[.!?;,\s]+$/, "").trim();
 }
 
+/** A chat is titled by its first message, which after a correction may still state the old fact, so a correcting entry
+ * names the chat without its title. */
+export function correctionSource(source: string): string {
+  const plain = source.replace(/^chat "(?:[^"\\]|\\.)*"(?:…)?/, "chat").trim();
+  return plain ? `${plain}, corrected` : "";
+}
+
 export function memorySourceLabel(from: { room?: { name: string }; task?: { title: string }; threadId: string }): string {
   const short = (name: string) => JSON.stringify(name.length > SOURCE_NAME_MAX ? `${name.slice(0, SOURCE_NAME_MAX)}…` : name);
   if (from.room) return `room ${short(from.room.name)}`;
@@ -492,7 +498,7 @@ export function updateMemory(botId: string, update: MemoryUpdate, opts: MemoryUp
         return { ok: false, code: "conflict", error: "That entry is already struck through. Replace or remove it, or append the new fact on its own." };
       }
       const struck = `${parsed ? parsed.prefix : line === body ? "" : "- "}~~${body}~~${SEP}superseded ${today}`;
-      entry = memoryEntry(text!, entryOpts);
+      entry = memoryEntry(text!, { ...entryOpts, source: correctionSource(cleanSource(opts.source)) });
       next = appendEntry(replaceLine(struck), entry);
     } else if (!parsed) {
       next = current.slice(0, index) + text! + current.slice(index + oldText.length);
@@ -500,7 +506,8 @@ export function updateMemory(botId: string, update: MemoryUpdate, opts: MemoryUp
       const swapped = line.slice(0, index - span.start) + text!.replace(TYPED_PREFIX, "") + line.slice(index - span.start + oldText.length);
       const reparsed = parseEntry(swapped);
       const body = reparsed ? reparsed.body : normaliseEntryText(swapped);
-      entry = `${parsed.prefix}${body.replace(UPDATED_MARK, "")}${SEP}updated ${today}`;
+      const prefix = parsed.prefix.replace(/^(- \d{4}-\d{2}-\d{2} · from )([^·\n]*?)( · )$/, (_, head: string, from: string, tail: string) => `${head}${from.endsWith(", corrected") ? from : correctionSource(from)}${tail}`);
+      entry = `${prefix}${body.replace(UPDATED_MARK, "")}${SEP}updated ${today}`;
       next = replaceLine(entry);
     }
   }

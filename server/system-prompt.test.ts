@@ -88,9 +88,9 @@ it("describes VPS persistence without treating the retained home volume as dispo
   expect(prompt).toContain("files and Chromium profiles there survive container recreation while that volume is kept");
   expect(prompt).toContain("recreating it replaces system changes outside persistent volumes");
   expect(prompt).not.toMatch(/\x42oat|API key|everything on it is wiped|filesystem is disposable/);
-  expect(CREDENTIAL_PROMPT).toContain("the user's own VPS needs no computer-provider API key");
+  expect(CREDENTIAL_PROMPT).toContain("their own VPS needs no provider key");
   expect(CREDENTIAL_PROMPT).not.toContain("\x42oat");
-  expect(TRIGGER_PROMPT).toContain("cloud explicitly uses the bot's own connected VPS computer with the same model");
+  expect(JSON.stringify(availableTools({} as never).find((tool) => tool.name === "trigger"))).toContain("cloud uses the bot's own sandboxed VPS computer with the same model");
   expect(TRIGGER_PROMPT).not.toContain("box runs");
 });
 
@@ -139,7 +139,7 @@ describe("buildSystemPrompt", () => {
     // memory is held for the conversation, so it rides in the cached half
     expect(built.stable).toBe(`You are Kiwi. Search past sessions. Your memory: likes tea.${TAIL}`);
     // A German person once read "Now the edits." between a bot's German lines: every line they see is in their language.
-    expect(REPLY_HABITS_PROMPT).toContain("in the language they use with you, including a short note between steps and a message you pass on for them");
+    expect(REPLY_HABITS_PROMPT).toContain("in the language of their latest message, never the app's language or your own earlier lines, including a short note between steps and a message you pass on for them");
     expect(built.volatile).not.toContain("likes tea");
     expect(built.volatile).toContain("@Fig");
     expect(built.volatile).toContain("today 20:48");
@@ -208,16 +208,16 @@ describe("buildSystemPrompt", () => {
 });
 
 describe("computerPrompt", () => {
-  it("distinguishes background window control from foreground desktop input", () => {
+  it("acts on the person's computer when asked: background first, the screen for a step that needs it, no workaround", () => {
     const prompt = computerPrompt("local");
-    expect(prompt).toContain("background delivery");
-    expect(prompt).toContain("do not bring dusk bot");
+    expect(prompt).toContain("When the person asks you to use their computer, that is permission to act on it.");
+    expect(prompt).toContain("use foreground input for that step without asking again, and say in one short line that you used the screen briefly");
+    expect(prompt).toContain("Do not bring dusk bot to the front just to inspect it");
     expect(prompt).toContain("dedicated browser tools");
     expect(prompt).toContain("keeping the user's intended browser profile/account");
-    expect(prompt).toContain("Do not silently retry a background refusal");
-    expect(prompt).toContain("including through shell scripts, AppleScript/System Events");
-    expect(prompt).toContain("If a background action unexpectedly changes focus");
-    expect(computerPrompt("vm-private")).not.toContain("user asked for foreground control");
+    expect(prompt).toContain("never route around a refusal through shell scripts, AppleScript/System Events");
+    expect(prompt).toContain("If an action changes focus unexpectedly, say so.");
+    expect(computerPrompt("vm-private")).not.toContain("permission to act on it");
   });
   it("tells sandbox desktops, and never the user's own computer, to send keys in the foreground", () => {
     for (const kind of ["vm-private", "vm-shared", "vps"] as const) {
@@ -319,27 +319,20 @@ describe("shared sentences", () => {
 
   it("configuration prompts follow actual applied or pending results without elevating another bot", () => {
     expect(PROFILE_PROMPT).toContain("propose_profile");
-    for (const prompt of [PROFILE_PROMPT, LEARN_PROMPT]) {
-      expect(prompt).toContain("continue the requested work without asking for another confirmation");
-      expect(prompt).toContain("Never claim success before an applied result");
-      expect(prompt).toContain("Full Access does not grant another bot broader permissions");
-      expect(prompt).not.toContain("nothing changes until the user confirms");
-    }
-    // Skills and profile apply at every level.
-    for (const prompt of [PROFILE_PROMPT, LEARN_PROMPT]) {
-      expect(prompt).toContain("applies immediately at every access level and the person sees it with an Undo");
-      expect(prompt).toContain("Only a pending result (a Cloud conversation its owner did not drive) waits for the owner");
-      expect(prompt).not.toContain("may wait for the person");
-    }
+    // said once, after the profile part, for skills and profile alike
+    expect(PROFILE_PROMPT).toContain("an applied change (your skills, profile or model, or as a Chief a teammate's) is done, with an Undo for the person, so carry on without asking again");
+    expect(PROFILE_PROMPT).toContain("a pending one, or a card waiting for their OK, is proposed, never done: say it waits for them and end the turn. Never claim one before it applied");
+    expect(PROFILE_PROMPT).toContain("Full Access never widens another bot's permissions");
+    expect(LEARN_PROMPT).not.toContain("Follow the tool result");
+    for (const prompt of [PROFILE_PROMPT, LEARN_PROMPT]) expect(prompt).not.toMatch(/nothing changes until the user confirms|may wait for the person/);
     expect(LEARN_PROMPT).toContain("only when the user explicitly asks to revise that exact name");
     // Triggers have no pending state: the bot sets them up in the same turn and the person undoes from the card.
     expect(TRIGGER_PROMPT).toContain("set it up with trigger action=create in this turn");
-    expect(TRIGGER_PROMPT).toContain("Do not ask for confirmation");
+    expect(TRIGGER_PROMPT).toContain("Do not ask or announce first");
     expect(TRIGGER_PROMPT).toContain("Edit, Pause and Undo");
-    expect(TRIGGER_PROMPT).toContain("use wait_until instead of staying busy or making a short-interval routine");
-    expect(TRIGGER_PROMPT).toContain("give follow_up only when they asked for something to be done at that moment");
+    expect(TRIGGER_PROMPT).toContain("use wait_until rather than staying busy");
     expect(TRIGGER_PROMPT).not.toMatch(/pending|explicitly asks/);
-    expect(CREDENTIAL_PROMPT).toContain("secure credential request");
+    expect(CREDENTIAL_PROMPT).toContain("call request_credential");
     expect(CREDENTIAL_PROMPT).not.toContain("applied immediately");
   });
 });
@@ -400,8 +393,9 @@ describe("cloudHomePrompt", () => {
     expect(text).not.toMatch(/Computer panel|container runtime|configure/i);
   });
 
-  it("says the person's own computer can't be reached from here, and never names a tool for it", () => {
-    expect(cloudHomePrompt()).toContain("You cannot see or use their own computer, its screen or its files from here.");
+  it("reaches the person's own Mac only through the Mac tools, and never refuses it outright", () => {
+    expect(cloudHomePrompt()).toContain("Their own Mac is reached only through the mac_ tools, when you have them");
+    expect(cloudHomePrompt()).not.toContain("You cannot see or use their own computer");
     expect(cloudHomePrompt()).not.toMatch(/shared_computer|list_shared_computers|ask_for_computer|this Mac/);
   });
 
@@ -484,12 +478,12 @@ describe("how every bot replies", () => {
       "the verdict, the number or \"X is ready\" in the first sentence",
       "where the facts came from and how fresh they are",
       "use the units, currency, time zone and numbers the person has told you about",
-      "no \"let me know if…\", no \"hope this helps\", and no \"Want me to…?\" after finished work",
-      "Offer a next step only when there is an obvious, valuable one",
+      "no \"let me know if…\", no \"hope this helps\"",
+      "Offer only a truly optional step, in one short line",
       "first check what you can already reach",
       "ask for exactly one thing, in plain words, with the reason",
       "do the parts that do not depend on it in the same turn",
-      "Never name tools or functions, the files that hold your notes or settings, MCP",
+      "never name tools or functions, the files that hold your notes or settings, MCP",
       "state the money facts you found: price, fees, deposit, cancellation terms",
       "Their pick of an option is the go-ahead.",
       "Never ask for passwords, one-time codes or card numbers in chat.",
@@ -499,8 +493,8 @@ describe("how every bot replies", () => {
   });
 
   it("asks one thing with tap-to-answer choices, keeps forms for real edits, and confirms a routine in plain words", () => {
-    expect(WIDGET_PROMPT).toContain("Ask only what you cannot find or sensibly default yourself, and one thing at a time.");
-    expect(WIDGET_PROMPT).toContain("a Card with a Row of Buttons, one per option, whose onClickAction sends that option in one tap");
+    expect(WIDGET_PROMPT).toContain("A pick from a few options goes as tap-to-answer buttons (show_widget, at most six)");
+    expect(JSON.stringify(availableTools({} as never).find((tool) => tool.name === "show_widget"))).toContain("a Card with a Row of Buttons, one per option (onClickAction sends it in one tap)");
     expect(WIDGET_PROMPT).not.toContain("never end a turn with a question in text that a form could ask");
     expect(TRIGGER_PROMPT).toContain("weekdays at 9:00 AM India time\", never a zone id such as Asia/Kolkata");
     expect(TRIGGER_PROMPT).toContain("where its results will appear, what each run covers, and when the first run is");
@@ -544,5 +538,11 @@ describe("act first, ask last", () => {
     expect(HUMAN_CHECK_PROMPT).toMatch(/Never ask about the same site twice in one task/);
     for (const wall of ["press and hold", "unusual traffic", "access denied", "429"]) expect(HUMAN_CHECK_PROMPT).toContain(wall);
     expect(SIGN_IN_PROMPT).not.toMatch(/a CAPTCHA, passkey/);
+  });
+});
+
+describe("a shorter answer", () => {
+  it("cuts words, never the facts the ask needs", () => {
+    expect(talkingStylePrompt("warm")).toContain("never the facts the ask needs (every item, name and total it asked for)");
   });
 });

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
-import { createStartupScreen } from "./startup-screen.mjs";
+import { createStartupScreen, STARTUP_TRY_AGAIN } from "./startup-screen.mjs";
 import { createSystemTray, trayIcon } from "./system-tray.mjs";
 
 const iconPath = fileURLToPath(new URL("./resources/app-icon.png", import.meta.url));
@@ -222,7 +222,7 @@ test("a failed startup shows on the card with try again and quit, never a hang",
   const { splash, calls } = fixture({ BrowserWindow: Said, onRetry: () => calls.push("retry") });
   splash.fail(new Error("the server exited"));
   assert.equal(splash.window.visible, true);
-  assert.ok(ran.some(code => code === `window.card?.fail(${JSON.stringify("the server exited")})`));
+  assert.ok(ran.some(code => code === `window.card?.fail(${JSON.stringify(STARTUP_TRY_AGAIN)})`));
   splash.window.webContents.emit("did-finish-load");
   assert.equal(ran.filter(code => code.startsWith("window.card?.fail(")).length, 2, "a reload still shows it");
   splash.window.webContents.emit("ipc-message", {}, "startup-screen:retry");

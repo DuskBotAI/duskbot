@@ -119,7 +119,10 @@ export function createQuestionRouting(deps: QuestionRoutingDeps) {
       if (card) store.patchMessage(pick.threadId, pick.card.id, { card: { ...card, answered: "answer", answeredText: message, answeredBy: { kind: "bot", name: sender.name } } });
     } else {
       const node = pick.node!;
-      if (!deps.answerNode(node.id, message, by)) return refused();
+      if (!deps.answerNode(node.id, message, by)) {
+        return deps.node(node.id)?.status === "waiting" ? peerDeliveryReceipt({ botId: target.id, botName: target.name, outcome: "failed",
+          detail: `${target.name} already had two answers from bots and asked again, so "${pick.question}" now waits on the person where it was asked. Tell them in one line what is blocked and what they can do` }) : refused();
+      }
       if (node.cards?.length) deps.settleSignIns(node);
       const asked = store.messagesFor(node.threadId).find((row) => row.card?.requestId?.startsWith(`needs-input-${node.id}-`) && !row.inbox
         && (!row.card.answered || (row.card.answeredBy?.kind === "bot" && row.card.answeredText === undefined)));

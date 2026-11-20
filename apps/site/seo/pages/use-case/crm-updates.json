@@ -1,0 +1,124 @@
+{
+  "path": "/use-cases/crm-updates",
+  "type": "use-case",
+  "title": "Review proposed CRM updates against your sales notes",
+  "nav": "crm updates",
+  "h1": "turn sales notes into crm updates you can verify",
+  "description": "Compare a call note with the current HubSpot deal. Get a field-by-field proposal with the old value, new value and words that justify the change.",
+  "keyword": "ai crm updates",
+  "keywords": [
+    "update hubspot from call notes",
+    "ai crm data entry"
+  ],
+  "answer": "**a buyer can move the demo without moving the close date.** give a bot the call note and the hubspot deal id. have it compare the note with the current fields, then return just the changes you can back up. the rep who owns the forecast decides what goes into the record.",
+  "updated": "2026-11-20",
+  "review": {
+    "status": "approved",
+    "by": "lead agent, after four independent reviewers read every page against seo/facts (2026-11-20); every finding applied",
+    "at": "2026-11-20"
+  },
+  "voice": 2,
+  "tags": [
+    "sales",
+    "deals",
+    "crm"
+  ],
+  "connectors": [
+    "hubspot"
+  ],
+  "related": [
+    "/integrations/hubspot",
+    "/routines/hubspot-stale-deals",
+    "/use-cases/meeting-notes"
+  ],
+  "art": {
+    "props": [
+      "p-briefcase",
+      "s-notebook"
+    ],
+    "bubble": "which field changed?"
+  },
+  "og_line": "see the old value beside the new one.",
+  "routine": {
+    "intro": "**pair every call note with its deal id.** add the pair to the call log after a call.",
+    "message": "every weekday at 5 pm, review today's deal ids and dated call notes in sales-call-log.md in your project folder. for each pair, get the current hubspot deal. compare the next step, close date and amount with the buyer's words. show a proposed change only where the note supports that exact field. include deal id, field, old value, proposed value and evidence.\n\nput tentative language under 'ask the rep'. skip deals without a matching id. leave every field alone. if no pairs came in today, stay quiet.",
+    "when": "weekdays at 5 pm after reps add their notes",
+    "needs": "hubspot read only, a deal id and a dated note for each call. use your call log’s filename and give the bot access to its folder.",
+    "output": "example proposal\ndeal 804 | next step | send samples → book a fitting | bernadette asked for a fitting after the samples arrived.\nclose date | keep current value | tuesday refers to the fitting.\namount | no proposal | buyer asked for a quote on a larger order."
+  },
+  "sections": [
+    {
+      "h": "start with the right opportunity",
+      "md": "**match on deal id before reading fields.** one customer can have a renewal and a new order open. a company name won't tell you which pipeline entry the buyer meant. get the id from the deal the rep had open during the call."
+    },
+    {
+      "h": "compare what the rep heard with what is on file",
+      "md": "**ask for the smallest edit the evidence supports.**\n\n1. use hubspot to read the named deal and its current properties.[^1]\n2. extract what changed from the call note. preserve dates and currencies as written.\n3. show the old and proposed values on one line. if the current value already says the same thing, omit the edit."
+    },
+    {
+      "h": "let the forecast owner apply the edit",
+      "md": "**reopen the deal before changing the forecast.** a colleague may have updated it since the bot read it. if the old value in chat differs from the live value, stop and ask the rep which is current.\n\nuse a regular field mapping for a fixed transfer between systems. dusk bot earns its place when someone's words need interpretation."
+    }
+  ],
+  "safeguards": [
+    "keep hubspot read only for the comparison. the rep enters accepted edits in the live deal.",
+    "leave stage and probability to the deal owner. enthusiasm alone gives you no basis for a forecast.",
+    "strip personal details from call notes before pasting them. include only the evidence for the proposed fields."
+  ],
+  "worked": {
+    "intro": "an invented call about a uniform order",
+    "before": "the next step still says “send samples”. bernadette confirms delivery and asks for a tuesday fitting. the rep also mentions a possible second order.",
+    "after": "the rep updates the next step and books the fitting separately. the forecast keeps its amount and close date until the buyer confirms an order."
+  },
+  "saves": {
+    "estimate": "around 12 minutes for a batch like this",
+    "formula": "6 call notes × 4 minutes reconciling each = 24 minutes\n6 proposals × 2 minutes reviewing and entering each = 12 minutes\n24 - 12 = 12 minutes",
+    "assumptions": [
+      "time both approaches on six deals",
+      "include collecting ids and correcting any proposals",
+      "exclude call note writing only if you already do it"
+    ]
+  },
+  "mistakes": [
+    {
+      "mistake": "overwriting an amount with a range",
+      "fix": "keep the range in the evidence. ask which value your forecasting rules accept."
+    },
+    {
+      "mistake": "treating a blank as an instruction to clear a field",
+      "fix": "absence of a new value means leave the existing value alone."
+    }
+  ],
+  "quick": {
+    "steps": [
+      "copy one deal id and its call note",
+      "ask for a proposal on the next-step field",
+      "compare the old value with hubspot before entering the edit"
+    ]
+  },
+  "faq": [
+    {
+      "q": "can the bot change a hubspot deal itself?",
+      "a": "hubspot has an update action.[^1] keep this routine read only. for a separate editing routine, limit the allowed actions and write “ask me before you change anything” into the message."
+    },
+    {
+      "q": "what if several calls mention the same deal?",
+      "a": "sort the notes by call date and look for a buyer correction. ask the rep about conflicts before entering either value."
+    }
+  ],
+  "sources": [
+    {
+      "label": "composio: hubspot actions",
+      "url": "https://docs.composio.dev/toolkits/hubspot",
+      "checked": "2026-11-12"
+    },
+    {
+      "label": "dusk bot docs: files and connected apps",
+      "url": "/docs/files-and-apps"
+    },
+    {
+      "label": "dusk bot docs: routines",
+      "url": "/docs/routines"
+    }
+  ]
+}

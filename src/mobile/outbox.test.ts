@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { initialState, StoreProvider, useStore, type Action } from "@/state/store";
 import { installSendOutbox, type OutboxSend } from "@/state/send-outbox";
-import { createOutbox, OUTBOX_MAX_AGE_MS, OUTBOX_MAX_TRIES, replayAction } from "./outbox";
+import { createOutbox, onBackOnline, OUTBOX_MAX_AGE_MS, OUTBOX_MAX_TRIES, replayAction } from "./outbox";
 
 function memoryPrefs() {
   const values = new Map<string, string>();
@@ -77,6 +77,40 @@ describe("outbox", () => {
     await other.ready;
     expect(other.pending()).toEqual([]);
   });
+
+  it("puts a new send behind one already waiting in its chat, and sends them in the order written", async () => {
+    const { prefs } = memoryPrefs();
+    const outbox = createOutbox(prefs, "k", () => 2_000);
+    await outbox.ready;
+    outbox.hold(send("a")); expect(outbox.keep("a")).toBe(true);
+    const dispatched: string[] = [];
+    const dispatch = (action: Action) => { if ("sendId" in action && action.sendId) { dispatched.push(action.sendId); outbox.hold(send(action.sendId)); } };
+    outbox.hold(send("b"));
+    expect(outbox.waitBehind("b")).toBe(true);
+    outbox.hold({ ...send("other"), threadId: "elsewhere" });
+    expect(outbox.waitBehind("other"), "another chat never waits").toBe(false);
+    outbox.release("other");
+    await outbox.flush(dispatch);
+    expect(dispatched).toEqual(["a"]);
+    outbox.release("a");
+    expect(dispatched).toEqual(["a", "b"]);
+    outbox.release("b");
+    expect(outbox.pending()).toEqual([]);
+  });
+
+  it("tries again when the network returns, not only on resume, until stopped", () => {
+    const network = new EventTarget();
+    let resume: (() => void) | null = null;
+    const run = vi.fn();
+    const stop = onBackOnline({ onResume: (listener) => { resume = listener; return () => { resume = null; }; } }, run, network);
+    network.dispatchEvent(new Event("online"));
+    resume!();
+    expect(run).toHaveBeenCalledTimes(2);
+    stop();
+    network.dispatchEvent(new Event("online"));
+    expect(run).toHaveBeenCalledTimes(2);
+    expect(resume).toBeNull();
+  });
 });
 
 describe("the store with an outbox", () => {
@@ -111,6 +145,34 @@ describe("the store with an outbox", () => {
     await outbox.flush(dispatch);
     await vi.advanceTimersByTimeAsync(1_000);
     expect(outbox.pending()).toEqual([]);
+    stop();
+  });
+
+  it("holds a later send behind one already waiting in the outbox, and delivers both in the order written", async () => {
+    const { prefs } = memoryPrefs();
+    const outbox = createOutbox(prefs, "k", () => Date.now());
+    await outbox.ready;
+    const stop = installSendOutbox(outbox);
+    let online = false;
+    const posted: string[] = [];
+    const dispatch = mount(vi.fn<typeof fetch>(async (path, init) => {
+      if (path !== SEND) return new Response("{}");
+      if (!online) throw new TypeError("Failed to fetch");
+      const { text, sendId } = JSON.parse(String(init?.body)) as { text: string; sendId: string };
+      posted.push(text);
+      return new Response(JSON.stringify({ ok: true, threadId: "thread", message: { id: `m-${sendId}`, role: "user", kind: "text", text, at: 1, sendId } }), { status: 202 });
+    }));
+    const onError = vi.fn();
+    dispatch({ type: "send", botId: "bot", threadId: "thread", text: "first", sendId: "send-first-0123456789", onError });
+    await vi.advanceTimersByTimeAsync(120_000);
+    online = true;
+    dispatch({ type: "send", botId: "bot", threadId: "thread", text: "second", sendId: "send-second-012345678", onError });
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(posted, "the later send never overtakes the waiting one").toEqual([]);
+    await outbox.flush(dispatch);
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect(posted).toEqual(["first", "second"]);
+    expect(onError).not.toHaveBeenCalled();
     stop();
   });
 

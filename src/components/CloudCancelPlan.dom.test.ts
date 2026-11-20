@@ -34,6 +34,7 @@ const write = async (label: string, value: string) => {
   const box = [...document.querySelectorAll("label")].find(item => item.textContent?.startsWith(label))!.querySelector("textarea")!;
   await act(async () => { Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!.call(box, value); box.dispatchEvent(new Event("input", { bubbles: true })); });
 };
+const next = () => click(button("Continue to cancel"));
 const chips = () => [...sheet()!.querySelectorAll<HTMLButtonElement>("button[aria-pressed]")].map(chip => [chip.textContent, chip.getAttribute("aria-pressed")]);
 /** What main answers: a cancel that turns renewal off (when it ends from the Admin), a keep, or as told. */
 function actionsFor(results: Partial<{ cancel: CloudRenewalResult; keep: CloudRenewalResult }> = {}) {
@@ -51,12 +52,17 @@ describe("the cancel sheet", () => {
     expect(button("Cancel plan")).toBeUndefined();
     await click(button("Cancel trial"));
     expect(sheet()!.getAttribute("aria-modal")).toBe("true");
-    expect(sheet()!.querySelector("h2")?.textContent).toBe("Cancel your trial");
-    expect(text()).toContain(`Your trial runs until ${day(END)}. Cancel now and nothing is charged.`);
-    expect(sheet()!.querySelector("legend")?.textContent).toBe("Before you go: what's the main reason?");
+    expect(sheet()!.querySelector("h2")?.textContent).toBe("Before you go");
+    expect(text()).toContain(`If you cancel, your trial keeps running until ${day(END)}. After that:`);
+    expect([...sheet()!.querySelectorAll("li")].map(item => item.textContent)).toEqual(["Bots on dusk cloud stop running when your Mac is asleep or off.", "Routines on dusk cloud stop.",
+      `Your dusk cloud files are kept until ${day(END + 3 * DAY)}, then deleted.`]);
+    expect(document.activeElement?.textContent).toBe("Keep my plan");
+    await next();
+    expect(sheet()!.querySelector("h2")?.textContent).toBe("Why are you leaving?");
+    expect(sheet()!.querySelector("legend")?.textContent).toBe("Pick the closest one, or skip it. It helps us fix the right thing.");
     expect(chips()).toEqual([["Missing a feature", "false"], ["Too expensive", "false"], ["Hard to set up", "false"], ["Didn't work as I expected", "false"],
       ["Not using it right now", "false"], ["Something else", "false"]]);
-    expect(document.activeElement?.textContent).toBe("Missing a feature");
+    expect(document.activeElement?.textContent).toBe("Keep my plan");
     expect([...sheet()!.querySelectorAll("label")].map(label => label.textContent)).toEqual(["What did you expect dusk cloud to do? (Optional)", "What could we have done better? (Optional)"]);
     expect(sheet()!.querySelector("a")).toBeNull();
     // One tap picks a reason; the same tap again lets it go.
@@ -64,16 +70,20 @@ describe("the cancel sheet", () => {
     await click(button("Too expensive"));
     await click(button("Hard to set up"));
     expect(chips().filter(([, pressed]) => pressed === "true")).toEqual([["Hard to set up", "true"]]);
+    expect(sheet()!.querySelector("[data-cloud-cancel-help]")?.textContent).toBe("Tell us where you got stuck below, and we'll help you finish.");
     await write("What did you expect", "To answer my email by itself.");
+    await next();
+    expect(sheet()!.querySelector("h2")?.textContent).toBe("Cancel your trial");
+    expect(text()).toContain(`Your trial ends on ${day(END)}, not today. Everything keeps working until then, and nothing is charged.`);
     await click(button("Cancel my trial"));
     expect(actions.cancel).toHaveBeenCalledExactlyOnceWith({ answer: "setup", expected: "To answer my email by itself." });
     expect(sheet()!.querySelector("[role='status']")?.textContent).toBe(`Cancelled. Your trial ends on ${day(END)}, and nothing is charged.`);
     expect(text()).toContain("The cloud stops then. Its files are kept 3 days, then deleted.");
     expect(text()).toContain("Thanks. We read every answer, and we'll write back if it's something we can build.");
     expect(changed).not.toHaveBeenCalled();
-    // Changed your mind? Keep my plan: renewal back on, the sheet closes and the plan is read again.
+    // Changed your mind? Restart plan: renewal back on, the sheet closes and the plan is read again.
     expect(text()).toContain("Changed your mind?");
-    await click(button("Keep my plan", sheet()!));
+    await click(button("Restart plan", sheet()!));
     expect(actions.keep).toHaveBeenCalledOnce();
     expect(sheet()).toBeNull();
     expect(changed).toHaveBeenCalledOnce();
@@ -83,22 +93,27 @@ describe("the cancel sheet", () => {
     const actions = actionsFor();
     await show(createElement(CloudCancelPlan, { renewal: trial, actions }));
     await click(button("Cancel trial"));
+    await next();
+    await next();
     await click(button("Cancel my trial"));
     expect(actions.cancel).toHaveBeenLastCalledWith(null);
     await click(button("Done"));
     await click(button("Cancel trial"));
+    await next();
     await write("What could we have done better", "Tell me sooner what it needs.");
+    await next();
     await click(button("Cancel my trial"));
     expect(actions.cancel).toHaveBeenLastCalledWith({ answer: null, improve: "Tell me sooner what it needs." });
     await click(button("Done"));
     const failing = actionsFor({ cancel: { outcome: "failed", state: { status: "connected" } } });
     await show(createElement(CloudCancelPlan, { renewal: trial, actions: failing }));
     await click(button("Cancel trial"));
+    await next();
     await click(button("Not using it right now"));
+    await next();
     await click(button("Cancel my trial"));
     expect(sheet()!.querySelector("[role='alert']")?.textContent).toBe("That didn't go through, and nothing changed. Try again in a minute.");
-    expect(sheet()!.getAttribute("data-cloud-cancel-sheet")).toBe("ask");
-    expect(chips().find(([label]) => label === "Not using it right now")?.[1]).toBe("true");
+    expect(sheet()!.getAttribute("data-cloud-cancel-sheet")).toBe("confirm");
     failing.cancel.mockRejectedValueOnce(new Error("main went away"));
     await click(button("Cancel my trial"));
     expect(sheet()!.querySelector("[role='alert']")).toBeTruthy();
@@ -112,6 +127,8 @@ describe("the cancel sheet", () => {
     await click(button("Keep my plan", sheet()!));
     expect([sheet(), actions.cancel.mock.calls.length, actions.keep.mock.calls.length, changed.mock.calls.length]).toEqual([null, 0, 0, 0]);
     await click(button("Cancel trial"));
+    await next();
+    await next();
     await click(button("Cancel my trial"));
     expect(sheet()!.querySelector("[role='status']")?.textContent).toBe("The cloud page's billing opened in your browser. You can do it there.");
     await click(button("Done"));
@@ -124,8 +141,11 @@ describe("the cancel sheet", () => {
     await show(createElement(CloudCancelPlan, { renewal: paid, actions }));
     expect(button("Cancel trial")).toBeUndefined();
     await click(button("Cancel plan"));
-    expect(sheet()!.querySelector("h2")?.textContent).toBe("Cancel your plan");
-    expect(text()).toContain(`Your plan runs until ${day(END)}. Cancel now and you won't be charged again. Acme's cloud stops then, for everyone in the team.`);
+    expect(sheet()!.querySelector("h2")?.textContent).toBe("Before you go");
+    expect(text()).toContain(`If you cancel, your plan keeps running until ${day(END)}. After that:Acme's cloud stops then, for everyone in the team.`);
+    expect(text()).toContain(`Your dusk cloud files are kept until ${day(END + DAY)}, then deleted.`);
+    await next();
+    await next();
     await click(button("Cancel my plan"));
     expect(sheet()!.querySelector("[role='status']")?.textContent).toBe(`Cancelled. Your plan ends on ${day(END)}. You won't be charged again.`);
     expect(text()).toContain("Acme's cloud stops then, for everyone in the team. Its files are kept 1 day, then deleted.");
@@ -158,6 +178,8 @@ describe("the cancel sheet", () => {
     const actions = actionsFor();
     await show(createElement(CloudCancelPlan, { renewal: trial, actions }));
     await click(button("Cancel trial"));
+    await next();
+    await next();
     await click(button("Cancel my trial"));
     await show(createElement(CloudCancelPlan, { renewal: cancelledTrial, actions }));
     expect(sheet()!.getAttribute("data-cloud-cancel-sheet")).toBe("done");
@@ -176,6 +198,17 @@ describe("the plan cards", () => {
       cancelPlan: vi.fn(async () => ({ outcome: "browser" as const })), keepPlan: vi.fn(async () => ({ outcome: "kept" as const, state })) } as unknown as CloudAccountBridge;
   }
 
+  it("this computer's Settings: a failed charge says the cloud is stopped and until when its data is kept, and Update card opens billing", async () => {
+    const bridge = accountBridge({ ...paidState(), payment: { name: "Night shift", fixBy: Date.UTC(2026, 11, 21, 12) } });
+    const continueInBrowser = vi.fn(async () => ({ outcome: "opened" as const }));
+    vi.stubGlobal("window", Object.assign(window, { duskDesktop: { cloudAccount: { ...bridge, continueInBrowser } } }));
+    await show(createElement(CloudAccountSettings));
+    expect(container.querySelector("[data-cloud-payment]")!.textContent).toMatch(/^Your payment didn't go through\. Update your card to get Night shift back\. Its data is kept until Dec 21, 2026\.Update card$/);
+    await click(button("Update card"));
+    expect(continueInBrowser).toHaveBeenCalledExactlyOnceWith({ kind: "billing" });
+    await act(async () => root.unmount()); root = createRoot(container);
+  });
+
   it("this computer's Settings: Cancel trial for the account that pays, through main's own bridge; nothing for anyone else", async () => {
     const bridge = accountBridge(paidState(trial));
     vi.stubGlobal("window", Object.assign(window, { duskDesktop: { cloudAccount: bridge } }));
@@ -183,7 +216,9 @@ describe("the plan cards", () => {
     expect(text()).toContain("Pro active · verified by dusk cloud");
     expect(button("Manage cloud subscription")).toBeTruthy();
     await click(button("Cancel trial"));
+    await next();
     await click(button("Missing a feature"));
+    await next();
     await click(button("Cancel my trial"));
     expect(bridge.cancelPlan).toHaveBeenCalledExactlyOnceWith({ answer: "feature" });
     expect(text()).toContain("The cloud page's billing opened in your browser.");
@@ -211,6 +246,8 @@ describe("the plan cards", () => {
     await show(createElement(CloudPlanOnCloud, { bridge: plan }));
     expect(button("Manage in your browser")).toBeTruthy();
     await click(button("Cancel trial"));
+    await next();
+    await next();
     await click(button("Cancel my trial"));
     expect(plan.cancel).toHaveBeenCalledExactlyOnceWith(null);
     await click(button("Done"));

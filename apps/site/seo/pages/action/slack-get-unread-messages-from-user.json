@@ -1,0 +1,93 @@
+{
+  "path": "/integrations/slack/get-unread-messages-from-user",
+  "type": "action",
+  "title": "Catch up on unread Slack DMs from one person",
+  "nav": "read one person's unread dms",
+  "h1": "catch up on unread slack messages from one teammate",
+  "description": "Get one teammate’s unread direct messages in order. Find the latest correction in the returned messages and see when a limit could leave newer ones out.",
+  "keyword": "unread slack messages from one person",
+  "keywords": [
+    "chatgpt summarise unread slack dms",
+    "claude read direct messages from teammate",
+    "find unread slack dms by sender"
+  ],
+  "answer": "**the second message might change the plan in the first.** a dusk bot can read unread direct messages from one slack teammate and bring them back oldest first. it uses your connected account's last-read point. the default limit is 25, so a full result can end before the newest correction.",
+  "updated": "2026-11-20",
+  "review": {
+    "status": "approved",
+    "by": "lead agent, after four independent reviewers read every page against seo/facts (2026-11-20); every finding applied",
+    "at": "2026-11-20"
+  },
+  "tags": [
+    "slack",
+    "read one person's unread dms"
+  ],
+  "connectors": [
+    "slack"
+  ],
+  "related": [
+    "/integrations/slack",
+    "/integrations/slack/list-unread-channel-messages",
+    "/integrations/slack/search-messages"
+  ],
+  "art": {
+    "logo": "slack",
+    "label": "Slack",
+    "props": [
+      "p-bubbles",
+      "s-clock"
+    ],
+    "bubble": "what changed since lunch"
+  },
+  "og_line": "read their correction after their question.",
+  "action": {
+    "toolkit": "slack",
+    "slug": "SLACK_GET_UNREAD_MESSAGES_FROM_USER"
+  },
+  "what": "**pick a person and the account whose unread messages you mean.** give the bot the teammate's slack member id, or have it look up their work email first. it opens or resumes your direct conversation and reads that person's messages after your last-read time.\n\nask it to keep corrections in order. if it reaches the requested limit, treat the last line as the latest one returned, with newer messages still possible.",
+  "uses": [
+    "follow a dispatcher’s changes to the van assignment in the order they arrived",
+    "catch a teammate's revision to a print quantity before you place the order",
+    "pull a question from your cover person's dms when you return to the desk"
+  ],
+  "routine": {
+    "message": "at 12:45 on delivery days, monday through friday, read my unread slack dms from the dispatcher named in my van rota file. use the member id in the file and read up to 50 of their messages. list van assignments and corrections here in time order. flag a full result before calling any assignment current. never reply in slack.",
+    "when": "weekdays at 12:45 before the afternoon delivery round",
+    "needs": "slack read only for unread direct messages, using your user account and the dispatcher id in the rota file",
+    "output": "monday, dispatcher howard coleman\n12:05: use the white van for the west round.\n12:12: correction, take the blue van instead.\nlast instruction returned: blue van."
+  },
+  "steps": [
+    "connect the slack account you use for dispatch in **Connected apps**. allow **read only**.",
+    "use the member id for the person on duty. confirm their identity if the rota gives only a display name.",
+    "choose a message limit for the catch-up. ask for the time and wording of any correction."
+  ],
+  "watch": [
+    "**messages you already read fall before the cutoff.** use a history read for an earlier instruction you still need.",
+    "**the action returns up to 999 messages.** hitting the limit leaves coverage uncertain. a short recap should flag that boundary.",
+    "**slack may ask for permissions to open direct conversations.** opening the dm is part of this lookup. the action doesn't write a reply."
+  ],
+  "faq": [
+    {
+      "q": "why did the summary miss a message i opened this morning?",
+      "a": "**unread follows your slack reading position.** ask for that earlier message separately if you need it to interpret what came later."
+    },
+    {
+      "q": "can it find everything this person wrote across my workspace?",
+      "a": "**use a sender search for that job.** this action covers the direct conversation with the named person. channel posts need a different lookup."
+    }
+  ],
+  "sources": [
+    {
+      "label": "dusk bot docs: files and apps",
+      "url": "/docs/files-and-apps"
+    },
+    {
+      "label": "dusk bot docs: routines",
+      "url": "/docs/routines"
+    }
+  ],
+  "voice": 2,
+  "tip": {
+    "text": "already inside a short dm exchange? read it in slack. a timed catch-up helps when one person's instructions arrive while you're away from the desk."
+  }
+}

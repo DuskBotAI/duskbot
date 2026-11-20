@@ -6,13 +6,16 @@ import { BugReportNote } from "./BugReportNote";
 import { GoalRunRow } from "./GoalRunCard";
 import { HelperKeySuggestion } from "./HelperKeySuggestion";
 import { MessageBoundary } from "./MessageBoundary";
+import { OfferCard } from "./OfferCard";
 import { WatchSuggestion } from "./WatchSuggestion";
+import { ProductsMessage } from "./ReviewCards";
 import { WidgetMessage } from "./widget/WidgetMessage";
 
 export function richRowKind(message: Message): Message["kind"] {
   // Dusk's follow-up is text the model reads, drawn under its intro's card row (OptionsCardRow).
   if (message.helperFollowup) return "options";
-  if (message.setupSuggestion || (message.kind === "goal.run" && message.goalRun)) return "widget";
+  if (message.setupSuggestion || message.offer || (message.kind === "goal.run" && message.goalRun)) return "widget";
+  if (message.kind === "widget" && message.products) return "widget";
   if (message.kind === "widget" && !message.widget) return "text";
   if (message.kind === "app" && !message.app) return "text";
   return message.kind;
@@ -21,7 +24,11 @@ export function richRowKind(message: Message): Message["kind"] {
 export function RichMessageRow({ botId, botName, threadId, message }: { botId: string; botName: string; threadId?: string; message: Message }) {
   return (
     <MessageBoundary fallbackText={message.text ?? ""}>
-      {message.setupSuggestion?.kind === "watch"
+      {message.offer
+        ? <OfferCard threadId={threadId} message={message} />
+        : message.products
+        ? <ProductsMessage message={message} />
+        : message.setupSuggestion?.kind === "watch"
         ? <WatchSuggestion threadId={threadId} message={message} />
         : message.setupSuggestion
         ? <HelperKeySuggestion threadId={threadId} message={message} />

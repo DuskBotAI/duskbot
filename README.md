@@ -274,7 +274,7 @@ curl -fsSL https://dusk.bot/s/<code>/tailscale | sh    # your tailnet
 curl -fsSL https://dusk.bot/s/<code>/ssh | sh          # over your SSH port
 ```
 
-It installs dusk bot as `duskbot.service`, links it to your app and sets up the way you picked. The line works once and expires after 30 minutes. By hand: `npx duskbot serve` on any machine with Node 24+, then `npx duskbot pair`. Docker Compose lives in [deploy/](deploy/). Never expose port 8799 directly; read [self-hosting](docs/self-hosting.md) first.
+It installs dusk bot as `duskbot.service`, links it to your app and sets up the way you picked. The line works once and expires after 30 minutes, and puts `duskbot` on the server's PATH for every login: `duskbot pair --label desktop` there links another computer. By hand: `npx duskbot serve` on any machine with Node 24+, then `npx duskbot pair`. Docker Compose lives in [deploy/](deploy/). Never expose port 8799 directly; read [self-hosting](docs/self-hosting.md) first.
 
 ## Configuration
 
@@ -384,4 +384,4 @@ Source available under [PolyForm Noncommercial 1.0.0](LICENSE). Free for persona
 
 <br>
 
-<p align="center"><img src="apps/site/public/landing/art/cat.webp" alt="" width="120"><br><sub>Made at dusk. The bots did most of it. <a href="https://dusk.bot">dusk.bot</a></sub></p>
+<p align="center"><img src="apps/site/public/landing/art/cat.webp" alt="" width="120"><br><sub>Made at dusk. The bots did most of it. <a href="https://dusk.bot">dusk.bot</a><br>Started as a fork of <a href="https://github.com/milind-soni/OpenMausBot">OpenMausBot</a> (Apache 2.0).</sub></p>

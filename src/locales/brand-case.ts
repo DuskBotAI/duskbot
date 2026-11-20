@@ -6,7 +6,7 @@ export const KEEP_WORDS: ReadonlySet<string> = new Set([
   "Foundry", "Gemini", "Gmail", "Google", "Greenference", "Grok", "Groq", "Jev", "Kimi", "Linux", "Mac", "Markdown",
   "Mermaid", "Meta", "Microsoft", "Mistral", "Moonshot", "Muse", "Node", "Notion", "Ollama", "OpenClaw", "Outlook", "Pi", "Podman",
   "PowerShell", "Qwen", "Reddit", "Safari", "Slack", "Stripe", "Tailscale", "Telegram", "Terminal", "Twitter", "Ubuntu",
-  "Unsloth", "Venice", "Vercel", "Wayland", "Whop", "Windows", "Windsurf", "Xorg", "Accessibility", "Downloads", "Applications",
+  "Unsloth", "Venice", "Vercel", "Wayland", "Whop", "Windows", "Windsurf", "Xorg", "Zoom", "Accessibility", "Downloads", "Applications",
   // people and places
   "Karan", "Bansal", "Europe", "Lisbon",
   // days, months, languages
@@ -27,6 +27,7 @@ export const KEEP_PHRASES: readonly string[] = [
   "Cloudflare Workers AI", "OpenCode Zen, Go", "OpenCode Zen and Go", "DeepSeek Harness", "Grok Imagine", "Muse Wonder", "Wispr Flow",
   "Cua Driver", "VS Code", "Node.js", "Wi-Fi", "Gmail, Calendar or Drive", "Outlook, Calendar or OneDrive", "Google Drive",
   "1Password", "AirPods Pro", "Google Calendar", "Google Sheets", "Google Docs", "Google Meet", "Microsoft Teams", "X Developer",
+  "Settings › Phone", "Settings › Voice", "Settings › Transfer", "Scan a QR code", "New code",
 ];
 
 /** whole strings left alone: the remote desktop's key caps, drawn as keys, and the viewer's line that starts with noVNC's own name */
@@ -77,14 +78,14 @@ export function brandCaseEntry(key: string, value: string): string {
 /** the pieces the app fills into the middle of another line ("on a live call from {device}", "your {list}", "turn {name} {state}");
  * they stay lowercase so the line around them reads as one sentence. Everything else starts with a capital. */
 const FRAGMENT_KEYS = new RegExp(`^(${[
-  "chat\\.event\\.(and|andMore|for)", "approval\\.voice\\.action\\w+", "helperIntro\\.followup\\.(botsNone|botOne|bots|routinesNone|routineOne|routines|more)",
+  "chat\\.event\\.(and|andMore|for|peerReplied)", "approval\\.voice\\.action\\w+", "helperIntro\\.followup\\.(botsNone|botOne|bots|routinesNone|routineOne|routines|more)",
   "call\\.live\\.device\\.\\w+", "vm\\.confirm\\.orphanVps", "vm\\.idle\\.minutes", "mcp\\.state\\.(on|off)", "sidebar\\.preview\\.aBot",
   "vpsLink\\.yourServer", "mobile\\.connection\\.your(Cloud|Computer)", "mobile\\.entry\\.legalAnd", "remote\\.client\\.fallbackName", "remote\\.time\\.justNow", "app\\.sentFrom", "botAccess\\.(theAdmins|folder\\.home)",
   "browser\\.panel\\.tab", "cloudBuy\\.team\\.unnamed", "bring\\.topic\\w+", "cloudTrial\\.yourPlan",
   "room\\.(hint|responder)\\.leadFallback", "call\\.questionOptions", "inbox\\.recommendedInline", "activity\\.(approvalIn|to)", "files\\.countMore", "voice\\.provider",
   "botMove\\.memory", "teamShare\\.skip\\.\\w+", "inbox\\.(in|via)", "model\\.variant\\.(unverified|unavailable)", "vpsLink\\.device\\.\\w+",
   "automations\\.(time|source|skip)\\.\\w+", "automations\\.app\\.(from|about|labeled|mentioning|in)", "cloudSetup\\.ready\\.(today|tomorrow)",
-  "connectApps\\.account\\.fallback", "automations\\.does\\.default", "cloudBuy\\.big\\.perMonth(Trial)?",
+  "connectApps\\.account\\.fallback", "settings\\.updates\\.thisServer", "automations\\.does\\.default", "cloudBuy\\.big\\.perMonth(Trial)?",
   "server\\.(runs\\.state|incidents\\.where|reports\\.(when|why))\\.\\w+",
   "server\\.(connect\\.thisApp|rooms\\.sameName\\.chief|teammates\\.(room|handedWork)|mcp\\.card\\.(newKey|newClientSecret))",
 ].join("|")})$`);

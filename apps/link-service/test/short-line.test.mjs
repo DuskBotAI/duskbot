@@ -85,4 +85,8 @@ describe("short line", () => {
     expect(ran.code).toBe(1);
     expect(ran.stderr).toContain("dusk bot could not be downloaded");
   }, 30_000);
+
+  it("a download that stalls is given up on, never waited on forever", () => {
+    expect(bootstrapScript("https://link.example.test", "abcdefghij-abcdefghijklmnopqrstuvwxyz", "tailscale")).toContain("curl -fsSL --connect-timeout 15 -m 120 $f https://link.example.test/i/");
+  });
 });

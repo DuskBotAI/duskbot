@@ -84,7 +84,7 @@ export interface IslandLayout {
   surface: "island";
   width: number;
   height: number;
-  collapsed: { kind: "notch" | "pill"; width: number; height: number; top: number; notch: number };
+  collapsed: { kind: "notch" | "pill"; width: number; height: number; top: number; notch: number; notchHeight: number };
   tile: number;
   size: "small" | "medium" | "large";
 }

@@ -20,7 +20,7 @@ export function SimpleRailFooter({ owner = null, archived, plus }: {
     <div data-sidebar-rail-footer="" className="relative flex flex-col items-center gap-2 px-2 pb-4 pt-2">
       <RailSpot />
       {plus}
-      <SidebarConnectApps circle small />
+      <SidebarConnectApps circle />
       <SidebarProfileMenu iconOnly rail simple={account} />
       <SidebarPlaceStatus place={place} className="absolute bottom-3 left-full z-40 ml-2 w-56 rounded-md bg-menu px-2 py-1 text-[11px] shadow-lg" />
     </div>

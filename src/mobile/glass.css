@@ -1,0 +1,160 @@
+/* iOS's glass for the phone shell, where the root carries data-mobile-glass (the iPhone app and the framed preview): chrome that
+   floats over content, segmented controls and switches. A web view has no UIGlassEffect, so the material is drawn here:
+   the page behind blurred and saturated, a thin tint, a bright rim that catches light at two opposite corners. */
+
+html[data-mobile-glass] .dusk-mobile {
+  --m-glass-tint: color-mix(in srgb, var(--color-composer) 46%, transparent);
+  --m-glass-filter: blur(16px) saturate(1.9);
+  --m-glass-rim: linear-gradient(135deg, rgb(255 255 255 / .95), rgb(255 255 255 / .25) 30%, rgb(255 255 255 / .1) 64%, rgb(255 255 255 / .75));
+  --m-glass-shadow: inset 0 1px 1px rgb(255 255 255 / .6), 0 6px 16px -6px rgb(20 20 24 / .2), 0 1px 3px rgb(20 20 24 / .08);
+  --m-glass-spring: cubic-bezier(.3, 1.35, .45, 1);
+  --m-seg-thumb: #fff;
+  --m-seg-thumb-shadow: 0 1px 2px rgb(20 20 24 / .08), 0 4px 12px -3px rgb(20 20 24 / .16);
+  --m-lens: rgb(255 255 255 / .3);
+  --m-lens-shadow: inset 0 0 0 1px rgb(255 255 255 / .6), inset 0 2px 3px rgb(255 255 255 / .55), 0 5px 14px rgb(20 20 24 / .2);
+}
+html[data-mobile-glass][data-skin="grok-dark"] .dusk-mobile {
+  --m-glass-tint: color-mix(in srgb, var(--color-composer) 52%, transparent);
+  --m-glass-rim: linear-gradient(135deg, rgb(255 255 255 / .38), rgb(255 255 255 / .07) 30%, rgb(255 255 255 / .03) 64%, rgb(255 255 255 / .24));
+  --m-glass-shadow: inset 0 1px 1px rgb(255 255 255 / .1), 0 6px 16px -6px rgb(0 0 0 / .6);
+  --m-seg-thumb: rgb(255 255 255 / .17);
+  --m-seg-thumb-shadow: inset 0 0 0 .5px rgb(255 255 255 / .14), 0 4px 12px -3px rgb(0 0 0 / .5);
+  --m-lens: rgb(255 255 255 / .16);
+  --m-lens-shadow: inset 0 0 0 1px rgb(255 255 255 / .3), inset 0 2px 3px rgb(255 255 255 / .22), 0 5px 14px rgb(0 0 0 / .5);
+}
+
+html[data-mobile-glass] .dusk-mobile .mobile-glass {
+  background-color: var(--m-glass-tint);
+  -webkit-backdrop-filter: var(--m-glass-filter);
+  backdrop-filter: var(--m-glass-filter);
+  box-shadow: var(--m-glass-shadow);
+}
+html[data-mobile-glass] .dusk-mobile .mobile-glass::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  padding: 1px;
+  border-radius: inherit;
+  background: var(--m-glass-rim);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
+  pointer-events: none;
+}
+
+/* glass answers a touch by swelling toward the finger and brightening, where the shell's solid controls sink */
+html[data-mobile-glass] .dusk-mobile .mobile-glass.mobile-press { transition: scale .32s var(--m-glass-spring), background-color .18s ease; }
+html[data-mobile-glass] .dusk-mobile .mobile-glass.mobile-press:active:not(:disabled),
+html[data-mobile-glass] .dusk-mobile .mobile-glass.mobile-press[data-opening] {
+  scale: 1.08;
+  background-color: color-mix(in srgb, var(--color-composer) 78%, transparent);
+  transition-duration: .16s, .12s;
+  transition-timing-function: var(--m-ease-out), ease;
+}
+
+/* content runs under the floating bar instead of stopping at a solid band: it softens and fades toward the top edge */
+html[data-mobile-glass] .dusk-mobile .mobile-edge {
+  background: linear-gradient(to bottom, color-mix(in srgb, var(--color-app) 76%, transparent), color-mix(in srgb, var(--color-app) 36%, transparent) 60%, transparent);
+  -webkit-backdrop-filter: blur(7px);
+  backdrop-filter: blur(7px);
+  -webkit-mask-image: linear-gradient(to bottom, #000 58%, transparent);
+  mask-image: linear-gradient(to bottom, #000 58%, transparent);
+}
+
+/* a sheet that hugs its content is a pane of glass over the page */
+html[data-mobile-glass] .dusk-mobile .mobile-sheet[data-sheet-fit] {
+  background-color: color-mix(in srgb, var(--color-app) 80%, transparent);
+  -webkit-backdrop-filter: blur(28px) saturate(1.8);
+  backdrop-filter: blur(28px) saturate(1.8);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / .5);
+}
+html[data-mobile-glass][data-skin="grok-dark"] .dusk-mobile .mobile-sheet[data-sheet-fit] { box-shadow: inset 0 1px 0 rgb(255 255 255 / .12); }
+
+/* the segmented control: a capsule track, and one raised thumb that slides to the chosen segment and swells while held */
+html[data-mobile-glass] .dusk-mobile [data-segmented] {
+  --seg-pad: 3px;
+  position: relative;
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(96px, 1fr);
+  gap: 0;
+  padding: var(--seg-pad);
+  border-radius: 9999px;
+  background-color: color-mix(in srgb, var(--color-ink) 7%, transparent);
+}
+html[data-mobile-glass] .dusk-mobile [data-segmented]::before {
+  content: "";
+  position: absolute;
+  inset-block: var(--seg-pad);
+  inset-inline-start: var(--seg-pad);
+  width: calc((100% - 2 * var(--seg-pad)) / var(--seg-count));
+  translate: calc(var(--seg-index) * 100%) 0;
+  border-radius: 9999px;
+  background-color: var(--m-seg-thumb);
+  box-shadow: var(--m-seg-thumb-shadow);
+  transition: translate .42s var(--m-glass-spring), scale .22s var(--m-ease-out), background-color .18s ease, box-shadow .18s ease;
+}
+html[data-mobile-glass] .dusk-mobile [data-segmented]:dir(rtl)::before { translate: calc(var(--seg-index) * -100%) 0; }
+html[data-mobile-glass] .dusk-mobile [data-segmented]:active::before {
+  scale: 1.05 1.14;
+  background-color: var(--m-lens);
+  -webkit-backdrop-filter: blur(2px) saturate(1.8);
+  backdrop-filter: blur(2px) saturate(1.8);
+  box-shadow: var(--m-lens-shadow);
+}
+html[data-mobile-glass] .dusk-mobile [data-segmented] > button {
+  position: relative;
+  height: 36px;
+  min-height: 36px;
+  padding-inline: 14px;
+  border-radius: 9999px;
+  background-color: transparent;
+  font-size: 15px;
+  font-weight: 600;
+  scale: 1;
+}
+html[data-mobile-glass] .dusk-mobile [data-segmented] > button:is([aria-selected="true"], [aria-pressed="true"]),
+html[data-mobile-glass] .dusk-mobile [data-segmented] > button[aria-pressed="true"] > span { color: var(--color-ink); }
+html[data-mobile-glass] .dusk-mobile [data-segmented] :is([data-segmented-pill], [data-tab-fill]) { display: none; }
+/* the thumb's lens is the pressed state; the shared phone layout's dimming would grey the label under it */
+html[data-mobile-glass] .dusk-mobile :is([data-segmented] > button, [role="switch"]):active { opacity: 1; }
+
+/* switches: the system's wide track and capsule thumb; held, the thumb swells into a clear lens over the track */
+html[data-mobile-glass] .dusk-mobile :is(.mobile-switch, button[role="switch"]:not(.mobile-row)) {
+  width: 62px;
+  height: 28px;
+  border-radius: 9999px;
+}
+html[data-mobile-glass] .dusk-mobile :is(.mobile-switch, button[role="switch"]:not(.mobile-row)) > span {
+  left: 2px;
+  top: 2px;
+  width: 38px;
+  height: 24px;
+  border-radius: 9999px;
+  box-shadow: 0 1px 2px rgb(20 20 24 / .14), 0 3px 8px -2px rgb(20 20 24 / .2);
+  transform-origin: center;
+  scale: 1;
+  transition: translate .4s var(--m-glass-spring), scale .22s var(--m-ease-out), background-color .16s ease, box-shadow .16s ease;
+}
+html[data-mobile-glass] .dusk-mobile button[role="switch"]:not(.mobile-row) > span { translate: 0 0; background-color: #fff; }
+html[data-mobile-glass] .dusk-mobile :is(.mobile-switch[data-on], button[role="switch"]:not(.mobile-row)[aria-checked="true"]) > span { translate: 20px 0; }
+html[data-mobile-glass] .dusk-mobile [role="switch"]:active:not(:disabled) .mobile-switch > span,
+html[data-mobile-glass] .dusk-mobile button[role="switch"]:not(.mobile-row):active:not(:disabled) > span {
+  scale: 1.26 1.38;
+  background-color: var(--m-lens);
+  -webkit-backdrop-filter: blur(1.5px) saturate(1.8) brightness(1.1);
+  backdrop-filter: blur(1.5px) saturate(1.8) brightness(1.1);
+  box-shadow: var(--m-lens-shadow);
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  html[data-mobile-glass] .dusk-mobile .mobile-glass,
+  html[data-mobile-glass] .dusk-mobile .mobile-sheet[data-sheet-fit] { background-color: var(--color-composer); -webkit-backdrop-filter: none; backdrop-filter: none; }
+  html[data-mobile-glass] .dusk-mobile .mobile-edge { -webkit-backdrop-filter: none; backdrop-filter: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html[data-mobile-glass] .dusk-mobile .mobile-glass.mobile-press:active { scale: 1; }
+  html[data-mobile-glass] .dusk-mobile [data-segmented]::before,
+  html[data-mobile-glass] .dusk-mobile :is(.mobile-switch, button[role="switch"]:not(.mobile-row)) > span { transition-duration: .01s; scale: 1; }
+}

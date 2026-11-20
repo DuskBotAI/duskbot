@@ -11,6 +11,8 @@ interface MobileSession {
   hash: string;
   deviceId: string;
   createdAt: number;
+  /** the workspace that paired it, when known */
+  environmentId?: string;
 }
 
 export function createMobileSessions({ file }: { file: string | null }) {
@@ -21,10 +23,11 @@ export function createMobileSessions({ file }: { file: string | null }) {
       if (parsed?.v !== 1 || !Array.isArray(parsed.sessions) || !parsed.sessions.every(
         (session: MobileSession) => session && typeof session.hash === "string" && /^[a-f0-9]{64}$/.test(session.hash)
           && typeof session.deviceId === "string" && Number.isSafeInteger(session.createdAt)
-          && session.createdAt >= 0,
+          && session.createdAt >= 0
+          && (session.environmentId === undefined || typeof session.environmentId === "string"),
       )) throw new Error("invalid mobile sessions");
       sessions = parsed.sessions
-        .map(({ hash, deviceId, createdAt }: MobileSession) => ({ hash, deviceId, createdAt }))
+        .map(({ hash, deviceId, createdAt, environmentId }: MobileSession) => ({ hash, deviceId, createdAt, ...(environmentId ? { environmentId } : {}) }))
         .sort((a: MobileSession, b: MobileSession) => a.createdAt - b.createdAt).slice(-64);
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
@@ -40,12 +43,12 @@ export function createMobileSessions({ file }: { file: string | null }) {
   };
 
   return {
-    remember(token: string, deviceId: string): void {
+    remember(token: string, deviceId: string, environmentId?: string | null): void {
       if (!TOKEN.test(token)) return;
       const hash = hashOf(token);
       if (sessions.some((session) => session.hash === hash)) return;
       const previous = sessions;
-      sessions = [...sessions, { hash, deviceId, createdAt: Date.now() }].slice(-64);
+      sessions = [...sessions, { hash, deviceId, createdAt: Date.now(), ...(environmentId ? { environmentId } : {}) }].slice(-64);
       try {
         persist();
       } catch (error) {
@@ -57,6 +60,10 @@ export function createMobileSessions({ file }: { file: string | null }) {
       if (!TOKEN.test(token)) return false;
       const hash = hashOf(token);
       return sessions.some((session) => session.hash === hash);
+    },
+    environmentOf(token: string): string | null {
+      const hash = hashOf(token);
+      return sessions.find((session) => session.hash === hash)?.environmentId ?? null;
     },
     forget(token: string): void {
       const hash = hashOf(token);

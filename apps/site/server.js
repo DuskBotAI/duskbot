@@ -9,7 +9,7 @@ import { createHash } from 'node:crypto';
 import { openStore } from './waitlist-store.js';
 import { openMongoStore } from './waitlist-mongo.js';
 import { emailFromToken } from './unsubscribe.js';
-import { serveMirrored } from './release-mirror.js';
+import { serveMirrored, serveVoiceModel } from './release-mirror.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const site = process.argv[2] || 'landing';
@@ -277,7 +277,7 @@ const server = http.createServer((req, res) => {
     res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'public, max-age=300' });
     return res.end('User-agent: *\nDisallow: /\n');
   }
-  if (serveMirrored(req, res, urlPath)) return;
+  if (serveMirrored(req, res, urlPath) || serveVoiceModel(req, res, urlPath)) return;
   // curl -fsSL https://dusk.bot/install-mac | sh: the mac installer has a short address
   let file = resolveFile(urlPath === '/install-mac' ? '/install-mac.sh' : urlPath), status = 200;
   // a page has one address, without the slash at its end

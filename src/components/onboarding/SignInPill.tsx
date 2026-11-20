@@ -76,13 +76,14 @@ function useSeconds(since: number | null): number {
   return since === null ? 0 : Math.max(0, Math.floor((now - since) / 1_000));
 }
 
-export function PasteSlot({ name, onSubmit, address = false }: { name: string; onSubmit: (code: string) => void; address?: boolean }) {
+export function PasteSlot({ name, onSubmit, address = false, problem = null }: { name: string; onSubmit: (code: string) => void; address?: boolean; problem?: string | null }) {
   const [code, setCode] = useState("");
   const label = address ? t("connect.redirect.paste") : t("onboarding.meet.paste", { name });
   return (
     <form data-sign-in={address ? "redirect" : "paste"} className="flex w-[288px] max-w-full flex-col items-center gap-2" onSubmit={(event) => { event.preventDefault(); onSubmit(code); }}>
-      <input autoFocus value={code} onChange={(event) => setCode(event.target.value)} aria-label={label} placeholder={label}
+      <input autoFocus value={code} onChange={(event) => setCode(event.target.value)} aria-label={label} placeholder={label} aria-invalid={problem ? true : undefined}
         className="h-9 w-full rounded-[18px] border-0 bg-ink/[0.06] px-4 text-[14px] leading-5 text-ink outline-none placeholder:text-ink-tertiary focus-visible:bg-ink/[0.08]" spellCheck={false} autoCorrect="off" autoCapitalize="off" />
+      {problem && <p role="alert" data-paste-problem="" className="m-0 max-w-[400px] text-center text-[13px] leading-[18px] text-danger">{problem}</p>}
       <button type="submit" disabled={!code.trim()} className={SECONDARY}>{t(address ? "connect.redirect.submit" : "onboarding.meet.pasteSubmit")}</button>
     </form>
   );
@@ -244,7 +245,7 @@ export function ConnectPanel({ flow, name, driverKind, onTrouble }: {
     case "waiting":
       if (state.kind === "paste" || state.kind === "redirect") {
         body = <>
-          <PasteSlot name={name} onSubmit={flow.submit} address={state.kind === "redirect"} />
+          <PasteSlot name={name} onSubmit={flow.submit} address={state.kind === "redirect"} problem={state.problem ?? null} />
           <WaitHelp guide={t(state.kind === "redirect" ? "connect.guide.redirect" : "connect.guide.paste", { site })} seconds={seconds} />
           <div className="flex items-center gap-1">
             {state.link && <button type="button" onClick={() => void flow.openAgain()} className={QUIET}>{t("connect.openAgain")}</button>}
@@ -275,9 +276,23 @@ export function ConnectPanel({ flow, name, driverKind, onTrouble }: {
       break;
     }
   }
+  const stageKey = state.stage === "waiting" ? `waiting-${state.kind}` : state.stage;
+  const stageRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (stageKey.startsWith("waiting") || stageKey === "failed") revealIfCovered(stageRef.current);
+  }, [stageKey]);
   return (
-    <StageSwap stage={state.stage === "waiting" ? `waiting-${state.kind}` : state.stage} className="w-full">
-      <div data-connect-stage={state.stage} className="flex w-full flex-col items-center gap-2.5">{body}</div>
+    <StageSwap stage={stageKey} className="w-full">
+      <div ref={stageRef} data-connect-stage={state.stage} className="flex w-full flex-col items-center gap-2.5">{body}</div>
     </StageSwap>
   );
+}
+
+export function revealIfCovered(element: HTMLElement | null): void {
+  if (!element) return;
+  const box = element.getBoundingClientRect();
+  const bottom = box.bottom - 4;
+  const hit = bottom > 0 && bottom < window.innerHeight ? document.elementFromPoint(box.left + box.width / 2, bottom) : null;
+  if (hit && element.contains(hit)) return;
+  element.scrollIntoView?.({ block: "center" });
 }

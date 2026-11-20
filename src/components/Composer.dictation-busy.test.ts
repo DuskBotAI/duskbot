@@ -88,7 +88,7 @@ describe("dictation while the bot works", () => {
     hear("also check the footer");
     flushSync(() => input().dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })));
     expect(speechStop).toHaveBeenCalled();
-    expect(fixture.dispatch).toHaveBeenCalledWith(expect.objectContaining({ type: "send", text: "also check the footer", followUp: "queue" }));
+    expect(fixture.dispatch).toHaveBeenCalledWith(expect.objectContaining({ type: "send", text: "also check the footer", followUp: "steer" }));
   });
 
   it("offers discard only while recording, and it brings back the draft from before", () => {

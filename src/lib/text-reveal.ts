@@ -110,3 +110,29 @@ export function revealedWords(threadId: string, now = Date.now()): number | null
   const handoff = handoffs.get(threadId);
   return handoff && now - handoff.at < HANDOFF_FRESH_MS ? handoff.words : null;
 }
+
+const FENCE = /^\s{0,3}(```|~~~)/;
+/** a line that carries on the block before a blank line: a list item, an indented line, a quote or a table row */
+const CONTINUES = /^(\s+\S|\s{0,3}([-*+]|\d+[.)])\s|\s{0,3}>|\s*\|)/;
+
+/** A streaming reply cut into its finished blocks and the one still growing, at blank lines outside code fences and
+ * never before a line that continues a list, quote or table, so each finished block renders as it will land. */
+export function streamingBlocks(text: string): string[] {
+  const lines = text.split("\n");
+  const blocks: string[] = [];
+  let current: string[] = [];
+  let fenced = false;
+  for (let i = 0; i < lines.length; i += 1) {
+    const line = lines[i]!;
+    if (FENCE.test(line)) fenced = !fenced;
+    const next = lines[i + 1];
+    if (!fenced && line.trim() === "" && current.length > 0 && next !== undefined && next.trim() !== "" && !CONTINUES.test(next)) {
+      blocks.push(current.join("\n"));
+      current = [];
+      continue;
+    }
+    current.push(line);
+  }
+  if (current.length) blocks.push(current.join("\n"));
+  return blocks;
+}

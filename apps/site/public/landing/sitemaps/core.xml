@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url><loc>https://dusk.bot/</loc><lastmod>2026-11-16</lastmod></url>
-  <url><loc>https://dusk.bot/about</loc><lastmod>2026-11-12</lastmod></url>
+  <url><loc>https://dusk.bot/about</loc><lastmod>2026-11-19</lastmod></url>
   <url><loc>https://dusk.bot/acceptable-use</loc><lastmod>2026-11-13</lastmod></url>
   <url><loc>https://dusk.bot/brand</loc><lastmod>2026-11-12</lastmod></url>
   <url><loc>https://dusk.bot/changelog</loc><lastmod>2026-11-12</lastmod></url>
@@ -13,7 +13,7 @@
   <url><loc>https://dusk.bot/docs/bots</loc><lastmod>2026-11-12</lastmod></url>
   <url><loc>https://dusk.bot/docs/computer</loc><lastmod>2026-11-12</lastmod></url>
   <url><loc>https://dusk.bot/docs/dusk-cloud</loc><lastmod>2026-11-13</lastmod></url>
-  <url><loc>https://dusk.bot/docs/faq</loc><lastmod>2026-11-15</lastmod></url>
+  <url><loc>https://dusk.bot/docs/faq</loc><lastmod>2026-11-19</lastmod></url>
   <url><loc>https://dusk.bot/docs/files-and-apps</loc><lastmod>2026-11-12</lastmod></url>
   <url><loc>https://dusk.bot/docs/getting-started</loc><lastmod>2026-11-12</lastmod></url>
   <url><loc>https://dusk.bot/docs/group-chats</loc><lastmod>2026-11-12</lastmod></url>
@@ -23,9 +23,9 @@
   <url><loc>https://dusk.bot/docs/routines</loc><lastmod>2026-11-12</lastmod></url>
   <url><loc>https://dusk.bot/docs/tips</loc><lastmod>2026-11-13</lastmod></url>
   <url><loc>https://dusk.bot/docs/troubleshooting</loc><lastmod>2026-11-12</lastmod></url>
-  <url><loc>https://dusk.bot/docs/your-own-server</loc><lastmod>2026-11-17</lastmod></url>
-  <url><loc>https://dusk.bot/download</loc><lastmod>2026-11-19</lastmod></url>
-  <url><loc>https://dusk.bot/license</loc><lastmod>2026-11-15</lastmod></url>
+  <url><loc>https://dusk.bot/docs/your-own-server</loc><lastmod>2026-11-19</lastmod></url>
+  <url><loc>https://dusk.bot/download</loc><lastmod>2026-11-20</lastmod></url>
+  <url><loc>https://dusk.bot/license</loc><lastmod>2026-11-19</lastmod></url>
   <url><loc>https://dusk.bot/pricing</loc><lastmod>2026-11-13</lastmod></url>
   <url><loc>https://dusk.bot/privacy</loc><lastmod>2026-11-16</lastmod></url>
   <url><loc>https://dusk.bot/refunds</loc><lastmod>2026-11-13</lastmod></url>

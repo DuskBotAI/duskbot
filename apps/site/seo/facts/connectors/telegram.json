@@ -1,0 +1,883 @@
+{
+  "toolkit": "telegram",
+  "name": "Telegram",
+  "version": "20261116_00",
+  "description": "Telegram is a cloud-based messaging app with a focus on security and speed. Build bots to send messages, manage chats, and interact with users.",
+  "managed_sign_in": false,
+  "auth": [
+    "API Key"
+  ],
+  "tools_count": 18,
+  "triggers_count": 0,
+  "tools": [
+    {
+      "name": "Answer Callback Query",
+      "slug": "TELEGRAM_ANSWER_CALLBACK_QUERY",
+      "kind": "write",
+      "description": "Use this method to send answers to callback queries sent from inline keyboards. The answer will be displayed to the user as a notification at the top of the chat screen or as an alert.",
+      "inputs": [
+        {
+          "name": "url",
+          "type": "string",
+          "required": false,
+          "about": "URL that will be opened by the user's client. If you have created a Game and accepted the conditions via @Botfather, specify the URL that opens your game – note that this will only work if the query comes from a callback_game button."
+        },
+        {
+          "name": "text",
+          "type": "string",
+          "required": false,
+          "about": "Text of the notification. If not specified, nothing will be shown to the user, 0-200 characters"
+        },
+        {
+          "name": "cache_time",
+          "type": "integer",
+          "required": false,
+          "about": "The maximum amount of time in seconds that the result of the callback query may be cached client-side. Telegram apps will support caching starting in version 3.14. Defaults to 0."
+        },
+        {
+          "name": "show_alert",
+          "type": "boolean",
+          "required": false,
+          "about": "If True, an alert will be shown by the client instead of a notification at the top of the chat screen. Defaults to false."
+        },
+        {
+          "name": "callback_query_id",
+          "type": "string",
+          "required": true,
+          "about": "Unique identifier for the query to be answered Must be answered promptly after receipt; the ID expires quickly and delayed responses leave users with stuck spinners in the UI."
+        }
+      ],
+      "scopes": "$undefined",
+      "tags": [
+        "callback",
+        "inline",
+        "keyboard",
+        "buttons",
+        "openWorldHint",
+        "createHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Export Chat Invite Link",
+      "slug": "TELEGRAM_CREATE_CHAT_INVITE_LINK",
+      "kind": "send",
+      "description": "Generate a new primary invite link for a chat; any previously generated primary link is revoked. The bot must be an administrator in the chat for this to work and must have the appropriate administrator rights.",
+      "inputs": [
+        {
+          "name": "chat_id",
+          "type": "",
+          "required": true,
+          "about": "Unique identifier for the target chat or username of the target supergroup or channel"
+        }
+      ],
+      "scopes": "$undefined",
+      "tags": [
+        "chat",
+        "invite",
+        "link",
+        "management",
+        "openWorldHint",
+        "updateHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Delete Message",
+      "slug": "TELEGRAM_DELETE_MESSAGE",
+      "kind": "write",
+      "description": "Delete a message, including eligible service messages. Telegram imposes time and message-type restrictions; deletion rights depend on the chat and message, and administrators with appropriate rights can delete other users' messages.",
+      "inputs": [
+        {
+          "name": "chat_id",
+          "type": "",
+          "required": true,
+          "about": "Unique identifier for the target chat or username of the target channel In linked channel/discussion group pairs, deleting in one does not remove the corresponding post in the other — issue separate deletion calls with the correct chat_id for each target."
+        },
+        {
+          "name": "message_id",
+          "type": "integer",
+          "required": true,
+          "about": "Identifier of the message to delete"
+        }
+      ],
+      "scopes": "$undefined",
+      "tags": [
+        "messaging",
+        "deletion",
+        "openWorldHint",
+        "destructiveHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Edit Message",
+      "slug": "TELEGRAM_EDIT_MESSAGE",
+      "kind": "write",
+      "description": "Edit the text of a message identified by chat and message ID or inline message ID. Telegram's editing permissions and message restrictions apply.",
+      "inputs": [
+        {
+          "name": "text",
+          "type": "string",
+          "required": true,
+          "about": "New text of the message, 1-4096 characters after entities parsing"
+        },
+        {
+          "name": "chat_id",
+          "type": "",
+          "required": false,
+          "about": "Required if inline_message_id is not specified. Unique identifier for the target chat or username of the target channel"
+        },
+        {
+          "name": "message_id",
+          "type": "integer",
+          "required": false,
+          "about": "Required if inline_message_id is not specified. Identifier of the message to edit"
+        },
+        {
+          "name": "parse_mode",
+          "type": "string",
+          "required": false,
+          "about": "Mode for parsing entities in the message text. Options: 'Markdown', 'MarkdownV2', 'HTML'"
+        },
+        {
+          "name": "reply_markup",
+          "type": "string",
+          "required": false,
+          "about": "JSON-serialized object for an inline keyboard"
+        },
+        {
+          "name": "inline_message_id",
+          "type": "string",
+          "required": false,
+          "about": "Required if chat_id and message_id are not specified. Identifier of the inline message"
+        },
+        {
+          "name": "disable_web_page_preview",
+          "type": "boolean",
+          "required": false,
+          "about": "Disables link previews for links in this message"
+        }
+      ],
+      "scopes": "$undefined",
+      "tags": [
+        "messaging",
+        "editing",
+        "openWorldHint",
+        "updateHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Forward Message",
+      "slug": "TELEGRAM_FORWARD_MESSAGE",
+      "kind": "send",
+      "description": "Forward a message from one chat to another. Service messages and messages with protected content cannot be forwarded.",
+      "inputs": [
+        {
+          "name": "chat_id",
+          "type": "",
+          "required": true,
+          "about": "Unique identifier for the target chat or username of the target channel"
+        },
+        {
+          "name": "message_id",
+          "type": "integer",
+          "required": true,
+          "about": "Message identifier in the chat specified in from_chat_id"
+        },
+        {
+          "name": "from_chat_id",
+          "type": "",
+          "required": true,
+          "about": "Unique identifier for the chat where the original message was sent (or channel username in the format @channelusername)"
+        },
+        {
+          "name": "disable_notification",
+          "type": "boolean",
+          "required": false,
+          "about": "Sends the message silently. Users will receive a notification with no sound."
+        }
+      ],
+      "scopes": "$undefined",
+      "tags": [
+        "messaging",
+        "forward",
+        "share",
+        "openWorldHint",
+        "createHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get Chat Info",
+      "slug": "TELEGRAM_GET_CHAT",
+      "kind": "read",
+      "description": "Get up to date information about the chat (current name of the user for one-on-one conversations, current username of a user, group or channel, etc.). The bot must be a member of or have access to the target chat; calls fail if the bot was never added, was removed, or is blocked.",
+      "inputs": [
+        {
+          "name": "chat_id",
+          "type": "",
+          "required": true,
+          "about": "Unique identifier for the target chat or username of the target supergroup or channel Numeric IDs for groups and channels are negative integers. Username must start with '@'; plain names without '@', full URLs, or free text will not resolve. Use TELEGRAM_GET_UPDATES to obtain reliable chat_id values"
+        }
+      ],
+      "scopes": "$undefined",
+      "tags": [
+        "chat",
+        "info",
+        "readOnlyHint",
+        "idempotentHint",
+        "openWorldHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get Chat Administrators",
+      "slug": "TELEGRAM_GET_CHAT_ADMINISTRATORS",
+      "kind": "read",
+      "description": "Get a list of chat administrators, excluding other bots. On success, returns ChatMember objects, including the bot itself if it is an administrator.",
+      "inputs": [
+        {
+          "name": "chat_id",
+          "type": "",
+          "required": true,
+          "about": "Unique identifier for the target chat or username of the target supergroup or channel"
+        }
+      ],
+      "scopes": "$undefined",
+      "tags": [
+        "chat",
+        "administrators",
+        "management",
+        "readOnlyHint",
+        "idempotentHint",
+        "openWorldHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get Chat History",
+      "slug": "TELEGRAM_GET_CHAT_HISTORY",
+      "kind": "read",
+      "description": "Poll pending bot updates and filter the returned batch by chat ID or username; this is not complete chat history, and an empty filtered batch does not establish that the chat has no accessible messages. Polling requires no active webhook, and advancing the offset confirms earlier updates across chats.",
+      "inputs": [
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "about": "Limits the number of messages to be retrieved. Values between 1-100 are accepted. Defaults to 100. To paginate beyond 100 messages, use coordinated offset or message_id values across sequential calls."
+        },
+        {
+          "name": "offset",
+          "type": "integer",
+          "required": false,
+          "about": "Sequential number of the first message to be returned; negative values are allowed. Default is 0."
+        },
+        {
+          "name": "chat_id",
+          "type": "",
+          "required": true,
+          "about": "Unique identifier for the target chat or username of the target supergroup or channel. Results are filtered to only include updates from this specific chat."
+        },
+        {
+          "name": "message_id",
+          "type": "integer",
+          "required": false,
+          "about": "Identifier of a message in the chat as a starting point for getting history. If not specified, returns recent messages."
+        }
+      ],
+      "scopes": "$undefined",
+      "tags": [
+        "chat",
+        "history",
+        "messages",
+        "readOnlyHint",
+        "openWorldHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get Chat Member",
+      "slug": "TELEGRAM_GET_CHAT_MEMBER",
+      "kind": "read",
+      "description": "Get a chat member's status/role (including the bot itself) to preflight permissions and troubleshoot 403/empty-history issues. Use before sending messages to verify bot membership and permissions.",
+      "inputs": [
+        {
+          "name": "chat_id",
+          "type": "",
+          "required": true,
+          "about": "Unique identifier for the target chat or username of the target supergroup or channel (in the format @channelusername)"
+        },
+        {
+          "name": "user_id",
+          "type": "integer",
+          "required": true,
+          "about": "Unique identifier of the target user"
+        }
+      ],
+      "scopes": "$undefined",
+      "tags": [
+        "important",
+        "readOnlyHint",
+        "idempotentHint",
+        "openWorldHint",
+        "member"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get Chat Members Count",
+      "slug": "TELEGRAM_GET_CHAT_MEMBERS_COUNT",
+      "kind": "read",
+      "description": "Get the number of members in a chat. The bot must be an administrator in the chat for this to work. Insufficient admin permissions surface as authorization errors, not as a zero or empty count.",
+      "inputs": [
+        {
+          "name": "chat_id",
+          "type": "",
+          "required": true,
+          "about": "Unique identifier for the target chat or username of the target supergroup or channel Usernames must be prefixed with '@'; plain chat names without '@' are invalid."
+        }
+      ],
+      "scopes": "$undefined",
+      "tags": [
+        "chat",
+        "members",
+        "analytics",
+        "readOnlyHint",
+        "idempotentHint",
+        "openWorldHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get Bot Info",
+      "slug": "TELEGRAM_GET_ME",
+      "kind": "read",
+      "description": "Get basic information about the bot using the Bot API getMe method, including its ID, name, username and available capability flags.",
+      "inputs": [
+        {
+          "name": "0",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "1",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "2",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "3",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "4",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "5",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "6",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "7",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "8",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "9",
+          "type": "",
+          "required": false,
+          "about": ""
+        }
+      ],
+      "scopes": "$undefined",
+      "tags": [
+        "bot",
+        "info",
+        "readOnlyHint",
+        "idempotentHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get Updates",
+      "slug": "TELEGRAM_GET_UPDATES",
+      "kind": "read",
+      "description": "Receive incoming bot updates using long polling; an outgoing webhook must be removed first, and offsets confirm earlier updates. Returned updates expose message, edited message, channel post, edited channel post and callback query fields, with limited message details.",
+      "inputs": [
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "about": "Limits the number of updates to be retrieved. Values between 1-100 are accepted. Defaults to 100"
+        },
+        {
+          "name": "offset",
+          "type": "integer",
+          "required": false,
+          "about": "Identifier of the first update to be returned. Must be greater by one than the highest among the identifiers of previously received updates"
+        },
+        {
+          "name": "timeout",
+          "type": "integer",
+          "required": false,
+          "about": "Timeout in seconds for long polling. Defaults to 0, i.e. usual short polling. Should be positive, short polling should be used for testing purposes only"
+        },
+        {
+          "name": "allowed_updates",
+          "type": "array",
+          "required": false,
+          "about": "A JSON-serialized list of the update types you want your bot to receive. Specify an empty list to receive all update types except chat_member"
+        }
+      ],
+      "scopes": "$undefined",
+      "tags": [
+        "updates",
+        "polling",
+        "readOnlyHint",
+        "openWorldHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Send Document",
+      "slug": "TELEGRAM_SEND_DOCUMENT",
+      "kind": "send",
+      "description": "Send a general file to a Telegram chat using the Bot API. Telegram currently supports sending documents by URL only for PDF and ZIP files.",
+      "inputs": [
+        {
+          "name": "caption",
+          "type": "string",
+          "required": false,
+          "about": "Document caption (may also be used when resending documents by file_id), 0-1024 characters after entities parsing"
+        },
+        {
+          "name": "chat_id",
+          "type": "",
+          "required": true,
+          "about": "Unique identifier for the target chat or username of the target channel"
+        },
+        {
+          "name": "document",
+          "type": "string",
+          "required": true,
+          "about": "File to send. Pass a file_id as String to send a file that exists on the Telegram servers (recommended), pass an HTTP URL as a String for Telegram to get a file from the Internet, or upload a new file using multipart/form-data. More info on Sending Files: https://core.telegram.org/bots/api#sending-f"
+        },
+        {
+          "name": "thumbnail",
+          "type": "string",
+          "required": false,
+          "about": "Thumbnail of the file sent; can be ignored if thumbnail generation for the file is supported server-side"
+        },
+        {
+          "name": "parse_mode",
+          "type": "string",
+          "required": false,
+          "about": "Mode for parsing entities in the document caption. Options: 'Markdown', 'MarkdownV2', 'HTML'"
+        },
+        {
+          "name": "reply_markup",
+          "type": "string",
+          "required": false,
+          "about": "JSON-serialized object for an inline keyboard, custom reply keyboard, instructions to remove reply keyboard or to force a reply from the user"
+        },
+        {
+          "name": "reply_to_message_id",
+          "type": "integer",
+          "required": false,
+          "about": "If the message is a reply, ID of the original message"
+        },
+        {
+          "name": "disable_notification",
+          "type": "boolean",
+          "required": false,
+          "about": "Sends the message silently. Users will receive a notification with no sound."
+        },
+        {
+          "name": "disable_content_type_detection",
+          "type": "boolean",
+          "required": false,
+          "about": "Disables automatic server-side content type detection for files uploaded using multipart/form-data"
+        }
+      ],
+      "scopes": "$undefined",
+      "tags": [
+        "messaging",
+        "media",
+        "document",
+        "file",
+        "openWorldHint",
+        "createHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Send Location",
+      "slug": "TELEGRAM_SEND_LOCATION",
+      "kind": "send",
+      "description": "Send point on the map location to a Telegram chat using the Bot API.",
+      "inputs": [
+        {
+          "name": "chat_id",
+          "type": "",
+          "required": true,
+          "about": "Unique identifier for the target chat or username of the target channel"
+        },
+        {
+          "name": "heading",
+          "type": "integer",
+          "required": false,
+          "about": "For live locations, a direction in which the user is moving, in degrees. Must be between 1 and 360 if specified."
+        },
+        {
+          "name": "latitude",
+          "type": "number",
+          "required": true,
+          "about": "Latitude of the location"
+        },
+        {
+          "name": "longitude",
+          "type": "number",
+          "required": true,
+          "about": "Longitude of the location"
+        },
+        {
+          "name": "live_period",
+          "type": "integer",
+          "required": false,
+          "about": "Period in seconds for which the location will be updated (see Live Locations), should be between 60 and 86400"
+        },
+        {
+          "name": "reply_markup",
+          "type": "string",
+          "required": false,
+          "about": "JSON-serialized object for an inline keyboard, custom reply keyboard, instructions to remove reply keyboard or to force a reply from the user"
+        },
+        {
+          "name": "horizontal_accuracy",
+          "type": "number",
+          "required": false,
+          "about": "The radius of uncertainty for the location, measured in meters; 0-1500"
+        },
+        {
+          "name": "reply_to_message_id",
+          "type": "integer",
+          "required": false,
+          "about": "If the message is a reply, ID of the original message"
+        },
+        {
+          "name": "disable_notification",
+          "type": "boolean",
+          "required": false,
+          "about": "Sends the message silently. Users will receive a notification with no sound."
+        },
+        {
+          "name": "proximity_alert_radius",
+          "type": "integer",
+          "required": false,
+          "about": "For live locations, a maximum distance for proximity alerts about approaching another chat member, in meters. Must be between 1 and 100000 if specified."
+        }
+      ],
+      "scopes": "$undefined",
+      "tags": [
+        "messaging",
+        "location",
+        "maps",
+        "openWorldHint",
+        "createHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Send Message",
+      "slug": "TELEGRAM_SEND_MESSAGE",
+      "kind": "send",
+      "description": "Send a text message to a Telegram chat using the Bot API. Sending is subject to Telegram's chat permissions and flood controls.",
+      "inputs": [
+        {
+          "name": "text",
+          "type": "string",
+          "required": true,
+          "about": "Text of the message to be sent, 1-4096 characters after entities parsing Content exceeding 4096 characters must be split across multiple calls."
+        },
+        {
+          "name": "chat_id",
+          "type": "",
+          "required": true,
+          "about": "Unique identifier for the target chat or username of the target channel (in the format @channelusername) Bots cannot initiate private chats with users who haven't messaged the bot first, and cannot message other bots. Verify accessibility via TELEGRAM_GET_UPDATES or TELEGRAM_GET_CHAT before sending."
+        },
+        {
+          "name": "parse_mode",
+          "type": "string",
+          "required": false,
+          "about": "Mode for parsing entities in the message text. Accepted values: 'MarkdownV2', 'Markdown', 'HTML'. All special characters must be properly escaped; unescaped or unmatched characters return 400 'can't parse entities'. Use plain text (omit parse_mode) if parsing fails."
+        },
+        {
+          "name": "reply_markup",
+          "type": "string",
+          "required": false,
+          "about": "JSON-serialized object for an inline keyboard, custom reply keyboard, instructions to remove reply keyboard or to force a reply from the user."
+        },
+        {
+          "name": "reply_to_message_id",
+          "type": "integer",
+          "required": false,
+          "about": "If the message is a reply, ID of the original message"
+        },
+        {
+          "name": "disable_notification",
+          "type": "boolean",
+          "required": false,
+          "about": "Sends the message silently. Users will receive a notification with no sound."
+        },
+        {
+          "name": "disable_web_page_preview",
+          "type": "boolean",
+          "required": false,
+          "about": "Disables link previews for links in this message"
+        }
+      ],
+      "scopes": "$undefined",
+      "tags": [
+        "messaging",
+        "important",
+        "openWorldHint",
+        "createHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Send Photo",
+      "slug": "TELEGRAM_SEND_PHOTO",
+      "kind": "send",
+      "description": "Send a photo to a Telegram chat using the Bot API. Each call sends one photo rather than an album.",
+      "inputs": [
+        {
+          "name": "photo",
+          "type": "string",
+          "required": true,
+          "about": "Photo to send. Pass a file_id as String to send a photo that exists on the Telegram servers (recommended), pass an HTTP URL as a String for Telegram to get a photo from the Internet, or upload a new photo using multipart/form-data URL must be a publicly reachable HTTPS URL (no authentication, no exp"
+        },
+        {
+          "name": "caption",
+          "type": "string",
+          "required": false,
+          "about": "Photo caption (may also be used when resending photos by file_id), 0-1024 characters after entities parsing"
+        },
+        {
+          "name": "chat_id",
+          "type": "",
+          "required": true,
+          "about": "Unique identifier for the target chat or username of the target channel Derive from TELEGRAM_GET_CHAT or TELEGRAM_GET_UPDATES; unverified IDs return 400 'chat not found'."
+        },
+        {
+          "name": "parse_mode",
+          "type": "string",
+          "required": false,
+          "about": "Mode for parsing entities in the photo caption. Options: 'Markdown', 'MarkdownV2', 'HTML' Unmatched or unescaped special characters (e.g., `*`, `_`) trigger 400 'can't parse entities' — escape all special characters before sending."
+        },
+        {
+          "name": "reply_markup",
+          "type": "string",
+          "required": false,
+          "about": "JSON-serialized object for an inline keyboard, custom reply keyboard, instructions to remove reply keyboard or to force a reply from the user"
+        },
+        {
+          "name": "reply_to_message_id",
+          "type": "integer",
+          "required": false,
+          "about": "If the message is a reply, ID of the original message"
+        },
+        {
+          "name": "disable_notification",
+          "type": "boolean",
+          "required": false,
+          "about": "Sends the message silently. Users will receive a notification with no sound."
+        }
+      ],
+      "scopes": "$undefined",
+      "tags": [
+        "messaging",
+        "media",
+        "photo",
+        "openWorldHint",
+        "createHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Send Poll",
+      "slug": "TELEGRAM_SEND_POLL",
+      "kind": "send",
+      "description": "Send a native poll to a Telegram chat using the Bot API, with a question and answer options. On success, Telegram returns the sent message containing the poll.",
+      "inputs": [
+        {
+          "name": "type",
+          "type": "string",
+          "required": false,
+          "about": "Poll type, defaults to 'regular'."
+        },
+        {
+          "name": "chat_id",
+          "type": "",
+          "required": true,
+          "about": "Unique identifier for the target chat or username of the target channel"
+        },
+        {
+          "name": "options",
+          "type": "array",
+          "required": true,
+          "about": "A list of answer options, 2-10 strings 1-100 characters each"
+        },
+        {
+          "name": "question",
+          "type": "string",
+          "required": true,
+          "about": "Poll question, 1-300 characters"
+        },
+        {
+          "name": "is_closed",
+          "type": "boolean",
+          "required": false,
+          "about": "Pass True, if the poll needs to be immediately closed. This can be useful for poll preview."
+        },
+        {
+          "name": "close_date",
+          "type": "integer",
+          "required": false,
+          "about": "Point in time (Unix timestamp) when the poll will be automatically closed. Must be at least 5 and no more than 600 seconds in the future. Can't be used together with open_period."
+        },
+        {
+          "name": "explanation",
+          "type": "string",
+          "required": false,
+          "about": "Text that is shown when a user chooses an incorrect answer or taps on the lamp icon in a quiz-style poll, 0-200 characters with at most 2 line feeds after entities parsing"
+        },
+        {
+          "name": "open_period",
+          "type": "integer",
+          "required": false,
+          "about": "Amount of time in seconds the poll will be active after creation, 5-600. Can't be used together with close_date."
+        },
+        {
+          "name": "is_anonymous",
+          "type": "boolean",
+          "required": false,
+          "about": "True, if the poll needs to be anonymous, defaults to True"
+        },
+        {
+          "name": "reply_markup",
+          "type": "string",
+          "required": false,
+          "about": "JSON-serialized object for an inline keyboard, custom reply keyboard, instructions to remove reply keyboard or to force a reply from the user"
+        },
+        {
+          "name": "correct_option_id",
+          "type": "integer",
+          "required": false,
+          "about": "0-based identifier of the correct answer option, required for polls in quiz mode"
+        },
+        {
+          "name": "reply_to_message_id",
+          "type": "integer",
+          "required": false,
+          "about": "If the message is a reply, ID of the original message"
+        },
+        {
+          "name": "disable_notification",
+          "type": "boolean",
+          "required": false,
+          "about": "Sends the message silently. Users will receive a notification with no sound."
+        },
+        {
+          "name": "explanation_parse_mode",
+          "type": "string",
+          "required": false,
+          "about": "Mode for parsing entities in the explanation."
+        },
+        {
+          "name": "allows_multiple_answers",
+          "type": "boolean",
+          "required": false,
+          "about": "True, if the poll allows multiple answers, ignored for polls in quiz mode, defaults to False"
+        }
+      ],
+      "scopes": "$undefined",
+      "tags": [
+        "messaging",
+        "poll",
+        "survey",
+        "quiz",
+        "openWorldHint",
+        "createHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Set Bot Commands",
+      "slug": "TELEGRAM_SET_MY_COMMANDS",
+      "kind": "write",
+      "description": "Use this method to change the list of the bot's commands. See https://core.telegram.org/bots#commands for more details about bot commands.",
+      "inputs": [
+        {
+          "name": "scope",
+          "type": "string",
+          "required": false,
+          "about": "JSON-serialized object, describing scope of users for which the commands are relevant. Defaults to BotCommandScopeDefault. Scoped commands override the global default only for matching users/chats; omitting scope sets the global list."
+        },
+        {
+          "name": "commands",
+          "type": "array",
+          "required": true,
+          "about": "A list of bot commands to be set as the list of the bot's commands. At most 100 commands can be specified. Each command name must be 1–32 characters (lowercase letters and underscores only); each command description must be 1–256 characters."
+        },
+        {
+          "name": "language_code",
+          "type": "string",
+          "required": false,
+          "about": "A two-letter ISO 639-1 language code. If empty, commands will be applied to all users from the given scope, for whose language there are no dedicated commands"
+        }
+      ],
+      "scopes": "$undefined",
+      "tags": [
+        "bot",
+        "commands",
+        "menu",
+        "setup",
+        "openWorldHint",
+        "updateHint"
+      ],
+      "deprecated": false
+    }
+  ],
+  "triggers": [],
+  "source": "https://docs.composio.dev/toolkits/telegram",
+  "fetched_at": "2026-11-20"
+}

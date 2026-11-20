@@ -94,6 +94,23 @@ describe("a wait for the person (tailscale's sign-in and https)", () => {
     expect(out.stdout.trim()).toBe("gave-up");
     expect(Date.now() - started).toBeLessThan(10_000);
   });
+
+  it.skipIf(!dash)("a sign-in nobody finishes ends when the wait runs out, and the person was told how long and what comes next", async () => {
+    const started = Date.now();
+    const out = await sourced('set -e; TMP=$STATE; redact() { :; }; ask() { cat >> "$STATE/asked"; }\n'
+      + 'if ts_with_link tailscale-login 2 "https://login\\.tailscale\\.com/[a-z0-9/]*" "Sign in:" -- sh -c "echo https://login.tailscale.com/a/abc123; sleep 60"; then echo ok; else echo gave-up; fi; cat "$STATE/asked"', [], dash);
+    expect(out.stdout).toMatch(/^gave-up\n/);
+    expect(out.stdout).toContain("https://login.tailscale.com/a/abc123");
+    expect(out.stdout).toContain("Waiting for you, up to 1 minutes. After that this server uses the private relay instead.");
+    expect(Date.now() - started).toBeLessThan(15_000);
+  });
+
+  it("every wait on Tailscale has an end", () => {
+    expect(script).toMatch(/^TS_INSTALL_SECS=600 TS_WAIT_SECS=900$/m);
+    expect(script).toContain('set -- timeout -k 15 "$TS_INSTALL_SECS" "$@"');
+    expect(script).not.toMatch(/ts_with_link tailscale-[a-z]+ \d/);
+    expect(script).toContain('ts up --timeout="${TS_WAIT_SECS}s"');
+  });
 });
 
 describe.skipIf(!dash || !existsSync("/usr/bin/node"))("tailnet https port 443", () => {

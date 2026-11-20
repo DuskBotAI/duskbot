@@ -1,0 +1,92 @@
+{
+  "path": "/integrations/slack/get-slack-list-item",
+  "type": "action",
+  "title": "Look up one task in a Slack List with AI",
+  "nav": "read a list item",
+  "h1": "who owns this to-do in my slack list?",
+  "description": "Read one existing Slack List item for its owner, due date and other saved fields. Learn what to use if you still need to create the list or add a task.",
+  "keyword": "read slack lists with ai",
+  "keywords": [
+    "chatgpt look up slack list task",
+    "claude get slack list item",
+    "how to create a to-do list in slack"
+  ],
+  "answer": "**read the task itself when yesterday's slack conversation and today's to-do list disagree.** a bot can fetch one existing slack list item and tell you the owner, due date or other values saved on it. give it both the list id and the row id. a channel name alone won't identify the task.",
+  "updated": "2026-11-20",
+  "review": {
+    "status": "approved",
+    "by": "lead agent, after four independent reviewers read every page against seo/facts (2026-11-20); every finding applied",
+    "at": "2026-11-20"
+  },
+  "tags": [
+    "slack",
+    "read a list item"
+  ],
+  "connectors": [
+    "slack"
+  ],
+  "related": [
+    "/integrations/slack",
+    "/integrations/slack/create-slack-list-item",
+    "/routines/slack-channel-digest"
+  ],
+  "art": {
+    "logo": "slack",
+    "label": "Slack",
+    "props": [
+      "s-notebook",
+      "s-key"
+    ],
+    "bubble": "who has the keys"
+  },
+  "og_line": "one task, as it stands now.",
+  "action": {
+    "toolkit": "slack",
+    "slug": "SLACK_GET_SLACK_LIST_ITEM"
+  },
+  "what": "**slack keeps each task's values under its column ids.** ask for the fields by their names and have the bot match them to the list's columns. if there's no due date on the item, the answer should say so. you can also ask whether your connected slack account subscribes to that row.",
+  "uses": [
+    "find who holds the venue keys before leaving for a shift",
+    "read the due date on a badge-printing task before booking collection",
+    "see whether your account follows a specific task you expect to hear about"
+  ],
+  "routine": {
+    "message": "at 5 pm on saturdays read the key return item in my front desk slack list. use the list and row ids from my shift handover file. tell me here who owns the return, when it's due and whether my connected account subscribes to it. never claim an empty field means the keys came back.",
+    "when": "saturdays at 5 pm before the desk closes",
+    "needs": "slack read only with list-reading permission on the connected user account and access to the shift handover file",
+    "output": "key return\nowner: brenda crane. due: saturday, closing time.\nyour account follows this item. the row gives no confirmation of return."
+  },
+  "steps": [
+    "select your slack user account in **Connected apps** and grant **read only** for list lookups.",
+    "get the list id from when the list was created. use the row id from adding the task or listing the items.",
+    "ask for one task field and its column name. request subscription details too if that is your question."
+  ],
+  "watch": [
+    "**a task title can repeat.** a copied task has its own row. keep the list and row ids together.",
+    "**subscription details need a separate option on the read.** ask for that detail before drawing a conclusion about who follows the task."
+  ],
+  "faq": [
+    {
+      "q": "how do i create a to-do list in slack if i don't have one yet?",
+      "a": "**use the create slack list action with task tracking turned on.** give the list a name, then add a row for each task. creation needs read and write access."
+    },
+    {
+      "q": "can i use this to tick off a task?",
+      "a": "**this lookup reads the saved values.** open the item in slack to mark it complete, or allow a separate update to that row."
+    }
+  ],
+  "sources": [
+    {
+      "label": "dusk bot docs: files and apps",
+      "url": "/docs/files-and-apps"
+    },
+    {
+      "label": "dusk bot docs: routines",
+      "url": "/docs/routines"
+    }
+  ],
+  "voice": 2,
+  "tip": {
+    "text": "if you're building a to-do list from scratch, start with creation. save the new list and item ids so a reading bot can look up the task later."
+  }
+}

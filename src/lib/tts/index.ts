@@ -2,6 +2,7 @@
 
 import { localSystemVoiceActive, remoteSystemVoice, resolveLocalSystemVoice } from "@/lib/local-voice";
 import { recordBlockTiming, recordPrepared, recordSpeakEnter } from "../voice-latency-probe";
+import { playLouder } from "./loudness";
 
 export type SpeechStatus = "idle" | "preparing" | "speaking";
 
@@ -391,6 +392,7 @@ export class Speaker {
       this.teardownAudio();
       const url = URL.createObjectURL(blob);
       const audio = new Audio(url);
+      playLouder(audio);
       this.audio = audio;
       this.objectUrl = url;
       let settled = false;

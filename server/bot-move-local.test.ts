@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { lookForBots } from "./bot-move-local.ts";
+import { channelLinks, lookForBots } from "./bot-move-local.ts";
 import { thisMachine, type SetupFs, type SetupMachine } from "./setup-import.ts";
 import { linkOldName, plantAgentTools, plantHermes, plantOpenClawEntries, plantOpenClawList, plantOpenClawStock, plantOpenMausBot, PNG, putter, SENTINEL } from "./testing/agent-app-fixtures.ts";
 
@@ -274,5 +274,34 @@ describe("dusk bot's older builds", () => {
     putter(home)(".openmausbot/bots.json", "[{");
     writeFileSync(join(home, ".openmausbot", "routines.json"), "{");
     expect(lookForBots(machineAt(home), { dataDir: join(home, ".duskbot") }).apps).toEqual([]);
+  });
+});
+
+describe("chat apps that move along", () => {
+  const TG = "7000001:AAH" + "x".repeat(32);
+  const DC = `${"M".repeat(26)}.Gabcde.${"z".repeat(38)}`;
+
+  it("marks the bot without reading a token, and only the carry reads its Telegram and Discord bots", () => {
+    const home = newHome();
+    const put = putter(home);
+    put(".hermes/SOUL.md", "You are Hermes.\n");
+    put(".hermes/.env", `OPENROUTER_API_KEY=${SENTINEL}\nTELEGRAM_BOT_TOKEN="${TG}"\nTELEGRAM_ALLOWED_USERS=501, 502\n`);
+    put(".openclaw/openclaw.json", JSON.stringify({ channels: { telegram: { botToken: TG, allowFrom: ["tg:501", "@sid"] }, discord: { token: DC, dm: { allowFrom: ["111111111111111111"] } } } }));
+    put(".openclaw/workspace/SOUL.md", "You are Claw.\n");
+    const machine = machineAt(home);
+    const look = lookForBots(machine, { now: NOW });
+    expect(machine.opened.some((path) => path.endsWith(".env"))).toBe(false);
+    expect(JSON.stringify(look)).not.toContain(TG);
+    expect(JSON.stringify(look)).not.toContain(DC);
+    const refs = look.apps.flatMap((app) => app.bots.map((bot) => bot.channelRef));
+    expect(refs).toEqual(expect.arrayContaining([`hermes:${join(home, ".hermes")}`, `openclaw:${join(home, ".openclaw")}`]));
+    expect(channelLinks(machine, `hermes:${join(home, ".hermes")}`)).toEqual([{ platform: "telegram", token: TG, allowed: ["501", "502"] }]);
+    expect(channelLinks(machine, `openclaw:${join(home, ".openclaw")}`)).toEqual([
+      { platform: "telegram", token: TG, allowed: ["501"] }, { platform: "discord", token: DC, allowed: ["111111111111111111"] },
+    ]);
+    expect(channelLinks(machine, "hermes:relative/path")).toEqual([]);
+    expect(channelLinks(machine, `shell:${home}`)).toEqual([]);
+    const setup = look.apps.find((app) => app.source === "openclaw")!.bots[0]!.memoryFiles!["memory/openclaw-setup.md"]!;
+    expect(setup).toContain("Telegram and Discord came along");
   });
 });

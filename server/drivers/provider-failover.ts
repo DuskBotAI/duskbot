@@ -1,17 +1,23 @@
 import type { RuntimeEvent } from "../contracts.ts";
+import { failureOf } from "../../shared/usage-signals.ts";
 import { classifyError } from "./retry.ts";
 
 /** A model whose provider failed a turn before it did anything is skipped this long, unless a turn on it works first. */
 export const PROVIDER_FAILURE_HOLD_MS = 10 * 60_000;
 
-const PROVIDER_REASONS: ReadonlySet<string> = new Set(["rate_limited", "overloaded", "server_error", "connection_reset", "timeout"]);
+/** What another AI cannot fix: a usage limit (its own takeover), the person's Stop, a safety block. */
+const NOT_FOR_BACKUP: ReadonlySet<string> = new Set(["quota", "interrupted", "provider_safety"]);
+/** What a fresh conversation on another AI does not fix either: a chat too long, a refusal, a tool's own failure. */
+const OWN_FIX: ReadonlySet<string> = new Set(["context", "refused", "tool"]);
 
-/** The turn failed on the provider's side (an outage, overload, rate limit, dropped connection or timeout) after the
- * engine's own retries: never a usage limit, a sign-in, a refused request or a safety block. */
+/** The turn failed before it did anything, for a reason another AI the person chose can get past: an outage, overload,
+ * rate limit, dropped connection or timeout after the engine's own retries, a model or key the provider refuses, a
+ * request it turned down, or an error nobody could read. Never a usage limit, a Stop, a safety block, a chat too long,
+ * a refusal or a tool's own failure. */
 export function providerFailure(cause: string | undefined, stopReason?: string | null): boolean {
-  if (!cause || stopReason === "tool_error" || stopReason === "provider_safety") return false;
-  const verdict = classifyError({ text: cause });
-  return verdict.transient && PROVIDER_REASONS.has(verdict.reason);
+  if (!cause || stopReason === "tool_error" || stopReason === "provider_safety" || stopReason === "cancelled" || stopReason === "interrupted") return false;
+  if (NOT_FOR_BACKUP.has(classifyError({ text: cause }).reason)) return false;
+  return !OWN_FIX.has(failureOf(cause).reason);
 }
 
 /** Something the person could see or that may have changed something: words of the reply, a tool, an ask. */

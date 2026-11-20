@@ -542,13 +542,13 @@ test("no page gets a control over lending this computer: not My Cloud's, another
 
 test("Settings on the person's own Cloud shows the plan read only, says when it is home, and can open the Plan page or sign in again; never switch away", async () => {
   const page = preload(CLOUD);
-  assert.deepEqual(Object.keys(page.bridge.cloudPlan), ["state", "manage", "signIn", "noticeSeen", "phoneSignIn", "openPage", "upgradePreview", "upgrade", "cancel", "keep", "roomNotNow", "restartNow"]);
+  assert.deepEqual(Object.keys(page.bridge.cloudPlan), ["state", "manage", "signIn", "noticeSeen", "phoneSignIn", "signedIn", "openPage", "upgradePreview", "upgrade", "cancel", "keep", "roomNotNow", "restartNow"]);
   assert.equal(page.bridge.cloudAccount, undefined, "no account, credential or address reaches the Cloud's page");
   await page.bridge.cloudPlan.state({ origin: "https://evil.example.test" });
   await assert.rejects(page.bridge.cloudPlan.manage(), /Choose Manage/);
   const ipc = pageIpc();
   const event = { sender: ipc.cloudContents, senderFrame: ipc.cloudFrame };
-  assert.deepEqual(Object.keys(Object.fromEntries(ipc.handlers)), ["cloud-plan:phone-sign-in", "cloud-plan:state", "cloud-plan:notice-seen", "cloud-plan:manage", "cloud-plan:open-page",
+  assert.deepEqual(Object.keys(Object.fromEntries(ipc.handlers)), ["cloud-plan:phone-sign-in", "cloud-plan:signed-in", "cloud-plan:state", "cloud-plan:notice-seen", "cloud-plan:manage", "cloud-plan:open-page",
     "cloud-plan:upgrade-preview", "cloud-plan:upgrade", "cloud-plan:cancel", "cloud-plan:keep", "cloud-plan:room-not-now", "cloud-plan:restart-now"]);
   assert.deepEqual(plain(await ipc.handlers.get("cloud-plan:state")(event, { tier: "personal" })), { status: "paid", tier: "max" });
   ipc.context.homeWindow = { homePage: (asked) => asked === event };
@@ -591,12 +591,8 @@ test("My Cloud as home with nothing else still opens the list of places, My Clou
   const cloud = { id: "c", kind: "remote", name: "My Cloud", origin: CLOUD, home: true };
   const rows = environments.workspaceMenuTemplate({ environments: [cloud], activeId: "c" }, { onSwitch() {}, onConnect() {}, onForget() {}, homeOrigin: CLOUD });
   assert.deepEqual(rows.map((row) => [row.label, row.checked]), [["dusk cloud", true]]);
-  const added = [];
-  const withAdd = environments.workspaceMenuTemplate({ environments: [cloud], activeId: "c" }, { onSwitch() {}, onConnect() {}, onForget() {}, onAddCloud: () => added.push(1), homeOrigin: CLOUD });
-  assert.deepEqual(withAdd.map((row) => row.label ?? row.type), ["dusk cloud", "separator", "Add dusk cloud…"], "one place still offers the way to add a cloud");
-  withAdd.at(-1).click();
-  assert.deepEqual(added, [1]);
-  assert.ok(MAIN.includes('homeWindow.cloudOrigin() && cloudOffersAllowed() ? { onAddCloud:'), "at home, main wires the add row");
+  const withAdd = environments.workspaceMenuTemplate({ environments: [cloud], activeId: "c" }, { onSwitch() {}, onConnect() {}, onForget() {}, onAddCloud() {}, homeOrigin: CLOUD });
+  assert.deepEqual(withAdd.map((row) => row.label ?? row.type), ["dusk cloud"], "home is dusk cloud: no Add dusk cloud…");
 });
 
 test("the place asked for: My Cloud unless a team is asked or remembered; a team is the session's, one the connected session no longer lists is gone, and one the Admin can't vouch for opens as saved", () => {
@@ -968,6 +964,10 @@ test("an account leaving: nothing under way for it goes on, and the next show ta
   here.home.accountLeaving();
   await here.home.show();
   assert.deepEqual(here.local, [false], "already on this computer's page: nothing moves");
+  const own = world({ journal: null, state: { status: "signed-out" }, url: "https://garage.example.test/" });
+  own.home.accountLeaving({ keep: true });
+  await own.home.show();
+  assert.deepEqual(own.local, [false], "the person's own server their bots live on is no account's: the window stays on it");
 });
 
 const B_CLOUD = "https://dusk-b.fly.dev";

@@ -280,7 +280,7 @@ export function LiveDesktop({ target, threadId, botId, name, poster, expanded, o
       }}
     >
       {expanded && (
-        <header {...dragProps} className={cn("flex shrink-0 flex-wrap items-center gap-2 border-b border-transparent bg-panel px-3 py-2", macInset && "pl-[86px]")}>
+        <header {...dragProps} className={cn("flex shrink-0 flex-wrap items-center gap-2 border-b border-transparent bg-panel pb-2 pt-[calc(var(--safe-area-inset-top,env(safe-area-inset-top,0px))+8px)] pe-[calc(var(--safe-area-inset-right,env(safe-area-inset-right,0px))+12px)]", macInset ? "pl-[86px]" : "ps-[calc(var(--safe-area-inset-left,env(safe-area-inset-left,0px))+12px)]")}>
           <span className="min-w-0 truncate text-[13px] font-medium text-ink">{label}</span>
           {!viewOnly && pill}
           {viewOnly && onTakeControl && <button type="button" style={noDragStyle} onClick={onTakeControl} disabled={connection !== "connected"} className={cn(iconButton, "ml-auto bg-control text-ink hover:bg-raised-hover")}>{t("computer.takeControl")}</button>}

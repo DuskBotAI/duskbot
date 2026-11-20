@@ -11,7 +11,7 @@ import { pipeline } from "node:stream/promises";
 import { setTimeout as delay } from "node:timers/promises";
 
 import { verifyLinkGrant } from "./grant.mjs";
-import { createPackages } from "./packages.mjs";
+import { createFleet, createPackages } from "./packages.mjs";
 import { createPushRelay } from "./push-relay.mjs";
 import { SEALED_ADDRESS_MAX, choosePlacement, createCluster, loadOf, refusesNew, sameSecret } from "./nodes.mjs";
 import { SMALL_BURST_BYTES, SMALL_BYTES_PER_SEC, SMALL_POST_BYTES, createAccountUsage, createPathCounts, fairRate } from "./fair-use.mjs";
@@ -42,6 +42,9 @@ const KEEP_LINE_EVENTS = 150;
 // a waiting server's standby read: 55 s each (the app's own reads ask 25), one request a minute and a beat every 10 s,
 // so an idle server costs the node as little as it can
 const MAX_WAIT_S = 55;
+/** phone apps 1.2 and 1.2.1 wait 15 s on a relay route before their next one: a server not reading its channels this
+ * long is answered at once instead */
+const SERVER_AWAY_MS = 20_000;
 const FRAME_MAX = 1024 * 1024 + 64;
 const QUEUE_FRAMES = 1024;
 const QUEUE_BYTES = 16 * 1024 * 1024;
@@ -178,7 +181,7 @@ export function bootstrapScript(base, token, way) {
 # dusk bot: gets the installer for this setup, then runs it
 dusk_install() {
   for f in "" -4 "" -4 ""; do
-    if s=$(curl -fsSL $f ${base}/i/${token}); then printf '%s\\n' "$s" | sh${args}; exit $?; fi
+    if s=$(curl -fsSL --connect-timeout 15 -m 120 $f ${base}/i/${token}); then printf '%s\\n' "$s" | sh${args}; exit $?; fi
     sleep 2
   done
   echo "dusk bot could not be downloaded. check the internet and paste the line again." >&2
@@ -401,11 +404,14 @@ export function createLinkService({ base, dataDir = null, scriptPath, uninstallP
   const relay = { at: now(), tokens: Math.max(limits.globalCeilingBytesPerSec * 2, limits.burstBytes), shareAt: -Infinity, demanding: new Map(), cpu: { at: Date.now(), usage: process.cpuUsage() } };
   const ipLoad = new Map();
   const packages = createPackages(packagesDir !== undefined ? packagesDir : dataDir ? join(dataDir, "packages") : null);
+  const fleet = createFleet(now);
   const sessionWaiters = new Map();
   const queues = new Map();
   const created = new Map();
   const cache = new Map();
   const channelReaders = new Map();
+  const serverReading = new Map();
+  const bootedAt = now();
   const channelRates = new Map();
   const channelSeen = new Map();
   const lookups = new Map();
@@ -518,9 +524,15 @@ export function createLinkService({ base, dataDir = null, scriptPath, uninstallP
       if (q) { q.wakeAll(); q.close(); queues.delete(key); }
     }
   }
+  function serverAway(tunnelId) {
+    const reading = serverReading.get(tunnelId);
+    if (reading?.open) return false;
+    return now() - Math.max(reading?.endedAt ?? 0, store.tunnels.get(tunnelId)?.seenAt ?? 0, bootedAt) > SERVER_AWAY_MS;
+  }
   function dropTunnelState(id) {
     channelReaders.get(id)?.close();
     channelReaders.delete(id);
+    serverReading.delete(id);
     tunnelRates.delete(id);
     serverReads.delete(id);
     serverDownloads.delete(id);
@@ -1004,6 +1016,10 @@ export function createLinkService({ base, dataDir = null, scriptPath, uninstallP
       }
       return fail(res, 405, "method not allowed");
     }
+    if (method === "GET" && path === "/ops/fleet") {
+      if (!opsAllowed()) return;
+      return send(res, 200, fleet.counts());
+    }
     if (method === "GET" && path === "/v1/stats/relay") {
       if (!opsAllowed()) return;
       const tunnels = [...store.tunnels.values()].filter((tunnel) => tunnel.relayDays && Object.keys(tunnel.relayDays).length)
@@ -1302,7 +1318,9 @@ export function createLinkService({ base, dataDir = null, scriptPath, uninstallP
         if (reads.length >= SERVER_RELEASE_READS_PER_HOUR) return fail(res, 429, "too many update checks", "rate_limited");
         reads.push(now());
         res.setHeader("cache-control", "no-store, private");
+        fleet.saw(id, req.headers["x-dusk-server-version"], req.headers["x-dusk-agent-version"]);
         if (!build) return fail(res, 404, "no build is published", "no_build");
+        if (packages.paused()) return fail(res, 404, "updates are paused", "paused");
         const policy = packages.policy();
         return send(res, 200, { v: 1, package: { sha256: build.sha256, size: build.size, version: build.version, ...(build.signature ? { signature: build.signature } : {}) }, ...(policy ? { policy } : {}) });
       }
@@ -1335,8 +1353,15 @@ export function createLinkService({ base, dataDir = null, scriptPath, uninstallP
           }
           ids.add(channel.id);
         }
+        // a phone's channel moves to another tunnel of the same account with the same phone credential: a cloud moved to a
+        // new machine makes a tunnel of its own, and the old one's machine is gone
+        const movable = (held, channel) => {
+          const from = store.tunnels.get(held.tunnel)?.acct, to = store.tunnels.get(id)?.acct;
+          return Boolean(from) && from === to && held.kind === "device" && channel.kind === "device" && held.verifier === channel.verifier;
+        };
         for (const channel of list) {
-          if (store.sessions.has(channel.id) || store.tunnels.has(channel.id) || (store.channels.has(channel.id) && store.channels.get(channel.id).tunnel !== id)) {
+          const held = store.channels.get(channel.id);
+          if (store.sessions.has(channel.id) || store.tunnels.has(channel.id) || (held && held.tunnel !== id && !movable(held, channel))) {
             return fail(res, 409, "channel id is taken", "taken", { id: channel.id });
           }
         }
@@ -1344,6 +1369,7 @@ export function createLinkService({ base, dataDir = null, scriptPath, uninstallP
         for (const channel of list) {
           const kept = store.channels.get(channel.id);
           if (kept) {
+            if (kept.tunnel !== id) { clearQueues(channel.id); kept.tunnel = id; cluster?.changed(kept); }
             const same = kept.verifier === channel.verifier && kept.kind === channel.kind && (kept.expiresAt ?? null) === (channel.expiresAt ?? null);
             if (kept.verifier !== channel.verifier) clearQueues(channel.id);
             Object.assign(kept, { verifier: channel.verifier, kind: channel.kind, expiresAt: channel.expiresAt ?? null });
@@ -1365,7 +1391,10 @@ export function createLinkService({ base, dataDir = null, scriptPath, uninstallP
       if (aggregate && method === "GET") {
         const wait = Math.min(MAX_WAIT_S, Math.max(0, Number.parseInt(url.searchParams.get("wait") ?? "0", 10) || 0));
         const abort = new AbortController();
-        res.on("close", () => abort.abort());
+        const reading = serverReading.get(id) ?? { open: 0, endedAt: now() };
+        serverReading.set(id, reading);
+        reading.open += 1;
+        res.on("close", () => { abort.abort(); reading.open -= 1; reading.endedAt = now(); });
         const reader = channelReader(id), turn = reader.claim();
         if (wait && url.searchParams.get("stream") === "1") return streamChannels(res, id, reader, turn, wait * 1000, abort.signal);
         const until = Date.now() + wait * 1000;
@@ -1399,6 +1428,7 @@ export function createLinkService({ base, dataDir = null, scriptPath, uninstallP
       if (!action && method === "DELETE") { deleteChannel(channel); return send(res, 200, { ok: true }); }
       if (action && elsewhere(res, store.tunnels.get(channel.tunnel))) return;
       if (action === "to-vps" && method === "POST") {
+        if (serverAway(channel.tunnel)) return fail(res, 503, "The computer or server is not reading its relay right now.", "server_away");
         if (!phoneRate(res, channel, "POST")) return;
         return postFrames(req, res, id, action, () => channelFor(req, res, id), true);
       }

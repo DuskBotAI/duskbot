@@ -357,6 +357,10 @@ jobs:
     if: needs.prepare.outputs.should_release == 'true'
     runs-on: windows-latest
     timeout-minutes: 30
+    env:
+      # until a code signing identity is in the secrets the Windows build is unsigned, and Defender and SmartScreen treat it
+      # as an unknown publisher
+      WIN_SIGNED: ${{ secrets.WIN_CSC_LINK != '' || secrets.AZURE_CLIENT_ID != '' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -392,7 +396,29 @@ jobs:
           DUSK_OAUTH_CLICKUP_CLIENT_SECRET: ${{ secrets.DUSK_OAUTH_CLICKUP_CLIENT_SECRET }}
           DUSK_OAUTH_TRELLO_API_KEY: ${{ secrets.DUSK_OAUTH_TRELLO_API_KEY }}
           DUSK_OAUTH_DROPBOX_CLIENT_ID: ${{ secrets.DUSK_OAUTH_DROPBOX_CLIENT_ID }}
+          WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
+          WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+          AZURE_SIGNING_ENDPOINT: ${{ vars.AZURE_SIGNING_ENDPOINT }}
+          AZURE_SIGNING_ACCOUNT: ${{ vars.AZURE_SIGNING_ACCOUNT }}
+          AZURE_SIGNING_PROFILE: ${{ vars.AZURE_SIGNING_PROFILE }}
+          WIN_PUBLISHER_NAME: ${{ vars.WIN_PUBLISHER_NAME }}
         run: pnpm package:win
+      - name: Unsigned Windows build
+        if: env.WIN_SIGNED != 'true'
+        shell: bash
+        run: echo "::warning title=Windows build not signed::no WIN_CSC_LINK or AZURE_CLIENT_ID secret, so Defender and SmartScreen see an unknown publisher"
+      - name: "Gate: every executable we ship carries a valid signature"
+        if: env.WIN_SIGNED == 'true'
+        shell: pwsh
+        run: |
+          $v = node -p "require('./package.json').version"
+          $res = 'release/win-unpacked/resources'
+          $files = @("release/DuskBot-$v-setup.exe", 'release/win-unpacked/Dusk Bot.exe', "$res/cua-driver-background.exe", "$res/cua-driver.exe")
+          $bad = $files | Where-Object { (Get-AuthenticodeSignature -LiteralPath $_).Status -ne 'Valid' }
+          if ($bad) { $bad | ForEach-Object { "::error::$_ is not validly signed" }; exit 1 }
       - name: "Gate: bundled browser works with an empty home"
         run: node scripts/smoke-browser-bundle.mjs --resources "${{ github.workspace }}/release/win-unpacked/resources"
       - name: "Gate: packaged Windows server discovers its browser"
@@ -408,6 +434,10 @@ jobs:
           node scripts/check-module-scopes.mjs "$res"
           [ -f "$res/ui/index.html" ] || { echo "::error::missing ui/index.html"; exit 1; }
           [ -f "$res/cloudflared/cloudflared.exe" ] || { echo "::error::missing cloudflared.exe"; exit 1; }
+          for cua in cua-driver.exe cua-driver-background.exe cua-sdk/cua-sdk.mjs cua-sdk/native/cua_driver_sdk.dll cua-sdk/native/cua_driver_node_runtime.node; do
+            [ -f "$res/$cua" ] || { echo "::error::missing $cua: bots could not use this computer"; exit 1; }
+          done
+          "$res/cua-driver.exe" --version | grep -Fq "cua-driver 0.28.2" || { echo "::error::cua-driver.exe has the wrong version"; exit 1; }
           [ -f "$res/licenses/cloudflared-LICENSE.txt" ] || { echo "::error::missing cloudflared license"; exit 1; }
           [ -f "$res/licenses/cloudflared-README.md" ] || { echo "::error::missing cloudflared provenance"; exit 1; }
           expected=$(node --input-type=module -e "import { CLOUDFLARED_ASSETS } from './scripts/prepare-cloudflared.mjs'; console.log(Object.values(CLOUDFLARED_ASSETS).find((asset) => asset.name === 'cloudflared-windows-amd64.exe').binarySha256)")

@@ -229,7 +229,7 @@ export function createAuth(options: AuthOptions) {
     let changed = false;
     if (now() - found.session.lastSeenAt >= 60_000) { found.session.lastSeenAt = now(); changed = true; }
     if (found.session.expiresAt - now() < 30 * day) { found.session.expiresAt = now() + 90 * day; changed = true; }
-    if (changed) store.changed();
+    if (changed) store.changedRow("sessions", found.session);
     for (const hook of appSeenHooks) hook(found.session);
     return found;
   }

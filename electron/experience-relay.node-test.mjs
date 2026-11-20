@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { crashProps, createExperienceRelay, updateFailStage } from "./experience-relay.mjs";
+import { UTILITY_NAMES } from "./utility-names.mjs";
 
 function events(install) {
   const sent = [];
@@ -31,6 +32,13 @@ test("crashes and update failures become fixed words", () => {
   assert.deepEqual(crashProps("page", "crashed"), { kind: "page", reason: "crashed" });
   assert.deepEqual(crashProps("GPU", "launch-failed"), { kind: "gpu", reason: "launch_failed" });
   assert.equal(crashProps("page", "clean-exit"), null);
+  assert.deepEqual(crashProps("Utility", "killed", { name: "Network Service" }), { kind: "utility", reason: "killed", service: "network_service" });
+  assert.deepEqual(crashProps("Utility", "crashed", { name: "Audio Service", exitCode: -36861 }), { kind: "utility", reason: "crashed", service: "audio_service", exit: "xffff7003" });
+  assert.deepEqual(crashProps("server", "crashed", { exitCode: 3 }), { kind: "server", reason: "crashed", exit: "3" });
+  for (const name of Object.values(UTILITY_NAMES)) assert.equal(crashProps("Utility", "killed", { name }), null);
+  assert.equal(crashProps("Utility", "abnormal-exit", { name: UTILITY_NAMES.companion }), null);
+  assert.equal(crashProps("GPU", "crashed", { ending: true }), null);
+  assert.equal(crashProps("server", "crashed", { ending: true }), null);
   assert.equal(updateFailStage("the update did not match its checksum"), "checksum");
   assert.equal(updateFailStage("the release manifest is not signed by a pinned key"), "manifest");
   assert.equal(updateFailStage("fetch failed"), "download");

@@ -119,6 +119,18 @@ it("restores a backup made on another host into the volume", async () => {
   await expect(provider.upload(server.id, "/etc/passwd", Buffer.from("x"))).rejects.toThrow("Invalid upload path");
 });
 
+it("archives in one call when the save is accepted as an operation and the snapshot is listed only later", async () => {
+  const { api, provider } = await fixture();
+  const server = await provider.create(input);
+  await provider.power(server.id, "off");
+  api.slowSnapshots(3);
+  const snap = await provider.archive(server.id, "dusk-slow-save");
+  expect(snap?.id).toMatch(/^sn_/);
+  expect(api.snapshots.get(snap!.id)!.name).toBe("dusk-slow-save");
+  expect(api.requests.filter(r => r.method === "POST" && r.path.endsWith("/snapshots"))).toHaveLength(1);
+  expect(await provider.archive(server.id, "dusk-slow-save")).toEqual(snap);
+});
+
 it("treats limits, cooldowns and conflicts as waiting, deletes only with confirmation and a receipt, and never names the key", async () => {
   const { api, provider } = await fixture();
   const server = await provider.create(input);

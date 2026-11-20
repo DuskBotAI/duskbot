@@ -11,20 +11,21 @@ afterEach(() => vi.unstubAllGlobals());
 
 describe("bot-attached files", () => {
   const attachments = [
-    { kind: "image" as const, path: "/store/aaaa.png", mime: "image/png" },
+    { kind: "image" as const, path: "/store/aaaa.png", mime: "image/png", name: "beach.png" },
     { kind: "file" as const, path: "/store/bbbb.mp3", mime: "audio/mpeg", name: "song.mp3" },
-    { kind: "file" as const, path: "/store/cccc.pptx", mime: "application/vnd.openxmlformats-officedocument.presentationml.presentation", name: "deck.pptx" },
+    { kind: "file" as const, path: "/store/cccc.pptx", mime: "application/vnd.openxmlformats-officedocument.presentationml.presentation", name: "deck.pptx", bytes: 2048 },
   ];
 
   it("splits a message's attachments into images and private files, keeping display names", () => {
     expect(splitMessageAttachments(attachments)).toEqual({
       images: ["/store/aaaa.png"],
+      pictures: [{ path: "/store/aaaa.png", name: "beach.png", private: true }],
       files: [
         { path: "/store/bbbb.mp3", name: "song.mp3", private: true },
-        { path: "/store/cccc.pptx", name: "deck.pptx", private: true },
+        { path: "/store/cccc.pptx", name: "deck.pptx", private: true, bytes: 2048 },
       ],
     });
-    expect(splitMessageAttachments(undefined)).toEqual({ images: [], files: [] });
+    expect(splitMessageAttachments(undefined)).toEqual({ images: [], pictures: [], files: [] });
     expect(splitMessageAttachments([
       ...attachments, { kind: "audio", path: "/store/voice.mp3" }, { kind: "future", path: "/store/unknown" },
     ])).toEqual(splitMessageAttachments(attachments));

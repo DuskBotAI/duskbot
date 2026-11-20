@@ -74,16 +74,16 @@ export const SidebarBotTile = memo(function SidebarBotTile({ primary = false, dr
       onKeyDown={onKeyDown}
       onContextMenu={(event) => openBotContextMenu(onMenu, bot.id, event)}
       className={cn(
-        "flex h-[92px] w-[78px] shrink-0 cursor-default flex-col items-center rounded-[10px] bg-[var(--tile)] px-1 pt-2 transition-colors duration-150", SIMPLE_ROW_FOCUS,
+        "flex h-[100px] w-[80px] shrink-0 cursor-default flex-col items-center rounded-[10px] bg-[var(--tile)] px-1 pt-2 transition-colors duration-150", SIMPLE_ROW_FOCUS,
         selected ? "[--tile:var(--color-raised)]" : "[--tile:var(--color-panel)] hover:[--tile:color-mix(in_srgb,var(--color-raised)_50%,var(--color-panel))]",
         pinnedCircleDragClass({ drag, dragging, drop }),
       )}
     >
-      <span className="relative flex">
+      <span data-morph={`bot:${bot.id}`} className="relative flex">
         <BotAvatar
           bot={bot}
           state={stateForBot({ ...bot, messages: visible })}
-          size={56}
+          size={62}
           motion={mascotMotion?.kind ?? "none"}
           motionKey={mascotMotion?.nonce ?? 0}
           animated={working || noticing || (mascotMotion?.kind ?? "none") !== "none"}
@@ -170,7 +170,7 @@ export function SidebarTileGrid({ primary, pinned, row, corner = false }: { prim
   if (!primary && order.ranked.length === 0) return null;
   return (
     <div ref={besideCorner.ref} data-sidebar-tiles="" data-beside-corner={besideCorner.beside ? "" : undefined}
-      className="flex max-h-[40vh] flex-wrap justify-center gap-1 overflow-y-auto px-3 pb-4 pt-2.5" {...order.frameProps}>
+      className="flex max-h-[40vh] flex-wrap justify-center gap-1 overflow-y-auto px-2 pb-4 pt-2.5" {...order.frameProps}>
       {primary && <SidebarBotTile {...row(primary)} primary />}
       {order.ranked.map((bot) => <SidebarBotTile key={bot.id} {...row(bot)} {...order.dragProps(bot)} />)}
       <span role="status" className="sr-only">{order.moved}</span>

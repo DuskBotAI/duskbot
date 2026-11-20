@@ -8,7 +8,7 @@ import { AudioLines, Check, ChevronDown, Loader2, Phone, PhoneOff, X } from "../
 import { openBot, useStore, visibleMessages, type Bot } from "@/state/store";
 import { cn } from "@/lib/cn";
 import { useMenuMotion } from "./MenuMotion";
-import { currentCall, deferCallCleanup, endCall, startCall, useOnCall } from "@/lib/call";
+import { currentCall, deferCallCleanup, endCall, startCall, takeCallAsk, useCallAsk, useOnCall } from "@/lib/call";
 import { CALL_MODES, callModeHint, effectiveCallMode, setCallMode, useCallMode, type CallMode } from "@/lib/call-mode";
 import { NO, YES } from "../../shared/call-consent";
 import { dismissStartPrompt, hangUpLiveCall, isLiveCallRunning, startLiveCall, useLiveMedia } from "@/lib/live-call-media";
@@ -25,23 +25,24 @@ import { isRoutineApproval, isSkillApproval, pendingApprovals, spokenApprovalPro
 import { callStarted } from "@/lib/product-events";
 import { useDesktopCapabilities } from "./DesktopCapabilities";
 import { callCapabilityHelp, type CallCapabilityHelp } from "@/lib/call-capability";
-import { onCallStartRequest } from "@/lib/call-start-request";
 import { serverListeningReady, listensHere, speechBridge } from "@/lib/speech";
 import { VoiceSetupDialog } from "./lazy-screens";
+import { useLocalVoiceCall } from "@/lib/voice-call/availability";
+import { VoiceCall } from "./VoiceCallBar";
 import { openBotSettings } from "./bot-panel/panel-link";
 import { MENU_SHEET } from "./menu-recipe";
 
 type Phase = "listening" | "sending" | "working" | "speaking";
 const CALL_ENDPOINT_MS = 850;
 
-/** `panel`: the small round button beside the bot in its panel, with no chevron. It leaves the composer's + menu to the
- * composer's own button: two buttons answering it would start two calls. */
+/** `panel`: the small round button beside the bot in its panel, with no chevron. */
 export type CallButtonPlacement = "header" | "composer" | "panel";
 
-/** `fill` (Simple composer): a round button in that colour with its glyph in `ink`, and no chevron; the + menu picks the
- * call mode. */
-/** `inverse` (phone composer): a round ink-coloured button with an app-coloured glyph: white on Midnight, dark on Meadow. */
-export function CallButton({ bot, placement = "header", fill, ink, inverse }: { bot: Bot; placement?: CallButtonPlacement; fill?: string; ink?: string; inverse?: boolean }) {
+/** `fill` (Simple composer): a round button in that colour with its glyph in `ink`, and no chevron; the bot's Voice chat
+ * settings pick the call mode. */
+/** `inverse` (phone composer): one of the pill's own 32 px controls, a plain glyph in the quiet ink, like its mic. */
+/** `live`: offer a Live call beside the built-in voice. */
+export function CallButton({ bot, placement = "header", fill, ink, inverse, live = true }: { bot: Bot; placement?: CallButtonPlacement; fill?: string; ink?: string; inverse?: boolean; live?: boolean }) {
   const { state } = useStore();
   return (
     <CallTargetButton
@@ -55,7 +56,7 @@ export function CallButton({ bot, placement = "header", fill, ink, inverse }: { 
       voices={[bot.voice]}
       setupBotId={bot.id}
       requireExplicitVoices={false}
-      liveCapable
+      liveCapable={live}
       onStart={(mode) => callStarted(state.instances, bot.modelSelection?.instanceId, mode)}
     />
   );
@@ -103,17 +104,18 @@ export function CallTargetButton({
   const capabilityHelp = capabilitiesReady
     ? callCapabilityHelp(capabilities, Boolean(speechBridge()?.speechStart), serverListeningReady(state.config))
     : null;
-  const supported = capabilitiesReady && !capabilityHelp;
-  const localVoice = localSystemVoiceActive();
+  const builtInVoice = useLocalVoiceCall() === true;
+  const supported = builtInVoice || (capabilitiesReady && !capabilityHelp);
+  const localVoice = builtInVoice || localSystemVoiceActive();
   const configured = localVoice || Boolean(state.config?.tts?.configured);
   const everyTargetHasVoice = voices.length > 0 && voices.every((voice) => Boolean(voice));
   const voiceReady =
     localVoice ||
     (configured && (requireExplicitVoices ? everyTargetHasVoice : Boolean(state.config?.tts?.ready || everyTargetHasVoice)));
-  const turnsHere = !capabilitiesReady || listensHere(capabilities, state.config);
+  const turnsHere = builtInVoice || !capabilitiesReady || listensHere(capabilities, state.config);
   const mode = effectiveCallMode(useCallMode(), { turnsHere, canLive });
   const liveMode = canLive && mode === "live";
-  const turnsReady = capabilitiesReady && supported && voiceReady;
+  const turnsReady = builtInVoice || (capabilitiesReady && supported && voiceReady);
   const unavailable = !active && !liveElsewhere && !liveMode && !turnsReady;
   const lineHeldElsewhere = liveMode && !onCall && liveLineHeldElsewhere(media, state.liveCall);
   const voiceSetupRequired = capabilitiesReady && supported && !voiceReady;
@@ -143,6 +145,8 @@ export function CallTargetButton({
       ? elsewhereName ? t("call.live.pill", { name: elsewhereName }) : t("call.live.badge")
       : liveMode
       ? t("call.live.callWith", { name: targetName })
+      : builtInVoice
+      ? t("call.callWith", { name: targetName })
       : !capabilitiesReady
       ? t("call.checking")
       : !supported
@@ -153,7 +157,9 @@ export function CallTargetButton({
             ? t("call.pickVoice")
             : t("call.callWith", { name: targetName });
 
-  const reason = !capabilitiesReady
+  const reason = builtInVoice
+    ? ""
+    : !capabilitiesReady
     ? t("call.checkingReason")
     : capabilityHelp
       ? capabilityHelp.reason
@@ -187,17 +193,14 @@ export function CallTargetButton({
     startCall(targetId);
   };
 
-  // The Simple composer's + menu: the same choice as this button's own call-mode menu, which it replaces there.
-  const requestedStart = useRef<(next: CallMode) => void>(() => {});
-  requestedStart.current = (next) => {
-    // Hidden below while Live's line is held on another device: the + menu must not start a second call either.
-    if (active || liveElsewhere || (next === "live" && !canLive) || lineHeldElsewhere) return;
-    closePopovers();
-    setCallMode(next);
-    start(next);
-  };
-  const answersPlusMenu = placement !== "panel";
-  useEffect(() => answersPlusMenu ? onCallStartRequest(targetId, (next) => requestedStart.current(next)) : undefined, [targetId, answersPlusMenu]);
+  const callAsked = useCallAsk() === targetId;
+  const startRef = useRef(start);
+  startRef.current = start;
+  useEffect(() => {
+    if (!callAsked || !capabilitiesReady || active || liveElsewhere || !takeCallAsk(targetId)) return;
+    if (unavailable) setHelpOpen(true);
+    else startRef.current(liveMode ? "live" : "turns");
+  }, [callAsked, capabilitiesReady, active, liveElsewhere, unavailable, liveMode, targetId]);
 
   const popoverOpen = helpOpen || menuOpen || startPrompt;
   useEffect(() => {
@@ -253,6 +256,7 @@ export function CallTargetButton({
         aria-label={label}
         title={label}
         data-call-button={placement}
+        data-call-active={active ? "" : undefined}
         style={fill && !active ? { backgroundColor: fill, color: ink } : undefined}
         className={cn(
           "relative flex shrink-0 items-center justify-center disabled:opacity-60",
@@ -261,7 +265,7 @@ export function CallTargetButton({
           active
             ? "bg-danger text-white hover:brightness-110"
             : inverse
-              ? "bg-ink text-app hover:opacity-90 max-md:size-10"
+              ? "size-8 text-ink-tertiary hover:text-ink"
             : fill
               ? composer ? "composer-press hover:brightness-[0.88]" : "hover:brightness-110"
             : placement === "panel"
@@ -324,6 +328,7 @@ export function CallTargetButton({
         <div
           ref={keyRef}
           id={keyId}
+          data-call-popover=""
           className={cn("animate-pop-in absolute right-0 z-30 max-h-[calc(100dvh-80px)] w-[340px] max-w-[90vw] overflow-y-auto overscroll-contain rounded-xl shadow-2xl", composer ? "bottom-full mb-1.5" : "top-full mt-1.5")}
         >
           <LiveKeyNeeded />
@@ -334,6 +339,7 @@ export function CallTargetButton({
         <div
           id={helpId}
           role="group"
+          data-call-popover=""
           aria-label={t("call.unavailable")}
           className={cn("absolute right-0 z-30 w-[280px]", composer ? "bottom-full mb-1.5" : "mt-1.5", "rounded-xl border border-transparent bg-panel p-3 text-left shadow-2xl", helpMotion.className)} {...helpMotion.exitProps}
         >
@@ -451,10 +457,12 @@ export function CallModeMenu({ id, mode, onChoose, onClose, placement = "header"
 export function CallOverlay({ bot }: { bot: Bot }) {
   const active = useOnCall() === bot.id;
   const media = useLiveMedia();
+  const builtInVoice = useLocalVoiceCall() === true;
   const onLiveCall = media.botId === bot.id && isLiveCallRunning(media.phase);
   if (!active || onLiveCall) return null;
+  if (builtInVoice) return <VoiceCall key={bot.threadId} bot={bot} />;
   return (
-    <div className="absolute inset-0 z-30 flex flex-col items-center justify-center gap-6 bg-app/95 backdrop-blur-sm">
+    <div data-call-surface="" className="absolute inset-0 z-30 flex flex-col items-center justify-center gap-6 bg-app/95 backdrop-blur-sm">
       <Call key="turns" bot={bot} />
     </div>
   );

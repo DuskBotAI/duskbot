@@ -141,7 +141,7 @@
 }
 
 /* grok's prose: blocks 10px apart, headings 8px further from what they follow */
-[data-chat-bubble="simple"] .chat-md > * + * {
+[data-chat-bubble="simple"] .chat-md > :where(:not(:first-child)) {
   margin-top: 10px;
 }
 [data-chat-bubble="simple"] .chat-md > [data-md-h] {
@@ -229,6 +229,13 @@
   line-height: 18px;
   font-weight: 400;
   letter-spacing: 0.15px;
+}
+/* a streaming reply's blocks render apart (LiveReplyBubble), spaced as the one landed message will space them */
+[data-chat-bubble="simple"] [data-live-blocks] > .chat-md + .chat-md {
+  margin-top: 10px;
+}
+[data-chat-bubble="simple"] [data-live-blocks] > .chat-md + .chat-md:has(> [data-md-h]:first-child:not([data-md-h="1"])) {
+  margin-top: 18px;
 }
 /* a code block and a rule keep the 10px every block has from the one before */
 [data-chat-bubble="simple"] .chat-md > * + :is(.chat-code-block, hr) {
@@ -404,42 +411,32 @@
   transform: none;
 }
 
-/* grok's activity line: the row grows from its leading edge, the mark pops, the label rises in; it leaves in 140ms */
+/* the working line: the row grows from its leading edge, the mark grows in, the label rises after it; it leaves in 140ms */
 @keyframes turn-status-in {
-  from { opacity: 0; transform: scale(0.92); }
+  from { opacity: 0; transform: scale(0.96); }
 }
 @keyframes turn-status-out {
   to { opacity: 0; transform: scale(0.92); }
 }
 @keyframes turn-mark-pop {
-  from { opacity: 0; transform: scale(0.6); }
+  from { opacity: 0; transform: scale(0.8); }
 }
 @keyframes turn-label-rise {
-  from { opacity: 0; transform: translateY(4px); }
+  from { opacity: 0; transform: translateY(3px); }
 }
 .turn-status-in {
   transform-origin: 0 18px;
-  animation: turn-status-in 180ms var(--dusk-ease-out) backwards;
+  animation: turn-status-in 260ms var(--dusk-ease-out) backwards;
 }
 .turn-status-in .turn-status-mark {
-  animation: turn-mark-pop 340ms var(--dusk-ease-back) backwards;
+  animation: turn-mark-pop 360ms var(--dusk-ease-out) backwards;
 }
 .turn-status-in .turn-label-slot {
-  animation: turn-label-rise 180ms var(--dusk-ease-out) backwards;
+  animation: turn-label-rise 260ms var(--dusk-ease-out) 40ms backwards;
 }
 .turn-status-out {
   transform-origin: 0 18px;
   animation: turn-status-out 140ms var(--dusk-ease-out) forwards;
-}
-/* a finished turn: the words leave in the same 140ms, the mark stays for its happy hop and fades last */
-.turn-status-out.turn-status-done {
-  animation: none;
-}
-.turn-status-done .turn-label-slot {
-  animation: dusk-fade-out 140ms var(--dusk-ease-out) forwards;
-}
-.turn-status-done .turn-status-mark {
-  animation: dusk-fade-out 120ms var(--dusk-ease-out) 260ms forwards;
 }
 .turn-label-in {
   animation: turn-label-rise 180ms var(--dusk-ease-out) backwards;
@@ -460,7 +457,7 @@
   background-size: 200% 100%;
   -webkit-background-clip: text;
   background-clip: text;
-  animation: status-shimmer 2.2s steps(60, end) infinite;
+  animation: status-shimmer 3.4s var(--dusk-ease-heavy) infinite;
 }
 @keyframes status-shimmer {
   from { background-position: 200% 0; }
@@ -469,7 +466,6 @@
 @media (prefers-reduced-motion: reduce) {
   .turn-status-in, .turn-status-in .turn-status-mark, .turn-status-in .turn-label-slot, .turn-label-in { animation-name: chat-row-fade; }
   .turn-status-out { animation-name: dusk-fade-out; }
-  .turn-status-out.turn-status-done { animation: none; }
   .status-shimmer { animation: none; background-image: none; color: var(--color-ink-secondary); }
 }
 

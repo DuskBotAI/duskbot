@@ -118,11 +118,13 @@ it("Later closes the sheet for good, then a slim line with Move asks; its close 
   expect(calls).toEqual(["dismiss-offer:prompt"]);
   expect(sheet()).toBeNull();
   expect(document.querySelector("[data-cloud-move-banner]")?.textContent).toBe("Move your bots to dusk cloudMove");
+  expect(document.querySelector("[data-cloud-move-banner]")?.closest("[data-topbar-notice-frame]"), "a pill in the top bar, never a strip in the page's flow").not.toBeNull();
+  expect(host.contains(document.querySelector("[data-cloud-move-banner]"))).toBe(false);
   expect(fixture.tracked).toContainEqual(["cloud_move_banner", { action: "shown" }]);
   await act(async () => document.querySelector<HTMLButtonElement>('[aria-label="Close"]')!.click());
   await settle();
   expect(calls).toEqual(["dismiss-offer:prompt", "dismiss-offer:banner"]);
-  expect(document.querySelector("[data-cloud-move-banner]")).toBeNull();
+  await vi.waitFor(() => expect(document.querySelector("[data-cloud-move-banner]")).toBeNull());
   expect(sheet()).toBeNull();
 });
 

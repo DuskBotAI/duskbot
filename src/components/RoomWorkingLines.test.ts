@@ -78,6 +78,21 @@ describe("the room's working line", () => {
     done();
   });
 
+  it("says Waiting for connection, with no bot at work, while the person's message waits for the network", () => {
+    const host = document.createElement("div");
+    document.body.append(host);
+    const root = createRoot(host);
+    flushSync(() => root.render(createElement(RoomWorkingLines, {
+      group: { id: "room", turnStartedAt: 1 }, members, workingIds: ["echo"],
+      speaker: { bot: members[0], visible: true, markState: "thinking", phrases: ["Thinking"], phase: "friendly:thinking", since: null },
+      slot: true, networkWait: true,
+    })));
+    expect(host.textContent).toContain("Waiting for connection");
+    expect(host.querySelectorAll("[data-bot-faces] [role=img]")).toHaveLength(0);
+    flushSync(() => root.unmount());
+    host.remove();
+  });
+
   it("keeps one bot at work on the plain 1:1 line", () => {
     const { host, done } = draw(["echo"]);
     expect(host.querySelectorAll("[data-bot-faces] [role=img]")).toHaveLength(1);

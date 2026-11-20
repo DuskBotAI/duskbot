@@ -33,7 +33,22 @@
       "week": "2026w46",
       "label": "app actions, batch 1: 90 actions of 9 apps (released by the owner, 12 november 2026)",
       "planned": "2026-11-12",
-      "released": "2026-11-12"
+      "released": "2026-11-12",
+      "lane": "action"
+    },
+    {
+      "id": "06",
+      "week": "2026w47",
+      "label": "search console batch 1: grok bot alternative and pricing, 20 more app integrations, 20 routines, 10 business use cases, 8 glossary terms (planned from search console data, 2026-11-20)",
+      "planned": "2026-11-20",
+      "released": "2026-11-20"
+    },
+    {
+      "id": "07",
+      "lane": "action",
+      "week": "2026w47",
+      "label": "app actions, batch 2: gmail, notion, slack and sheets actions near real queries (gated on cohort 05)",
+      "planned": "2026-11-20"
     }
   ],
   "pages": {
@@ -1021,6 +1036,376 @@
       "cohort": "05",
       "status": "live",
       "live_at": "2026-11-12"
+    },
+    "/alternatives/grok-bot": {
+      "cohort": "06",
+      "status": "live",
+      "live_at": "2026-11-20"
+    },
+    "/vs/grok-bot": {
+      "cohort": "06",
+      "status": "live",
+      "live_at": "2026-11-20"
+    },
+    "/guides/grok-bot-pricing": {
+      "cohort": "06",
+      "status": "live",
+      "live_at": "2026-11-20"
+    },
+    "/guides/move-from-grok-bot": {
+      "cohort": "06",
+      "status": "live",
+      "live_at": "2026-11-20"
+    },
+    "/integrations/google-docs": {
+      "cohort": "06",
+      "status": "live",
+      "live_at": "2026-11-20"
+    },
+    "/integrations/trello": {
+      "cohort": "06",
+      "status": "live",
+      "live_at": "2026-11-20"
+    },
+    "/integrations/dropbox": {
+      "cohort": "06",
+      "status": "live",
+      "live_at": "2026-11-20"
+    },
+    "/integrations/sentry": {
+      "cohort": "06",
+      "status": "live",
+      "live_at": "2026-11-20"
+    },
+    "/integrations/reddit": {
+      "cohort": "06",
+      "status": "live",
+      "live_at": "2026-11-20"
+    },
+    "/integrations/supabase": {
+      "cohort": "06",
+      "status": "live",
+      "live_at": "2026-11-20"
+    },
+    "/integrations/clickup": {
+      "cohort": "06",
+      "status": "live",
+      "live_at": "2026-11-20"
+    },
+    "/integrations/todoist": {
+      "cohort": "06",
+      "status": "live",
+      "live_at": "2026-11-20"
+    },
+    "/integrations/zoom": {
+      "cohort": "06",
+      "status": "live",
+      "live_at": "2026-11-20"
+    },
+    "/integrations/calendly": {
+      "cohort": "06",
+      "status": "live",
+      "live_at": "2026-11-20"
+    },
+    "/integrations/gitlab": {
+      "cohort": "06",
+      "status": "live",
+      "live_at": "2026-11-20"
+    },
+    "/integrations/intercom": {
+      "cohort": "06",
+      "status": "live",
+      "live_at": "2026-11-20"
+    },
+    "/integrations/zendesk": {
+      "cohort": "06",
+      "status": "live",
+      "live_at": "2026-11-20"
+    },
+    "/integrations/mailchimp": {
+      "cohort": "06",
+      "status": "live",
+      "live_at": "2026-11-20"
+    },
+    "/integrations/microsoft-teams": {
+      "cohort": "06",
+      "status": "live",
+      "live_at": "2026-11-20"
+    },
+    "/integrations/monday": {
+      "cohort": "06",
+      "status": "live",
+      "live_at": "2026-11-20"
+    },
+    "/integrations/typeform": {
+      "cohort": "06",
+      "status": "live",
+      "live_at": "2026-11-20"
+    },
+    "/integrations/google-tasks": {
+      "cohort": "06",
+      "status": "live",
+      "live_at": "2026-11-20"
+    },
+    "/integrations/confluence": {
+      "cohort": "06",
+      "status": "live",
+      "live_at": "2026-11-20"
+    },
+    "/integrations/miro": {
+      "cohort": "06",
+      "status": "live",
+      "live_at": "2026-11-20"
+    },
+    "/routines/sentry-error-digest": {
+      "cohort": "06",
+      "status": "live",
+      "live_at": "2026-11-20"
+    },
+    "/routines/stripe-failed-payments-check": {
+      "cohort": "06",
+      "status": "live",
+      "live_at": "2026-11-20"
+    },
+    "/routines/shopify-low-stock-alert": {
+      "cohort": "06",
+      "status": "live",
+      "live_at": "2026-11-20"
+    },
+    "/routines/hubspot-stale-deals": {
+      "cohort": "06",
+      "status": "live",
+      "live_at": "2026-11-20"
+    },
+    "/routines/zendesk-urgent-tickets": {
+      "cohort": "06",
+      "status": "live",
+      "live_at": "2026-11-20"
+    },
+    "/routines/intercom-unanswered-conversations": {
+      "cohort": "06",
+      "status": "live",
+      "live_at": "2026-11-20"
+    },
+    "/routines/trello-overdue-cards": {
+      "cohort": "06",
+      "status": "live",
+      "live_at": "2026-11-20"
+    },
+    "/routines/linear-sprint-recap": {
+      "cohort": "06",
+      "status": "live",
+      "live_at": "2026-11-20"
+    },
+    "/routines/notion-meeting-notes-to-tasks": {
+      "cohort": "06",
+      "status": "live",
+      "live_at": "2026-11-20"
+    },
+    "/routines/google-docs-weekly-report-draft": {
+      "cohort": "06",
+      "status": "live",
+      "live_at": "2026-11-20"
+    },
+    "/routines/calendly-booking-prep": {
+      "cohort": "06",
+      "status": "live",
+      "live_at": "2026-11-20"
+    },
+    "/routines/todoist-evening-plan": {
+      "cohort": "06",
+      "status": "live",
+      "live_at": "2026-11-20"
+    },
+    "/routines/reddit-mentions-watch": {
+      "cohort": "06",
+      "status": "live",
+      "live_at": "2026-11-20"
+    },
+    "/routines/github-pr-review-reminder": {
+      "cohort": "06",
+      "status": "live",
+      "live_at": "2026-11-20"
+    },
+    "/routines/typeform-new-responses-summary": {
+      "cohort": "06",
+      "status": "live",
+      "live_at": "2026-11-20"
+    },
+    "/routines/dropbox-inbox-folder-sort": {
+      "cohort": "06",
+      "status": "live",
+      "live_at": "2026-11-20"
+    },
+    "/routines/mailchimp-campaign-report": {
+      "cohort": "06",
+      "status": "live",
+      "live_at": "2026-11-20"
+    },
+    "/routines/competitor-pricing-page-check": {
+      "cohort": "06",
+      "status": "live",
+      "live_at": "2026-11-20"
+    },
+    "/routines/friday-wins-summary": {
+      "cohort": "06",
+      "status": "live",
+      "live_at": "2026-11-20"
+    },
+    "/routines/gitlab-merge-request-digest": {
+      "cohort": "06",
+      "status": "live",
+      "live_at": "2026-11-20"
+    },
+    "/use-cases/customer-support-inbox": {
+      "cohort": "06",
+      "status": "live",
+      "live_at": "2026-11-20"
+    },
+    "/use-cases/meeting-notes": {
+      "cohort": "06",
+      "status": "live",
+      "live_at": "2026-11-20"
+    },
+    "/use-cases/crm-updates": {
+      "cohort": "06",
+      "status": "live",
+      "live_at": "2026-11-20"
+    },
+    "/use-cases/bug-triage": {
+      "cohort": "06",
+      "status": "live",
+      "live_at": "2026-11-20"
+    },
+    "/use-cases/price-monitoring": {
+      "cohort": "06",
+      "status": "live",
+      "live_at": "2026-11-20"
+    },
+    "/use-cases/form-filling": {
+      "cohort": "06",
+      "status": "live",
+      "live_at": "2026-11-20"
+    },
+    "/use-cases/expense-reports": {
+      "cohort": "06",
+      "status": "live",
+      "live_at": "2026-11-20"
+    },
+    "/use-cases/job-applications": {
+      "cohort": "06",
+      "status": "live",
+      "live_at": "2026-11-20"
+    },
+    "/use-cases/content-repurposing": {
+      "cohort": "06",
+      "status": "live",
+      "live_at": "2026-11-20"
+    },
+    "/use-cases/client-onboarding": {
+      "cohort": "06",
+      "status": "live",
+      "live_at": "2026-11-20"
+    },
+    "/glossary/computer-use-agent": {
+      "cohort": "06",
+      "status": "live",
+      "live_at": "2026-11-20"
+    },
+    "/glossary/ai-routine": {
+      "cohort": "06",
+      "status": "live",
+      "live_at": "2026-11-20"
+    },
+    "/glossary/human-in-the-loop": {
+      "cohort": "06",
+      "status": "live",
+      "live_at": "2026-11-20"
+    },
+    "/glossary/prompt-injection": {
+      "cohort": "06",
+      "status": "live",
+      "live_at": "2026-11-20"
+    },
+    "/glossary/agent-memory": {
+      "cohort": "06",
+      "status": "live",
+      "live_at": "2026-11-20"
+    },
+    "/glossary/browser-agent": {
+      "cohort": "06",
+      "status": "live",
+      "live_at": "2026-11-20"
+    },
+    "/glossary/ai-agent-sandbox": {
+      "cohort": "06",
+      "status": "live",
+      "live_at": "2026-11-20"
+    },
+    "/glossary/background-agent": {
+      "cohort": "06",
+      "status": "live",
+      "live_at": "2026-11-20"
+    },
+    "/integrations/gmail/get-draft": {
+      "cohort": "07",
+      "status": "queued"
+    },
+    "/integrations/gmail/delete-draft": {
+      "cohort": "07",
+      "status": "queued"
+    },
+    "/integrations/gmail/trash-thread": {
+      "cohort": "07",
+      "status": "queued"
+    },
+    "/integrations/gmail/untrash-thread": {
+      "cohort": "07",
+      "status": "queued"
+    },
+    "/integrations/gmail/update-google-contact": {
+      "cohort": "07",
+      "status": "queued"
+    },
+    "/integrations/google-sheets/add-sheet-to-existing-spreadsheet": {
+      "cohort": "07",
+      "status": "queued"
+    },
+    "/integrations/google-sheets/get-spreadsheet-info": {
+      "cohort": "07",
+      "status": "queued"
+    },
+    "/integrations/notion/fetch-all-notion-block-contents": {
+      "cohort": "07",
+      "status": "queued"
+    },
+    "/integrations/notion/create-notion-database": {
+      "cohort": "07",
+      "status": "queued"
+    },
+    "/integrations/notion/fetch-database": {
+      "cohort": "07",
+      "status": "queued"
+    },
+    "/integrations/notion/fetch-database-row": {
+      "cohort": "07",
+      "status": "queued"
+    },
+    "/integrations/notion/retrieve-comment": {
+      "cohort": "07",
+      "status": "queued"
+    },
+    "/integrations/slack/find-channels": {
+      "cohort": "07",
+      "status": "queued"
+    },
+    "/integrations/slack/get-slack-list-item": {
+      "cohort": "07",
+      "status": "queued"
+    },
+    "/integrations/slack/get-unread-messages-from-user": {
+      "cohort": "07",
+      "status": "queued"
     }
   }
 }

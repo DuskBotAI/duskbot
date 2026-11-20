@@ -29,6 +29,8 @@ describe("admin nav", () => {
     expect(currentItem("/admin/analytics/pages")?.label).toBe("overview");
     expect(currentItem("/admin/product/apps")?.label).toBe("product");
     expect(currentItem("/admin/waitlist")?.label).toBe("waitlist");
+    expect(currentItem("/admin/experience")?.label).toBe("experience");
+    expect(currentItem("/admin/subscribers")?.label).toBe("subscribers");
     expect(currentItem("/admin")?.label).toBe("overview");
     expect(currentItem("/admin/nothing-here")).toBeNull();
   });

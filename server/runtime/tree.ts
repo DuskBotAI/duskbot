@@ -138,9 +138,11 @@ export function ownsConversation(n: Assignment, owner: Owner): boolean {
   return false;
 }
 
-export function restartNote(n: Assignment, children: readonly Assignment[], nameOf: (child: Assignment) => string): string {
+export function restartNote(n: Assignment, children: readonly Assignment[], nameOf: (child: Assignment) => string, progress: readonly string[] = []): string {
   if (!n.restart) return "";
-  const own = n.restart === "rerun"
+  const own = n.restart === "rerun" && progress.length
+    ? `dusk bot restarted while your previous turn here was running and cut it off; this turn continues it. That turn had already done this: ${progress.map((line, index) => `${index + 1}. ${line}`).join("; ")}. Carry on from where it stopped instead of starting over. Never repeat a step that changed something (sent, posted, saved, created, booked, paid); if one was cut off, check its state first. Looking something up again is fine when you need its result. Then finish and report as usual. A restart alone is not a blocker.`
+    : n.restart === "rerun"
     ? "dusk bot restarted while your previous turn here was running and cut it off; this turn continues it. First check what that turn already did (files, commits, messages, anything sent or started) and verify anything uncertain, so nothing is done twice; then finish and report as usual. A restart alone is not a blocker."
     : n.restart === "cut" ? "dusk bot restarted before your previous turn here finished, after it sent work to teammates. Check what that turn already did before repeating any of it." : "";
   const cut = children.filter(child => child.restarts > 0 || outwardInterrupted(child)).map(child => `${nameOf(child)} (${

@@ -1,18 +1,20 @@
 {
   "path": "/glossary/always-on-ai-agent",
   "type": "glossary",
-  "title": "Always-on AI agent: what it means, with an example",
+  "title": "Always-on AI agents: what runs when your laptop sleeps?",
   "nav": "always-on ai agent",
-  "h1": "always-on ai agent",
-  "description": "An always-on AI agent keeps working when you are not at your computer: it runs on a machine that stays on. What that means in practice, with a real example.",
+  "h1": "how do always-on ai agents work when your laptop sleeps?",
+  "description": "Always-on AI agents can run a routine while your laptop sleeps. See where the work happens and what becomes of a missed run on your own computer.",
   "keyword": "always on ai agent",
   "keywords": [
     "what is an always on ai agent",
     "24/7 ai agent",
-    "background ai agent"
+    "background ai agent",
+    "always on ai agents",
+    "always on ai agent"
   ],
-  "answer": "an always-on ai agent keeps doing its job when you're not around: routines at set times, reactions to new mail, answers to your phone at 2am. the trick isn't the ai. it's where the agent runs. it needs a computer that never sleeps, and your laptop isn't one.",
-  "updated": "2026-11-12",
+  "answer": "**always-on ai agents run scheduled jobs or respond to events on a computer that stays available.** if that computer is your laptop, closing the lid can cost you the morning brief. a bot on a server or hosted computer can do the work while your laptop sleeps.",
+  "updated": "2026-11-20",
   "review": {
     "status": "approved",
     "by": "lead agent, against dusk bot docs",
@@ -47,6 +49,10 @@
     {
       "h": "words nearby",
       "md": "- **routine:** a job a bot does on a schedule or when something happens. see [scheduled ai tasks](/scheduled-ai-tasks).\n- **background agent:** often the same idea, sometimes just an agent in a tab you aren't watching. that one still stops when the computer sleeps.\n- **cloud computer:** a computer someone hosts for you. the usual home for an always-on agent."
+    },
+    {
+      "h": "does an always-on agent need access to change my accounts?",
+      "md": "**a bot can bring back a report with read-only access.** in dusk, choose which apps the bot can read. it can then use those connections for a routine while you're away. leave unrelated accounts disconnected.[^3]"
     }
   ],
   "sources": [
@@ -57,6 +63,10 @@
     {
       "label": "dusk bot docs: dusk cloud",
       "url": "/docs/dusk-cloud"
+    },
+    {
+      "label": "dusk bot docs: connected apps",
+      "url": "/docs/files-and-apps"
     }
   ],
   "voice": 2

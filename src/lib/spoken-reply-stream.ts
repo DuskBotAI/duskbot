@@ -247,3 +247,43 @@ export class SpokenReplyStream {
 }
 
 export const spokenReplyStream = new SpokenReplyStream(speaker);
+
+/** The voice call that speaks one thread's replies through its own player. */
+export interface CallReplySpeech {
+  botId: string;
+  threadId: string;
+  sink: ReplySpeechSink;
+}
+
+let callSpeech: CallReplySpeech | null = null;
+
+/** Returns the release; an older call's release never clears a newer call. */
+export function claimCallReplies(owner: CallReplySpeech): () => void {
+  callSpeech = owner;
+  return () => {
+    if (callSpeech === owner) callSpeech = null;
+  };
+}
+
+export function callReplyOwner(threadId: string): SpokenReplyOwner | null {
+  return callSpeech?.threadId === threadId ? { botId: callSpeech.botId } : null;
+}
+
+const silentStream: SpeechStream = {
+  push: () => {},
+  end: async () => {},
+  prepare: async () => [],
+  identify: () => {},
+  cancel: () => {},
+  fail: () => {},
+};
+
+export const callReplyStream = new SpokenReplyStream({
+  begin: (opts) => callSpeech?.sink.begin(opts) ?? silentStream,
+});
+
+/** A call says a reply once its message is in the chat, which shows each reply whole: streamed text is never said
+ * ahead of what the person can read. */
+export function callReplyEvent(event: RuntimeEvent): void {
+  callReplyStream.onRuntimeEvent(event, null);
+}

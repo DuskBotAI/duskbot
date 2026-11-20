@@ -29,9 +29,12 @@ async function show(name: string, body: BodyInit, markdown: boolean) {
 }
 
 describe("filePreviewKind", () => {
-  it.each([["report.html", "html"], ["notes.md", "markdown"], ["Brief.MARKDOWN", "markdown"], ["notes.txt", "text"], ["run.log", "text"], ["data.json", "text"], ["ci.yaml", "text"], ["ci.yml", "text"]] as const)(
+  it.each([["report.html", "html"], ["notes.md", "markdown"], ["Brief.MARKDOWN", "markdown"], ["notes.txt", "text"], ["run.log", "text"], ["data.json", "text"], ["ci.yaml", "text"], ["ci.yml", "text"], ["data.csv", "table"], ["export.TSV", "table"]] as const)(
     "opens %s as %s", (name, kind) => expect(filePreviewKind(name)).toBe(kind));
-  it.each(["data.csv", "photo.png", "notes.md.zip", "md", "archive.tar"])("saves %s at once", (name) => expect(filePreviewKind(name)).toBeNull());
+  it("previews a CSV or TSV on tap like a PDF, page or Markdown file beside it, with Save on its small button, so one list of files never answers a tap two ways", () => {
+    expect(filePreviewKind("numbers.csv")).toBe(filePreviewKind("report.pdf") ? "table" : null);
+  });
+  it.each(["photo.png", "notes.md.zip", "md", "archive.tar"])("saves %s at once", (name) => expect(filePreviewKind(name)).toBeNull());
 });
 
 describe("a Markdown or text file's preview", () => {

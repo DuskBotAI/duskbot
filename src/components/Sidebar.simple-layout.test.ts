@@ -264,10 +264,10 @@ describe("Simple-mode sidebar layout", () => {
     expect(listedBots(render().tree)).toHaveLength(3);
   });
 
-  it("opens at 280px in Simple and 320px in Advanced, each remembering its own resized width", () => {
+  it("opens at 288px in Simple and 320px in Advanced, each remembering its own resized width", () => {
     const width = () => render().root.props.style!["--sidebar-width"];
-    expect(width()).toBe("280px");
-    expect(render().root.props.className).toContain("w-[280px]");
+    expect(width()).toBe("288px");
+    expect(render().root.props.className).toContain("w-[288px]");
     fixture.values = [];
   });
   const edge = (tree: ReactElement<Props>[]) => tree.find((node) => node.type === SidebarResizeHandle)?.props as Parameters<typeof SidebarResizeHandle>[0] | undefined;
@@ -278,14 +278,14 @@ describe("Simple-mode sidebar layout", () => {
     handle.onAvatars(true);
     expect(fixture.storage.get(SIDEBAR_DENSITY_KEY)).toBe("avatars");
     const { root, tree } = render();
-    expect(root.props.className).toContain("w-[68px]");
+    expect(root.props.className).toContain("w-[80px]");
     expect(sectionOrder(tree)).toEqual([userSectionId("Work"), BOTS_SECTION_ID, CHANNELS_SECTION_ID]);
     expect(listedBots(tree)).toEqual(["dodo", "atlas", "bea"]);
     expect(headers(tree)).toEqual([]);
     expect(tree.filter((node) => node.type === SidebarRailSeparator)).toHaveLength(2);
     expect(tree.some((node) => node.type === SidebarSearchToggle)).toBe(false);
     expect(edge(tree)?.avatars, "the rail keeps its edge, to drag it open again").toBe(true);
-    expect(edge(tree)?.avatarsWidth).toBe(68);
+    expect(edge(tree)?.avatarsWidth).toBe(80);
     expect(tree.some((node) => node.props["data-sidebar-top-buttons"] !== undefined)).toBe(false);
   });
 
@@ -294,7 +294,7 @@ describe("Simple-mode sidebar layout", () => {
     const plusSlot = () => render().tree.find((node) => node.type === SimpleRailFooter)!.props.plus as ReactElement<Props>;
     const top = () => nodes(plusSlot());
     const plus = () => top().find((node) => node.type === "button" && node.props["aria-label"] === "New or share")!;
-    expect(plus().props.className).toEqual(expect.stringContaining("size-8"));
+    expect(plus().props.className).toEqual(expect.stringContaining("size-10"));
     (plus().props.onClick as () => void)();
     const menu = top().find((node) => /\bmin-w-\[200px\]/.test(node.props.className ?? ""))!;
     expect(menu.props.className).toEqual(expect.stringContaining("left-full bottom-0"));

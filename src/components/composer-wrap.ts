@@ -107,26 +107,28 @@ export function movesLess(): boolean {
   return window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
 }
 
-/** Slides an element from where it was to where it is whenever `key` changes, on the pill's own spring. */
+/** Slides an element from where it was to where it is whenever `key` changes, on the pill's own spring. Its box is read
+ * only when `key` changes: once while rendering, before React moves anything, and once after; a box read on every commit
+ * forced a layout of the whole page each time a chat's rows mounted. */
 export function useSlideOnChange(target: () => HTMLElement | null | undefined, key: unknown, on: boolean): void {
-  const last = useRef<DOMRect | null>(null);
   const lastKey = useRef(key);
-  useLayoutEffect(() => {
-    const element = target();
-    if (!element) {
-      last.current = null;
-      return;
-    }
-    const rect = element.getBoundingClientRect();
-    const before = last.current;
-    const changed = lastKey.current !== key;
-    last.current = rect;
+  const before = useRef<DOMRect | null>(null);
+  const element = useRef(target);
+  element.current = target;
+  if (lastKey.current !== key) {
     lastKey.current = key;
-    if (!on || !changed || !before || typeof element.animate !== "function" || movesLess()) return;
-    const dx = before.left - rect.left;
-    const dy = before.top - rect.top;
+    before.current = on && typeof document !== "undefined" && !movesLess() ? target()?.getBoundingClientRect() ?? null : null;
+  }
+  useLayoutEffect(() => {
+    const from = before.current;
+    before.current = null;
+    const moved = element.current();
+    if (!from || !moved || typeof moved.animate !== "function") return;
+    const rect = moved.getBoundingClientRect();
+    const dx = from.left - rect.left;
+    const dy = from.top - rect.top;
     if (!dx && !dy) return;
     const easing = getComputedStyle(document.documentElement).getPropertyValue("--composer-spring").trim() || "ease-out";
-    element.animate([{ transform: `translate(${dx}px, ${dy}px)` }, { transform: "none" }], { duration: 300, easing });
-  });
+    moved.animate([{ transform: `translate(${dx}px, ${dy}px)` }, { transform: "none" }], { duration: 300, easing });
+  }, [key]);
 }

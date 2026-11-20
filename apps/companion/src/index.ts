@@ -135,6 +135,7 @@ const service = (): ServiceInfo => ({
 const connectedDevices = createConnectedDeviceTracker();
 const proxy = createProxyHandler({
     harnessPort: HARNESS_PORT,
+    webhookPort: num(process.env.DUSK_WEBHOOK_PORT, HARNESS_PORT + 1),
     mobile,
     mutationToken: parentPort ? () => mutationToken : undefined,
     // Also stamps lastSeenAt.

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { connectionNotice, isCloudOrigin, placeKind, STUCK_AFTER_MS, WAKE_SLOW_AFTER_MS, type NoticeInput } from "./connection-notice";
+import { connectionNotice, isCloudOrigin, placeKind, RECONNECTING_AFTER_MS, STUCK_AFTER_MS, WAKE_SLOW_AFTER_MS, type NoticeInput } from "./connection-notice";
 
 const base: NoticeInput = { hydrated: true, connected: false, offline: false, waking: false, resuming: false, downSince: 0, wakingSince: null, now: 0 };
 
@@ -8,6 +8,12 @@ describe("what the phone says about its live connection", () => {
     expect(connectionNotice({ ...base, hydrated: false })).toBeNull();
     expect(connectionNotice({ ...base, connected: true, downSince: null })).toBeNull();
     expect(connectionNotice({ ...base, resuming: true, now: STUCK_AFTER_MS * 10 })).toBeNull();
+  });
+
+  it("says nothing while a live stream is still opening or comes back within moments", () => {
+    expect(connectionNotice({ ...base, now: RECONNECTING_AFTER_MS - 1 })).toBeNull();
+    expect(connectionNotice({ ...base, answeredAt: 0, now: RECONNECTING_AFTER_MS - 1 })).toBeNull();
+    expect(connectionNotice({ ...base, now: RECONNECTING_AFTER_MS })).toBe("reconnecting");
   });
 
   it("never reconnects forever: after the time box it is a problem with an action", () => {

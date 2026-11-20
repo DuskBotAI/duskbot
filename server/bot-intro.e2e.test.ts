@@ -17,6 +17,7 @@ const ROOT = join(SERVER_DIR, "..");
 const FAKE_CLAUDE = join(SERVER_DIR, "testing", "fake-claude-cli.ts");
 const HELLO = "Hi, I'm Ledger. I keep your books tidy. Want me to start with last month's receipts?";
 const FALLBACK = "Hi, I'm Edie. Tell me what you'd like to start with and I'll take it from there.";
+const SLOW_HELLO = "Hi, I'm Pace. I take my time saying hello, word by word, so you may well get in first.";
 
 let child: ChildProcess;
 let home = "";
@@ -51,6 +52,11 @@ beforeAll(async () => {
       intro: {
         driver: "claudeAgent", displayName: "Intro fixture", config: { cli: FAKE_CLAUDE },
         environment: { FAKE_CLAUDE_MODE: "happy", FAKE_CLAUDE_DUMP: dump, FAKE_CLAUDE_TOOL_CALLS: "[]", FAKE_CLAUDE_REPLIES: JSON.stringify([HELLO, HELLO]) },
+      },
+      slow: {
+        driver: "claudeAgent", displayName: "Slow fixture", config: { cli: FAKE_CLAUDE },
+        environment: { FAKE_CLAUDE_MODE: "happy", FAKE_CLAUDE_TOOL_CALLS: "[]", FAKE_CLAUDE_STREAM_CADENCE: "1:150",
+          FAKE_CLAUDE_REPLIES: JSON.stringify([SLOW_HELLO]), FAKE_CLAUDE_DUMP: join(home, "slow-dump.json") },
       },
       broken: {
         driver: "claudeAgent", displayName: "Broken fixture", config: { cli: FAKE_CLAUDE },
@@ -152,6 +158,22 @@ describe("a new bot's intro", { timeout: 60_000 }, () => {
     // the turn's work receipt (kind digest) is a record the chat does not draw
     expect(settled.filter((message) => message.role === "bot" && message.kind !== "digest").map((message) => message.text)).toEqual([FALLBACK]);
   });
+
+  it("answers the person's first message instead of greeting, when they write before the greeting lands", async () => {
+    const { bot } = (await api("POST", "/api/bots", {
+      name: "pace", title: "Namer", greeting: false, useDefaults: false,
+      modelSelection: { instanceId: "slow", model: "claude-sonnet-5" },
+    })).body;
+    expect((await api("PATCH", `/api/bots/${bot.id}`, { memoryUpkeep: false, browser: false, computer: "off" })).status).toBe(200);
+    expect((await api("POST", `/api/bots/${bot.id}/intro`)).status).toBe(202);
+    await waitFor(() => api("GET", "/api/bots?messages=0"), (state) => state.body.bots.find((one: { id: string }) => one.id === bot.id)?.busy === true);
+    expect((await api("POST", `/api/bots/${bot.id}/messages`, { text: "name my bakery" })).status).toBeLessThan(300);
+    await waitFor(() => messages(bot.threadId), (rows) => rows.some((message) => message.role === "bot" && message.kind === "text"), 40_000);
+    await idle(bot.id);
+    const said = (await messages(bot.threadId)).filter((message) => message.kind === "text").map((message) => message.role);
+    expect(said, "one reply, to the person's message, and no greeting before it").toEqual(["user", "bot"]);
+    expect(JSON.stringify(JSON.parse(readFileSync(join(home, "slow-dump.json"), "utf8")).prompt)).toContain("name my bakery");
+  }, 60_000);
 
   it("knows no bot it cannot find", async () => {
     expect((await api("POST", "/api/bots/nope/intro")).status).toBe(404);

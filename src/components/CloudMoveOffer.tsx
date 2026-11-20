@@ -15,13 +15,14 @@ import { WhatMovesLine } from "./WhatMoves";
 import { useCloudSendNotice } from "./CloudSendStrip";
 import { mdPrimaryCls, useDialogKeys } from "./ui/GrokDialog";
 import { ScrimMotion, SheetMotion } from "./ui/SheetMotion";
+import { TOP_BAR_PILL, TOP_BAR_PILL_CLOSE, TopBarNotice } from "./TopBarNotice";
 
 export const QUIET_BUTTON = "inline-flex h-9 shrink-0 cursor-pointer items-center rounded-full px-3 text-[13px] font-medium text-ink-secondary transition-[color,background-color] duration-[120ms] ease-[ease] hover:bg-ink/6 hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus disabled:opacity-50";
 
 /**
  * Moving this computer's bots to the person's dusk cloud, in one small sheet: it asks once by itself, then follows the move
- * as the bots hop across, and ends with All moved. Closed while it asks, a slim line at the top asks instead; closed too,
- * Settings → Computer keeps Move (CloudMoveSettings). On My Cloud's page All moved is a slim line at the top, never a sheet over its chat.
+ * as the bots hop across, and ends with All moved. Closed while it asks, a pill in the top bar asks instead; closed too,
+ * Settings → Computer keeps Move (CloudMoveSettings). On My Cloud's page All moved is that pill, never a sheet over its chat.
  */
 export function CloudMoveOffer({ cloudHome = false }: { cloudHome?: boolean }) {
   const { state } = useStore();
@@ -67,36 +68,32 @@ export function CloudMoveOffer({ cloudHome = false }: { cloudHome?: boolean }) {
     void bridge.dismiss(MOVE_LINE).then(setNotice).catch(() => {});
   };
 
-  // on dusk cloud's own page the move is already where it ended: a slim line, never a sheet over the cloud's chat
-  if (sheet === "done" && cloudHome) {
-    return <div role="status" data-cloud-move-done="" className="flex h-9 items-center justify-center gap-2 px-3 text-[13px] font-medium text-ink">
-      <span className="min-w-0 truncate">{t("cloudMoveOffer.done")} · <span className="text-ink-secondary">{t("cloudMoveOffer.doneLine")}</span></span>
-      <button type="button" aria-label={t("cloudMoveOffer.close")} onClick={openCloud}
-        className="ml-1 flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-full text-ink/68 transition-[background-color,color] duration-[120ms] ease-[ease] hover:bg-ink/6 hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-focus">
-        <X size={14} aria-hidden="true" />
-      </button>
-    </div>;
-  }
-  if (sheet) {
+  if (sheet && !(sheet === "done" && cloudHome)) {
     return <MoveSheet state={sheet} progress={furthest.current} busy={busy}
       onClose={sheet === "ask" ? later : sheet === "done" ? openCloud : hide}
       onMove={() => accept("prompt")} onLater={later} onHide={hide} onRetry={retry} onOpen={openCloud} />;
   }
-  if (ask === "banner" && !moving) {
-    return <div role="region" aria-label={t("cloudMoveOffer.banner")} data-cloud-move-banner="" className="flex h-9 items-center justify-center gap-2 px-3 text-[13px] font-medium text-ink">
+  // on dusk cloud's own page the move is already where it ended: a line in the top bar, never a sheet over the cloud's chat
+  const line = sheet === "done" ? "done" : ask === "banner" && !moving ? "banner" : null;
+  return <TopBarNotice noticeKey={line}>
+    {line === "done" && <div role="status" data-cloud-move-done="" className={TOP_BAR_PILL}>
+      <span className="min-w-0 truncate">{t("cloudMoveOffer.done")} · <span className="text-ink-secondary">{t("cloudMoveOffer.doneLine")}</span></span>
+      <button type="button" aria-label={t("cloudMoveOffer.close")} onClick={openCloud} className={TOP_BAR_PILL_CLOSE}>
+        <X size={14} aria-hidden="true" />
+      </button>
+    </div>}
+    {line === "banner" && <div role="region" aria-label={t("cloudMoveOffer.banner")} data-cloud-move-banner="" className={TOP_BAR_PILL}>
       <span className="min-w-0 truncate">{t("cloudMoveOffer.banner")}</span>
       <button type="button" data-cloud-move-accept="banner" disabled={busy} aria-busy={busy || undefined} onClick={() => accept("banner")}
-        className="inline-flex shrink-0 cursor-pointer items-center gap-1 rounded-sm font-semibold text-accent-text underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus">
+        className="ml-1 inline-flex h-6 shrink-0 cursor-pointer items-center gap-1 rounded-full px-2 font-semibold text-accent-text transition-[background-color] duration-[120ms] ease-[ease] hover:bg-ink/6 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-focus">
         {busy && <Loader2 aria-hidden="true" className="size-3.5 animate-spin motion-reduce:animate-none" />}
         {t("cloudMoveOffer.move")}
       </button>
-      <button type="button" aria-label={t("cloudMoveOffer.close")} onClick={() => void bridge.moveOfferDismiss?.("banner").then(setNotice).catch(() => {})}
-        className="ml-1 flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-full text-ink/68 transition-[background-color,color] duration-[120ms] ease-[ease] hover:bg-ink/6 hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-focus">
+      <button type="button" aria-label={t("cloudMoveOffer.close")} onClick={() => void bridge.moveOfferDismiss?.("banner").then(setNotice).catch(() => {})} className={TOP_BAR_PILL_CLOSE}>
         <X size={14} aria-hidden="true" />
       </button>
-    </div>;
-  }
-  return null;
+    </div>}
+  </TopBarNotice>;
 }
 
 function MoveSheet({ state, progress, busy, onClose, onMove, onLater, onHide, onRetry, onOpen }: {

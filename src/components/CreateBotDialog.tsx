@@ -1,6 +1,9 @@
 import { ModalLayer } from "./ui/ModalLayer";
+import { ScrimMotion, SheetMotion, useDialogMotion } from "./ui/SheetMotion";
+import { AnimatePresence } from "motion/react";
 import { useEffect, useId, useRef, useState, type FocusEvent as ReactFocusEvent, type PointerEvent as ReactPointerEvent } from "react";
 import { DUSK_BODY_IDS, type DuskBodyId } from "../../shared/body-migration";
+import { takeImportName } from "../../shared/import-name";
 import { MAUS_COLOR_LABEL, PICKER_COLORS, colorSwatch, rowsOfFive, type MausColor } from "@/lib/mascot";
 import { useStore } from "@/state/store";
 import { prefetchBotDefaults } from "@/lib/bot-defaults-prefetch";
@@ -8,6 +11,7 @@ import { stoppedAtBotLimit } from "@/lib/bot-limit";
 import { CREATE_BOT_EVENT, openCreateBot, takeCreateBotSection } from "@/lib/create-bot-request";
 import { openNewGroup } from "@/lib/new-group-request";
 import { t } from "@/lib/i18n";
+import { upperFirst } from "@/lib/lower-first";
 import { cn } from "@/lib/cn";
 import { MausAvatar, type MausAvatarHandle } from "./Avatar";
 import { Icon } from "./Icon";
@@ -35,17 +39,18 @@ function useOpenRequests(onOpen: () => void) {
 export function CreateBotDialog() {
   const [session, setSession] = useState<{ key: number; section?: string } | null>(null);
   useOpenRequests(() => { const section = takeCreateBotSection(); setSession((open) => open ?? { key: Date.now(), section }); });
-  if (!session) return null;
-  return <CreateBotForm key={session.key} section={session.section} onClose={() => setSession(null)} />;
+  return <AnimatePresence>{session && <CreateBotForm key={session.key} section={session.section} onClose={() => setSession(null)} />}</AnimatePresence>;
 }
 
 function CreateBotForm({ section, onClose }: { section?: string; onClose: () => void }) {
   const { state, dispatch } = useStore();
   const [name, setName] = useState("");
+  const sameName = state.bots.find((bot) => bot.name.trim().toLowerCase() === name.trim().toLowerCase() && name.trim())?.name;
   // the dialog opens on a shape and colour of its own choosing, a new one each time
   const [body, setBody] = useState<DuskBodyId>(() => pick(DUSK_BODY_IDS));
   const [color, setColor] = useState<MausColor>(() => pick(PICKER_COLORS));
   const dialog = useRef<HTMLDivElement>(null);
+  const played = useDialogMotion();
   const mascot = useRef<MausAvatarHandle>(null);
   const preview = useRef<HTMLSpanElement>(null);
   // the preview watches whichever shape or colour the pointer or focus is on
@@ -116,9 +121,10 @@ function CreateBotForm({ section, onClose }: { section?: string; onClose: () => 
   }, [onClose]);
 
   return (
-    <ModalLayer><div className="fixed inset-0 z-[60]">
-      <div aria-hidden className="absolute inset-0 bg-black/50" onMouseDown={onClose} />
-      <div
+    <ModalLayer><div {...played.layer} className="fixed inset-0 z-[60]">
+      <ScrimMotion {...played.scrim} aria-hidden className="absolute inset-0 bg-black/50" onMouseDown={onClose} />
+      <SheetMotion
+        {...played.sheet}
         ref={dialog}
         role="dialog"
         aria-modal="true"
@@ -153,6 +159,7 @@ function CreateBotForm({ section, onClose }: { section?: string; onClose: () => 
               onKeyDown={(event) => { if (event.key === "Enter" && !event.nativeEvent.isComposing) { event.preventDefault(); create(); } }}
               className="my-1 h-9 w-full rounded-[10px] border border-transparent bg-transparent px-2.5 py-2 text-center text-[13px] tracking-[0.195px] text-ink outline-none placeholder:text-ink/56 focus:border-transparent!"
             />
+            {sameName && <p role="status" data-create-bot-same-name className="-mt-2 mb-0 text-center text-[12px] leading-4 text-ink-secondary">{t("createBot.sameName", { name: sameName, next: takeImportName(name, new Set(state.bots.map((bot) => bot.name.toLowerCase())), 80) })}</p>}
             <div className="flex flex-col gap-3">
               <div role="group" aria-label={t("botPanel.avatar.shapes")} className="flex flex-col gap-2 py-1.5" onPointerLeave={rest} onBlur={rest}>
                 {SHAPES.map((row) => (
@@ -168,7 +175,7 @@ function CreateBotForm({ section, onClose }: { section?: string; onClose: () => 
                   <button
                     key={swatch}
                     type="button"
-                    aria-label={`${t(MAUS_COLOR_LABEL[swatch])} character color`}
+                    aria-label={t("botPanel.avatar.colorNamed", { color: t(MAUS_COLOR_LABEL[swatch]) })}
                     aria-pressed={swatch === color}
                     onClick={() => pickColor(swatch)}
                     {...watch}
@@ -205,7 +212,7 @@ function CreateBotForm({ section, onClose }: { section?: string; onClose: () => 
             <span>{creating ? t("createBot.creating") : "Create"}</span>
           </button>
         </div>
-      </div>
+      </SheetMotion>
     </div></ModalLayer>
   );
 }
@@ -227,7 +234,7 @@ function ShapeTile({ id, color, selected, onPick, onPointerEnter, onFocus }: {
   return (
     <button
       type="button"
-      aria-label={`${id} character shape`}
+      aria-label={t("botPanel.avatar.shapeNamed", { name: upperFirst(id) })}
       aria-pressed={selected}
       onClick={onPick}
       onPointerEnter={onPointerEnter}

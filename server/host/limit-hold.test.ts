@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import type { Checklist } from "../batch-checklist.ts";
 import type { RuntimeEvent } from "../contracts.ts";
 import type { LimitHoldState } from "../../shared/wire.ts";
-import { AFTER_RESET_MS, AFTER_START_MS, createLimitHold, MAX_HOLD_MS, MAX_RESUMES, resumeNote, UNKNOWN_RESET_RECHECK_MS, type HeldTurn } from "./limit-hold.ts";
+import { AFTER_RESET_MS, AFTER_START_MS, createLimitHold, MAX_HOLD_MS, MAX_RESUMES, refusedStartWaits, resumeNote, UNKNOWN_RESET_RECHECK_MS, type HeldTurn } from "./limit-hold.ts";
 
 const START = Date.parse("2026-11-17T10:00:00Z");
 const HOUR = 3_600_000;
@@ -282,6 +282,35 @@ describe("never looping", () => {
     expect(h.hold.list()).toEqual([]);
     expect(h.lines.at(-1)!.text).toBe("Claude is still at its limit, so this stopped waiting. Send a message to try again.");
     expect(h.refreshes()).toBeLessThanOrEqual(MAX_HOLD_MS / UNKNOWN_RESET_RECHECK_MS + 1);
+  });
+});
+
+describe("a turn its limit refused before it began", () => {
+  it("waits like one refused mid-turn: the person's own request, or a held turn's resume; never another turn or another refusal", () => {
+    expect(refusedStartWaits("engine", { person: true, resuming: false })).toBe(true);
+    expect(refusedStartWaits("model", { person: false, resuming: true })).toBe(true);
+    expect(refusedStartWaits("engine", { person: false, resuming: false }), "a routine's or a relayed turn").toBe(false);
+    expect(refusedStartWaits("credits", { person: true, resuming: false }), "credits do not reset").toBe(false);
+    expect(refusedStartWaits("provider", { person: true, resuming: false })).toBe(false);
+    expect(refusedStartWaits(undefined, { person: true, resuming: false })).toBe(false);
+  });
+
+  it("a resume refused before it began waits again with a backoff instead of being left stuck", async () => {
+    const h = harness();
+    h.hold.hold({ botId: "kai", threadId: "t1", engine: "claude", engineName: "Claude", resetsAt: START + HOUR, request: "Write the report" });
+    expect(h.hold.resuming("t1")).toBe(false);
+    await h.time.advance(HOUR + AFTER_RESET_MS);
+    expect(h.resumed).toHaveLength(1);
+    expect(h.hold.resuming("t1")).toBe(true);
+    expect(h.hold.held("t1"), "no card while it runs").toBeUndefined();
+
+    expect(h.hold.hold({ botId: "kai", threadId: "t1", engine: "claude", engineName: "Claude" })).not.toBeNull();
+    expect(h.hold.resuming("t1")).toBe(false);
+    expect(h.hold.held("t1")).toMatchObject({ resumes: 1, request: "Write the report" });
+    expect(h.paused.at(-1)!.state).toEqual({ retryAt: h.time.now() + UNKNOWN_RESET_RECHECK_MS });
+    await h.time.advance(UNKNOWN_RESET_RECHECK_MS);
+    expect(h.resumed).toHaveLength(2);
+    expect(h.resumed[1]!.note).toContain("Write the report");
   });
 });
 

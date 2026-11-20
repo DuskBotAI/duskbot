@@ -40,6 +40,7 @@ import type { HostKind } from "../browser/chrome/flags.ts";
 import { browserEngineKind, type BrowserEngineKind } from "../browser/config.ts";
 import { ChromeEngine, chromeTarget, LiveRouter, profileKey, RuntimeRouter } from "../browser/engines.ts";
 import { CHROME_BROWSER_SYSTEM_PROMPT } from "../browser/prompt.ts";
+import { refusedSignInNote } from "../browser/agent-browser-args.ts";
 import { passkeyAnnotation } from "../browser/passkey-notice.ts";
 import type { EngineBrowsers } from "../engine-memory.ts";
 import { augmentedPath } from "../env-path.ts";
@@ -140,6 +141,7 @@ export function createBrowserHost(deps: BrowserHostDeps) {
   const boxed = Boolean(browserBox?.(LAUNCHER_SECCOMP_FD, []));
   if (browserBox) chromeLauncher.boxWith(() => browserBox(LAUNCHER_SECCOMP_FD, []));
   agentBrowserRuntime.onIdleClose((session) => idleClosing.add(session));
+  agentBrowserRuntime.refusedSignIn = () => refusedSignInNote(myChromeAvailable() && (cfg.browserProfiles ?? []).some((profile) => profile.browser === "chrome"));
   const agentBrowserLive = new BrowserLive({ runtime: agentBrowserRuntime, devTools: {
     url: (port) => relay(port, { action: "cdp_url" }, { timeoutMs: 5_000, maxBytes: 65_536 }).then((answer) => answer.data?.cdpUrl),
   } });

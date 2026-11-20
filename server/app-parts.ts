@@ -5,7 +5,7 @@
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
 import { createReadStream, existsSync, readFileSync } from "node:fs";
-import { mkdir, mkdtemp, open, readdir, rename, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, open, readdir, readFile, rename, rm, stat, utimes, writeFile } from "node:fs/promises";
 import { join, resolve, win32 } from "node:path";
 
 export const PARTS_FILE = "parts.json";
@@ -90,6 +90,50 @@ export function declaredPart(name: PartName, env: NodeJS.ProcessEnv = process.en
   return { part, root, directory: partDirectory(root, part), installed: partInstalled(root, part) };
 }
 
+/** A lock untouched this long is a holder that died or hung, and is taken over. */
+export const PART_LOCK_STALE_MS = 120_000;
+
+const alive = (pid: number) => {
+  try { process.kill(pid, 0); return true; } catch (error) { return (error as NodeJS.ErrnoException).code === "EPERM"; }
+};
+
+/**
+ * One app process at a time downloads a part: every workspace's server shares the parts folder, and two appending to the
+ * same partial file leave bytes that fail the SHA-256 check on every try. Resolves "mine" with the lock held (touch it
+ * while working, release it after), or "installed" once the process that held it put the part in place.
+ */
+export async function partLock(root: string, part: PartSpec, options: { signal?: AbortSignal; pollMs?: number; staleMs?: number; onWait?: () => void } = {}):
+  Promise<{ kind: "mine"; touch(): void; release(): Promise<void> } | { kind: "installed" }> {
+  const directory = join(root, DOWNLOADS);
+  await mkdir(directory, { recursive: true });
+  const file = join(directory, `${part.sha256}.lock`);
+  const staleMs = options.staleMs ?? PART_LOCK_STALE_MS;
+  let waited = false;
+  for (;;) {
+    options.signal?.throwIfAborted();
+    if (partInstalled(root, part)) return { kind: "installed" };
+    try {
+      await writeFile(file, `${process.pid}\n`, { flag: "wx" });
+      let touched = Date.now();
+      return {
+        kind: "mine",
+        touch() { if (Date.now() - touched < 10_000) return; touched = Date.now(); void utimes(file, new Date(), new Date()).catch(() => {}); },
+        async release() { await rm(file, { force: true }); },
+      };
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+    }
+    const [holder, info] = await Promise.all([readFile(file, "utf8").catch(() => ""), stat(file).catch(() => null)]);
+    const pid = Number(holder.trim());
+    if (!info || !Number.isSafeInteger(pid) || !alive(pid) || Date.now() - info.mtimeMs > staleMs) {
+      await rm(file, { force: true });
+      continue;
+    }
+    if (!waited) { waited = true; options.onWait?.(); }
+    await new Promise((resolve) => setTimeout(resolve, options.pollMs ?? 2_000));
+  }
+}
+
 export interface PartProgress { phase: "download" | "setup"; received: number; total: number }
 
 /** Resumes a partial download with a Range request; the whole file must then match the pinned size and SHA-256. */
@@ -100,6 +144,8 @@ export async function downloadPart(part: PartSpec, options: {
   onProgress?: (progress: PartProgress) => void;
   /** a connection that sends nothing for this long is given up, so a waiting turn is never stuck on it */
   stallMs?: number;
+  /** where to fetch it from this time: one of `partSources(part.url)` */
+  url?: string;
 }): Promise<string> {
   const stall = new AbortController();
   const stallMs = options.stallMs ?? 60_000;
@@ -118,6 +164,7 @@ async function fetchPart(part: PartSpec, options: {
   signal: AbortSignal;
   alive: () => void;
   onProgress?: (progress: PartProgress) => void;
+  url?: string;
 }): Promise<string> {
   const directory = join(options.root, DOWNLOADS);
   await mkdir(directory, { recursive: true });
@@ -126,7 +173,7 @@ async function fetchPart(part: PartSpec, options: {
   if (have > part.bytes) { await rm(file, { force: true }); have = 0; }
   options.onProgress?.({ phase: "download", received: have, total: part.bytes });
   if (have < part.bytes) {
-    const response = await (options.fetchImpl ?? fetch)(part.url, {
+    const response = await (options.fetchImpl ?? fetch)(options.url ?? part.url, {
       redirect: "follow",
       signal: options.signal,
       headers: have > 0 ? { range: `bytes=${have}-` } : {},
@@ -265,6 +312,14 @@ export type PartState =
 /** Tries after a failure: soon, then less often; offline it keeps trying every ten minutes. */
 export const PART_RETRY_MS = [5_000, 30_000, 120_000, 600_000];
 
+const DOWNLOADS_PART = /^https:\/\/github\.com\/DuskBotAI\/duskbot-releases\/releases\/download\/v(\d+\.\d+\.\d+)\/(DuskBot-\1-[A-Za-z0-9_.-]+\.zip)$/;
+/** where a part can come from, tried in turn after each failure: its pinned url, then dusk.bot's copy of a downloads-repo
+ * part (scripts/mirror-release.sh puts it there). either is checked against the same pinned size and SHA-256 */
+export function partSources(url: string): string[] {
+  const match = DOWNLOADS_PART.exec(url);
+  return match ? [url, `https://dusk.bot/releases/${match[1]}/${match[2]}`] : [url];
+}
+
 export interface PartsDownloader {
   start(): void;
   state(name: PartName): PartState | null;
@@ -316,14 +371,21 @@ export function createPartsDownloader(options: {
     let last: PartProgress = { phase: "download", received: 0, total: part.bytes };
     try {
       options.log?.(`app parts: getting ${part.name} ${part.id} (${Math.round(part.bytes / 1024 / 1024)} MB, digest pinned)`);
-      const archive = await downloadPart(part, {
-        root: options.root, fetchImpl: options.fetchImpl, signal: controller.signal,
-        onProgress: (progress) => { last = progress; set(part.name, progress); },
-      });
-      const directory = await installPart(part, archive, {
-        root: options.root, platform: options.platform, exec: options.exec,
-        check: options.check ? (dir) => options.check!(part, dir) : undefined,
-      });
+      const sources = partSources(part.url);
+      const lock = await partLock(options.root, part, { signal: controller.signal, onWait: () => options.log?.(`app parts: another dusk bot process is getting ${part.name}; waiting for it`) });
+      let directory = partDirectory(options.root, part);
+      if (lock.kind === "mine") {
+        try {
+          const archive = await downloadPart(part, {
+            root: options.root, fetchImpl: options.fetchImpl, signal: controller.signal, url: sources[(failures.get(part.name) ?? 0) % sources.length],
+            onProgress: (progress) => { lock.touch(); last = progress; set(part.name, progress); },
+          });
+          directory = await installPart(part, archive, {
+            root: options.root, platform: options.platform, exec: options.exec,
+            check: options.check ? (dir) => options.check!(part, dir) : undefined,
+          });
+        } finally { await lock.release(); }
+      }
       failures.delete(part.name);
       options.log?.(`app parts: ${part.name} is ready`);
       set(part.name, { phase: "ready", directory });

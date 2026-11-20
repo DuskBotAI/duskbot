@@ -1,4 +1,4 @@
-# what is true about dusk bot (checked 2026-11-12)
+# what is true about dusk bot (checked 2026-11-12, phone and grok bot lines 2026-11-20)
 
 The only claims about Dusk Bot an seo page may make. Each line names its source: a site docs page (link it as /docs/...)
 or a doc in the Dusk Bot repo (do not link those; they are internal). If a page needs a fact that is not here, it does not
@@ -7,11 +7,15 @@ make that claim. Never invent features, numbers, integrations, users, ratings or
 ## what it is
 - An app where you keep a small team of AI bots and text them like teammates. Each bot has a name, a job, its own chats, its own memory and the AI you picked for it. (/docs/getting-started, /docs/bots)
 - Desktop app for macOS 12 or later, Windows 10 or 11 (64-bit, installer needs no admin rights) and Ubuntu 24.04 (beta, .deb or AppImage). (/docs/getting-started)
-- Phone: you text your bots from an iPhone or Android phone. The store apps are on their way; until then pairing opens Dusk Bot in the phone's browser and you add it to the home screen (that version sends no notifications). (/docs/phone)
+- Phone: you text your bots from your phone. On an iPhone, get Dusk Bot from the App Store; the Android app is on its way to Google Play, and until then Android uses the browser version (pair it, then Install app; that version sends no notifications). The app tells you when a reply, a question or an approval arrives; a notification shows the bot's name and "new message", never the text. Paired with your computer, the phone works only while that computer is on; paired with Dusk Cloud it works with your computer off. (/docs/phone)
 - Free for personal use on your own computer, with every feature. No account, no card. An account is only needed to buy a plan. (/docs/account-and-billing)
 - Source-available under the PolyForm Noncommercial license: free for personal and other noncommercial use, and you may change it and pass it on for noncommercial purposes if the license and its required notice go with it; work use needs a work license. Not open source. (/docs/faq, /license)
 - Independent; not owned by, paid for by or affiliated with any AI company whose models it runs. (/about)
 - Began from OpenMausBot, an open project by Milind Soni and contributors; that original code stays under Apache 2.0. Dusk Bot itself is source-available, never call it open source or Apache licensed. (/about, /license)
+
+## moving in from grok bot
+- Settings, Import, **Move from Grok Bot** brings a Grok Bot over: it needs no sign-in and the import makes no network call. Grok Bot has no export button, so you send each Grok Bot one message and it writes down its own setup as a file; you paste or drop that file into Dusk Bot. A preview names the bot and counts its skills, routines and memories before anything is written. Then you turn each routine off in Grok Bot and on in Dusk Bot. One bot at a time. (repo docs/team-sharing.md)
+- The site says Dusk Bot is "the free Grok bot alternative that runs on your own models": free for personal use, and each bot thinks with the AI you already use. (repo README.md)
 
 ## the ai
 - Dusk Bot has no model of its own. Bots think with an AI you already use: Claude, ChatGPT, Gemini, Grok and others. You sign in the usual way from the first screen. (/docs/getting-started)
@@ -106,6 +110,6 @@ make that claim. Never invent features, numbers, integrations, users, ratings or
 - Ratings, reviews, user counts, customer logos, testimonials, "trusted by", awards.
 - Measured time savings, benchmarks or success rates (none have been measured yet).
 - That Dusk Bot is open source.
-- That a store phone app is out (it is on its way).
+- That the Android store app is out (it is on its way to Google Play; the iPhone app is in the App Store).
 - That any routine is importable as a file, or that Dusk has a template marketplace (routines are made by sending a message).
 - Anything about a competitor without a dated source from seo/facts or omb-ref/seo-research/facts-*.json.

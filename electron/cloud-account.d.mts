@@ -68,6 +68,8 @@ export interface CloudAccountState {
   waking?: true;
   /** Connected: the plan's renewal, only while this account pays for a plan that runs: what Cancel and Keep act on (display only). */
   renewal?: import("./cloud-list.mjs").CloudRenewal;
+  /** Connected: My Cloud's renewal failed; it keeps running until `fixBy` (Update card opens the billing page). */
+  payment?: import("./cloud-list.mjs").CloudPayment;
 }
 /** What holding the first run's AI sign-ins did: `held` for the Cloud being made, `nothing` to hold, `no-cloud` (none
  * being made for this account), or `failed`. */
@@ -257,7 +259,9 @@ export interface CloudPlanSnapshot {
 }
 export type CloudPhoneSignIn = { outcome: "code"; code: string; expiresAt: number; email: string;
   /** the account service that made the code, which the phone must redeem it at; absent from an older app */
-  service?: string } | { outcome: "signed-out" | "limited" | "failed" | "canceled" };
+  service?: string }
+  /** "unsupported": the account service makes no phone codes, so the phone logs in with its email instead */
+  | { outcome: "signed-out" | "limited" | "unsupported" | "failed" | "canceled" };
 export interface CloudPlanBridge {
   state(): Promise<CloudPlanSnapshot>;
   manage(): Promise<void>;
@@ -268,6 +272,8 @@ export interface CloudPlanBridge {
   /** A code (and its QR) that logs a phone in to this account, after main's presence check; `renew` swaps the one on
    * screen without asking again for about an hour. Absent on an older app. */
   phoneSignIn?(renew?: boolean): Promise<CloudPhoneSignIn>;
+  /** Whether this computer is signed in to a dusk bot account. Absent on an older app. */
+  signedIn?(): Promise<boolean>;
   /** The trial's popup due now was shown: main shows it no more today. Absent on an older app. */
   noticeSeen?(): Promise<void>;
   /** The usage meter's Upgrade: the preview, then the change (only from the person's click). Absent on an older app. */

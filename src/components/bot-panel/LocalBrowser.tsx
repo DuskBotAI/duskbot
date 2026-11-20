@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from "react";
+import { AnimatePresence } from "motion/react";
 import { Hand, Loader2 } from "../../icons";
 
 import { resolveAddressBarInput } from "@/lib/browser-address";
@@ -6,11 +7,12 @@ import { browserStreamAccess, createPreviewStreamClient, type PreviewStreamClien
 import { createLiveStreamClient, type LiveResume } from "@/lib/browser-stream-v1";
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
+import { phoneApp } from "@/lib/store-app";
 import {
   blankPage, browserHeadline, closeLocalBrowser, keepView, keptKey, keptView, localBrowserFixture, useLocalBrowser,
 } from "@/lib/local-browser";
 import { usePageVisible } from "@/lib/page-visible";
-import { panelWide, setPanelWide, usePanelWidth, PANEL_NARROW } from "@/lib/panel-wide";
+import { panelRest, panelWide, setPanelWide, usePanelWidth } from "@/lib/panel-wide";
 import { browserScope, withBrowserScope } from "@/lib/team-browser";
 import { api, useStore, type Bot } from "@/state/store";
 import { BROWSER_HELD_ELSEWHERE } from "../../../shared/browser-held";
@@ -117,7 +119,7 @@ export function LocalBrowserLive({ bot, from, started = false, onClosed, onEnded
   const [error, setError] = useState("");
   const [closing, setClosing] = useState(false);
   const [actedAt, setActedAt] = useState<number | null>(null);
-  const wide = usePanelWidth() > PANEL_NARROW;
+  const wide = usePanelWidth() > panelRest();
   const pageVisible = usePageVisible();
   const clientRef = useRef<PreviewStreamClient | null>(null);
   const controlRef = useRef<PreviewStreamControl | null>(null);
@@ -333,7 +335,8 @@ export function LocalBrowserClosed({ bot, pill, starting = false, onStart }: {
   bot: Bot; pill: RefObject<HTMLButtonElement | null>; starting?: boolean; onStart: () => void;
 }) {
   return (
-    <section data-local-browser="closed" aria-label={t("localBrowser.label", { name: bot.name })} className="flex transition-opacity duration-200 ease-out starting:opacity-0">
+    <section data-local-browser="closed" aria-label={t("localBrowser.label", { name: bot.name })} className={cn("flex transition-opacity duration-200 ease-out starting:opacity-0", phoneApp() && "flex-col items-center gap-4 px-6 pb-6 pt-10 text-center")}>
+      {phoneApp() && <p className="max-w-[300px] text-[15px] leading-[22px] text-ink-secondary">{t("localBrowser.explain", { name: bot.name })}</p>}
       <StartPill ref={pill} onStart={onStart} disabled={starting} />
     </section>
   );
@@ -410,14 +413,14 @@ export function LocalBrowserSection({ bot, steps, after, askFirst = null }: {
   }, [live]);
 
   const from = override?.kind === "started" ? override.from : null;
-  const wide = usePanelWidth() > PANEL_NARROW;
+  const wide = usePanelWidth() > panelRest();
   return (
     <>
       {live ? <LocalBrowserLive key={`${bot.id}\n${bot.threadId ?? ""}`} bot={bot} from={from} started={override?.kind === "started"} onClosed={ended("closed")} onEnded={ended("ended")} />
         : known || late || override ? <LocalBrowserClosed bot={bot} pill={pill} starting={checking} onStart={start} /> : null}
       <div ref={below} className="mt-3 empty:hidden">{steps}{(known || late) && !wide && after}</div>
-      {asking && askFirst && <MacPermissionsDialog bridge={askFirst} onClose={() => setAsking(false)} onAllowed={openBrowser}
-        relaunch={typeof window.duskDesktop?.relaunch === "function" ? () => void window.duskDesktop!.relaunch!() : null} />}
+      <AnimatePresence>{asking && askFirst && <MacPermissionsDialog key="mac-permissions-dialog" bridge={askFirst} onClose={() => setAsking(false)} onAllowed={openBrowser}
+        relaunch={typeof window.duskDesktop?.relaunch === "function" ? () => void window.duskDesktop!.relaunch!() : null} />}</AnimatePresence>
     </>
   );
 }

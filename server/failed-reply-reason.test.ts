@@ -24,6 +24,10 @@ describe("failed reply reason", () => {
     expect(failedReplyReason("OpenCode has no usable models. Add an OpenCode key in Settings → API keys.", { setup: true })).toBe("signed_out");
   });
 
+  it("names a chat whose AI session is gone even after its rebuild, so the card offers a new chat", () => {
+    expect(failedReplyReason("No conversation found with session ID: e8b9f01e-97e3-4be6-a55c-be988595628a", {})).toBe("session_lost");
+  });
+
   it("leaves a failure it can't place to the app", () => {
     expect(failedReplyReason("something odd", {})).toBeUndefined();
   });

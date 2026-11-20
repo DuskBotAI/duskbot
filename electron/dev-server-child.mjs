@@ -1,4 +1,5 @@
 import net from "node:net";
+import { UTILITY_NAMES } from "./utility-names.mjs";
 
 // `pnpm dev:app` (DUSK_DEV_OWN_SERVER=1): a source checkout runs the harness as this app's own utility child, the way
 // the packaged app does, so the local computer grant reaches it over the child's private port and nowhere else.
@@ -52,7 +53,7 @@ export function createDevServerChild({
   const spawn = () => {
     timer = null;
     if (stopping) return;
-    const proc = fork(entry, [], { env, stdio: "inherit", execArgv: ["--experimental-strip-types"], serviceName: "dusk bot dev server" });
+    const proc = fork(entry, [], { env, stdio: "inherit", execArgv: ["--experimental-strip-types"], serviceName: UTILITY_NAMES.devServer });
     const startedAt = now();
     current = proc;
     let markExited;

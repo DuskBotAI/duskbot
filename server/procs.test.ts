@@ -57,7 +57,7 @@ describe("spawn ENOENT", () => {
   it("names a missing working folder instead of blaming the install (MOCA-309)", () => {
     const missing = join(mkdtempSync(join(tmpdir(), "dusk-procs-")), "deleted-project");
     expect(describeSpawnFailure(enoent(), "/home/u/.duskbot/tools/npm/bin/codex", missing)).toEqual({
-      message: `This chat's working folder no longer exists: ${missing}. Choose another folder in the bot's settings, or create it again.`,
+      message: "This bot's folder deleted-project was moved or deleted. Pick a folder in the bot's settings.",
       setup: false,
     });
   });

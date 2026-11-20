@@ -119,6 +119,8 @@ export function createConfigRoutes(deps: ConfigRouteDeps): RouteHandler {
       const body = opened.body;
       const patch = parseConfigPatch(body as JsonValue);
       deps.settingsChanged?.(Object.keys(patch));
+      if (patch.defaultModelSelection !== undefined || patch.newBotDefaults?.profile.modelSelection) patch.defaultModelChosen = true;
+      else delete patch.defaultModelChosen;
       if (patch.profile && ownProfile) {
         // The address is the verified claim's; a profile names no other.
         const { email: _email, ...own } = patch.profile;

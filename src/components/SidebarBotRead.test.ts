@@ -76,9 +76,9 @@ describe("Simple mode's bot menu", () => {
   const words = () => [...sheet().children].map((node) => node.getAttribute("role") === "separator" ? "|" : text(node));
   beforeEach(() => { mode.advanced = false; });
 
-  it("is grok's menu word for word: Pin and Mark as Read, Rename Bot, Copy conversation ID, Bot Settings, then Hide from sidebar and Delete", () => {
+  it("is grok's menu word for word: Pin and Mark as Read, Rename Bot, Copy conversation ID, Bot Settings, then Archive and Delete", () => {
     draw();
-    expect(words()).toEqual(["Pin", "Mark as read", "|", "Rename bot", "|", "Copy conversation ID", "|", "Bot settings", "|", "Hide from sidebar", "Delete"]);
+    expect(words()).toEqual(["Pin", "Mark as read", "|", "Rename bot", "|", "Copy conversation ID", "|", "Bot settings", "|", "Archive", "Delete"]);
     expect([...sheet().querySelectorAll("[data-icon-name]")].map((node) => node.getAttribute("data-icon-name"))).toEqual(["pin", "bell", "pencil-square", "copy", "gear", "eye-slash", "trash"]);
     flushSync(() => button("Rename bot").click());
     expect(onRename).toHaveBeenCalledWith(bot.id);

@@ -3,6 +3,8 @@ import { motion, useReducedMotion } from "motion/react";
 import { ChevronLeft, CircleAlert, X } from "../../icons";
 import { t } from "@/lib/i18n";
 import { dur, ease } from "../motion";
+import { BAR_RANK, useNativeBar } from "../chrome";
+import { usePlatform } from "../platform";
 
 /** one filled action per screen; disabled reads as disabled in both looks */
 export const PRIMARY = "mobile-press flex h-[52px] w-full items-center justify-center gap-2 rounded-full bg-ink text-[17px] font-semibold text-app disabled:bg-ink/[0.08] disabled:text-ink-tertiary";
@@ -30,17 +32,24 @@ export function StepPane({ id, children }: { id: string; children: ReactNode }) 
 export function Screen({ top, art, children, actions, align = "center" }: { top?: ReactNode; art?: ReactNode; children: ReactNode; actions: ReactNode; align?: "center" | "top" }) {
   return (
     <>
-      <div className="flex h-[calc(var(--m-safe-top)+60px)] shrink-0 items-end px-4 pb-2">{top}</div>
-      <div className={`flex min-h-0 flex-1 flex-col items-center overflow-y-auto px-7 text-center ${align === "center" ? "justify-center" : "pt-4"}`}>
+      <div className="mobile-screen-top flex h-[calc(var(--m-safe-top)+60px)] shrink-0 items-end px-4 pb-2">{top}</div>
+      <div className={`flex min-h-0 flex-1 flex-col items-center overflow-y-auto px-7 text-center ${align === "center" ? "justify-center" : "pt-4"} ${actions ? "" : "pb-[calc(max(var(--m-kb,0px),var(--m-safe-bottom))+16px)]"}`}>
         {art && <div className="mb-7 flex justify-center">{art}</div>}
         {children}
       </div>
-      <div className="flex shrink-0 flex-col items-center gap-2 px-6 pb-[calc(var(--m-safe-bottom)+16px)] pt-4">{actions}</div>
+      {actions && <div className="flex shrink-0 flex-col items-center gap-2 px-6 pb-[calc(max(var(--m-kb,0px),var(--m-safe-bottom))+16px)] pt-4">{actions}</div>}
     </>
   );
 }
 
+/** Back or close at the top of a covering screen: a button in the system's bar where there is one. */
 export function BackButton({ onClick, close = false }: { onClick: () => void; close?: boolean }) {
+  const label = t(close ? "mobile.sheet.close" : "mobile.sheet.back");
+  const system = useNativeBar(BAR_RANK.screen, usePlatform().chrome ? {
+    leading: [close ? { id: "leave", role: "close", label } : { id: "leave", symbol: "chevron.backward", label }],
+    trailing: [],
+  } : null, { leave: onClick });
+  if (system) return null;
   return (
     <button type="button" onClick={onClick} aria-label={t(close ? "mobile.sheet.close" : "mobile.sheet.back")} className="mobile-press flex size-11 items-center justify-center rounded-full bg-ink/[0.06] text-ink">
       {close ? <X size={20} /> : <ChevronLeft size={21} />}

@@ -63,9 +63,7 @@ export function useSidebarSections({ simple, rail, density, query, label, sideba
     collapsed: (id: string) => sidebarSectionCollapsed(id, collapsedIds, density, query),
     toggle: (id: string) => {
       if (!interactive) return;
-      const next = toggleCollapsedSection(collapsedIds, id);
-      setCollapsedIds(next);
-      saveCollapsedSections(next);
+      setCollapsedIds((current) => { const next = toggleCollapsedSection(current, id); saveCollapsedSections(next); return next; });
     },
     /** A department's new name keeps its place and its collapsed state. */
     renamed: (from: string, to: string) => {

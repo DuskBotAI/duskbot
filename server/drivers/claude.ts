@@ -1,5 +1,6 @@
 // Claude Code over stream-json both ways: prompt on stdin, one retained CLI process per thread,
 // each turn settled by the CLI's own `result` frame.
+import { outboundSendKey } from "../../shared/declined-sends.ts";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
 import { createServer as createNetServer } from "node:net";
@@ -21,7 +22,6 @@ import { claudeModelExtras } from "./claude-model-extras.ts";
 import { AGENTS_DEFERRED_NOTE, claudeToolSearchSetting } from "./claude-tool-search.ts"; import { AGENTS_DEFER_ENV } from "./agents-mcp-env.ts"; import { unusableBuiltIns } from "./claude-unusable-tools.ts"; import { EMAIL_READ_TOOL_NAMES } from "../../shared/email.ts";
 import { cliExitCode } from "../../shared/usage-signals.ts";
 import { claudeElicitations } from "./claude-elicitation.ts";
-import { readCostHistory, recordCostState } from "./claude-cost-history.ts";
 import { classifyResumeFailure, mayReplay, rebuiltSessionNotice, recoveryPromptFor } from "../resume-recovery.ts";
 import { ClaudeLoginController } from "./claude-login-auth.ts";
 
@@ -53,6 +53,9 @@ import { TEAM_TOOLS_FAILED, failedCustomMcp, teamToolsFailed } from "./team-tool
 import { armIdleClose, engineIdleMs, sessionIdlePolicy, stopIdleClose } from "./session-idle.ts";
 import { promptHalves, withVolatileNote } from "./prompt-split.ts"; import { CLAUDE_OWN_MEMORY_OFF } from "./claude-own-memory.ts";
 import { versionAtLeast } from "./acp/version-probe.ts";
+import { applyClaudeEffort, claudeEffortByControl } from "./claude-effort.ts";
+import { claudeCostSnapshot, readCostHistory, recordCostState, restoredCostBase, turnCostFromRunningTotal } from "./claude-cost-history.ts";
+export { claudeCostSnapshot, restoredCostBase, turnCostFromRunningTotal, type ClaudeCostSnapshot } from "./claude-cost-history.ts";
 import { CLAUDE_FLAG_FLOORS, claudeCliSupports, parseClaudeCliVersion, type ClaudeCliVersion } from "./claude-cli-version.ts";
 export { CLAUDE_FLAG_FLOORS, claudeCliSupports, parseClaudeCliVersion, type ClaudeCliVersion } from "./claude-cli-version.ts";
 import {
@@ -227,15 +230,13 @@ export function claudeCliUpdate(version: string | null, cli: string): ProviderSn
   const missing = (Object.keys(CLAUDE_FLAG_FLOORS) as (keyof typeof CLAUDE_FLAG_FLOORS)[])
     .filter((flag) => !claudeCliSupports(parsed, flag));
   const effects = [
-    ...(missing.includes("--autocompact") ? ["no compaction window picked by dusk bot"] : []),
-    ...(missing.includes("--setting-sources") ? ["bots still see this machine's own Claude Code setup"] : []),
-    ...(missing.includes("--system-prompt-snapshot") ? ["resumed turns cannot refresh stale system prompts"] : []),
+    ...(missing.includes("--autocompact") ? ["long chats are shortened later than they should be"] : []),
+    ...(missing.includes("--setting-sources") ? ["bots also follow this computer's own Claude Code setup"] : []),
+    ...(missing.includes("--system-prompt-snapshot") ? ["a bot can miss changes to its instructions in an ongoing chat"] : []),
   ];
   return {
-    title: "Update Claude Code for context controls",
-    message:
-      `Claude Code ${parsed.join(".")} predates ${floor}, so bots run without ${missing.join(", ")}: ` +
-      `${effects.join("; ")}. Update it, then refresh Engines.`,
+    title: "Update Claude Code",
+    message: `Claude Code ${parsed.join(".")} is older than ${floor}, so ${new Intl.ListFormat("en", { type: "conjunction" }).format(effects)}. Update it to fix this.`,
     command: cli === "claude" ? "claude update" : `${cli} update`,
   };
 }
@@ -258,6 +259,7 @@ export interface ClaudeConfig {
 export const STATIC_CLAUDE_MODELS: ModelCatalog = {
   default: "claude-sonnet-5",
   options: [
+    { id: "claude-fable-5-2", label: "Claude Fable 5.2", contextWindow: 1_000_000 },
     { id: "claude-fable-5-1", label: "Claude Fable 5.1" },
     { id: "claude-fable-5", label: "Claude Fable 5" },
     { id: "claude-opus-5-5", label: "Claude Opus 5.5", contextWindow: 1_000_000 },
@@ -424,16 +426,15 @@ export function permissionSocketPath(threadId: string, botId?: string) {
 }
 
 /** Broker bind paths, in order. Windows pipe names are never unlinkable (a hung child can hold one
- * for minutes), and macOS rejects socket paths past `sun_path`, hence the short temp fallbacks; the last is fresh each
- * launch, so a path another process still holds never fails a turn on its own. */
+ * for minutes), and macOS rejects socket paths past `sun_path` (104 bytes), hence the short temp fallbacks, then /tmp
+ * for a TMPDIR too deep for even those (every socket is chmod 0600); a `dp-` path is fresh each launch, so a path another
+ * process still holds never fails a turn on its own. */
 export function brokerSocketCandidates(threadId: string, botId?: string): string[] {
   const base = permissionSocketPath(threadId, botId);
   if (process.platform !== "win32") {
-    const scope = createHash("sha256")
-      .update(`${DATA_DIR}\0${process.pid}\0${botId ?? ""}\0${threadId}`)
-      .digest("hex")
-      .slice(0, 16);
-    return [base, join(tmpdir(), `dusk-perm-${scope}.sock`), join(tmpdir(), `dp-${randomBytes(4).toString("hex")}.sock`)];
+    const scope = createHash("sha256").update(`${DATA_DIR}\0${process.pid}\0${botId ?? ""}\0${threadId}`).digest("hex").slice(0, 16);
+    const fresh = (dir: string) => join(dir, `dp-${randomBytes(4).toString("hex")}.sock`);
+    return [base, join(tmpdir(), `dusk-perm-${scope}.sock`), fresh(tmpdir()), ...(tmpdir() === "/tmp" ? [] : [fresh("/tmp")])];
   }
   return [
     base,
@@ -652,60 +653,6 @@ function firstText(content: unknown): string {
   return Array.isArray(content) ? content.filter((b) => b?.type === "text" && b.text).map((b) => b.text).join("") : "";
 }
 
-/** A turn's cost from total_cost_usd, which is the process's running total (2.1.282): the growth
- * since `previous`, or the whole figure when the start is unknown or the total went down. */
-export function turnCostFromRunningTotal(total: number | null, previous: number | null): number | null {
-  if (total === null) return null;
-  if (previous === null || total < previous) return total;
-  return Number((total - previous).toFixed(10));
-}
-
-/** total_cost_usd and per-model modelUsage [input, cache read, cache write, output] from a
- * `result`; both cover the whole session, including what --resume restored. */
-export interface ClaudeCostSnapshot {
-  total: number;
-  models: Record<string, [number, number, number, number]>;
-}
-
-export function claudeCostSnapshot(total: unknown, modelUsage: unknown): ClaudeCostSnapshot | null {
-  if (typeof total !== "number" || !Number.isFinite(total)) return null;
-  const count = (value: unknown) => (typeof value === "number" && Number.isFinite(value) ? value : 0);
-  const models: ClaudeCostSnapshot["models"] = {};
-  if (modelUsage && typeof modelUsage === "object" && !Array.isArray(modelUsage)) {
-    for (const [model, raw] of Object.entries(modelUsage as Record<string, unknown>)) {
-      if (!raw || typeof raw !== "object") continue;
-      const u = raw as Record<string, unknown>;
-      models[model] = [count(u.inputTokens), count(u.cacheReadInputTokens), count(u.cacheCreationInputTokens), count(u.outputTokens)];
-    }
-  }
-  return { total, models };
-}
-
-/** The running total a resumed session carried before this process's first turn. On --resume the
- * CLI (2.1.282) restores cost from an earlier state, not always the latest one seen. */
-export function restoredCostBase(
-  earlier: readonly ClaudeCostSnapshot[],
-  current: ClaudeCostSnapshot,
-  usage: { input: number; cacheRead: number; cacheWrite: number; output: number },
-): number {
-  const turn = [usage.input, usage.cacheRead, usage.cacheWrite, usage.output];
-  const nothing: ClaudeCostSnapshot = { total: 0, models: {} };
-  let exact: number | null = null;
-  let inside = 0;
-  for (const state of [nothing, ...earlier]) {
-    const within = Object.entries(state.models).every(([model, counts]) =>
-      counts.every((n, i) => n <= (current.models[model]?.[i] ?? 0)));
-    if (!within) continue;
-    inside = state.total;
-    const growth = Object.entries(current.models).map(([model, counts]) =>
-      counts.map((n, i) => n - (state.models[model]?.[i] ?? 0)));
-    const isTurn = (counts: number[]) => counts.every((n, i) => n === turn[i]);
-    const summed = turn.map((_, i) => growth.reduce((sum, counts) => sum + counts[i]!, 0));
-    if (growth.some(isTurn) || isTurn(summed)) exact = state.total;
-  }
-  return exact ?? inside;
-}
-
 type ClaudeImage = NonNullable<SendTurnInput["images"]>[number];
 type ClaudeUserContent =
   | { type: "image"; source: { type: "base64"; media_type: ClaudeImage["mime"]; data: string } }
@@ -844,6 +791,8 @@ export const ClaudeDriver: ProviderDriver<ClaudeConfig> = {
       argsKey: string;
       /** the volatile half the conversation holds; null once a compaction may have summarized it away */
       volatile: string | null;
+      /** the effort the CLI runs at, set per turn over stdin (null: its default); undefined when the launch argv carries it */
+      effort?: string | null;
       sessionId: string | null;
       /** `init` arrived; before it the CLI took nothing, so a resume retry is safe */
       sawInit: boolean;
@@ -948,6 +897,9 @@ export const ClaudeDriver: ProviderDriver<ClaudeConfig> = {
       });
     };
 
+    const effortByControl = () => claudeEffortByControl(cliVersionChecked, cliVersion);
+    const applyEffort = (s: Session, threadId: string, effort: string | undefined) => applyClaudeEffort(s, effort, (msg) => appendNative(threadId, { dir: "out", source: "claude.sdk.message", msg }));
+
     const authRecovery = claudeAuthRecovery((event: RuntimeEvent) => {
       for (const l of Array.from(listeners)) l(event);
     }, async (threadId) => {
@@ -1051,7 +1003,8 @@ export const ClaudeDriver: ProviderDriver<ClaudeConfig> = {
       const turnModel = config.managed ? turn.model : await resolveClaudeTurnModel(turn.model, turnEnvironment);
       const injected = config.managed ? { model: turnModel ?? null, injected: false } : applyClaudeInject({ ...turnEnvironment }, turnModel);
       if (injected.model) args.push("--model", injected.model);
-      if (turn.effort) args.push("--effort", turn.effort);
+      const effortControl = effortByControl();
+      if (turn.effort && !effortControl) args.push("--effort", turn.effort);
 
       // Off argv: Windows' CreateProcess limit (spawn ENAMETOOLONG), and the prompt may be sensitive.
       let systemPromptPath: string | null = null;
@@ -1228,7 +1181,7 @@ export const ClaudeDriver: ProviderDriver<ClaudeConfig> = {
         live.volatile = volatile;
         const running = live.turn;
         // A warm process can exit just as the next turn is written; its close resumes this turn.
-        if (!(await writeUser(live, threadId, message)) && !running?.stopRequested) closeSession(threadId, "stdin write failed");
+        if (!(await applyEffort(live, threadId, turn.effort) && await writeUser(live, threadId, message)) && !running?.stopRequested) closeSession(threadId, "stdin write failed");
         if (mcpConfigPath) {
           try {
             rmSync(dirname(mcpConfigPath), { recursive: true, force: true });
@@ -1289,6 +1242,7 @@ export const ClaudeDriver: ProviderDriver<ClaudeConfig> = {
                 // The Bash command, for exact-command grants and for the safety floor.
                 ...shellRequest(ask.kind === "permission" && ask.tool === "Bash" ? ask.input.command : undefined, commandCwd), ...(ask.kind === "permission" && readToolPaths(ask.tool, ask.input) ? { reads: readToolPaths(ask.tool, ask.input) } : {}),
                 ...(ask.kind === "permission" && typeof ask.tool === "string" && ask.tool.startsWith("mcp__") ? { callFacts: toolCallFacts(ask.input) } : {}),
+                ...(ask.kind === "permission" && typeof ask.tool === "string" && outboundSendKey(ask.tool, ask.input) ? { sendKey: outboundSendKey(ask.tool, ask.input) } : {}),
                 requiresExplicitApproval: ask.kind === "permission" && ask.tool === "Bash" && ask.input.dangerouslyDisableSandbox === true || undefined,
                 nativeReview,
                 allowSession: ask.kind === "permission" && !(controlsHost && typeof ask.tool === "string" && ask.tool.startsWith("mcp__computer")) ? true : undefined,
@@ -1374,6 +1328,7 @@ export const ClaudeDriver: ProviderDriver<ClaudeConfig> = {
         argsKey,
         preloadedComputer: (mcpServers.computer as { alwaysLoad?: boolean } | undefined)?.alwaysLoad === true,
         volatile: turn.systemVolatile ?? "",
+        ...(effortControl ? { effort: null } : {}),
         sessionId: sessionId ?? newSessionId,
         sawInit: false,
         nativePermissionMode: null,
@@ -1903,7 +1858,7 @@ export const ClaudeDriver: ProviderDriver<ClaudeConfig> = {
       emit({ ...base(threadId, turnId), type: "turn.started" });
 
       // Prompt over stdin, never argv (ARG_MAX); stdin stays open for steers and the next turn.
-      if (!(await writeUser(session, threadId, halves.stable !== null && halves.volatile.trim() ? claudeUserMessage(withVolatileNote(turn.text, halves.volatile, true), turn.images) : promptMsg))) {
+      if (!(await applyEffort(session, threadId, turn.effort)) || !(await writeUser(session, threadId, halves.stable !== null && halves.volatile.trim() ? claudeUserMessage(withVolatileNote(turn.text, halves.volatile, true), turn.images) : promptMsg))) {
         if (!session.turn?.stopRequested) settle(false, "stdin_write_failed");
         closeSession(threadId, "stdin write failed");
       }
@@ -2068,6 +2023,7 @@ export const ClaudeDriver: ProviderDriver<ClaudeConfig> = {
           images: true,
           nativeImageInput: true,
           effortLevels: ["low", "medium", "high", "xhigh", "max"],
+          get effortPerTurn() { return effortByControl(); },
           queueing: true,
           // stream-json takes image blocks on any user message, mid-turn too
           steerImages: true,

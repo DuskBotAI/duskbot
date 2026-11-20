@@ -10,9 +10,14 @@ import { pipeline } from "node:stream/promises";
 
 export const OUTPUT_TAIL = 200 * 1024;
 const READ_MAX = 262_144;
+/** what one mac_send_file carries: the sealed outcome grows it by about three quarters */
+export const SEND_MAX = 8 * 1024 * 1024;
 const LIST_MAX = 500;
 const KILL_GRACE_MS = 3000;
 const DOWNLOAD_MAX = 2 * 1024 ** 3;
+
+/** the tools are written for macOS (zsh, open, screencapture, and the bots are told it is a Mac), so only a Mac serves them */
+export const servesMacJobs = (platform = process.platform) => platform === "darwin";
 
 export function macLogFile(home = homedir()) {
   return path.join(home, "Library", "Logs", "Dusk Bot", "mac-control.log");
@@ -108,6 +113,11 @@ export function jobSummary(job) {
     case "mac_save_from_cloud": return `${clip(a.source)} -> ${clip(a.to ?? "~/Downloads")}`;
     case "mac_screenshot": return "screen";
     case "mac_download": return `${clip(a.url)} -> ${clip(a.to ?? "~/Downloads/")}`;
+    case "mac_screen": {
+      const on = a.arguments ?? {};
+      const where = [on.pid !== undefined && `pid ${clip(on.pid)}`, on.window_id !== undefined && `window ${clip(on.window_id)}`, on.app && clip(on.app)].filter(Boolean).join(" ");
+      return `${clip(a.name)}${where ? ` on ${where}` : ""}`;
+    }
     default: return clip(a.path ?? "~");
   }
 }
@@ -217,6 +227,15 @@ export function createMacExecutor(options = {}) {
         throw error;
       }
       return { text: `saved ${size} bytes from ${url.host} to ${saved}` };
+    },
+    async mac_send_file(a) {
+      const file = at(a.path);
+      const info = await exists(file);
+      if (!info) throw new Error(`there is no ${file} on this Mac`);
+      if (!info.isFile()) throw new Error(`${file} is a folder; zip it with mac_exec first (ditto -c -k --keepParent) and send the zip`);
+      if (info.size > SEND_MAX) throw new Error(`${file} is ${Math.ceil(info.size / 1024 / 1024)} MB, over the ${SEND_MAX / 1024 / 1024} MB a cloud bot can bring over`);
+      const data = (await fsp.readFile(file)).toString("base64");
+      return { text: `sent ${info.size} bytes of ${file}`, file: { name: path.basename(file), data } };
     },
     async mac_screenshot() {
       if (options.screenshot) return { text: "screenshot of the main screen", image: await options.screenshot() };

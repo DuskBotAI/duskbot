@@ -17,6 +17,7 @@ export const relayPairingUsable = (relay: PhoneRelayState | null): boolean =>
 /** why pairing from anywhere is not on offer, or null when it is (or this build has no relay) */
 export function relayUnavailableMessage(relay: PhoneRelayState | null): string | null {
   if (relay?.status === "signed-out") return t("phone.relay.signIn");
+  if (relay?.status === "error" && relay.code === "tunnel_limit") return t("phone.relay.tunnelLimit");
   if (relay?.status === "error") return t("phone.relay.failed", { reason: relay.message ?? t("phone.relay.unreachable") });
   return null;
 }

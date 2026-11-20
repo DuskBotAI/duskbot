@@ -1,7 +1,7 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { memo, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { cn } from "@/lib/cn";
 import type { MentionPeer } from "@/lib/mentions";
-import { closeOpenMarks, nextReveal, noteRevealed } from "@/lib/text-reveal";
+import { closeOpenMarks, nextReveal, noteRevealed, streamingBlocks } from "@/lib/text-reveal";
 import { shownReplyText, useLiveReplyText } from "@/state/live-reply";
 import { usePrefersReducedMotion } from "./mascot-clock";
 import { ChatMarkdown } from "./ChatMarkdown";
@@ -86,10 +86,27 @@ export function LiveReplyBubble({ threadId, mentionPeers, onGrow }: {
     <div data-live-reply="" className="relative flex w-full flex-col items-start" aria-hidden="true">
       <div className="flex w-full items-center justify-start gap-1.5">
         <div ref={bubble} data-chat-bubble="simple" className={cn("w-fit", SIMPLE_BUBBLE_MAX, SIMPLE_BOT_BUBBLE)}>
-          <ChatMarkdown text={closeOpenMarks(text)} mentionPeers={mentionPeers} reveal={reduced ? undefined : LIVE_REVEAL} />
+          <LiveBlocks text={text} mentionPeers={mentionPeers} reveal={!reduced} />
         </div>
         <span className="shrink-0" style={{ width: actions }} />
       </div>
     </div>
   );
 }
+
+/** The reply's finished blocks render once and stay as they are; only the block still growing parses again on each
+ * step and fades its new words in, so a long reply costs no more per step than a short one. */
+function LiveBlocks({ text, mentionPeers, reveal }: { text: string; mentionPeers?: readonly MentionPeer[]; reveal: boolean }) {
+  const blocks = streamingBlocks(text);
+  return (
+    <div data-live-blocks="">
+      {blocks.map((block, index) => index < blocks.length - 1
+        ? <FinishedBlock key={index} text={block} mentionPeers={mentionPeers} />
+        : <ChatMarkdown key={index} text={closeOpenMarks(block)} mentionPeers={mentionPeers} reveal={reveal ? LIVE_REVEAL : undefined} />)}
+    </div>
+  );
+}
+
+const FinishedBlock = memo(function FinishedBlock({ text, mentionPeers }: { text: string; mentionPeers?: readonly MentionPeer[] }) {
+  return <ChatMarkdown text={text} mentionPeers={mentionPeers} />;
+});

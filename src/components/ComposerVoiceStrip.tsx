@@ -106,6 +106,7 @@ function PreviewLine({ phase, preview }: { phase: DictationPhase; preview: strin
     <div
       ref={lineRef}
       data-voice-preview=""
+      data-voice-heard={shown ? "" : undefined}
       className={cn(
         "flex min-w-0 flex-1 justify-end overflow-hidden whitespace-nowrap",
         (overflow || shown.startsWith("…")) && "[mask-image:linear-gradient(to_right,transparent,black_28px)]",

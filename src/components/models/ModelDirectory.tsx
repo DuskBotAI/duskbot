@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { AnimatePresence } from "motion/react";
 import { Loader2, Search, X } from "../../icons";
 import { PROVIDER_SECTIONS, type ProviderSection } from "../../../shared/model-providers";
 import type { SearchHit } from "../../../shared/model-search";
@@ -97,9 +98,9 @@ export function ModelDirectory() {
             </>
           )}
       </Card>
-      {connecting && (
-        <ConnectProviderDialog provider={connecting.provider} place={answer.place} model={connecting.model} onClose={() => setConnecting(null)} />
-      )}
+      <AnimatePresence>{connecting && (
+        <ConnectProviderDialog key="connect-provider-dialog" provider={connecting.provider} place={answer.place} model={connecting.model} onClose={() => setConnecting(null)} />
+      )}</AnimatePresence>
     </>
   );
 }

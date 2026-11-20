@@ -4,7 +4,8 @@
 // at every level (own-file-reads.ts). A bot's question always reaches a human.
 
 import { supportsApprovalMode, type ApprovalMode } from "../shared/approval-mode.ts";
-import { failedTurnTool, type FailedTurnTool } from "../shared/failed-turn.ts";
+import { type FailedTurnTool } from "../shared/failed-turn.ts";
+import { failedTurnRow } from "./failed-turn-row.ts";
 import { isOutboundTool } from "../shared/outbound.ts";
 import type { ProviderAdapter, RequestOutcome } from "./contracts.ts";
 
@@ -130,7 +131,7 @@ export function undeliveredApprovalTool(
   outcome: Exclude<RequestOutcome, "allowed-once" | "unavailable"> | "failed",
   source: AutoVerdictSource,
 ): FailedTurnTool | { name: string; ok: false } {
-  if (outcome !== "rejected") return failedTurnTool("could not deliver approval to the provider; retry the task after reconnecting.");
+  if (outcome !== "rejected") return failedTurnRow("could not deliver approval to the provider; retry the task after reconnecting.");
   const grant = source === "command-allowlist" ? "the saved command permission"
     : source === "tool-allowlist" ? "the saved tool permission" : "Full access";
   return { name: `The provider rejected this action despite ${grant}.`, ok: false };

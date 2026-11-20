@@ -75,21 +75,27 @@ export function isAudioAttachment(path: string): boolean {
   return /\.(?:mp3|m4a|aac|wav|ogg|oga|opus|flac)$/i.test(fileIdentity(path));
 }
 
-type MessageAttachmentEntry = { path: string; kind?: string; name?: string };
+type MessageAttachmentEntry = { path: string; kind?: string; name?: string; bytes?: number };
 const NO_GENERATED_ATTACHMENTS: readonly MessageAttachmentEntry[] = [];
 
-export function splitMessageAttachments(attachments: readonly MessageAttachmentEntry[] = NO_GENERATED_ATTACHMENTS): { images: string[]; files: GalleryFile[] } {
+/** `pictures` are `images` with the names they were sent under, for the gallery to show and share them by. */
+export function splitMessageAttachments(attachments: readonly MessageAttachmentEntry[] = NO_GENERATED_ATTACHMENTS): { images: string[]; pictures: TranscriptImageAttachment[]; files: GalleryFile[] } {
   const images: string[] = [];
+  const pictures: TranscriptImageAttachment[] = [];
   const files: GalleryFile[] = [];
   for (const attachment of attachments) {
-    if (attachment.kind === "file") files.push({ path: attachment.path, name: attachment.name || attachmentBasename(attachment.path), private: true });
-    else if (attachment.kind === "image" || attachment.kind === undefined) images.push(attachment.path);
+    if (attachment.kind === "file") files.push({ path: attachment.path, name: attachment.name || attachmentBasename(attachment.path), private: true, ...(attachment.bytes ? { bytes: attachment.bytes } : {}) });
+    else if (attachment.kind === "image" || attachment.kind === undefined) {
+      images.push(attachment.path);
+      pictures.push({ path: attachment.path, name: attachment.name || attachmentBasename(attachment.path), private: true });
+    }
   }
-  return { images, files };
+  return { images, pictures, files };
 }
 
 export function replyAttachmentGroup(text: string, attachments: readonly MessageAttachmentEntry[] = NO_GENERATED_ATTACHMENTS): {
   images: string[];
+  pictures: TranscriptImageAttachment[];
   files: GalleryFile[];
   delivered: Record<string, string>;
 } {
@@ -109,7 +115,7 @@ export function replyAttachmentGroup(text: string, attachments: readonly Message
     if (Object.hasOwn(delivered, link.name) || taken.has(fileIdentity(link.path))) continue;
     if (isVideoAttachment(link.path) || isAudioAttachment(link.path)) files.push(link);
   }
-  return { images: attached.images, files, delivered };
+  return { images: attached.images, pictures: attached.pictures, files, delivered };
 }
 
 export function MessageAttachmentGallery({ text, attachments = NO_GENERATED_ATTACHMENTS, message, media, eager, className }: {
@@ -125,7 +131,7 @@ export function MessageAttachmentGallery({ text, attachments = NO_GENERATED_ATTA
     () => [...attached.files, ...collectMessageFiles(text, [...attached.images, ...attached.files.map((file) => file.path)])],
     [text, attached],
   );
-  return <AttachmentGallery images={attached.images} files={files} message={message} media={media} eager={eager} className={className} />;
+  return <AttachmentGallery images={attached.pictures} files={files} message={message} media={media} eager={eager} className={className} />;
 }
 
 const MEDIA_STALL_MS = 15_000;

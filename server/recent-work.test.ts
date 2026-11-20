@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   botThreads,
+  correctedChatTitles,
   parseSince,
   parseUntil,
   recentWorkLines,
@@ -161,5 +162,17 @@ describe("parseUntil", () => {
     expect(parseUntil("2026-09-01T00:00:00Z", now)).toBe(Date.UTC(2026, 8, 1));
     expect(parseUntil("soon", now)).toBeNull();
     expect(parseUntil("", now)).toBeNull();
+  });
+
+  it("leaves out a chat title that still states a fact the person corrected there", () => {
+    const stale = correctedChatTitles([
+      '- 2026-11-20 · from chat "remember my gym days are monday and thursday" · ~~Your gym days are Monday and Thursday.~~ · superseded 2026-11-20',
+      "- 2026-11-20 · from chat, corrected · Your gym days are Tuesday and Friday.",
+      '- 2026-11-18 · from chat "Trip planning for the long weekend in Goa next mo…" · ~~The hotel is Taj~~ · superseded 2026-11-19',
+      '- 2026-11-18 · from chat "Office move" · The office is in Pune',
+    ].join("\n") + "\n");
+    expect(stale("remember my gym days are monday and thursday")).toBe(true);
+    expect(stale("Trip planning for the long weekend in Goa next month")).toBe(false);
+    expect(stale("Office move")).toBe(false);
   });
 });

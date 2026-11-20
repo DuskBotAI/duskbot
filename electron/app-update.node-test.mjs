@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 
-import { createAppUpdater, DESKTOP_MANIFEST_URL, DOWNLOAD_PAGE, installerIn, installerUrl, justUpdated, mirrorUrl, quietNow, RELEASE_KEYS, sumsUrl, updatePlace, verifiedRelease, zipIn, zipUrl } from "./app-update.mjs";
+import { createAppUpdater, DESKTOP_MANIFEST_URL, DOWNLOAD_PAGE, installerIn, installerUrl, justUpdated, LOOKUP_BACKOFF_MS, MANIFEST_SOURCES, mirrorUrl, OFFLINE_CHECKS_BEFORE_FAILED, POLICY_SOURCES, SLOW_UNPACKS_BEFORE_FAILED, quietNow, RELEASE_KEYS, storedBucket, sumsUrl, updatePlace, verifiedRelease, zipIn, zipUrl } from "./app-update.mjs";
 import { failReason, resumableDownload, UpdateError } from "./app-update-download.mjs";
 import { updateFailStage } from "./experience-relay.mjs";
 
@@ -37,7 +37,7 @@ function breaks(bytes, how, total = bytes.length * 4) {
 }
 
 /** a release `version` on the network, its zip `zip`, and an updater around it */
-function world({ version = "1.1.0", current = "1.0.0", signed = true, zip = Buffer.from("zip bytes"), sumsZip = zip, manifestKey = privateKey, prepare = async () => {}, drop = [], blocked = null, installs = true, platform = "darwin", extra = {}, download = noWait } = {}) {
+function world({ version = "1.1.0", current = "1.0.0", signed = true, zip = Buffer.from("zip bytes"), sumsZip = zip, manifestKey = privateKey, prepare = async () => {}, drop = [], blocked = null, installs = true, platform = "darwin", extra = {}, download = noWait, options = {} } = {}) {
   const sums = `${sha(sumsZip)}  DuskBot-${version}-arm64.zip\n${sha("x")}  DuskBot-${version}-x64.zip\n${sha("exe")}  DuskBot-${version}-setup.exe\n${sha("deb")}  DuskBot-${version}-amd64.deb\n`;
   const routes = new Map([
     [DESKTOP_MANIFEST_URL, JSON.stringify(manifest(version, sums, "test-desk", manifestKey))],
@@ -57,7 +57,7 @@ function world({ version = "1.1.0", current = "1.0.0", signed = true, zip = Buff
     },
     installer: { prepare: async (file, v) => { w.prepared.push({ file, v, bytes: readFileSync(file) }); await prepare(); }, install: () => { w.installed += 1; } },
     quiet: async () => w.quiet, fallback: { check: async () => { w.told += 1; return null; } }, onState: (s) => w.states.push(s), onFailed: (m, info) => w.failures.push({ m, ...info }),
-    timers: { setTimeout: (fn) => { w.timers.push(fn); return w.timers.length; }, clearTimeout: () => {} },
+    timers: { setTimeout: (fn) => { w.timers.push(fn); return w.timers.length; }, clearTimeout: () => {} }, ...options,
   });
   return w;
 }
@@ -81,6 +81,52 @@ test("a newer signed release is downloaded, checked against the signed sums, and
   assert.deepEqual(w.updater.state(), { ...IDLE, ready: "1.1.0", available: "1.1.0" });
   assert.equal(w.told, 0);
   done(w);
+});
+
+function policyDoc(policy, key = privateKey) {
+  const body = JSON.stringify(policy);
+  const head = `r1.test-desk.${Buffer.from(JSON.stringify({ v: 1, kind: "update-policy", name: "update-policy", version: String(policy.serial), sha256: sha(body), signedAt: 1 })).toString("base64url")}`;
+  return JSON.stringify({ body, signature: `${head}.${sign(null, Buffer.from(head), key).toString("base64url")}` });
+}
+
+test("the signed update policy holds a paused, blocked or staged version back, and a newer policy lets it in", async () => {
+  const paused = world({ extra: { [POLICY_SOURCES[0]]: policyDoc({ serial: 2, floor: null, blocked: [], paused: true }) } });
+  assert.equal(await paused.updater.check(), null);
+  assert.equal(paused.prepared.length, 0);
+  assert.equal(paused.told, 0);
+  paused.routes.set(POLICY_SOURCES[0], policyDoc({ serial: 3, floor: null, blocked: [] }));
+  assert.equal(await paused.updater.check(), "1.1.0");
+  done(paused);
+
+  const forged = world({ extra: { [POLICY_SOURCES[0]]: policyDoc({ serial: 2, floor: null, blocked: [], paused: true }, generateKeyPairSync("ed25519").privateKey),
+    [POLICY_SOURCES[1]]: policyDoc({ serial: 1, floor: null, blocked: ["1.1.0"] }) } });
+  assert.equal(await forged.updater.check(), null);
+  assert.equal(forged.prepared.length, 0);
+  done(forged);
+
+  const staged = (bucket) => world({ extra: { [POLICY_SOURCES[1]]: policyDoc({ serial: 1, floor: null, blocked: [], rollout: { "1.1.0": 20 } }) }, options: { bucket: () => bucket } });
+  const inside = staged(19), outside = staged(20);
+  assert.equal(await inside.updater.check(), "1.1.0");
+  assert.equal(await outside.updater.check(), null);
+  done(inside); done(outside);
+});
+
+test("a policy that pauses after the download keeps the quiet restart from happening", async () => {
+  const w = world();
+  await w.updater.check();
+  w.routes.set(POLICY_SOURCES[0], policyDoc({ serial: 5, floor: null, blocked: [], paused: true }));
+  await w.updater.check();
+  w.quiet = true;
+  await w.timers.shift()();
+  assert.equal(w.installed, 0);
+  done(w);
+});
+
+test("an install keeps its rollout bucket", () => {
+  const dir = mkdtempSync(join(tmpdir(), "dusk-bucket-")), file = join(dir, "b.json");
+  assert.equal(storedBucket(file, () => 0.42), 42);
+  assert.equal(storedBucket(file, () => 0.99), 42);
+  rmSync(dir, { recursive: true, force: true });
 });
 
 test("it restarts into the update only at a quiet moment, or when the person asks", async () => {
@@ -189,6 +235,74 @@ test("GitHub failing (an error answer or no answer at all) falls back to dusk.bo
     assert.deepEqual(w.fetched.filter((u) => u.endsWith(".zip")), [zipUrl("1.1.0", name), mirrorUrl("1.1.0", name)]);
     done(w);
   }
+});
+
+const dnsMiss = () => { throw new TypeError("fetch failed", { cause: Object.assign(new Error("getaddrinfo ENOTFOUND dusk.bot"), { code: "ENOTFOUND" }) }); };
+
+test("dusk.bot unreachable (DNS, a proxy) takes the signed manifest and its sums from the downloads repo", async () => {
+  const probe = world();
+  const manifestCopy = probe.routes.get(DESKTOP_MANIFEST_URL), sumsCopy = probe.routes.get(sumsUrl("1.1.0"));
+  done(probe);
+  const w = world({ extra: { [DESKTOP_MANIFEST_URL]: dnsMiss, [sumsUrl("1.1.0")]: dnsMiss, [MANIFEST_SOURCES[1]]: manifestCopy, [zipUrl("1.1.0", "SHA256SUMS")]: sumsCopy } });
+  assert.equal(await w.updater.check(), "1.1.0");
+  assert.deepEqual(w.fetched.slice(0, 4), [DESKTOP_MANIFEST_URL, MANIFEST_SOURCES[1], sumsUrl("1.1.0"), zipUrl("1.1.0", "SHA256SUMS")]);
+  assert.deepEqual(w.failures, []);
+  done(w);
+  const forged = world({ extra: { [DESKTOP_MANIFEST_URL]: dnsMiss, [MANIFEST_SOURCES[1]]: JSON.stringify(manifest("1.1.0", "other sums", "test-desk", generateKeyPairSync("ed25519").privateKey)) } });
+  assert.equal(await forged.updater.check(), null);
+  assert.deepEqual(forged.failures.map((f) => [f.stage, f.reason]), [["manifest", "not_signed"]]);
+  assert.equal(forged.prepared.length, 0);
+  done(forged);
+});
+
+test("a network blip is waited out and tried again; an offline computer is not a failure until it lasts or the person asks", async () => {
+  const probe = world();
+  const manifestText = probe.routes.get(DESKTOP_MANIFEST_URL);
+  done(probe);
+  let hiccups = 2;
+  const waits = [];
+  const blip = world({ download: { wait: async (ms) => { waits.push(ms); } }, extra: { [DESKTOP_MANIFEST_URL]: (init) => (hiccups-- > 0 ? new Response("busy", { status: 503 }) : served(manifestText, init)), [MANIFEST_SOURCES[1]]: dnsMiss } });
+  assert.equal(await blip.updater.check(), "1.1.0");
+  assert.deepEqual(waits, LOOKUP_BACKOFF_MS);
+  done(blip);
+
+  const off = world({ extra: { [DESKTOP_MANIFEST_URL]: dnsMiss, [MANIFEST_SOURCES[1]]: () => { throw Object.assign(new Error("timed out"), { name: "TimeoutError" }); } } });
+  for (let i = 1; i < OFFLINE_CHECKS_BEFORE_FAILED; i += 1) {
+    assert.equal(await off.updater.check(), null);
+    assert.equal(off.updater.state().failed, false);
+  }
+  assert.deepEqual([off.failures.length, off.told], [0, 0]);
+  await off.updater.check();
+  assert.deepEqual(off.failures.map((f) => [f.stage, f.reason]), [["manifest", "enotfound"]]);
+  assert.equal(off.updater.state().failed, true);
+  await off.updater.check({ again: true });
+  assert.equal(off.failures.length, 2);
+  done(off);
+});
+
+test("squirrel unpacking past its timeout is tried again quietly at the next check, and told only when it keeps happening", async () => {
+  let slow = SLOW_UNPACKS_BEFORE_FAILED - 1;
+  const w = world({ prepare: async () => { if (slow-- > 0) throw new Error("the update did not unpack in time"); } });
+  for (let i = 1; i < SLOW_UNPACKS_BEFORE_FAILED; i += 1) {
+    assert.equal(await w.updater.check(), null);
+    assert.equal(w.updater.state().failed, false);
+  }
+  assert.deepEqual([w.failures.length, w.told], [0, 0]);
+  assert.equal(await w.updater.check(), "1.1.0");
+  done(w);
+
+  const stuck = world({ prepare: async () => { throw new Error("the update did not unpack in time"); } });
+  for (let i = 1; i < SLOW_UNPACKS_BEFORE_FAILED; i += 1) await stuck.updater.check();
+  assert.equal(stuck.failures.length, 0);
+  await stuck.updater.check();
+  assert.deepEqual(stuck.failures.map((f) => f.stage), ["install"]);
+  assert.equal(stuck.updater.state().failed, true);
+  done(stuck);
+
+  const asked = world({ prepare: async () => { throw new Error("the update did not unpack in time"); } });
+  await asked.updater.check({ again: true });
+  assert.equal(asked.failures.length, 1, "a check the person asked for says so at once");
+  done(asked);
 });
 
 test("a connection that goes quiet is given up after the stall time and resumed, not waited on for half an hour", async () => {

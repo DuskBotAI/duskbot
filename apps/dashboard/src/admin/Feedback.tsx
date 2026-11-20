@@ -13,7 +13,7 @@ export interface Note {
   turns?: number; minutes?: number; failed?: number; days?: number;
 }
 interface Theme { key: string; label: string; count: number; examples: string[]; pain: boolean }
-interface FeedbackAnswer { notes: Note[]; next: number | null; counts: Record<Kind, number>; themes: Theme[] }
+interface FeedbackAnswer { notes: Note[]; next: number | null; counts: Record<Kind, number>; countsCapped?: boolean; themes: Theme[] }
 
 const KINDS: Array<{ id: Kind | null; label: string }> = [{ id: null, label: "all" }, { id: "bad", label: "bad chats" }, { id: "big", label: "big sessions" }, { id: "weekly", label: "weekly" }];
 const KIND_TAG: Record<Kind, { label: string; wash: string }> = {
@@ -99,6 +99,7 @@ export function FeedbackPage() {
             </button>
           );
         })}
+        {data?.countsCapped && <span className="self-center text-12 text-ink-3">counts stop at 50,000 notes a kind</span>}
       </div>
       {error && <Failed error={error} retry={reload} />}
       {!data && loading && <Loading />}

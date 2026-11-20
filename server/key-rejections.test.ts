@@ -1,5 +1,5 @@
 import { expect, it, vi } from "vitest";
-import { forgetKey, keyRejected, noteKeyAccepted, noteKeyRejected, onKeyRejectionChange, rejectsKey } from "./key-rejections.ts";
+import { KEY_REJECTION_HOLD_MS, forgetKey, keyRejected, noteKeyAccepted, noteKeyRejected, onKeyRejectionChange, rejectsKey } from "./key-rejections.ts";
 
 it.each([
   [401, `{"error":{"message":"Incorrect API key provided","code":"invalid_api_key"}}`, true],
@@ -41,4 +41,11 @@ it("marks a key per endpoint until it is accepted or forgotten, without keeping 
   expect(keyRejected("https://other.invalid/v1", "fixture-rejected-key")).toBe(false);
   expect(listener).toHaveBeenCalledTimes(5);
   stop();
+});
+
+it("lets a refused key be tried again after a while, so one bad answer never signs an AI out for good", () => {
+  const at = 1_000_000;
+  noteKeyRejected("https://gateway.example/v1", "sk-hold", at);
+  expect(keyRejected("https://gateway.example/v1", "sk-hold", at + 60_000)).toBe(true);
+  expect(keyRejected("https://gateway.example/v1", "sk-hold", at + KEY_REJECTION_HOLD_MS + 1)).toBe(false);
 });

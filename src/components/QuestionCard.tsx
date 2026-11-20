@@ -109,7 +109,7 @@ export function QuestionCard({
   const [drafts, setDrafts] = useState<Record<number, Draft>>({});
   const [active, setActive] = useState(0);
   const [sent, setSent] = useState<{ answer: string; label?: string } | null>(null);
-  const [failed, setFailed] = useState(false);
+  const [failed, setFailed] = useState<string | null>(null);
 
   if (!card?.requestId || !questions.length) return null;
   if (decidedByBot(card)) return <DecidedQuestion threadId={threadId} asker={asker} card={card} questions={questions} />;
@@ -135,10 +135,10 @@ export function QuestionCard({
     if (answers.some((entry) => !entry.length)) return;
     const message = card.questionRequest ? formatQuestionAnswers(questions, answers) : cardAnswerFor(card, answers[0]![0]!);
     if (!message) return;
-    setFailed(false);
+    setFailed(null);
     setSent({ answer: message, ...(label ? { label } : {}) });
     returnFocusToComposer();
-    dispatch({ type: "decideRequest", threadId, requestId: card.requestId, behavior: "answer", message, onError: () => setFailed(true) });
+    dispatch({ type: "decideRequest", threadId, requestId: card.requestId, behavior: "answer", message, onError: (reason) => setFailed(answerFailure(reason)) });
   }
 
   const choose = (label: string) => {
@@ -231,7 +231,7 @@ export function QuestionCard({
           />
         </div>
       )}
-      {failed && <AskError>{t("ask.error")}</AskError>}
+      {failed && <AskError>{failed}</AskError>}
     </AskCard>
   );
 }
@@ -347,4 +347,9 @@ function SettledQuestion({ card, questions, asker }: { card: NonNullable<Message
       {many || !line.value ? <span>{line.label}{line.value && <span className="text-ink-secondary"> · {line.value}</span>}</span> : settledAnswer(line.value, choices)}
     </AskSettledLine>
   );
+}
+
+/** Why an answer did not land: a question nobody is waiting on any more says so; anything else asks to try again. */
+function answerFailure(reason: string): string {
+  return reason === t("ask.unavailable") ? reason : t("ask.error");
 }

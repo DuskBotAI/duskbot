@@ -7,6 +7,7 @@ export declare const SIGNED_IN_MS: number;
 export declare const WAKING_SIGNED_IN_MS: number;
 export declare const WAKING_SHOWN_AFTER_MS: number;
 export declare class CloudAsleepError extends Error {}
+export declare function goneAnswer(response: { status: number; headers?: { get(name: string): string | null } } | null | undefined): boolean;
 export declare function asleepAnswer(response: { status: number; headers?: { get(name: string): string | null } } | null | undefined): boolean;
 export interface CloudPowerGate {
   /** Background work must not call My Cloud now. */

@@ -24,7 +24,7 @@ export interface BatteryReport {
   rows: BatteryRow[];
 }
 
-export type ForecastWarning = "frequent" | "costly";
+export type ForecastWarning = "frequent" | "costly" | "spike";
 
 export interface RoutineForecast {
   /** Null when its schedule has no fixed rhythm (after a usage limit resets). */
@@ -40,6 +40,15 @@ export interface RoutineForecast {
   capUsd?: number;
   /** What it spent in the last seven days. */
   spentUsd: number;
+  /** Runs that used anything, its own address's included, over the last 7 and 30 days, with what they spent and the
+   *  tokens they used (input and output). */
+  usage?: { week: UsagePeriod; month: UsagePeriod };
+}
+
+export interface UsagePeriod {
+  runs: number;
+  usd: number;
+  tokens: number;
 }
 
 export interface SpendCapInput {
@@ -51,6 +60,10 @@ export interface SpendCapInput {
 
 /** More often than this a day, a schedule is worth a second look. */
 export const FREQUENT_RUNS_PER_DAY = 12;
+/** A routine past this share of the last day's use, at several times its usual day, has spiked. */
+export const SPIKE_SHARE = 0.25;
+export const SPIKE_FACTOR = 3;
+export const SPIKE_MIN_RUNS = 3;
 /** A routine forecast to take more than this share of the week. */
 export const COSTLY_SHARE = 0.1;
 export const MAX_CAP_USD = 100_000;

@@ -6,8 +6,11 @@ import { PixelArt } from "../Illustration";
 import { usePlatform, type MobilePlatform } from "../platform";
 import { spring } from "../motion";
 import { BackButton } from "../onboarding/parts";
+import { closesOnBack } from "../Sheet";
 import { useMobileAccount } from "./AccountGate";
 import { MobileSignIn } from "./MobileSignIn";
+import { useConnections } from "../connection/connections";
+import { placeKind } from "../connection/connection-notice";
 
 export const SIGN_IN_OFFER_KEY = "dusk.mobile.signInOffer";
 const SHOW_AFTER_MS = 2500;
@@ -29,7 +32,9 @@ export function SignInOffer({ paused = false }: { paused?: boolean }) {
   const [visible, setVisible] = useState(false);
   const [signingIn, setSigningIn] = useState(false);
   // the store apps never ask for an account a paired computer does not need (App Store guideline 5.1.1(v))
-  const wanted = Boolean(account?.offered && !account.account) && !storeApp();
+  const { connections, loaded } = useConnections();
+  // a dusk cloud is already the account's: a phone linked to one is never asked to log in
+  const wanted = Boolean(account?.offered && !account.account) && !storeApp() && loaded && !connections.some((place) => placeKind(place) === "cloud");
 
   useEffect(() => {
     if (!wanted || paused) return;
@@ -39,6 +44,8 @@ export function SignInOffer({ paused = false }: { paused?: boolean }) {
     }, SHOW_AFTER_MS);
     return () => { alive = false; clearTimeout(timer); };
   }, [wanted, paused, platform]);
+
+  useEffect(() => signingIn ? closesOnBack(() => setSigningIn(false)) : undefined, [signingIn]);
 
   const dismiss = () => { setVisible(false); setSigningIn(false); void dismissSignInOffer(platform); };
   if (!wanted && !signingIn) return null;
@@ -67,7 +74,7 @@ export function SignInOffer({ paused = false }: { paused?: boolean }) {
       </div>
       {signingIn && (
         <div role="dialog" aria-modal aria-label={t("mobile.entry.signInTitle")} className="dusk-mobile fixed inset-0 z-50 flex flex-col overflow-y-auto bg-app text-ink">
-          <div className="flex h-[calc(var(--m-safe-top)+60px)] shrink-0 items-end px-4 pb-2"><BackButton close onClick={() => setSigningIn(false)} /></div>
+          <div className="mobile-screen-top flex h-[calc(var(--m-safe-top)+60px)] shrink-0 items-end px-4 pb-2"><BackButton close onClick={() => setSigningIn(false)} /></div>
           <div className="flex flex-1 flex-col items-center px-7 pb-[calc(var(--m-safe-bottom)+16px)] pt-4 text-center">
             <MobileSignIn onSignedIn={dismiss} />
           </div>

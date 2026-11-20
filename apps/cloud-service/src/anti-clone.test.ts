@@ -144,6 +144,9 @@ describe("people see our own domain, never the provider's", () => {
     expect(await call(handle, "GET", `/v1/managed/edge/route?label=${label}`, undefined, { authorization: `Bearer ${token}` })).toMatchObject({ status: 200, body: { upstream } });
     expect((await call(handle, "GET", `/v1/managed/edge/route?label=${label}`, undefined, { authorization: "Bearer nope" })).status).toBe(404);
     expect((await call(handle, "GET", `/v1/managed/edge/route?label=d${"0".repeat(20)}`, undefined, { authorization: `Bearer ${token}` })).status).toBe(404);
+    c.status = "destroyed";
+    expect(await call(handle, "GET", `/v1/managed/edge/route?label=${label}`, undefined, { authorization: `Bearer ${token}` })).toMatchObject({ status: 410, body: { error: "gone" } });
+    expect((await call(handle, "GET", `/v1/managed/edge/route?label=${label}`, undefined, { authorization: "Bearer nope" })).status).toBe(404);
   });
 });
 

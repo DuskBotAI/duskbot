@@ -23,10 +23,10 @@ describe("the Connect apps faces", () => {
     expect(appFaces(["a", "b", "c", "d"], many)).toHaveLength(APP_FACES);
   });
 
-  it("draws grok's 36px hairline pill with a 14px medium label and three 20px tiles on white, 6px over each other", () => {
+  it("draws a 36px hairline pill with a 13px medium label (the owner found 40/14 too big) and three 20px tiles on white, 6px over each other", () => {
     const html = renderToStaticMarkup(createElement(SidebarConnectApps));
     // 16px in, 12px out beside the logos, which sit 6px after the label
-    expect(html).toMatch(/class="group\/apps flex h-9 min-w-0 flex-1 items-center justify-center rounded-full border border-ink\/\[0\.08\] bg-composer ps-4 text-\[14px\] font-medium leading-5 [^"]*\bpe-3\b/);
+    expect(html).toMatch(/class="group\/apps flex h-9 min-w-0 flex-1 items-center justify-center rounded-full border border-ink\/\[0\.08\] bg-composer ps-3\.5 text-\[13px\] font-medium leading-5 [^"]*\bpe-3\b/);
     expect(html).toContain('class="ms-1.5 flex shrink-0 items-center"');
     const faces = [...html.matchAll(/data-app-face="[^"]+" class="([^"]*)"/g)].map(([, classes]) => classes!);
     expect(faces).toHaveLength(3);
@@ -37,9 +37,9 @@ describe("the Connect apps faces", () => {
     for (const face of faces) expect(face.split(" ").filter((name) => name.includes("rotate")).every((name) => name.includes("group-hover/apps:"))).toBe(true);
   });
 
-  it("is a round 36px apps-grid button on the collapsed rail, named for screen readers", () => {
+  it("is a round 40px apps-grid button on the collapsed rail, named for screen readers", () => {
     const html = renderToStaticMarkup(createElement(SidebarConnectApps, { circle: true }));
-    expect(html).toMatch(/data-tour="nav-apps"[^>]*aria-label="Connect apps" class="[^"]*\brounded-full\b[^"]*\bh-9 min-w-9\b/);
+    expect(html).toMatch(/data-tour="nav-apps"[^>]*aria-label="Connect apps" class="[^"]*\brounded-full\b[^"]*\bh-10 min-w-10\b/);
     expect(html).toContain('data-icon-name="grid-plus"');
     expect(html).not.toContain("data-app-face");
   });

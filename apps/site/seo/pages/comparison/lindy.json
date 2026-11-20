@@ -64,7 +64,7 @@
         "label": "places to talk",
         "cells": [
           "web, slack, email, imessage and phone calls",
-          "desktop chats, voice or calls; phone access through a paired browser today"
+          "desktop chats, voice or calls; iphone app or paired android browser"
         ],
         "src": [
           2,
@@ -146,7 +146,7 @@
     },
     {
       "q": "can i text lindy?",
-      "a": "**yes, its pricing lists imessage.** it also lists slack, email and phone calls.[^2] dusk uses a paired phone browser today; store apps are still on the way.[^7]"
+      "a": "**yes, its pricing lists imessage.** it also lists slack, email and phone calls.[^2] on iphone, dusk replies arrive in its own app from the app store. android uses a paired browser for now.[^7]"
     },
     {
       "q": "is lindy better than openclaw for a business owner?",
@@ -208,7 +208,7 @@
     "lindy vs zapier",
     "lindy ai review"
   ],
-  "updated": "2026-11-12",
+  "updated": "2026-11-20",
   "review": {
     "status": "approved",
     "by": "lead agent: independent reviewer pass against seo/facts (4 reviewers), every finding applied, automated gate",

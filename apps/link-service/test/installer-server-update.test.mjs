@@ -41,7 +41,7 @@ async function updateRound({ installed = "1.0.0", staged = "1.1.0", ready = {}, 
   await writeFile(join(release, "ready.json"), JSON.stringify({ v: 1, sha256: sha, size: tgz.length, version: staged, signature: sig(staged), at: 1, ...ready }));
   const file = join(dir, "fixture.sh");
   await writeFile(file, `${script}
-SVC_HOME=${home} STATE=${stateDir} DATA=${data} SERVER_RELEASE=${release} INSTALL_LOCK=${join(dir, "lock")} NODE_BIN=${process.execPath} SELFTEST_WAIT=2 UPDATER=${join(dir, "updater.sh")} PKGS=${join(dir, "root-pkgs")} UPDATE_RESTART_WAIT=30
+SVC_HOME=${home} CLI=${join(dir, "cli")} STATE=${stateDir} DATA=${data} SERVER_RELEASE=${release} INSTALL_LOCK=${join(dir, "lock")} NODE_BIN=${process.execPath} SELFTEST_WAIT=2 UPDATER=${join(dir, "updater.sh")} PKGS=${join(dir, "root-pkgs")} UPDATE_RESTART_WAIT=30
 log=${join(dir, "log")} answers=${join(dir, "answers")}
 printf '%s\\n' ${busy.join(" ")} > "$answers"
 id() { echo 0; }

@@ -32,13 +32,15 @@ export function setAdminData(value: "live" | "own") {
   try { if (value === "own") localStorage.setItem(DATA_KEY, "own"); else localStorage.removeItem(DATA_KEY); } catch { /* private mode keeps the default */ }
 }
 
-/** whether the panel includes the QA and review accounts the server leaves out by default */
+/** whether the panel includes the QA and review accounts the server leaves out by default: off, unless a page of this tab
+ *  was opened with ?tests=show (for checking the fixture); an older panel's saved choice is dropped */
 const TESTS_KEY = "dusk-admin-tests";
 export function adminTests(): boolean {
-  try { return localStorage.getItem(TESTS_KEY) === "show"; } catch { return false; }
-}
-export function setAdminTests(show: boolean) {
-  try { if (show) localStorage.setItem(TESTS_KEY, "show"); else localStorage.removeItem(TESTS_KEY); } catch { /* private mode keeps the default */ }
+  try {
+    localStorage.removeItem(TESTS_KEY);
+    if (new URLSearchParams(location.search).get("tests") === "show") sessionStorage.setItem(TESTS_KEY, "show");
+    return sessionStorage.getItem(TESTS_KEY) === "show";
+  } catch { return false; }
 }
 
 /** which money every number counts: live (the default), test (dodo test mode) or both; the revenue page's switch shares it */
@@ -60,26 +62,79 @@ export async function adminCall<T>(path: string, init: { method?: string; body?:
   }
   const data = await res.json().catch(() => null) as (T & { error?: string; code?: string }) | null;
   if (!res.ok) throw new AdminApiError(lowercase(data?.error) ?? "the request failed.", res.status, data?.code ?? null);
+  if (method !== "GET") forgetAnswers();
   return data as T;
 }
 
-/** one admin read: loading, its error, and a reload; an older answer never lands on a newer key */
+// the panel's last answer to each read, so a page opened again shows it at once while a fresh one loads behind it.
+// a range that ends "now" is one read whatever millisecond it was asked at; a change made in the panel forgets them all
+const KEPT_MS = 30 * 60_000, KEPT_MAX = 120;
+const kept = new Map<string, { at: number; data: unknown }>();
+const running = new Map<string, Promise<unknown>>();
+export function readKeyOf(path: string, now = Date.now()) {
+  const [route, query = ""] = path.split("?");
+  const params = new URLSearchParams(query);
+  const to = Number(params.get("to"));
+  if (params.has("to") && Number.isFinite(to) && Math.abs(now - to) < 10 * 60_000) params.set("to", "now");
+  return `${route}?${params}|${adminData()}|${adminTests()}|${adminMoney()}`;
+}
+function keep(key: string, data: unknown) {
+  kept.delete(key); kept.set(key, { at: Date.now(), data });
+  while (kept.size > KEPT_MAX) kept.delete(kept.keys().next().value!);
+}
+export function keptAnswer<T>(path: string): T | null {
+  const hit = kept.get(readKeyOf(path));
+  return hit && Date.now() - hit.at < KEPT_MS ? hit.data as T : null;
+}
+export function forgetAnswers() { kept.clear(); }
+/** one read at a time per key; a second caller (a hover, then the page) shares the first */
+function readShared<T>(path: string): Promise<T> {
+  const key = readKeyOf(path), inFlight = running.get(key);
+  if (inFlight) return inFlight as Promise<T>;
+  const promise = adminCall<T>(path).then((answer) => { keep(key, answer); return answer; }).finally(() => running.delete(key));
+  running.set(key, promise);
+  return promise;
+}
+/** warms a read before its page opens (a hover on its link); errors stay quiet, the page shows its own */
+export function prefetchAdmin(path: string) {
+  const hit = kept.get(readKeyOf(path));
+  if (hit && Date.now() - hit.at < 15_000) return;
+  readShared(path).catch(() => {});
+}
+
+/** a read past the server's deadline keeps running there, and asking again joins it */
+const SLOW_RETRIES = 4;
+/** one admin read: the kept answer at once when there is one, then a fresh one; loading, its error, and a reload. an older
+ *  answer never lands on a newer key */
 export function useAdmin<T>(path: string | null, refreshMs?: number) {
-  const [data, setData] = useState<T | null>(null);
+  const [data, setDataState] = useState<T | null>(() => path === null ? null : keptAnswer<T>(path));
   const [error, setError] = useState<AdminApiError | null>(null);
   const [loading, setLoading] = useState(path !== null);
   const [tick, setTick] = useState(0);
   const current = useRef(path);
   current.current = path;
+  const slowTries = useRef(0);
   useEffect(() => {
     if (path === null) return;
-    const controller = new AbortController();
+    let live = true, retry: ReturnType<typeof setTimeout> | undefined;
+    const shown = keptAnswer<T>(path);
+    if (shown !== null) setDataState(shown);
     setLoading(true);
-    adminCall<T>(path, { signal: controller.signal })
-      .then((answer) => { if (current.current === path) { setData(answer); setError(null); } })
-      .catch((err: unknown) => { if ((err as Error).name !== "AbortError" && current.current === path) setError(err instanceof AdminApiError ? err : new AdminApiError("the request failed.", 0, null)); })
-      .finally(() => { if (!controller.signal.aborted) setLoading(false); });
-    return () => controller.abort();
+    readShared<T>(path)
+      .then((answer) => { if (live && current.current === path) { setDataState(answer); setError(null); } })
+      .then(() => { slowTries.current = 0; })
+      .catch((err: unknown) => {
+        if (!live || (err as Error).name === "AbortError" || current.current !== path) return;
+        if (err instanceof AdminApiError && err.code === "admin_slow" && slowTries.current < SLOW_RETRIES) {
+          slowTries.current++;
+          retry = setTimeout(() => setTick((n) => n + 1), 1_000);
+          return;
+        }
+        slowTries.current = 0;
+        setError(err instanceof AdminApiError ? err : new AdminApiError("the request failed.", 0, null));
+      })
+      .finally(() => { if (live && retry === undefined) setLoading(false); });
+    return () => { live = false; clearTimeout(retry); };
   }, [path, tick]);
   useEffect(() => {
     if (!refreshMs) return;
@@ -87,22 +142,28 @@ export function useAdmin<T>(path: string | null, refreshMs?: number) {
     return () => clearInterval(timer);
   }, [refreshMs]);
   const reload = useCallback(() => setTick((n) => n + 1), []);
+  // a page that edits its answer in place (a status change) keeps the edit for the next time it opens
+  const setData = useCallback((next: T | null | ((before: T | null) => T | null)) => {
+    setDataState((before) => {
+      const value = typeof next === "function" ? (next as (before: T | null) => T | null)(before) : next;
+      if (path !== null && value !== null) keep(readKeyOf(path), value);
+      return value;
+    });
+  }, [path]);
   return { data, error, loading, reload, setData };
 }
 
 export interface FunnelStep { id: string; label: string; count: number; total: number }
 export interface Overview {
   now: number; days: number; range: string[];
-  totals: { accounts: number; newAccounts: number; activeToday: number; wau: number; mau: number; paying: number; waitlist: number | null; clouds: number; devices: number };
+  totals: { accounts: number; newAccounts: number; activeToday: number; untracked: number | null; appWau: number; paying: number; waitlist: number | null; clouds: number };
   series: { signups: number[]; waitlist: number[]; active: number[]; visitors: number[]; views: number[]; apps: number[] };
   funnel: FunnelStep[];
   clouds: Array<{ state: string; count: number }>;
   bots: { workspaces: number; bots: number; turns30d: number };
-  platforms: Array<{ platform: string; count: number }>;
-  spend: { exposed: boolean; note: string };
 }
 export interface UserRow {
-  id: string; email: string; name: string | null; createdAt: number; methods: string[]; plan: { plan: string | null; status: string } | null;
+  id: string; email: string; name: string | null; createdAt: number; methods: string[]; plan: { plan: string | null; status: string; trial?: boolean } | null;
   clouds: number; devices: number; platforms: string[]; lastSeenAt: number | null; optOut: boolean;
 }
 export interface CloudRow {

@@ -105,9 +105,9 @@ describe("sidebar top row", () => {
     expect(buttons).toBeGreaterThan(slot);
     expect(classesOf(row, "data-sidebar-top-buttons")).toEqual(expect.arrayContaining(["shrink-0", "pointer-events-auto"]));
     expect(row.slice(buttons).match(/<button/g)).toHaveLength(2);
-    expect(row).toMatch(/data-sidebar-search-toggle="true" aria-label="Search" aria-expanded="false" title="Search" class="[^"]*\bsize-\[26px\][^"]*\brounded-lg\b[^"]*\btext-ink-secondary\b/);
+    expect(row).toMatch(/data-sidebar-search-toggle="true" aria-label="Search" aria-expanded="false" title="Search" class="[^"]*\bsize-7\b[^"]*\brounded-lg\b[^"]*\btext-ink-secondary\b/);
     expect(row, "no round box round either").not.toContain("bg-composer");
-    expect(html).toMatch(/aria-label="New or share" class="[^"]*\bsize-\[26px\][^"]*\brounded-lg\b/);
+    expect(html).toMatch(/aria-label="New or share" class="[^"]*\bsize-7\b[^"]*\brounded-lg\b/);
     expect(html).not.toContain("data-sidebar-edge-toggle");
     expect(html).not.toContain('title="Active threads"');
     expect(html).not.toContain("data-sidebar-search-pill");
@@ -148,8 +148,8 @@ describe("sidebar top row", () => {
       at("data-sidebar-account"),
     ];
     expect(positions).toEqual([...positions].sort((a, b) => a - b));
-    expect(foot).toMatch(/aria-label="New or share" class="(?=[^"]*\bsize-8\b)(?=[^"]*\brounded-full\b)/);
-    expect(foot).toMatch(/data-tour="nav-apps" data-sidebar-nav="apps"[^>]*aria-label="Connect apps"[^>]*class="[^"]*\bh-8\b[^"]*\bmin-w-8\b[^"]*">(<[^>]*>)*<svg [^>]*class="[^"]*\bui-icon\b[^"]*" data-icon-name="grid-plus"/);
+    expect(foot).toMatch(/aria-label="New or share" class="(?=[^"]*\bsize-10\b)(?=[^"]*\brounded-full\b)/);
+    expect(foot).toMatch(/data-tour="nav-apps" data-sidebar-nav="apps"[^>]*aria-label="Connect apps"[^>]*class="[^"]*\bh-10\b[^"]*\bmin-w-10\b[^"]*">(<[^>]*>)*<svg [^>]*class="[^"]*\bui-icon\b[^"]*" data-icon-name="grid-plus"/);
     expect(foot).not.toContain("data-workspace-switcher");
     expect(foot).not.toContain('data-sidebar-nav="automations"');
     expect(foot).not.toContain('data-sidebar-nav="team-map"');

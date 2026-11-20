@@ -84,13 +84,23 @@ export function buildThread(botKey, thread, { now, attachmentsDir, botId = "", t
   };
 }
 
-/** What a dusk.backup keeps of a conversation: readable text only, chained in order. */
+/** A question card as the one line a dusk.backup can carry: the question, why, and the answers it offered. */
+const questionText = (card) => [card.title, card.subtitle, card.options.map((option, i) => `${i + 1}. ${option}`).join("\n")].filter(Boolean).join("\n\n");
+
+/** What a dusk.backup keeps of a conversation: readable text only, chained in order. A team backup carries no cards, so a
+ * question reads as its text with its answers (and the lead-in line that only repeats it goes), and an answered
+ * approval, which a chat keeps no line for, is left out. */
 export function backupProjection(built) {
-  const kept = built.messages.filter((message) => (message.kind === "text" && message.text) || message.kind === "options");
+  const kept = built.messages.filter((message, i) => {
+    if (message.kind === "options") return message.card.requestType !== "permission";
+    if (message.kind !== "text" || !message.text) return false;
+    const next = built.messages[i + 1];
+    return !(message.role === "bot" && next?.kind === "options" && next.card.title.trim() === message.text.trim());
+  });
   return kept.map((message, i) => ({
     id: message.id,
     role: message.role,
-    text: message.kind === "options" ? `${message.card.title}\n${message.card.subtitle}` : message.text,
+    text: message.kind === "options" ? questionText(message.card) : message.text,
     at: message.at,
     parentId: i === 0 ? null : kept[i - 1].id,
   }));

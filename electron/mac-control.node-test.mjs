@@ -5,7 +5,7 @@ import path from "node:path";
 import test from "node:test";
 
 import { createMacControlHost } from "./mac-control.mjs";
-import { createMacExecutor, folderName, jobSummary, macLogFile, resolveMacPath } from "./mac-control-tools.mjs";
+import { createMacExecutor, folderName, jobSummary, macLogFile, resolveMacPath, servesMacJobs } from "./mac-control-tools.mjs";
 
 const job = (tool, args = {}, extra = {}) => ({ id: `job-${tool}`, tool, arguments: args, bot: { id: "b1", name: "Nova" }, expiresAt: Date.now() + 60_000, ...extra });
 
@@ -124,4 +124,10 @@ test("a server that refuses this session is asked again only much later", async 
 test("a screenshot comes back as an image", async (t) => {
   const execute = createMacExecutor({ home: scratchHome(t), screenshot: async () => ({ data: "AAAA", mimeType: "image/jpeg" }) });
   assert.deepEqual(await execute(job("mac_screenshot")), { ok: true, result: { text: "screenshot of the main screen", image: { data: "AAAA", mimeType: "image/jpeg" } } });
+});
+
+test("only a Mac serves the Mac tools: they run zsh, open and screencapture, and the bots are told it is a Mac", () => {
+  assert.equal(servesMacJobs("darwin"), true);
+  assert.equal(servesMacJobs("win32"), false);
+  assert.equal(servesMacJobs("linux"), false);
 });

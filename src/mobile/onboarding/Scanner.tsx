@@ -7,6 +7,7 @@ import { t } from "@/lib/i18n";
 import { haptic } from "../haptics";
 import { dur, ease, spring } from "../motion";
 import type { CameraSession, MobilePlatform } from "../platform";
+import { BAR_RANK, useNativeBar } from "../chrome";
 
 /** The viewfinder fills the width but a margin, up to a size that still leaves room for the title and the buttons. */
 const frameSize = () => Math.round(Math.max(240, Math.min((globalThis.innerWidth || 390) - 56, 360)));
@@ -65,7 +66,7 @@ export function Scanner({ platform, busy, onCode, onClose, onEnterCode, onPaste 
       onCode: (text) => {
         if (stopped) return;
         // the system's scanner gives its own haptic as it reads
-        if (!fullScreen) haptic("medium");
+        if (!fullScreen) haptic("hold");
         setSeen(true);
         read.current(text);
       },
@@ -94,9 +95,13 @@ export function Scanner({ platform, busy, onCode, onClose, onEnterCode, onPaste 
   const toggleTorch = () => {
     const live = session.current;
     if (!live?.torch || torch === null) return;
-    haptic("selection");
+    haptic("pick");
     void live.torch.set(!torch).then(() => setTorch(!torch)).catch(() => {});
   };
+  const systemBar = useNativeBar(BAR_RANK.camera, platform.chrome ? {
+    leading: [{ id: "close", role: "close", label: t("mobile.sheet.close") }],
+    trailing: torch === null ? [] : [{ id: "torch", symbol: torch ? "flashlight.on.fill" : "flashlight.off.fill", label: t("mobile.onboarding.torch") }],
+  } : null, { close: onClose, torch: toggleTorch });
 
   return (
     <motion.div
@@ -138,14 +143,14 @@ export function Scanner({ platform, busy, onCode, onClose, onEnterCode, onPaste 
         </AnimatePresence>
       </div>
 
-      <div className="absolute inset-x-0 top-0 flex items-center justify-between px-4 pt-[calc(var(--m-safe-top)+8px)]">
+      {!systemBar && <div className="absolute inset-x-0 top-0 flex items-center justify-between px-4 pt-[calc(var(--m-safe-top)+8px)]">
         <button type="button" onClick={onClose} aria-label={t("mobile.sheet.close")} className="mobile-press flex size-11 items-center justify-center rounded-full bg-white/[0.14] text-white backdrop-blur-md"><X size={20} /></button>
         {torch !== null && (
           <button type="button" onClick={toggleTorch} aria-pressed={torch} aria-label={t("mobile.onboarding.torch")} className="mobile-press flex size-11 items-center justify-center rounded-full bg-white/[0.14] text-white backdrop-blur-md">
             {torch ? <Flashlight size={19} /> : <FlashlightOff size={19} />}
           </button>
         )}
-      </div>
+      </div>}
 
       <motion.div className="absolute inset-x-0 bottom-0 flex flex-col items-center gap-5 px-6 pb-[calc(var(--m-safe-bottom)+24px)] text-center"
         initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: dur.base, ease: ease.out, delay: 0.08 }}>

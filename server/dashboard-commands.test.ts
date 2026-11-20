@@ -1,3 +1,6 @@
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { createDashboardCommands, plainError } from "./dashboard-commands.ts";
 import { NO_APPS_SERVICE } from "./composio.ts";
@@ -69,5 +72,29 @@ describe("connecting an app with no Composio set up", () => {
     const { authorizeService, setManagedBrokerAccess } = await import("./composio.ts");
     setManagedBrokerAccess(null);
     await expect(authorizeService({} as never, "gmail")).rejects.toMatchObject({ status: 409, message: NO_APPS_SERVICE });
+  });
+});
+
+describe("a command the dashboard sends again after the workspace restarted", () => {
+  it("pairs a phone and opens an app sign-in once per command id, and runs a failed one again", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "dusk-dashboard-commands-"));
+    try {
+      let calls = 0, status = 200;
+      const runner = () => createDashboardCommands({ port: 7, dataDir: dir, collect: {} as never,
+        fetch: (async () => { calls += 1; return new Response(JSON.stringify({ link: `duskbot://pair?m=grant${calls}` }), { status }); }) as typeof fetch });
+      const pair = { id: "cmd_once", kind: "phone.pair" as const, target: "Phone", issuedAt: 0, expiresAt: Date.now() + 60_000 };
+      const first = await runner().execute(pair);
+      expect(first).toMatchObject({ ok: true, link: "duskbot://pair?m=grant1" });
+      expect(await runner().execute(pair)).toEqual(first);
+      expect(calls).toBe(1);
+      expect(await runner().execute({ ...pair, id: "cmd_other" })).toMatchObject({ link: "duskbot://pair?m=grant2" });
+      status = 500;
+      const failing = { ...pair, id: "cmd_fails" };
+      expect(await runner().execute(failing)).toMatchObject({ ok: false });
+      status = 200;
+      expect(await runner().execute(failing)).toMatchObject({ ok: true });
+      expect(await runner().execute({ ...pair, id: "cmd_expired", expiresAt: Date.now() - 1 })).toMatchObject({ ok: true });
+      expect(await runner().execute({ ...pair, id: "cmd_expired", expiresAt: Date.now() - 1 })).toMatchObject({ link: `duskbot://pair?m=grant${calls}` });
+    } finally { rmSync(dir, { recursive: true, force: true }); }
   });
 });

@@ -6,7 +6,8 @@
 import { CarriedRefs } from "./browser/agent-browser-refs.ts";
 
 const PREFIX = "chat-";
-const EXTRA = "~";
+// agent-browser 0.37.0 refuses a tab label outside [A-Za-z][A-Za-z0-9_-]*.
+const EXTRA = "__";
 const THREAD_ID = /^[\w-]{1,128}$/u;
 
 export type TabRpc = (name: string, args: Record<string, unknown>) => Promise<unknown>;

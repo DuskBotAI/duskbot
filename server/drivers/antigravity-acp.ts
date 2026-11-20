@@ -237,7 +237,12 @@ export class AntigravityAcpClient {
     this.child = spawnCli(
       runtime.executablePath,
       process.platform === "linux" ? ["--uid="] : [],
-      { cwd, env: profile.environment, stdio: ["pipe", "pipe", "pipe"] },
+      {
+        cwd, env: profile.environment, stdio: ["pipe", "pipe", "pipe"],
+        // Google's redirect, and a pasted landing address, reach the runtime's listener on this host's 127.0.0.1, which a
+        // box with its own network hides; the box still fences the sign-in's files.
+        ...(onAuthorizationUrl ? { box: { net: "shared" as const } } : {}),
+      },
       "bot",
     );
     this.child.stdout!.setEncoding("utf8");

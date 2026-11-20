@@ -1,4 +1,5 @@
 import { isRecord } from "../shared/json.ts";
+import { parseProductsCard, productsText } from "../shared/products.ts";
 // A bot's widget tree is normalised, scrubbed of secrets and given its text fallback here, once; everything after reads the stored message.
 import {
   parseWidgetInput, resolveWidgetAction, widgetActions, widgetFields, widgetToText, WIDGET_LIMITS,
@@ -122,6 +123,14 @@ export function createAgentCard(args: AgentCardArgs): AgentCardResult | Promise<
   if (input.tool === "show_html" || input.tool === "update_html") {
     if (!args.apps) return { ok: false, status: 400, error: "Pages are not available on this computer." };
     return args.apps.createAppCard({ bot, threadId, input, ...(args.authored ? { authored: args.authored } : {}), ...(args.folders ? { folders: args.folders } : {}) });
+  }
+  if (input.tool === "show_products") {
+    if (store.groupByThread(threadId)) return { ok: false, status: 409, error: ROOM_REFUSAL };
+    const parsed = parseProductsCard(input);
+    if (!parsed.ok) return { ok: false, status: 400, error: parsed.error };
+    const message = store.appendMessage(threadId, { role: "bot", kind: "widget", text: productsText(parsed.value), products: parsed.value });
+    args.authored?.(message.id);
+    return { ok: true, messageId: message.id };
   }
   if (input.tool !== "show_widget" && input.tool !== "update_widget") {
     return { ok: false, status: 400, error: "tool: must be show_widget or update_widget." };

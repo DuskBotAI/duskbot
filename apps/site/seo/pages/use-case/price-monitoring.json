@@ -1,0 +1,128 @@
+{
+  "path": "/use-cases/price-monitoring",
+  "type": "use-case",
+  "title": "Monitor supplier prices against your reorder target",
+  "nav": "price monitoring",
+  "h1": "watch the unit price on items you reorder",
+  "description": "Give a bot a supplier link, pack size and target unit price. Get a buying note when the right pack qualifies, with the listing and arithmetic to verify.",
+  "keyword": "ai price monitoring",
+  "keywords": [
+    "supplier price tracker",
+    "monitor prices with a browser agent"
+  ],
+  "answer": "**a cheaper carton can still cost more per piece.** put your usual pack and reorder target in google sheets. a dusk bot can visit the supplier in its own browser and divide the listed price by the count. ask for a buying note only when the exact item qualifies, or the comparison breaks.",
+  "updated": "2026-11-20",
+  "review": {
+    "status": "approved",
+    "by": "lead agent, after four independent reviewers read every page against seo/facts (2026-11-20); every finding applied",
+    "at": "2026-11-20"
+  },
+  "voice": 2,
+  "tags": [
+    "purchasing",
+    "browser",
+    "prices"
+  ],
+  "connectors": [
+    "googlesheets"
+  ],
+  "related": [
+    "/ai-agent-that-controls-your-computer",
+    "/routines/competitor-pricing-page-check",
+    "/integrations/google-sheets"
+  ],
+  "art": {
+    "props": [
+      "p-binoculars",
+      "s-parcel"
+    ],
+    "bubble": "what does one cost?"
+  },
+  "og_line": "compare the pack you actually buy.",
+  "routine": {
+    "intro": "**write the target as a price per usable piece.** include the part number and unit in your sheet.",
+    "message": "on tuesday mornings at 9, read the reorder rows from reorders!a2:h40 in https://docs.google.com/spreadsheets/d/1h5x8n2w4c7r9j3k6m8q2v5b7t4p9s3z6a2d8f5l7g4/edit. use your own browser to visit each listed supplier url. match the part number, currency and pack count. use only an in-stock pack available at our listed order quantity. divide the pack price by its count. tell me here if the unrounded unit price meets our target.\n\nshow the link, reading time, displayed pack price, count and any extra costs the page lists. flag unknown shipping. if the pack changed or the page blocks access, report that instead. don't add items to a cart or buy anything.",
+    "when": "tuesdays at 9 am, before the supply order",
+    "needs": "a read only google sheets range, supplier links and a bot with its own browser. use your reorder sheet link and range.",
+    "output": "example buying note for eileen\nbrass eyelet e14 | 100 per pack | £18 | £0.18 each\nsheet target £0.19 each before delivery | in stock at one pack\nshipping unknown | confirm the delivered total before ordering"
+  },
+  "sections": [
+    {
+      "h": "write down what your target buys",
+      "md": "**put the pack count next to the price ceiling.** add the exact part, supplier link, currency and how many packs you normally order. include the tax basis if it matters. a price for ten cartons says little about the cost of buying one."
+    },
+    {
+      "h": "read the selected variant in the browser",
+      "md": "**compare the price you could actually order at.**\n\n1. read the named range in google sheets for the purchase rules.[^1]\n2. open the product page on the bot's own desktop. match the selected size, finish and pack count.[^2]\n3. divide only after the details match. show the calculation and page link so the buyer can repeat it."
+    },
+    {
+      "h": "decide whether to place the order",
+      "md": "**let the buyer settle freight, tax and minimum quantities.** a listing below target can still cost more delivered. if the seller hides shipping until checkout, mark it unknown. you handle the order.\n\nif prices move minute by minute, use the seller's price feed or alerts. a scheduled browser visit only captures the price it sees."
+    }
+  ],
+  "safeguards": [
+    "use take control for permitted sign-ins, captchas and two-step codes. hand control back after access is ready.[^2]",
+    "some sites block bots. stop at the block and use a permitted source for the price.",
+    "keep sheets read only and keep the bot out of checkout. a price target gives no authority to spend."
+  ],
+  "worked": {
+    "intro": "an invented stationery order",
+    "before": "eileen pays £18 for 100 eyelets. the same link now shows £15 on the tile. opening the listing reveals a pack of 75.",
+    "after": "the new pack costs £0.20 per eyelet. the bot flags the pack change. eileen keeps the £0.19 reorder target and skips the apparent deal."
+  },
+  "saves": {
+    "estimate": "a possible 9 minutes per purchasing round",
+    "formula": "4 listings × 3 minutes comparing by hand = 12 minutes\n12 minutes - 3 minutes verifying the buying note = 9 minutes",
+    "assumptions": [
+      "time four repeat purchases with known part numbers",
+      "include your sign-in and verification time",
+      "adjust the review time when suppliers change packaging"
+    ]
+  },
+  "mistakes": [
+    {
+      "mistake": "rounding down to trigger the target",
+      "fix": "compare using the full calculation. round only the figure you display."
+    },
+    {
+      "mistake": "using a coupon price for every order",
+      "fix": "count the discount only if the terms apply to your order quantity and account."
+    }
+  ],
+  "quick": {
+    "steps": [
+      "choose one item you bought last month",
+      "enter its part number, count and unit ceiling",
+      "compare the bot's arithmetic with the supplier listing"
+    ]
+  },
+  "faq": [
+    {
+      "q": "can it compare member pricing?",
+      "a": "if the seller permits it, sign in yourself using take control. mark the observation as a member price so buyers know who can get it."
+    },
+    {
+      "q": "will it catch a short flash sale?",
+      "a": "only if a run sees it. local runs need dusk open and the machine awake.[^3] use a seller alert for a deal you cannot afford to miss."
+    }
+  ],
+  "sources": [
+    {
+      "label": "composio: google sheets actions",
+      "url": "https://docs.composio.dev/toolkits/googlesheets",
+      "checked": "2026-11-12"
+    },
+    {
+      "label": "dusk bot docs: a bot’s computer",
+      "url": "/docs/computer"
+    },
+    {
+      "label": "dusk bot docs: routines",
+      "url": "/docs/routines"
+    },
+    {
+      "label": "dusk bot docs: files and connected apps",
+      "url": "/docs/files-and-apps"
+    }
+  ]
+}

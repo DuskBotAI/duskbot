@@ -46,11 +46,11 @@ describe("streamed chat tool calls", () => {
 });
 
 describe("tool calls per reply", () => {
-  it("accepts 32 calls in one reply and refuses a 33rd", () => {
+  it("accepts 128 calls in one reply (a batch of 40 sends is one reply) and refuses a 129th", () => {
     const calls = new ChatToolCalls();
-    calls.add(Array.from({ length: 32 }, (_, index) => ({ index, ...completeCall, id: `call_${index}` })), true);
-    expect(calls.finish("tool_calls", false)).toHaveLength(32);
-    expect(() => new ChatToolCalls().add([{ index: 32, ...completeCall }], true)).toThrow(/invalid tool-call index/);
+    calls.add(Array.from({ length: 128 }, (_, index) => ({ index, ...completeCall, id: `call_${index}` })), true);
+    expect(calls.finish("tool_calls", false)).toHaveLength(128);
+    expect(() => new ChatToolCalls().add([{ index: 128, ...completeCall }], true)).toThrow(/invalid tool-call index/);
   });
 });
 
@@ -95,7 +95,7 @@ describe("streamed tool calls without an index (Gemini's OpenAI-compatible endpo
   it("still rejects a part with neither an index nor an id, and more calls than one reply may carry", () => {
     expect(() => new ChatToolCalls().add([{ function: { name: "f", arguments: "{}" } }], true)).toThrow(/invalid tool-call index/);
     const calls = new ChatToolCalls();
-    calls.add(Array.from({ length: 32 }, (_, n) => whole(`call_${n}`, "f")), true);
-    expect(() => calls.add([whole("call_32", "f")], true)).toThrow(/invalid tool-call index/);
+    calls.add(Array.from({ length: 128 }, (_, n) => whole(`call_${n}`, "f")), true);
+    expect(() => calls.add([whole("call_128", "f")], true)).toThrow(/invalid tool-call index/);
   });
 });

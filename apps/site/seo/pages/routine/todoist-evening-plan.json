@@ -1,0 +1,90 @@
+{
+  "path": "/routines/todoist-evening-plan",
+  "type": "routine",
+  "title": "Make tomorrow’s Todoist plan before you sign off",
+  "nav": "todoist evening plan",
+  "h1": "pick tomorrow’s first todoist task tonight",
+  "description": "Turn overdue and upcoming Todoist tasks into a short evening plan. Keep timed commitments visible and leave every due date where you put it.",
+  "keyword": "todoist evening planning routine",
+  "keywords": [
+    "plan tomorrow in todoist",
+    "todoist overdue task review",
+    "evening task planning"
+  ],
+  "answer": "**leave yourself a first move for tomorrow morning.** at the end of the day, a bot reads unfinished work in one todoist project. it picks a starting task, keeps tomorrow’s timed commitments in view and sets older work aside for a decision. the plan lands in chat with your original dates intact.",
+  "updated": "2026-11-20",
+  "review": {
+    "status": "approved",
+    "by": "lead agent, after four independent reviewers read every page against seo/facts (2026-11-20); every finding applied",
+    "at": "2026-11-20"
+  },
+  "voice": 2,
+  "tags": [
+    "todoist",
+    "planning",
+    "tasks"
+  ],
+  "connectors": [
+    "todoist"
+  ],
+  "related": [
+    "/integrations/todoist",
+    "/routines/friday-wins-summary",
+    "/routines/weekly-calendar-preview"
+  ],
+  "art": {
+    "label": "Todoist",
+    "props": [
+      "s-notebook",
+      "p-mug"
+    ],
+    "bubble": "start with this"
+  },
+  "og_line": "one first move for tomorrow morning.",
+  "routine": {
+    "message": "every evening at 6 pm, read the incomplete tasks in my todoist project called \"work\". include tasks overdue, still due today or due tomorrow.\n\nin this chat, list tomorrow’s timed tasks in order. pick one starting task from the remaining items. use my marked priorities, then the earliest due date to break ties. give the task title and your reason. group the other items due today or earlier under “decide later”. flag anything else due tomorrow by name.\n\nnever change dates, priorities or completion status. stay quiet after a successful read with no qualifying tasks. tell me if you couldn't finish reading the project.",
+    "when": "at 6 pm each evening, looking one calendar day ahead",
+    "needs": "read-only todoist access to incomplete tasks in your chosen project[^3]. replace \"work\" with your project name.",
+    "output": "thursday plan · print orders\ntimed: 11 am, collect the paper samples.\nstart with: price the binding for nell foster. highest marked priority, due thursday.\ndecide later: reconcile the postage receipts, due monday."
+  },
+  "knobs": [
+    "**plan around your last shift.** move 6 pm to the time you usually close the project.",
+    "**give clients their own lane.** name a single client project if personal errands keep winning the first slot.",
+    "**choose your tie-breaker.** put an overdue promise ahead of tomorrow’s untimed work if that is how you choose by hand."
+  ],
+  "fails": [
+    "**everything looks urgent.** reserve the top priority for work you would actually interrupt your morning to do.",
+    "**a due date turns into an appointment.** show a clock time only when the task has one. leave date-only tasks untimed."
+  ],
+  "sections": [
+    {
+      "h": "keep overdue work visible without letting it fill tomorrow",
+      "md": "**yesterday’s unfinished task still needs a decision.** a proposed first move helps you start. moving the rest to tomorrow would hide how long those tasks have waited.\n\nif your todoist list already opens with exactly what you need to do next, skip the extra evening message."
+    }
+  ],
+  "faq": [
+    {
+      "q": "does this fit tasks into gaps between meetings?",
+      "a": "**it reads todoist alone.** a task due at noon tells you when it is due. your free time is a separate question."
+    },
+    {
+      "q": "what happens on friday evening?",
+      "a": "**tomorrow means saturday.** if you work weekdays, ask for the next working day and spell out what friday should cover."
+    }
+  ],
+  "sources": [
+    {
+      "label": "dusk bot docs: routines",
+      "url": "/docs/routines"
+    },
+    {
+      "label": "dusk bot docs: files and apps",
+      "url": "/docs/files-and-apps"
+    },
+    {
+      "label": "composio: todoist actions",
+      "url": "https://docs.composio.dev/toolkits/todoist",
+      "checked": "2026-11-20"
+    }
+  ]
+}

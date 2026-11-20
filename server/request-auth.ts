@@ -418,6 +418,9 @@ export const CLIENT_ALLOW: ReadonlyArray<{ methods: readonly string[]; path: Reg
   { methods: ["POST"], path: /^\/api\/tts\/speak$/ },
   // voice input's clean-up: dictated words in, tidied words out, on a fixed prompt and a capped length (routes/voice.ts)
   { methods: ["POST"], path: /^\/api\/voice\/clean$/ },
+  // the built-in voice: no key, capped text and audio, one inference at a time (routes/local-voice.ts)
+  { methods: ["GET"], path: /^\/api\/voice\/local$/ },
+  { methods: ["POST"], path: /^\/api\/voice\/local\/(?:prepare|speak|transcribe)$/ },
   // routines: the input carries no cwd or permission field
   { methods: ["GET"], path: /^\/api\/routines$/ },
   { methods: ["POST"], path: /^\/api\/routines$/ },

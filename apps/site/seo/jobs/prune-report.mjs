@@ -30,7 +30,10 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const today = localDay(), siteUrl = (process.env.SITE_URL || 'https://dusk.bot').replace(/\/+$/, '');
   const file = process.argv.find((a) => a.startsWith('--snapshot='))?.split('=')[1];
   if (!file && !gscConfigured()) { console.log('no data: connect search console (DUSK_GSC_CREDENTIALS, DUSK_GSC_SITE) and run seo/jobs/release.mjs first, or pass --snapshot=seo/reports/gsc-<day>.json'); process.exit(0); }
-  const snap = JSON.parse(fs.readFileSync(file || fs.readdirSync(path.join(seoDir, 'reports')).filter((f) => f.startsWith('gsc-')).sort().map((f) => path.join(seoDir, 'reports', f)).at(-1), 'utf8'));
+  const reports = path.join(seoDir, 'reports');
+  const latest = fs.existsSync(reports) ? fs.readdirSync(reports).filter((f) => f.startsWith('gsc-')).sort().map((f) => path.join(reports, f)).at(-1) : null;
+  if (!file && !latest) { console.log('no data: no search console snapshot yet (seo/jobs/release.mjs takes one when it measures a cohort), or pass --snapshot=<file>'); process.exit(0); }
+  const snap = JSON.parse(fs.readFileSync(file || latest, 'utf8'));
   const { records } = plan({ preview: false });
   const rules = JSON.parse(fs.readFileSync(path.join(seoDir, 'growth.json'), 'utf8')).prune;
   const rows = decide(records.filter((r) => r.indexable), snap, rules, today, siteUrl);

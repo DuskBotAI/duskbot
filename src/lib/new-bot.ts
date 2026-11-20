@@ -65,9 +65,8 @@ async function createNewBot(section: string | undefined, bots: readonly Bot[], t
     return { bot, warnings: [] as string[], startsOnAsk: false };
   }
   const template = startingTemplate(await readBotDefaults(request), true);
-  // A name the person typed is theirs as typed; only the suggested one steps aside for a bot that has it.
   if (look) Object.assign(template.profile, look);
-  else template.profile.name = freeName(template.profile.name!, bots);
+  template.profile.name = freeName(template.profile.name!.trim(), bots);
   if (section !== undefined) template.profile.section = section;
   const draft = new BotCreationDraft(template, () => {}, request);
   const startsOnAsk = draft.bot.approvalMode === "auto" && draft.bot.computer === "local";

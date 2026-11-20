@@ -2,7 +2,7 @@ import { rmSync } from "node:fs";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { DATA_DIR } from "./config.ts";
-import { closeMessageDb, recallMatchTerm, recallTerms } from "./message-db.ts";
+import { closeMessageDb, insertMessage, recallMatchTerm, recallTerms } from "./message-db.ts";
 import { buildRecall, enoughMatches, RECALL_CLOSE, RECALL_NONE, RECALL_OPEN, recallQuery, renderRecall } from "./recall.ts";
 import { appendMemoryLog, loadMemory, searchMemoryFiles, writeMemoryFile, writeMemoryTopic, WORKSPACES_DIR } from "./workspace.ts";
 
@@ -89,8 +89,7 @@ describe("recall from memory files", () => {
     expect(block).toContain("memory/dining.md");
     expect(block).toContain("Loves pasta");
     const dentist = await recallText("who is my dentist", { loaded: [loadMemory(BOT)!.text] });
-    expect(dentist).not.toContain("Dr Rao");
-    expect(dentist).not.toContain("Dr Old");
+    expect(dentist).toBe("");
     expect(await recallText("who is my dentist")).toContain("Dr Rao");
   });
 
@@ -171,6 +170,36 @@ describe("recall from memory files", () => {
     const then = await recallText("where did I live last spring?");
     expect(then).toContain("Lisbon");
     expect(then).toMatch(/no longer true; held 2026-01-05 to 2026-06-10\): The person lives in Lisbon/);
+  });
+
+  it("a correction wins in a new chat: the old words still in the earlier chat never come back as current", async () => {
+    const at = Date.parse("2026-11-20T10:00:00+05:30");
+    const said = (id: string, role: "user" | "bot", text: string, minutes: number) =>
+      insertMessage("chat-gym", { id, role, text, at: at + minutes * 60_000, parentId: null, kind: "text" } as never);
+    said("g1", "user", "remember my gym days are monday and thursday", 0);
+    said("g2", "bot", "Got it. Your gym days are Monday and Thursday.", 1);
+    said("g3", "user", "actually change that, it's tuesday and friday now", 2);
+    said("g4", "bot", "Updated. Your gym days are now Tuesday and Friday.", 3);
+    writeMemoryFile(BOT, [
+      "- 2026-11-20 · from chat \"gym\" · ~~Your gym days are Monday and Thursday.~~ · superseded 2026-11-20",
+      "- 2026-11-20 · from chat \"gym\" · Your gym days are Tuesday and Friday.",
+    ].join("\n") + "\n");
+    const ask = (message: string) => buildRecall({ botId: BOT, message, threadIds: ["chat-gym"], label: () => "chat", author: (hit) => hit.role === "user" ? "User" : "Sage",
+      loaded: [loadMemory(BOT)!.text], today: "2026-11-20" });
+    const now = (await ask("which days do I go to the gym?"))?.text ?? "";
+    expect(now).toMatch(/your notes \(current; it replaced the old note "Your gym days are Monday and Thursday\." on 2026-11-20\): Your gym days are Tuesday and Friday\./);
+    expect(now.replace(/the old note "[^"]*"/, "")).not.toMatch(/monday/i);
+    // a day later the chat still holds the old words; a question about the past still reaches them
+    const before = (await ask("which days did I go to the gym before I changed them?"))?.text ?? "";
+    expect(before).toMatch(/monday/i);
+  });
+
+  it("an earlier chat newer than the note still comes back: it may hold what the note does not", async () => {
+    insertMessage("chat-gym", { id: "n1", role: "user", text: "my gym moved to the Baner branch", at: Date.parse("2026-11-22T10:00:00+05:30"), parentId: null, kind: "text" } as never);
+    writeMemoryFile(BOT, "- 2026-11-20 · Your gym days are Tuesday and Friday.\n");
+    const block = (await buildRecall({ botId: BOT, message: "which gym branch do I use?", threadIds: ["chat-gym"], label: () => "chat", author: () => "User",
+      loaded: [loadMemory(BOT)!.text], today: "2026-11-23" }))?.text ?? "";
+    expect(block).toContain("Baner");
   });
 
   it("says plainly when a question about the person finds nothing, and stays silent otherwise", async () => {

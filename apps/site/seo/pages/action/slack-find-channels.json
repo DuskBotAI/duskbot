@@ -1,0 +1,93 @@
+{
+  "path": "/integrations/slack/find-channels",
+  "type": "action",
+  "title": "Find a Slack channel when you only remember its purpose",
+  "nav": "find channels by purpose",
+  "h1": "find the slack channel for the job you need done",
+  "description": "Search Slack channel names, topics and purposes with a bot. Narrow the results to active channels you can see, even if the channel name has changed.",
+  "keyword": "find slack channels with ai",
+  "keywords": [
+    "search slack channels by topic",
+    "chatgpt find slack channel by purpose",
+    "claude find renamed slack channel"
+  ],
+  "answer": "**the place to ask about expenses might be called finance desk.** tell the bot what the channel is for. it searches visible slack channels by name, topic or purpose. matches can arrive across several batches, including batches with no matches. ask it to finish the search before telling you a channel doesn't exist.",
+  "updated": "2026-11-20",
+  "review": {
+    "status": "approved",
+    "by": "lead agent, after four independent reviewers read every page against seo/facts (2026-11-20); every finding applied",
+    "at": "2026-11-20"
+  },
+  "tags": [
+    "slack",
+    "find channels by purpose"
+  ],
+  "connectors": [
+    "slack"
+  ],
+  "related": [
+    "/integrations/slack",
+    "/integrations/slack/search-messages",
+    "/integrations/slack/fetch-conversation-history"
+  ],
+  "art": {
+    "logo": "slack",
+    "label": "Slack",
+    "props": [
+      "s-signpost",
+      "p-magnifier"
+    ],
+    "bubble": "where do expenses go"
+  },
+  "og_line": "the right channel by what it does.",
+  "action": {
+    "toolkit": "slack",
+    "slug": "SLACK_FIND_CHANNELS"
+  },
+  "what": "**search for the words someone would put in a channel description.** try “expense claims” if the name escapes you. a partial search examines the names and topics it can see. if you remember an exact old channel name, ask for an exact-name search, which can also match a previous name.",
+  "uses": [
+    "find where staff should ask about expenses before sending them to payroll",
+    "recover a channel you remember by its old name after a team reorganisation",
+    "locate an event planning channel whose purpose mentions accessibility"
+  ],
+  "routine": {
+    "message": "on the first thursday of the month at 2, search active public slack channels for expense claims in their names, topics or purposes. continue through every batch, even an empty one, while slack gives you another to search. show matching names and the words that matched here for the staff handbook. never join a channel or update the handbook.",
+    "when": "first thursday of the month at 2 pm",
+    "needs": "slack connected with read only for channel discovery in the handbook workspace",
+    "output": "for walter green's handbook\n#finance-desk: purpose mentions expense claims and mileage.\nfinished the active public channel search."
+  },
+  "steps": [
+    "choose the handbook workspace in **Connected apps** and give your bot **read only**.",
+    "say whether you want public channels, private channels you can see, or only channels you already belong to.",
+    "try a purpose phrase first. use an exact name when retracing a rename."
+  ],
+  "watch": [
+    "**archived channels are left out by default.** include them when you're looking for an old project room.",
+    "**slack filters each batch separately.** zero hits in an early batch can hide a match in the next one.",
+    "**visibility depends on the signed-in account.** a search cannot give someone membership or a complete private directory."
+  ],
+  "faq": [
+    {
+      "q": "can it find a slack channel from something a teammate said there?",
+      "a": "**use message search for remembered dialogue.** channel discovery looks at names and descriptive details. a line from last week's discussion belongs in a message search."
+    },
+    {
+      "q": "do i need the hash sign or exact capitalisation?",
+      "a": "**ordinary search works without either.** a partial term can match. narrow to exact names if several channels look alike."
+    }
+  ],
+  "sources": [
+    {
+      "label": "dusk bot docs: files and apps",
+      "url": "/docs/files-and-apps"
+    },
+    {
+      "label": "dusk bot docs: routines",
+      "url": "/docs/routines"
+    }
+  ],
+  "voice": 2,
+  "tip": {
+    "text": "for a one-off lookup of a channel you already know, type the name in slack. a bot helps when the right name is the thing you're trying to learn."
+  }
+}

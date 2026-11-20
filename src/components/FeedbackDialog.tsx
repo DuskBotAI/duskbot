@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef, useState } from "react";
+import { AnimatePresence } from "motion/react";
 
 import { friendlyError } from "@/lib/plain-error";
 import { ApiError } from "@/state/api";
@@ -112,7 +113,7 @@ export function FeedbackHost() {
   const open = useFeedbackOpen();
   const [sent, setSent] = useState(false);
   return <>
-    {open && <FeedbackDialog onClose={closeFeedback} onSent={() => { closeFeedback(); setSent(true); }} />}
+    <AnimatePresence>{open && <FeedbackDialog key="feedback" onClose={closeFeedback} onSent={() => { closeFeedback(); setSent(true); }} />}</AnimatePresence>
     {sent && <Toast data-notice-toast="feedback" text={t("giveFeedback.sent")} onDone={() => setSent(false)} />}
   </>;
 }

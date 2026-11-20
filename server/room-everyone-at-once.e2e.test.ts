@@ -158,4 +158,25 @@ describe.skipIf(process.platform === "win32")("a room message goes to everyone a
       rmSync(dir, { recursive: true, force: true });
     }
   }, 120_000);
+  it("runs \"@X …, then @Y …\" in order: Y starts only once X's reply has landed, so it can build on it", async () => {
+    const gateDir = mkdtempSync(join(tmpdir(), "dusk-room-chain-"));
+    const gate = join(gateDir, "finish.gate");
+    const h = await harness({ FAKE_CLAUDE_MODE: "slow", FAKE_CLAUDE_SLOW_FINISH_GATE: gate });
+    try {
+      const { bots, roomId, threadId } = await h.team(["Forge", "Brief"]);
+      const [forge, brief] = bots;
+      await h.send(roomId, "@Forge write release notes for v2, then @Brief turn Forge's notes into a 3 line standup");
+      await expect.poll(() => h.speaking(roomId), POLL).toEqual([forge!.id]);
+      expect(await h.busy()).toEqual([forge!.id]);
+      writeFileSync(gate, "finish");
+      // the fake echoes the message it got, so Brief's echo @mentions Forge, who may answer once more after it
+      await expect.poll(async () => (await h.finals(threadId)).map((reply) => reply.from?.botId).slice(0, 2), POLL).toEqual([forge!.id, brief!.id]);
+      const [first, second] = await h.finals(threadId);
+      expect(first!.at).toBeLessThan(second!.at);
+    } finally {
+      if (!existsSync(gate)) writeFileSync(gate, "finish");
+      await h.fixture.close();
+      rmSync(gateDir, { recursive: true, force: true });
+    }
+  }, 120_000);
 });

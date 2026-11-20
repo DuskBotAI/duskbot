@@ -216,7 +216,8 @@ const browserProfilesSchema = z.array(browserProfileSchema).max(20).superRefine(
 const featureConfigSchema = z.object({
   /** Bots may draft skills for your review. On unless false. */
   skillAuthoring: z.boolean().optional(),
-  /** The bot's engine reviews long conversations and updates its learned skills. Off unless true; needs skillAuthoring. */
+  /** After substantial work the bot's quick model reviews the conversation and saves at most one skill change, three a day per bot,
+   * only to skills it wrote itself. On unless false; needs skillAuthoring. */
   skillReview: z.boolean().optional(),
   /** Tool steps in one conversation between automatic reviews. */
   skillReviewSteps: z.number().int().min(3).max(100).optional(),
@@ -242,7 +243,7 @@ const featureConfigSchema = z.object({
   /** Room jobs to several members run side by side, each in a thread of its own. Off unless true. */
   parallelRoomJobs: z.boolean().optional(),
   acpPlanLines: z.boolean().optional(), // An ACP agent's plan as activity lines. Off unless true.
-}).extend({ agentsToolBridge: z.boolean().optional() }); // agentsToolBridge: the find_tool / use_tool bridge, off unless true
+}).extend({ agentsToolBridge: z.boolean().optional(), suggestions: z.boolean().optional(), suggestionsPerDay: z.number().int().min(1).max(5).optional() }); // agentsToolBridge: the find_tool / use_tool bridge, off unless true; suggestions: bots suggest things on their own, on unless false, at most suggestionsPerDay (default 2) a day
 const onboardingConfigSchema = z.object({
   completedAt: z.string().trim().max(40).optional(),
   version: z.number().int().min(0).max(1000).optional(),
@@ -307,6 +308,8 @@ const appConfigSchema = z.object({
   /** Who may sign in with an emailed code: addresses or `@domain` entries; admins get every scope, members chat only. */
   signIn: z.object({ admins: z.array(z.string().max(320)).max(500).optional(), members: z.array(z.string().max(320)).max(5000).optional() }).optional(),
   defaultModelSelection: defaultModelSelectionSchema.optional(),
+  /** The person picked the default model themselves, so it never gives way to another AI by itself. */
+  defaultModelChosen: z.boolean().optional(),
   automaticRecovery: automaticRecoverySchema.optional(),
   cacheKeepWarm: cacheKeepWarmSchema.optional(),
   newBotDefaults: newBotDefaultsSchema.optional(),
@@ -379,8 +382,9 @@ const appConfigSchema = z.object({
       "Use a model ID without control characters",
     ).optional(),
   }).optional(),
-  /** Non-secret profile details; aboutMe is shared with every bot. */
-  profile: z.object({ name: optionalText, email: optionalText, aboutMe: z.string().max(24_000).optional(), avatarUrl: z.union([z.literal(""), botAvatarUrlSchema]).optional() }).optional(),
+  /** Non-secret profile details; aboutMe is shared with every bot. `accountName`: the dusk cloud account's name this
+   * computer last copied into `name`; while `name` is still that copy, a new name on the account replaces it. */
+  profile: z.object({ name: optionalText, email: optionalText, aboutMe: z.string().max(24_000).optional(), avatarUrl: z.union([z.literal(""), botAvatarUrlSchema]).optional(), accountName: optionalText }).optional(),
   /** UI language override (BCP-47, lowercase), absent follows the system; what a paired phone calls this computer, "" for the default. */
   language: optionalText, computerName: z.string().trim().max(63).optional(), talkingStyle: z.enum(TALKING_STYLES).optional(),
   rooms: roomConfigSchema.optional(),
@@ -429,6 +433,7 @@ export interface AppConfig extends HelperConfig {
   signIn?: { admins?: string[]; members?: string[] };
   /** Preferred selection for newly created bots; existing bots keep theirs. */
   defaultModelSelection?: ModelSelection;
+  defaultModelChosen?: boolean;
   /** Off by default; one backup attempt only before any work starts. */
   automaticRecovery?: { enabled: boolean; backup?: ModelSelection };
   cacheKeepWarm?: { enabled: boolean; windowMinutes?: number };
@@ -468,14 +473,14 @@ export interface AppConfig extends HelperConfig {
   decider?: DeciderConfig;
   imageGen?: ImageGenerationConfig;
   live?: LiveConfig;
-  profile?: { name?: string; email?: string; aboutMe?: string; avatarUrl?: string };
+  profile?: { name?: string; email?: string; aboutMe?: string; avatarUrl?: string; accountName?: string };
   rooms?: { turnTimeoutMinutes: number };
   mcp?: { callTimeoutMinutes?: number };
   threads?: { maxConcurrentPerBot: number; eventLogMaxBytes?: number; eventLogRetentionDays?: number };
   context?: { rebuildBytes?: number; compactAt?: number; autoCompact?: boolean; roomCompactAt?: number; roomSessions?: boolean; replayToolHistory?: boolean };
   memory?: { captureQuietMs?: number; tidyHour?: number };
   localVm?: { mode?: "shared" | "per-bot" | "pool"; maxInstances?: number; idleTimeoutMinutes?: number; preserveInstalledApps?: boolean };
-  features?: { skillAuthoring?: boolean; skillReview?: boolean; skillReviewSteps?: number; showToolCalls?: boolean; browser?: boolean; claudeUserMcp?: boolean; claudeUserSkills?: boolean; llmThreadTitles?: boolean; quickUpdates?: boolean; smartSetupChoices?: boolean; autoRecall?: boolean; skillsLibrary?: boolean; shareLearnedSkills?: "off" | "ask" | "auto"; roomMemoryCapture?: boolean; parallelRoomJobs?: boolean; acpPlanLines?: boolean; agentsToolBridge?: boolean };
+  features?: { skillAuthoring?: boolean; skillReview?: boolean; skillReviewSteps?: number; showToolCalls?: boolean; browser?: boolean; claudeUserMcp?: boolean; claudeUserSkills?: boolean; llmThreadTitles?: boolean; quickUpdates?: boolean; smartSetupChoices?: boolean; autoRecall?: boolean; skillsLibrary?: boolean; shareLearnedSkills?: "off" | "ask" | "auto"; roomMemoryCapture?: boolean; parallelRoomJobs?: boolean; acpPlanLines?: boolean; agentsToolBridge?: boolean; suggestions?: boolean; suggestionsPerDay?: number };
   onboarding?: { completedAt?: string; version?: number; reelSeen?: boolean; hintsSeen?: string[]; firstTurnAt?: string };
   browserProfiles?: BrowserProfile[];
   browserEngine?: BrowserEngineConfig;
@@ -618,7 +623,7 @@ export const MIN_SKILL_REVIEW_STEPS = 3;
 export const MAX_SKILL_REVIEW_STEPS = 100;
 
 export function skillReviewEnabled(cfg: AppConfig): boolean {
-  return skillAuthoringEnabled(cfg) && cfg.features?.skillReview === true;
+  return skillAuthoringEnabled(cfg) && cfg.features?.skillReview !== false;
 }
 
 export function skillReviewSteps(cfg: AppConfig): number {
@@ -965,6 +970,10 @@ export function saveConfig(
     } else {
       delete disk.defaultModelSelection;
     }
+  }
+  if (checkedPatch.defaultModelSelection !== undefined || checkedPatch.newBotDefaults !== undefined) {
+    if (checkedPatch.defaultModelChosen === true && disk.defaultModelSelection) disk.defaultModelChosen = true;
+    else delete disk.defaultModelChosen;
   }
   if (checkedPatch.cliStartup !== undefined) disk.cliStartup = checkedPatch.cliStartup;
   if (checkedPatch.mcpServers !== undefined) {

@@ -22,6 +22,8 @@ import type { ModelSelection } from "./contracts.ts";
 import * as mdb from "./message-db.ts";
 import { peerAllowKey } from "./peer-approval-key.ts";
 import { Store, toWireTask, type BotRecord } from "./store.ts";
+import { messagePages } from "./host/message-pages.ts";
+import { quotedAttachmentLines } from "./reply-attachments.ts";
 import type { TeamSetupRequest } from "../shared/team-setup.ts";
 import { SECTION_CONTEXTS_FILE } from "./section-context.ts";
 
@@ -42,6 +44,27 @@ const selection = (): ModelSelection => ({ instanceId: "claude", model: "claude-
 describe("Store", () => {
   beforeEach(() => {
     rmSync(DATA_DIR, { recursive: true, force: true });
+  });
+
+  it("keeps a reply's quoted message across a restart, readable on its own however far back it is", () => {
+    const store = new Store(selection);
+    const bot = store.createBot({ name: "Receipts" });
+    const image = join(DATA_DIR, "attachments", "123e4567-e89b-42d3-a456-426614174000.png");
+    mkdirSync(join(DATA_DIR, "attachments"), { recursive: true });
+    writeFileSync(image, Buffer.from("89504e470d0a1a0a00000000", "hex"));
+    const pictured = store.appendMessage(bot.threadId, { role: "user", kind: "text", text: `My receipt\n\n<attached-image path="${image}" name="r.png" />` });
+    for (let index = 0; index < 80; index += 1) store.appendMessage(bot.threadId, { role: index % 2 ? "bot" : "user", kind: "text", text: `line ${index}` });
+    const reply = store.appendMessage(bot.threadId, { role: "user", kind: "text", text: "What was the total?", replyToId: pictured.id });
+    flushDeferredSaves();
+
+    const restarted = new Store(selection);
+    const tail = restarted.messagesTail(bot.threadId, 60).messages;
+    expect(tail.find((message) => message.id === reply.id)?.replyToId).toBe(pictured.id);
+    expect(tail.some((message) => message.id === pictured.id)).toBe(false);
+    const window = messagePages(restarted).messageWindow(bot.threadId, pictured.id, 1);
+    expect(window?.messages).toEqual([expect.objectContaining({ id: pictured.id })]);
+    expect(quotedAttachmentLines(restarted.messagesFor(bot.threadId).find((message) => message.id === pictured.id)!))
+      .toContain(`<attached-image path="${image}" name="r.png" />`);
   });
 
   it("retains tool selection across restarts and distinguishes clearing from no tools", () => {
@@ -852,6 +875,20 @@ describe("Store", () => {
     expect(new Store(selection).taskByThread(bot.id, bot.threadId)?.usage?.turns).toBe(20);
   });
 
+  it("defers the write of a read marker, so reading a chat never rewrites and fsyncs bots.json", () => {
+    const store = new Store(selection);
+    const bot = store.createBot({ name: "Reading" });
+    const reply = store.appendMessage(bot.threadId, { role: "bot", kind: "text", text: "hello" });
+    store.patchTask(bot.id, bot.threadId, { unread: true });
+    flushDeferredSaves();
+    const save = vi.spyOn(store as unknown as { saveBots(): void }, "saveBots");
+    store.patchTask(bot.id, bot.threadId, { unread: false, lastReadMessageId: reply.id });
+    expect(save).not.toHaveBeenCalled();
+    flushDeferredSaves();
+    expect(save).toHaveBeenCalledTimes(1);
+    expect(new Store(selection).taskByThread(bot.id, bot.threadId)).toMatchObject({ unread: false, lastReadMessageId: reply.id });
+  });
+
   it("addTaskUsage accumulates settled-turn totals per task and survives a restart", () => {
     const store = new Store(selection);
     const bot = store.createBot();
@@ -1606,8 +1643,8 @@ describe("Store", () => {
     store.seedIfEmpty();
     const chief = store.bots[0]!;
     expect(chief).toMatchObject({ name: "dusk bot", color: "chrome", chiefOfStaff: true, defaultBot: {} });
-    expect(store.messagesFor(chief.threadId).map((message) => [message.kind, message.helperIntro, message.card?.options.length])).toEqual([["options", true, 4]]);
-    expect(store.messagesFor(chief.threadId)[0]!.text).toContain("Hey! I'm dusk bot. I'm new here. I'm here to be your Chief of Staff.");
+    expect(store.messagesFor(chief.threadId).map((message) => [message.kind, message.helperIntro, message.card?.options.length])).toEqual([["options", true, 3]]);
+    expect(store.messagesFor(chief.threadId)[0]!.text).toBe("Hi! I'm dusk bot. Hand me one real job and I'll get it done. What should we start with?");
     const later = Array.from({ length: 25 }, () => store.createBot());
     expect(later.map((bot) => bot.color)).not.toContain("silver");
     expect(later.map((bot) => bot.color)).not.toContain("chrome");

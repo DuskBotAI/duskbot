@@ -21,7 +21,7 @@ function TrioMascot({ color, size, raise, delay }: { color: MausColor; size: num
   return (
     <motion.button type="button" tabIndex={-1} aria-hidden className="relative touch-manipulation"
       style={{ marginBottom: raise }} whileTap={{ scale: 1.1, transition: spring.lively }}
-      onPointerDown={() => { haptic("light"); ref.current?.poke?.(); }}>
+      onPointerDown={() => { haptic("tap"); ref.current?.poke?.(); }}>
       <span className="dusk-float block" style={{ animationDuration: "6.4s", animationDelay: `${delay}s` }}>
         <MausAvatar ref={ref} color={color} size={size} state="idle" label="" />
       </span>

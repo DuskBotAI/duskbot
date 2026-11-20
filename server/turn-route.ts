@@ -63,6 +63,8 @@ export interface RouteInput {
   effortLevels?: readonly EffortLevel[];
   /** Saver mode (server/allowance.ts): every turn a person starts runs on the quick model, or at the lowest effort. */
   saver?: boolean;
+  /** The engine takes a turn's effort without a relaunch and an unset effort is its default again (effortPerTurn). */
+  effortPerTurn?: boolean;
 }
 
 export interface RouteResult {
@@ -77,7 +79,8 @@ export interface RouteResult {
 export function routeTurn(input: RouteInput): RouteResult {
   const keep: RouteResult = { tier: null, model: input.model, effort: input.effort, variant: input.variant };
   if (input.saver && !input.automated) return saverRoute(input, keep);
-  if (!input.conversational || !input.followsBotModel || input.automated) return keep;
+  if (!input.followsBotModel || input.automated) return keep;
+  if (!input.conversational) return quickEffortRoute(input, keep);
   const tier = classifyTurn(input.signals);
   if (tier === "complex") return { ...keep, tier };
   const fast = fastModelFor(input.catalog, input.model, input.refused);
@@ -89,6 +92,12 @@ export function routeTurn(input: RouteInput): RouteResult {
   if (option?.contextWindow && (input.contextTokens ?? 0) > option.contextWindow * QUICK_CONTEXT_SHARE) return { ...keep, tier };
   // Effort and variant belong to the configured model; the quick model runs on its engine's defaults.
   return { tier, model: fast, quickModel: option?.label ?? fast };
+}
+
+/** A quick question on the bot's own model and engine default effort runs at low effort: the reply skips the long think. */
+function quickEffortRoute(input: RouteInput, keep: RouteResult): RouteResult {
+  if (input.effort !== undefined || !input.effortPerTurn || !input.effortLevels?.includes("low")) return keep;
+  return classifyTurn(input.signals) === "simple" ? { ...keep, tier: "simple", effort: "low" } : keep;
 }
 
 function saverRoute(input: RouteInput, keep: RouteResult): RouteResult {
@@ -106,7 +115,7 @@ export function routeDirectTurn(
   task: { modelSelection?: ModelSelection; usage?: { context?: { tokens: number } } },
   path: readonly { role: string; kind?: string }[],
   message: { text: string; images: readonly unknown[] },
-  instance: { models?: ModelCatalog; quickModelsUsable?: () => boolean; adapter: { capabilities: { effortLevels?: readonly EffortLevel[] } } },
+  instance: { models?: ModelCatalog; quickModelsUsable?: () => boolean; adapter: { capabilities: { effortLevels?: readonly EffortLevel[]; effortPerTurn?: boolean } } },
   automated: boolean,
   refused?: ReadonlySet<string>,
   saver?: boolean,
@@ -127,6 +136,7 @@ export function routeDirectTurn(
     catalog: instance.quickModelsUsable?.() === false ? undefined : instance.models,
     refused,
     effortLevels: instance.adapter.capabilities.effortLevels,
+    effortPerTurn: instance.adapter.capabilities.effortPerTurn === true,
     contextTokens: task.usage?.context?.tokens,
     saver,
   });

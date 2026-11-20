@@ -50,3 +50,8 @@ export function addressFor(ask: AddressAsk, webhooks: Pick<WebhookManager, "curr
   const address = webhookAddress(webhooks, id, baseUrl);
   return address ? { address } : {};
 }
+
+/** The id of the webhook that runs this routine, made the first time someone asks for its address. */
+export function routineAddress(webhooks: Pick<WebhookManager, "forRoutine" | "create">, routineId: string, botId: string, name: string): string {
+  return webhooks.forRoutine(routineId)?.id ?? webhooks.create({ name: name.slice(0, 80) || "Routine", prompt: "", botId, routineId }).webhook.id;
+}

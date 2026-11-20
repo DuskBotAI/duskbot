@@ -27,6 +27,12 @@ describe("cloudPairing", () => {
     expect(await cloudPairing(refused, cloud, { wait: async () => {} })).toEqual(asleep);
     expect(refused.pairCloud).toHaveBeenCalledOnce();
   });
+  it("never wakes the primary cloud for another one that sleeps", async () => {
+    const account = { pairCloud: answers({ outcome: "asleep" }), wakeCloud: vi.fn(async () => true) };
+    expect(await cloudPairing(account, { ...cloud, id: "c2", primary: false }, { wait: async () => {} })).toEqual({ outcome: "asleep" });
+    expect(account.wakeCloud).not.toHaveBeenCalled();
+    expect(account.pairCloud).toHaveBeenCalledOnce();
+  });
   it("hands the existing pairing path the code without its dashes", () => {
     expect(cloudPairingPayload(cloud, grant)).toEqual({ v: 1, transport: "https", origin: grant.origin, credential: "", code: "ABCDEFGHJKLM", name: "Studio", expiresAt: grant.expiresAt });
   });

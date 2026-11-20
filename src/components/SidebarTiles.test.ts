@@ -38,10 +38,10 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("the sidebar tiles", () => {
-  it.each([true, false])("draws the main tile and a pinned tile the same: 78 by 92, radius 10, a 56px avatar over a one-line 13px medium name (main %s)", (primary) => {
+  it.each([true, false])("draws the main tile and a pinned tile the same: 80 by 100, radius 10, a 62px avatar over a one-line 13px medium name (main %s)", (primary) => {
     const html = renderToStaticMarkup(createElement(SidebarBotTile, { ...props(bot({ chiefOfStaff: primary })), primary }));
-    expect(html).toMatch(new RegExp(`data-sidebar-tile="${primary ? "primary" : "pinned"}"[^>]*class="[^"]*\\bh-\\[92px\\] w-\\[78px\\][^"]*\\brounded-\\[10px\\]`));
-    expect(html).toContain("width:56px;height:56px");
+    expect(html).toMatch(new RegExp(`data-sidebar-tile="${primary ? "primary" : "pinned"}"[^>]*class="[^"]*\\bh-\\[100px\\] w-\\[80px\\][^"]*\\brounded-\\[10px\\]`));
+    expect(html).toContain("width:62px;height:62px");
     expect(html).toMatch(/truncate text-center text-\[13px\] font-medium leading-4 text-ink"[^>]*>Dusk</);
     expect(html).not.toContain("data-provider-mark");
   });
@@ -120,8 +120,8 @@ describe("the tile grid", () => {
     const drag = count > 1 ? ":drag" : "";
     expect(tiles(html)).toEqual(["primary:dusk", ...pins(count).map((pin) => `pinned:${pin.id}${drag}`)]);
     expect(html).toMatch(/^<div data-sidebar-tiles="" class="flex max-h-\[40vh\] flex-wrap justify-center gap-1 overflow-y-auto /);
-    expect(html.match(/\bh-\[92px\] w-\[78px\]/g)).toHaveLength(count + 1);
-    expect(html.match(/width:56px;height:56px/g)).toHaveLength(count + 1);
+    expect(html.match(/\bh-\[100px\] w-\[80px\]/g)).toHaveLength(count + 1);
+    expect(html.match(/width:62px;height:62px/g)).toHaveLength(count + 1);
     expect(html.match(/data-testid="chief-badge"/g)).toHaveLength(1);
   });
 

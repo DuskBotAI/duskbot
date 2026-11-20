@@ -450,6 +450,16 @@ describe("Settings > Transfer", () => {
     expect(fake.bridge.moveBack).toHaveBeenCalledTimes(1);
   });
 
+  it("on the server's own page in the app, opens this computer to bring the bots back instead of saying it needs the app", async () => {
+    const open = vi.fn(async () => ({}));
+    vi.stubGlobal("duskDesktop", { platform: "darwin", app: { ownPage: false }, workspaces: { open } });
+    await act(async () => { root.render(createElement(TransferSettings)); });
+    await settle();
+    expect(text()).not.toContain("works in the desktop app");
+    await click(document.querySelector("[data-open-this-device]"));
+    expect(open).toHaveBeenCalledWith("local");
+  });
+
   it("shows the line that takes dusk bot off the server, only when asked", async () => {
     const fake = fakeBridge();
     const UNINSTALL = "curl -fsSL https://link.dusk.bot/uninstall | sh";

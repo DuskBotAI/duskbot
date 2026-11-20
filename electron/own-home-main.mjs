@@ -116,7 +116,8 @@ export function installOwnHome({ localRequest: anyServer, clean = null, fetch: f
   const onOwnCopy = (work) => (clean ? clean.holding(work) : work());
   const journal = jsonStore(journalStore), choice = jsonStore(choiceStore);
   const chosen = () => parseChoice(choice.read());
-  const placeOf = (picked = chosen()) => (picked ? environments().find((entry) => handSaved(entry) && entry.origin === picked.origin) ?? null : null);
+  const placeOf = (picked = chosen()) => (picked ? environments().find((entry) => handSaved(entry) && entry.id === picked.id)
+    ?? environments().find((entry) => handSaved(entry) && entry.origin === picked.origin) ?? null : null);
   const owners = new Map();
 
   const local = {
@@ -249,7 +250,7 @@ export function installOwnHome({ localRequest: anyServer, clean = null, fetch: f
     /** The chosen server while home is there: this computer is lent to it as it is to My Cloud. */
     home() {
       const picked = chosen(), place = placeOf(picked);
-      return picked && place && home.away() ? { id: place.id, origin: picked.origin, environmentId: picked.environmentId, name: place.name } : null;
+      return picked && place && home.away() ? { id: place.id, origin: place.origin, environmentId: picked.environmentId, name: place.name } : null;
     },
     /** A server connected by hand whose own word, fresh, is that it is this person's alone (read again now and then,
      * `refresh`). */

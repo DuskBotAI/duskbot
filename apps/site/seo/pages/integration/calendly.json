@@ -1,0 +1,136 @@
+{
+  "path": "/integrations/calendly",
+  "type": "integration",
+  "title": "Calendly bot for booking prep and finding open slots",
+  "nav": "calendly",
+  "h1": "a calendly bot that brings the booking details to the call",
+  "description": "Prepare from Calendly invitee details, find real openings for a specific event type, and reconcile attendance changes before a group session.",
+  "keyword": "calendly bot",
+  "keywords": [
+    "calendly ai assistant",
+    "calendly ai agent"
+  ],
+  "answer": "**know why someone booked before you ask them to explain it again.** a calendly bot can read today's bookings and pull the details each invitee gave you. get a call brief in dusk chat, see who's still on the group roster, or ask which openings calendly actually offers for a particular appointment type.",
+  "updated": "2026-11-20",
+  "review": {
+    "status": "approved",
+    "by": "lead agent, after four independent reviewers read every page against seo/facts (2026-11-20); every finding applied",
+    "at": "2026-11-20"
+  },
+  "voice": 2,
+  "tags": [
+    "scheduling",
+    "intake",
+    "appointments"
+  ],
+  "connectors": [
+    "calendly"
+  ],
+  "related": [
+    "/routines/calendly-booking-prep",
+    "/integrations/zoom",
+    "/use-cases/client-onboarding"
+  ],
+  "art": {
+    "label": "Calendly",
+    "props": [
+      "s-map"
+    ],
+    "bubble": "why did they book"
+  },
+  "og_line": "open the call with the booking reason.",
+  "app": {
+    "name": "Calendly",
+    "toolkit": "calendly",
+    "intro": "**start from the appointment, then read its invitees.** an event type describes the service people book. a scheduled event is the actual appointment. each invitee has a separate record. that's where to look for the details behind a discovery call.",
+    "highlight": [
+      {
+        "slug": "CALENDLY_LIST_SCHEDULED_EVENTS",
+        "use": "find your active discovery calls inside today's time window"
+      },
+      {
+        "slug": "CALENDLY_GET_EVENT",
+        "use": "confirm which booking matches a particular session"
+      },
+      {
+        "slug": "CALENDLY_LIST_EVENT_INVITEES",
+        "use": "read the active roster for a group appointment"
+      },
+      {
+        "slug": "CALENDLY_GET_EVENT_INVITEE",
+        "use": "inspect one person's booking details before their call"
+      },
+      {
+        "slug": "CALENDLY_LIST_EVENT_TYPES",
+        "use": "identify the appointment type for which you need openings"
+      },
+      {
+        "slug": "CALENDLY_LIST_EVENT_TYPE_AVAILABLE_TIMES",
+        "use": "look up bookable slots for that type in a short future window"
+      },
+      {
+        "slug": "CALENDLY_LIST_USER_BUSY_TIMES",
+        "use": "see busy intervals when diagnosing a gap in availability"
+      }
+    ],
+    "setup": "**pick your host account and the event type you actually offer.** connect calendly in dusk bot and give the bot reading access. tell it your time zone and what you call a discovery call. try a known booking and compare the invitee detail with the appointment you expected."
+  },
+  "routines_intro": "**say which date and whose calendar matter.** a group roster and a personal availability search answer different questions. set the event type and group session names in chat, then use the message that matches the job.",
+  "routines": [
+    {
+      "name": "discovery call briefs",
+      "message": "every weekday at 8, find my active discovery calls today. read each booking's invitee details. give me the call time, name and any reason they gave for booking. turn a missing answer into one opening question. keep unrelated contact details out of the brief.",
+      "when": "weekdays at 08:00",
+      "output": "a short opening note for each discovery call"
+    },
+    {
+      "name": "openings for a longer consult",
+      "message": "at noon every monday, find available times for my long consultation event type over the next five days. show the earliest opening on each day in my time zone. mark days with no returned slots. leave the times open for booking.",
+      "when": "mondays at 12:00",
+      "output": "bookable consultation times grouped by day"
+    },
+    {
+      "name": "group clinic roster",
+      "message": "each thursday at 3, find tomorrow's group clinic. list its active invitees. list cancellations separately so i can update my paper roster. keep repeat names separate unless their booking details match. if two clinics fit the name, show me the start times before picking one.",
+      "when": "thursdays at 15:00",
+      "output": "a roster for the host to take into the clinic"
+    }
+  ],
+  "asks": "**looking up a slot leaves it available to others.** read-only access covers these three jobs. canceling a scheduled event changes the booking. it has no automatic send approval. leave cancellation off the action list for a prep bot.",
+  "cannot": [
+    "**look up a month's open slots in one call.** the event type availability action accepts a future window of at most seven days. split a longer search into shorter windows.",
+    "**pull another host's organization bookings on ordinary personal access.** use your own user scope for your schedule. organization-level member or group queries require an admin or owner.",
+    "**promise a time will stay open.** the lookup reads availability. it doesn't reserve a place for someone who might book later."
+  ],
+  "sections": [
+    {
+      "h": "when to use the booking link",
+      "md": "**use the calendly link directly when someone just needs to choose a time.** a list in chat ages as people book. the bot is more useful when the host needs to choose staffing, prepare questions or reconcile a roster before the session."
+    }
+  ],
+  "faq": [
+    {
+      "q": "can a busy-time lookup tell me which appointments are bookable?",
+      "a": "**use the event type's available times for that.** a busy interval helps explain a gap. a stretch that looks empty doesn't tell you which appointments calendly offers there."
+    },
+    {
+      "q": "what goes in the brief when someone skips a booking question?",
+      "a": "**leave the answer blank and bring one question.** keep wording from the invitee separate from your suggested opener so the host knows which came from the booking."
+    }
+  ],
+  "worked": {
+    "intro": "a fictional brief for a studio consultation.",
+    "before": "marisol booked a consultation about framing a family photograph. the booking gives the print size but says nothing about the wall space.",
+    "after": "reason: frame a family photograph. print size already provided.\nopening question: how much wall space do you have for the finished frame?"
+  },
+  "sources": [
+    {
+      "label": "dusk bot docs: connected apps",
+      "url": "/docs/files-and-apps"
+    },
+    {
+      "label": "dusk bot docs: routines",
+      "url": "/docs/routines"
+    }
+  ]
+}

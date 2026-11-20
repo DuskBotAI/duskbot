@@ -22,6 +22,13 @@ export interface SendOutbox {
   release(sendId: string): void;
   /** its answer never came back: true when the outbox keeps it to send later, so the store leaves it on screen */
   keep(sendId: string): boolean;
+  /** an earlier send in its chat already waits here: true when this one waits behind it instead of going now */
+  waitBehind(sendId: string): boolean;
+}
+
+/** A send that went into the outbox behind an earlier one in its chat, to go after it. */
+export class QueuedBehindError extends Error {
+  constructor() { super("The message waits behind an earlier one in this chat."); this.name = "QueuedBehindError"; }
 }
 
 let installed: SendOutbox | null = null;

@@ -1,0 +1,92 @@
+{
+  "path": "/integrations/notion/fetch-all-notion-block-contents",
+  "type": "action",
+  "title": "Read nested Notion blocks without missing the fine print",
+  "nav": "read nested blocks",
+  "h1": "read the blocks inside a notion page or toggle",
+  "description": "Find the detail tucked inside a Notion toggle or nested list. Ask a bot to follow child blocks and tell you exactly where its reading stopped.",
+  "keyword": "read notion blocks with ai",
+  "keywords": [
+    "what are blocks in notion",
+    "chatgpt read nested notion blocks",
+    "claude read notion toggle contents"
+  ],
+  "answer": "**the line you need might sit inside a toggle.** a notion block is one piece of a page, such as a paragraph or list item. blocks can hold other blocks. give the bot a page link and ask it to follow those children. have it flag any branch it couldn't finish before you trust the answer.",
+  "updated": "2026-11-20",
+  "review": {
+    "status": "approved",
+    "by": "lead agent, after four independent reviewers read every page against seo/facts (2026-11-20); every finding applied",
+    "at": "2026-11-20"
+  },
+  "tags": [
+    "notion",
+    "read nested blocks"
+  ],
+  "connectors": [
+    "notion"
+  ],
+  "related": [
+    "/integrations/notion",
+    "/integrations/notion/get-page-markdown",
+    "/integrations/notion/fetch-database-row"
+  ],
+  "art": {
+    "logo": "notion",
+    "label": "Notion",
+    "props": [
+      "s-books",
+      "p-binoculars"
+    ],
+    "bubble": "inside the toggle"
+  },
+  "og_line": "read inside the toggle.",
+  "action": {
+    "toolkit": "notion",
+    "slug": "NOTION_FETCH_ALL_BLOCK_CONTENTS"
+  },
+  "what": "**reading down the page and reading into a block are different jobs.** a bot can gather the items directly under a page across batches. asking it to read recursively takes it inside items that have children. give it a parent block id if you only need one branch.\n\nset a stopping depth when the page is large. the result can still be partial if a nested block is inaccessible or the read reaches its block budget.",
+  "uses": [
+    "find the packing exception tucked beneath a costume name",
+    "bring back the small-print meal options nested under a conference menu",
+    "read the alternate ending under a scene toggle without collecting the entire script"
+  ],
+  "routine": {
+    "message": "each thursday at 4 pm, read the wardrobe packing page in notion, including children inside the costume toggles. pull out pieces marked hand carry and put each under its costume name here. if a branch stops early, name it and call the list partial. never mark a piece packed.",
+    "when": "thursdays at 4 pm before tour packing",
+    "needs": "notion read only with access to the wardrobe page and its nested blocks",
+    "output": "hand carry for sidney beck's wardrobe crew\n- rain scene: spare spectacles in the inside pocket.\npartial list: the ballroom costume branch reached the depth limit."
+  },
+  "steps": [
+    "share the wardrobe page with the notion connection and select **read only** in **Connected apps**.",
+    "paste the page url or the parent block id. choose the smallest branch that can answer the question.",
+    "ask for nested children and the heading above each result. compare one item with the open toggle."
+  ],
+  "watch": [
+    "**a database view link won't work here.** open the actual page whose blocks you want to read.",
+    "**an empty branch and a cut-off branch mean different things.** the bot should report any depth or block limit the nested read returns."
+  ],
+  "faq": [
+    {
+      "q": "do i need to find the id of every block in notion?",
+      "a": "**start with the parent.** the bot can use the page link or the containing block's id and follow its children."
+    },
+    {
+      "q": "how far into nested blocks can it read?",
+      "a": "**recursive reads default to ten levels and 5,000 blocks.** you can adjust those limits. access to the nested content still matters."
+    }
+  ],
+  "sources": [
+    {
+      "label": "dusk bot docs: files and apps",
+      "url": "/docs/files-and-apps"
+    },
+    {
+      "label": "dusk bot docs: routines",
+      "url": "/docs/routines"
+    }
+  ],
+  "voice": 2,
+  "tip": {
+    "text": "for a sentence you can see on the open page, read it there. use the bot when its location in the nesting matters."
+  }
+}

@@ -31,7 +31,8 @@ export type NewWaitCondition =
   | { kind: "url_contains" | "url_missing"; url: string; text: string }
   | { kind: "file_exists" | "file_missing" | "file_changed"; path: string }
   | { kind: "process_running" | "process_gone"; process: string }
-  | { kind: "bot_idle"; botId: string; botName: string };
+  | { kind: "bot_idle"; botId: string; botName: string }
+  | { kind: "time"; at: number };
 export type WaitCondition =
   | { kind: "url_contains"; url: string; text: string }
   /** `sawText`: a check found the text, so its going counts (a page its scripts draw reads bare from the start). */
@@ -39,7 +40,8 @@ export type WaitCondition =
   | { kind: "file_exists" | "file_missing"; path: string }
   | { kind: "file_changed"; path: string; before: FileStamp | null }
   | { kind: "process_running" | "process_gone"; process: string }
-  | { kind: "bot_idle"; botId: string; botName: string; sawBusy: boolean };
+  | { kind: "bot_idle"; botId: string; botName: string; sawBusy: boolean }
+  | { kind: "time"; at: number };
 export interface WaitNotice { status: "fired" | "expired" | "stopped"; text: string }
 export interface WaitRecord {
   id: string; botId: string; threadId: string; label: string; condition: WaitCondition; followUp?: string;
@@ -73,6 +75,7 @@ const conditionSchema = z.union([
   z.object({ kind: z.literal("file_changed"), path: z.string(), before: stampSchema.nullable() }),
   z.object({ kind: z.enum(["process_running", "process_gone"]), process: z.string() }),
   z.object({ kind: z.literal("bot_idle"), botId: z.string(), botName: z.string(), sawBusy: z.boolean() }),
+  z.object({ kind: z.literal("time"), at: z.number() }),
 ]);
 const recordSchema = z.object({
   id: z.string(),
@@ -100,6 +103,7 @@ export function describeCondition(condition: NewWaitCondition | WaitCondition): 
     case "process_running": return `${condition.process} is running`;
     case "process_gone": return `${condition.process} has stopped`;
     case "bot_idle": return `${condition.botName} finishes its work`;
+    case "time": return `it is ${iso(condition.at)}`;
   }
 }
 
@@ -113,10 +117,13 @@ function firedDetail(condition: WaitCondition): string {
     case "process_running": return `${condition.process} is running.`;
     case "process_gone": return `${condition.process} stopped.`;
     case "bot_idle": return `${condition.botName} finished.`;
+    case "time": return "";
   }
 }
 
-const iso = (ms: number) => new Date(ms).toISOString();
+function iso(ms: number): string { return new Date(ms).toISOString(); }
+/** A time wait still fires this long after its moment, for a computer that was asleep then. */
+const TIME_GRACE_MS = 24 * 3_600_000;
 
 export function waitList(waits: readonly WaitRecord[]): string {
   return waits
@@ -193,8 +200,8 @@ export class WaitManager {
       condition,
       ...(input.followUp ? { followUp: input.followUp } : {}),
       createdAt: now,
-      expiresAt: now + (input.hours ?? WAIT_HOURS.default) * 3_600_000,
-      nextCheckAt: now + interval(condition.kind, 0),
+      expiresAt: condition.kind === "time" ? condition.at + TIME_GRACE_MS : now + (input.hours ?? WAIT_HOURS.default) * 3_600_000,
+      nextCheckAt: condition.kind === "time" ? condition.at : now + interval(condition.kind, 0),
       errors: 0,
     };
     this.commit(() => this.waits.push(wait));
@@ -264,7 +271,9 @@ export class WaitManager {
   /** When a sleeping Cloud should wake to check: WAIT_WAKE_MS on while a wait is open, never a page's next minute (the
    * home would never sleep), null with none open. */
   nextWakeAt(): number | null {
-    return this.waits.some((w) => !w.ending) ? this.now() + WAIT_WAKE_MS : null;
+    const open = this.waits.filter((w) => !w.ending);
+    if (!open.length) return null;
+    return Math.min(this.now() + WAIT_WAKE_MS, ...open.flatMap((w) => (w.condition.kind === "time" ? [Math.max(w.condition.at, this.now())] : [])));
   }
 
   removeForBot(botId: string): number {
@@ -346,7 +355,7 @@ export class WaitManager {
           }
           continue;
         }
-        if (verdict.met) wait.ending = { status: "fired", text: `${wait.label}: done. ${firedDetail(wait.condition)}` };
+        if (verdict.met) wait.ending = { status: "fired", text: wait.condition.kind === "time" ? `Reminder: ${wait.label}.` : `${wait.label}: done. ${firedDetail(wait.condition)}` };
         else if (verdict.gone && wait.condition.kind === "bot_idle") wait.ending = { status: "stopped", text: `Stopped waiting for ${wait.label}: ${wait.condition.botName} no longer exists.` };
         else if (expired) wait.ending = this.expiredNotice(wait);
         else {
@@ -361,8 +370,8 @@ export class WaitManager {
 
       for (const wait of this.waits.slice()) {
         if (!wait.ending) continue;
-        let posted = false;
-        try { posted = this.options.post(wait, wait.ending); } catch (error) { console.error(`wait ${wait.id}: could not post`, error); }
+        let posted = wait.ending.status === "fired" && wait.condition.kind === "time" && Boolean(wait.followUp);
+        if (!posted) try { posted = this.options.post(wait, wait.ending); } catch (error) { console.error(`wait ${wait.id}: could not post`, error); }
         if (!posted) continue;
         const status = wait.ending.status;
         this.commit(() => { this.waits = this.waits.filter((w) => w !== wait); });
@@ -409,6 +418,7 @@ export class WaitManager {
           return { met: false, unlisted: true };
         }
       }
+      case "time": return { met: this.now() >= condition.at };
       case "bot_idle": {
         const busy = this.options.botBusy(condition.botId);
         if (busy === undefined) return { met: false, gone: true };

@@ -52,7 +52,7 @@ afterEach(() => {
 });
 
 const settle = () => act(async () => { for (let i = 0; i < 5; i += 1) await new Promise((resolve) => setTimeout(resolve, 0)); });
-const toast = () => document.querySelector<HTMLElement>("[data-access-toast]");
+const toast = () => document.querySelector<HTMLElement>("[data-access-toast]:not([data-exit-ghost])");
 const forgetFirst = async () => {
   await act(async () => root.render(createElement(MemoryPage, { bot, derived: {} as never })));
   await settle();

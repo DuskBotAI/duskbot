@@ -33,7 +33,7 @@ export interface AutomationLine {
   name: string;
   /** What started the run; "app" is a connected-app event, "wait" a wait's follow-up. A Bot API call starts a turn,
    * never a run, so "api" is never seen here. */
-  trigger: RoutineRunTrigger | "app" | "wait";
+  trigger: RoutineRunTrigger | "app" | "wait" | "job";
   executionThreadId: string;
   scheduledFor: number;
   /** The run needs the person: it asked them something or cannot go on without them. */
@@ -60,3 +60,6 @@ export function routinePromptName(text: string | undefined): string | null {
   if (!head) return null;
   try { const name = JSON.parse(head[1]!); return typeof name === "string" ? name : null; } catch { return null; }
 }
+
+/** The exact silence token a routine run answers with when nothing needs the person: a line of its own, never shown. */
+export const SILENT_LINE = /^[\s*_`"'.!-]*nothing new[\s*_`"'.!-]*$/i;

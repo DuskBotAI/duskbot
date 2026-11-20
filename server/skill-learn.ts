@@ -23,6 +23,9 @@ export function learnSource(request: string): string {
   return `${LEARN_SOURCE_PREFIX}${body.slice(0, 180)}`;
 }
 
+/** The source a skill written by the background review carries: only those may be changed by a later review or the curator. */
+export const REVIEW_SKILL_SOURCE = learnSource("automatic review of this conversation");
+
 export const AUTHORING_STANDARDS = `Follow these skill-authoring rules:
 
 Frontmatter:

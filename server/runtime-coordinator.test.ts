@@ -1739,6 +1739,23 @@ describe("RuntimeCoordinator: who answers a teammate's question", () => {
     expect(answered.text).toContain('@chief answered: "Excel, the sheet is for finance".');
   });
 
+  it("hands a teammate's question to the person once its requester has answered two already, so two blocked bots stop trading it", async () => {
+    const w = world((node) => node.botId === "builder" ? { ok: true, text: "PDF export is blocked here.\nNEEDS INPUT: Can you give me a shell for this?" } : undefined);
+    w.host.levels.builder = { level: "full" };
+    const { node } = send(w, chief, "gen-1", undefined, builder, "Make the PDF");
+    ended(w, "gen-1");
+    for (let round = 0; round < 2; round += 1) {
+      w.coordinator.tick(); await flush();
+      expect(w.coordinator.node(node.id)?.decide, `round ${round}`).toEqual({});
+      expect(w.coordinator.answerNode(node.id, "I can't give you one either; try again.", { kind: "bot", botId: "chief" })).toBe(true);
+    }
+    w.coordinator.tick(); await flush();
+    expect(w.coordinator.node(node.id)).toMatchObject({ status: "waiting", question: "Can you give me a shell for this?" });
+    expect(w.coordinator.node(node.id)?.decide).toBeUndefined();
+    expect(w.coordinator.answerNode(node.id, "Try once more.", { kind: "bot", botId: "chief" })).toBe(false);
+    expect(w.coordinator.answerNode(node.id, "Here is a VPS now.")).toBe(true);
+  });
+
   it("puts only what the person alone can give to the person at Full access, and every question to the person below it", async () => {
     const full = world(asks("NEEDS INPUT: Please sign in to the bank portal so I can download the statement."));
     full.host.levels.builder = { level: "full" };

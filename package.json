@@ -1,7 +1,7 @@
 {
   "name": "duskbot",
   "private": true,
-  "version": "0.2.19",
+  "version": "0.2.25",
   "description": "A local-first chat app for running a team of AI agents.",
   "homepage": "https://dusk.bot",
   "repository": {
@@ -49,8 +49,8 @@
     "dashboard:fixture": "node apps/dashboard/scripts/fixture.ts --demo",
     "build:dashboard": "tsc -p apps/dashboard/tsconfig.json && vite build --config apps/dashboard/vite.config.ts",
     "typecheck:dashboard": "tsc -p apps/dashboard/tsconfig.json",
-    "build": "tsc -b && tsc -p server/tsconfig.json && vite build",
-    "typecheck": "tsc -b && tsc -p server/tsconfig.json",
+    "build": "node scripts/typecheck.mjs && vite build",
+    "typecheck": "node scripts/typecheck.mjs",
     "test": "vitest run && pnpm broker:test && pnpm test:electron && pnpm test:packaged-server",
     "test:electron": "node --test \"electron/*.node-test.mjs\"",
     "test:main": "node scripts/test-main.mjs",
@@ -82,7 +82,7 @@
     "build:ssh2": "node scripts/bundle-ssh2.mjs",
     "package:prepare": "pnpm build && node scripts/bundle-cloud-seal.mjs && pnpm build:server && pnpm build:companion && pnpm build:android-tools && pnpm build:cloudflared && pnpm build:browser && pnpm build:duckdb",
     "package:mac": "pnpm package:prepare && pnpm build:speech && pnpm build:cua && node scripts/pack-browser-part.mjs && electron-builder --config build/electron-builder.yml --mac --publish never",
-    "package:win": "pnpm package:prepare && pnpm build:cua:win && electron-builder --config build/electron-builder.yml --win --publish never",
+    "package:win": "pnpm package:prepare && pnpm build:cua:win && node scripts/package-win.mjs",
     "package:win:cross": "pnpm package:prepare && node scripts/stage-win-cross.mjs && electron-builder --config build/electron-builder.yml --win --x64 --publish never",
     "package:linux": "pnpm package:prepare && pnpm build:cua:linux && electron-builder --config build/electron-builder.yml --linux --x64 --publish never -c.productName=dusk-bot",
     "package:linux:offline": "pnpm package:prepare && pnpm build:cua:linux:offline && electron-builder --config build/electron-builder.yml --linux --x64 --publish never -c.productName=dusk-bot",
@@ -97,6 +97,7 @@
     "broker:test": "vitest run --config apps/cloudflare/composio-broker/vitest.config.ts",
     "broker:deploy": "wrangler deploy --config apps/cloudflare/composio-broker/wrangler.jsonc",
     "relay:test": "vitest run --config apps/cloudflare/link-relay/vitest.config.ts",
+    "mail-edge:test": "vitest run --config apps/cloudflare/inbound-mail/vitest.config.ts",
     "relay:e2e": "RELAY_E2E=1 vitest run --config apps/cloudflare/link-relay/vitest.config.ts test/e2e.test.js"
   },
   "dependencies": {
@@ -127,6 +128,7 @@
     "motion": "^14.9.1",
     "node-datachannel": "0.33.6",
     "nodemailer": "10.3.1",
+    "onnxruntime-node": "1.31.1",
     "papaparse": "^5.7.0",
     "pdfjs-dist": "6.5.438",
     "qrcode-terminal": "0.12.0",

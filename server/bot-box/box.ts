@@ -6,7 +6,7 @@ import { existsSync, mkdirSync, openSync, readFileSync, rmSync, statSync, writeF
 import { basename, delimiter, dirname, isAbsolute, join, resolve } from "node:path";
 
 import { homedSpawn } from "../engine-homes/layout.ts";
-import { engineInstallRoots } from "../engine-roots.ts";
+import { engineInstallRoots, vendorEngineRoots } from "../engine-roots.ts";
 import { SERVER_ROOT, resolveProxy } from "../proxy-paths.ts";
 import { bridgedCommand, type BridgeTools } from "./bridge.ts";
 import { brokerRewrite } from "./broker-env.ts";
@@ -15,7 +15,7 @@ import { boxWanted, detectBox, type BoxDetection, type BoxKind } from "./detect.
 import { openBoxEgressGate, type BoxEgressGate } from "./egress-gate.ts";
 import { boxEnvironment } from "./env.ts";
 import { openHarnessGate, type HarnessGate } from "./harness-gate.ts";
-import { DENIED_SYSCALLS, seccompBytes, seccompSupported } from "./seccomp.ts";
+import { seccompBytes, seccompSupported, seccompTarget } from "./seccomp.ts";
 import { boxUploadsDir, bwrapArgs, planBox, taskWorkspaceIds, type BoxBridge, type BoxFence, type BoxPlan, type BoxRequest, type BoxSetup } from "./plan.ts";
 
 /** The loopback port inside a box that reaches the egress gate. The harness gate sits at the server's own port. */
@@ -128,10 +128,13 @@ export class BoxRunner {
       for (const name of ["HTTPS_PROXY", "HTTP_PROXY", "https_proxy", "http_proxy"]) env[name] = proxy;
       // Node's env proxy matches an IPv6 host only bracketed; curl and the engines take the plain forms.
       for (const name of ["NO_PROXY", "no_proxy"]) env[name] = "127.0.0.1,localhost,::1,[::1]";
+      // Node 24's fetch and http modules ignore HTTPS_PROXY unless this is set, and the box has no DNS of its own, so a
+      // bot's node script failed with EAI_AGAIN. A caller's own value (an MCP gate's "0") stands.
+      env.NODE_USE_ENV_PROXY ??= "1";
     }
     const bridges = plan.net === "isolated" ? this.options.setup.bridges : [];
-    const inner = bridgedCommand(this.options.bridge, bridges, request.command, request.args);
     const brokered = this.broker(env, plan, request);
+    const inner = bridgedCommand(this.options.bridge, bridges, request.command, brokered.args);
     const vouched = (request.allowEnv ?? []).filter((name) => /(?:KEY|TOKEN|SECRET)$/.test(name) && brokered.env[name] !== undefined && brokered.env[name] === request.env[name]);
     const unbrokered = [...new Set([...brokered.unbrokered, ...vouched])];
     return { command: this.options.bwrap, args: [...bwrapArgs(plan), "--", inner.command, ...inner.args], env: brokered.env, plan, token: brokered.token, release: brokered.release, unbrokered, extraFds };
@@ -146,18 +149,18 @@ export class BoxRunner {
   }
 
   /** Keys become a per-process token when the broker is on and the box has its own network (the bridge to the broker). */
-  private broker(env: Record<string, string>, plan: BoxPlan, request: BoxRequest): { env: Record<string, string>; token: string | null; release(): void; unbrokered: string[] } {
+  private broker(env: Record<string, string>, plan: BoxPlan, request: BoxRequest): { env: Record<string, string>; args: readonly string[]; token: string | null; release(): void; unbrokered: string[] } {
     const broker = this.options.broker;
-    if (!broker || plan.net !== "isolated") return { env, token: null, release: () => {}, unbrokered: [] };
+    if (!broker || plan.net !== "isolated") return { env, args: request.args, token: null, release: () => {}, unbrokered: [] };
     const ids = request.cwd ? taskWorkspaceIds(request.cwd, this.options.setup.dataDir) : null;
     // The token is minted first (its value goes in the environment), then granted exactly what the rewrite took out.
     const minted = broker.mintForProcess({ botId: plan.botId, threadId: ids?.threadId ?? null, grants: {} });
-    const rewrite = brokerRewrite(env, minted.token, broker.port);
+    const rewrite = brokerRewrite(env, minted.token, broker.port, request.args);
     broker.revoke(minted.token);
-    if (!Object.keys(rewrite.grants).length) return { env, token: null, release: () => {}, unbrokered: rewrite.unbrokered };
+    if (!Object.keys(rewrite.grants).length) return { env, args: request.args, token: null, release: () => {}, unbrokered: rewrite.unbrokered };
     const granted = broker.mintForProcess({ botId: plan.botId, threadId: ids?.threadId ?? null, grants: rewrite.grants });
-    const again = brokerRewrite(env, granted.token, broker.port);
-    return { env: again.env, token: granted.token, release: () => broker.revoke(granted.token), unbrokered: again.unbrokered };
+    const again = brokerRewrite(env, granted.token, broker.port, request.args);
+    return { env: again.env, args: again.args, token: granted.token, release: () => broker.revoke(granted.token), unbrokered: again.unbrokered };
   }
 }
 
@@ -272,7 +275,7 @@ export class BotBox {
       bridge: { socat: this.detection.tools.socat, bridgeScript: BOX_BRIDGE_SCRIPT, node: process.execPath },
       setup: {
         dataDir: options.dataDir, home: options.home, codeRoots: [...(options.codeRoots ?? defaultCodeRoots()), ...extraCodeRoots(env)],
-        engineRoots: options.engineRoots ?? engineInstallRoots(options.dataDir), bridges,
+        engineRoots: options.engineRoots ?? [...engineInstallRoots(options.dataDir), ...vendorEngineRoots(options.home)], bridges,
         ...(this.required ? { fence: requiredFence(options.home, options.dataDir) } : {}),
       },
       ...(this.required ? { engineHome: engineHomeDir(options.dataDir) } : {}),
@@ -344,7 +347,7 @@ export class BotBox {
       refused: { egress: this.egress?.refused ?? 0, harness: this.harness?.refused ?? 0 },
       broker: { on: this.credentials !== null, ...(this.credentials?.stats() ?? { tokens: 0, forwarded: 0, refused: 0 }), unbrokered: [...this.unbrokered].sort() },
       hardening: {
-        seccomp: this.runner ? (this.seccompFile ? "on" : "unsupported") : "off", denied: this.seccompFile ? DENIED_SYSCALLS.length : 0,
+        seccomp: this.runner ? (this.seccompFile ? "on" : "unsupported") : "off", denied: this.seccompFile ? seccompTarget()?.denied.length ?? 0 : 0,
         hidepid: process.platform === "linux" && procHidepid(), flyApiPrivate: process.platform === "linux" && existsSync("/.fly") ? flyApiPrivate() : true,
       },
     };

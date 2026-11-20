@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { RelayGoneError } from "./relay";
 import { ASLEEP_PROBE_GAP_MS, asleepProbe, BearerEventSource, createSseParser, installTransport, mediaUrl, rewriteApiUrl } from "./transport";
-import { cloudAsleep, noteCloudPageActivity, resetCloudPowerForTests } from "@/lib/cloud-power";
+import { cloudAsleep, cloudGone, noteCloudPageActivity, resetCloudPowerForTests } from "@/lib/cloud-power";
 
 afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
@@ -112,15 +112,17 @@ describe("bearer event source", () => {
 });
 
 function transportFixture() {
-  class EmptyElement {
+  class EmptyElement extends EventTarget {
     readonly attributes = new Map<string, string>();
     readonly tagName = "IMG";
     getAttribute(name: string) { return this.attributes.get(name) ?? null; }
     setAttribute(name: string, value: string) { this.attributes.set(name, value); }
+    hasAttribute(name: string) { return this.attributes.has(name); }
+    removeAttribute(name: string) { this.attributes.delete(name); }
     matches() { return true; }
     querySelectorAll() { return []; }
   }
-  class EmptyDocument {
+  class EmptyDocument extends EventTarget {
     elements: EmptyElement[] = [];
     querySelectorAll() { return this.elements; }
   }
@@ -367,6 +369,18 @@ describe("a sleeping Cloud behind the phone's stream", () => {
     const source = new BearerEventSource("/api/events", undefined, { url: "https://workspace.test/api/events", token: "t", fetch: vi.fn(async () => { throw new TypeError("cors"); }), failed });
     await vi.waitFor(() => expect(source.readyState).toBe(source.CLOSED));
     expect(failed).toHaveBeenCalledOnce();
+  });
+  it("the probe and the stream both hear a deleted dusk cloud, and say it is gone", async () => {
+    const gone = () => new Response("This dusk bot was deleted.", { status: 410, headers: { "x-dusk-cloud-power": "gone" } });
+    asleepProbe(vi.fn(async () => gone()), "https://workspace.test", "secret", () => 0)();
+    await vi.waitFor(() => expect(cloudGone()).toBe(true));
+    expect(cloudAsleep()).toBe(false);
+    resetCloudPowerForTests();
+    const failed = vi.fn();
+    const source = new BearerEventSource("/api/events", undefined, { url: "https://workspace.test/api/events", token: "t", fetch: vi.fn(async () => gone()), failed });
+    await vi.waitFor(() => expect(source.readyState).toBe(source.CLOSED));
+    expect(cloudGone()).toBe(true);
+    expect(failed).not.toHaveBeenCalled();
   });
   it("the probe is a background read that marks the page asleep, at most once in its gap", async () => {
     let clock = 0;

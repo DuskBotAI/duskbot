@@ -1,5 +1,7 @@
 import { useLayoutEffect, useRef, type RefObject } from "react";
 import { probeMotion } from "@/lib/motion-probe";
+import { cssBezier, pacedMs, pacedOut, springTiming, type SpringTiming } from "@/lib/motion-speed";
+import { contentTop, readingInset, landingReply, replyHoldTop } from "@/lib/reply-hold";
 
 import { usePrefersReducedMotion } from "@/components/mascot-clock";
 
@@ -16,23 +18,7 @@ export const ROW_ENTER_EASE = `cubic-bezier(${ROW_ENTER_CURVE.join(", ")})`;
  * column still follows it, but it does not rise as well. */
 export const OWN_ENTRANCE = "data-arrival-own";
 
-export interface SpringTiming { duration: number; easing: string }
-
-/** A spring from rest at 0 to rest at 1 (mass 1) as a WAAPI duration and linear() easing, so it runs off the main thread
- * and a glide cut short can be read back from the computed transform. */
-export function springTiming(stiffness: number, damping: number): SpringTiming {
-  const w = Math.sqrt(stiffness);
-  const z = Math.min(1, damping / (2 * w));
-  const wd = w * Math.sqrt(1 - z * z);
-  const at = (t: number) => z >= 1 ? 1 - (1 + w * t) * Math.exp(-w * t)
-    : 1 - Math.exp(-z * w * t) * (Math.cos(wd * t) + (z * w / wd) * Math.sin(wd * t));
-  const envelope = (t: number) => z >= 1 ? (1 + w * t) * Math.exp(-w * t) : Math.exp(-z * w * t) / Math.sqrt(1 - z * z);
-  let end = 0.05;
-  while (envelope(end) > 0.001 && end < 2) end += 0.005;
-  const steps = 48;
-  const points = Array.from({ length: steps + 1 }, (_, i) => i === steps ? "1" : String(Math.round(at((end * i) / steps) * 10000) / 10000));
-  return { duration: Math.round(end * 1000), easing: `linear(${points.join(", ")})` };
-}
+export { springTiming, type SpringTiming } from "@/lib/motion-speed";
 
 /** motion's { type: "spring", bounce, visualDuration } in stiffness and damping */
 export function visualSpring(visualDuration: number, bounce = 0): SpringTiming {
@@ -42,10 +28,10 @@ export function visualSpring(visualDuration: number, bounce = 0): SpringTiming {
 
 /** How a transcript resting at its end follows a new row: one short ease that stops cleanly. A spring's long tail read
  * as the row landing and then creeping up a few more px. */
-export const FOLLOW: SpringTiming = { duration: 240, easing: "cubic-bezier(0.25, 0.46, 0.45, 0.94)" };
+export const FOLLOW: SpringTiming = { duration: pacedMs(240), easing: cssBezier(pacedOut([0.25, 0.46, 0.45, 0.94])) };
 /** The person's own send: the column follows on one short ease-out, the same one the bubble fades in on, and a send
  * that lands with room to spare rises SEND_RISE_PX instead. */
-export const SEND_FLOW: SpringTiming = { duration: 200, easing: "cubic-bezier(0.22, 1, 0.36, 1)" };
+export const SEND_FLOW: SpringTiming = { duration: pacedMs(200), easing: cssBezier(pacedOut([0.22, 1, 0.36, 1])) };
 export const SEND_RISE_PX = 8;
 
 /** The column's glide from where the rows were drawn to where they now rest: `from` px below its place, back to 0. */
@@ -113,12 +99,15 @@ export function useArrivalFlow({
   columnRef,
   transcriptKey,
   following,
+  onHold,
 }: {
   scrollRef: RefObject<HTMLElement | null>;
   clipRef: RefObject<HTMLElement | null>;
   columnRef: RefObject<HTMLElement | null>;
   transcriptKey: string;
   following: boolean;
+  /** a reply taller than the view stopped the follow at its top */
+  onHold?: () => void;
 }): void {
   const reduced = usePrefersReducedMotion();
   const snapshot = useRef<Snapshot | null>(null);
@@ -136,10 +125,13 @@ export function useArrivalFlow({
   useLayoutEffect(() => {
     const scroller = scrollRef.current, column = columnRef.current;
     if (!scroller || !column || typeof ResizeObserver === "undefined") return;
+    // the observer's first call, after the opened chat's first layout, takes its first snapshot; a scroll moves `top`
     const observer = new ResizeObserver(() => take(transcriptKey));
     observer.observe(column);
     observer.observe(scroller);
-    return () => observer.disconnect();
+    const scrolled = () => take(transcriptKey);
+    scroller.addEventListener("scroll", scrolled, { passive: true });
+    return () => { observer.disconnect(); scroller.removeEventListener("scroll", scrolled); };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- take reads refs only
   }, [scrollRef, columnRef, transcriptKey]);
 
@@ -164,6 +156,10 @@ export function useArrivalFlow({
     const arrivals = [...column.querySelectorAll<HTMLElement>(ARRIVAL)].filter((row) => !played.current.has(row));
     arrivals.forEach((row) => played.current.add(row));
     if (import.meta.env.DEV && arrivals.some((row) => row.getAttribute("data-arrival") === "end")) probeMotion(scroller, column);
+    // a render with no new row leaves the snapshot to the observer and the scroll listener: reading the transcript's size
+    // here forced its whole style and layout on every render, four times over while a long chat opened; a chat's first
+    // render still takes one
+    if (arrivals.length === 0 && before?.key === transcriptKey) return;
     if (!before || before.key !== transcriptKey) {
       take(transcriptKey);
       return;
@@ -173,8 +169,14 @@ export function useArrivalFlow({
     // a transcript resting at its end stays there; mid-scroll (a jump to the latest in progress) is left alone
     const atEnd = scroller.scrollTop >= Math.min(before.max, max) - 2;
     if (following && atEnd && scroller.scrollTop !== max) scroller.scrollTop = max;
+    const reply = following && atEnd ? landingReply(arrivals) : null;
+    const hold = reply && replyHoldTop({ replyTop: contentTop(scroller, reply, glideOffset(column)), inset: readingInset(scroller), end: max, current: before.top });
+    if (hold !== null && hold !== undefined) {
+      scroller.scrollTop = hold;
+      onHold?.();
+    }
     // what the rows added under a view that was resting at its end (another hook may already have pinned it there)
-    const shift = before.top >= before.max - 2 ? Math.max(0, max - before.max) : 0;
+    const shift = before.top >= before.max - 2 ? Math.max(0, scroller.scrollTop - before.top) : 0;
 
     const track = (anim: Animation) => {
       if (clip) clip.style.overflowY = "clip";

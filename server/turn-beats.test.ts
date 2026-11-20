@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { RuntimeEvent } from "./contracts.ts";
 import { toolStep } from "./step-summary.ts";
 import {
-  ACK_IDLE_MS, beatsNote, cleanBeat, createTurnBeats, looksLikeWork, MILESTONE_QUIET_MS, PLAN_MIN_MS, PLAN_WRITE_MS, type BeatKind,
+  ACK_IDLE_MS, RETRY_429_MS, beatPrompt, beatsNote, cleanBeat, createTurnBeats, looksLikeWork, MILESTONE_QUIET_MS, PLAN_MIN_MS, PLAN_WRITE_MS, type BeatKind,
 } from "./turn-beats.ts";
 
 const THREAD = "th1";
@@ -17,7 +17,7 @@ const toolStart = (title: string, input: unknown, id = title) =>
 const toolDone = (id: string) => event({ type: "item.completed", itemType: "tool", itemId: id, ok: true });
 const said = (text: string) => event({ type: "item.completed", itemType: "assistant_text", text });
 
-function setup(options: { replies?: Partial<Record<BeatKind, string>>; enabled?: boolean; writerMs?: number; soul?: string } = {}) {
+function setup(options: { replies?: Partial<Record<BeatKind, string>>; enabled?: boolean; writerMs?: number; soul?: string; showsThinking?: boolean; fails?: string[] } = {}) {
   vi.useFakeTimers();
   const prompts: Array<{ kind: BeatKind; prompt: string }> = [];
   const posts: Array<{ kind: BeatKind; text: string; turnId: string }> = [];
@@ -28,9 +28,12 @@ function setup(options: { replies?: Partial<Record<BeatKind, string>>; enabled?:
     writer: () => (prompt) => {
       const kind: BeatKind = prompt.includes("Write the acknowledgement") ? "ack" : prompt.includes("Write the second message") ? "plan" : "milestone";
       prompts.push({ kind, prompt });
+      const failure = options.fails?.shift();
+      if (failure) return Promise.reject(new Error(failure));
       return new Promise((resolve) => setTimeout(() => resolve(replies[kind]), options.writerMs ?? 2_000));
     },
     bot: () => ({ name: "Nova", soul: options.soul ?? "You are Nova, a market researcher." }),
+    ...(options.showsThinking === undefined ? {} : { showsThinking: () => options.showsThinking! }),
     live: (_threadId, turnId) => live && turnId === TURN,
     post: ({ kind, text, turnId }) => posts.push({ kind, text, turnId }),
   });
@@ -70,6 +73,35 @@ describe("turn beats", () => {
     expect(beats.note(THREAD)).toBe("");
   });
 
+  it("acks work at ACK_IDLE_MS on an engine that shows no thinking, and never sooner", async () => {
+    const { beats, posts, send } = setup({ showsThinking: false });
+    beats.start({ botId: "b", threadId: THREAD, text: "Write a launch plan for the spring candle line", attachments: 0, unattended: false });
+    send(event({ type: "turn.started" }));
+    await vi.advanceTimersByTimeAsync(ACK_IDLE_MS - 200);
+    expect(posts).toEqual([]);
+    await vi.advanceTimersByTimeAsync(400);
+    expect(posts.map((p) => p.kind)).toEqual(["ack"]);
+  });
+
+  it("asks the writer once more after a rate limit, and gives up after a second one", async () => {
+    const limited = setup({ fails: ["429 Too Many Requests"] });
+    limited.beats.start({ botId: "b", threadId: THREAD, text: "Research the best budget mechanical keyboards in India", attachments: 0, unattended: false });
+    limited.send(event({ type: "turn.started" }));
+    limited.send(toolStart("WebSearch", { query: "keyboards" }, "s1"));
+    await vi.advanceTimersByTimeAsync(RETRY_429_MS + 2_100);
+    expect(limited.prompts.map((p) => p.kind)).toEqual(["ack", "ack"]);
+    expect(limited.posts.map((p) => p.kind)).toEqual(["ack"]);
+    vi.useRealTimers();
+
+    const twice = setup({ fails: ["429 Too Many Requests", "rate limit reached"] });
+    twice.beats.start({ botId: "b", threadId: THREAD, text: "Research the best budget mechanical keyboards in India", attachments: 0, unattended: false });
+    twice.send(event({ type: "turn.started" }));
+    twice.send(toolStart("WebSearch", { query: "keyboards" }, "s1"));
+    await vi.advanceTimersByTimeAsync(RETRY_429_MS + 3_000);
+    expect(twice.prompts.map((p) => p.kind)).toEqual(["ack", "ack"]);
+    expect(twice.posts).toEqual([]);
+  });
+
   it("drops its ack when the engine speaks first", async () => {
     const { beats, posts, send } = setup();
     beats.start({ botId: "b", threadId: THREAD, text: "Research standing desks under 30k", attachments: 0, unattended: false });
@@ -101,14 +133,23 @@ describe("turn beats", () => {
     expect(tool.posts.map((p) => p.kind)).toEqual(["ack"]);
   });
 
-  it("waits for the engine before acking work that has run no tool yet", async () => {
+  it("waits for the engine before acking work that has run no tool yet, and acks only once it is thinking", async () => {
     const { beats, posts, send } = setup();
     beats.start({ botId: "b", threadId: THREAD, text: "Write a launch plan for the spring candle line", attachments: 0, unattended: false });
     send(event({ type: "turn.started" }));
+    send(event({ type: "content.delta", streamKind: "reasoning_text", delta: "Planning the sections." }));
     await vi.advanceTimersByTimeAsync(ACK_IDLE_MS - 500);
     expect(posts).toEqual([]);
     await vi.advanceTimersByTimeAsync(600);
     expect(posts.map((p) => p.kind)).toEqual(["ack"]);
+  });
+
+  it("never acks a silent turn that runs no tool, so no ack is left with nothing after it", async () => {
+    const { beats, posts, send } = setup();
+    beats.start({ botId: "b", threadId: THREAD, text: "Write three posts for X announcing dark mode", attachments: 0, unattended: false });
+    send(event({ type: "turn.started" }));
+    await vi.advanceTimersByTimeAsync(ACK_IDLE_MS * 3);
+    expect(posts).toEqual([]);
   });
 
   it("holds the ack for a bot set up to ask before it uses tools until a tool runs", async () => {
@@ -221,6 +262,8 @@ describe("beat text", () => {
     expect(cleanBeat("ack", "Want me to check prices too?")).toBeNull();
     expect(cleanBeat("ack", "word ".repeat(40))).toBeNull();
     expect(cleanBeat("plan", "one\ntwo\nthree")).toBeNull();
+    expect(cleanBeat("plan", "I'll give you a brief confirmation, leaving the other details unchanged. Before sending, I'll check that both corrections match your message.")).toBeNull();
+    expect(cleanBeat("plan", "You'll get a short table of the three plans with prices, and I'll check each price is current.")).not.toBeNull();
     expect(cleanBeat("ack", "On it, testing sk-ant-api03-abcdefghijklmnopqrstuvwxyz0123456789 now")).not.toContain("abcdefghijklmnopqrstuvwxyz0123456789");
   });
 
@@ -232,6 +275,39 @@ describe("beat text", () => {
 
   it("is nothing for the engine when nothing was sent", () => {
     expect(beatsNote([])).toBe("");
+  });
+});
+
+describe("what a beat may promise", () => {
+  const input = { name: "Forge", ask: "make a node cli todo app with tests, run them", steps: ["Writing index.js"], said: ["On it, writing the todo app."] };
+  it("never asks the writer for a check before sending, and forbids promising one the steps do not show", () => {
+    const plan = beatPrompt("plan", input);
+    expect(plan).not.toContain("the one check that will happen before sending");
+    expect(plan).toContain("Never promise a check, a test, a price lookup or anything else that is not already among the steps");
+  });
+  it("knows the connected apps and never claims access to an app, chat or item it cannot see", () => {
+    for (const kind of ["ack", "plan", "milestone"] as const) {
+      const prompt = beatPrompt(kind, { ...input, ask: "watch our telegram group and tell me when a deal moves", apps: ["gmail"] });
+      expect(prompt).toContain("Connected apps Forge can use: gmail.");
+      expect(prompt).toContain("Never claim to be reading, watching, cancelling or changing something in an app, account, chat, device or existing item");
+    }
+    expect(beatPrompt("ack", input)).toContain("Connected apps Forge can use: none.");
+  });
+  it("never apologises in a beat, and names the fix instead", () => {
+    for (const kind of ["ack", "plan", "milestone"] as const) {
+      expect(beatPrompt(kind, input)).toContain("no apology: when they are upset, name the fix being made");
+      expect(beatPrompt(kind, input)).toContain("Never say what can't be done or that a step failed: that is Forge's own reply to make.");
+    }
+  });
+  it("acks every work ask, a correction and a watch setup included", () => {
+    const ack = beatPrompt("ack", input);
+    expect(ack).toContain("Reply exactly SKIP only if the message is a greeting, thanks or small talk");
+    expect(ack).toContain("a correction or a change (\"wait, it's in Rust\") gets one naming the change");
+    expect(ack).not.toContain("outside what");
+    expect(ack).not.toMatch(/name the goal instead[^.]*or reply SKIP/);
+  });
+  it("keeps product names as the person wrote them in the ack", () => {
+    expect(beatPrompt("ack", input)).toContain("Write names and products exactly as the person did");
   });
 });
 

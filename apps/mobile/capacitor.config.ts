@@ -15,6 +15,8 @@ const config: CapacitorConfig = {
     Keyboard: { resize: "none" as KeyboardResize, resizeOnFullScreen: false },
     SplashScreen: { launchShowDuration: 0, launchAutoHide: true },
     StatusBar: { overlaysWebView: true, style: "DEFAULT" },
+    // on Android the window's insets and the keyboard's are the app's own (android/.../InsetsPlugin.java)
+    SystemBars: { insetsHandling: "disable" },
     PushNotifications: { presentationOptions: ["badge", "sound", "alert"] },
     CapacitorHttp: { enabled: true },
   },

@@ -27,8 +27,8 @@ describe("a new bot's intro words", () => {
   });
 
   it("reads how the person writes, for the hello to mirror", () => {
-    expect(writingHabits([{ text: "hey can u check this" }, { text: "ok thx" }])).toBe("all in lower case, short, with no emoji");
-    expect(writingHabits([{ text: "Could you look at the October numbers? 🙏" }])).toBe("in normal case, short, with emoji");
+    expect(writingHabits([{ text: "hey can u check this" }, { text: "ok thx" }])).toBe("short, with no emoji");
+    expect(writingHabits([{ text: "Could you look at the October numbers? 🙏" }])).toBe("short, with emoji");
     expect(writingHabits([])).toBeNull();
   });
 
@@ -46,7 +46,8 @@ describe("a new bot's intro words", () => {
     expect(prompt).toContain("picked you from the ready-made bots: \"Writer and editor\" (writing)");
     expect(prompt).toContain("Before this they were talking to Ledger, 3 minutes ago.");
     expect(prompt).toContain("to Ledger: \"can u check the vat thing\"");
-    expect(prompt).toContain("They write all in lower case, short, with no emoji");
+    expect(prompt).toContain("They write short, with no emoji");
+    expect(prompt).toContain("in Sentence case (capital letters where they belong, your name included) whatever case they type in");
     expect(prompt).toContain("chosen style (casual)");
     expect(prompt).toContain("not a list");
     expect(prompt).toContain("No connected apps are available to you yet; you work best with gmail");
@@ -59,7 +60,7 @@ describe("a new bot's intro words", () => {
     const prompt = introPrompt(base({ apps: null, language: "de" }));
     expect(prompt).not.toContain("Connected apps you can use now");
     expect(prompt).toContain("made you from scratch");
-    expect(prompt).toContain("Sentence case with no emoji");
+    expect(prompt).toContain("With no lines to go on, use no emoji");
     expect(prompt).toContain("Write it in German.");
   });
 

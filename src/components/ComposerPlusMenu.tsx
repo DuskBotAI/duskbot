@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
-import { AudioLines, Camera, Check, GraduationCap, Images, ListChecks, Paperclip, Phone, Plus, Target, X } from "../icons";
+import { Camera, Check, Images, ListChecks, Paperclip, Plus, Target, X } from "../icons";
 import { approvalModeFor } from "../../shared/approval-mode";
 import {
   approvalModeOptions,
@@ -8,24 +8,15 @@ import {
   shownApprovalMode,
   simpleApprovalName,
 } from "@/lib/approval-mode-options";
-import { CALL_MODES, effectiveCallMode, useCallMode } from "@/lib/call-mode";
-import { callCapabilityHelp } from "@/lib/call-capability";
-import { serverListeningReady, listensHere, speechBridge } from "@/lib/speech";
-import { requestCallStart } from "@/lib/call-start-request";
-import { useOnCall } from "@/lib/call";
-import { isLiveCallRunning, useLiveMedia } from "@/lib/live-call-media";
-import { useStore } from "@/state/store";
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
-import { useDesktopCapabilities } from "./DesktopCapabilities";
-import { liveLineHeldElsewhere } from "./LiveCallBar";
+import { systemMenu } from "@/lib/system-menu";
 import { useMenuMotion } from "./MenuMotion";
 import { nextMenuIndex, SidebarPopoverMenu, type SidebarMenuItem } from "./SidebarPopoverMenu";
 import type { ApprovalChoice } from "./thread-approval";
 import type { AttachChoices } from "./ComposerFilePickers";
 import { SIMPLE_CONTROL } from "./composer-simple";
 import { Icon } from "./Icon";
-import { ELEVATED_FLOAT, ELEVATED_OPEN, ELEVATED_TINT } from "./elevated";
 
 /** Finish together: the room (or, `solo`, the one bot) keeps working until the goal is done. A quiet neutral pill, like
  * the approval chip beside it. `compact` is Simple mode's chip, shown only while the mode is on: its name and a × that
@@ -110,21 +101,6 @@ function approvalMenu(choice: ApprovalChoice) {
   };
 }
 
-function approvalItem(name: string, choice: ApprovalChoice): SidebarMenuItem {
-  const { current, note, items } = approvalMenu(choice);
-  const CurrentIcon = current.Icon;
-  return {
-    key: "approval",
-    separatorBefore: true,
-    label: t("botSettings.simple.beforeActs", { name }),
-    subtitle: current.label,
-    note,
-    icon: <CurrentIcon size={16} />,
-    onSelect: () => {},
-    submenu: items,
-  };
-}
-
 /** The thread's approval level as a small pill that opens its choices: in the Simple composer while it is not the
  * default, and on the bot panel's Details. */
 export function ApprovalChip({ choice, quiet = false }: { choice: ApprovalChoice; quiet?: boolean }) {
@@ -152,83 +128,29 @@ export function ApprovalChip({ choice, quiet = false }: { choice: ApprovalChoice
   );
 }
 
-/**
- * The composer's round +: attach files, Work until done (Finish together in a group) and Teach a task. A phone's + also
- * holds what its narrow composer has no room for: the thread's approval level and the call mode. With attaching the
- * only choice, the + opens the file picker.
- */
-/** Grok's Teach a task mark: a red record button, as teaching records what you do. */
-function TeachMark() {
-  return <span className="flex size-3.5 items-center justify-center rounded-full border-[1.5px] border-danger"><span className="size-1.5 rounded-full bg-danger" /></span>;
-}
-
-export function ComposerPlusMenu({ onAttach, attachChoices, goal, teach, approval, callBotId, circle = false }: {
+/** The composer's round +: uploads only. On a phone or touch screen the photo library and the camera stand beside Files;
+ * with Files the only choice, the + opens the file picker. */
+export function ComposerPlusMenu({ onAttach, attachChoices, circle = false }: {
   onAttach: () => void;
   /** A phone or touch screen: the photo library and the camera beside Files (ComposerFilePickers). */
   attachChoices?: AttachChoices;
-  /** Starts a /learn draft in the field, where the composer offers /learn. */
-  teach?: () => void;
   /** The phone dock: a round button of its own beside the field, not a small chip inside it. */
   circle?: boolean;
-  goal?: { on: boolean; onToggle: () => void; solo?: boolean };
-  approval?: { name: string; choice: ApprovalChoice };
-  /** The bot whose call button the call mode starts, as that button's own mode menu did. */
-  callBotId?: string;
 }) {
-  const { capabilities, ready } = useDesktopCapabilities();
-  const { state } = useStore();
-  const storedMode = useCallMode();
-  const onCall = useOnCall();
-  const media = useLiveMedia();
-  const turnsHere = !ready || listensHere(capabilities, state.config);
-  const callMode = effectiveCallMode(storedMode, { turnsHere, canLive: true });
-  const turnsHelp = turnsHere ? null : callCapabilityHelp(capabilities, Boolean(speechBridge()?.speechStart), serverListeningReady(state.config));
-  // As the call button, which hides while Live is the mode and its line is held on another device.
-  const lineHeldElsewhere = callMode === "live" && liveLineHeldElsewhere(media, state.liveCall);
-  const calling = callBotId !== undefined && (onCall === callBotId || isLiveCallRunning(media.phase) || lineHeldElsewhere);
   const items: SidebarMenuItem[] = [
     ...(attachChoices ? [
       { key: "attach:photos", label: t("composer.attach.photos"), icon: <Images size={16} />, onSelect: attachChoices.photos },
       { key: "attach:camera", label: t("composer.attach.camera"), icon: <Camera size={16} />, onSelect: attachChoices.camera },
     ] satisfies SidebarMenuItem[] : []),
     { key: "attach", label: t(attachChoices ? "composer.attach.files" : "composer.attachFiles"), icon: circle || attachChoices ? <Paperclip size={16} /> : <Icon name="paperclip" size={14} />, onSelect: onAttach },
-    // grok's + holds Attach files and Teach a task alone: a bot's Work until done lives in its panel's Details
-    ...(goal && (circle || !goal.solo) ? [{
-      key: "goal",
-      separatorBefore: circle,
-      label: t(goal.solo ? "composer.goal.soloAria" : "composer.goal.aria"),
-      icon: <Target size={16} />,
-      active: goal.on,
-      trailing: goal.on ? check : undefined,
-      onSelect: goal.onToggle,
-    } satisfies SidebarMenuItem] : []),
-    ...(teach ? [{ key: "teach", separatorBefore: circle && !goal, label: t("composer.teachTask"), icon: circle ? <GraduationCap size={16} /> : <TeachMark />, onSelect: teach } satisfies SidebarMenuItem] : []),
-    ...(approval ? [approvalItem(approval.name, approval.choice)] : []),
-    // the phone's + lists only the call modes it can start, so the menu stays one short screen
-    ...(callBotId === undefined ? [] : CALL_MODES.filter((entry) => !circle || entry.id !== "turns" || !turnsHelp).map((entry, index): SidebarMenuItem => {
-      const unavailable = entry.id === "turns" ? turnsHelp : null;
-      return {
-        key: `call:${entry.id}`,
-        heading: index === 0 ? t("call.mode.menu") : undefined,
-        separatorBefore: index === 0,
-        label: t(entry.label),
-        // Only a reason it can't be used: the modes' long hints would make the + menu a page.
-        note: unavailable ? `${unavailable.label}. ${unavailable.reason}` : undefined,
-        icon: entry.id === "live" ? <Phone size={16} /> : <AudioLines size={16} />,
-        trailing: callMode === entry.id ? check : undefined,
-        disabled: calling || Boolean(unavailable),
-        onSelect: () => requestCallStart(callBotId, entry.id),
-      };
-    })),
   ];
   const trigger = (open: boolean) => circle ? (
     <span
       data-composer-plus
       className={cn(
-        // the message pill's twin: its one-line height, its surface and its shadow
-        "flex size-[52px] items-center justify-center rounded-full text-ink transition-colors duration-[120ms]",
-        ELEVATED_FLOAT,
-        open ? ELEVATED_OPEN : ELEVATED_TINT,
+        // inside the message pill, at its left edge: a plain glyph, the pill's first 32 px control
+        "flex size-8 items-center justify-center rounded-full text-ink-secondary transition-colors duration-[120ms]",
+        open ? "text-ink" : "hover:text-ink",
       )}
     >
       <Plus size={22} aria-hidden="true" />
@@ -246,6 +168,8 @@ export function ComposerPlusMenu({ onAttach, attachChoices, goal, teach, approva
     );
   }
   if (!circle) return <ComposerMenu items={items} renderTrigger={trigger} triggerClass={plusClass} />;
+  const native = systemMenu();
+  if (native) return <NativePlusButton items={items} native={native}>{trigger(false)}</NativePlusButton>;
   return (
     <SidebarPopoverMenu
       items={items}
@@ -254,6 +178,44 @@ export function ComposerPlusMenu({ onAttach, attachChoices, goal, teach, approva
       triggerClassName="flex shrink-0 rounded-full"
       renderTrigger={({ open }) => trigger(open)}
     />
+  );
+}
+
+const ATTACH_SYMBOL: Record<string, string> = {
+  "attach:photos": "photo.on.rectangle",
+  "attach:camera": "camera",
+  attach: "paperclip",
+};
+
+function NativePlusButton({ items, native, children }: {
+  items: SidebarMenuItem[];
+  native: NonNullable<ReturnType<typeof systemMenu>>;
+  children: ReactNode;
+}) {
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  return (
+    <button
+      ref={buttonRef}
+      type="button"
+      aria-haspopup="menu"
+      aria-label={t("composer.add")}
+      title={t("composer.add")}
+      className="flex shrink-0 rounded-full"
+      onClick={() => {
+        const anchor = buttonRef.current?.getBoundingClientRect();
+        if (!anchor) return;
+        void native(anchor, items.map((item) => ({
+          key: item.key,
+          label: item.label,
+          symbol: ATTACH_SYMBOL[item.key],
+          disabled: item.disabled,
+        }))).then((key) => {
+          if (key !== null) items.find((item) => item.key === key)?.onSelect();
+        });
+      }}
+    >
+      {children}
+    </button>
   );
 }
 

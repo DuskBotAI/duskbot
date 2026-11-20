@@ -8,14 +8,19 @@ import { plainWhen } from "../plain-time.ts";
 import type { ToolCallContext, ToolCallResult } from "./agents-call.ts";
 import { WEEKDAYS } from "./agents-catalog.ts";
 import type { Json } from "./agents-client.ts";
+import { withRepeatHint } from "./repeat-hint.ts";
 
 export const TRIGGER_TOOL_NAMES: ReadonlySet<string> = new Set(["trigger_info", "trigger", "delete_trigger"]);
 
 const LIST_ROUTE = "/api/internal/triggers";
+const JOB_LIST_ROUTE = "/api/internal/jobs";
+const EVERY_WAIT_ROUTE = "/api/internal/waits/all";
 const EVENTS_ROUTE = "/api/internal/trigger-events";
+const USAGE_ROUTE = "/api/internal/trigger-usage";
+const MAIL_ROUTE = "/api/internal/bot-mail";
 const APP_ONLY = ["app", "event", "account"] as const;
 const REQUEST_ROUTE = "/api/internal/trigger-requests";
-const SCHEDULE_ONLY = ["schedule", "timeout_minutes", "timeoutMinutes", "clear_timeout", "continuity", "overlap", "run_on_startup", "runOnStartup"] as const;
+const SCHEDULE_ONLY = ["schedule", "timeout_minutes", "timeoutMinutes", "clear_timeout", "continuity", "overlap", "run_on_startup", "runOnStartup", "check", "clear_check"] as const;
 
 function jsonRecord(value: unknown): value is Json {
   return value !== null && typeof value === "object" && !Array.isArray(value);
@@ -264,7 +269,29 @@ function routineFields(args: Json): { fields: Json; error?: string } {
   if (typeof args.continuity === "boolean") fields.continuity = args.continuity;
   if (args.overlap !== undefined) fields.overlap = args.overlap;
   if (typeof runOnStartup === "boolean") fields.runOnStartup = runOnStartup;
+  const check = routineCheck(args.check, args.clear_check);
+  if (check.error) return { fields, error: check.error };
+  if (check.probe !== undefined) fields.probe = check.probe;
   return { fields };
+}
+
+/** check as the routine keeps it (its probe); null when clear_check removes it. */
+function routineCheck(raw: unknown, clear: unknown): { probe?: Json | null; error?: string } {
+  if (clear != null && typeof clear !== "boolean") return { error: "clear_check must be true or false." };
+  if (clear === true) return raw == null ? { probe: null } : { error: "Choose check or clear_check, not both." };
+  if (raw == null) return {};
+  let value = raw;
+  if (typeof value === "string") { try { value = JSON.parse(value); } catch { return { error: "check must be an object." }; } }
+  if (!jsonRecord(value)) return { error: 'check must be an object such as {"kind":"page","url":"https://example.com/status"} or {"kind":"script","command":"..."}.' };
+  const kind = value.kind;
+  if (kind === "script") {
+    if (typeof value.command !== "string" || !value.command.trim()) return { error: "A script check needs command: one shell command line." };
+    return { probe: { kind, url: "", command: value.command.trim() } };
+  }
+  if (kind !== "page" && kind !== "feed" && kind !== "price") return { error: "check.kind must be page, feed, price or script." };
+  if (typeof value.url !== "string" || !value.url.trim()) return { error: `A ${kind} check needs url: the full https address.` };
+  const selector = typeof value.selector === "string" && value.selector.trim() ? value.selector.trim() : undefined;
+  return { probe: { kind, url: value.url.trim(), ...(selector ? { selector } : {}) } };
 }
 
 
@@ -321,7 +348,7 @@ function closingWords(r: Json, action: string): string {
   const plain = zone ? plainTimeZone(zone) : "";
   const next = typeof r.nextRunAt === "number" && zone ? `${plainWhen(r.nextRunAt, zone)} ${plain}` : "";
   if (next && action === "create") {
-    return `In a sentence or two of plain words, tell the person what you set up and what you assumed: when it runs, saying the time zone as "${plain}", never as a zone id; where its results will appear (here in this chat); what each run covers; and that the first run is ${next}.`;
+    return `In a sentence or two of plain words, tell the person what you set up and what you assumed: when it runs, saying the time zone as "${plain}", never as a zone id; where its results will appear (here in this chat); what each run covers; that the first run is ${next}; and that they can change, pause or stop it by saying so here.`;
   }
   if (next && (action === "update" || action === "resume")) return `Tell the person in one plain sentence what changed, saying the time zone as "${plain}", and that the next run is ${next}.`;
   return "Tell the person in one sentence what will happen.";
@@ -347,20 +374,23 @@ async function request(body: Json, context: ToolCallContext, done: string): Prom
     const error = typeof r.error === "string" ? r.error : `HTTP ${status}`;
     return { text: `The trigger change did not apply: ${error}\n\nDo not claim it was applied. Fix what the error says, or tell the person plainly what is missing.`, isError: true };
   }
+  if (r.state === "pending") return { text: "Not applied yet: this check runs a command with no AI, so a card in this chat now asks the person to allow it, showing the exact command. It applies once they confirm. Tell them in one sentence and end your turn; do not set it up again." };
   return appliedText(r, done, String(body.action ?? ""));
 }
 
 /** Everything a trigger call may carry beyond the fields it sets. */
-const CALL_KEYS = new Set(["action", "trigger_id", "for_bot_id"]);
+const CALL_KEYS = new Set(["action", "trigger_id", "for_bot_id", "test"]);
 const CREATE_ONLY = ["when", "app", "event", "account", "engine", "repeat"] as const;
 
 export async function callTriggerTool(name: string, args: Json, context: ToolCallContext): Promise<ToolCallResult> {
   const forBotId = typeof args.for_bot_id === "string" && args.for_bot_id.trim() ? args.for_bot_id.trim() : undefined;
   if (name === "trigger_info") {
     if (args.action === "events") return listEvents(args, context);
-    if (args.action !== undefined && args.action !== null && args.action !== "list") return { text: "trigger_info action is list or events.", isError: true };
+    if (args.action === "usage") return listUsage(context);
+    if (args.action !== undefined && args.action !== null && args.action !== "list") return { text: "trigger_info action is list, events or usage.", isError: true };
     return listTriggers(args, forBotId, context);
   }
+  if (name === "trigger" && args.action === "email") return emailRoute(args, context);
   if (name === "trigger" && args.action === "create") {
     if (args.trigger_id !== undefined && args.trigger_id !== null) return { text: "trigger_id is for a trigger that exists; leave it out to create one.", isError: true };
     return createTrigger(args, forBotId, context);
@@ -375,14 +405,16 @@ export async function callTriggerTool(name: string, args: Json, context: ToolCal
   if (createOnly) return { text: `${createOnly} applies only to action=create.`, isError: true };
   const { fields, error } = triggerFields(Object.fromEntries(Object.entries(args).filter(([key]) => !CALL_KEYS.has(key))));
   if (error) return { text: error, isError: true };
-  const body: Json = { action, triggerId, ...(forBotId ? { forBotId } : {}) };
+  if (args.test === true && action !== "run_now") return { text: "test applies only to action=run_now.", isError: true };
+  const test = action === "run_now" && args.test === true;
+  const body: Json = { action, triggerId, ...(forBotId ? { forBotId } : {}), ...(test ? { test: true } : {}) };
   if (action === "update") {
     if (!Object.keys(fields).length) return { text: "The update action needs at least one supported field to change.", isError: true };
     body.changes = fields;
   } else if (Object.keys(fields).length) {
     return { text: name === "delete_trigger" ? "delete_trigger takes only trigger_id and for_bot_id." : `The ${action} action changes no fields; send them with action=update.`, isError: true };
   }
-  const done = action === "run_now" ? `Started trigger ${triggerId} once now` : `Applied ${action} to trigger ${triggerId}`;
+  const done = test ? `Started a test run of trigger ${triggerId}: it reads what it needs and puts what it would send in its report instead of sending; its report is posted in the chat when it finishes` : action === "run_now" ? `Started trigger ${triggerId} once now` : `Applied ${action} to trigger ${triggerId}`;
   return request(body, context, done);
 }
 
@@ -394,15 +426,48 @@ async function listTriggers(args: Json, forBotId: string | undefined, context: T
     query.set("includeAddress", "1");
   }
   if (forBotId) query.set("forBotId", forBotId);
-  const r = await context.client.api(`${LIST_ROUTE}?${query.toString()}`);
+  const everything = !query.has("triggerId") && !forBotId;
+  const [r, others] = await Promise.all([context.client.api(`${LIST_ROUTE}?${query.toString()}`), everything ? alsoRunning(context) : ""]);
   const now = typeof r.now === "string" ? r.now : new Date().toISOString();
   const timeZone = typeof r.timeZone === "string" && r.timeZone ? r.timeZone : "local computer timezone";
   const clock = `current time: ${now}; timezone: ${timeZone}`;
   if (typeof r.error === "string") return { text: `${r.error} (${clock})`, isError: true };
   if (r.trigger) return { text: `Trigger (${clock}):\n${JSON.stringify(r.trigger, null, 2)}` };
   const triggers = Array.isArray(r.triggers) ? r.triggers : [];
-  if (!triggers.length) return { text: `This bot has no triggers. Current time: ${now}. Timezone: ${timeZone}.` };
-  return { text: `This bot's triggers (${clock}):\n${JSON.stringify(triggers, null, 2)}` };
+  if (!triggers.length) return { text: `This bot has no triggers. Current time: ${now}. Timezone: ${timeZone}.${others}` };
+  return { text: `This bot's triggers (${clock}):\n${JSON.stringify(triggers, null, 2)}${others}` };
+}
+
+/** The rest of what runs on its own for this bot, so "what's running for me" is one call: its background jobs and its
+ * waits in every chat. A part that cannot be read here (a guest's turn, a room) is left out, never reported as none. */
+async function alsoRunning(context: ToolCallContext): Promise<string> {
+  const [jobs, waits] = await Promise.all([
+    context.client.apiResponse(JOB_LIST_ROUTE, { method: "POST", body: JSON.stringify({ action: "list" }) }).catch(() => null),
+    context.client.apiResponse(EVERY_WAIT_ROUTE).catch(() => null),
+  ]);
+  const part = (title: string, reply: { ok: boolean; body: Json } | null) =>
+    reply?.ok && typeof reply.body.text === "string" && reply.body.text.trim() ? `\n\n${title}:\n${reply.body.text.trim()}` : "";
+  return part("Background jobs (background_job)", jobs) + part("Waits, in every chat (wait_until)", waits);
+}
+
+async function emailRoute(args: Json, context: ToolCallContext): Promise<ToolCallResult> {
+  const triggerId = typeof args.trigger_id === "string" ? args.trigger_id.trim() : "";
+  if (!triggerId && args.email_from !== undefined && args.email_from !== null) return { text: "email_from needs trigger_id: the routine or webhook automation the mail runs.", isError: true };
+  if (triggerId && !Array.isArray(args.email_from)) return { text: "trigger action=email with trigger_id needs email_from: the senders it takes mail from (an empty list removes the route).", isError: true };
+  const query = new URLSearchParams({ fromBotId: context.botId, fromThreadId: context.threadId });
+  const { ok, body: r } = triggerId
+    ? await context.client.apiResponse(`${MAIL_ROUTE}?${query.toString()}`, { method: "POST", body: JSON.stringify({ triggerId, alias: typeof args.email_alias === "string" ? args.email_alias : "", from: args.email_from }) })
+    : await context.client.apiResponse(`${MAIL_ROUTE}?${query.toString()}`, { method: "GET" });
+  if (!ok) return { text: `The mail setting did not apply: ${typeof r.error === "string" ? r.error : "unknown error"}. Do not claim it did.`, isError: true };
+  const problem = typeof r.problem === "string" ? `\n\nNot receiving yet: ${r.problem}` : "";
+  return { text: `Your mail address and its routes:\n${JSON.stringify({ address: r.address, routes: r.routes, received: r.received }, null, 2)}${problem}\n\nThe address is not a secret: give the route's address to the person or paste it where mail should come from. Mail from anyone not listed in a route is dropped without a reply.` };
+}
+
+async function listUsage(context: ToolCallContext): Promise<ToolCallResult> {
+  const query = new URLSearchParams({ fromBotId: context.botId, fromThreadId: context.threadId });
+  const { ok, body: r } = await context.client.apiResponse(`${USAGE_ROUTE}?${query.toString()}`, { method: "GET" });
+  if (!ok || typeof r.error === "string") return { text: typeof r.error === "string" ? r.error : "The usage could not be read.", isError: true };
+  return { text: `What your automations used, runs and ${r.basis === "usd" ? "approximate dollars" : "tokens"} over the last 7 and 30 days:\n${JSON.stringify(r.automations, null, 2)}\n\n${String(r.note ?? "")}` };
 }
 
 async function listEvents(args: Json, context: ToolCallContext): Promise<ToolCallResult> {
@@ -463,8 +528,9 @@ async function createTrigger(args: Json, forBotId: string | undefined, context: 
   if (when === "schedule") {
     if (!fields.schedule) return { text: "A schedule trigger needs schedule.", isError: true };
     if (fields.eventTypes) return { text: "webhook_event_types applies only to when=webhook.", isError: true };
-    const { eventTypes: _unused, ...routine } = fields;
-    return request({ action: "create", kind: "schedule", routine, ...(forBotId ? { forBotId } : {}) }, context, `Created ${label}`);
+    const { eventTypes: _unused, ...asked } = fields;
+    const routine = typeof asked.continuity === "boolean" ? asked : { ...asked, continuity: true };
+    return withRepeatHint(await request({ action: "create", kind: "schedule", routine, ...(forBotId ? { forBotId } : {}) }, context, `Created ${label}`), fields);
   }
   const misplaced = SCHEDULE_ONLY.find((key) => args[key] !== undefined && args[key] !== null);
   if (misplaced) return { text: `A webhook trigger fires when its link is called, so it takes no ${misplaced}.`, isError: true };

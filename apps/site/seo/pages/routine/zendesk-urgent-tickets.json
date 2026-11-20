@@ -1,0 +1,91 @@
+{
+  "path": "/routines/zendesk-urgent-tickets",
+  "type": "routine",
+  "title": "Zendesk urgent tickets to review at shift handoff",
+  "nav": "zendesk urgent tickets",
+  "h1": "which urgent zendesk tickets still need an owner?",
+  "description": "Start a support shift with new and open urgent Zendesk tickets in your group. Find unassigned work first and see which tickets already have an owner.",
+  "keyword": "zendesk urgent tickets",
+  "keywords": [
+    "urgent ticket handoff",
+    "unassigned urgent zendesk tickets"
+  ],
+  "answer": "**put unassigned urgent tickets at the top of the shift handoff.** an incoming lead needs to see which customer problems still have nobody on them. this routine searches one zendesk group for new and open tickets with urgent priority. the bot returns ticket numbers and assignees in dusk chat so the lead can divide the work.",
+  "updated": "2026-11-20",
+  "review": {
+    "status": "approved",
+    "by": "lead agent, after four independent reviewers read every page against seo/facts (2026-11-20); every finding applied",
+    "at": "2026-11-20"
+  },
+  "voice": 2,
+  "tags": [
+    "routine",
+    "zendesk",
+    "support",
+    "handoff"
+  ],
+  "connectors": [
+    "zendesk"
+  ],
+  "related": [
+    "/integrations/zendesk",
+    "/use-cases/customer-support-inbox",
+    "/routines/intercom-unanswered-conversations"
+  ],
+  "art": {
+    "label": "Zendesk",
+    "props": [
+      "p-briefcase",
+      "p-bubbles"
+    ],
+    "bubble": "who has this ticket"
+  },
+  "og_line": "start the shift with unclaimed urgent work.",
+  "routine": {
+    "message": "at 3pm each weekday, search zendesk for urgent tickets in the support group called \"returns desk\". run separate searches for new and open status. read all matches, confirm group and priority, and combine the results by ticket id.\n\nshow unassigned tickets first in this chat. then list tickets with an assignee. within each group put the oldest creation time first. include id, subject, status and assignee, using the id if a name is unavailable. leave ticket bodies out.\n\nnever reply, reassign or change a ticket. keep quiet on a complete empty handoff. if either status search fails or cuts off, say which part is missing.",
+    "when": "at the weekday 3pm shift change in the support group’s time zone",
+    "needs": "a read-only zendesk connection with ticket search and access to the handoff group. put your shift’s group name in the message.",
+    "output": "afternoon shift · returns desk\nunassigned: #763 · new · cannot open return label · opened 12:09\nassigned: #754 · open · replacement stuck at dispatch · ellen frost · opened 10:18"
+  },
+  "knobs": [
+    "**choose the right shift.** replace 3pm with the hour someone actually takes the desk. include weekends if you staff them.",
+    "**split a crowded handoff.** show unassigned subjects in full and give only numbers for tickets a teammate already owns.",
+    "**include pending work deliberately.** give pending tickets their own list if the next shift also chases customer confirmations."
+  ],
+  "fails": [
+    "**the subject says urgent but the ticket never appears.** this search uses the priority field. inspect the ticket’s priority before widening the query.[^1]",
+    "**a group looks like an owner.** inspect the assignee field. routing a ticket to a team still leaves someone to take it.",
+    "**a missing subject breaks the list.** zendesk can return a blank subject. keep the ticket number and mark the subject blank.[^1]"
+  ],
+  "sections": [
+    {
+      "h": "give the incoming lead a queue they can claim",
+      "md": "**take the first unassigned ticket and open its history before handing it to someone.** an old creation time tells you how long the ticket has existed. it says nothing about when the customer last heard from support.\n\nfor a deadline that expires before shift change, use your live escalation process. dusk bot’s handoff is the wrong place to wait for that alarm."
+    }
+  ],
+  "faq": [
+    {
+      "q": "will a solved urgent ticket stay on the list?",
+      "a": "**the handoff only includes new and open work.** a ticket can keep its urgent priority after a resolution and still fall outside both searches."
+    },
+    {
+      "q": "can a high-priority ticket appear too?",
+      "a": "**only if you widen the priority rule.** ask for a separate high-priority section so a long list of those tickets never buries an unassigned urgent one."
+    }
+  ],
+  "sources": [
+    {
+      "label": "composio: zendesk actions",
+      "url": "https://docs.composio.dev/toolkits/zendesk",
+      "checked": "2026-11-20"
+    },
+    {
+      "label": "dusk bot docs: routines",
+      "url": "/docs/routines"
+    },
+    {
+      "label": "dusk bot docs: connected apps",
+      "url": "/docs/files-and-apps"
+    }
+  ]
+}

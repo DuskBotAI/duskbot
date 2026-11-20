@@ -7,9 +7,10 @@ export declare const DOCK: Readonly<{ cell: number; tile: number; column: number
 export declare const DISPLAY_CHOICES: readonly ("active" | "built-in" | "main")[];
 interface Rect { x: number; y: number; width: number; height: number }
 interface DisplayLike { id?: number; bounds: Rect; workArea: Rect; internal?: boolean; label?: string }
-export declare function notchOf(display: DisplayLike, platform: string): { width: number; height: number } | null;
-export declare function islandLayout(display: DisplayLike, options?: { platform?: string; size?: string }): {
-  window: Rect; collapsed: { kind: "notch" | "pill"; width: number; height: number; top: number; notch: number }; tile: number; size: "small" | "medium" | "large";
+interface Size { width: number; height: number }
+export declare function notchOf(display: DisplayLike, platform: string, measured?: Size | null): { width: number; height: number; housing: Size } | null;
+export declare function islandLayout(display: DisplayLike, options?: { platform?: string; size?: string; measured?: Size | null }): {
+  window: Rect; collapsed: { kind: "notch" | "pill"; width: number; height: number; top: number; notch: number; notchHeight: number }; tile: number; size: "small" | "medium" | "large";
 };
 export declare function dockEdge(display: DisplayLike): number;
 export declare function dockLayout(display: DisplayLike): { window: Rect; body: number; top: number };

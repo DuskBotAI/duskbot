@@ -16,6 +16,7 @@ import { acceptedSendMatch, sendFingerprint, SendSequencer } from "../send-idemp
 import { _queuedCount, drainSteeredMessages, queuedSteeredMessage, queueSteeredMessage } from "../steer-queue.ts";
 import { Store, type Message } from "../store.ts";
 import { typedWords } from "../typed-sends.ts";
+import { VOICE_CALL_NOTE } from "../local-voice/call-note.ts";
 import { createBotMessageRoutes, type BotMessageRouteDeps } from "./bot-messages.ts";
 import { dispatchRoutes } from "./table.ts";
 
@@ -205,6 +206,19 @@ describe("POST /api/bots/:id/messages and who typed it", () => {
     const plain = await post({ threadId, sendId: SEND, text: words });
     expect(plain.status, JSON.stringify(plain.body)).toBe(202);
     expect(typedWords(threadId, [plain.body.message])).toBe("");
+  });
+});
+
+describe("a line typed while a send card waits", () => {
+  it("stops the card's wait for a typed line, never for a press or a relay", async () => {
+    const stopped: string[] = [];
+    const { store, bot, threadId, post, show } = await fixture({ typedOverHeldCards: (thread: string) => { stopped.push(thread); } });
+    await post({ threadId, sendId: SEND, text: "cancel that, book 10am instead" });
+    expect(stopped).toEqual([threadId]);
+    await post({ threadId, sendId: OTHER_SEND, text: "x", widgetAction: { messageId: show("routineForm"), ref: "confirm", values: { days: "mon", report: "discord:releases" } } });
+    store.patchBot(bot.id, { approvalMode: "ask", autoApprove: false });
+    await post({ threadId, sendId: "send-3", text: "y", expectedActiveLeafId: store.activeLeaf(threadId), expectedApprovalMode: "ask" }, "/guarded");
+    expect(stopped).toEqual([threadId]);
   });
 });
 
@@ -561,5 +575,30 @@ describe("POST /api/bots/:id/messages from a registered phone", () => {
     state.fromPhone = true;
     expect((await post({ threadId: "someone-elses-thread", sendId: OTHER_SEND, text: "Hi" })).status).toBe(409);
     expect(state.phoneSends).toEqual([]);
+  });
+});
+
+describe("POST /api/bots/:id/messages spoken on a voice call", () => {
+  it("marks the line as said on the call and tells the bot its reply is spoken", async () => {
+    const { threadId, state, post } = await fixture();
+    const sent = await post({ threadId, sendId: SEND, text: "what's on my calendar", voiceCall: { callId: "vc-abcdef123" } });
+    expect(sent.status, JSON.stringify(sent.body)).toBe(202);
+    expect(state.accepted.at(-1)).toMatchObject({ text: "what's on my calendar", via: "call", callId: "vc-abcdef123", app: { context: VOICE_CALL_NOTE } });
+  });
+
+  it("refuses a malformed call and a call on anything but a plain message", async () => {
+    const { threadId, state, post, show } = await fixture();
+    expect((await post({ threadId, text: "hi", voiceCall: { callId: "x" } })).status).toBe(400);
+    expect((await post({ threadId, text: "hi", voiceCall: "vc-abcdef123" })).status).toBe(400);
+    const pressed = await post({ threadId, sendId: SEND, text: "hi", voiceCall: { callId: "vc-abcdef123" }, widgetAction: { messageId: show("routineForm"), ref: "confirm", values: {} } });
+    expect(pressed.status).toBe(400);
+    expect(state.accepted).toEqual([]);
+  });
+
+  it("leaves a typed line unmarked", async () => {
+    const { threadId, state, post } = await fixture();
+    await post({ threadId, sendId: SEND, text: "typed" });
+    expect(state.accepted.at(-1)?.via).toBeUndefined();
+    expect(state.accepted.at(-1)?.app?.context ?? "").not.toContain("Voice call");
   });
 });

@@ -123,3 +123,27 @@ the page's own drag events, and exits.
 `src/components/SidebarSectionHeader.naming.dom.test.ts` the name field. The
 headless pictures cannot prove the operating system's own drag image or a drag
 between two windows.
+
+## Opening and closing the sidebar
+
+Run `node --experimental-strip-types scripts/verify-sidebar-motion.ts <dir>`.
+It starts a disposable fake-engine server with nine bots (three pinned, two in
+a **Work** department, two archived), opens the real app in a headless Chrome
+with a throwaway profile, and writes to `<dir>`: the sidebar open and as
+avatars in daylight and midnight, the Archived section open and an archived
+chat opened from it, a frame strip and a 60fps clip of each move (every
+animation paused and stepped 1/60 s at a time), and `*-frame-times.json` with
+the CPU slowed 4x: rAF frame times, the toggle handler's time, long tasks, and
+the layout, style and script cost of each toggle. `--label before` names the
+files for a run against an older tree.
+
+What to see: ⌘\ (Ctrl+\ elsewhere) or a drag of the edge moves the chat column
+as one slide while the sidebar's edge rides with it; each avatar glides to its
+new place without being clipped; names fade where they stood and never reflow;
+the avatar column, profile, feedback and section headers sit on the same 40px
+centre line open and as avatars. With reduced motion it swaps at once.
+
+`src/components/sidebar-motion.dom.test.ts` checks the shared clock, the
+avatar's glide, the clip when opening, the reduced-motion swap and the curve.
+Electron's own compositor and a transcript of hundreds of messages were not
+part of the headless run.

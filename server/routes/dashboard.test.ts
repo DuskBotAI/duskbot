@@ -154,7 +154,8 @@ describe("dashboard app commands", () => {
       json(res, status, body);
     });
     const base = await listen(server), commands = createDashboardCommands({ port: Number(new URL(base).port), collect: createDashboardCollector(dependencies()) });
-    const run = (kind: "app.connect" | "app.disconnect", target: string) => commands.execute({ id: kind, kind, target, issuedAt: 0, expiresAt: Date.now() + 1000 });
+    let sent = 0;
+    const run = (kind: "app.connect" | "app.disconnect", target: string) => commands.execute({ id: `${kind}-${++sent}`, kind, target, issuedAt: 0, expiresAt: Date.now() + 1000 });
     return { seen, run };
   }
   it("starts a sign-in through the workspace's own connector route and hands back only an https link", async () => {

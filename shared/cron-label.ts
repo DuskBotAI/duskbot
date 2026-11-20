@@ -2,12 +2,14 @@ import { plainTimeZone } from "./plain-time-zone.ts";
 import type { RoutineCronSchedule } from "./routine-schedule.ts";
 
 const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+const DAY_NAMES = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"];
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
 /** Describe familiar presets; retain the exact expression for everything else.
  * This is presentation only, never a second parser or source of scheduling truth. */
 export function cronScheduleLabel(schedule: RoutineCronSchedule): string {
-  const [minute, hour, day, month, weekday] = schedule.expression.trim().split(/\s+/);
+  const [minute, hour, day, month, rawWeekday] = schedule.expression.trim().split(/\s+/);
+  const weekday = rawWeekday?.toUpperCase().replace(/\b(SUN|MON|TUE|WED|THU|FRI|SAT)\b/g, (name) => String(DAY_NAMES.indexOf(name)));
   let label = `Cron ${schedule.expression}`;
   if (/^\d+$/.test(minute ?? "") && /^\d+$/.test(hour ?? "")) {
     const time = `${Number(hour)}:${minute!.padStart(2, "0")}`;
@@ -20,7 +22,7 @@ export function cronScheduleLabel(schedule: RoutineCronSchedule): string {
       const name = MONTHS[Number(month) - 1];
       if (name) label = `Yearly on ${name} ${monthDay} at ${time}`;
     } else if (day === "*" && month === "*") {
-      if (weekday === "1-5" || weekday?.toUpperCase() === "MON-FRI") label = `Every weekday at ${time}`;
+      if (weekday === "1-5") label = `Every weekday at ${time}`;
       else if (/^[0-7]$/.test(weekday ?? "")) label = `Weekly on ${WEEKDAYS[Number(weekday) % 7]} at ${time}`;
       else {
         const nth = /^([0-7])#([1-5]|L)$/i.exec(weekday ?? "");

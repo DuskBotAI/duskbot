@@ -7,13 +7,15 @@ function rig(options: { heardAt?: number | null; online?: boolean; visible?: boo
   let tick: () => void = () => {};
   const state = { heardAt: options.heardAt ?? null, online: options.online ?? true, visible: options.visible ?? true };
   let finish: () => void = () => {};
+  let moved: () => void = () => {};
   const rewalk = vi.fn(() => new Promise<void>((resolve) => { finish = resolve; }));
   const stop = watchRoute({
     heardAt: () => state.heardAt, online: () => state.online, visible: () => state.visible, rewalk,
+    onNetworkChange: (listener) => { moved = listener; return () => { moved = () => {}; }; },
     now: () => now, every: (run) => { tick = run; return () => { tick = () => {}; }; },
   });
   return {
-    state, rewalk, stop,
+    state, rewalk, stop, moved: () => moved(),
     advance(ms: number) { for (let at = 0; at < ms; at += ROUTE_CHECK_MS) { now += ROUTE_CHECK_MS; tick(); } },
     finish: async () => { finish(); await Promise.resolve(); await Promise.resolve(); },
   };
@@ -53,6 +55,24 @@ describe("a phone stuck on a route that went away", () => {
     expect(watch.rewalk).toHaveBeenCalledTimes(2);
     watch.stop();
     watch.advance(ROUTE_STUCK_MS * 2);
+    expect(watch.rewalk).toHaveBeenCalledTimes(2);
+  });
+
+  it("walks at once when the phone changes networks, not waiting for the silence", async () => {
+    const watch = rig({ heardAt: 0 });
+    watch.moved();
+    expect(watch.rewalk).toHaveBeenCalledOnce();
+    watch.moved();
+    expect(watch.rewalk).toHaveBeenCalledOnce();
+    await watch.finish();
+    watch.state.online = false;
+    watch.moved();
+    expect(watch.rewalk).toHaveBeenCalledOnce();
+    watch.state.online = true;
+    watch.moved();
+    expect(watch.rewalk).toHaveBeenCalledTimes(2);
+    watch.stop();
+    watch.moved();
     expect(watch.rewalk).toHaveBeenCalledTimes(2);
   });
 

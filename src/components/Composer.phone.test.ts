@@ -149,31 +149,38 @@ describe("the phone composer", () => {
     }
   });
 
-  it("with live calls off, ends the pill on an inverse mic and offers no call", () => {
+  it("with calls off, ends the pill on an inverse mic and offers no call", () => {
     vi.stubEnv("VITE_DUSK_LIVE_CALL", "");
+    vi.stubEnv("VITE_DUSK_VOICE_CALL", "0");
     try {
       render({ bot });
       expect(fixture.call).toBeNull();
       const mic = container.querySelector<HTMLButtonElement>('button[data-voice-mic="start"]')!;
       expect(mic.getAttribute("aria-label")).toBe("Start dictation");
-      expect(mic.className.split(" ")).toEqual(expect.arrayContaining(["bg-ink", "text-app", "size-8", "max-md:size-10"]));
+      expect(mic.className.split(" ")).toEqual(expect.arrayContaining(["bg-ink", "text-app", "size-8"]));
     } finally {
       vi.stubEnv("VITE_DUSK_LIVE_CALL", "1");
+      vi.stubEnv("VITE_DUSK_VOICE_CALL", "");
     }
   });
 
-  it("shows only the + and the pill, with an inverse voice button", () => {
+  it("is one pill to the reference's measure: the + at its left edge and every control 32 px inside it", () => {
     render({ bot });
-    expect(plus()).not.toBeNull();
+    const pill = container.querySelector("[data-composer-row]")!;
+    expect(pill.contains(plus())).toBe(true);
+    expect(container.querySelector("[data-composer-plus]")!.className.split(" ")).toEqual(expect.arrayContaining(["size-8", "rounded-full"]));
+    expect(pill.parentElement!.className.split(" ")).toEqual(expect.arrayContaining(["min-h-[48px]", "rounded-[24px]", "p-2"]));
+    expect(container.querySelector<HTMLButtonElement>('button[data-voice-mic="start"]')!.className.split(" ")).toContain("size-8");
     expect(fixture.call).toMatchObject({ placement: "composer", inverse: true });
     expect(fixture.call?.fill).toBeUndefined();
   });
 
-  it("offers the photo library, the camera and files from the +, each its own picker", () => {
-    render({ bot });
+  it("offers only the photo library, the camera and files from the +, each its own picker", () => {
+    render({ bot: { ...bot, tasks: [{ threadId: bot.threadId, title: "new thread", createdAt: 1, approvalMode: "full" }] } });
     openPlus();
     const keys = [...menu()!.querySelectorAll("[data-menu-key]")].map((row) => row.getAttribute("data-menu-key"));
-    expect(keys.slice(0, 3)).toEqual(["attach:photos", "attach:camera", "attach"]);
+    expect(keys).toEqual(["attach:photos", "attach:camera", "attach"]);
+    expect(menu()!.textContent).not.toMatch(/Work until done|Teach a task|acts|Call mode|Live/);
     expect(item("attach:photos")?.textContent).toContain("Photo library");
     expect(item("attach:camera")?.textContent).toContain("Take photo");
     expect(item("attach")?.textContent).toContain("Files");

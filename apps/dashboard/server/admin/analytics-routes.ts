@@ -3,18 +3,18 @@ import { cancelFlowSummary } from "../analytics/cancel-flow.ts";
 import type { createAuth } from "../auth/index.ts";
 import type { createBilling } from "../billing/index.ts";
 import type { Analytics } from "../analytics/index.ts";
-import type { StoredEvent } from "../analytics/sink.ts";
+import { keepPartial, type StoredEvent } from "../analytics/sink.ts";
 import type { StoredWorkspace } from "../store.ts";
 import { DAY, DIMENSIONS, ONLINE_MS, SURFACES, breakdownTally, feed, funnel, identityOf, kpisTally, matches, online, retention, seriesTally, valuesOf, visitsFromPaced, visitsOf, type Dimension, type FunnelFacts, type Filters, type People, type Visit } from "../analytics/web.ts";
 import { BILLING_EVENTS, QUARTER, accountsDigest, appDigest, appDigestOf, appReport, seenDigest, upsellsDigest, visitsDigest, type AccountsDigest, type UpsellsDigest } from "../analytics/digests.ts";
 import { pacer, type Digest } from "../analytics/rollup.ts";
 import { choseCloud, wasPaid, workspaceTurns } from "./metrics.ts";
-import { productDigest, productReportOf } from "./product.ts";
+import { accountOfWho, productDigest, productReportOf, resolvePeople } from "./product.ts";
 import { paymentsOf, revenueReport } from "../analytics/revenue.ts";
 import { aligned, firstSeenOf, newVsReturningTally, peakHoursTally } from "../analytics/insights.ts";
 import { billingSteps, firstSourceOf, sessionsOf, spendOf, timeToPayOf, whereOf } from "../analytics/profile.ts";
 import type { StoredSubscription } from "../billing/store.ts";
-import { accountMrr, billingCardOf, livesOf, paysOf, subscriptionReport, type SubscriptionsInput } from "../analytics/subscriptions.ts";
+import { billingCardOf, paysOf, receivedIn, refundsOf, subscriptionReport, type SubscriptionsInput } from "../analytics/subscriptions.ts";
 import { LEDGER_LABELS } from "../billing/ledger.ts";
 import { BILLING_CONFIG } from "../billing/plans.ts";
 import { quote } from "../billing/pricing.ts";
@@ -83,7 +83,7 @@ export function createAnalyticsRoutes(options: AnalyticsRoutesOptions) {
     const events = await analytics.sink.scan(since, until, names);
     if (names && !names.includes("billing") && !names.includes("checkout_paid")) return events;
     const ops = opsEventOf(billing.store.state);
-    return events.filter(event => !ops(event));
+    return keepPartial(events, events.filter(event => !ops(event)));
   } };
   /** the money records the owner sees: with a real provider, the fake provider's checkouts (fake_ sessions) and fixture
    * ledger rows are never real money, whatever put them in the store */
@@ -152,16 +152,54 @@ export function createAnalyticsRoutes(options: AnalyticsRoutesOptions) {
     return { onboarding, days, last };
   }
 
-  async function web(url: URL) {
-    const { from, to } = windowOf(url, now()), span = to - from;
-    const { surface, filters, scoped } = webFilters(url);
+  /** the visitors on the site and in an app in the last five minutes */
+  async function onlineNow() {
     const time = now();
-    const [{ identity, people: p, sessions }, recent, crawls, notes] = await Promise.all([load(Math.min(from - span, from - 60 * DAY), true), sink.scan(time - ONLINE_MS, time + 60_000),
-      sink.crawls(from, to), sink.notes(from - span, to)]);
-    const pause = pacer();
-    const all = await visitsFromPaced(sessions, SURFACES, pause), visits = all.filter(visit => surface === "all" || visit.surface === surface);
+    return online(await sink.scan(time - ONLINE_MS, time + 60_000), time, analytics.presence.list().map(entry => entry.key));
+  }
+  /** what every surface's answer for one window reads: the visits, people, crawls and notes */
+  async function webBase(from: number, to: number) {
+    const span = to - from;
+    const [{ identity, people: p, sessions }, live, crawls, notes] = await Promise.all([load(Math.min(from - span, from - 60 * DAY), true), onlineNow(), sink.crawls(from, to), sink.notes(from - span, to)]);
+    const all = await visitsFromPaced(sessions, SURFACES, pacer());
+    return { from, to, identity, people: p, live, crawls, notes, all };
+  }
+  type WebBase = Awaited<ReturnType<typeof webBase>>;
+  const tzOf = (url: URL) => {
     const tz = url.searchParams.has("tz") ? Number(url.searchParams.get("tz")) : 0;
     if (!Number.isInteger(tz) || tz < -900 || tz > 900) throw bad();
+    return tz;
+  };
+
+  async function web(url: URL) {
+    const { from, to } = windowOf(url, now());
+    webFilters(url); tzOf(url);
+    return webAnswer(await webBase(from, to), url);
+  }
+  /** the answers to these questions in order, each window's visits read once and let go before the next window's */
+  async function webMany(urls: readonly URL[]) {
+    const time = now(), windows = new Map<string, number[]>();
+    urls.forEach((url, i) => {
+      const { from, to } = windowOf(url, time);
+      webFilters(url); tzOf(url);
+      const key = `${from}:${to}`;
+      (windows.get(key) ?? windows.set(key, []).get(key)!).push(i);
+    });
+    const out: Array<Awaited<ReturnType<typeof webAnswer>>> = [];
+    for (const [key, indexes] of windows) {
+      const [from, to] = key.split(":").map(Number) as [number, number];
+      const base = await webBase(from, to);
+      for (const i of indexes) out[i] = await webAnswer(base, urls[i]!);
+    }
+    return out;
+  }
+
+  async function webAnswer(base: WebBase, url: URL) {
+    const { from, to, identity, people: p, all, live, crawls, notes } = base, span = to - from;
+    const { surface, filters, scoped } = webFilters(url);
+    const pause = pacer();
+    const visits = all.filter(visit => surface === "all" || visit.surface === surface);
+    const tz = tzOf(url);
     // every number below in one pass over the visits, a piece at a time
     const firstSeen = new Map<string, number>();
     for (let i = 0; i < visits.length; i += 20_000) { firstSeenOf(visits.slice(i, i + 20_000), firstSeen); await pause(); }
@@ -182,7 +220,6 @@ export function createAnalyticsRoutes(options: AnalyticsRoutesOptions) {
     const marks = (["signup", "paid"] as const).flatMap(kind => [...(kind === "signup" ? p.signups : p.paid)].filter(([id, at]) => at >= from && at < to && (!allowed || allowed.has(id)))
       .map(([id, at]) => ({ at, kind, seed: [...(identity.visitorsOf.get(id) ?? [])][0] ?? id, email: accounts.get(id)?.email ?? null, customer: p.paid.has(id) })))
       .sort((a, b) => b.at - a.at || a.seed.localeCompare(b.seed)).slice(0, 60);
-    const live = online(recent, time, analytics.presence.list().map(entry => entry.key));
     await pause();
     const money = moneyState();
     // the revenue cards credit payments to visits, so only an account's visits matter to them
@@ -330,6 +367,14 @@ export function createAnalyticsRoutes(options: AnalyticsRoutesOptions) {
         page: event.ctx?.page ?? (typeof event.props.path === "string" ? event.props.path : null), goal: typeof event.props.goal === "string" ? event.props.goal : null,
         source: event.ctx?.source ?? null, country: where?.country ?? event.ctx?.country ?? null, city: where?.city ?? event.ctx?.city ?? null, lat: where?.lat ?? event.ctx?.lat ?? null, lon: where?.lon ?? event.ctx?.lon ?? null };
     });
+    // a trial beginning is a billing record, not an event: it joins the feed in its place
+    for (const sub of moneyState().subscriptions) {
+      if (sub.trialEndsAt === undefined || sub.status === "pending" || sub.createdAt < since || sub.createdAt > time) continue;
+      const visitor = [...(identity.visitorsOf.get(sub.accountId) ?? [])][0], where = visitor ? geo.get(visitor) : undefined;
+      feed.push({ id: `trial_${sub.id}`, at: sub.createdAt, name: "trial_started", seed: visitor ?? sub.accountId, email: accounts.get(sub.accountId)?.email ?? null, customer: true,
+        page: null, goal: null, source: null, country: where?.country ?? null, city: where?.city ?? null, lat: where?.lat ?? null, lon: where?.lon ?? null });
+    }
+    feed.sort((a, b) => b.at - a.at);
     const latest = new Map<string, (typeof feed)[number]>();
     for (const item of feed) if (item.at >= time - 5 * 60_000 && (item.name === "site_view" || item.name === "site_goal" || item.name === "page_view") && !latest.has(item.seed)) latest.set(item.seed, item);
     const present = analytics.presence.list(time);
@@ -356,9 +401,10 @@ export function createAnalyticsRoutes(options: AnalyticsRoutesOptions) {
       const row = power.get(event.accountId) ?? power.set(event.accountId, { first: event.at, seen: new Set(), opens: 0, sent: 0, replies: 0, features: 0, lastAt: 0 }).get(event.accountId)!;
       row.first = Math.min(row.first, event.at); row.seen.add(Math.floor(event.at / DAY)); row.lastAt = Math.max(row.lastAt, event.at);
     }
+    const trialing = new Set(moneyState().subscriptions.filter(sub => sub.status === "active" && sub.trialEndsAt !== undefined && sub.trialEndsAt > time).map(sub => sub.accountId));
     // people in the order they were first seen, so equal rows keep their order
     const users = [...power].sort((a, b) => a[1].first - b[1].first).filter(([id]) => accounts.has(id)).map(([id, row]) => ({ id, email: accounts.get(id)!.email, name: accounts.get(id)!.name, ...face(accounts.get(id)!),
-      activeDays: [...row.seen].filter(day => days.get(id)?.has(day)).length, opens: row.opens, sent: row.sent, replies: row.replies, features: row.features, lastAt: row.lastAt, customer: p.paid.has(id) }))
+      activeDays: [...row.seen].filter(day => days.get(id)?.has(day)).length, opens: row.opens, sent: row.sent, replies: row.replies, features: row.features, lastAt: row.lastAt, customer: p.paid.has(id), trial: trialing.has(id) }))
       .sort((a, b) => b.activeDays - a.activeDays || b.sent - a.sent).slice(0, 25);
     return { now: time, cohorts, power: users };
   }
@@ -377,7 +423,7 @@ export function createAnalyticsRoutes(options: AnalyticsRoutesOptions) {
     const [{ sessions, identity, identifies, people: p, facts }, digest] = await Promise.all([load(from, true), digestOf(productDigest, from, Math.min(to, now() + 60_000))]);
     const flow = funnel({ from, to, now: now(), mode: "visitors", visits: await visitsFromPaced(sessions, ["site"], pacer()), identity, facts: await funnelFactsOf(facts!, identifies, null), people: p,
       cloudChosen: p.cloudChosen, paired: p.paired, replied: p.replied });
-    return productReportOf(digest, from, to, flow.steps);
+    return productReportOf(resolvePeople(digest, accountOfWho(identity)), from, to, flow.steps);
   }
 
   const planLabel = (id: string) => BILLING_CONFIG.bundles.find(bundle => bundle.id === id)?.label.toLowerCase() ?? (id === "custom" ? "custom" : id.replace(/_/g, " "));
@@ -420,7 +466,7 @@ export function createAnalyticsRoutes(options: AnalyticsRoutesOptions) {
     await attribute(paying, identity, since);
     return { input: subscriptionInput(activity), seen, identity };
   }
-  /** visitor, signup, checkout, paid and still paying a month after: people first seen in the window */
+  /** visitor, signup, trial started and trial converted (of the trials already over): people first seen in the window */
   function revenueFunnel(input: SubscriptionsInput, seen: ReadonlyMap<string, { visitor: string; start: number }>, identity: ReturnType<typeof identityOf>, days: number) {
     const time = now(), from = time - days * DAY;
     const first = new Map<string, number>();
@@ -429,16 +475,15 @@ export function createAnalyticsRoutes(options: AnalyticsRoutesOptions) {
       if (!first.has(who) || first.get(who)! > start) first.set(who, start);
     }
     for (const [id, account] of input.accounts) if (!first.has(id) || first.get(id)! > account.createdAt) first.set(id, account.createdAt);
-    const pays = paysOf(input), lives = livesOf(input, pays, time);
-    const firstPaid = new Map<string, number>();
-    for (const life of lives) if (!life.comp && (!firstPaid.has(life.accountId) || firstPaid.get(life.accountId)! > life.start)) firstPaid.set(life.accountId, life.start);
-    const checkout = new Set(input.checkouts.filter(row => row.source !== "ops_grant" && row.source !== "admin_comp").map(row => row.accountId));
+    const trials = new Map<string, StoredSubscription>();
+    for (const sub of input.subscriptions) if (sub.trialEndsAt !== undefined && sub.status !== "pending" && sub.source !== "ops_grant" && sub.source !== "admin_comp" && !sub.review
+      && (!trials.has(sub.accountId) || trials.get(sub.accountId)!.createdAt > sub.createdAt)) trials.set(sub.accountId, sub);
     const people = [...first].filter(([, at]) => at >= from && at < time).map(([id]) => id);
-    const signed = people.filter(id => input.accounts.has(id)), started = signed.filter(id => checkout.has(id) || firstPaid.has(id)), paid = started.filter(id => firstPaid.has(id));
-    const eligible = paid.filter(id => firstPaid.get(id)! + 30 * DAY <= time);
-    const retained = eligible.filter(id => (accountMrr(lives, firstPaid.get(id)! + 30 * DAY).get(id) ?? 0) > 0);
-    return { days, steps: [{ id: "visit", label: "visited", count: people.length }, { id: "signup", label: "signed up", count: signed.length }, { id: "checkout", label: "started checkout", count: started.length },
-      { id: "paid", label: "paid", count: paid.length }, { id: "retained", label: "still paying in month 2", count: retained.length, of: eligible.length }] };
+    const signed = people.filter(id => input.accounts.has(id)), started = signed.filter(id => trials.has(id));
+    const over = started.filter(id => trials.get(id)!.trialEndsAt! <= time);
+    const converted = over.filter(id => { const sub = trials.get(id)!; return sub.status === "active" || sub.status === "payment_problem" || (sub.status === "ended" && sub.updatedAt > sub.trialEndsAt! + 3_600_000); });
+    return { days, steps: [{ id: "visit", label: "visited", count: people.length }, { id: "signup", label: "signed up", count: signed.length },
+      { id: "trial", label: "started a trial", count: started.length }, { id: "converted", label: "trial converted", count: converted.length, of: over.length }] };
   }
   async function revenue(url: URL) {
     const days = Number(url.searchParams.get("days") ?? "90");
@@ -447,7 +492,8 @@ export function createAnalyticsRoutes(options: AnalyticsRoutesOptions) {
     if (asked !== "live" && asked !== "test" && asked !== "all") throw bad();
     const { input: every, seen, identity } = await revenueData();
     const input = scoped(every, asked), state = billing.store.state;
-    return { ...subscriptionReport(input), funnel: revenueFunnel(input, seen, identity, days), mode: asked, serverMode: serverMode(),
+    const pays = paysOf(input), time = now();
+    return { ...subscriptionReport(input), funnel: revenueFunnel(input, seen, identity, days), received: receivedIn(pays, refundsOf(input, pays), time + 1 - days * DAY, time + 1), mode: asked, serverMode: serverMode(),
       modes: { live: moneyTotals(scoped(every, "live")), test: moneyTotals(scoped(every, "test")) }, sync: { available: billing.operator.provider === "dodo", last: state.lastSync ?? null },
       cancelFlow: cancelFlowSummary(state.retention ?? [], now() - 90 * DAY, now() + 1) };
   }
@@ -472,5 +518,5 @@ export function createAnalyticsRoutes(options: AnalyticsRoutesOptions) {
     return note;
   }
 
-  return { revenue, customers: () => subscriptionReport(scoped(subscriptionInput(new Map()), serverMode())).customers, syncRevenue: () => billing.service.syncFromProvider(), web, webDetails, funnel: funnelRoute, journeys, profile, realtime, retention: retentionRoute, app, product, saveNote, deleteNote: (id: string) => sink.deleteNote(id), isDimension: (value: string): value is Dimension => (DIMENSIONS as readonly string[]).includes(value) };
+  return { revenue, customers: () => subscriptionReport(scoped(subscriptionInput(new Map()), serverMode())).customers, syncRevenue: () => billing.service.syncFromProvider(), web, webMany, onlineNow, webDetails, funnel: funnelRoute, journeys, profile, realtime, retention: retentionRoute, app, product, saveNote, deleteNote: (id: string) => sink.deleteNote(id), isDimension: (value: string): value is Dimension => (DIMENSIONS as readonly string[]).includes(value) };
 }

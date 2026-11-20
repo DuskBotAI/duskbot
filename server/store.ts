@@ -12,6 +12,7 @@ import type { TeamComputers } from "./team-computers.ts";
 import { removeBotFolder, soulFile, soulHash, writeSoulMirror } from "./bot-folder.ts";
 import type { BotProfilePatch } from "./bot-profile.ts";
 import { peerAllowKey, type PeerAction } from "./peer-approval-key.ts";
+import { rebaseStoredFolders } from "./own-folders.ts";
 import { DATA_DIR, EVENTS_DIR, NATIVE_DIR, loadBrowserProfileIdAliases } from "./config.ts";
 import * as mdb from "./message-db.ts";
 import { forgetBotMemoryJournal, journalFile, rotatedJournalFile } from "./memory-journal.ts";
@@ -161,7 +162,7 @@ export const botWireProjectionIsExact: BotWireProjectionIsExact = true;
 
 const BOTS_FILE = join(DATA_DIR, "bots.json");
 /** Task fields every turn rewrites (store.saveBotsLater). */
-const TURN_MARKS = new Set(["unread", "lastContextModel"]);
+const TURN_MARKS = new Set(["unread", "lastReadMessageId", "lastContextModel"]);
 const GROUPS_FILE = join(DATA_DIR, "groups.json");
 const THREAD_MODEL_COPIES_CLEARED = join(DATA_DIR, "thread-model-copies-cleared");
 const ASKED_AT_FILLED = join(DATA_DIR, "asked-at-filled");
@@ -279,10 +280,11 @@ export class Store {
     this.groups = groupsRead.records;
     if (groupsRead.state === "loaded") this.groupsFile.loaded(groupsRead.text);
     this.rememberSections([...this.bots, ...this.groups].map((record) => record.section));
-    let botsMigrated = false;
+    const isBot = (id: string) => this.bots.some((bot) => bot.id === id);
+    let botsMigrated = rebaseStoredFolders(this.bots, DATA_DIR, isBot);
     const browserProfileAliases = loadBrowserProfileIdAliases();
     const chiefSectionsSeen = new Set<string>();
-    let groupsMigrated = false;
+    let groupsMigrated = rebaseStoredFolders(this.groups, DATA_DIR, isBot);
     for (const b of this.bots) {
       if (b.busy || (b.activity !== undefined && b.activity !== "idle")) botsMigrated = true;
       b.busy = false;
@@ -1486,7 +1488,8 @@ export class Store {
   deleteBot(id: string, setupRequest?: TeamSetupRequest): boolean {
     const bot = this.bot(id);
     if (!bot) return false;
-    if (bot.defaultBot) throw Object.assign(new Error(defaultBotRefusal(bot.name)), { status: 409 });
+    const kept = defaultBotRefusal(bot, this.bots);
+    if (kept) throw Object.assign(new Error(kept), { status: 409 });
     let nextBots = this.bots.filter((b) => b.id !== id);
     if (setupRequest) {
       const chief = this.bot(setupRequest.botId);
@@ -1970,6 +1973,13 @@ export class Store {
     });
     this.emit({ type: "group", groupId: group.id });
     return cwd;
+  }
+
+  repinGroupCwd(groupId: string, threadId: string, cwd: string | null): void {
+    const group = this.group(groupId), task = this.groupTaskByThread(groupId, this.roomThreadOf(threadId));
+    if (!group) return;
+    this.commitGroupChange(group, "the thread's folder", () => { if (task) task.pinnedCwd = cwd; if (!task || group.threadId === task.threadId) group.pinnedCwd = cwd; });
+    this.emit({ type: "group", groupId: group.id });
   }
 
   project(botId: string, projectId: string): BotProjectRecord | undefined {

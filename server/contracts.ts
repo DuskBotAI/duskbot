@@ -110,6 +110,8 @@ export interface SendTurnInput {
   /** Drivers namespace process-level resources (broker socket, CLI session) by botId too: threadIds may coincide across bots. */
   botId?: string;
   text: string;
+  /** A run of a routine, trigger or webhook rather than the person's own message: its replies never set up more later work. */
+  automationRun?: boolean;
   /** The recall block the harness put in front of `text`; it informs this turn only, so a replay can leave it out. */
   recalled?: string;
   /** Reasserted every turn so a resumed native session cannot keep a stale, more permissive mode. */
@@ -177,6 +179,8 @@ export interface SendTurnInput {
     phone?: { command: string; args: string[]; env: Record<string, string> };
     /** The built-in browser's MCP proxy: one tab per bot, in its own persistent partition. */
     browser?: { command: string; args: string[]; env: Record<string, string> };
+    /** This computer's shell (run_command, find_files) for an engine with none of its own, on the desktop app's own server. */
+    shell?: { command: string; args: string[]; env: Record<string, string> };
     /** The Data tools' MCP proxy: DuckDB on this bot's own database. */
     data?: { command: string; args: string[]; env: Record<string, string> };
     /** The Email tools' MCP proxy: the harness holds the passwords and the per-bot verdict. */
@@ -260,6 +264,9 @@ export interface ProviderAdapter {
     effortLevels?: readonly EffortLevel[];
     /** Only a model whose catalog entry lists `effortLevels` takes one, and only those levels. */
     effortByModel?: boolean;
+    /** A turn's effort is applied to that turn alone: an unset one is the engine's default again, and a change costs no
+     *  relaunch or prompt cache. Quick questions then run at low effort (turn-route.ts). */
+    effortPerTurn?: boolean;
     /** The driver validates and applies model-specific variant IDs per session. */
     modelVariants?: boolean;
     /** The driver keeps a live session and can take a user message mid-turn (steer). */
@@ -277,6 +284,8 @@ export interface ProviderAdapter {
     hooks?: boolean;
     /** "confined": sendTurn honours `guestConfined`; absent, a guest turn is refused. */
     guestTurns?: "confined";
+    /** false: the engine may stream no reasoning before its first tool call, so a turn's silence is not a sign it is idle. */
+    thinkingSignal?: false;
     /** "meter": `contextTokens` / `contextWindow` are the engine's own report, shown on the context meter but never used to time compaction. */
     contextReading?: "meter";
     /** sendTurn calls `engineAdmission` itself before it starts an engine process or joins one. */

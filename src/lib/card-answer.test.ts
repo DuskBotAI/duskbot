@@ -19,6 +19,7 @@ describe("answerResponse", () => {
     expect(answerResponse({ tool: "Bash" }, "Allow")).toEqual({ behavior: "allow" });
     expect(answerResponse({ tool: "Bash" }, "Deny")).toEqual({ behavior: "deny" });
     expect(answerResponse({ tool: "ask_bot" }, "Always allow")).toEqual({ behavior: "allow" });
+    expect(answerResponse({ tool: "mac_exec" }, "Allow for this task")).toEqual({ behavior: "allow", always: true });
     expect(answerResponse({ tool: "Bash" }, "Yes")).toEqual({ behavior: "allow" });
   });
 });

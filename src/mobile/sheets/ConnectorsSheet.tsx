@@ -1,6 +1,8 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { Check, ChevronDown, Search } from "../../icons";
 import { motion, useReducedMotion } from "motion/react";
 import { t } from "@/lib/i18n";
+import { cn } from "@/lib/cn";
 import { api } from "@/state/store";
 import { connectorDescription } from "@/lib/app-catalog";
 import { preloadConnectedApps } from "@/lib/connected-apps";
@@ -10,12 +12,13 @@ import { HOSTED_MCP_APPS, hostedConnections } from "@/lib/hosted-mcp-apps";
 import { ServiceTile } from "@/components/ServiceIcon";
 import { Icon } from "@/components/Icon";
 import { type McpServerListing, isRemoteMcpListing } from "@/components/mcp-draft";
-import { grokCategories, type AppEntry } from "@/components/connect-apps/catalog";
+import { CATEGORY_LABEL, grokCategories, popularity, presentCategories, searchApps, type AppEntry, type Category } from "@/components/connect-apps/catalog";
 import { mergeEntries, idsOf } from "@/components/connect-apps/merge";
 import { appLogo } from "@/components/connect-apps/logos";
 import { loadConnectorCatalog } from "@/components/connect-apps/use-connectors";
 import { loadComposioSnapshot, mergeCatalog } from "@/components/connect-apps/composio-snapshot";
 import { remoteConnection, sameEndpoint } from "@/components/connect-apps/use-remote-apps";
+import { connectAppsState, openConnectApps, subscribeConnectApps } from "@/components/connect-apps/open";
 import { managedConnectorUnavailableReason } from "../../../shared/connector-availability";
 import type { DirectoryAnswer } from "../../../shared/connector-directory";
 import { Sheet } from "../Sheet";
@@ -90,21 +93,55 @@ async function readApps(): Promise<AppsSnapshot> {
 export function AppFace({ entry }: { entry: Pick<AppEntry, "label" | "icon"> }) {
   const { glyph, glyphPaint: _glyphPaint, ...art } = entry.icon;
   return (
-    <span aria-hidden className="relative flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-[11px] bg-ink/[0.06] text-ink-secondary">
+    <span aria-hidden data-app-face="" className="relative flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-[11px] bg-ink/[0.06] text-ink-secondary">
       {glyph ? <Icon name={glyph} size={21} /> : <ServiceTile card={{ label: entry.label, ...art }} size={40} className="absolute inset-0" />}
     </span>
   );
 }
 
+export type AppGroup = { key: "connected" | "popular" | Category; entries: AppEntry[]; total: number };
+
+const POPULAR_SHOWN = 8;
+export const CATEGORY_SHOWN = 5;
 const SKELETON_ROWS = 4;
 
-/** The apps the bots here can use, read only: apps are connected from a computer, never from the phone. */
+/** The list as people look for an app: what's connected, the popular ones, then each category with its first few. An app
+ * shows once, in the first group it belongs to. */
+export function groupApps(entries: readonly AppEntry[], added: ReadonlySet<string>, expanded: ReadonlySet<string> = new Set()): AppGroup[] {
+  const seen = new Set<string>();
+  const take = (list: AppEntry[]) => { for (const entry of list) seen.add(entry.id); return list; };
+  const connected = take(entries.filter((entry) => appIsAdded(entry, added)));
+  const popular = take(entries.filter((entry) => !seen.has(entry.id) && popularity(entry) !== Infinity).sort((a, b) => popularity(a) - popularity(b)).slice(0, POPULAR_SHOWN));
+  const groups: AppGroup[] = [{ key: "connected", entries: connected, total: connected.length }, { key: "popular", entries: popular, total: popular.length }];
+  for (const category of presentCategories(entries)) {
+    const members = take(entries.filter((entry) => !seen.has(entry.id) && entry.categories[0] === category));
+    groups.push({ key: category, entries: expanded.has(category) ? members : members.slice(0, CATEGORY_SHOWN), total: members.length });
+  }
+  const rest = entries.filter((entry) => !seen.has(entry.id));
+  if (rest.length) {
+    const other = groups.find((group) => group.key === "other");
+    if (other) { other.total += rest.length; other.entries = expanded.has("other") ? [...other.entries, ...rest] : [...other.entries, ...rest].slice(0, CATEGORY_SHOWN); }
+    else groups.push({ key: "other", entries: expanded.has("other") ? rest : rest.slice(0, CATEGORY_SHOWN), total: rest.length });
+  }
+  return groups.filter((group) => group.entries.length > 0);
+}
+
+/** The Connect Apps page an app's row opens: its own page, where it is connected, managed and disconnected. */
+export function connectPageFor(entry: Pick<AppEntry, "id" | "kind">): { kind: "detail"; id: string } {
+  return { kind: "detail", id: entry.kind === "custom" ? "custom-mcp" : entry.id };
+}
+
+/** Every app the bots in the place this phone is paired to can use: connected first, then the rest to browse and search.
+ * A row opens the app's page from the computer app, so connecting, managing and disconnecting work the same here. */
 export function ConnectorsSheet({ open, onClose }: SheetPageProps<"connectors">) {
   const [snapshot, setSnapshot] = useState<AppsSnapshot | null>(null);
+  const [query, setQuery] = useState("");
+  const [expanded, setExpanded] = useState<ReadonlySet<string>>(() => new Set());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const reduced = useReducedMotion();
   const requestVersion = useRef(0);
+  const id = useId();
   const load = useCallback(async () => {
     const version = ++requestVersion.current;
     setLoading(true);
@@ -116,23 +153,55 @@ export function ConnectorsSheet({ open, onClose }: SheetPageProps<"connectors">)
     finally { if (version === requestVersion.current) setLoading(false); }
   }, []);
   useEffect(() => { if (open) void load(); return () => { requestVersion.current++; }; }, [open, load]);
-  const connected = snapshot ? connectedApps(snapshot.entries, snapshot.added) : [];
+  // what was connected or disconnected on an app's page shows here when it closes
+  useEffect(() => {
+    if (!open) return;
+    let was = connectAppsState().open;
+    return subscribeConnectApps(() => {
+      const now = connectAppsState().open;
+      if (was && !now) void load();
+      was = now;
+    });
+  }, [open, load]);
+  const searching = Boolean(query.trim());
+  const found = snapshot && searching ? searchApps(snapshot.entries, query, snapshot.entries.length) : [];
+  const groups: AppGroup[] = !snapshot ? [] : searching ? [{ key: "popular", entries: found, total: found.length }] : groupApps(snapshot.entries, snapshot.added, expanded);
+  const empty = snapshot !== null && !loading && (searching ? found.length === 0 : snapshot.entries.length === 0);
   return (
     <Sheet open={open} onClose={onClose} title={t("mobile.connectors.title")} full>
-      <div className="px-2 pt-2">
-        {error && <div className="mb-4 rounded-[20px] bg-ink/[0.045] px-4 py-3"><p role="alert" className="text-[15px] leading-[22px] text-ink">{t("mobile.connectors.error")}</p><button type="button" disabled={loading} onClick={() => void load()} className="mobile-press mt-2 min-h-11 rounded-full bg-ink px-5 text-[15px] font-semibold text-app disabled:opacity-40">{t("mobile.connectors.retry")}</button></div>}
+      <div className="px-4 pt-2">
+        <label htmlFor={id} className="mb-4 flex h-11 items-center gap-2 rounded-full bg-menu px-4 text-ink-secondary">
+          <Search aria-hidden size={19} /><span className="sr-only">{t("mobile.connectors.search")}</span>
+          <input id={id} type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t("mobile.connectors.search")} className="h-full min-w-0 flex-1 border-0 bg-transparent text-[16px] text-ink placeholder:text-ink-tertiary" />
+        </label>
+        {error && <div className="mb-4 rounded-[16px] bg-menu px-4 py-3"><p role="alert" className="text-[15px] leading-[22px] text-ink">{t("mobile.connectors.error")}</p><button type="button" disabled={loading} onClick={() => void load()} className="mobile-press mt-2 min-h-11 rounded-full bg-ink px-5 text-[15px] font-semibold text-app disabled:opacity-40">{t("mobile.connectors.retry")}</button></div>}
         {!snapshot ? (
-          loading && <div role="status" aria-label={t("mobile.connectors.loading")} className="overflow-hidden rounded-[20px] bg-ink/[0.045]">
+          loading && <div role="status" aria-label={t("mobile.connectors.loading")} data-settings-card="" className="flex flex-col gap-[2px] overflow-hidden rounded-[16px] [&>*]:bg-menu [&_.mobile-row]:rounded-none">
             {Array.from({ length: SKELETON_ROWS }, (_, key) => <div key={key} aria-hidden className={APP_ROW}><span className="size-10 shrink-0 rounded-[11px] bg-ink/[0.06]" /><span className="flex-1 space-y-2"><span className="block h-4 w-1/2 rounded-full bg-ink/[0.06]" /><span className="block h-3 w-3/4 rounded-full bg-ink/[0.05]" /></span></div>)}
           </div>
-        ) : connected.length > 0 ? (
-          <motion.ul aria-label={t("mobile.connectors.title")} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: reduced ? 0 : dur.base, ease: ease.out }} className="overflow-hidden rounded-[20px] bg-ink/[0.045]">
-            {connected.map((entry) => <li key={entry.id} className={APP_ROW}>
-              <AppFace entry={entry} />
-              <span className="min-w-0 flex-1"><span className="block truncate text-[16px] font-semibold text-ink">{entry.label}</span><span className="mt-0.5 line-clamp-1 text-[14px] leading-5 text-ink-secondary">{entry.description}</span></span>
-            </li>)}
-          </motion.ul>
-        ) : !error && <EmptyState art="plug" title={t("mobile.connectors.emptyTitle")} body={t("mobile.connectors.emptyBody")} className="pt-12" />}
+        ) : (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: reduced ? 0 : dur.base, ease: ease.out }}>
+            {groups.map((group) => <section key={group.key} aria-labelledby={`${id}-${group.key}`} className="mb-6">
+              <h2 id={`${id}-${group.key}`} className={searching ? "sr-only" : "px-4 pb-1 text-[14px] font-medium text-ink-secondary"}>{searching ? t("mobile.connectors.search") : group.key === "connected" || group.key === "popular" ? t(`mobile.connectors.${group.key}`) : t(CATEGORY_LABEL[group.key])}</h2>
+              <ul data-settings-card="" className="flex flex-col gap-[2px] overflow-hidden rounded-[16px] [&>*]:bg-menu [&_.mobile-row]:rounded-none">
+                {group.entries.map((entry) => {
+                  const added = appIsAdded(entry, snapshot.added);
+                  return <li key={entry.id}><button type="button" onClick={() => openConnectApps(connectPageFor(entry))} className={cn(APP_ROW, "mobile-row w-full text-left")}>
+                    <AppFace entry={entry} />
+                    <span className="min-w-0 flex-1"><span className="block truncate text-[16px] font-semibold text-ink">{entry.label}</span><span className="mt-0.5 line-clamp-1 text-[14px] leading-5 text-ink-secondary">{entry.description}</span></span>
+                    {added
+                      ? <span className="flex shrink-0 items-center gap-1 text-[14px] font-semibold text-success"><Check aria-hidden size={15} />{t("mobile.connectors.added")}</span>
+                      : <span className="flex min-h-8 shrink-0 items-center rounded-full bg-ink/[0.06] px-3 text-[14px] font-semibold text-ink">{t("mobile.connectors.add")}</span>}
+                  </button></li>;
+                })}
+              </ul>
+              {!searching && group.total > group.entries.length && <button type="button" onClick={() => setExpanded((current) => new Set([...current, group.key]))} className="mobile-row mt-1 flex min-h-11 w-full items-center gap-2 rounded-2xl px-4 text-left text-[15px] font-semibold text-ink-secondary"><ChevronDown aria-hidden size={18} />{t("mobile.connectors.showAll", { count: group.total })}</button>}
+            </section>)}
+            {empty && (searching
+              ? <EmptyState art="plug" title={t("mobile.connectors.noMatch")} body={t("mobile.connectors.noMatchHint")} className="pt-12" />
+              : !error && <EmptyState art="plug" title={t("mobile.connectors.emptyTitle")} body={t("mobile.connectors.emptyBody")} action={{ label: t("mobile.connectors.retry"), onClick: () => void load() }} className="pt-12" />)}
+          </motion.div>
+        )}
       </div>
     </Sheet>
   );

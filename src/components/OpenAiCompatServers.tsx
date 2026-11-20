@@ -6,6 +6,10 @@ import { keySaved } from "@/lib/product-events";
 import { addedServers } from "@/lib/openai-compat-endpoints";
 import { cn } from "@/lib/cn";
 import { KEY_FIELD } from "./keys/KeyRow";
+import { KeyCheckNote } from "./keys/KeyCheckNote";
+import { keyCheckView, type KeyCheckView } from "./keys/key-check-view";
+import { checkKey } from "./keys/key-save";
+import type { KeyResult } from "@/lib/analytics-allowlist";
 import { Select } from "./Select";
 import { friendlyError } from "@/lib/plain-error";
 
@@ -83,7 +87,9 @@ function AddedServers({ servers }: { servers: Array<InstanceInfo & { url?: strin
   const [models, setModels] = useState("");
   const [busy, setBusy] = useState<"add" | "other" | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [check, setCheck] = useState<KeyCheckView | null>(null);
   const ready = Boolean(name.trim() && url.trim() && key.trim());
+  const edit = (setter: (value: string) => void) => (event: { target: { value: string } }) => { setter(event.target.value); setCheck(null); };
 
   const run = (kind: "add" | "other", request: () => Promise<{ instances?: unknown }>, onDone?: () => void) => {
     if (busy) return;
@@ -99,17 +105,47 @@ function AddedServers({ servers }: { servers: Array<InstanceInfo & { url?: strin
       .finally(() => setBusy(null));
   };
 
-  const add = () => ready && run(
-    "add",
-    () => api("/api/instances/openai-compat", {
-      method: "POST",
-      body: JSON.stringify({ displayName: name.trim(), url: url.trim(), key: key.trim(), ...(modelIds(models).length ? { models: modelIds(models) } : {}) }),
-    }).then(
-      (added) => { keySaved("custom_endpoint", "settings", "unverified"); return added; },
-      (cause: unknown) => { keySaved("custom_endpoint", "settings", "error"); throw cause; },
-    ),
-    () => { setName(""); setUrl(""); setKey(""); setModels(""); },
-  );
+  /** One provider call with the key and first model as typed; an address it may not send a key to is left as before. */
+  const verify = async (): Promise<{ view: KeyCheckView; result: KeyResult } | null> => {
+    setBusy("add");
+    setError(null);
+    try {
+      const answer = await checkKey("openaiCompat", { key: key.trim(), url: url.trim(), ...(modelIds(models)[0] ? { model: modelIds(models)[0] } : {}) });
+      return { view: keyCheckView(answer.answer, name.trim() || url.trim()), result: answer.result };
+    } catch (cause) {
+      setError(friendlyError(cause, t("apiInstances.failed")));
+      return null;
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const add = async (anyway = false) => {
+    if (!ready || busy) return;
+    let result: KeyResult = "unverified";
+    if (!(anyway && check?.confirm)) {
+      const checked = await verify();
+      if (!checked) return;
+      result = checked.result;
+      if (!checked.view.address && (checked.view.blocks || checked.view.confirm)) {
+        setCheck(checked.view);
+        if (checked.view.blocks) keySaved("custom_endpoint", "settings", result);
+        return;
+      }
+    }
+    setCheck(null);
+    run(
+      "add",
+      () => api("/api/instances/openai-compat", {
+        method: "POST",
+        body: JSON.stringify({ displayName: name.trim(), url: url.trim(), key: key.trim(), ...(modelIds(models).length ? { models: modelIds(models) } : {}) }),
+      }).then(
+        (added) => { keySaved("custom_endpoint", "settings", result); return added; },
+        (cause: unknown) => { keySaved("custom_endpoint", "settings", "error"); throw cause; },
+      ),
+      () => { setName(""); setUrl(""); setKey(""); setModels(""); },
+    );
+  };
 
   return (
     <div data-api-keys-other>
@@ -159,18 +195,22 @@ function AddedServers({ servers }: { servers: Array<InstanceInfo & { url?: strin
           {t("apiInstances.geminiPreset")}
         </button>
         {url.trim() === GEMINI_PRESET.url && <p className="text-[12px] leading-4 text-ink-secondary">{t("apiInstances.geminiKeyHint")}</p>}
-        <input value={name} onChange={(e) => setName(e.target.value)} placeholder={t("apiInstances.name")} aria-label={t("apiInstances.name")}
+        <input value={name} onChange={edit(setName)} placeholder={t("apiInstances.name")} aria-label={t("apiInstances.name")}
           spellCheck={false} disabled={busy !== null} className={INPUT} />
-        <input type="url" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://api.example.com/v1" aria-label={t("apiInstances.url")}
+        <input type="url" value={url} onChange={edit(setUrl)} placeholder="https://api.example.com/v1" aria-label={t("apiInstances.url")}
           spellCheck={false} disabled={busy !== null} className={cn(INPUT, "font-mono")} />
-        <input type="password" value={key} onChange={(e) => setKey(e.target.value)} placeholder={t("apiInstances.key")} aria-label={t("apiInstances.key")}
+        <input type="password" value={key} onChange={edit(setKey)} placeholder={t("apiInstances.key")} aria-label={t("apiInstances.key")}
           autoComplete="off" disabled={busy !== null} className={cn(INPUT, "font-mono")} />
-        <input value={models} onChange={(e) => setModels(e.target.value)} placeholder={t("apiInstances.models")} aria-label={t("apiInstances.models")}
+        <input value={models} onChange={edit(setModels)} placeholder={t("apiInstances.models")} aria-label={t("apiInstances.models")}
           spellCheck={false} disabled={busy !== null} className={cn(INPUT, "font-mono")} />
         <p className="text-[12px] leading-4 text-ink-secondary">{t("apiInstances.modelsHint")}</p>
+        {check && (
+          <KeyCheckNote view={check} busy={busy !== null} saveAnywayLabel={t("apiInstances.addAnyway")}
+            onSaveAnyway={() => void add(true)} onUseModel={(model) => { setModels(model); setCheck(null); }} />
+        )}
         <button
           type="button"
-          onClick={add}
+          onClick={() => void add()}
           disabled={busy !== null || !ready}
           className="ui-button self-start"
         >

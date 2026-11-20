@@ -1067,6 +1067,12 @@ describe("config status frames", () => {
     expect(status.savedKeys).toEqual({ ttsKey: { configured: true, last4: "e5f6" }, openaiLiveKey: { configured: false } });
   });
 
+  it("keeps the computer's name and the new-bot effort through a live config update", () => {
+    const status = configStatusFromFrame({ computerName: "Studio Mac", newBots: { effort: "high" } } as ConfigStatusFrame);
+    expect(status.computerName).toBe("Studio Mac");
+    expect(status.newBots).toEqual({ effort: "high" });
+  });
+
   it("keeps thread capacity and room timeout with the existing config fields", () => {
     expect(
       configStatusFromFrame({

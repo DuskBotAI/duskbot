@@ -20,6 +20,10 @@ export const CLAUDE_FLAG_FLOORS = {
 } as const satisfies Record<string, ClaudeCliVersion>;
 
 
+/** From here a live stream-json session takes a turn's effort as the control request `apply_flag_settings`
+ * {effortLevel}; null brings back the CLI's default, not a launch --effort. Checked on 2.1.288 and 2.1.314. */
+export const CLAUDE_EFFORT_CONTROL_FLOOR: ClaudeCliVersion = [2, 1, 288];
+
 /** `claude --version` prints "2.1.232 (Claude Code)". */
 export function parseClaudeCliVersion(stdout: string | null | undefined): ClaudeCliVersion | null {
   return parseVersionTriple(stdout ?? "");

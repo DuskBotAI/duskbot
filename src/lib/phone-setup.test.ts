@@ -1,8 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { CompanionAccountState } from "../types/duskDesktop";
 import {
-  secureAccessRetryHelps,
-  secureAccessUnavailableMessage,
   claimPhonePairingAttempt,
   closePhonePairingIfOwned,
   completePhonePairingAttempt,
@@ -35,17 +33,6 @@ const account = (status: CompanionAccountState["status"]): CompanionAccountState
 });
 
 describe("phone setup flow", () => {
-  it("tells the person why secure access is unavailable and whether retrying helps", () => {
-    const unsupported: CompanionAccountState = { available: false, status: "signed-out", reason: "unsupported" };
-    const offline: CompanionAccountState = { available: false, status: "signed-out", reason: "offline" };
-    expect(secureAccessUnavailableMessage(unsupported)).toMatch(/isn’t offered yet.*Tailscale/);
-    expect(secureAccessUnavailableMessage(offline)).toMatch(/can’t reach the internet/);
-    expect(secureAccessUnavailableMessage({ available: false, status: "signed-out" })).toMatch(/not available right now/);
-    expect(secureAccessUnavailableMessage({ available: true, status: "signed-out" })).toBeNull();
-    expect(secureAccessRetryHelps(unsupported)).toBe(false);
-    expect(secureAccessRetryHelps(offline)).toBe(true);
-  });
-
   it("refreshes Tailscale before validating an explicit tailnet route", async () => {
     const calls: string[] = [];
     const initial = { enabled: true };

@@ -1,0 +1,91 @@
+{
+  "path": "/routines/dropbox-inbox-folder-sort",
+  "type": "routine",
+  "title": "Sort a Dropbox inbox folder with a move list you approve",
+  "nav": "dropbox inbox folder sort",
+  "h1": "sort a dropbox inbox without guessing where files belong",
+  "description": "Give receipts and signed files a destination in Dropbox. Review the full paths before anything moves and leave ambiguous names and collisions in the inbox.",
+  "keyword": "dropbox inbox folder sort",
+  "keywords": [
+    "sort dropbox files by name",
+    "dropbox folder organization routine",
+    "review dropbox file moves"
+  ],
+  "answer": "**a file called scan.pdf could be a receipt, a contract or last week’s menu.** give your bot two filename rules and let it sort only the files that fit. you see each source and destination in chat before you choose what moves. ambiguous names stay in the dropbox inbox.",
+  "updated": "2026-11-20",
+  "review": {
+    "status": "approved",
+    "by": "lead agent, after four independent reviewers read every page against seo/facts (2026-11-20); every finding applied",
+    "at": "2026-11-20"
+  },
+  "voice": 2,
+  "tags": [
+    "dropbox",
+    "files",
+    "sorting"
+  ],
+  "connectors": [
+    "dropbox"
+  ],
+  "related": [
+    "/integrations/dropbox",
+    "/use-cases/file-organizer",
+    "/use-cases/expense-reports",
+    "/routines/weekly-receipts-sweep"
+  ],
+  "art": {
+    "logo": "dropbox",
+    "props": [
+      "p-folder",
+      "p-receipt"
+    ],
+    "bubble": "leave the scan here"
+  },
+  "og_line": "see both paths before a file moves.",
+  "routine": {
+    "message": "each friday at 3 pm, list every file directly inside /inbox in my work dropbox. read filenames only. skip subfolders. propose moving names starting with receipt- to /receipts and signed- to /signed. keep the filename. if neither prefix fits, leave the file for me.\n\nshow the full source and destination paths here. flag missing folders or existing destination names and skip those moves. ask me before you change anything. wait for me to choose specific rows. before moving each file, confirm it still matches the proposal and its destination is free. skip it if anything changed.\n\nnever overwrite, auto-rename, delete or share. report the moves that succeeded and any that failed. stay quiet if the complete inbox listing contains no files. report a listing error here.",
+    "when": "fridays at 3 pm, with moves waiting for your choice in chat",
+    "needs": "dropbox folder listing and metadata reads. allow the move action only if you want the bot to carry out your choices.[^3]",
+    "output": "friday sort · proposed only\n1. /inbox/receipt-faye-brooks.pdf → /receipts/receipt-faye-brooks.pdf\nhold: /inbox/signed-lease.pdf already has a namesake in /signed.\nleave for you: /inbox/scan.pdf has no matching prefix.\nmove row 1?"
+  },
+  "knobs": [
+    "**start with a dry run.** give dropbox read-only access. you can compare the paths and do the filing yourself.",
+    "**match the names your scanner uses.** choose a prefix you can apply consistently. a file extension alone says little about the contents.",
+    "**narrow the inbox.** point the routine at one client’s intake folder if several clients use the same naming convention."
+  ],
+  "fails": [
+    "**the listing stops partway down the folder.** continue through the remaining results before proposing the batch. a first page can miss files.[^3]",
+    "**you approved a file that someone has since renamed.** skip that row. read the new name and ask for a fresh decision."
+  ],
+  "sections": [
+    {
+      "h": "make a name collision a decision",
+      "md": "**two files with the same name can hold different agreements.** leave both where they are until someone compares them. adding a suffix makes the move possible, but leaves the next reader guessing which copy to use.\n\nif the only reliable filing clue is inside a scanned document, this filename routine is the wrong pick."
+    }
+  ],
+  "faq": [
+    {
+      "q": "does listing files require permission to move them?",
+      "a": "**read only works for the proposal.** moving a chosen file needs the separate dropbox move action. keep the instruction to ask before each approved set of changes."
+    },
+    {
+      "q": "what if only part of the sort worked?",
+      "a": "**use the reported paths to locate each file.** refresh the inbox and destination before retrying a failed row. leave successful moves alone."
+    }
+  ],
+  "sources": [
+    {
+      "label": "dusk bot docs: routines",
+      "url": "/docs/routines"
+    },
+    {
+      "label": "dusk bot docs: files and apps",
+      "url": "/docs/files-and-apps"
+    },
+    {
+      "label": "composio: dropbox actions",
+      "url": "https://docs.composio.dev/toolkits/dropbox",
+      "checked": "2026-11-20"
+    }
+  ]
+}

@@ -8,11 +8,11 @@ import { approvalModeFor, modelSwitchNeedsAsk, type ApprovalMode } from "../../s
 import { writeFileAtomic } from "../atomic.ts";
 import { recoveryCapabilityError } from "../automatic-recovery.ts";
 import type { InstanceConfigMap, ProviderAdapter, RuntimeEvent } from "../contracts.ts";
-import { readyToRun, selectDefaultModelSelection, type DefaultSelectionContext, type SelectableInstance } from "../default-model-selection.ts";
+import { readyToRun, type DefaultSelectionContext, type SelectableInstance } from "../default-model-selection.ts";
 import { engineFailureKind } from "../drivers/engine-errors.ts";
 import { PROVIDER_FAILURE_HOLD_MS, providerFailoverLine } from "../drivers/provider-failover.ts";
 import { classifyError } from "../drivers/retry.ts";
-import { billsEachUse, failoverLine, limitBackupAllowed, signedOutLine, type LimitFailover } from "../limit-failover.ts";
+import { failoverLine, limitBackupAllowed, signedOutLine, type LimitFailover } from "../limit-failover.ts";
 import { LimitNotices, limitNoticeText, signedOutNoticeText } from "../limit-notices.ts";
 import { UNNAMED_LIMIT_MS } from "../limit-resets.ts";
 import type { LimitMode, ModelSelection } from "../../shared/wire.ts";
@@ -60,6 +60,8 @@ export interface LimitTakeoverDeps {
   /** The backups a signed-out AI's turns (and a turn its provider failed) go to, as for a turn its AI never started: the bot's own list, or the
    * installation's one backup while Automatic recovery is on. `chosen` when not given. */
   signedOutChosen?(botId: string): ModelSelection[];
+  /** The AIs that carry on for a bot that chose no backup at all, best first (server/automatic-recovery.ts). */
+  automatic?(botId: string, from: ModelSelection, engines: readonly TakeoverEngine[]): ModelSelection[];
   engineName(instanceId: string): string;
   tell(bot: Bot, text: string): void;
   /** A conversation moved off a limited or signed-out AI: it goes back once that ends. */
@@ -192,9 +194,9 @@ export function createLimitTakeover(deps: LimitTakeoverDeps) {
   };
 
   /** The AIs that may carry on while `from` is limited or signed out, best first: for one model's limit the same AI's own
-   * default model, then the backups the person chose, then (for a limit) the AI Dusk would pick for a new bot among
-   * the rest that draw on a plan. One that bills each use spends the person's money, so it carries on only as a backup
-   * they chose; a signed-out AI's turns go only to a backup they chose. `approval`: the thread's level, when known. */
+   * default model, then the backups the person chose, then, with the bot set to it, the free model. No other AI ever
+   * carries on by itself: another engine starts a new session that has none of the limited one's work, so with none of
+   * these the turn waits for the reset and goes on in its own session. `approval`: the thread's level, when known. */
   function backups(botId: string, from: ModelSelection, scope: TakeoverScope = "engine", approval?: ApprovalMode): ModelSelection[] {
     const engines = deps.engines();
     const current = engines.find((engine) => engine.instanceId === from.instanceId);
@@ -209,14 +211,10 @@ export function createLimitTakeover(deps: LimitTakeoverDeps) {
     // like a sign-out, a provider's hiccup never reaches the installation backup while Automatic recovery is off
     const startup = scope === "signed-out" || scope === "provider";
     for (const selection of startup ? deps.signedOutChosen?.(botId) ?? deps.chosen(botId) : deps.chosen(botId)) add(selection);
-    // A provider's hiccup moves a turn only to a backup the person chose.
+    if (!out.length) for (const selection of deps.automatic?.(botId, from, engines) ?? []) add(selection);
+    // A provider's hiccup moves a turn only to a backup the person chose, or one of their own AIs when they chose none.
     if (scope === "signed-out" || scope === "provider") return out;
-    const free = (deps.limitMode?.(botId) ?? "wait") === "free";
-    if (free) { const pick = freeSelection(from, scope, approval); if (pick) add(pick); }
-    const others = engines.filter((engine) => engine.instanceId !== from.instanceId && engine.access !== "api" && !billsEachUse(deps.configs()[engine.instanceId])
-      && (free || !freeFallback(engine)) && usable(engines, current, { instanceId: engine.instanceId, model: engine.models.default }, scope, approval));
-    const pick = selectDefaultModelSelection(others, undefined, deps.context);
-    if (pick.instanceId && pick.model) add(pick);
+    if ((deps.limitMode?.(botId) ?? "wait") === "free") { const pick = freeSelection(from, scope, approval); if (pick) add(pick); }
     return out;
   }
 

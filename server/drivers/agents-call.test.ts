@@ -392,3 +392,17 @@ describe("page tools", () => {
       { path: "/api/internal/pages/unpublish", body: { page_id: "abcdefghijklmnopqrstuvwxyz" } }]);
   });
 });
+
+describe("select_computer with nothing to select", () => {
+  const options = [{ surface: "cloud", available: false, reason: "Connect a VPS in Settings before using this computer." }];
+  it("says pages and search still work without a computer, so the bot carries on", async () => {
+    for (const answer of [{ error: "No configured computer or browser is available.", options }, { current: "off", canSelect: true, options }]) {
+      const result = await callTool("select_computer", {}, context({ client: { api: async () => answer, apiResponse: async () => ({ ok: true, status: 200, body: {} }) } }));
+      expect(result.text).toContain("reading pages and searching the web need none: do every part of the task you can");
+    }
+  });
+  it("adds nothing when a computer is available", async () => {
+    const result = await callTool("select_computer", {}, context({ client: { api: async () => ({ current: "off", options: [{ surface: "vm", available: true }] }), apiResponse: async () => ({ ok: true, status: 200, body: {} }) } }));
+    expect(result.text).not.toContain("need none");
+  });
+});

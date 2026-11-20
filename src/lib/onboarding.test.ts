@@ -251,8 +251,15 @@ describe("persistence patches", () => {
 });
 
 describe("the first run's screens", () => {
-  it("is the welcome, the AI, the account, where bots live, dusk cloud's checkout, bringing things in, the phone, the cloud being made and the permissions, in that order", () => {
-    expect(BEAT_ORDER).toEqual(["welcome", "account", "place", "checkout", "ai", "bring", "phone", "making", "permissions"]);
+  it("is the hello, an account the install requires, dusk cloud's checkout, the AI, the cloud's bring and the cloud being made, in that order", () => {
+    expect(BEAT_ORDER).toEqual(["welcome", "account", "checkout", "ai", "bring", "making"]);
+  });
+
+  it("resumes a screen this run no longer shows (this Mac's bring) on the AI choice, never back on the hello", () => {
+    expect(resumeBeat(["welcome", "ai"], "bring")).toBe("ai");
+    expect(resumeBeat(["welcome", "ai"], "account")).toBe("ai");
+    expect(resumeBeat(["welcome", "ai"], "welcome")).toBe("welcome");
+    expect(resumeBeat(["welcome"], "bring"), "a cloud the desktop app set up asks for no AI").toBe("welcome");
   });
 
   it("resumes the saved screen while it is offered, else starts at the first", () => {

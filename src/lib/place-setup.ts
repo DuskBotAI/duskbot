@@ -29,24 +29,46 @@ export function installChecklist(view: VpsLinkView, now: number): Array<{ key: "
 const LOOPBACK = new Set(["localhost", "127.0.0.1", "[::1]"]);
 const CODE = /^([A-Z0-9]{4})-?([A-Z0-9]{4})-?([A-Z0-9]{4})$/;
 
-/** The pairing link main opens, from what the person typed: a whole pairing link as it is, or an address (https, or plain
- * http on this computer for an SSH tunnel) and an optional code. */
-export function pairingLink(address: string, code: string): { link: string } | { error: "address" | "code" } {
-  const typed = address.trim();
-  if (!typed) return { error: "address" };
-  if (/#code=/.test(typed)) return { link: typed };
+function serverOrigin(typed: string): URL | null {
   let url: URL;
   // a bare loopback address is an SSH tunnel, which speaks plain http
   const scheme = /^(?:localhost|127\.0\.0\.1|\[::1\])(?:[:/]|$)/i.test(typed) ? "http" : "https";
-  try { url = new URL(/^[a-z][a-z0-9+.-]*:\/\//i.test(typed) ? typed : `${scheme}://${typed}`); } catch { return { error: "address" }; }
+  try { url = new URL(/^[a-z][a-z0-9+.-]*:\/\//i.test(typed) ? typed : `${scheme}://${typed}`); } catch { return null; }
   const loopback = LOOPBACK.has(url.hostname);
-  if (url.username || url.password || url.search || !(url.protocol === "https:" || (url.protocol === "http:" && loopback))) return { error: "address" };
-  if (!loopback && !url.hostname.includes(".")) return { error: "address" };
-  const cleaned = code.replace(/\s+/g, "").toUpperCase();
-  if (!cleaned) return { link: url.origin };
-  const parts = CODE.exec(cleaned);
-  if (!parts) return { error: "code" };
-  return { link: `${url.origin}/pair#code=${parts[1]}-${parts[2]}-${parts[3]}` };
+  if (url.username || url.password || url.search || !(url.protocol === "https:" || (url.protocol === "http:" && loopback))) return null;
+  if (!loopback && !url.hostname.includes(".")) return null;
+  return url;
+}
+
+function withCode(origin: string, code: string): { link: string } | { error: "code" } {
+  const parts = CODE.exec(code.replace(/[\s-]+/g, "").toUpperCase());
+  return parts ? { link: `${origin}/pair#code=${parts[1]}-${parts[2]}-${parts[3]}` } : { error: "code" };
+}
+
+/** The pairing link in what `duskbot pair` printed, pasted whole or as one line: its public https link before the
+ * loopback one it also prints, which on this computer would name this app's own server. */
+export function pastedPairingLink(text: string): string | null {
+  const found = Array.from(text.matchAll(/https?:\/\/[^\s"'<>`]+?\/pair\/?#code=([A-Za-z0-9]{4}-?[A-Za-z0-9]{4}-?[A-Za-z0-9]{4})/g), (match) => {
+    const url = serverOrigin(match[0].slice(0, match[0].indexOf("/pair")));
+    const made = url ? withCode(url.origin, match[1]!) : null;
+    return made && "link" in made ? { link: made.link, loopback: LOOPBACK.has(url!.hostname) } : null;
+  }).filter((one) => one !== null);
+  return (found.find((one) => !one.loopback) ?? found[0])?.link ?? null;
+}
+
+/** The pairing link main opens, from what the person typed: a pairing link (or the lines `duskbot pair` printed around
+ * it), or an address (https, or plain http on this computer for an SSH tunnel) and an optional code. */
+export function pairingLink(address: string, code: string): { link: string } | { error: "address" | "code" } {
+  const typed = address.trim();
+  if (!typed) return { error: "address" };
+  if (/#code=/.test(typed)) {
+    const link = pastedPairingLink(typed);
+    return link ? { link } : { error: "address" };
+  }
+  const url = serverOrigin(typed);
+  if (!url) return { error: "address" };
+  if (!code.trim()) return { link: url.origin };
+  return withCode(url.origin, code);
 }
 
 /** Where the sheet opens: the first choice, straight at a server's ways to connect, or at the recommended way's line

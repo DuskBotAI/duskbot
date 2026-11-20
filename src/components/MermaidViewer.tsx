@@ -247,7 +247,7 @@ export function MermaidViewer({ svg, onClose }: { svg: string; onClose: () => vo
           <div ref={contentRef} dir="ltr" className="[&_svg]:block" dangerouslySetInnerHTML={markup} />
         </MotionDiv>
       </div>
-      <div className="absolute end-3 top-3 z-[1] flex items-center gap-2">
+      <div data-viewer-controls="" className="absolute end-[calc(var(--safe-area-inset-right,env(safe-area-inset-right,0px))+12px)] top-[calc(var(--safe-area-inset-top,env(safe-area-inset-top,0px))+12px)] z-[1] flex items-center gap-2">
         <div className={GROUP}>
           <button type="button" className={BUTTON} onClick={() => zoomBy(1 / STEP)} disabled={view.scale <= MIN_SCALE} aria-label={t("mermaid.zoomOut")} title={t("mermaid.zoomOut")}>
             <Icon name="zoom-out" size={16} />

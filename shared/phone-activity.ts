@@ -32,7 +32,7 @@ export function pushCategory(push: { kind: string; requestId?: string; groupId?:
 /** ActivityKit's attributes-type: the Swift struct's name. */
 export const TURN_ACTIVITY_TYPE = "DuskTurnAttributes";
 /** How long a finished activity stays on the lock screen. */
-export const TURN_ACTIVITY_DISMISS_S = 4 * 60;
+export const TURN_ACTIVITY_DISMISS_S = 20;
 
 /** Fixed for the activity's life. */
 export interface TurnActivityAttributes {

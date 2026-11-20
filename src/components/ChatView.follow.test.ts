@@ -29,6 +29,8 @@ vi.mock("./DesktopCapabilities", async (importOriginal) => ({
 vi.mock("@/lib/analytics", () => ({ track: vi.fn() }));
 vi.mock("@/lib/cloud-guest", () => ({ useCanWriteIn: () => true, useReactor: () => "user" }));
 vi.mock("./ModelPicker", () => ({ ModelPicker: () => null }));
+// the working line's hooks come and go with the turn, which would shift every ref the fixture keeps by call order
+vi.mock("./TurnPresence", async (importOriginal) => ({ ...await importOriginal<typeof import("./TurnPresence")>(), TurnPresence: () => null }));
 
 const { ChatView } = await import("./ChatView");
 afterAll(() => vi.unstubAllGlobals());

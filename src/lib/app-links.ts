@@ -24,9 +24,32 @@ export function platformLabel(platform?: string): string | null {
   return (platform && PLATFORM_NAMES[platform]) ?? null;
 }
 
+/** How an app that is not the desktop window shows a web page and puts it away: the phone's in-app browser. */
+export interface ExternalPages {
+  open(url: string): Promise<void>;
+  close?(): void;
+}
+
+let hostPages: ExternalPages | null = null;
+
+export function setExternalPages(pages: ExternalPages | null): void {
+  hostPages = pages;
+}
+
+/** The app's own way to show a page outside this one; null in a plain browser tab, where a new tab is the way. */
+export function externalOpener(): ((url: string) => Promise<unknown>) | null {
+  return window.duskDesktop?.openExternal ?? hostPages?.open ?? null;
+}
+
+/** Puts away the page an app showed for a sign-in once it has done its job, so the person is back in the app. */
+export function closeExternalPage(): void {
+  hostPages?.close?.();
+}
+
 export async function openExternalLink(url: string): Promise<void> {
-  if (window.duskDesktop?.openExternal) {
-    await window.duskDesktop.openExternal(url);
+  const open = externalOpener();
+  if (open) {
+    await open(url);
     return;
   }
   window.open(url, "_blank", "noopener,noreferrer");

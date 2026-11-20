@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 
 import { connect as tcpConnect } from "node:net";
 
-import { createEgressProxy, createTunnelAgent, EGRESS_DIAL_MS, EGRESS_PROBE, openFrame, sealBytes, sealFrame } from "../agent.mjs";
+import { createEgressProxy, createTunnelAgent, EGRESS_DIAL_MS, EGRESS_PROBE, createCloudRelay, keepHubRunning, openFrame, sealBytes, sealFrame } from "../agent.mjs";
 
 const id = "abcdefghij";
 const key = Buffer.alloc(32, 3);
@@ -275,5 +275,40 @@ describe("egress fallback", () => {
       socket.destroy();
       await proxy.stop();
     }
+  });
+});
+
+describe("the phone hub beside a running tunnel", () => {
+  it("is made again when the relay refused it, and stays stopped once the tunnel ends", async () => {
+    const hubs = [];
+    const make = () => {
+      let end;
+      const hub = { done: false, run: () => new Promise((resolve) => { end = resolve; }), stop: () => { hub.done = true; end?.(); }, refuse: () => end() };
+      hubs.push(hub);
+      return hub;
+    };
+    const kept = keepHubRunning(make, { againMs: 10 });
+    expect(hubs).toHaveLength(1);
+    hubs[0].refuse();
+    await new Promise((resolve) => setTimeout(resolve, 40));
+    expect(hubs).toHaveLength(2);
+    hubs[1].refuse();
+    kept.stop();
+    await kept.done;
+    await new Promise((resolve) => setTimeout(resolve, 40));
+    expect(hubs).toHaveLength(2);
+  });
+});
+
+describe("the cloud relay before the app registered this link", () => {
+  it("asks again soon at first instead of waiting the long unknown wait", async () => {
+    let asked = 0;
+    const relay = createCloudRelay({ url: "https://relay.test", id: "abcdefghij", key: "k".repeat(43), hub: {}, log: () => {}, unknownFirstMs: 20, unknownMs: 60_000,
+      connect: async () => { asked += 1; throw Object.assign(new Error("not found"), { status: 404 }); } });
+    relay.start();
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    relay.stop();
+    expect(asked).toBeGreaterThanOrEqual(3);
+    expect(asked).toBeLessThan(8);
   });
 });

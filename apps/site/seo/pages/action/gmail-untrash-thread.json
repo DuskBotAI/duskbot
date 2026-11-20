@@ -1,0 +1,92 @@
+{
+  "path": "/integrations/gmail/untrash-thread",
+  "type": "action",
+  "title": "Recover a whole Gmail thread from trash with AI",
+  "nav": "restore a conversation",
+  "h1": "recover the gmail conversation behind a missing reply",
+  "description": "Find a conversation in Gmail trash and restore its messages together. Use a detail from the exchange to distinguish it from threads with similar subjects.",
+  "keyword": "recover gmail thread from trash with ai",
+  "keywords": [
+    "restore all messages in a gmail conversation",
+    "chatgpt find deleted gmail conversation",
+    "claude restore gmail thread"
+  ],
+  "answer": "**sometimes the missing email only makes sense with the replies that followed it.** ask the bot to look in gmail trash for the conversation and recover its messages together. give it a detail from the exchange, like the venue or the revised pickup time. recovery depends on the thread still being in trash.",
+  "updated": "2026-11-20",
+  "review": {
+    "status": "approved",
+    "by": "lead agent, after four independent reviewers read every page against seo/facts (2026-11-20); every finding applied",
+    "at": "2026-11-20"
+  },
+  "tags": [
+    "gmail",
+    "restore a conversation"
+  ],
+  "connectors": [
+    "gmail"
+  ],
+  "related": [
+    "/integrations/gmail",
+    "/integrations/gmail/trash-thread",
+    "/integrations/gmail/untrash-message"
+  ],
+  "art": {
+    "logo": "gmail",
+    "label": "Gmail",
+    "props": [
+      "p-bubbles",
+      "p-magnifier"
+    ],
+    "bubble": "found the whole exchange"
+  },
+  "og_line": "bring the conversation back together.",
+  "action": {
+    "toolkit": "gmail",
+    "slug": "GMAIL_UNTRASH_THREAD"
+  },
+  "what": "**recover the exchange that explains which instruction won.** tell the bot to search threads with `label:trash` and use the matching thread id. it can read the sequence and bring back the whole conversation. if all you need is the last instruction, a read of the thread may settle it without a mailbox change.",
+  "uses": [
+    "bring back the correspondence showing why a collection point moved",
+    "recover the repair discussion with both the original fault and the agreed fix",
+    "retrieve the complete exchange before disputing a change to a rental booking"
+  ],
+  "routine": {
+    "message": "just once, this coming monday at 8 am, search my bookings mailbox in trash for the piano collection conversation about the mill street hall. put the first arrangement and the last agreed pickup location here, with the thread id. ask me before you change anything. restore that thread only after i choose it, and never restore another booking.",
+    "when": "once, this coming monday at 8 am before the piano pickup",
+    "needs": "bookings gmail with read and write for trash search, reading and thread recovery",
+    "output": "piano collection with helen barlow\noriginal arrangement: main entrance. last agreement: use loading door on mill street.\nfound one matching conversation in trash. restore the exchange?"
+  },
+  "steps": [
+    "select the bookings account under **Connected apps**. give the bot the venue and a phrase you remember.",
+    "ask it to include the trash label. a normal thread search skips those results.",
+    "grant **read and write** for recovery, then compare both arrangements before choosing the thread."
+  ],
+  "watch": [
+    "**a search that skips trash can look like a failed recovery.** target the trash label and try a distinctive place or sender.",
+    "**a permanent deletion leaves nothing here to restore.** a thread id won't recreate those messages."
+  ],
+  "faq": [
+    {
+      "q": "will it put the thread under a label i choose?",
+      "a": "**restoring takes the thread out of trash.** the action has no field for a destination label."
+    },
+    {
+      "q": "do i need write access just to see what the last email said?",
+      "a": "**reading the thread takes read access.** keep the bot on **read only** if you just want the pickup instructions."
+    }
+  ],
+  "sources": [
+    {
+      "label": "dusk bot docs: files and apps",
+      "url": "/docs/files-and-apps"
+    },
+    {
+      "label": "dusk bot docs: routines",
+      "url": "/docs/routines"
+    }
+  ],
+  "voice": 2,
+  "tip": {
+    "text": "if you remember the changed detail better than the subject, give the bot that clue to distinguish the conversation after it searches."
+  }
+}

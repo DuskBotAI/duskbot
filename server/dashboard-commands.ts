@@ -1,5 +1,7 @@
-import { randomBytes } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
+import { mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import type { IncomingMessage } from "node:http";
+import { join } from "node:path";
 import { appSlug, commandPairLink, commandUrl, connectCallback } from "../shared/dashboard-protocol.ts";
 import type { CompanionEndpoint } from "../shared/pairing-link.ts";
 import type { CommandResult, DashboardCommand } from "../shared/dashboard-protocol.ts";
@@ -13,10 +15,38 @@ export function plainError(message: string): boolean {
   return text.length > 0 && text.length <= 240 && !/[\r\n]|https?:\/\/|\bat [\w.<>]+ \(|[A-Za-z]:\\|\/(?:home|root|usr|data|var|tmp)\//.test(text);
 }
 
+/** What a one-time command already did, by command id, until the command expires: the dashboard sends a command again
+ * while it has no result, and a workspace that restarted before reporting one would otherwise mint a second pairing
+ * grant or sign-in link. `null` dataDir keeps it in memory only. */
+export function commandResults(dataDir: string | null, now = Date.now) {
+  const file = dataDir ? join(dataDir, "dashboard-commands.json") : null;
+  let kept: Array<{ result: CommandResult; until: number }> = [];
+  try {
+    const saved = file ? JSON.parse(readFileSync(file, "utf8")) as { v?: number; kept?: typeof kept } : null;
+    if (saved?.v === 1 && Array.isArray(saved.kept)) kept = saved.kept.filter((one) => typeof one?.result?.id === "string" && Number.isFinite(one.until));
+  } catch {}
+  const live = () => { const at = now(); kept = kept.filter((one) => one.until > at).slice(-100); };
+  return {
+    get(id: string): CommandResult | null { live(); return kept.find((one) => one.result.id === id)?.result ?? null; },
+    set(result: CommandResult, until: number): void {
+      live();
+      kept = [...kept.filter((one) => one.result.id !== result.id), { result, until }];
+      if (!file) return;
+      const temporary = `${file}.${randomUUID()}.tmp`;
+      try {
+        mkdirSync(dataDir!, { recursive: true });
+        writeFileSync(temporary, JSON.stringify({ v: 1, kept }), { mode: 0o600, flag: "wx" });
+        renameSync(temporary, file);
+      } catch {} finally { try { unlinkSync(temporary); } catch {} }
+    },
+  };
+}
+
 /** `companion`: the Mac companion's addresses while it already runs and policy allows remote access, else null; a phone
  *  pairing never starts it */
-export function createDashboardCommands(deps: { port: number; collect: ReturnType<typeof createDashboardCollector>; fetch?: typeof fetch; companion?: () => Promise<CompanionEndpoint[] | null>; dashboardUrl?: () => string | null }) {
+export function createDashboardCommands(deps: { port: number; collect: ReturnType<typeof createDashboardCollector>; fetch?: typeof fetch; companion?: () => Promise<CompanionEndpoint[] | null>; dashboardUrl?: () => string | null; dataDir?: string | null }) {
   const pending = new Map<string, { path: string; method: string }>();
+  const done = commandResults(deps.dataDir ?? null);
   const owners = new WeakSet<RequestAuth>();
   function authenticate(req: IncomingMessage): RequestAuth | null {
     const key = req.headers["x-dusk-dashboard-command"];
@@ -61,7 +91,16 @@ export function createDashboardCommands(deps: { port: number; collect: ReturnTyp
       return host === own || own.endsWith(`.${host}`) ? callback : null;
     } catch { return null; }
   }
+  /** a phone pairing and an app sign-in make something new each time they run, so each command id runs them once */
   async function execute(command: DashboardCommand): Promise<CommandResult> {
+    if (command.kind !== "phone.pair" && command.kind !== "app.connect") return run(command);
+    const before = done.get(command.id);
+    if (before) return before;
+    const result = await run(command);
+    if (result.ok) done.set(result, command.expiresAt);
+    return result;
+  }
+  async function run(command: DashboardCommand): Promise<CommandResult> {
     if (command.kind === "phone.pair") return pairPhone(command);
     const result = (ok: boolean, message: string): CommandResult => ({ id: command.id, ok, message, at: Date.now() });
     let path: string, method: string, message: string, body: object = {};

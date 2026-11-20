@@ -11,6 +11,9 @@ describe("schedule labels", () => {
     ["0 9 * * 1#2", "Monthly on the second Monday at 9:00"],
     ["0 9 * * 1-5", "Every weekday at 9:00"],
     ["30 17 * * 5", "Weekly on Friday at 17:30"],
+    ["0 18 * * SUN", "Weekly on Sunday at 18:00"],
+    ["0 9 * * mon-fri", "Every weekday at 9:00"],
+    ["0 9 * * TUE#2", "Monthly on the second Tuesday at 9:00"],
     ["0 9 1 * 1", "Cron 0 9 1 * 1"],
     ["*/15 9-17 * * 1-5", "Cron */15 9-17 * * 1-5"],
   ])("labels %s without inventing a meaning for arbitrary expressions", (expression, description) => {
@@ -42,7 +45,7 @@ describe("schedule labels", () => {
     expect(scheduleSentence({ type: "interval", everyMinutes: 90, anchorAt: 0 })).toBe("every 1 hour 30 minutes");
     expect(scheduleSentence({ type: "daily", time: "09:00", weekdays: [1, 2, 3, 4, 5] })).toMatch(/^every weekday at /);
     expect(scheduleSentence({ type: "daily", time: "09:00", weekdays: [0, 1, 2, 3, 4, 5, 6] })).toMatch(/^every day at /);
-    expect(scheduleSentence({ type: "daily", time: "09:00", weekdays: [3] })).toMatch(/^weekly on wed at /);
+    expect(scheduleSentence({ type: "daily", time: "09:00", weekdays: [3] })).toMatch(/^weekly on Wednesday at /);
     expect(scheduleSentence({ type: "once", at: Date.UTC(2026, 8, 5, 12) })).toMatch(/^once on /);
   });
 

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { EMPTY_VIEW, type VpsLinkView } from "./vps-link";
-import { installChecklist, installPhase, pairingLink } from "./place-setup";
+import { pairingBlock } from "../../server/cli-pairing";
+import { installChecklist, installPhase, pairingLink, pastedPairingLink } from "./place-setup";
 
 const at = (view: Partial<VpsLinkView>): VpsLinkView => ({ ...EMPTY_VIEW, ...view });
 const states = (view: VpsLinkView, now = 0) => installChecklist(view, now).map((step) => `${step.key}:${step.state}`);
@@ -52,5 +53,24 @@ describe("connecting by address", () => {
     expect(pairingLink("https://intranet", "")).toEqual({ error: "address" });
     expect(pairingLink("https://a.example.com?x=1", "")).toEqual({ error: "address" });
     expect(pairingLink("https://a.example.com", "nope")).toEqual({ error: "code" });
+    expect(pairingLink("http://10.0.0.5/pair#code=ABCD-2345-EFGH", "")).toEqual({ error: "address" });
+    expect(pairingLink("https://a.example.com/pair#code=nope", "")).toEqual({ error: "address" });
+  });
+
+  it("takes the public link out of everything `duskbot pair` printed, pasted as it is", () => {
+    const printed = pairingBlock({
+      code: "ABCD-2345-EFGH", url: "https://bots.example.com/pair#code=ABCD-2345-EFGH", inviteUrl: "duskbot://pair?address=bots.example.com&token=x",
+      localUrl: "http://127.0.0.1:8799/pair#code=ABCD-2345-EFGH", expiresAt: Date.now() + 60_000,
+    });
+    expect(pairingLink(printed, "")).toEqual({ link: "https://bots.example.com/pair#code=ABCD-2345-EFGH" });
+    // a one-line field drops the line breaks of a paste
+    expect(pairingLink(printed.replace(/\n/g, ""), "")).toEqual({ link: "https://bots.example.com/pair#code=ABCD-2345-EFGH" });
+    expect(pastedPairingLink("open or scan:  https://bots.example.com/pair#code=abcd2345efgh")).toBe("https://bots.example.com/pair#code=ABCD-2345-EFGH");
+  });
+
+  it("falls back to a loopback link only when nothing else was pasted", () => {
+    expect(pastedPairingLink("http://127.0.0.1:8790/pair#code=ABCD-2345-EFGH")).toBe("http://127.0.0.1:8790/pair#code=ABCD-2345-EFGH");
+    expect(pastedPairingLink("https://bots.example.com")).toBeNull();
+    expect(pastedPairingLink("pairing code:  ABCD-2345-EFGH")).toBeNull();
   });
 });

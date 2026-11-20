@@ -3,6 +3,7 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
+process.env.FAKE_CHAT_RETRY_SCALE = "0.001";
 
 import type { SendTurnInput } from "../contracts.ts";
 import { recordEvents } from "../testing/events.ts";
@@ -210,12 +211,13 @@ describe("an OpenAI-compatible provider that refuses large requests", () => {
     [400, '{"error":{"message":"invalid model"}}', "upstream HTTP 400: invalid model"],
     [500, "Internal Server Error", "upstream HTTP 500: Internal Server Error"],
     [429, '{"error":{"message":"Rate limit reached for requests"}}', "upstream HTTP 429: Rate limit reached for requests"],
-  ])("leaves an HTTP %i failure as it was", async (status, body, message) => {
+  ])("leaves an HTTP %i failure as it was, after the retries a transient one gets", async (status, body, message) => {
     const f = await provider(() => ({ status, body }));
     const done = await f.run({ transcript: transcript(20, 3_000) });
     expect(done).toMatchObject({ ok: false });
-    expect(f.requests).toHaveLength(1);
-    expect(f.retries()).toEqual([]);
+    expect(f.requests).toHaveLength(status === 400 ? 1 : 3);
+    expect(f.retries()).toHaveLength(status === 400 ? 0 : 2);
+    expect(new Set(f.requests.map((request) => request.bytes)).size).toBe(1);
     expect(f.errors()).toEqual([message]);
   });
 });

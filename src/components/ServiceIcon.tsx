@@ -75,7 +75,7 @@ export function ServiceTile({ card, size = 40, className }: { card: TileArt; siz
   const padded = card.padded || source !== card.image;
   const inner = padded ? size * (card.scale ?? 0.684) : size - 2;
   return (
-    <span aria-hidden="true" className={cn(TILE, className)} style={frame}>
+    <span aria-hidden="true" data-service-tile-bare={padded && !card.background ? "" : undefined} className={cn(TILE, className)} style={frame}>
       <img key={source} src={source} alt="" draggable={false} loading="lazy" decoding="async" width={inner} height={inner} style={{ width: inner, height: inner }} className="object-contain" onError={() => setFailed((count) => count + 1)} />
     </span>
   );

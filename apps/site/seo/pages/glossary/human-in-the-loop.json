@@ -1,0 +1,80 @@
+{
+  "path": "/glossary/human-in-the-loop",
+  "type": "glossary",
+  "title": "What does human in the loop mean for an AI agent?",
+  "nav": "human in the loop",
+  "h1": "what does human in the loop mean?",
+  "description": "See where to put a human decision in an AI task, what the reviewer needs to see, and how to keep control when an agent proposes a change.",
+  "keyword": "human in the loop",
+  "keywords": [
+    "human in the loop ai",
+    "human approval for ai agents"
+  ],
+  "answer": "**human in the loop means a person makes a decision that can change what the ai does next.** the agent can gather the evidence and propose an action. you can accept it, correct it or stop there. put that decision before a mistake would become someone else's problem.",
+  "updated": "2026-11-20",
+  "review": {
+    "status": "approved",
+    "by": "lead agent, after four independent reviewers read every page against seo/facts (2026-11-20); every finding applied",
+    "at": "2026-11-20"
+  },
+  "tags": [
+    "approvals",
+    "permissions",
+    "glossary"
+  ],
+  "connectors": [],
+  "related": [
+    "/guides/is-it-safe-to-let-ai-control-your-computer",
+    "/glossary/prompt-injection",
+    "/glossary/computer-use-agent"
+  ],
+  "art": {
+    "props": [
+      "s-button",
+      "p-folder"
+    ],
+    "bubble": "keep both versions?"
+  },
+  "og_line": "decide while you can still change the result.",
+  "definition": "a human is in the loop when their judgment helps decide the outcome of an ai task.",
+  "example": "**dennis finds two recordings with the same concert title.** in this example, an agent proposes removing the shorter one. dennis asks for the running times and the recording dates. the short one is a rehearsal he wants to keep. he rejects the deletion while both recordings still exist.",
+  "sections": [
+    {
+      "h": "give the reviewer a real decision",
+      "md": "**a useful request shows exactly what a yes would change.** for the recordings, show both filenames, the dates and the reason for choosing one. “tidy the archive?” gives dennis too little to decide.\n\nput the decision with someone who knows why a rehearsal might matter. watching a progress bar gives them no chance to save it."
+    },
+    {
+      "h": "where to put the pause in dusk bot",
+      "md": "**choose ask for approval for a bot handling risky file operations.** when an approval card arrives, use allow or deny. you can steer a working bot with another message.[^1][^2]\n\nconnected apps have their own permissions. for a review of records, give the bot read only access. it can propose a change in chat while you make the edit yourself.[^3]"
+    },
+    {
+      "h": "when personal review breaks down",
+      "md": "**keep the job with a person if a reviewer cannot judge the evidence.** dusk bot is a poor fit for discarding original recordings on title alone. even a careful reviewer needs a way to listen to the doubtful pair."
+    }
+  ],
+  "faq": [
+    {
+      "q": "does reading the report afterward count as an approval?",
+      "a": "a later review can improve the next run. if you need to prevent a deletion today, put your decision before the file disappears."
+    },
+    {
+      "q": "does a human have to do every step?",
+      "a": "no. the agent can gather filenames and dates on its own. reserve your attention for choices where the same evidence could reasonably lead to different outcomes."
+    }
+  ],
+  "sources": [
+    {
+      "label": "dusk bot docs: approval levels",
+      "url": "/docs/computer"
+    },
+    {
+      "label": "dusk bot docs: steering a bot",
+      "url": "/docs/bots"
+    },
+    {
+      "label": "dusk bot docs: app permissions",
+      "url": "/docs/files-and-apps"
+    }
+  ],
+  "voice": 2
+}

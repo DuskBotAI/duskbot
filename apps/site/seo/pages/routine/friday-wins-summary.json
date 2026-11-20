@@ -1,0 +1,90 @@
+{
+  "path": "/routines/friday-wins-summary",
+  "type": "routine",
+  "title": "Build a Friday wins summary from completed Todoist tasks",
+  "nav": "friday wins summary",
+  "h1": "remember what you finished before friday slips away",
+  "description": "Use completion dates from one Todoist project to draft a weekly wins note. Keep task titles as evidence and leave room for the work your list never captured.",
+  "keyword": "friday wins summary routine",
+  "keywords": [
+    "weekly wins summary",
+    "friday accomplishments recap",
+    "todoist weekly completed tasks"
+  ],
+  "answer": "**friday is a bad time to reconstruct monday from memory.** ask a bot to read what you completed in one todoist project this week. it groups the finished tasks into a short wins note and puts the original titles underneath. you can see what you did without turning a ticked box into a claim about results.",
+  "updated": "2026-11-20",
+  "review": {
+    "status": "approved",
+    "by": "lead agent, after four independent reviewers read every page against seo/facts (2026-11-20); every finding applied",
+    "at": "2026-11-20"
+  },
+  "voice": 2,
+  "tags": [
+    "todoist",
+    "weekly",
+    "accomplishments"
+  ],
+  "connectors": [
+    "todoist"
+  ],
+  "related": [
+    "/integrations/todoist",
+    "/routines/todoist-evening-plan",
+    "/routines/google-docs-weekly-report-draft"
+  ],
+  "art": {
+    "label": "Todoist",
+    "props": [
+      "p-newspaper",
+      "s-notebook"
+    ],
+    "bubble": "finished this week"
+  },
+  "og_line": "keep the evidence underneath each win.",
+  "routine": {
+    "message": "at 4 pm each friday, read completed todoist tasks for my project called \"bindery work\" from just after last friday’s 4 pm cutoff through this friday at 4. use my time zone and completion dates.\n\ndraft up to three wins here. group tasks only when their titles point to the same piece of work. use plain past tense. under each win, give the original task titles and completion days. mention how many other completed tasks you left out. skip routine housekeeping unless your job says to include it.\n\nnever edit tasks or share the recap. never infer a customer result from a task title. stay quiet when the full read turns up only housekeeping or nothing completed. tell me if the history is incomplete.",
+    "when": "friday at 4 pm, covering completions since the previous friday cutoff",
+    "needs": "todoist read only for tasks completed in the chosen project during a date window[^3]. enter your own todoist project name.",
+    "output": "wins for the week · bindery work\nprepared the repair samples for louise hart.\n- tuesday: cut linen swatches for louise hart\n- thursday: mount louise hart’s repair samples\n\nfinished the stock count.\n- monday: count remaining blue boards\n\nleft out: two routine supply runs."
+  },
+  "knobs": [
+    "**choose the audience before the wording.** ask for first person if you keep a personal work journal.",
+    "**define housekeeping in your own terms.** leave out routine supply runs unless deliveries are the work you report on.",
+    "**give a long handoff room.** ask for one win with its supporting tasks if that project dominated your week."
+  ],
+  "fails": [
+    "**something due next month shows up this week.** that is correct if you finished it this week. use the completion date, even when the due date differs.",
+    "**the recap says a client approved the samples.** look at the task verb. “prepare” supports preparation. approval needs separate evidence."
+  ],
+  "sections": [
+    {
+      "h": "count the work between two fridays",
+      "md": "**give the recap a fixed cutoff so late friday work has somewhere to go.** a task you finish after this week’s cutoff belongs in next week’s note. starting on monday would quietly lose it.\n\nif most of your work never reaches todoist, write the recap yourself. use the completed list as a memory aid."
+    }
+  ],
+  "faq": [
+    {
+      "q": "how do i keep a long project from looking like five separate wins?",
+      "a": "**group by the thing you finished.** buying paper, cutting sheets and binding a sample can support one finished sample. keep each original title underneath."
+    },
+    {
+      "q": "can unfinished work go in the note?",
+      "a": "**keep it out of the wins list.** add your own progress sentence after reading the draft if someone needs to know what is still underway."
+    }
+  ],
+  "sources": [
+    {
+      "label": "dusk bot docs: routines",
+      "url": "/docs/routines"
+    },
+    {
+      "label": "dusk bot docs: files and apps",
+      "url": "/docs/files-and-apps"
+    },
+    {
+      "label": "composio: todoist actions",
+      "url": "https://docs.composio.dev/toolkits/todoist",
+      "checked": "2026-11-20"
+    }
+  ]
+}

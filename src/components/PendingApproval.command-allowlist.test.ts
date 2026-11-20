@@ -168,7 +168,7 @@ describe("remembering exact command approvals", () => {
     const pending = pendingApprovals([message()])[0]!;
     const html = renderToStaticMarkup(createElement(PendingApprovalPanel, { pending, count: 1, index: 0, botName: "Scout" }));
     const row = html.slice(0, html.indexOf('id="approval-details-'));
-    expect(row).toContain("Scout wants to run a command");
+    expect(row).toContain(">Wants to run a command</p>");
     expect(row).toMatch(/<div dir="auto"[^>]*class="[^"]*font-mono[^"]*"[^>]*>git status --short<\/div>/);
     expect(row).not.toContain("<pre");
   });

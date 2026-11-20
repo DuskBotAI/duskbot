@@ -9,6 +9,7 @@ import { t } from "@/lib/i18n";
 import { copyText } from "@/lib/copy-text";
 import { columnMinimums, fitsColumns } from "@/lib/table-fit";
 import { cn } from "@/lib/cn";
+import { phoneBridge } from "@/lib/phone-bridge";
 
 export interface TableCell { text: string; content?: ReactNode; align?: TableAlign; vAlign?: "top" | "middle" | "bottom" }
 export type TableAlign = "left" | "center" | "right" | "start" | "end";
@@ -25,7 +26,18 @@ export interface RichTableProps {
 }
 
 /** The native modal supplies focus containment, Escape, an inert background and focus restoration. */
-export function TableDialog({ title, onClose, children, returnFocus }: { title: string; onClose: () => void; children: ReactNode; returnFocus: HTMLElement | null }) {
+export function TableDialog(props: { title: string; onClose: () => void; children: ReactNode; returnFocus: HTMLElement | null }) {
+  const phone = phoneBridge();
+  const opened = useRef(false);
+  useEffect(() => {
+    if (!phone || opened.current) return;
+    opened.current = true;
+    phone.view({ kind: "page", title: props.title, body: <div className="px-3">{props.children}</div> }, props.onClose);
+  }, []);
+  return phone ? null : <ModalTableDialog {...props} />;
+}
+
+function ModalTableDialog({ title, onClose, children, returnFocus }: { title: string; onClose: () => void; children: ReactNode; returnFocus: HTMLElement | null }) {
   const ref = useRef<HTMLDialogElement>(null);
   const id = useId();
   useEffect(() => {
@@ -96,14 +108,21 @@ export function RichTable({ columns, rows, name = t("table.title"), expanded = f
         placeholder={t("table.search")} className="w-full min-w-0 bg-transparent py-1 text-xs text-ink outline-none placeholder:text-ink-tertiary focus-visible:ring-1 focus-visible:ring-focus" />
     </label>
   );
+  const phone = phoneBridge();
+  const expand = (opener: HTMLElement | null) => {
+    if (phone) return phone.view({ kind: "table", columns, rows, name });
+    trigger.current = opener as HTMLButtonElement | null;
+    setOpen(true);
+  };
   const sortBy = (column: number) => setSort(sort?.column !== column ? { column, descending: false } : !sort.descending ? { column, descending: true } : null);
   const card = () => (
     <div data-table-card className={TABLE_CARD} dir="ltr">
       <div className="table-plate absolute end-1.5 top-1.5 z-20 flex items-center opacity-0 transition-opacity duration-150 focus-within:opacity-100 group-hover/table:opacity-100 has-[[aria-expanded=true]]:opacity-100 touch:end-1 touch:top-1 touch:opacity-100">
+        {phone && <button type="button" data-table-expand="" className={cn(TABLE_PLATE_BUTTON, "me-1 w-10 rounded-[6px]")} aria-label={t("table.expand")} onClick={() => expand(null)}><Maximize2 size={14} /></button>}
         <button type="button" className={cn(TABLE_PLATE_BUTTON, "w-6 rounded-s-[6px] touch:w-10")} aria-label={t("table.copyPlain")} onClick={() => void copy()}>{copyState === "copied" ? <Check size={14} /> : <Icon name="copy" size={14} />}</button>
         <SidebarPopoverMenu grok items={[
           { key: "download", label: t("table.download"), icon: <Download size={14} aria-hidden="true" />, onSelect: download },
-          { key: "expand", label: t("table.expand"), icon: <Maximize2 size={14} aria-hidden="true" />, onSelect: () => { trigger.current = document.activeElement as HTMLButtonElement | null; setOpen(true); } },
+          { key: "expand", label: t("table.expand"), icon: <Maximize2 size={14} aria-hidden="true" />, onSelect: () => expand(document.activeElement as HTMLElement | null) },
         ]} ariaLabel={t("table.copyOptions")} placement="below" align="end" triggerClassName={cn(TABLE_PLATE_BUTTON, "-ms-px w-4 rounded-e-[6px] touch:w-8")} triggerLabel={t("table.copyOptions")}
           renderTrigger={() => <Icon name="chevron-down" size={12} />} />
       </div>
@@ -113,7 +132,9 @@ export function RichTable({ columns, rows, name = t("table.title"), expanded = f
           <span role="status" className="shrink-0 text-[12px] tabular-nums">{t("table.count", { shown: order.length.toLocaleString(), total: rows.length.toLocaleString(), columns: columns.length })}</span>
         </div>
       )}
-      <TableViewport columns={columns} rows={rows} order={order} name={name} wrap={wrap} large={false} sort={sort} direction={direction} headless={headless} look="card" onSort={sortBy} />
+      <div className="contents" onClick={phone ? (event) => { if (!(event.target as Element).closest("button, a, input")) expand(null); } : undefined}>
+        <TableViewport columns={columns} rows={rows} order={order} name={name} wrap={wrap} large={false} sort={sort} direction={direction} headless={headless} look="card" onSort={sortBy} />
+      </div>
       {status}
     </div>
   );

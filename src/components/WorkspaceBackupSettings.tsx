@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { AnimatePresence } from "motion/react";
 import type { WorkspaceBackupSummary } from "../../shared/workspace-backup";
 import { api } from "@/state/store";
 import { t } from "@/lib/i18n";
@@ -177,7 +178,7 @@ export function WorkspaceBackupSettings() {
         </ItemRow>
         {error && !exportOpen && !file && <NoteRow tone="danger">{error}</NoteRow>}
       </RowsCard>
-      {exportOpen && <FormDialog data-panel-modal="backup-export" title={t("backup.export")} description={t("backup.passwordHint")}
+      <AnimatePresence>{exportOpen && <FormDialog key="backup-export" data-panel-modal="backup-export" title={t("backup.export")} description={t("backup.passwordHint")}
         saveLabel={busy === "export" ? t("backup.exporting") : t("settings.w6c.backup.exportTitle")} canSave={exportReady} busy={busy !== null} error={error ?? undefined}
         onSave={exportBackup} onClose={() => { setExportOpen(false); setExportPassword(""); setConfirmPassword(""); }}>
         <FormField label={t("backup.exportPassword")}>
@@ -186,15 +187,15 @@ export function WorkspaceBackupSettings() {
         <FormField label={t("backup.confirmPassword")}>
           <input type="password" autoComplete="new-password" minLength={12} maxLength={1024} required disabled={disabled} value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} className={textFieldCls} />
         </FormField>
-      </FormDialog>}
-      {file && !preview && <FormDialog data-panel-modal="backup-import" title={t("backup.import")} description={file.name}
+      </FormDialog>}</AnimatePresence>
+      <AnimatePresence>{file && !preview && <FormDialog key="backup-import" data-panel-modal="backup-import" title={t("backup.import")} description={file.name}
         saveLabel={busy === "preview" ? t("backup.validating") : t("backup.validate")} canSave={Boolean(importPassword)} busy={busy !== null} error={error ?? undefined}
         onSave={previewBackup} onClose={closeImport}>
         <FormField label={t("backup.importPassword")}>
           <input type="password" autoComplete="off" maxLength={1024} required disabled={disabled} value={importPassword} onChange={(event) => setImportPassword(event.target.value)} className={textFieldCls} />
         </FormField>
-      </FormDialog>}
-      {preview && <FormDialog data-panel-modal="backup-restore" title={t("backup.preview")} description={t("backup.replaceWarning")} width={460}
+      </FormDialog>}</AnimatePresence>
+      <AnimatePresence>{preview && <FormDialog key="backup-restore" data-panel-modal="backup-restore" title={t("backup.preview")} description={t("backup.replaceWarning")} width={460}
         saveLabel={busy === "restore" ? t("backup.restoring") : t("backup.replace")} canSave={confirmation === "REPLACE"} busy={busy !== null} error={error ?? undefined}
         onSave={restoreBackup} onClose={closeImport}>
         <div className="-mx-2"><WorkspaceBackupSummaryView summary={preview.summary} /></div>
@@ -202,7 +203,7 @@ export function WorkspaceBackupSettings() {
         <FormField label={t("backup.confirmReplace")}>
           <input value={confirmation} autoComplete="off" spellCheck={false} disabled={disabled} onChange={(event) => setConfirmation(event.target.value)} className={textFieldCls} />
         </FormField>
-      </FormDialog>}
+      </FormDialog>}</AnimatePresence>
     </>}
   </>;
 }

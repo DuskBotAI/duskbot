@@ -18,11 +18,14 @@ import { ChartCard, ConversionList, LiveMap, LtvList, MainChart, PeakHours, SERI
 import { FunnelChart } from "./FunnelChart";
 import { KpiRow, useKpiLayout } from "./KpiRow";
 import { mainOf, type ChartedId } from "./kpi-layout";
-import { RevenueStrip } from "./RevenuePage";
+import { TrialsSummary } from "./Subscribers";
 import { Failed, Loading, n } from "./ui";
 
 const Globe = lazy(() => import("./globe/Globe"));
 
+interface TrialKpis { started: number; ended: number; converted: number; conversion: number | null }
+/** the free trials of the window, from the same report as revenue */
+export interface TrialReport { current: TrialKpis; previous: TrialKpis; active: number; cancelling: number; mrrAtStake: number; series: number[]; cards: Record<string, Record<string, number>>; byChannel?: Record<string, number[]> }
 interface Kpis { visitors: number; visits: number; pageviews: number; signups: number; paid: number; waitlist: number; conversion: number | null; bounce: number | null; visitMs: number | null }
 export type Surface = "all" | "site" | "account" | "desktop" | "phone";
 export interface WebAnswer {
@@ -30,7 +33,7 @@ export interface WebAnswer {
   series: SeriesData; cards: Record<string, RankRow[]>; notes: Note[]; tracked: boolean; marks?: Mark[];
   surfaces?: { site: number; account: number; desktop: number; phone: number };
   crawlers: { total: number; bot: RankRow[]; page: RankRow[]; kind: RankRow[] };
-  revenue?: RevenueAnswer & { byChannel?: Record<string, number[]>; ltv?: Array<{ source: string; customers: number; cents: number; perCustomer: number }> };
+  revenue?: RevenueAnswer & { byChannel?: Record<string, number[]>; ltv?: Array<{ source: string; customers: number; cents: number; perCustomer: number }>; trials?: TrialReport };
   insights?: Insights;
 }
 interface Person {
@@ -93,13 +96,8 @@ function SitePicker({ value, onChange, counts }: { value: Surface; onChange(v: S
 const I = { size: 14, strokeWidth: 1.75 } as const;
 
 function mainSeries(id: ChartedId, data: SeriesData): MainSeries {
-  const money = data.revenue, net = (i: number) => money ? money.new[i]! + money.renewal[i]! + money.refund[i]! : 0;
   switch (id) {
-    case "revenue": return { label: "revenue", kind: "revenue", values: null };
-    case "mrr": return { label: "expected mrr", kind: "money", values: money?.mrr ?? null };
-    case "customers": return { label: "new customers", kind: "count", values: data.paid };
-    case "per visitor": return { label: "per visitor", kind: "money", values: data.visitors.map((v, i) => v ? net(i) / v : 0) };
-    case "conversion": return { label: "conversion", kind: "share", values: data.visitors.map((v, i) => v ? data.signups[i]! / v : 0) };
+    case "trials": return { label: "trials started", kind: "count", values: data.trials ?? null };
   }
 }
 
@@ -256,15 +254,14 @@ export function OverviewPage() {
   const overview = useAdmin<Overview>("/overview?days=30", 120_000);
   const owner = useAdminRole() === "owner";
   const pick = (dim: string, key: string) => setSel((s) => ({ ...s, filters: { ...s.filters, [dim]: s.filters[dim] === key ? undefined : key } }));
-  const c = data?.current, p = data?.previous, r = data?.revenue;
+  const c = data?.current, p = data?.previous, r = data?.revenue, t = r?.trials;
   const online = data ? data.online.site + data.online.app : 0;
   const detail = (tab: string) => `/admin/analytics/${tab}?${webQuery(range, surface, filters).replace(/from=\d+&to=\d+&?/, `range=${range.key}&`).replace(/surface=/, "site=")}`;
-  const series = useMemo(() => data ? { ...data.series, revenue: data.revenue?.series } : null, [data]);
-  const filtered = Object.values(filters).some((v) => v !== undefined);
+  const series = useMemo(() => data ? { ...data.series, revenue: data.revenue?.series, trials: data.revenue?.trials?.series } : null, [data]);
   const whole = (v: number) => n(v), dollars = (v: number) => usd(v, true), share = (v: number) => percent(v);
   const main = useMemo(() => series && mainId ? mainSeries(mainId, series) : null, [series, mainId]);
   const charted = (id: ChartedId) => mainId === id ? { on: show.main, flip: flip("main"), colour: SERIES.revenue } : undefined;
-  const mrrMoved = r && !filtered ? r.current.mrr - r.previous.mrr : null;
+
   return (
     <>
       <header className="mb-5 flex flex-wrap items-center justify-between gap-3">
@@ -282,28 +279,25 @@ export function OverviewPage() {
         <div className={cx("transition-opacity duration-150", loading && "opacity-80")}>
           <section className="rounded-[28px] bg-card p-2" aria-label="key numbers and chart">
             <KpiRow layout={kpis} onLayout={setKpis} cards={[
+              { id: "trials", value: t ? t.current.started : null, format: whole, now: t?.current.started, before: t?.previous.started, toggle: charted("trials") },
+              { id: "trial to paid", value: t ? t.current.conversion : null, format: share, now: t?.current.conversion ?? undefined, before: t?.previous.conversion ?? undefined,
+                change: t && t.current.conversion === null ? <span className="text-12 text-ink-4">no trial over yet</span> : undefined },
+              { id: "active trials", value: t ? t.active : null, format: whole },
+              { id: "cancelling", value: t ? t.cancelling : null, format: whole, change: t ? <span className="text-12 text-ink-4">trials set to end</span> : undefined },
+              { id: "trial mrr", value: t ? t.mrrAtStake : null, format: dollars, change: t ? <span className="text-12 text-ink-4">at stake if they pay</span> : undefined },
+              { id: "received", value: r ? r.current.net : null, format: dollars, now: r?.current.net, before: r?.previous.net, hint: "payments taken less refunds in this range, before tax and processor fees" },
               { id: "visitors", value: c.visitors, format: whole, now: c.visitors, before: p.visitors, toggle: { on: show.visitors, flip: flip("visitors"), colour: SERIES.visitors } },
-              { id: "revenue", value: r ? r.current.net : null, format: dollars, now: r?.current.net, before: r?.previous.net, toggle: charted("revenue") },
               { id: "signups", value: c.signups, format: whole, now: c.signups, before: p.signups, toggle: { on: show.signups, flip: flip("signups"), colour: SERIES.signups } },
-              { id: "mrr", value: r && !filtered ? r.current.mrr : null, format: dollars, toggle: charted("mrr"),
-                change: mrrMoved === null ? undefined : mrrMoved === 0 ? <span className="text-12 text-ink-4">no change in this range</span> : <span className="text-12 text-ink-4"><span className={cx("font-mono num", mrrMoved > 0 ? "text-good" : "text-bad")}>{mrrMoved > 0 ? "+" : ""}{usd(mrrMoved, true)}</span> in this range</span> },
-              { id: "customers", value: r ? (overview.data?.totals.paying ?? r.current.customers) : null, format: whole, now: r?.current.customers, before: r?.previous.customers, toggle: charted("customers") },
-              { id: "per visitor", value: r && c.visitors ? r.current.net / c.visitors : null, format: (v) => usd(Math.round(v)), now: r && c.visitors ? r.current.net / c.visitors : undefined, before: r && p.visitors ? r.previous.net / p.visitors : undefined, toggle: charted("per visitor") },
-              { id: "conversion", value: c.conversion, format: share, now: c.conversion, before: p.conversion, toggle: charted("conversion") },
-              { id: "bounce rate", value: c.bounce, format: share, now: c.bounce, before: p.bounce, invert: true },
             ]} />
             <div className="px-3 pb-2 pt-6 max-sm:px-1">
               {!data.tracked && <p className="mb-3 rounded-[14px] bg-wash-lemon px-4 py-2.5 text-13 text-ink">no visits recorded for this view yet.</p>}
               <MainChart data={series} previous={data.insights?.previousVisitors ?? []} notes={data.notes} show={show} main={main} onNote={owner ? setNote : () => {}}
-                emptyMoney={!r?.live ? "payments aren't live yet" : mainId === "revenue" ? "no sales in this window" : mainId === "mrr" ? (filtered ? "mrr shows without filters" : "no expected mrr in this window") : null} />
+                emptyMoney={mainId === "trials" && t && !t.current.started ? "no trials in this window" : null} />
               <div className="mt-4 flex flex-wrap items-center justify-between gap-3 px-1">
                 <ul className="flex flex-wrap items-center gap-x-4 gap-y-1 text-12 text-ink-3" aria-label="legend">
                   <li className="inline-flex items-center gap-1.5"><span className="h-0.5 w-4 rounded-full bg-viz-visitors" aria-hidden /> visitors</li>
                   <li className="inline-flex items-center gap-1.5"><svg width="16" height="2" aria-hidden><line x1="0" x2="16" y1="1" y2="1" stroke="var(--ink-4)" strokeWidth="1.5" strokeDasharray="3 3" /></svg> window before</li>
-                  {mainId === "revenue" ? <>
-                    <li className="inline-flex items-center gap-1.5"><span className="size-2.5 rounded-[2px] bg-viz-new" aria-hidden /> new revenue</li>
-                    <li className="inline-flex items-center gap-1.5"><span className="size-2.5 rounded-[2px] bg-viz-renewal" aria-hidden /> renewals</li>
-                  </> : main && <li className="inline-flex items-center gap-1.5"><span className="size-2.5 rounded-[2px] bg-viz-new" aria-hidden /> {main.label}</li>}
+                  {main && <li className="inline-flex items-center gap-1.5"><span className="size-2.5 rounded-[2px] bg-viz-new" aria-hidden /> {main.label}</li>}
                   <li className="inline-flex items-center gap-1.5"><span className="size-2.5 rounded-full bg-coral" aria-hidden /> signups</li>
                   <li className="inline-flex items-center gap-1.5"><span className="size-2 rotate-45 rounded-[2px] bg-warn" aria-hidden /> notes</li>
                 </ul>
@@ -312,18 +306,19 @@ export function OverviewPage() {
             </div>
           </section>
 
-          <div className="mt-4"><RevenueStrip days={Math.ceil((range.to - range.from) / 86_400_000)} /></div>
+          <div className="mt-4 [&>section]:mb-0"><TrialsSummary /></div>
 
           <div className="mt-4 grid grid-cols-2 gap-4 max-lg:grid-cols-1">
             <RankCard title="where they came from" tabs={[{ id: "channel", label: "channel", icon: <Link2 {...I} /> }, { id: "referrer", label: "referrer" }, { id: "campaign", label: "campaign", icon: <Tag {...I} /> }, { id: "keyword", label: "keyword", icon: <Search {...I} /> }, { id: "ref", label: "ref" }]}
-              data={data.cards} label={dimLabel} onPick={pick} active={filters} details={detail} money={r?.cards} />
+              data={data.cards} label={dimLabel} onPick={pick} active={filters} details={detail} trials={t?.cards} />
             <RankCard title="where they are" tabs={[{ id: "map", label: "map", icon: <GlobeIcon {...I} /> }, { id: "country", label: "country", icon: <MapPin {...I} /> }, { id: "region", label: "region" }, { id: "city", label: "city" }]}
-              data={data.cards} label={dimLabel} onPick={pick} active={filters} details={(tab) => tab === "map" ? null : detail(tab)} panels={{ map: <MapPanel rows={data.cards.country ?? []} /> }} money={r?.cards} />
-            <RankCard title="pages" tabs={[{ id: "page", label: "page", icon: <File {...I} /> }, { id: "entry", label: "entry" }, { id: "exit", label: "exit" }, { id: "host", label: "hostname" }]} data={data.cards} label={dimLabel} onPick={pick} active={filters} details={detail} money={r?.cards} />
-            <RankCard title="what they use" tabs={[{ id: "browser", label: "browser", icon: <Monitor {...I} /> }, { id: "os", label: "os" }, { id: "device", label: "device" }, { id: "surface", label: "surface" }]} data={data.cards} label={dimLabel} onPick={pick} active={filters} details={detail} money={r?.cards} />
+              data={{ ...data.cards, map: data.cards.country ?? [] }} label={(tab, key) => dimLabel(tab === "map" ? "country" : tab, key)} onPick={(tab, key) => pick(tab === "map" ? "country" : tab, key)} active={{ ...filters, map: filters.country }}
+              details={(tab) => detail(tab === "map" ? "country" : tab)} panels={{ map: <MapPanel rows={data.cards.country ?? []} /> }} trials={t ? { ...t.cards, map: t.cards.country ?? {} } : undefined} />
+            <RankCard title="pages" tabs={[{ id: "page", label: "page", icon: <File {...I} /> }, { id: "entry", label: "entry" }, { id: "exit", label: "exit" }, { id: "host", label: "hostname" }]} data={data.cards} label={dimLabel} onPick={pick} active={filters} details={detail} trials={t?.cards} />
+            <RankCard title="what they use" tabs={[{ id: "browser", label: "browser", icon: <Monitor {...I} /> }, { id: "os", label: "os" }, { id: "device", label: "device" }, { id: "surface", label: "surface" }]} data={data.cards} label={dimLabel} onPick={pick} active={filters} details={detail} trials={t?.cards} />
           </div>
           <div className="mt-4 grid grid-cols-2 gap-4 max-lg:grid-cols-1">
-            <ChartCard title="revenue by channel"><StackedBars starts={series.starts} size={series.size} stacks={channelStacks(r?.byChannel)} format={(v) => usd(v, true)} /></ChartCard>
+            <ChartCard title="trials by channel"><StackedBars starts={series.starts} size={series.size} stacks={channelStacks(t?.byChannel)} format={(v) => n(v)} /></ChartCard>
             <ChartCard title="new and returning visitors">
               <StackedBars starts={series.starts} size={series.size} format={(v) => n(v)} stacks={[
                 { key: "new", label: "first visit", color: SERIES.visitors, values: data.insights?.visitors.new ?? [] },

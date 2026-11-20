@@ -1,13 +1,13 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url><loc>https://dusk.bot/ai-teammates</loc><lastmod>2026-11-15</lastmod></url>
-  <url><loc>https://dusk.bot/alternatives/chatgpt-agent</loc><lastmod>2026-11-12</lastmod></url>
-  <url><loc>https://dusk.bot/alternatives/genspark</loc><lastmod>2026-11-12</lastmod></url>
-  <url><loc>https://dusk.bot/alternatives/lindy</loc><lastmod>2026-11-12</lastmod></url>
-  <url><loc>https://dusk.bot/claude-code-from-your-phone</loc><lastmod>2026-11-12</lastmod></url>
+  <url><loc>https://dusk.bot/alternatives/chatgpt-agent</loc><lastmod>2026-11-20</lastmod></url>
+  <url><loc>https://dusk.bot/alternatives/genspark</loc><lastmod>2026-11-20</lastmod></url>
+  <url><loc>https://dusk.bot/alternatives/lindy</loc><lastmod>2026-11-20</lastmod></url>
+  <url><loc>https://dusk.bot/claude-code-from-your-phone</loc><lastmod>2026-11-20</lastmod></url>
   <url><loc>https://dusk.bot/guides/claude-connectors</loc><lastmod>2026-11-12</lastmod></url>
   <url><loc>https://dusk.bot/guides/claude-scheduled-tasks</loc><lastmod>2026-11-12</lastmod></url>
-  <url><loc>https://dusk.bot/guides/is-openclaw-safe</loc><lastmod>2026-11-12</lastmod></url>
+  <url><loc>https://dusk.bot/guides/is-openclaw-safe</loc><lastmod>2026-11-20</lastmod></url>
   <url><loc>https://dusk.bot/guides/what-is-an-ai-agent</loc><lastmod>2026-11-12</lastmod></url>
   <url><loc>https://dusk.bot/guides/what-is-mcp</loc><lastmod>2026-11-12</lastmod></url>
   <url><loc>https://dusk.bot/integrations/asana</loc><lastmod>2026-11-12</lastmod></url>
@@ -22,5 +22,5 @@
   <url><loc>https://dusk.bot/use-cases/newsletter</loc><lastmod>2026-11-12</lastmod></url>
   <url><loc>https://dusk.bot/vs/chatgpt-agent</loc><lastmod>2026-11-12</lastmod></url>
   <url><loc>https://dusk.bot/vs/claude-cowork</loc><lastmod>2026-11-12</lastmod></url>
-  <url><loc>https://dusk.bot/vs/openclaw</loc><lastmod>2026-11-12</lastmod></url>
+  <url><loc>https://dusk.bot/vs/openclaw</loc><lastmod>2026-11-20</lastmod></url>
 </urlset>

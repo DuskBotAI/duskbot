@@ -24,7 +24,7 @@ function fakeLink() {
     start: vi.fn(async () => (view = { ...EMPTY_VIEW, stage: "command", command: "curl -fsSL https://link.example/i/abc | sh", expiresAt: Date.now() + 25 * 60_000 })),
     reset: vi.fn(async () => (view = EMPTY_VIEW)),
     open: vi.fn(async () => {}),
-    where: vi.fn(async () => ({ place: "vps" as const, server: SERVER })),
+    where: vi.fn(async (): Promise<{ place: "vps" | "mac"; server: typeof SERVER | null }> => ({ place: "mac", server: null })),
     moveBack: vi.fn(async () => ({ ok: true as const })),
     onChange: vi.fn((callback: (view: VpsLinkView) => void) => { listeners.add(callback); return () => listeners.delete(callback); }),
   } as unknown as VpsLinkBridge;
@@ -117,6 +117,29 @@ it("arriving with a server linked already makes a new line, so another server ca
   expect(link.bridge.start).toHaveBeenCalledTimes(1);
   expect(q("[data-install-phase]")?.getAttribute("data-install-phase")).toBe("waiting");
   expect(q("h2")?.textContent).toBe("Paste this on your server");
+});
+
+it("a server the bots already live on is found, not installed again: Reconnect opens it, or another server gets a new line", async () => {
+  const link = fakeLink();
+  vi.mocked(link.bridge.where).mockResolvedValue({ place: "vps", server: SERVER });
+  const open = vi.fn(async () => ({}));
+  vi.stubGlobal("duskDesktop", { vpsLink: link.bridge, workspaces: { open } });
+  const onClose = vi.fn();
+  await act(async () => { root.render(createElement(PlaceSetup, { onClose, start: "install" })); });
+  await settle();
+  expect(q("[data-install-phase]")?.getAttribute("data-install-phase")).toBe("found");
+  expect(q("h2")?.textContent).toBe("We found your server my-vps");
+  expect(link.bridge.start).not.toHaveBeenCalled();
+  await click(q("[data-setup-reconnect]"));
+  expect(open).toHaveBeenCalledWith("vps-1");
+  expect(onClose).toHaveBeenCalled();
+  await act(async () => root.unmount());
+  root = createRoot(host);
+  await act(async () => { root.render(createElement(PlaceSetup, { onClose: vi.fn(), start: "install" })); });
+  await settle();
+  await click(q("[data-setup-another]"));
+  expect(link.bridge.start).toHaveBeenCalledTimes(1);
+  expect(q("[data-install-phase]")?.getAttribute("data-install-phase")).toBe("waiting");
 });
 
 it("once linked it goes on to signing in the AI and moving the bots", async () => {
@@ -254,7 +277,7 @@ it("a dusk bot already running is connected by its address and code, and what wa
   await act(async () => { root.render(createElement(PlaceSetup, { onClose })); });
   expect(q("[data-setup-method=tailscale]"), "line ways need the relay").toBeNull();
   await click(q("[data-setup-method=address]"));
-  expect(document.body.textContent).toContain("The https:// address it prints.");
+  expect(document.body.textContent, "the one field takes the pairing link too (0118a37aea)").toContain("Its pairing link, or the https:// address it prints.");
   await type(q<HTMLInputElement>("[data-setup-address]")!, "http://10.0.0.5:8799");
   await act(async () => { q<HTMLFormElement>("form")!.requestSubmit(); });
   expect(q("[role=alert]")?.textContent).toBe("Use an https:// address. Plain http only works through an SSH tunnel, at http://127.0.0.1.");
@@ -313,6 +336,7 @@ it("the rail's sheet buys a first cloud and hands a server to the app window, ea
 
 it("this computer with no bots names the server they are on, switches there, or brings them back", async () => {
   const link = fakeLink();
+  vi.mocked(link.bridge.where).mockResolvedValue({ place: "vps", server: SERVER });
   const open = vi.fn(async () => true);
   vi.stubGlobal("duskDesktop", { vpsLink: link.bridge, platform: "darwin", elsewhere: { open } });
   const onClose = vi.fn();

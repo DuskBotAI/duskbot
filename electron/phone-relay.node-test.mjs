@@ -10,7 +10,7 @@ import test from "node:test";
 
 import { createLinkService } from "../apps/link-service/src/app.mjs";
 import { jsonFile } from "./desktop-prefs.mjs";
-import { createPhoneRelay, phoneRelayStore } from "./phone-relay.mjs";
+import { createPhoneRelay, installPhoneRelay, phoneRelayStore, proxyFromResolved, systemProxy } from "./phone-relay.mjs";
 import { createTunnelProxy, sealKeyOf, sha256hex, x25519Pair } from "./vps-link-protocol.mjs";
 
 const linkRoot = fileURLToPath(new URL("../apps/link-service/", import.meta.url));
@@ -275,4 +275,83 @@ test("another workspace's harness never replaces a tunnel's channels", async (t)
   await until(() => kept.get("/data/two")?.tunnel && f.harness.syncs.at(-1).tunnel === kept.get("/data/two").tunnel.id && f.harness.syncs.at(-1).applied === f.harness.rev);
   assert.notEqual(kept.get("/data/two").tunnel.id, first);
   assert.equal(f.service.store.channels.get(channel)?.tunnel, first, "the first workspace's phone keeps its channel");
+});
+
+test("a phone request that lands after a workspace switch never reaches the other workspace's harness", async (t) => {
+  const f = await fixture(t);
+  let folder = "/data/one";
+  const store = memoryStore();
+  const relay = f.relay({ store, scope: () => folder, checkMs: 60_000 });
+  const phone = x25519Pair(), token = randomBytes(32).toString("base64url"), channel = "phoneaaaad";
+  f.change([{ id: channel, kind: "device", pub: phone.pub, verifier: sha256hex(token) }]);
+  assert.equal((await relay.ready(5000)).status, "ready");
+  await until(() => f.service.store.channels.has(channel));
+  const { pub } = f.harness.syncs.at(-1);
+  const get = await f.phone(channel, sealKeyOf(phone.priv, phone.pub, pub, channel), token);
+  assert.equal((await get("/api/auth/session")).status, 200);
+  const before = f.harness.seen.length;
+  folder = "/data/two";
+  const late = await get("/api/auth/session").then((response) => response.status, () => "failed");
+  assert.notEqual(late, 200);
+  assert.notEqual(late, 401);
+  assert.equal(f.harness.seen.length, before, "the request never reached a harness");
+});
+
+test("a relay waiting out a failure tries again as soon as the computer wakes", async (t) => {
+  const f = await fixture(t);
+  let down = true;
+  const relay = f.relay({ retryMs: [600_000], fetch: (...args) => (down ? Promise.reject(new TypeError("fetch failed")) : fetch(...args)) });
+  relay.start();
+  await until(() => relay.state().status === "error");
+  down = false;
+  await delay(200);
+  assert.equal(relay.state().status, "error", "the failure's wait still holds");
+  relay.wake();
+  await until(() => relay.state().status === "ready");
+});
+
+test("the computer's proxy settings reach the relay hub: the first plain http proxy, or direct", async () => {
+  assert.equal(proxyFromResolved("DIRECT"), null);
+  assert.deepEqual(proxyFromResolved("PROXY proxy.corp:3128; DIRECT"), { host: "proxy.corp", port: 3128 });
+  assert.deepEqual(proxyFromResolved("SOCKS5 s.corp:1080; PROXY [fd00::1]:8080"), { host: "fd00::1", port: 8080 });
+  assert.equal(proxyFromResolved("SOCKS5 s.corp:1080"), null);
+  assert.equal(proxyFromResolved(""), null);
+  const asked = [];
+  const proxy = systemProxy(() => ({ resolveProxy: async (url) => { asked.push(url); return "PROXY p.corp:8080"; } }));
+  assert.deepEqual(await proxy(new URL("https://link.dusk.bot/v1/x")), { host: "p.corp", port: 8080 });
+  assert.deepEqual(asked, ["https://link.dusk.bot/v1/x"]);
+  assert.equal(await systemProxy(() => ({ resolveProxy: async () => { throw new Error("no"); } }))(new URL("https://link.dusk.bot")), null);
+});
+
+test("installed before the app is ready, the relay still answers the page and asks for the proxy only when it dials", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "dusk-phone-relay-install-"));
+  const before = process.env.DUSK_PHONE_RELAY;
+  process.env.DUSK_PHONE_RELAY = "off";
+  try {
+    let ready = false;
+    // electron 39's session.defaultSession getter throws until app ready
+    const session = { get defaultSession() { if (!ready) throw new TypeError("Session can only be received when app is ready"); return { resolveProxy: async () => "DIRECT" }; } };
+    const handlers = new Map();
+    const relay = installPhoneRelay({
+      ipcMain: { handle: (channel, handler) => handlers.set(channel, handler) }, guard: (_name, handler) => handler, session,
+      jsonFile, userData: dir, dataDir: () => dir, encryption: { available: async () => false }, wanted: () => false,
+      signedIn: () => false, linkGrant: async () => null, label: () => "test phones", port: () => 1, ownerToken: () => OWNER, log: () => {},
+    });
+    assert.deepEqual([...handlers.keys()].sort(), ["phone-relay:ready", "phone-relay:state"]);
+    assert.equal(typeof relay.state().status, "string");
+    ready = true;
+  } finally {
+    if (before === undefined) delete process.env.DUSK_PHONE_RELAY; else process.env.DUSK_PHONE_RELAY = before;
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("main installs the relay at load without reading the default session, which throws before app ready", () => {
+  const main = readFileSync(new URL("./main.mjs", import.meta.url), "utf8");
+  const wiring = main.split("\n").find((line) => line.includes('import("./phone-relay.mjs")'));
+  assert.ok(wiring, "main.mjs imports the phone relay");
+  const install = wiring.slice(wiring.indexOf('import("./phone-relay.mjs")'));
+  assert.doesNotMatch(install.slice(0, install.indexOf("}));") + 3), /defaultSession/);
+  assert.match(install, /installPhoneRelay\(\{[^}]*\bsession\b/);
+  assert.match(install, /\.catch\(/, "a relay that cannot start is logged");
 });

@@ -1,3 +1,5 @@
+import { chatLimitFacts } from "./drivers/openai-chat-carry.ts";
+import { isLimitResume, TAKEOVER_CAUSE } from "./limit-resume.ts";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -7,9 +9,10 @@ import type { ModelSelection, ProviderAdapter, ProviderSnapshot } from "./contra
 import { createCoordinator, type Coordinator, type HostTurnResult } from "./coordinator.ts";
 import { PROBE_TIMEOUT_MS } from "./engine-install.ts";
 import { closeMessageDb } from "./message-db.ts";
-import { createQuotaSwitch, NOT_NOW, quotaSwitchEnabled, type QuotaRequest, type QuotaSwitch, type QuotaSwitchDeps, type QuotaSwitchEngine } from "./quota-switch.ts";
+import { createQuotaSwitch, NOT_NOW, quotaSwitchEnabled, turnFailureRow, type QuotaRequest, type QuotaSwitch, type QuotaSwitchDeps, type QuotaSwitchEngine } from "./quota-switch.ts";
 import { Store, type BotRecord, type Message } from "./store.ts";
 import { toolFailureMessage } from "./drivers/tool-failure.ts";
+import { failedTurnTool } from "../shared/failed-turn.ts";
 
 const QUOTA = "You've hit your weekly limit · resets Oct 12 at 2:30pm (Asia/Calcutta)";
 const defaultSelection = (): ModelSelection => ({ instanceId: "claude", model: "claude-default" });
@@ -212,9 +215,119 @@ describe("quota switch", () => {
       expect(message).toMatchObject({ id: messageId, text: "how's the weather", dataContext: { cardId: "sales" } });
       expect(replyTo).toMatchObject({ id: quoted });
       expect(spoken).toEqual({});
-      expect(notices()).toContainEqual({ name: "notice: continuing on Codex after hitting the usage limit", ok: true });
+      expect(notices()).toContainEqual({ name: expect.stringMatching(/^notice: Claude hit its limit(?: until [^,]+)?, Codex is answering\.$/), ok: true });
       expect(told).toEqual([{ botId: bot.id, from: defaultSelection(), facts: { scope: "engine", backup: CODEX } }]);
       expect(moves, "so it goes back once the limit resets").toEqual([{ threadId: bot.threadId, from: defaultSelection(), to: CODEX }]);
+    });
+
+    it("carries a limited turn that already ran steps on with the backup from where it was cut off, never sending the request again to start over", async () => {
+      const carryOn = vi.fn<NonNullable<QuotaSwitchDeps["carryOn"]>>(async () => undefined);
+      deps.turnStops = { failureCause: () => cause, read: () => ({ acted: true, flags: { limit: "engine" } }) };
+      quota = createQuotaSwitch({ ...deps, carryOn });
+      const messageId = said("rename every file in the folder");
+      await limited({ messageId });
+      expect(thread().modelSelection).toEqual(CODEX);
+      expect(resend).not.toHaveBeenCalled();
+      expect(carryOn).toHaveBeenCalledTimes(1);
+      const [, threadId, note, request] = carryOn.mock.calls[0]!;
+      expect(threadId).toBe(bot.threadId);
+      expect(isLimitResume(note)).toBe(true);
+      expect(note).toContain(TAKEOVER_CAUSE);
+      expect(note).toContain('"asked"');
+      expect(request).toBe("asked");
+      expect(notices()).toContainEqual({ name: expect.stringMatching(/^notice: Claude hit its limit(?: until [^,]+)?, Codex is answering\.$/), ok: true });
+    });
+
+    it("sends the request again as it was when the limited turn had done nothing yet", async () => {
+      const carryOn = vi.fn<NonNullable<QuotaSwitchDeps["carryOn"]>>(async () => undefined);
+      deps.turnStops = { failureCause: () => cause, read: () => ({ acted: false, flags: { limit: "engine" } }) };
+      quota = createQuotaSwitch({ ...deps, carryOn });
+      await limited({ messageId: said("plan my week") });
+      expect(carryOn).not.toHaveBeenCalled();
+      expect(resend).toHaveBeenCalledTimes(1);
+    });
+
+    it("keeps the failure card down while a backup takes the turn, so no error shows for a reply that carries on", async () => {
+      const messageId = said("plan my week");
+      const row = store.appendMessage(bot.threadId, { role: "bot", kind: "activity", tool: failedTurnTool(QUOTA, { reason: "usage_limit" }) });
+      await limited({ messageId });
+      expect(thread().modelSelection).toEqual(CODEX);
+      expect(store.messagesFor(bot.threadId).find((m) => m.id === row.id)!.tool!.resolvedAt).toBeTypeOf("number");
+    });
+
+    it("shows the failure card again, cause and all, when no backup could take the turn", async () => {
+      switchRefusal = "Codex can't run this thread.";
+      const messageId = said("plan my week");
+      const row = store.appendMessage(bot.threadId, { role: "bot", kind: "activity", tool: failedTurnTool(QUOTA, { reason: "usage_limit" }) });
+      await limited({ messageId });
+      const now = store.messagesFor(bot.threadId).find((m) => m.id === row.id)!.tool!;
+      expect(now.resolvedAt).toBeUndefined();
+      expect(now.name).toBe(row.tool!.name);
+    });
+
+    it("sends the message once more on the same AI, quietly, when the engine crashed before it showed or did anything", async () => {
+      deps.turnStops = { failureCause: () => cause, read: () => ({ error: cause }) };
+      quota = createQuotaSwitch(deps);
+      const messageId = said("plan my week");
+      const row = store.appendMessage(bot.threadId, { role: "bot", kind: "activity", tool: failedTurnTool("claude exited with code 137 before it replied", { reason: "cli_exit" }) });
+      const before = notices().length;
+      await limited({ messageId }, "claude exited with code 137 before it replied");
+      expect(resend).toHaveBeenCalledTimes(1);
+      expect(resend.mock.calls[0]![2]).toMatchObject({ id: messageId });
+      expect(thread().modelSelection, "the same AI").toEqual(defaultSelection());
+      expect(notices().length, "no line about it").toBe(before);
+      expect(store.messagesFor(bot.threadId).find((m) => m.id === row.id)!.tool!.resolvedAt, "no failure card while it tries again").toBeTypeOf("number");
+
+      resend.mockClear();
+      await limited({ messageId }, "claude exited with code 137 before it replied");
+      expect(thread().modelSelection, "a second crash goes to the bot's backup").toEqual(CODEX);
+      expect(resend).toHaveBeenCalledTimes(1);
+
+      resend.mockClear();
+      const third = store.appendMessage(bot.threadId, { role: "bot", kind: "activity", tool: failedTurnTool("codex exited with code 137 before it replied", { reason: "cli_exit" }) });
+      await limited({ messageId }, "codex exited with code 137 before it replied");
+      expect(resend, "the backup failing it too is reported, not moved again").not.toHaveBeenCalled();
+      expect(store.messagesFor(bot.threadId).find((m) => m.id === third.id)!.tool!.resolvedAt).toBeUndefined();
+    });
+
+    it("sends the message once more on the same AI when it failed in words nobody could read, then moves it to the backup", async () => {
+      deps.turnStops = { failureCause: () => cause, read: () => ({ error: cause }) };
+      quota = createQuotaSwitch(deps);
+      const messageId = said("plan my week");
+      const before = notices().length;
+      await limited({ messageId }, "Internal error (session/prompt)");
+      expect(resend).toHaveBeenCalledTimes(1);
+      expect(thread().modelSelection, "the same AI first").toEqual(defaultSelection());
+      expect(notices().length, "no line about it").toBe(before);
+
+      await limited({ messageId }, "Internal error (session/prompt)");
+      expect(resend).toHaveBeenCalledTimes(2);
+      expect(thread().modelSelection).toEqual(CODEX);
+    });
+
+    it("never sends again a refusal or a chat too long for the model", async () => {
+      deps.turnStops = { failureCause: () => cause, read: () => ({ error: cause }) };
+      quota = createQuotaSwitch(deps);
+      await limited({ messageId: said("plan my week") }, "The model refused to answer this request.");
+      await limited({ messageId: said("plan my week") }, "prompt is too long: 250000 tokens > 200000 maximum context length");
+      expect(resend).not.toHaveBeenCalled();
+      expect(thread().modelSelection).toEqual(defaultSelection());
+    });
+
+    it("never sends again a turn that crashed after it showed words or ran a tool", async () => {
+      deps.turnStops = { failureCause: () => cause, read: () => ({ acted: true }) };
+      quota = createQuotaSwitch(deps);
+      await limited({ messageId: said("plan my week") }, "claude exited with code 137 before it replied");
+      expect(resend).not.toHaveBeenCalled();
+    });
+
+    it("finds only the newest turn's own failure row, never an older one a reply already followed", () => {
+      const ask = { id: "a", role: "user", kind: "text", text: "hi", at: 1 } as Message;
+      const fail = { id: "f", role: "bot", kind: "activity", at: 2, tool: failedTurnTool("boom") } as Message;
+      const reply = { id: "r", role: "bot", kind: "text", text: "done", at: 3 } as Message;
+      expect(turnFailureRow([ask, fail], "a")?.id).toBe("f");
+      expect(turnFailureRow([ask, fail, reply], "a")).toBeUndefined();
+      expect(turnFailureRow([fail, ask], "a")).toBeUndefined();
     });
 
     it("never takes a failed tool call for the AI's usage limit, whatever the tool is called", async () => {
@@ -242,7 +355,7 @@ describe("quota switch", () => {
       await limited({ messageId: said("hi") });
       expect(thread().modelSelection).toEqual({ instanceId: "claude", model: "claude-plan" });
       expect(resend).toHaveBeenCalledTimes(1);
-      expect(notices()).toContainEqual({ name: "notice: continuing on Claude claude-plan after hitting the usage limit", ok: true });
+      expect(notices()).toContainEqual({ name: expect.stringMatching(/^notice: Claude \S+ hit its limit(?: until [^,]+)?, Claude claude-plan is answering\.$/), ok: true });
       expect(told[0]!.facts).toEqual({ scope: "credits", backup: { instanceId: "claude", model: "claude-plan" } });
     });
 
@@ -370,6 +483,13 @@ describe("quota switch", () => {
         expect(resend).not.toHaveBeenCalled();
       });
 
+      it("holds an API engine's rate limit, the way its driver reports one, until the wait the provider named", async () => {
+        flags = chatLimitFacts(Object.assign(new Error("upstream HTTP 429: Rate limit reached"), { retryAfterMs: 120_000 }), 1_900_000_000_000)!;
+        await limited();
+        expect(holds).toEqual([{ botId: bot.id, threadId: bot.threadId, from: defaultSelection(), resetsAt: 1_900_000_120_000, request: "asked" }]);
+        expect(moves).toEqual([]);
+      });
+
       it("holds even with carrying on switched off, which only stops other AIs taking over", async () => {
         enabled = false;
         await limited();
@@ -417,6 +537,20 @@ describe("quota switch", () => {
         expect(thread().modelSelection.instanceId).toBe("cursor");
         expect(resend).toHaveBeenCalledTimes(1);
         expect(holds).toEqual([]);
+      });
+
+      it("set to ask: the free model on the card picks the limited turn up where it was cut off", async () => {
+        mode = "ask";
+        free = CURSOR;
+        const carryOn = vi.fn<NonNullable<QuotaSwitchDeps["carryOn"]>>(async () => undefined);
+        quota = createQuotaSwitch({ ...deps, carryOn });
+        await limited({ messageId: said("Draft the reply") });
+        expect(await answer(pending()!, "Cursor")).toBe("answered");
+        expect(thread().modelSelection.instanceId).toBe("cursor");
+        expect(resend).not.toHaveBeenCalled();
+        expect(carryOn).toHaveBeenCalledTimes(1);
+        expect(isLimitResume(carryOn.mock.calls[0]![2])).toBe(true);
+        expect(carryOn.mock.calls[0]![3]).toBe("Draft the reply");
       });
 
       it("set to ask with no free model to offer: it waits without asking", async () => {
@@ -1034,8 +1168,17 @@ describe("quota switch", () => {
     });
 
     it.each([
-      ["a refused request", "unexpected status 400 Bad Request: invalid_request"],
-      ["a sign-in problem", "unexpected status 401 Unauthorized"],
+      ["a request the provider turned down", "unexpected status 400 Bad Request: invalid_request"],
+      ["a key the provider refused", "unexpected status 401 Unauthorized"],
+      ["a model the provider does not offer", "HTTP 404: The model `deepseek-x` does not exist"],
+    ])("moves %s to the backup the person chose", async (_label, why) => {
+      const messageId = said("summarize the report");
+      await failedOn(why, { messageId });
+      expect(thread().modelSelection).toEqual(CODEX);
+      expect(resend).toHaveBeenCalledTimes(1);
+    });
+
+    it.each([
       ["a safety block", "This task was blocked by our safety systems."],
     ])("leaves %s to its own handling", async (_label, why) => {
       await failedOn(why, { messageId: said("summarize the report") });

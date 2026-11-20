@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { cloudMachine, cloudSetupProgress, cloudState, homeLook, listedColors, MAX_CLOUDS, olderRelease, otherOwnClouds, ownCloudPlaces, parseCloudList, parseCloudRenewal, parseOrganizations, releaseVersion, withoutOldCloudHome, signedInServers, swatchColor } from "./cloud-list.mjs";
+import { cloudMachine, cloudSetupProgress, cloudState, homeLook, listedColors, MAX_CLOUDS, olderRelease, otherOwnClouds, ownCloudPlaces, parseCloudList, parseCloudPayment, parseCloudRenewal, parseOrganizations, releaseVersion, withoutOldCloudHome, signedInServers, swatchColor } from "./cloud-list.mjs";
 import { generateEntitlementSigner, signEntitlement } from "../shared/entitlement.ts";
 import environments from "./environments.cjs";
 import { createHomePlaces } from "./home-places.mjs";
@@ -180,6 +180,14 @@ test("a release older than the newest one, compared number by number; nothing is
   assert.deepEqual([["0.1.118", "0.1.130"], ["0.1.130", "0.1.130"], ["0.2.0", "0.1.130"], ["0.1", "0.1.1"], ["0.1.9", "0.1.10"]].map(([a, b]) => olderRelease(a, b)), [true, false, false, true, true]);
   for (const [a, b] of [["0.1.118-dev", "0.1.130"], ["0.1.118", null], [null, "0.1.130"], ["main", "0.1.130"], ["0.1.118", "latest"]]) assert.equal(olderRelease(a, b), false, `${a} ${b}`);
   assert.deepEqual(["0.1.130", null, "", "<b>", 7].map(releaseVersion), ["0.1.130", null, null, null, null]);
+});
+
+test("a failed renewal is said for the account's own primary Cloud only, with the date it keeps running until", () => {
+  const own = { id: "c1", name: " My  Cloud ", role: "owner", primary: true, payment: { fixBy: 1_900_000_000_000 } };
+  assert.deepEqual(parseCloudPayment([{ ...own, id: "c2", primary: false }, own]), { name: "My Cloud", fixBy: 1_900_000_000_000 });
+  for (const clouds of [undefined, [], [{ ...own, role: "member" }], [{ ...own, primary: false }], [{ ...own, payment: { fixBy: "soon" } }], [{ ...own, payment: null }], [{ ...own, name: "<b>" }]]) {
+    assert.equal(parseCloudPayment(clouds), null, JSON.stringify(clouds));
+  }
 });
 
 test("the plan's renewal is the account's own primary Cloud's, only as the Admin says it; anything malformed is none", () => {

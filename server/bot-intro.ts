@@ -73,14 +73,14 @@ export function toneSamples(lines: ReadonlyArray<{ to: string; text: string }>):
     .slice(0, 3).map((line) => (line.text.length > 160 ? { to: line.to, text: `${line.text.slice(0, 160)}…` } : line));
 }
 
-/** How the person writes, read from their lines: what the hello mirrors. */
+/** How the person writes, read from their lines: the length and emoji the hello mirrors. Their casing is not mirrored:
+ * a bot writes in Sentence case unless they asked it to write otherwise. */
 export function writingHabits(samples: ReadonlyArray<{ text: string }>): string | null {
   if (!samples.length) return null;
   const letters = samples.map((line) => line.text).join(" ");
-  const lower = !/\p{Lu}/u.test(letters) && /\p{Ll}/u.test(letters);
   const emoji = /\p{Extended_Pictographic}/u.test(letters);
   const short = samples.every((line) => line.text.length <= 90);
-  return [lower ? "all in lower case" : "in normal case", short ? "short" : "", emoji ? "with emoji" : "with no emoji"].filter(Boolean).join(", ");
+  return [short ? "short" : "at some length", emoji ? "with emoji" : "with no emoji"].join(", ");
 }
 
 const OFFERS: Record<TalkingStyle, string> = {
@@ -136,8 +136,8 @@ export function introPrompt(facts: IntroFacts): string {
   ].filter(Boolean);
   return [
     "You were just created, and this is your very first message to the person, before they have written anything to you.",
-    "Write it the way someone who knows them would text them right now, not like a product tour. Read the moment: the time and day where they are (late at night, early morning, a Monday morning, a weekend) and what they were just doing, and let it color one short clause of your first line the way a friend's would (\"hey, you're up late\", \"happy saturday\"), never a whole sentence about their day, without reciting the time or these facts.",
-    `Talk in the person's chosen style (${facts.style}), and mirror how they write (described below): if they write all in lower case, so do you, even your name and the first word; match their length and their emoji or lack of it. With no lines to go on, write in Sentence case with no emoji.`,
+    "Write it the way someone who knows them would text them right now, not like a product tour. Read the moment: the time and day where they are (late at night, early morning, a Monday morning, a weekend) and what they were just doing, and let it color one short clause of your first line the way a friend's would (\"Hey, you're up late\", \"Happy Saturday\"), never a whole sentence about their day, without reciting the time or these facts. Sound like a sharp friend, not a product: no \"I'm here to help\", no list of everything you can do, and at most one light, original touch of personality.",
+    `Talk in the person's chosen style (${facts.style}), in Sentence case (capital letters where they belong, your name included) whatever case they type in, unless they asked you to write otherwise; match their length and their emoji or lack of it (described below). With no lines to go on, use no emoji.`,
     "Say who you are in a few words and what you can take off their plate right now. Ground every claim in what you really have: your role and standing instructions, your skills index, the connected apps listed below and in your instructions, your computer and browser, and what you know about them. Never claim an app, skill or access you do not have, never invent facts about them, and never point out what you do not know about them.",
     OFFERS[facts.style],
     "A plain \"yes\" should answer every offer: to let them choose between things, ask which one (\"Which first: X or Y?\"), never \"want me to start with X, Y or Z?\".",

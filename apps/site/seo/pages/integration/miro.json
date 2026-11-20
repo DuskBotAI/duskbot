@@ -1,0 +1,140 @@
+{
+  "path": "/integrations/miro",
+  "type": "integration",
+  "title": "Miro bot for workshop notes, tagged ideas and handoff maps",
+  "nav": "miro",
+  "h1": "take the decisions out of a miro workshop frame",
+  "description": "Pull decisions from a Miro frame, collect tagged interview notes and trace the arrows in a process map. Keep the original board layout intact.",
+  "keyword": "miro bot",
+  "keywords": [
+    "miro ai assistant",
+    "miro ai agent"
+  ],
+  "answer": "**recover what the workshop decided while the sticky notes still make sense.** give a miro bot in dusk the board and frame that hold the agreed actions. it can read the notes, follow their tags and trace connectors between items. ask for the original item ids beside each finding so the facilitator can return to the board.",
+  "updated": "2026-11-20",
+  "review": {
+    "status": "approved",
+    "by": "lead agent, after four independent reviewers read every page against seo/facts (2026-11-20); every finding applied",
+    "at": "2026-11-20"
+  },
+  "voice": 2,
+  "tags": [
+    "workshops",
+    "frames",
+    "process maps"
+  ],
+  "connectors": [
+    "miro"
+  ],
+  "related": [
+    "/integrations/figma",
+    "/integrations/confluence",
+    "/use-cases/meeting-notes"
+  ],
+  "art": {
+    "label": "Miro",
+    "props": [
+      "s-map"
+    ],
+    "bubble": "follow the arrows"
+  },
+  "og_line": "keep each decision tied to its sticky.",
+  "app": {
+    "name": "Miro",
+    "toolkit": "miro",
+    "intro": "**use frame membership to set the boundary.** a busy board can hold last month’s workshop next to today’s. give the bot a frame id to collect its child items. use board-wide reads only when the question genuinely spans frames.",
+    "highlight": [
+      {
+        "slug": "MIRO_GET_BOARD_ITEMS",
+        "use": "locate the named frames and page through board items"
+      },
+      {
+        "slug": "MIRO_GET_ITEMS_WITHIN_FRAME",
+        "use": "read the items that actually belong to the decision frame"
+      },
+      {
+        "slug": "MIRO_GET_STICKY_NOTE_ITEM",
+        "use": "recover the exact wording from a workshop note"
+      },
+      {
+        "slug": "MIRO_GET_ITEM_TAGS",
+        "use": "distinguish a research quote from an interpretation using your tags"
+      },
+      {
+        "slug": "MIRO_GET_CONNECTORS",
+        "use": "find the arrows on a process map"
+      },
+      {
+        "slug": "MIRO_GET_SPECIFIC_ITEM",
+        "use": "read the item at either end of an arrow"
+      },
+      {
+        "slug": "MIRO_SHARE_BOARD",
+        "use": "invite a recipient to the board with the role you chose"
+      }
+    ],
+    "setup": "**choose a finished frame that the facilitator recognizes.** connect miro, allow your workshop bot to read it and give it the board id. ask it to list the frame names and ids. pick the decision frame and define the tags your team uses there."
+  },
+  "routines_intro": "**preserve a trail back to the board.** a tidy summary loses its value if nobody can find the note it came from. each prompt keeps an item id, a frame or a pair of endpoints.",
+  "routines": [
+    {
+      "name": "decisions after the workshop",
+      "message": "every thursday at 4, read the stickies inside our decisions frame on the workshop board. separate agreed actions from questions using our tags. copy any owner and due date written on each action. return the sticky ids here. flag decisions without owners. leave the layout alone.",
+      "when": "thursdays at 4 pm",
+      "output": "actions and open questions from the decision frame"
+    },
+    {
+      "name": "interview evidence",
+      "message": "every friday at noon, collect stickies tagged customer quote in our research frame. group them by the problem described. retain the exact wording and item id for one example per group. put interpretations with no customer quote aside. give me the groups here.",
+      "when": "fridays at noon",
+      "output": "research themes grounded in the tagged quotes"
+    },
+    {
+      "name": "arrows across a handoff",
+      "message": "each monday at 2, read the connectors on our order process board. follow arrows between items in the sales and fulfillment frames. list the label at each end here. flag any endpoint you cannot identify. do not infer a handoff just because two shapes sit close together.",
+      "when": "mondays at 2 pm",
+      "output": "handoffs with their source and destination items"
+    }
+  ],
+  "asks": "**keep the board private while preparing the recap.** sharing a board sends an email invitation and asks first by default. choose the recipient and role before approving. moving a sticky or changing its text is a write. read-only access keeps those actions out of a workshop review.\n\ncareful with **Full access**: a bot there with no sending rule can send up to 25 a day without asking. give it **Ask every time**.",
+  "cannot": [
+    "**find a sticky in a frame by appearance alone.** the frame lookup returns items nested under that frame id. a nearby note may belong elsewhere.",
+    "**create a connector that ends in empty space.** the create action needs an existing item at both ends.",
+    "**start a recap from a miro board event through this connector.** schedule it for the end of the workshop or ask for it in chat."
+  ],
+  "sections": [
+    {
+      "h": "when to go back to the canvas",
+      "md": "**keep spatial disagreements on the board.** if the facilitator appears to have moved an idea between groups, look at the canvas together. the bot is useful for collecting labeled choices and tracing actual arrows. it is the wrong pick for deciding what an unlabeled gap meant to the room."
+    }
+  ],
+  "faq": [
+    {
+      "q": "will collecting the workshop notes move our stickies?",
+      "a": "**grant the bot only the read actions.** the action list and research themes come back in dusk. the facilitator keeps the arrangement everyone saw."
+    },
+    {
+      "q": "can a miro ai assistant tell who owns an action?",
+      "a": "**use the name written on the sticky or a tag your team defined.** the person who typed a note might have been taking minutes. leave ownership open when nobody accepted the work."
+    }
+  ],
+  "worked": {
+    "intro": "a fictional example.",
+    "before": "edith shaw keeps a sticky about a packaging trial near the decisions frame. the actual decision inside the frame names a smaller sample run.",
+    "after": "agreed action: prepare the sample run. the nearby packaging idea is outside the decision frame. leave it out of the commitments."
+  },
+  "sources": [
+    {
+      "label": "dusk bot docs: files and apps",
+      "url": "/docs/files-and-apps"
+    },
+    {
+      "label": "dusk bot docs: routines",
+      "url": "/docs/routines"
+    },
+    {
+      "label": "dusk bot docs: sending permissions",
+      "url": "/docs/computer"
+    }
+  ]
+}

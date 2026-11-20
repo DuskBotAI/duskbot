@@ -6,7 +6,7 @@ import { trailNavigation } from "@/lib/trail";
 import { cn } from "@/lib/cn";
 import { scrollWithin } from "@/lib/scroll-within";
 import { useMediaQuery } from "@/lib/use-media-query";
-import { REDUCED, SHEET_EXIT, WIPE } from "@/lib/motion-presets";
+import { REDUCED, SHEET_EXIT, sheetLeave, WIPE } from "@/lib/motion-presets";
 import { MotionDiv, useMotionReduced } from "./ui/SheetMotion";
 import { useOwnerOrAdmin } from "@/lib/use-owner-or-admin";
 import { currentPhonePairingTarget, phonePairingSettingsAction } from "@/lib/phone-pairing";
@@ -411,7 +411,7 @@ export function SettingsModal() {
         className="settings-dialog"
         // the sheet opens with the app's one dialog motion (overlays.css) and fades out on close; on a phone its drill-in slides
         initial={false}
-        exit={{ opacity: 0, transition: SHEET_EXIT }}
+        exit={sheetLeave()}
       >
         <div className="settings-layout">
           {phone ? (

@@ -3,7 +3,7 @@ import { createElement, useRef } from "react";
 import { flushSync } from "react-dom";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { applyGlassGlyphs, buttonKind, composerButtons, covered, cssColor, cssHex, darkGround, frameOf, restingFrame, typeInto, useNativeGlass, type GlassBridge, type GlassEvent, type GlassState } from "./native-glass";
+import { applyGlassGlyphs, buttonKind, composerButtons, covered, cssColor, cssHex, darkGround, frameOf, REASSERT_MS, restingFrame, transcriptRoom, typeInto, useNativeGlass, type GlassBridge, type GlassEvent, type GlassState } from "./native-glass";
 import type { SlidePath } from "./NavStack";
 import type { MobilePlatform } from "./platform";
 
@@ -91,12 +91,14 @@ describe("composer buttons", () => {
     expect(buttonKind(button({ "data-composer-stop": "beside" }))).toBe("stop");
     expect(buttonKind(button({ "data-composer-discard": "" }))).toBe("discard");
     expect(buttonKind(button({ "aria-haspopup": "menu" }, "data-composer-follow-up"))).toBe("followUp");
-    expect(buttonKind(button({ "aria-label": "Call" }))).toBeNull();
+    expect(buttonKind(button({ "data-call-button": "composer" })), "the call keeps the composer native while the field is empty").toBe("call");
+    expect(buttonKind(button({ "data-call-button": "composer", "data-call-active": "" }))).toBe("hangUp");
+    expect(buttonKind(button({ "aria-label": "Help" }))).toBeNull();
   });
 
   it("leaves the composer to the page when one control has no twin", () => {
     const actions = document.createElement("div");
-    actions.append(button({ "data-voice-mic": "start" }), button({ "aria-label": "Call" }));
+    actions.append(button({ "data-voice-mic": "start" }), button({ "aria-label": "Help" }));
     expect(composerButtons(actions)).toBeNull();
     actions.lastElementChild!.remove();
     actions.append(button({ "data-composer-send": "", disabled: "" }));
@@ -171,11 +173,12 @@ function fakeGlass() {
   const glass = {
     update: vi.fn<(state: GlassState) => void>(),
     setText: vi.fn<(text: string, seq: number) => void>(),
+    clearText: vi.fn<(id: number) => void>(),
     setAvatar: vi.fn(),
     focus: vi.fn(),
     blur: vi.fn(),
     clear: vi.fn(),
-    slide: vi.fn<(path: SlidePath | null) => void>(),
+    slide: vi.fn<(path: SlidePath | null, at?: number) => void>(),
     onEvent: (fn: (event: GlassEvent) => void) => { listener = fn; return () => { listener = null; }; },
   } satisfies GlassBridge;
   return { glass, send: (event: GlassEvent) => listener?.(event) };
@@ -207,8 +210,9 @@ describe("useNativeGlass", () => {
   let root: Root;
   let host: HTMLDivElement;
 
-  function mount() {
+  function mount(acks = false) {
     const { glass, send } = fakeGlass();
+    if (acks) Object.assign(glass, { acks: true });
     const platform = { kind: "ios", native: true, glass } as unknown as MobilePlatform;
     host = document.createElement("div");
     document.body.appendChild(host);
@@ -279,7 +283,7 @@ describe("useNativeGlass", () => {
     const sent = glass.update.mock.calls.length;
     $("page").dataset.moving = "";
     slideGlass({ duration: 400, points: [390, 200, 0] });
-    expect(glass.slide).toHaveBeenCalledWith({ duration: 400, points: [390, 200, 0] });
+    expect(glass.slide).toHaveBeenCalledWith({ duration: 400, points: [390, 200, 0] }, expect.any(Number));
     for (const dx of [300, 120, 30]) { slideBy(dx); runFrame(); }
     expect(glass.update).toHaveBeenCalledTimes(sent + 1);
     expect(glass.update.mock.lastCall![0]).toMatchObject({ offset: 0, header: { back: { x: 12 } } });
@@ -299,6 +303,72 @@ describe("useNativeGlass", () => {
     const avatarAt = glass.setAvatar.mock.invocationCallOrder[0];
     const headerAt = glass.update.mock.invocationCallOrder[0];
     expect(avatarAt).toBeLessThan(headerAt!);
+  });
+
+  it("with acks the page keeps its composer until the native one is on screen, and takes it back when it is not", () => {
+    vi.useFakeTimers({ toFake: ["performance"] });
+    try {
+      const { glass, send } = mount(true);
+      const html = document.documentElement;
+      runFrame();
+      expect(glass.update.mock.lastCall![0].composer).not.toBeNull();
+      expect(html.dataset.nativeGlassComposer).toBeUndefined();
+      send({ type: "composer", shown: true });
+      runFrame();
+      expect(html.dataset.nativeGlassComposer).toBe("");
+      send({ type: "composer", shown: false, reason: "no host" });
+      runFrame();
+      expect(html.dataset.nativeGlassComposer).toBeUndefined();
+      expect(glass.update.mock.lastCall![0].composer).toBeNull();
+
+      // back in front it asks again; silence past the wait keeps the page's
+      document.dispatchEvent(new Event("visibilitychange"));
+      runFrame();
+      expect(glass.update.mock.lastCall![0].composer).not.toBeNull();
+      vi.advanceTimersByTime(500);
+      runFrame();
+      expect(html.dataset.nativeGlassComposer).toBeUndefined();
+      expect(glass.update.mock.lastCall![0].composer).toBeNull();
+    } finally { vi.useRealTimers(); }
+  });
+
+  it("gives the composer's place to a call's bar: the native composer goes, stays gone through every resend, and comes back as the bar leaves", () => {
+    vi.useFakeTimers({ toFake: ["performance"] });
+    try {
+      const { glass, send, $ } = mount(true);
+      const html = document.documentElement;
+      runFrame();
+      send({ type: "composer", shown: true });
+      runFrame();
+      expect(html.dataset.nativeGlassComposer).toBe("");
+
+      const bar = document.createElement("div");
+      bar.setAttribute("data-call-surface", "");
+      $("chat").append(bar);
+      for (let i = 0; i < 15; i += 1) runFrame();
+      expect(glass.update.mock.lastCall![0]).toMatchObject({ composer: null, call: true, header: { name: "Manager" } });
+      expect(html.dataset.nativeGlassComposer).toBeUndefined();
+
+      // the once-a-second resend and the ack wait never bring the composer back while the call holds its place
+      const sent = glass.update.mock.calls.length;
+      vi.advanceTimersByTime(REASSERT_MS + 500);
+      for (let i = 0; i < 15; i += 1) runFrame();
+      expect(glass.update.mock.calls.length).toBeGreaterThan(sent);
+      expect(glass.update.mock.calls.slice(sent).every(([state]) => state.composer === null && state.call === true)).toBe(true);
+      document.dispatchEvent(new Event("visibilitychange"));
+      runFrame();
+      expect(glass.update.mock.lastCall![0]).toMatchObject({ composer: null, call: true });
+
+      // the bar starts to leave: the composer is asked back under it, no longer as a call
+      bar.setAttribute("data-call-leaving", "");
+      for (let i = 0; i < 15; i += 1) runFrame();
+      expect(glass.update.mock.lastCall![0].composer).not.toBeNull();
+      expect(glass.update.mock.lastCall![0].call).toBeUndefined();
+      send({ type: "composer", shown: true });
+      runFrame();
+      expect(html.dataset.nativeGlassComposer).toBe("");
+      bar.remove();
+    } finally { vi.useRealTimers(); }
   });
 
   it("drops the native chrome while a sheet covers the chat", () => {
@@ -344,20 +414,106 @@ describe("useNativeGlass", () => {
     expect(pressed.mic).not.toHaveBeenCalled();
   });
 
+  const LONG = Array.from({ length: 80 }, (_, i) => `line ${i}: check the build again 🚀 “quoted”`).join("\n");
+
+  /** the page's Send: what a tap on the native one presses, and what the page then does with its field */
+  function pageSends($: (id: string) => HTMLElement, takes = true) {
+    $("mic").addEventListener("click", () => { if (takes) typeInto($("field") as HTMLTextAreaElement, ""); });
+  }
+
+  it("clears the native field outright once the page takes a long send, and never types its old text back", () => {
+    const { glass, send, $ } = mount();
+    pageSends($);
+    runFrame();
+    send({ type: "text", text: LONG });
+    runFrame();
+    send({ type: "button", index: 0, kind: "send" });
+    // the field's own text from before the clear, late (a dictation or autocorrection settling)
+    send({ type: "text", text: LONG.replace(/again 🚀 “quoted”$/, "again! 🚀 “quoted”") });
+    expect(($("field") as HTMLTextAreaElement).value).toBe("");
+    runFrame();
+    const id = glass.clearText.mock.calls[0]![0];
+    expect(glass.setText).toHaveBeenLastCalledWith("", id);
+    send({ type: "text", text: LONG });
+    expect(($("field") as HTMLTextAreaElement).value).toBe("");
+    expect(glass.clearText.mock.calls.length).toBeGreaterThan(1);
+    send({ type: "text", text: "next one" });
+    expect(($("field") as HTMLTextAreaElement).value).toBe("next one");
+  });
+
+  it("leaves the native field alone when the page does not take the send", () => {
+    const { glass, send, $ } = mount();
+    pageSends($, false);
+    runFrame();
+    send({ type: "text", text: LONG });
+    send({ type: "button", index: 0, kind: "send" });
+    for (let i = 0; i < 3; i += 1) runFrame();
+    expect(glass.clearText).not.toHaveBeenCalled();
+    expect(($("field") as HTMLTextAreaElement).value).toBe(LONG);
+  });
+
+  it("puts a failed send's text back in the native field after clearing it", () => {
+    const { glass, send, $ } = mount();
+    pageSends($);
+    runFrame();
+    send({ type: "text", text: LONG });
+    send({ type: "button", index: 0, kind: "send" });
+    runFrame();
+    expect(glass.clearText).toHaveBeenCalledTimes(1);
+    typeInto($("field") as HTMLTextAreaElement, LONG);
+    runFrame();
+    expect(glass.setText).toHaveBeenLastCalledWith(LONG, expect.any(Number));
+  });
+
+  it("types native text into the composer's current field after the page made it anew", () => {
+    const { send, $ } = mount();
+    runFrame();
+    const old = $("field") as HTMLTextAreaElement;
+    const fresh = document.createElement("textarea");
+    old.replaceWith(fresh);
+    send({ type: "text", text: "hello" });
+    expect(fresh.value).toBe("hello");
+  });
+
   it("sends the page's own edits to the native field, never echoing what was typed there", () => {
     const { glass, send, $ } = mount();
     runFrame();
+    expect(glass.setText, "a chat opening hands the field its own text, empty here").toHaveBeenCalledTimes(1);
+    expect(glass.setText.mock.calls[0]![0]).toBe("");
     send({ type: "text", text: "hel" });
     runFrame();
-    expect(glass.setText).not.toHaveBeenCalled();
+    expect(glass.setText).toHaveBeenCalledTimes(1);
     typeInto($("field") as HTMLTextAreaElement, "");
     runFrame();
-    expect(glass.setText).toHaveBeenCalledWith("", 1);
+    expect(glass.setText).toHaveBeenCalledTimes(2);
+    expect(glass.setText.mock.calls[1]![0]).toBe("");
     send({ type: "text", text: "again" });
     runFrame();
     typeInto($("field") as HTMLTextAreaElement, "");
     runFrame();
-    expect(glass.setText).toHaveBeenLastCalledWith("", 2);
+    expect(glass.setText).toHaveBeenCalledTimes(3);
+    const seqs = glass.setText.mock.calls.map((call) => call[1]);
+    expect(seqs[1]! > seqs[0]! && seqs[2]! > seqs[1]!).toBe(true);
+  });
+
+  // App Store 1.2: each chat counted from 1 again while the native field kept the highest count it had taken, so after
+  // the first chat a send never cleared the native field
+  it("keeps counting up across chats, so a send clears the native field in every chat, not only the first", () => {
+    const first = mount();
+    runFrame();
+    first.send({ type: "text", text: "one" });
+    typeInto(first.$("field") as HTMLTextAreaElement, "");
+    runFrame();
+    const highest = Math.max(...first.glass.setText.mock.calls.map((call) => call[1]));
+    flushSync(() => root.unmount());
+    const second = mount();
+    runFrame();
+    second.send({ type: "text", text: "two" });
+    typeInto(second.$("field") as HTMLTextAreaElement, "");
+    runFrame();
+    const cleared = second.glass.setText.mock.calls.at(-1)!;
+    expect(cleared[0]).toBe("");
+    expect(cleared[1]).toBeGreaterThan(highest);
   });
 
   it("keeps the composer's height to the native one and blurs it on the way out", () => {
@@ -398,6 +554,45 @@ describe("useNativeGlass", () => {
     ($("field") as HTMLTextAreaElement).focus();
     expect(glass.focus).toHaveBeenCalled();
   });
+
+  it("hands the keyboard back to the native field when the page's composer gives way to it again", () => {
+    const { glass, $ } = mount();
+    runFrame();
+    const strip = document.createElement("div");
+    place(strip, 10, 700, 370, 40);
+    $("field").closest("[data-composer-row]")!.parentElement!.prepend(strip);
+    for (let i = 0; i < 15; i += 1) runFrame();
+    expect(glass.update.mock.lastCall![0].composer).toBeNull();
+    ($("field") as HTMLTextAreaElement).focus();
+    expect(glass.focus).not.toHaveBeenCalled();
+    strip.remove();
+    for (let i = 0; i < 15; i += 1) runFrame();
+    expect(glass.update.mock.lastCall![0].composer).not.toBeNull();
+    expect(glass.focus).toHaveBeenCalledTimes(1);
+  });
+
+  it("tells the native side its chrome again every second, so a composer it lost comes back", () => {
+    let clock = 5000;
+    vi.spyOn(performance, "now").mockImplementation(() => clock);
+    const { glass } = mount();
+    for (let i = 0; i < 31; i += 1) runFrame();
+    const sent = glass.update.mock.calls.length;
+    for (let i = 0; i < 15; i += 1) runFrame();
+    expect(glass.update).toHaveBeenCalledTimes(sent);
+    clock += REASSERT_MS + 1;
+    for (let i = 0; i < 15; i += 1) runFrame();
+    expect(glass.update).toHaveBeenCalledTimes(sent + 1);
+    expect(glass.update.mock.lastCall![0].composer).not.toBeNull();
+  });
+
+  it("tells the native side everything again when the app comes back to the front", () => {
+    const { glass } = mount();
+    for (let i = 0; i < 31; i += 1) runFrame();
+    const sent = glass.update.mock.calls.length;
+    document.dispatchEvent(new Event("visibilitychange"));
+    runFrame();
+    expect(glass.update).toHaveBeenCalledTimes(sent + 1);
+  });
 });
 
 describe("the header's symbols for the page", () => {
@@ -421,5 +616,33 @@ describe("the header's symbols for the page", () => {
     expect(applyGlassGlyphs(html, {})).toBe(false);
     expect(applyGlassGlyphs(html, { right: { data: "javascript:alert(1)", w: 24, h: 17 } })).toBe(false);
     expect(html.dataset.nativeGlyphs).toBeUndefined();
+  });
+});
+
+describe("the transcript's room under its last row", () => {
+  it("is the empty space below a short chat and none under a long one", () => {
+    const chat = document.createElement("div");
+    const list = document.createElement("div");
+    const content = document.createElement("div");
+    const jump = document.createElement("div");
+    jump.style.position = "absolute";
+    list.className = "glass-scroller";
+    list.append(content, jump);
+    chat.append(list);
+    document.body.append(chat);
+    place(list, 0, 54, 390, 700);
+    place(jump, 0, 700, 390, 40);
+    const size = (filled: number) => {
+      place(content, 0, 54, 390, filled);
+      Object.defineProperty(list, "clientHeight", { configurable: true, get: () => 700 });
+      // a browser never reports less than the box itself, however short the content
+      Object.defineProperty(list, "scrollHeight", { configurable: true, get: () => Math.max(700, filled) });
+    };
+    size(420.4);
+    expect(transcriptRoom(chat)).toBe(280);
+    size(2400);
+    expect(transcriptRoom(chat)).toBe(0);
+    expect(transcriptRoom(null)).toBe(0);
+    chat.remove();
   });
 });

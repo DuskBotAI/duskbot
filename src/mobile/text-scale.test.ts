@@ -1,5 +1,10 @@
-import { describe, expect, it, vi } from "vitest";
-import { followSystemTextSize, textScaleFor } from "./text-scale";
+// @vitest-environment happy-dom
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { followSystemTextSize, readTextSize, setTextSize, textScale, textScaleFor } from "./text-scale";
+
+const saved = new Map<string, string>();
+vi.stubGlobal("localStorage", { getItem: (key: string) => saved.get(key) ?? null, setItem: (key: string, value: string) => { saved.set(key, value); }, clear: () => saved.clear() });
+afterEach(() => saved.clear());
 
 describe("system text size", () => {
   it("is the system body size over its default, kept inside what the layout holds", () => {
@@ -17,17 +22,36 @@ describe("system text size", () => {
     const zoom = vi.fn();
     let resumed: (() => void) | undefined;
     const stop = vi.fn();
-    expect(followSystemTextSize({ kind: "ios", onResume: (listener) => { resumed = listener; return stop; } }, () => size, zoom)).toBe(stop);
+    const off = followSystemTextSize({ kind: "ios", onResume: (listener) => { resumed = listener; return stop; } }, () => size, zoom);
     expect(zoom).toHaveBeenLastCalledWith(124);
     size = 17;
     resumed?.();
     expect(zoom).toHaveBeenLastCalledWith(100);
+    off();
+    expect(stop).toHaveBeenCalled();
   });
 
-  it("leaves Android and the browser to their own text zoom", () => {
+  it("leaves Android's and the browser's own text zoom alone while the phone's setting is followed", () => {
+    expect(textScale("system", "android", () => 30)).toBe(1);
+    expect(textScale("system", "web", () => 30)).toBe(1);
+  });
+});
+
+describe("a text size picked in Settings", () => {
+  it("wins over the phone's Larger Text and applies at once", () => {
     const zoom = vi.fn();
-    followSystemTextSize({ kind: "android" }, () => 30, zoom);
-    followSystemTextSize({ kind: "web" }, () => 30, zoom);
-    expect(zoom).not.toHaveBeenCalled();
+    const off = followSystemTextSize({ kind: "ios" }, () => 23, zoom);
+    expect(zoom).toHaveBeenLastCalledWith(135);
+    setTextSize("default");
+    expect(zoom).toHaveBeenLastCalledWith(100);
+    setTextSize("small");
+    expect(zoom).toHaveBeenLastCalledWith(88);
+    expect(readTextSize()).toBe("small");
+    off();
+  });
+
+  it("reads an unknown saved value as the phone's setting", () => {
+    localStorage.setItem("dusk.mobile.textSize", "huge");
+    expect(readTextSize()).toBe("system");
   });
 });

@@ -28,7 +28,8 @@ afterEach(() => {
   fixture.pending = false;
 });
 
-const dialog = () => document.querySelector<HTMLElement>("[data-create-bot-dialog]");
+/** the open dialog: one on its way out (inert, still drawn) is closed */
+const dialog = () => [...document.querySelectorAll<HTMLElement>("[data-create-bot-dialog]")].find((el) => !el.closest("[data-leaving]")) ?? null;
 const button = (name: string) => [...dialog()!.querySelectorAll("button")].find((b) => b.textContent === name || b.getAttribute("aria-label") === name)!;
 function type(value: string) {
   const input = dialog()!.querySelector("input")!;
@@ -47,7 +48,7 @@ it("is Create New Bot: a name, the twenty pixel bodies, the colours, and Create 
   type("   ");
   expect(button("Create").disabled, "a blank name is no name").toBe(true);
   type("Rex");
-  flushSync(() => button("hearty character shape").click());
+  flushSync(() => button("Hearty character shape").click());
   flushSync(() => button("Blue character color").click());
   flushSync(() => button("Create").click());
   expect(fixture.dispatch).toHaveBeenCalledWith(expect.objectContaining({ type: "newBot", section: "GOATS", look: { name: "Rex", color: "blue", mascotBody: "hearty" } }));
@@ -60,13 +61,13 @@ it("is Create New Bot: a name, the twenty pixel bodies, the colours, and Create 
 it("keeps the name, shape and colour and says why when the bot could not be made", () => {
   flushSync(() => openCreateBot());
   type("Rex");
-  flushSync(() => button("hearty character shape").click());
+  flushSync(() => button("Hearty character shape").click());
   flushSync(() => button("Create").click());
   flushSync(() => fixture.dispatch.mock.calls[0]![0].onError("couldn't make a new bot: offline"));
   expect(dialog()).not.toBeNull();
   expect(dialog()!.querySelector("[data-create-bot-error]")!.textContent).toBe("couldn't make a new bot: offline");
   expect(dialog()!.querySelector("input")!.value).toBe("Rex");
-  expect(button("hearty character shape").getAttribute("aria-pressed")).toBe("true");
+  expect(button("Hearty character shape").getAttribute("aria-pressed")).toBe("true");
   expect(button("Create").disabled, "it can be tried again").toBe(false);
 });
 

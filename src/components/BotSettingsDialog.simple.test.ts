@@ -6,7 +6,6 @@ import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Routine } from "@/lib/routines";
 import type { MemoryDoc } from "@/lib/memory";
 import type { Bot, BotSettingsSection, InstanceInfo } from "@/state/store";
-import { AVATAR_FOCUS_CENTER, AVATAR_ZOOM_MIN } from "../../shared/bot-avatar";
 import type { ManagedSkill } from "./bot-settings/SkillsSection";
 import type { BotApps } from "./bot-settings/useBotApps";
 
@@ -147,8 +146,6 @@ const { VOICE_LANGUAGES, VOICE_SPEEDS } = await import("./bot-panel/voice-prefs"
 const { LocalComputerAutoWarning } = await import("./LocalComputerAutoWarning");
 const { BotRoutines } = await import("./routines/BotRoutines");
 const { SignedInSites } = await import("./SignedInSites");
-const { AvatarImageGenerator } = await import("./AvatarImageGenerator");
-const { AvatarFraming } = await import("./avatar-editing");
 
 afterAll(() => vi.unstubAllGlobals());
 
@@ -211,11 +208,6 @@ const find = (rendered: { nodes: Node[] }, attr: string, value: unknown = true) 
   const found = rendered.nodes.find((node) => node.props[attr] === value);
   if (!found) throw new Error(`no node with ${attr}=${String(value)}`);
   return found;
-};
-const segment = (rendered: { nodes: Node[] }, attr: string) => {
-  const found = rendered.nodes.find((node) => node.props.attr === attr);
-  if (!found) throw new Error(`no segmented control ${attr}`);
-  return found.props as { value: unknown; onChange: (value: string) => void; options: Array<{ value: string; label: unknown; disabled?: boolean }> };
 };
 const has = (rendered: { nodes: Node[] }, attr: string, value: unknown = true) => rendered.nodes.some((node) => node.props[attr] === value);
 const panelWrappers = new Map<unknown, unknown>([[DetailsTab, PanelDetailsTab], [AdvancedTab, PanelAdvancedTab], [AvatarEditorCard, PanelAvatarEditor]]);
@@ -298,7 +290,7 @@ describe("the bot panel in Simple mode", () => {
     const rendered = panel(bot);
     expect(ofType(rendered, PanelShareMenu)!.props.bot).toBe(bot);
     expect(has(rendered, "data-panel-gear")).toBe(false);
-    click(find(rendered, "aria-label", "Close"));
+    click(find(rendered, "aria-label", "Close panel"));
     expect(onClose).toHaveBeenCalled();
     const hero = ofType(rendered, PanelHero)!;
     expect(hero.props.bot).toBe(bot);
@@ -526,13 +518,13 @@ describe("the avatar editor", () => {
     const bot = makeBot();
     const rendered = editor(bot);
     expect([...rendered.html.matchAll(/aria-label="(\w+) character shape"/g)].map((match) => match[1]))
-      .toEqual([...DUSK_BODY_IDS]);
+      .toEqual(DUSK_BODY_IDS.map((id) => id[0]!.toUpperCase() + id.slice(1)));
     expect([...rendered.html.matchAll(/aria-label="(\w+) character color"/g)].map((match) => match[1]))
       .toEqual(["Blue", "Cyan", "Teal", "Green", "Yellow", "Orange", "Coral", "Red", "Pink", "Purple"]);
     expect(rendered.html.toLowerCase()).not.toContain("more looks");
-    expect(find(rendered, "aria-label", "kit character shape").props["aria-pressed"]).toBe(true);
-    expect(find(editor(makeBot({ mascotBody: "teardrop" as Bot["mascotBody"] })), "aria-label", "drip character shape").props["aria-pressed"]).toBe(true);
-    click(find(rendered, "aria-label", "pip character shape"));
+    expect(find(rendered, "aria-label", "Kit character shape").props["aria-pressed"]).toBe(true);
+    expect(find(editor(makeBot({ mascotBody: "teardrop" as Bot["mascotBody"] })), "aria-label", "Drip character shape").props["aria-pressed"]).toBe(true);
+    click(find(rendered, "aria-label", "Pip character shape"));
     expect(patch).toHaveBeenLastCalledWith({ mascotBody: "pip" });
     click(find(rendered, "aria-label", "Blue character color"));
     expect(patch).toHaveBeenLastCalledWith({ color: "blue" });
@@ -541,41 +533,15 @@ describe("the avatar editor", () => {
 
   it("switches back to the mascot when a body is picked over a picture", () => {
     const bot = makeBot({ avatarUrl: "/api/attachments/cat.webp", avatarCrop: "circle" });
-    click(find(editor(bot), "data-avatar-tab", "bot"));
-    click(find(editor(bot), "aria-label", "starry character shape"));
+    click(find(editor(bot), "aria-label", "Starry character shape"));
     expect(patch).toHaveBeenLastCalledWith({ mascotBody: "starry", avatarCrop: "mascot" });
   });
 
-  it("resets the mascot as the Advanced card does", () => {
-    click(find(editor(makeBot()), "data-avatar-reset"));
-    expect(patch).toHaveBeenLastCalledWith({ avatarCrop: "mascot", color: "green", mascotExpression: null, mascotBody: "kit", mascotFaceColor: null });
-  });
-
-  it("generates with the shared generator, and uploads with shape and framing", () => {
-    const bot = makeBot();
-    click(find(editor(bot), "data-avatar-tab", "generate"));
-    const generate = editor(bot);
-    expect(ofType(generate, AvatarImageGenerator)!.props.botLabel).toBe("Researcher");
-
-    click(find(generate, "data-avatar-tab", "upload"));
-    const upload = editor(bot);
-    expect(upload.html).toContain("Drop a picture here, or choose one");
-    expect(upload.html).toContain("PNG, JPEG, GIF, or WebP · up to 10 MB");
-    expect(segment(upload, "data-avatar-crop").options.map((option) => [option.value, option.disabled])).toEqual([
-      ["circle", true], ["rounded", true], ["square", true],
-    ]);
-    expect(ofType(upload, AvatarFraming)).toBeUndefined();
-
-    fresh();
-    const pictured = makeBot({ avatarUrl: "/api/attachments/cat.webp", avatarCrop: "circle" });
-    const withImage = editor(pictured);
-    expect(find(withImage, "data-avatar-tab", "upload").props["aria-selected"]).toBe(true);
-    expect(ofType(withImage, AvatarFraming)!.props.bot).toBe(pictured);
-    expect(segment(withImage, "data-avatar-crop").value).toBe("circle");
-    segment(withImage, "data-avatar-crop").onChange("square");
-    expect(patch).toHaveBeenLastCalledWith({ avatarCrop: "square" });
-    click(find(withImage, "aria-label", "Remove custom avatar image"));
-    expect(patch).toHaveBeenLastCalledWith({ avatarUrl: null, avatarCrop: "mascot", avatarZoom: AVATAR_ZOOM_MIN, avatarFocusX: AVATAR_FOCUS_CENTER, avatarFocusY: AVATAR_FOCUS_CENTER });
+  it("shows only the character shapes and colors: no tabs, generator, upload or reset", () => {
+    const rendered = editor(makeBot());
+    expect(rendered.html).not.toContain("data-avatar-tab");
+    expect(rendered.html).not.toContain("data-avatar-reset");
+    expect(rendered.html).not.toContain("data-avatar-drop");
   });
 
   it("closes on Escape without letting the dialog close settings", () => {
@@ -644,7 +610,7 @@ describe("the Bot settings page", () => {
     expect(order.every((index) => index > -1)).toBe(true);
     expect([...order].sort((a, b) => a - b)).toEqual(order);
     const pages = [...rendered.html.matchAll(/data-panel-page="(\w+)"/g)].map((match) => match[1]);
-    expect(pages).toEqual(["identity", "instructions", "memory", "skills", "tools", "permissions", "folder", "backups"]);
+    expect(pages).toEqual(["identity", "instructions", "memory", "skills", "tools", "permissions", "folder"]);
     expect(rendered.html).not.toContain('data-panel-advanced="settings"');
     for (const page of pages) {
       click(find(rendered, "data-panel-page", page));
@@ -658,11 +624,19 @@ describe("the Bot settings page", () => {
     const row = (page: string) => find(rendered, "data-panel-page", page).props;
     expect(row("memory").value).toBe("Off");
     expect(row("skills").value).toBe("None");
-    expect(row("backups").value).toBe("None");
-    for (const page of ["instructions", "memory", "skills", "folder", "backups"]) expect(row(page).hint, page).toBeUndefined();
+    for (const page of ["instructions", "memory", "skills", "folder"]) expect(row(page).hint, page).toBeUndefined();
     // instructions already written need no value; an empty one says None
     expect(row("instructions").value).toBeUndefined();
     expect(find(settingsPage(makeBot({ soul: "" })), "data-panel-page", "instructions").props.value).toBe("None");
+  });
+
+  it("has one Backup AI switch, on (automatic) unless the bot was set to none, and no backup model list", () => {
+    const backup = (fallback?: Array<{ instanceId: string; model: string }>) => find(settingsPage(makeBot(fallback ? { fallback } : {})), "data-panel-row", "backup-ai").props;
+    expect(backup().checked).toBe(true);
+    expect(backup([]).checked).toBe(false);
+    expect(backup([{ instanceId: "codex", model: "gpt-6" }]).checked).toBe(true);
+    expect(backup().hint).toBeUndefined();
+    expect(settingsPage(makeBot()).html).not.toContain('data-panel-page="backups"');
   });
 
   it("has no rows for apps, signed-in sites, the API, conversations, Work until done, Hide, Call mode or the label", () => {
@@ -757,6 +731,17 @@ describe("the Computer tab", () => {
     for (const gone of ['data-panel-card="runs-on"', 'data-panel-select="place"', 'data-panel-advanced="computer"', 'data-panel-action="move-home"', 'data-panel-action="move-vps"']) {
       expect(rendered.html, gone).not.toContain(gone);
     }
+  });
+
+  it("on a server shows a browser bot its browser there, not a screen with nothing on it, and keeps the move to dusk cloud", () => {
+    const rendered = computer(makeBot({ computer: "browser" }));
+    const section = rendered.nodes.find((node) => "askFirst" in node.props);
+    expect(section?.props.bot).toMatchObject({ id: "scout" });
+    expect(section?.props.askFirst, "the server's browser asks for no Mac permissions").toBeNull();
+    expect(rendered.nodes.some((node) => node.props.inline === true)).toBe(false);
+    expect(rendered.html).not.toContain('data-panel-screen-of=""');
+    const after = capture(() => section!.props.after as Node);
+    expect(after.html).toContain('data-panel-card="cloud-desktop"');
   });
 
   it("on this computer drops the screen choice and preview, and offers dusk cloud through checkout", () => {

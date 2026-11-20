@@ -4,15 +4,15 @@ import { randomBytes } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { resolveCompanionEntry } from "./companion-entry.mjs";
+import { UTILITY_NAMES } from "./utility-names.mjs";
 import {
   cleanupCompanionOriginEndpoint,
   companionOriginHealth,
   createCompanionOriginEndpoint,
 } from "./companion-origin-gateway.mjs";
+import { companionFolder, companionLaunchPorts, companionPorts } from "./desktop-ports.mjs";
 
-// Must stay clear of the harness's 8799 and its webhook receiver's 8800.
-const CONTROL_PORT = 8811;
-const COMPANION_PORT = 8810;
+let ports = companionPorts(8799);
 
 let proc = null;
 // New for each sidecar launch and held only by main and the sidecar, so a page served from the control port cannot drive it.
@@ -86,7 +86,7 @@ async function control(method, urlPath, body, { timeoutMs = 4_000 } = {}) {
     options.body = JSON.stringify(body);
     options.headers["content-type"] = "application/json";
   }
-  const res = await fetch(`http://127.0.0.1:${CONTROL_PORT}${urlPath}`, options);
+  const res = await fetch(`http://127.0.0.1:${ports.control}${urlPath}`, options);
   if (!res.ok && res.status !== 404) throw new Error(`companion control ${res.status}`);
   return res.json();
 }
@@ -165,22 +165,25 @@ async function start({ resourcesPath, harnessPort, mutationToken, hostedUrl = nu
   delete childEnvironment.DUSK_PHONE_SECRET_PUBLIC_KEY;
   if (hostedUrl) childEnvironment.DUSK_COMPANION_HOSTED_URL = hostedUrl;
   childEnvironment.DUSK_COMPANION_INTERNAL_ORIGIN = allocatedOrigin.socketPath;
+  childEnvironment.DUSK_COMPANION_DIR ||= companionFolder({ home: app.getPath("home"), harnessPort, packaged: app.isPackaged });
   if (/^[A-Za-z0-9_-]{87}$/.test(String(secretPublicKey ?? ""))) {
     childEnvironment.DUSK_PHONE_SECRET_PUBLIC_KEY = secretPublicKey;
   }
 
   controlToken = randomBytes(32).toString("base64url");
+  ports = await companionLaunchPorts(harnessPort, { packaged: app.isPackaged });
   let child;
   try {
     child = utilityProcess.fork(resolved.entry, [], {
       env: {
         ...childEnvironment,
         DUSK_PORT: String(harnessPort),
-        DUSK_COMPANION_PORT: String(COMPANION_PORT),
-        DUSK_CONTROL_PORT: String(CONTROL_PORT),
+        DUSK_COMPANION_PORT: String(ports.companion),
+        DUSK_CONTROL_PORT: String(ports.control),
       },
       execArgv: resolved.execArgv,
       stdio: ["ignore", "pipe", "pipe"],
+      serviceName: UTILITY_NAMES.companion,
     });
   } catch {
     cleanupOrigin();
@@ -210,6 +213,7 @@ async function start({ resourcesPath, harnessPort, mutationToken, hostedUrl = nu
         type: "exit",
         expected: expectedStops.has(child),
         pid: child.pid,
+        code,
       });
     }
     cleanupOrigin();
@@ -229,7 +233,7 @@ async function start({ resourcesPath, harnessPort, mutationToken, hostedUrl = nu
           child.kill();
         } catch {
         }
-        lastError = `Port ${CONTROL_PORT} is already serving another companion: stop it and try again`;
+        lastError = `Port ${ports.control} is already serving another companion: stop it and try again`;
         return companionState();
       }
       if (!Number.isSafeInteger(child.pid) || child.pid <= 0) {
@@ -296,7 +300,7 @@ export async function companionState() {
     const state = {
       enabled: false,
       keepAwake,
-      port: COMPANION_PORT,
+      port: ports.companion,
       devices: [],
       connectedDeviceIds: [],
       pairing: null,
@@ -311,7 +315,7 @@ export async function companionState() {
     return {
       enabled: true,
       keepAwake,
-      port: COMPANION_PORT,
+      port: ports.companion,
       devices: [],
       connectedDeviceIds: [],
       pairing: null,

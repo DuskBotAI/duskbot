@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { builtInBrowserEnabled, llmThreadTitlesEnabled, parseSkillReviewSteps, phoneAppByHand, phoneAppEnabled, setPhoneAppByHand, roomMemoryCaptureEnabled, shareLearnedSkillsMode, showToolCallsEnabled, skillAuthoringEnabled, skillReviewEnabled, skillReviewSteps, skillReviewUnavailableEngines } from "./feature-flags";
+import { builtInBrowserEnabled, llmThreadTitlesEnabled, parseSkillReviewSteps, phoneAppEnabled, phoneAppPrompted, roomMemoryCaptureEnabled, shareLearnedSkillsMode, showToolCallsEnabled, skillAuthoringEnabled, skillReviewEnabled, skillReviewSteps, skillReviewUnavailableEngines } from "./feature-flags";
 
 describe("experimental feature flags", () => {
   it("keeps skill authoring on by default, before and after the config arrives", () => {
@@ -28,9 +28,10 @@ describe("experimental feature flags", () => {
     expect(skillReviewUnavailableEngines([], instances)).toEqual([]);
   });
 
-  it("learns skills automatically only after an opt-in, and never without skill authoring", () => {
-    expect(skillReviewEnabled(null)).toBe(false);
-    expect(skillReviewEnabled({ features: {} })).toBe(false);
+  it("learns skills automatically unless switched off, and never without skill authoring", () => {
+    expect(skillReviewEnabled(null)).toBe(true);
+    expect(skillReviewEnabled({ features: {} })).toBe(true);
+    expect(skillReviewEnabled({ features: { skillReview: false } })).toBe(false);
     expect(skillReviewEnabled({ features: { skillReview: true } })).toBe(true);
     expect(skillReviewEnabled({ features: { skillReview: true, skillAuthoring: false } })).toBe(false);
   });
@@ -44,27 +45,15 @@ describe("experimental feature flags", () => {
     for (const bad of ["", "2", "101", "4.5", "-5", "ten"]) expect(parseSkillReviewSteps(bad)).toBeNull();
   });
 
-  it("shows the phone app on a computer whose Advanced switch is on, and only there", () => {
+  it("shows and prompts the phone app in a plain build, since both phone apps are out, and hides it only when a build asks", () => {
     vi.stubEnv("VITE_DUSK_PHONE_APP", "");
-    const store = new Map<string, string>();
-    vi.stubGlobal("localStorage", { getItem: (k: string) => store.get(k) ?? null, setItem: (k: string, v: string) => store.set(k, v), removeItem: (k: string) => store.delete(k) });
-    expect(phoneAppEnabled()).toBe(false);
-    setPhoneAppByHand(true);
-    expect(phoneAppByHand()).toBe(true);
     expect(phoneAppEnabled()).toBe(true);
-    setPhoneAppByHand(false);
-    expect(phoneAppEnabled()).toBe(false);
-    vi.unstubAllGlobals();
-    vi.unstubAllEnvs();
-  });
-
-  it("hides the phone app in a plain build while it is reworked, and shows it only when a build asks", () => {
-    vi.stubEnv("VITE_DUSK_PHONE_APP", "");
-    expect(phoneAppEnabled()).toBe(false);
+    expect(phoneAppPrompted()).toBe(true);
     vi.stubEnv("VITE_DUSK_PHONE_APP", "1");
     expect(phoneAppEnabled()).toBe(true);
     vi.stubEnv("VITE_DUSK_PHONE_APP", "0");
     expect(phoneAppEnabled()).toBe(false);
+    expect(phoneAppPrompted()).toBe(false);
     vi.unstubAllEnvs();
   });
 

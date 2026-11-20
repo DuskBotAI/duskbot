@@ -117,7 +117,7 @@ describe("Settings, drawn as Grok Bot's", () => {
   it("opens Advanced features on one titled group of its rarer pages, with no shortcuts to places the sidebar already has", () => {
     const html = open("advanced");
     expect(title(html)).toBe("Advanced features");
-    expect(groups(html)).toEqual(["Everything else", "Developer"]);
+    expect(groups(html), "the phone app's developer switch is only for a build that hides it").toEqual(["Everything else"]);
     expect([...html.matchAll(/data-settings-open="([^"]+)"/g)].map((match) => match[1])).toEqual([]);
     expect([...html.matchAll(/data-settings-advanced="([^"]+)"/g)].map((match) => match[1]))
       .toEqual(["apps", "team", "data"]);

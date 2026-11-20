@@ -1,18 +1,19 @@
 {
   "path": "/guides/is-openclaw-safe",
   "type": "guide",
-  "title": "Is OpenClaw safe? Security reports and practical limits",
+  "title": "Is OpenClaw safe to use with your files and accounts?",
   "nav": "openclaw safety",
-  "h1": "is openclaw safe enough for your accounts?",
-  "description": "A dated look at OpenClaw advisories, the ClawHub skills audit and reported security work, plus practical limits for any agent you run.",
+  "h1": "is openclaw safe to use on your own computer?",
+  "description": "Judge your OpenClaw setup by its version, installed skills and account access. See how to read a security advisory and choose a safer first task.",
   "keyword": "is openclaw safe",
   "keywords": [
     "openclaw security",
     "openclaw security issues",
-    "openclaw safe"
+    "openclaw safe",
+    "is openclaw safe"
   ],
-  "answer": "**openclaw's power comes with an upkeep job: yours.** it can reach files and accounts, so start with a small reading task and limited access. as of 12 november 2026, github lists 722 published security advisories.[^1] use the affected versions and fixes to judge your install. that historical count alone won't tell you how many flaws remain.",
-  "updated": "2026-11-12",
+  "answer": "**don't give an untested openclaw setup access to private files: it can read and write files and run shell commands.**[^5] start with a separate workspace and a low-stakes reading job. compare your installed version with the project's advisories, and inspect each skill before connecting an account.[^1][^2]",
+  "updated": "2026-11-20",
   "review": {
     "status": "approved",
     "by": "lead agent: independent reviewer pass against seo/facts (4 reviewers), every finding applied, automated gate",
@@ -73,6 +74,10 @@
     {
       "q": "are all clawhub skills malicious?",
       "a": "**koi found 341 malicious skills among 2,857 examined.** that was the audit reported on 2 february 2026, rather than a rate for today's whole catalog.[^2]"
+    },
+    {
+      "q": "is openclaw safer on a separate computer?",
+      "a": "**a separate machine helps keep your everyday files out of reach.** openclaw can still use accounts you connect there, including mail and calendar. for a first trial, leave those accounts disconnected and give it a folder of public documents.[^5]"
     }
   ],
   "sources": [
@@ -93,6 +98,11 @@
     {
       "label": "dusk bot docs: sending and approval settings",
       "url": "/docs/computer"
+    },
+    {
+      "label": "openclaw: files, commands and connected accounts",
+      "url": "https://openclaw.ai/",
+      "checked": "2026-11-12"
     }
   ],
   "quick": {

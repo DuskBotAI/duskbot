@@ -131,6 +131,9 @@ const crossed = (asker: string, request: Assignment): string => `@${asker} is al
 
 /** How often a request that joined another looks at it. */
 const JOIN_POLL_MS = 1_000;
+/** A teammate that asks again after its requester already answered this often goes to the person: two bots that can't
+ * unblock each other would otherwise trade the same question forever. */
+const MAX_REQUESTER_ANSWERS = 2;
 const JOINED_NOTE = "Another teammate asked this a moment ago, so it was answered once, for both of you:";
 
 export class RuntimeCoordinator implements Coordinator {
@@ -351,6 +354,7 @@ export class RuntimeCoordinator implements Coordinator {
     this.ready();
     const a = this.store.get(id);
     if (!a || a.status !== "needs_input") return false;
+    if (by?.kind === "bot" && a.decide === undefined && this.requesterAnswers(id) >= MAX_REQUESTER_ANSWERS) return false;
     return this.runtime.answer(id, text, by);
   }
 
@@ -566,6 +570,7 @@ export class RuntimeCoordinator implements Coordinator {
       },
       names: (a, parent) => host.names(view(a, parent), parent && this.project(parent)),
       outward: a => host.outward ? host.outward(this.project(a)) : [],
+      progress: a => host.progress ? host.progress(this.project(a)) : [],
     };
   }
 
@@ -609,8 +614,14 @@ export class RuntimeCoordinator implements Coordinator {
     const question = root ? undefined : needsInputQuestion(result.text);
     if (question === undefined) return { kind: "completed", text: result.text, ...(await this.statusOnly(a, parent, input.turn, result, signal) ? { statusOnly: true } : {}), ...evidence(result) };
     const named = withDefault(question);
-    const decide = requesterDecides(a) && !result.privateQuestion && !personOnly(named.question) ? { decide: named.default ? { default: named.default } : {} } : {};
+    const decide = requesterDecides(a) && !result.privateQuestion && !personOnly(named.question) && this.requesterAnswers(a.id) < MAX_REQUESTER_ANSWERS
+      ? { decide: named.default ? { default: named.default } : {} } : {};
     return { kind: "needs_input", question, ...decide, ...evidence(result) };
+  }
+
+  /** How many of this assignment's questions a bot answered rather than the person. */
+  private requesterAnswers(id: string): number {
+    return this.store.events(id).filter(event => event.kind === "answered" && event.detail?.startsWith("queued: answered by ")).length;
   }
 
   private live(): Assignment[] {

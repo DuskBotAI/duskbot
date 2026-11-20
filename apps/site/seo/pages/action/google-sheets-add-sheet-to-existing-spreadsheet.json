@@ -1,0 +1,94 @@
+{
+  "path": "/integrations/google-sheets/add-sheet-to-existing-spreadsheet",
+  "type": "action",
+  "title": "Add a new tab to an existing Google Sheets file",
+  "nav": "add a blank tab",
+  "h1": "add a dated tab to the google sheet your team already uses",
+  "description": "Set up the next stocktake in the existing workbook. Ask a Google Sheets bot to add a blank tab and stop if another person has already made it.",
+  "keyword": "add a tab in google sheets with ai",
+  "keywords": [
+    "google sheets bot create new tab",
+    "chatgpt add worksheet to existing spreadsheet",
+    "claude add monthly sheets tab"
+  ],
+  "answer": "**give the next stocktake a blank tab in the workbook everyone already has.** paste the google sheets link and tell the bot exactly what to call the new tab. ask it to stop on a name clash. otherwise a second run can quietly create another tab with a numbered suffix.",
+  "updated": "2026-11-20",
+  "review": {
+    "status": "approved",
+    "by": "lead agent, after four independent reviewers read every page against seo/facts (2026-11-20); every finding applied",
+    "at": "2026-11-20"
+  },
+  "tags": [
+    "google sheets",
+    "add a blank tab"
+  ],
+  "connectors": [
+    "googlesheets"
+  ],
+  "related": [
+    "/integrations/google-sheets",
+    "/integrations/google-sheets/get-spreadsheet-info",
+    "/integrations/google-sheets/copy-sheet-to-another-spreadsheet"
+  ],
+  "art": {
+    "logo": "sheets",
+    "label": "Google Sheets",
+    "props": [
+      "p-folder",
+      "s-notebook"
+    ],
+    "bubble": "next month fits here"
+  },
+  "og_line": "one workbook, room for next month.",
+  "action": {
+    "toolkit": "googlesheets",
+    "slug": "GOOGLESHEETS_ADD_SHEET"
+  },
+  "what": "**the file link is the destination. the new title belongs to the tab.** the bot adds an ordinary grid of rows and columns inside that file. you can choose its size, colour or position. a fresh grid starts blank. use a tab copy when you need last month's headings and formulas.",
+  "uses": [
+    "open a blank count sheet for a new month inside the stocktake file",
+    "give a second rehearsal its own worksheet beside the first cast's notes",
+    "add a visible scratch tab where someone can work out figures away from the main budget"
+  ],
+  "routine": {
+    "message": "on the last friday of each month at 11, open the stocktake workbook at https://docs.google.com/spreadsheets/d/1w3f5m7q9r2t4v6x8z3c5b7n9p2s4d6g8h3j5k7l9a2/edit and list its tab names. use next month's name and year for the new count tab. if that title exists, tell me here and stop.\n\notherwise ask me before you change anything, then add the blank tab with automatic suffixes off. never rename an existing count.",
+    "when": "last friday of each month at 11 am",
+    "needs": "google sheets read and write for adding a tab, plus access to read tab names in the stocktake workbook",
+    "output": "clyde turner's stocktake workbook already contains december 2026. skipped creation."
+  },
+  "steps": [
+    "give the stocktake bot **read and write** for google sheets in **Connected apps**.",
+    "paste your stocktake workbook link into the routine. agree on the exact title.",
+    "ask it to list current tabs. set automatic renaming off so an exact clash stops creation.",
+    "after approval, compare the new title with the original request before recording any counts."
+  ],
+  "watch": [
+    "**automatic suffixes are on by default.** a tab ending in `_2` can split a month's entries across two places.",
+    "**a chart-only tab needs a different action.** this one creates a grid.",
+    "**placement can clash when several tabs are created together.** leave the position open or add them one at a time."
+  ],
+  "faq": [
+    {
+      "q": "can it carry last month's formulas into the new tab?",
+      "a": "**a fresh grid has no formulas to carry forward.** use a copy when the existing layout is part of the job."
+    },
+    {
+      "q": "what if someone creates the tab after the bot looks?",
+      "a": "**turn off automatic name suffixes for the creation itself.** a duplicate name then fails, even if the earlier lookup found nothing."
+    }
+  ],
+  "sources": [
+    {
+      "label": "dusk bot docs: files and apps",
+      "url": "/docs/files-and-apps"
+    },
+    {
+      "label": "dusk bot docs: routines",
+      "url": "/docs/routines"
+    }
+  ],
+  "voice": 2,
+  "tip": {
+    "text": "if you want an empty tab just once and the workbook is open, add it there. a scheduled bot helps when the date and naming rule repeat."
+  }
+}

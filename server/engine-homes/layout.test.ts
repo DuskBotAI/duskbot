@@ -29,6 +29,10 @@ linux("an audience's engine home", () => {
     expect(homed.shared).toContainEqual({ source: "/data/.codex/auth.json", target: `${bob}/.codex/auth.json` });
     expect(homed.shared).toContainEqual({ source: "/data/.grok/auth.json", target: `${bob}/.grok/auth.json` });
     expect(homed.shared).toContainEqual({ source: "/data/.local/share/opencode/auth.json", target: `${bob}/.local/share/opencode/auth.json` });
+    expect(homed.shared).toContainEqual({ source: "/data/.config/cursor/auth.json", target: `${bob}/.config/cursor/auth.json` });
+    for (const file of ["auth.json", "models.json", "models-store.json"]) {
+      expect(homed.shared).toContainEqual({ source: `/data/.pi/agent/${file}`, target: `${bob}/.pi/agent/${file}` });
+    }
     for (const file of ["kimi-code.json", "kimi-code-env-0e4f99c69cc27850.json"]) {
       expect(homed.shared).toContainEqual({ source: `/data/.kimi-code/credentials/${file}`, target: `${bob}/.kimi-code/credentials/${file}` });
     }

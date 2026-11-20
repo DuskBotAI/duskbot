@@ -76,18 +76,6 @@ export function phoneSetupReducer(
   }
 }
 
-/** why secure access cannot be set up, said so the person knows what to do; null while it can */
-export function secureAccessUnavailableMessage(account: CompanionAccountState | null): string | null {
-  if (account?.available) return null;
-  if (account?.reason === "offline") return t("phone.signIn.offline");
-  if (account?.reason === "unsupported") return t("phone.signIn.notOffered");
-  return t("phone.signIn.unavailable");
-}
-
-/** retrying only helps when the service could not be reached */
-export const secureAccessRetryHelps = (account: CompanionAccountState | null): boolean =>
-  account?.reason !== "unsupported";
-
 export type PhoneSetupAccountStatus = CompanionAccountState["status"] | "unavailable";
 
 export interface PhoneSetupSnapshot {

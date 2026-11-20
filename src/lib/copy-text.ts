@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { phoneBridge } from "./phone-bridge";
 
 export type CopyResult = "copied" | "empty" | "failed";
 export type CopyFeedback = "idle" | "copied" | "failed";
@@ -31,8 +32,13 @@ function writeWeb(write: () => Promise<void> | undefined): Promise<boolean> {
 /** The web Clipboard API rejects unfocused, denied and insecure-context writes; then the desktop bridge runs. Never throws. */
 export async function copyText(text: string): Promise<CopyResult> {
   if (!text.trim()) return "empty";
-  if (await writePlain(text)) return "copied";
-  return copyThroughDesktop(text);
+  return felt(await writePlain(text) ? "copied" : await copyThroughDesktop(text));
+}
+
+/** On the phone a copy is felt as well as shown. */
+function felt(result: CopyResult): CopyResult {
+  phoneBridge()?.haptic(result === "copied" ? "success" : "error");
+  return result;
 }
 
 const writePlain = (text: string) => writeWeb(() => navigator.clipboard?.writeText?.(text));
@@ -43,8 +49,7 @@ export async function copyRichText(text: string, html: string): Promise<CopyResu
   const rich = () => typeof ClipboardItem === "function" && navigator.clipboard?.write
     ? navigator.clipboard.write([new ClipboardItem({ "text/html": new Blob([html], { type: "text/html" }), "text/plain": new Blob([text], { type: "text/plain" }) })])
     : undefined;
-  if (await writeWeb(rich) || await writePlain(text)) return "copied";
-  return copyThroughDesktop(text);
+  return felt(await writeWeb(rich) || await writePlain(text) ? "copied" : await copyThroughDesktop(text));
 }
 
 async function copyThroughDesktop(text: string): Promise<CopyResult> {

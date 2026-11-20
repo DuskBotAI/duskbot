@@ -8,13 +8,19 @@ import { claimedActions, connectorActionKind, createActionReceipts, toolEvidence
 
 type Body = RuntimeEvent extends infer E ? E extends RuntimeEvent ? Omit<E, "eventId" | "provider" | "threadId" | "createdAt"> : never : never;
 const dirs: string[] = [];
-afterEach(() => { for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true }); });
+const open: Array<ReturnType<typeof createActionReceipts>> = [];
+// a receipt line is appended after the call returns: removing its folder under that write races it (ENOTEMPTY)
+afterEach(async () => {
+  await Promise.all(open.splice(0).map((receipts) => receipts.settled()));
+  for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true });
+});
 
 function harness() {
   const dataDir = mkdtempSync(join(tmpdir(), "dusk-receipts-"));
   dirs.push(dataDir);
   const marks: Array<{ threadId: string; turnId?: string; kinds: ActionKind[] }> = [];
   const receipts = createActionReceipts({ dataDir, botOf: (threadId) => (threadId === "room" ? null : "bot-1"), mark: (threadId, turnId, kinds) => { marks.push({ threadId, turnId, kinds }); return true; } });
+  open.push(receipts);
   const send = (body: Body & { itemId?: string; turnId?: string }) => receipts.onEvent({ eventId: "e", provider: "fake", threadId: "t1", createdAt: "", ...body } as RuntimeEvent);
   return { dataDir, marks, receipts, send };
 }
@@ -59,7 +65,7 @@ describe("action receipts", () => {
     for (const name of ["2026-01.jsonl", "2026-09.jsonl", "notes.txt"]) writeFileSync(join(dataDir, "receipts", name), "{}\n");
     const receipts = createActionReceipts({ dataDir, botOf: () => "bot-1", mark: () => true, now: () => Date.parse("2026-11-12T00:00:00Z") });
     receipts.record("t1", "GMAIL_SEND_EMAIL");
-    await new Promise((resolve) => setTimeout(resolve, 50));
+    await receipts.settled();
     expect(readdirSync(join(dataDir, "receipts")).sort()).toEqual(["2026-11.jsonl", "notes.txt"]);
   });
 
@@ -78,7 +84,7 @@ describe("action receipts", () => {
     h.send({ type: "item.completed", itemType: "assistant_text", text: "Sent it to Priya." });
     h.send({ type: "turn.completed", ok: true });
     expect(h.marks).toEqual([]);
-    await new Promise((resolve) => setTimeout(resolve, 50));
+    await h.receipts.settled();
     const file = readdirSync(join(h.dataDir, "receipts"))[0]!;
     expect(JSON.parse(readFileSync(join(h.dataDir, "receipts", file), "utf8").trim())).toMatchObject({ botId: "bot-1", threadId: "t1", kind: "send", what: "GMAIL_SEND_EMAIL" });
   });

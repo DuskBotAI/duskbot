@@ -121,6 +121,10 @@ export function agentAppTrigger(trigger: AppTrigger, latestRun?: RoutineRun) {
   };
 }
 
+function withAddress<T extends ReturnType<typeof agentRoutine>>(shown: T, linked: ReadonlyMap<string, string>, routineId: string): T {
+  return [...linked.values()].includes(routineId) ? { ...shown, hasAddress: true } : shown;
+}
+
 type AgentTrigger = ReturnType<typeof agentRoutine> | ReturnType<typeof agentWebhook> | ReturnType<typeof agentAppTrigger>;
 export interface TriggerListing {
   now: string;
@@ -141,12 +145,15 @@ export function listTriggers(input: {
   timeZone: string;
   now: number;
 }): TriggerListing {
+  const routines = input.routines.filter((routine) => routine.botId === input.botId);
+  const linked = new Map(input.webhooks.filter((webhook) => webhook.routineId && routines.some((routine) => routine.id === webhook.routineId)).map((webhook) => [webhook.id, webhook.routineId!]));
+  // a routine's own address runs that routine: its fires are the routine's
+  const ownerOf = (run: RoutineRun) => linked.get(run.routineId) ?? run.routineId;
   const latest = new Map<string, RoutineRun>();
   for (const run of input.runs) {
-    if (run.botId === input.botId && !latest.has(run.routineId)) latest.set(run.routineId, run);
+    if (run.botId === input.botId && !latest.has(ownerOf(run))) latest.set(ownerOf(run), run);
   }
-  const routines = input.routines.filter((routine) => routine.botId === input.botId);
-  const webhooks = input.webhooks.filter((webhook) => webhook.botId === input.botId);
+  const webhooks = input.webhooks.filter((webhook) => webhook.botId === input.botId && !linked.has(webhook.id));
   const apps = (input.appTriggers ?? []).filter((trigger) => trigger.botId === input.botId);
   const header = { now: new Date(input.now).toISOString(), timeZone: input.timeZone };
   if (input.triggerId) {
@@ -154,14 +161,14 @@ export function listTriggers(input: {
     const webhook = webhooks.find((candidate) => candidate.id === input.triggerId);
     const app = apps.find((candidate) => candidate.id === input.triggerId);
     if (!routine && !webhook && !app) return { ...header, error: "No trigger with that id belongs to this bot. Call trigger_info without trigger_id to see its ids." };
-    const fires = input.runs.filter((run) => run.routineId === input.triggerId).slice(0, FIRES_SHOWN).map(agentRun);
-    const shown = routine ? agentRoutine(routine, latest.get(routine.id)) : webhook ? agentWebhook(webhook, latest.get(webhook.id)) : agentAppTrigger(app!, latest.get(app!.id));
+    const fires = input.runs.filter((run) => ownerOf(run) === input.triggerId).slice(0, FIRES_SHOWN).map(agentRun);
+    const shown = routine ? withAddress(agentRoutine(routine, latest.get(routine.id)), linked, routine.id) : webhook ? agentWebhook(webhook, latest.get(webhook.id)) : agentAppTrigger(app!, latest.get(app!.id));
     return { ...header, trigger: { ...shown, recentFires: fires } };
   }
   return {
     ...header,
     triggers: [
-      ...routines.map((routine) => agentRoutine(routine, latest.get(routine.id))),
+      ...routines.map((routine) => withAddress(agentRoutine(routine, latest.get(routine.id)), linked, routine.id)),
       ...webhooks.map((webhook) => agentWebhook(webhook, latest.get(webhook.id))),
       ...apps.map((trigger) => agentAppTrigger(trigger, latest.get(trigger.id))),
     ].slice(0, 100),
@@ -174,7 +181,8 @@ const triggerRequestSchema = z.union([
   z.object({ ...source, action: z.literal("create"), kind: z.literal("webhook"), webhook: z.unknown() }).strict(),
   z.object({ ...source, action: z.literal("create"), kind: z.literal("app"), trigger: z.unknown() }).strict(),
   z.object({ ...source, action: z.literal("update"), triggerId: z.string().min(1).max(200), changes: z.record(z.string(), z.unknown()) }).strict(),
-  z.object({ ...source, action: z.enum(["pause", "resume", "run_now", "delete"]), triggerId: z.string().min(1).max(200) }).strict(),
+  z.object({ ...source, action: z.enum(["pause", "resume", "delete"]), triggerId: z.string().min(1).max(200) }).strict(),
+  z.object({ ...source, action: z.literal("run_now"), triggerId: z.string().min(1).max(200), test: z.literal(true).optional() }).strict(),
 ]);
 
 const WEBHOOK_FIELDS = new Set(["name", "instructions", "runOn", "eventTypes"]);
@@ -182,15 +190,34 @@ const APP_FIELDS = new Set(["name", "instructions", "runOn", "filter", "config"]
 
 export type ParsedTriggerRequest =
   | { ok: false; error: string }
-  | { ok: true; kind: "schedule"; forBotId: unknown; proposal: { action: string; routine?: unknown; routineId?: string; changes?: unknown } }
+  | { ok: true; kind: "schedule"; forBotId: unknown; proposal: { action: string; routine?: unknown; routineId?: string; changes?: unknown; test?: boolean } }
   | { ok: true; kind: "webhook"; forBotId: unknown; operation: { action: string; webhook?: unknown; webhookId?: string; changes?: unknown } }
   | { ok: true; kind: "app"; forBotId: unknown; operation: { action: string; trigger?: unknown; triggerId?: string; changes?: unknown } };
 
 /** A create names its kind; a change finds it from the trigger id (routine, webhook and app-event ids never collide). */
+const WEEKDAY = "monday|tuesday|wednesday|thursday|friday|saturday|sunday";
+// a day said relative to when the automation was made: true that day, wrong every day after
+const RELATIVE_DAY = new RegExp(`\\s*[,(-]?\\s*\\b(?:(?:due|on|for|by|until)\\s+)?(?:today|tonight|tomorrow(?:\\s+(?:morning|afternoon|evening|night))?|yesterday|this\\s+(?:morning|afternoon|evening|week|weekend|month)|next\\s+(?:week|month|weekend|${WEEKDAY})|in\\s+\\d+\\s+(?:days?|weeks?))\\b\\s*\\)?`, "gi");
+
+/** An automation's name without a day said relative to now ("Calculus midterm tomorrow" names it "Calculus midterm"),
+ * so it stays true after that day; a name that is nothing but such a day stays as it was. */
+export function timelessName(name: string): string {
+  const kept = name.replace(RELATIVE_DAY, " ").replace(/\s{2,}/g, " ").replace(/^[\s,:;-]+|[\s,:;-]+$/g, "");
+  return kept.length >= 2 ? kept : name;
+}
+
+function withTimelessName<T>(value: T): T {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return value;
+  const record = value as Record<string, unknown>;
+  return typeof record.name === "string" ? { ...record, name: timelessName(record.name) } as T : value;
+}
+
 export function parseTriggerRequest(body: unknown, kindOf: (id: string) => "schedule" | "app" | "webhook"): ParsedTriggerRequest {
   const parsed = triggerRequestSchema.safeParse(body);
   if (!parsed.success) return { ok: false, error: "invalid trigger request" };
   const request = parsed.data;
+  if (request.action === "create") Object.assign(request, request.kind === "schedule" ? { routine: withTimelessName(request.routine) } : request.kind === "app" ? { trigger: withTimelessName(request.trigger) } : { webhook: withTimelessName(request.webhook) });
+  if (request.action === "update") request.changes = withTimelessName(request.changes);
   if (request.action === "create") {
     if (request.kind === "app") return { ok: true, kind: "app", forBotId: request.forBotId, operation: { action: "create", trigger: request.trigger } };
     return request.kind === "schedule"
@@ -207,7 +234,8 @@ export function parseTriggerRequest(body: unknown, kindOf: (id: string) => "sche
   if (kind === "schedule") {
     if (changes && "eventTypes" in changes) return { ok: false, error: "webhook_event_types applies only to webhook triggers" };
     if (changes && ("filter" in changes || "config" in changes)) return { ok: false, error: "filter and event_config apply only to app-event triggers" };
-    return { ok: true, kind: "schedule", forBotId: request.forBotId, proposal: { action: request.action, routineId: request.triggerId, ...(changes ? { changes } : {}) } };
+    const test = request.action === "run_now" && request.test ? { test: true } : {};
+    return { ok: true, kind: "schedule", forBotId: request.forBotId, proposal: { action: request.action, routineId: request.triggerId, ...(changes ? { changes } : {}), ...test } };
   }
   const misplaced = changes && Object.keys(changes).find((key) => !WEBHOOK_FIELDS.has(key));
   if (misplaced) return { ok: false, error: `A webhook trigger has no ${misplaced}; it fires when its link is called. Change name, instructions, run_on or webhook_event_types.` };

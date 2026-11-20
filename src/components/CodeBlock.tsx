@@ -8,6 +8,7 @@ import { Icon } from "./Icon";
 import { cn } from "@/lib/cn";
 import { useCopyFeedback } from "@/lib/copy-text";
 import { t } from "@/lib/i18n";
+import { phoneBridge } from "@/lib/phone-bridge";
 import { SidebarPopoverMenu, type SidebarMenuItem } from "./SidebarPopoverMenu";
 
 const highlightCache = new Map<string, string>();
@@ -205,15 +206,11 @@ export function CodePlate({ copied, onCopy, copyLabel, items, small = false, exp
   );
 }
 
-export function CodeBlock({ code, lang, initialWrap = false }: CodeBlockProps) {
-  // a fence with no language stays plain, in the bubble's grey, as grok does
+/** Shiki's markup for a fence, from the cache when it was drawn before; null while it loads and for a fence with no
+ * language, which stays plain in the bubble's grey as grok does. */
+export function useHighlightedCode(code: string, lang: string): { __html: string } | null {
   const highlightable = code.length <= HIGHLIGHT_MAX_CHARS && Boolean(lang.trim());
   const [html, setHtml] = useState<string | null>(() => highlightable ? highlightCache.get(highlightKey(lang, code)) ?? null : null);
-  // React compares dangerouslySetInnerHTML by identity: a fresh object each render rebuilds the highlighted DOM.
-  const markup = useMemo(() => (html ? { __html: html } : null), [html]);
-  const { state: copied, copy } = useCopyFeedback(code);
-  const wrapLines = initialWrap;
-
   useEffect(() => {
     if (!highlightable) return setHtml(null);
     const key = highlightKey(lang, code);
@@ -232,6 +229,31 @@ export function CodeBlock({ code, lang, initialWrap = false }: CodeBlockProps) {
       alive = false;
     };
   }, [code, lang, highlightable]);
+  // React compares dangerouslySetInnerHTML by identity: a fresh object each render rebuilds the highlighted DOM.
+  return useMemo(() => (html ? { __html: html } : null), [html]);
+}
+
+/** The words a fence's language reads as on a label: "TypeScript" for ts, the fence's own word for one we don't name. */
+export function codeLanguageLabel(lang: string): string {
+  const requested = lang.trim().toLowerCase();
+  if (PLAIN_LANGS.has(requested)) return "";
+  const file = grammarFile(requested);
+  return (file && LANGUAGE_NAMES[file]) || requested;
+}
+const LANGUAGE_NAMES: Partial<Record<GrammarFile, string>> = {
+  javascript: "JavaScript", jsx: "JSX", typescript: "TypeScript", tsx: "TSX", json: "JSON", jsonc: "JSON", json5: "JSON5",
+  bash: "Bash", powershell: "PowerShell", fish: "Fish", python: "Python", html: "HTML", css: "CSS", scss: "SCSS", sass: "Sass",
+  less: "Less", markdown: "Markdown", mdx: "MDX", yaml: "YAML", toml: "TOML", xml: "XML", c: "C", cpp: "C++", csharp: "C#",
+  rust: "Rust", go: "Go", ruby: "Ruby", php: "PHP", java: "Java", kotlin: "Kotlin", swift: "Swift", dart: "Dart", r: "R",
+  lua: "Lua", sql: "SQL", graphql: "GraphQL", proto: "Protobuf", dockerfile: "Dockerfile", makefile: "Makefile", diff: "Diff",
+  wasm: "WebAssembly",
+};
+
+export function CodeBlock({ code, lang, initialWrap = false }: CodeBlockProps) {
+  const markup = useHighlightedCode(code, lang);
+  const { state: copied, copy } = useCopyFeedback(code);
+  const wrapLines = initialWrap;
+  const phone = phoneBridge();
 
   const body = (pad: string, plainInk: string) => markup ? (
     <div
@@ -246,10 +268,15 @@ export function CodeBlock({ code, lang, initialWrap = false }: CodeBlockProps) {
     </pre>
   );
 
+  const label = codeLanguageLabel(lang);
+  const open = phone ? () => phone.view({ kind: "code", code, lang }) : undefined;
   return (
-    <div dir="ltr" data-lang={lang.trim() || undefined} className="chat-code-block group/code relative my-2.5 overflow-hidden rounded-lg bg-ink/[0.04]">
-      {/* grok's code block offers copy alone */}
-      <CodePlate copied={copied} onCopy={copy} copyLabel={t("code.copyTitle")} small={Boolean(lang.trim())} items={[]} />
+    <div dir="ltr" data-lang={lang.trim() || undefined} className="chat-code-block group/code relative my-2.5 overflow-hidden rounded-lg bg-ink/[0.04]"
+      onClick={open && ((event) => { if (!(event.target as Element).closest("button, a")) open(); })}>
+      {phone && label && <span data-code-label className="pointer-events-none absolute start-3 top-2.5 text-[12px] leading-4 font-medium text-ink-tertiary">{label}</span>}
+      {/* grok's code block offers copy alone; the phone adds a key that opens it full screen */}
+      <CodePlate copied={copied} onCopy={copy} copyLabel={t("code.copyTitle")} small={Boolean(lang.trim())} items={[]}
+        expand={open && { label: t("code.open"), onClick: open }} />
       {body("leading-5 [&_pre]:px-3 [&_pre]:py-2", "text-ink-secondary")}
     </div>
   );

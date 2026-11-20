@@ -83,6 +83,12 @@ describe("new bot", () => {
     expect(named.created()).toMatchObject({ name: "Helper 3" });
   });
 
+  it("gives a name typed in the dialog that another bot has, in any case, the next number too", async () => {
+    const typed = server();
+    await newBot(typed.request, { look: { name: "nova", color: "blue", mascotBody: "puff" } }, [{ name: "Nova" }] as Bot[]);
+    expect(typed.created()).toMatchObject({ name: "nova 2" });
+  });
+
   it("with no AI set up, still makes the bot, without one, for the first AI connected later", async () => {
     const { calls, request, created } = server({ modelSelection: { instanceId: "", model: "" } });
     const sent = await newBot(request);

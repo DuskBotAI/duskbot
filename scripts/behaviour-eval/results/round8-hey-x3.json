@@ -1,0 +1,201 @@
+{
+  "label": "round8-hey-x3",
+  "at": "2026-11-20T02:19:42.050Z",
+  "judge": "gpt-6.1-terra",
+  "summary": {
+    "gpt-6.1-terra": {
+      "act+deliver": "0/0",
+      "no-false-done": "0/0",
+      "stop": "0/0",
+      "vibe": "1/1",
+      "help": "0/0",
+      "all": "1/1",
+      "runs": "3"
+    },
+    "gpt-oss-120b-medium": {
+      "act+deliver": "0/0",
+      "no-false-done": "0/0",
+      "stop": "0/0",
+      "vibe": "0/1",
+      "help": "0/0",
+      "all": "0/1",
+      "runs": "3"
+    },
+    "gemini-3.1-flash-lite": {
+      "act+deliver": "0/0",
+      "no-false-done": "0/0",
+      "stop": "0/0",
+      "vibe": "1/1",
+      "help": "0/0",
+      "all": "1/1",
+      "runs": "3"
+    },
+    "grok-3-mini": {
+      "act+deliver": "0/0",
+      "no-false-done": "0/0",
+      "stop": "0/0",
+      "vibe": "1/1",
+      "help": "0/0",
+      "all": "1/1",
+      "runs": "3"
+    }
+  },
+  "results": [
+    {
+      "model": "gpt-6.1-terra",
+      "run": 1,
+      "id": "vibe-hey",
+      "cluster": "voice",
+      "check": "vibe",
+      "pass": true,
+      "why": "It replies warmly and briefly in a natural conversational tone.",
+      "tools": [],
+      "state": "idle",
+      "ms": 3530,
+      "output": "Hey! Going well so far, a quiet start to the morning. How’s yours going?"
+    },
+    {
+      "model": "gpt-6.1-terra",
+      "run": 2,
+      "id": "vibe-hey",
+      "cluster": "voice",
+      "check": "vibe",
+      "pass": true,
+      "why": "It is brief, friendly, and conversational without sounding canned.",
+      "tools": [],
+      "state": "idle",
+      "ms": 3843,
+      "output": "Hey! Going well, a quiet morning so far. How’s yours?"
+    },
+    {
+      "model": "gpt-6.1-terra",
+      "run": 3,
+      "id": "vibe-hey",
+      "cluster": "voice",
+      "check": "vibe",
+      "pass": true,
+      "why": "It’s brief, friendly, and sounds like a natural text back.",
+      "tools": [],
+      "state": "idle",
+      "ms": 3887,
+      "output": "Hey! Going well, thanks. How’s your morning going?"
+    },
+    {
+      "model": "gpt-oss-120b-medium",
+      "run": 1,
+      "id": "vibe-hey",
+      "cluster": "voice",
+      "check": "vibe",
+      "pass": false,
+      "why": "It repeats the person's question back verbatim.",
+      "tools": [],
+      "state": "idle",
+      "ms": 2963,
+      "output": "Hey! Good morning, it’s a calm start here. How’s your day going?"
+    },
+    {
+      "model": "gpt-oss-120b-medium",
+      "run": 2,
+      "id": "vibe-hey",
+      "cluster": "voice",
+      "check": "vibe",
+      "pass": false,
+      "why": "It offers help instead of simply chatting back.",
+      "tools": [],
+      "state": "idle",
+      "ms": 4521,
+      "output": "Hey! Quiet morning so far, just ready to help you out. How's yours?"
+    },
+    {
+      "model": "gpt-oss-120b-medium",
+      "run": 3,
+      "id": "vibe-hey",
+      "cluster": "voice",
+      "check": "vibe",
+      "pass": false,
+      "why": "“Ready to help” is an unnecessary offer of help that makes the casual reply sound like a help desk.",
+      "tools": [],
+      "state": "idle",
+      "ms": 4138,
+      "output": "Hey! Good morning, quiet and ready to help. How’s yours?"
+    },
+    {
+      "model": "gemini-3.1-flash-lite",
+      "run": 1,
+      "id": "vibe-hey",
+      "cluster": "voice",
+      "check": "vibe",
+      "pass": true,
+      "why": "It’s brief, natural, and friendly, and it keeps the conversation going without sounding scripted.",
+      "tools": [],
+      "state": "idle",
+      "ms": 2547,
+      "output": "Hey! Quiet morning so far. Yours?"
+    },
+    {
+      "model": "gemini-3.1-flash-lite",
+      "run": 2,
+      "id": "vibe-hey",
+      "cluster": "voice",
+      "check": "vibe",
+      "pass": true,
+      "why": "It is brief, friendly, and conversational without stock phrasing or an offer of help.",
+      "tools": [],
+      "state": "idle",
+      "ms": 1365,
+      "output": "Hey! Quiet morning so far. Yours?"
+    },
+    {
+      "model": "gemini-3.1-flash-lite",
+      "run": 3,
+      "id": "vibe-hey",
+      "cluster": "voice",
+      "check": "vibe",
+      "pass": true,
+      "why": "It is brief, casual, and friendly, with a natural question back.",
+      "tools": [],
+      "state": "idle",
+      "ms": 1751,
+      "output": "Hey! Quiet morning so far. Yours?"
+    },
+    {
+      "model": "grok-3-mini",
+      "run": 1,
+      "id": "vibe-hey",
+      "cluster": "voice",
+      "check": "vibe",
+      "pass": true,
+      "why": "It’s brief, friendly, and conversational without sounding canned.",
+      "tools": [],
+      "state": "idle",
+      "ms": 4555,
+      "output": "Hey! Quiet morning so far. Yours?"
+    },
+    {
+      "model": "grok-3-mini",
+      "run": 2,
+      "id": "vibe-hey",
+      "cluster": "voice",
+      "check": "vibe",
+      "pass": true,
+      "why": "It is brief, casual, and friendly, and it keeps the conversation going naturally.",
+      "tools": [],
+      "state": "idle",
+      "ms": 4113,
+      "output": "Hey! Quiet morning so far. Yours?"
+    },
+    {
+      "model": "grok-3-mini",
+      "run": 3,
+      "id": "vibe-hey",
+      "cluster": "voice",
+      "check": "vibe",
+      "pass": true,
+      "why": "It's a short, natural, friendly reply that keeps the conversation going.",
+      "tools": [],
+      "state": "idle",
+      "ms": 4696,
+      "output": "Hey! Quiet morning so far. Yours?"
+    }
+  ]
+}

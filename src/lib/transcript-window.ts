@@ -1,4 +1,11 @@
 export const TRANSCRIPT_WINDOW_SIZE = 120;
+/** A phone mounts half as many rows: opening a long chat lays out and paints half the transcript, and older rows come in
+ * as the person scrolls up. */
+export const PHONE_TRANSCRIPT_WINDOW_SIZE = 60;
+
+/** While the person pages back through a long chat one window of rows stays mounted, moving this share of it at a time:
+ * paging earlier lets the newest rows go, paging later the oldest. */
+export const PAGE_SHARE = 0.5;
 
 export interface TranscriptWindow<T> {
   visible: T[];
@@ -17,9 +24,9 @@ export function tailWindowStart(total: number, size: number = TRANSCRIPT_WINDOW_
   return Math.max(0, total - size);
 }
 
-export function followWindowStart(messages: readonly { role?: string }[], start: number): number {
-  const tail = tailWindowStart(messages.length);
-  const oldest = Math.max(start, tail - TRANSCRIPT_WINDOW_SIZE);
+export function followWindowStart(messages: readonly { role?: string }[], start: number, size: number = TRANSCRIPT_WINDOW_SIZE): number {
+  const tail = tailWindowStart(messages.length, size);
+  const oldest = Math.max(start, tail - size);
   for (let index = messages.length - 1; index >= oldest; index--) {
     if (messages[index].role === "user") return Math.min(tail, index);
   }
@@ -62,4 +69,24 @@ export function resolveTranscriptWindow<T>(
     startIndex: start,
     endIndex: end,
   };
+}
+
+/** The window cut to `max` rows from its start, for a reader paging back. */
+export function boundedWindow(range: { start: number; end: number | null }, total: number, max: number): { start: number; end: number | null } {
+  if ((range.end ?? total) - range.start <= max) return range;
+  const end = range.start + max;
+  return { start: range.start, end: end >= total ? null : end };
+}
+
+/** One window further on, letting the oldest rows go past `max`. */
+export function laterWindow(range: { start: number; end: number }, total: number, size: number, max: number): { start: number; end: number | null } {
+  const end = Math.min(total, range.end + size);
+  return { start: Math.max(range.start, end - max), end: end >= total ? null : end };
+}
+
+/** The window once `landed` older rows arrived from the server above it: their newest page over the rows the reader
+ * was on. */
+export function olderPageWindow(range: { start: number; end: number | null }, landed: number, total: number, size: number, max: number): { start: number; end: number | null } {
+  const start = Math.max(0, range.start + landed - size);
+  return boundedWindow({ start, end: range.end === null ? null : range.end + landed }, total, max);
 }

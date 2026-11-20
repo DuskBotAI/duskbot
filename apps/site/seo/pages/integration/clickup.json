@@ -1,0 +1,136 @@
+{
+  "path": "/integrations/clickup",
+  "type": "integration",
+  "title": "ClickUp bot for time entries, client work and review queues",
+  "nav": "clickup",
+  "h1": "a clickup bot that catches the timer still running",
+  "description": "Review ClickUp time entries before billing, find briefs missing a client code, and pull aging reviews from the same task view your team uses.",
+  "keyword": "clickup bot",
+  "keywords": [
+    "clickup ai assistant",
+    "clickup ai agent"
+  ],
+  "answer": "**catch the timer you left running before its hours reach a client invoice.** a clickup bot can read your time entries, separate active timers from finished work and flag tasks missing a client code. ask for the task id beside each exception. you can fix the entry where the work happened.",
+  "updated": "2026-11-20",
+  "review": {
+    "status": "approved",
+    "by": "lead agent, after four independent reviewers read every page against seo/facts (2026-11-20); every finding applied",
+    "at": "2026-11-20"
+  },
+  "voice": 2,
+  "tags": [
+    "time tracking",
+    "billing",
+    "reviews"
+  ],
+  "connectors": [
+    "clickup"
+  ],
+  "related": [
+    "/integrations/asana",
+    "/integrations/trello",
+    "/integrations/google-sheets"
+  ],
+  "art": {
+    "label": "ClickUp",
+    "props": [
+      "s-clock"
+    ],
+    "bubble": "is that timer running"
+  },
+  "og_line": "find the open timer before you total the week.",
+  "app": {
+    "name": "ClickUp",
+    "toolkit": "clickup",
+    "intro": "**start from the view or list that defines the job.** your delivery view and a task's home list can contain different work. time entries belong to a workspace and a date range. give the bot those boundaries before asking for a total.",
+    "highlight": [
+      {
+        "slug": "CLICKUP_GET_TIME_ENTRIES_IN_DATE_RANGE",
+        "use": "read your own entries for the billing week"
+      },
+      {
+        "slug": "CLICKUP_GET_RUNNING_TIME_ENTRY",
+        "use": "see whether the timer still runs on an entry you expected to finish"
+      },
+      {
+        "slug": "CLICKUP_GET_VIEW_TASKS",
+        "use": "read the tasks visible under the delivery view's filters"
+      },
+      {
+        "slug": "CLICKUP_GET_TASK",
+        "use": "open one task to see its details"
+      },
+      {
+        "slug": "CLICKUP_GET_ACCESSIBLE_CUSTOM_FIELDS",
+        "use": "identify the field the team uses for its client code"
+      },
+      {
+        "slug": "CLICKUP_GET_TASKS",
+        "use": "review open tasks whose home is the intake list"
+      },
+      {
+        "slug": "CLICKUP_GET_TASK_TIME_IN_STATUS",
+        "use": "find time spent in review when the workspace supports it"
+      }
+    ],
+    "setup": "**give the bot your workspace id and the delivery view id.** add the home list for intake and the exact name of your client code field. allow these reads. try asking about one entry you recognize so you can confirm the date range and whose time it reads."
+  },
+  "routines_intro": "**use the same week boundaries as billing.** tell the bot which day starts your week, which time zone to use and what your review status means. these jobs return exceptions in chat for the person who can resolve them.",
+  "routines": [
+    {
+      "name": "friday timesheet close",
+      "message": "each friday at 5, read my clickup time entries for this billing week. total finished entries by task. put entries with a negative duration on a separate running timer line. leave them out of totals. give me task ids for corrections and leave the timers alone.",
+      "when": "fridays at 17:00",
+      "output": "finished time by task and any timer still running"
+    },
+    {
+      "name": "missing client codes",
+      "message": "each morning at 9, read open tasks whose home is my intake list. use the client code field from that list's field definitions. bring me tasks with no value. show the task id and title. if the field itself is missing, tell me instead of flagging every task.",
+      "when": "daily at 09:00",
+      "output": "uncoded briefs for the intake lead"
+    },
+    {
+      "name": "review queue aging",
+      "message": "each tuesday at 3, read every page of my delivery view. for tasks currently in review, look up time in that status. list tasks with more than two days in review, longest first. flag unavailable durations. don't use the task creation date as a substitute.",
+      "when": "tuesdays at 15:00",
+      "output": "review tasks to discuss with their recorded time in status"
+    }
+  ],
+  "asks": "**a timesheet review can finish without stopping a timer.** restrict the bot to reading entries and tasks. stopping time or filling in a client code changes clickup. if you enable either write, add “ask me before you change anything” to that job.",
+  "cannot": [
+    "**get every task visible in a view by reading one home list.** the list action returns tasks whose home is that list. use the view action when the view defines the workload.",
+    "**read time in status everywhere.** the workspace needs the total time in status clickapp enabled. otherwise leave the duration unknown.",
+    "**decide what you can bill from a timer.** a finished entry shows recorded time. the client agreement decides whether the time belongs on the invoice."
+  ],
+  "sections": [
+    {
+      "h": "make the exception easy to fix",
+      "md": "**put the task id beside the suspect hours.** a busy designer can log time against two tasks with nearly identical names. if you already know which timer needs stopping, open it directly. the bot helps when the mistake could sit anywhere in the week's entries."
+    }
+  ],
+  "faq": [
+    {
+      "q": "why did the bot leave a negative duration out of my total?",
+      "a": "**that value marks an active timer.** inspect the running entry and decide when the work ended. subtracting its duration would distort the total."
+    },
+    {
+      "q": "will the delivery review respect my view filters?",
+      "a": "**yes, when it reads the view itself.** give it the view id and ask it to continue to the last page. name the status you consider review."
+    }
+  ],
+  "worked": {
+    "intro": "an example before a studio closes its timesheets.",
+    "before": "helena has a finished layout entry and an active timer on packaging revisions. both tasks belong to the same client.",
+    "after": "layout: 45 minutes finished.\npackaging revisions: timer running, excluded. open this entry before totaling the client's hours."
+  },
+  "sources": [
+    {
+      "label": "dusk bot docs: connected apps",
+      "url": "/docs/files-and-apps"
+    },
+    {
+      "label": "dusk bot docs: routines",
+      "url": "/docs/routines"
+    }
+  ]
+}

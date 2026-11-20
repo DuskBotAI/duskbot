@@ -1,5 +1,6 @@
 import { CreditCard, type GlyphIcon } from "../icons";
 
+import joinbotLogo from "@/assets/joinbot/logo.png";
 import whopLogo from "@/assets/whop/logo.png";
 import type { LocaleKey } from "@/locales";
 
@@ -40,6 +41,15 @@ export const HOSTED_MCP_APPS = [
     description: "agentcard.description",
     notice: "agentcard.notice",
     keywords: "agentcard agent card opencommerce shopping payments buy virtual debit card",
+  },
+  {
+    id: "joinbot",
+    label: "JoinBot",
+    url: "https://usejoinbot.com/api/mcp",
+    icon: { image: joinbotLogo },
+    description: "joinbot.description",
+    notice: "joinbot.notice",
+    keywords: "joinbot meeting meetings zoom google meet teams call calls voice speak transcript",
   },
 ] as const satisfies readonly HostedMcpApp[];
 

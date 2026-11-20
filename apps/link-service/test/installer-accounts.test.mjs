@@ -84,9 +84,13 @@ describe("the installer's units", () => {
     const link = await read(join(dir, "units", "duskbot-link.service"));
     for (const line of ["User=omb-link", `Environment=HOME=${dir}/var/lib/omb-link`, `Environment=DUSK_LINK_ENGINES_FILE=${dir}/var/lib/omb-link/handoff/engines.env`,
       `Environment=DUSK_LINK_CODEX_AUTH_FILE=${dir}/var/lib/omb-link/handoff/codex-auth.json`, "NoNewPrivileges=yes", "ProtectHome=yes", "RestrictNamespaces=yes", "ProtectKernelTunables=yes", "PrivateDevices=yes", `ReadWritePaths=${dir}/var/lib/omb-link`,
-      "PartOf=duskbot.service", "WantedBy=multi-user.target duskbot.service"]) {
+      "WantedBy=multi-user.target duskbot.service"]) {
       expect(link.split("\n"), line).toContain(line);
     }
+    // a server restart must not restart the link: that drops the app's tunnel and every phone's stream; a stop still
+    // takes it down, from the server's own stop hook
+    expect(link).not.toMatch(/^(?:PartOf|BindsTo|StopPropagatedFrom)=/m);
+    expect(server).toContain("ExecStopPost=+/bin/sh -c 'systemctl list-jobs --no-legend duskbot.service 2>/dev/null | grep -qw stop && systemctl stop --no-block duskbot-link.service || true'");
     expect(link).not.toContain("User=dusk");
 
     const gate = await read(join(dir, "units", "omb-docker-gate.service"));

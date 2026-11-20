@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { appLinkFromUniversal, MOBILE_LINK_VERSION, mobileLinkUrl, mobileOpenLink, parseMobileOpenLink, parseMobilePairingLink, parseSignInLink, universalPairLink, universalSignInLink, type MobileLinkPayload } from "./mobile-link.ts";
+import { appLinkFromUniversal, pairSignIn, MOBILE_LINK_VERSION, mobileLinkUrl, mobileOpenLink, parseMobileOpenLink, parseMobilePairingLink, parseSignInLink, universalPairLink, universalSignInLink, type MobileLinkPayload } from "./mobile-link.ts";
 import { phonePairingLink } from "./pairing-link.ts";
 
 const token = `omb_pair_${"a".repeat(43)}`;
@@ -77,6 +77,24 @@ describe("mobile pairing link adapter", () => {
     expect(appLinkFromUniversal("https://dusk.bot/m/signin?email=a@b.c"), "the email stays where no server sees it").toBeNull();
     expect(parseSignInLink("duskbot://pair?m=x")).toBeNull();
     expect(parseSignInLink("https://evil.example/m/signin#email=a@b.c")).toBeNull();
+  });
+
+  it("a signed-in desktop's pairing qr carries the account's sign-in beside the pairing", () => {
+    const link = universalPairLink("duskbot://pair?m=abc", "ABCD-EFGH-JKLM", { code: "WXYZ-QRST", email: "o@b.test", serviceOrigin: "https://dusk.bot" });
+    expect(link).toBe("https://dusk.bot/m/pair#m=abc&c=ABCDEFGHJKLM&a=WXYZQRST&ae=o%40b.test&as=production");
+    expect(pairSignIn(link)).toEqual({ code: "WXYZQRST", email: "o@b.test", service: "production" });
+    const real = universalPairLink(mobileLinkUrl(payload), null, { code: "WXYZQRST", email: "o@b.test" });
+    expect(parseMobilePairingLink(appLinkFromUniversal(real)!), "apps that predate it still pair").toEqual(parseMobilePairingLink(mobileLinkUrl(payload)));
+    expect(parseMobilePairingLink(mobileLinkUrl(payload))).not.toBeNull();
+    expect(pairSignIn(universalPairLink("duskbot://pair?m=abc", null))).toBeNull();
+  });
+
+  it("a dusk cloud's qr names the cloud it was drawn on, and only a dusk cloud's own address", () => {
+    const cloud = "https://d0123456789abcdef0123.dusk.bot";
+    const link = universalSignInLink("a@b.test", "ABCD-EFGH", "https://dusk.bot", cloud);
+    expect(parseSignInLink(link)).toEqual({ email: "a@b.test", code: "ABCDEFGH", service: "production", cloud });
+    expect(universalSignInLink("a@b.test", null, null, "https://evil.example")).toBe("https://dusk.bot/m/signin#email=a%40b.test");
+    expect(parseSignInLink(`duskbot://signin?email=a@b.test&o=${encodeURIComponent("https://evil.example")}`)).toEqual({ email: "a@b.test" });
   });
 
   it("a dusk cloud's qr with a desktop's code carries it beside the email, after the # where no server sees it", () => {

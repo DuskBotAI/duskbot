@@ -1,12 +1,13 @@
 // real-shaped failures per engine, as each driver emits them in runtime.error, read into a usage reason and a detail
 import { describe, expect, it } from "vitest";
-import { FAILURE_DETAIL, cleanUsageTurn, cliExitCode, failureOf, modelFamily, opencodeProvider } from "../shared/usage-signals.ts";
+import { FAILURE_DETAIL, cleanUsageTurn, cliExitCode, failureOf, modelFamily, opencodeProvider, rpcCode } from "../shared/usage-signals.ts";
 import { codexErrorCode } from "./drivers/codex-errors.ts";
 import { engineFailureMessage } from "./drivers/engine-errors.ts";
 import { exitDetail } from "./drivers/acp/exit-report.ts";
 import { describeSpawnFailure } from "./procs.ts";
 import { serverLine } from "./server-lines.ts";
 import { turnRecord } from "./usage-signals.ts";
+import { runnerActions } from "../shared/usage-trace.ts";
 
 const NOW = Date.UTC(2026, 10, 17, 12);
 const SECRET = "Email jane.doe@acme.com the Q3 numbers from /Users/jane/Secret Plan.xlsx at https://acme.com/x sk-live-abcdefghijklmnop";
@@ -119,6 +120,41 @@ describe("copilot (ACP)", () => {
     expect(failureOf("", { stopReason: "exit_before_result" })).toEqual({ reason: "cli_exit_early" });
     expect(failureOf("something odd", { stopReason: "weird_stop" })).toEqual({ reason: "unknown", detail: "stop_weird_stop" });
     expect(failureOf("something odd", { stopReason: "Some long sentence the engine said" })).toEqual({ reason: "unknown" });
+  });
+});
+
+describe("a connected-apps runner call", () => {
+  it("reads the actions it ran from whole or cut-short arguments, and nothing from other tools", () => {
+    expect(runnerActions("COMPOSIO_MULTI_EXECUTE_TOOL", { tools: [{ tool_slug: "GMAIL_FETCH_EMAILS" }] })).toEqual(["GMAIL_FETCH_EMAILS"]);
+    expect(runnerActions("mcp__composio__COMPOSIO_MULTI_EXECUTE_TOOL", '{"tools":[{"tool_slug":"NOTION_CREATE_PAGE","arguments":{"title":"cut sh')).toEqual(["NOTION_CREATE_PAGE"]);
+    expect(runnerActions("COMPOSIO_SEARCH_TOOLS", { tool_slug: "GMAIL_FETCH_EMAILS" })).toEqual([]);
+    expect(runnerActions("COMPOSIO_MULTI_EXECUTE_TOOL", { tools: [{ tool_slug: "COMPOSIO_SEARCH_TOOLS" }, { tool_slug: "lower_case" }] })).toEqual([]);
+  });
+
+  it("makes a failed runner call count against its app and action in the usage record", () => {
+    const record = turnRecord({ driverKind: "claudeAgent", status: "ok", startedAt: NOW - 1_000, endedAt: NOW, trigger: { kind: "owner" }, room: false,
+      toolNames: ["GMAIL_SEND_EMAIL", "mcp__composio__COMPOSIO_SEARCH_TOOLS"], failedNames: ["GMAIL_SEND_EMAIL"] }, "desktop", NOW);
+    expect(record).toMatchObject({ apps: ["gmail", "other_app"], failedApps: ["gmail"], actions: ["gmail_send_email"], category: "email" });
+  });
+});
+
+describe("a JSON-RPC failure with no words to go on (ACP agents, codex app-server)", () => {
+  it("keeps the RPC code in the detail instead of the bare stop reason", () => {
+    expect(failureOf("Internal error (session/prompt)", { code: rpcCode(-32603), stopReason: "rpc_error" })).toEqual({ reason: "unknown", detail: "rpc_32603" });
+    expect(failureOf("Invalid params (session/prompt)", { code: rpcCode(-32602), stopReason: "rpc_error" })).toEqual({ reason: "bad_request", detail: "rpc_32602" });
+    expect(rpcCode("x")).toBeUndefined();
+    expect(rpcCode(1.5)).toBeUndefined();
+  });
+});
+
+describe("the api engine's own stops", () => {
+  it.each([
+    ["The model announced another action without tool progress after a nudge. The task is incomplete.", "announced_no_action", "no_reply"],
+    ["Stopped after 64 steps without a final answer. The steps so far already ran, so ask only for what's left.", "max_steps", "no_reply"],
+    ["tool arguments are not complete JSON", "tool_args_malformed", "tool"],
+    ["provider reused a tool-call ID; refusing to repeat an operation", "reused_call_id", "tool"],
+  ])("%s", (text, code, reason) => {
+    expect(failureOf(text, { code, stopReason: "error" })).toEqual({ reason, detail: code });
   });
 });
 

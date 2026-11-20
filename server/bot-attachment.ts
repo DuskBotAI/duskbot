@@ -6,7 +6,9 @@ import {
   extensionForMime,
   FILE_MAX_BYTES,
   IMAGE_MAX_BYTES,
+  SCRIPT_MAX_BYTES,
   saveFile,
+  scriptExtensionOf,
   saveImage,
 } from "./attachments.ts";
 import { mimeFor, openFileSavedSince, openMessageFile, type OpenedMessageFile } from "./message-file.ts";
@@ -16,7 +18,7 @@ export type BotAttachment = NonNullable<Message["attachments"]>[number];
 
 export const ATTACH_SUPPORTED_TYPES =
   "images (png, jpg, gif, webp), video (mp4, webm, mov), audio (mp3, m4a, aac, wav, ogg, opus, flac), " +
-  "pdf, Word/Excel/PowerPoint and OpenDocument files, and csv, tsv, txt, md, json, rtf";
+  "pdf, Word/Excel/PowerPoint and OpenDocument files, csv, tsv, txt, md, json, rtf, and code files (py, sh, js, ts, sql and the like) as plain-text downloads";
 
 function statusError(status: number, message: string): Error & { status: number } {
   return Object.assign(new Error(message), { status });
@@ -80,7 +82,8 @@ export async function saveBotAttachment(input: SaveBotAttachmentInput): Promise<
   // A VM turn's tools never wrote to the host, so it gets roots only.
   const file = await openSource(guestHost ?? requested, roots, input.guest ? undefined : input.savedThisTurn);
   try {
-    const mime = mimeFor(file.name);
+    const script = scriptExtensionOf(file.name);
+    const mime = script ? "text/plain" : mimeFor(file.name);
     const name = displayNameFor(input.name, file.name);
     if (extensionForMime(mime)) {
       if (file.bytes > IMAGE_MAX_BYTES) throw statusError(413, `image exceeds ${IMAGE_MAX_BYTES} bytes`);
@@ -91,10 +94,16 @@ export async function saveBotAttachment(input: SaveBotAttachmentInput): Promise<
       throw statusError(415, `${file.name} is not a supported attachment type. Supported: ${ATTACH_SUPPORTED_TYPES}.`);
     }
     if (file.bytes > FILE_MAX_BYTES) throw statusError(413, `file exceeds ${FILE_MAX_BYTES} bytes`);
+    if (script) {
+      if (file.bytes > SCRIPT_MAX_BYTES) throw statusError(413, `a code file can be at most ${SCRIPT_MAX_BYTES} bytes`);
+      const head = Buffer.alloc(Math.min(file.bytes, SCRIPT_MAX_BYTES));
+      await file.handle.read(head, 0, head.length, 0);
+      if (head.includes(0)) throw statusError(415, `${file.name} is not plain text, so it can't be attached as code.`);
+    }
     const saved = await saveFile(file.handle.createReadStream({ start: 0, autoClose: false }), name || basename(file.name), mime, {
       expectedBytes: file.bytes,
     });
-    return { attachment: { kind: "file", path: saved.path, mime: saved.mime, name: saved.name }, bytes: saved.bytes };
+    return { attachment: { kind: "file", path: saved.path, mime: saved.mime, name: saved.name, bytes: saved.bytes }, bytes: saved.bytes };
   } finally {
     await file.handle.close().catch(() => undefined);
   }

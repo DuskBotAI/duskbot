@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
 import { createCloudAccountClient } from "../../../../electron/cloud-account.mjs";
 import { parseCloudOffer, parseCloudSummary, parsePairingGrant, parsePublicOffer } from "../../../../electron/cloud-home.mjs";
-import { otherOwnClouds, parseCloudList, parseCloudRenewal } from "../../../../electron/cloud-list.mjs";
+import { otherOwnClouds, parseCloudList, parseCloudPayment, parseCloudRenewal } from "../../../../electron/cloud-list.mjs";
 import { oneHomeCloud } from "../../../../electron/one-home-main.mjs";
 import { createBilling } from "./index.ts";
 import { CHECKOUT_BURST } from "./service.ts";
@@ -184,6 +184,25 @@ it("runs the real desktop client through checkout, setup, pairing, upgrade, anot
   }
   expect(await f.request("session", undefined, token)).toMatchObject({ status: 401, data: { error: "invalid_token" } });
   expect((await f.client.refresh()).status).toBe("reauth-required");
+});
+
+it("a failed renewal tells the desktop when its cloud keeps running until, and nothing once the card is fixed", async () => {
+  const f = await fixture(); await f.client.start(); await f.signIn();
+  expect((await f.client.checkout("starter", "app_card")).outcome).toBe("opened");
+  await f.complete(); await f.reconcile();
+  const sub = () => f.billing.store.state.subscriptions[0]!;
+  const deliver = async (deliveries: Array<{ headers: Record<string, string>; body: Buffer }>) => {
+    for (const delivery of deliveries) expect((await fetch(`${f.origin}/v1/billing/webhooks/dodo`, { method: "POST", headers: { "content-type": "application/json", ...delivery.headers }, body: new Uint8Array(delivery.body) })).status).toBe(200);
+  };
+  f.setTime(f.now() + 1000);
+  await deliver(f.billing.fake!.fail(sub().providerSubscriptionId!));
+  const fixBy = f.now() + BILLING_CONFIG.graceDays * 86_400_000;
+  expect(parseCloudPayment((await f.session()).clouds)).toEqual({ name: "My Cloud", fixBy });
+  await f.client.refresh();
+  expect(f.client.state().payment).toEqual({ name: "My Cloud", fixBy });
+  await deliver(f.billing.fake!.renew(sub().providerSubscriptionId!));
+  expect(parseCloudPayment((await f.session()).clouds)).toBeNull();
+  await f.client.refresh(); expect(f.client.state().payment).toBeUndefined();
 });
 
 it("takes a handoff token the app made, once, and names the handoff page in the session", async () => {

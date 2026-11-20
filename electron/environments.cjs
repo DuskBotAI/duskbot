@@ -72,6 +72,17 @@ function parseHostedWorkspaceLink(input) {
   }
 }
 
+/** `origin` is this app's own server: what `duskbot pair` prints as "this computer" on a server without a public
+ * address names port 8799 there, which here is this app, so it is never added as another place. */
+function isThisAppsServer(origin, port) {
+  try {
+    const url = new URL(origin);
+    return ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname) && Number(url.port || (url.protocol === "https:" ? 443 : 80)) === Number(port);
+  } catch {
+    return false;
+  }
+}
+
 /** Remote renderers learn only their current workspace, never the local list. */
 function workspaceSummary(state) {
   const active = activeEnvironment(state);
@@ -146,11 +157,10 @@ function workspaceMenuTemplate(state, { onSwitch, onConnect, onForget, onAddClou
   if (homeOrigin) {
     const here = onLocal ? [{ id: "workspace-local", label: hereName(platform), type: "radio", checked: localShown === true, ...(kindIcon ? { icon: kindIcon("computer") } : {}), click: onLocal }] : [];
     const rows = [...here, ...homeMenuTemplate(state, { onSwitch, onForget, sublabels, iconFor, kindIcon, foldSublabels, homeOrigin })];
-    const add = onAddCloud ? [{ id: "workspace-add-cloud", label: "Add dusk cloud…", click: onAddCloud }] : [];
-    const more = [...move, ...add];
-    return more.length ? [...rows, { type: "separator" }, ...more] : rows;
+    return move.length ? [...rows, { type: "separator" }, ...move] : rows;
   }
   const isMine = (entry) => entry.id === myCloudId || entry.home === true;
+  const hasCloud = state.environments.some(isMine);
   const localIcon = kindIcon ? kindIcon("computer") : iconFor && cleanColor(state.localColor) ? iconFor(state.localColor) : null;
   return [
     ...(places ? [{ id: "workspace-places", label: places, enabled: false }, { type: "separator" }] : []),
@@ -159,7 +169,7 @@ function workspaceMenuTemplate(state, { onSwitch, onConnect, onForget, onAddClou
       .map((entry) => placeRow(entry, { myCloud: isMine(entry), checked: entry.id === state.activeId, onSwitch, sublabels, iconFor, kindIcon, foldSublabels })),
     ...(copyToCloud ? [{ id: "workspace-copy-to-cloud", label: copyToCloud.label, click: copyToCloud.click }] : []),
     ...move,
-    ...(onAddCloud && !move.length ? [{ id: "workspace-add-cloud", label: "Add dusk cloud…", ...(foldSublabels ? {} : { sublabel: "Keeps your bots running 24/7" }), click: onAddCloud }] : []),
+    ...(onAddCloud && !move.length && !hasCloud ? [{ id: "workspace-add-cloud", label: "Add dusk cloud…", ...(foldSublabels ? {} : { sublabel: "Keeps your bots running 24/7" }), click: onAddCloud }] : []),
     { type: "separator" },
     { id: "workspace-connect", label: "Connect a server…", click: onConnect },
     ...(active && !listedPlace(active) ? [{ id: "workspace-forget", label: `Forget “${active.name}”…`, click: () => onForget(active.id) }] : []),
@@ -531,6 +541,7 @@ module.exports = {
   parseEnvironments,
   parsePairingLink,
   parseHostedWorkspaceLink,
+  isThisAppsServer,
   savedPlace,
   serializeEnvironments,
   startupEnvironmentDir,

@@ -13,6 +13,36 @@ app. The fixture has no desktop, so the websocket check proves the upgrade reach
 phone's session (409), not a live desktop; the byte-for-byte websocket echo is covered by
 `apps/link-service/test/phone-hub.test.mjs` and `apps/companion/test/mobile.test.ts`.
 
+## The phone apps already shipped, against this desktop
+
+The connection code of iPhone 1.2 and Android 1.2.1, taken from the commits they were built from
+(`scripts/testing/shipped-phone.ts`), against a harness in desktop mode, the desktop's own phone relay
+(`electron/phone-relay.mjs` with the link agent's hub), a local link service and the companion's handler: pair by QR and
+typed code, chat with a streamed reply, then the relay down (both phones go on over Wi-Fi), a link node restart, a
+harness restart (unreachable, never unpaired), a tunnel the link service dropped (made again with the same channels),
+a Wi-Fi-only phone, and removal from the desktop and from the phone.
+
+```sh
+node --experimental-strip-types scripts/phone-shipped-e2e.ts
+```
+
+Everything listens on 127.0.0.1. WebRTC direct is not driven (node has no RTCPeerConnection, so the phones stay on the
+relay); `src/mobile/transport/direct.e2e.test.ts` covers it.
+
+## Launch to first content, and a reply heard live
+
+iPhone 1.2's connection code and this tree's, each timed from launch to the chat list against routes that never answer
+(a secure access address, a tailnet name) ahead of the computer's Wi-Fi address; then the live stream asked the way the
+iPhone's web view asks it (a preflight and a read with `Origin: capacitor://localhost`) of desktop 0.2.20's companion
+and of this tree's, with a message sent and its reply waited for on that stream.
+
+```sh
+node --experimental-strip-types scripts/phone-cold-start.ts
+```
+
+Node's fetch gives up connecting after 10 s, so a route that never answers costs iPhone 1.2 10 to 15 s here where the
+device waits its full 15 s.
+
 ## Two real clients
 
 The desktop renderer and the phone app, each in its own headless Chrome, on one isolated fixture: a message sent from

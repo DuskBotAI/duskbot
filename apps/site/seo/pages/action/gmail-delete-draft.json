@@ -1,0 +1,93 @@
+{
+  "path": "/integrations/gmail/delete-draft",
+  "type": "action",
+  "title": "Delete one Gmail draft without losing the newer version",
+  "nav": "discard a draft",
+  "h1": "delete the obsolete gmail draft and keep the revision",
+  "description": "Review the recipient and the line that identifies an obsolete Gmail draft. Give the bot permission to delete that exact copy only after you confirm it.",
+  "keyword": "delete gmail draft with ai",
+  "keywords": [
+    "remove duplicate gmail draft",
+    "chatgpt discard a gmail draft",
+    "claude delete one gmail draft"
+  ],
+  "answer": "**deleting a gmail draft is permanent.** when an estimate exists in two versions, ask your bot to show the line that differs. choose the obsolete copy by its draft id and confirm that choice before deletion. you can keep the comparison read only if you'd prefer to discard the draft yourself.",
+  "updated": "2026-11-20",
+  "review": {
+    "status": "approved",
+    "by": "lead agent, after four independent reviewers read every page against seo/facts (2026-11-20); every finding applied",
+    "at": "2026-11-20"
+  },
+  "tags": [
+    "gmail",
+    "discard a draft"
+  ],
+  "connectors": [
+    "gmail"
+  ],
+  "related": [
+    "/integrations/gmail",
+    "/integrations/gmail/get-draft",
+    "/integrations/gmail/list-drafts"
+  ],
+  "art": {
+    "logo": "gmail",
+    "label": "Gmail",
+    "props": [
+      "s-mailbox",
+      "p-shield"
+    ],
+    "bubble": "keep the revision"
+  },
+  "og_line": "pick the draft you can afford to lose.",
+  "action": {
+    "toolkit": "gmail",
+    "slug": "GMAIL_DELETE_DRAFT"
+  },
+  "what": "**the old estimate and the corrected estimate can look identical in a list.** have the bot open both and bring back the recipient and the price from each. use the draft id alongside those details so your choice still points to the right copy.\n\ngmail discards the selected draft outright. there is no stop in trash where you can rescue it.",
+  "uses": [
+    "retire an unsigned offer after you save a corrected version",
+    "discard a practice email written during mailbox training",
+    "remove an abandoned translation while keeping the draft in the language the customer requested"
+  ],
+  "routine": {
+    "message": "at 3 on fridays, list drafts titled wardrobe estimate in my costume shop mailbox. if two have the same recipient, show their draft ids and the line about alterations here. ask me before you change anything. delete only the id i choose after seeing both versions. never discard both, even if the texts match.",
+    "when": "fridays at 3 while estimates are open",
+    "needs": "gmail read and write for draft lookups and deletion",
+    "output": "franklin bell has two wardrobe estimates.\ndraft r31846 includes alterations. draft r51927 bills alterations separately.\nwhich draft id should i discard, if either?"
+  },
+  "steps": [
+    "open **Connected apps** and select the account where you keep the estimates.",
+    "try the comparison with **read only**. pick a detail the drafts disagree on.",
+    "allow **read and write** for deletion if you want the bot to carry out your choice.",
+    "before it discards anything, have it reread the chosen draft. if the wording changed, ask for a fresh comparison."
+  ],
+  "watch": [
+    "**an email id won't identify the draft to discard.** take the draft id from the draft list or from the result when you created it.",
+    "**a date alone can't prove which version you want.** the later copy may be the rejected one. decide using the actual wording."
+  ],
+  "faq": [
+    {
+      "q": "can i recover a draft after the bot deletes it?",
+      "a": "**no.** if there's a line you might need again, keep the draft or save that text first."
+    },
+    {
+      "q": "will gmail ask the bot to confirm for me?",
+      "a": "**put the confirmation in your request.** deletion is a write. require a fresh yes for the exact draft and its current contents."
+    }
+  ],
+  "sources": [
+    {
+      "label": "dusk bot docs: files and apps",
+      "url": "/docs/files-and-apps"
+    },
+    {
+      "label": "dusk bot docs: routines",
+      "url": "/docs/routines"
+    }
+  ],
+  "voice": 2,
+  "tip": {
+    "text": "if you can't explain which version should go, skip deletion. the cost of an extra draft is small."
+  }
+}

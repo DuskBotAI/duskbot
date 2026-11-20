@@ -226,7 +226,7 @@ export function phraseCycle(phrases: readonly string[], seed: string, step: numb
   return order[at % pool.length]!;
 }
 
-/** How long the line keeps a pool's phrase before the next: 2.5 to 3.5 s. */
+/** How long the line keeps a pool's phrase readable before the next: 7 to 9 s. */
 export function rotationHoldMs(seed: string, step: number): number {
-  return 2500 + (hash(`${seed}#${step}`) % 1001);
+  return 7000 + (hash(`${seed}#${step}`) % 2001);
 }

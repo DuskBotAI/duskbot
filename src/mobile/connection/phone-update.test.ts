@@ -14,7 +14,7 @@ describe("phone and server versions", () => {
   });
 
   it("sends each phone to its own store, and to the download page until the iPhone app has a store id", () => {
-    expect(storeUrl("android")).toBe("https://play.google.com/store/apps/details?id=bot.dusk.mobile");
+    expect(storeUrl("android")).toBe("https://dusk.bot/download#android");
     expect(storeUrl("ios", "1234567890")).toBe("https://apps.apple.com/app/id1234567890");
     expect(storeUrl("ios", null)).toBe("https://dusk.bot/download");
     expect(storeUrl("ios"), "the listed iPhone app").toBe("https://apps.apple.com/app/id6834725640");

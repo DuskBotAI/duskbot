@@ -69,7 +69,7 @@ describe("screen access for a bot on this Mac", () => {
     await act(async () => document.querySelector<HTMLButtonElement>("[data-screen-access-allow]")!.click());
     expect(document.querySelector("[data-mac-permissions-dialog]")).not.toBeNull();
     await act(async () => document.querySelector<HTMLButtonElement>("[data-mac-permissions-done]")!.click());
-    expect(document.querySelector("[data-mac-permissions-dialog]")).toBeNull();
+    expect([...document.querySelectorAll("[data-mac-permissions-dialog]")].filter((el) => !el.closest("[data-leaving]")), "the dialog has closed").toEqual([]);
     expect(retry).toHaveBeenCalled();
   });
 

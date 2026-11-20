@@ -55,3 +55,31 @@ test('the site server streams a mirrored release file, whole or from a byte, and
     await answer.body?.cancel();
   }
 });
+
+test('the site server streams a mirrored voice model by its hash, and nothing else from that mirror', async (t) => {
+  const mirror = mkdtempSync(join(tmpdir(), 'dusk-voice-mirror-'));
+  const sha = 'a'.repeat(64);
+  mkdirSync(join(mirror, sha));
+  writeFileSync(join(mirror, sha, 'model_q8f16.onnx'), 'weights');
+  writeFileSync(join(mirror, sha, 'notes.txt'), 'no');
+  const port = 20000 + Math.floor(Math.random() * 20000);
+  const server = spawn(process.execPath, ['server.js', 'landing'], { cwd: new URL('.', import.meta.url), env: { ...process.env, PORT: String(port), DUSK_VOICE_MIRROR: mirror, MONGODB_URI: '' }, stdio: ['ignore', 'pipe', 'inherit'] });
+  t.after(() => { server.kill(); rmSync(mirror, { recursive: true, force: true }); });
+  let said = '';
+  await new Promise((resolve) => server.stdout.on('data', (chunk) => { said += chunk; if (said.includes(`127.0.0.1:${port}`)) resolve(); }));
+  const base = `http://127.0.0.1:${port}/voice`;
+
+  const whole = await fetch(`${base}/${sha}/model_q8f16.onnx`);
+  assert.equal(whole.status, 200);
+  assert.match(whole.headers.get('cache-control'), /immutable/);
+  assert.equal(await whole.text(), 'weights');
+  const rest = await fetch(`${base}/${sha}/model_q8f16.onnx`, { headers: { range: 'bytes=3-' } });
+  assert.equal(rest.status, 206);
+  assert.equal(await rest.text(), 'ghts');
+
+  for (const name of [`${sha}/notes.txt`, `${'b'.repeat(64)}/model_q8f16.onnx`, `${sha}/..%2F..%2Fetc%2Fpasswd`, 'short/model.onnx']) {
+    const answer = await fetch(`${base}/${name}`);
+    assert.equal(answer.status, 404, name);
+    await answer.body?.cancel();
+  }
+});

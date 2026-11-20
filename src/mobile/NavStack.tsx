@@ -1,18 +1,35 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { motion, useMotionValue, useTransform, type MotionValue } from "motion/react";
 import { TranscriptStaging } from "@/components/transcript-staging";
+import { wakeSystemControls } from "@/lib/system-control";
 import { canScroll, ownsDrag, useDrag } from "./gesture";
-import { prefersReducedMotion, projectRelease, settleTo, spring, springPath } from "./motion";
+import { replyRowAt } from "./swipe-reply";
+import { prefersReducedMotion, projectRelease, settleTo, springPath, system } from "./motion";
+import { PlatformContext } from "./platform";
+
+const NavLeavingContext = createContext(false);
+
+export function useNavLeaving(): boolean {
+  return useContext(NavLeavingContext);
+}
+
+function readSafeTop(el: HTMLElement): number {
+  const probe = document.createElement("div");
+  probe.style.cssText = "position:absolute;visibility:hidden;height:var(--m-safe-top)";
+  el.appendChild(probe);
+  const height = probe.getBoundingClientRect().height;
+  probe.remove();
+  return height;
+}
 
 /** Parallax of the page underneath, as a share of the width: UIKit's navigation push moves it a third as far. */
 const UNDER_SHIFT = 0.3;
-const EXIT = { stiffness: 440, damping: 40 };
-/** A tapped push starts from rest: critically damped (zeta 1), so it eases in and lands without overshoot or creep. */
-const PUSH = { stiffness: 380, damping: 39 };
+const NAV = { stiffness: system.stiffness, damping: system.damping };
 /** A chat still loading its transcript slides in once it has it, or after this long with its loading rows. */
 const LOAD_WAIT_MS = 150;
 
-type Run = { stop: () => void };
+/** `stop` leaves the page where it is and says how fast it was moving there, in px/s, so what follows carries on. */
+type Run = { stop: () => number };
 /** A page slide as the compositor plays it: positions in px, one per 60 Hz frame, linear between them. */
 export type SlidePath = { duration: number; points: number[] };
 
@@ -62,9 +79,12 @@ function slideLayers(layers: { page: HTMLElement; base: HTMLElement | null; dim:
   runs[0]!.onfinish = () => { if (!over) { hand(path.points.at(-1)!); onDone(); } };
   return {
     stop: () => {
-      if (over) return;
+      if (over) return 0;
+      const frame = Math.floor(Number(runs[0]!.currentTime ?? 0) / (1000 / 60));
+      const speed = ((path.points[frame + 1] ?? path.points.at(-1)!) - (path.points[frame] ?? path.points.at(-1)!)) * 60;
       hand(new DOMMatrixReadOnly(getComputedStyle(layers.page).transform).m41);
       onStopped?.();
+      return speed;
     },
   };
 }
@@ -93,6 +113,7 @@ export function NavStack({ base, page, pageKey, onBack, onSettled, onSlide, onLe
   const [shownKey, setShownKey] = useState<string | null>(null);
   const lastPage = useRef<ReactNode>(null);
   const [moving, setMoving] = useState(false);
+  const [leavingPage, setLeavingPage] = useState(false);
   const run = useRef<Run | null>(null);
   const pageRef = useRef<HTMLDivElement>(null);
   const baseRef = useRef<HTMLDivElement>(null);
@@ -108,7 +129,11 @@ export function NavStack({ base, page, pageKey, onBack, onSettled, onSlide, onLe
   // the page's older rows wait while it moves: they mount once it lands, and never for a page on its way out
   const sliding = useRef(false);
   const waiting = useRef(new Set<() => void>());
+  // the list under a page is inert from the page's landing until it has fully left: toggling inert restyles the whole
+  // list, so it never happens as a back slide or a finger's drag starts, only once nothing moves
+  const [covered, setCovered] = useState(false);
   const landed = useCallback(() => {
+    setCovered(true);
     sliding.current = false;
     const steps = [...waiting.current];
     waiting.current.clear();
@@ -126,34 +151,50 @@ export function NavStack({ base, page, pageKey, onBack, onSettled, onSlide, onLe
     },
   }), []);
 
-  const go = useCallback((target: number, velocity: number, done?: () => void, push = false) => {
-    run.current?.stop();
+  /** `velocity` null: a tap, which pushes and pops at the system's speed, or carries on at the speed of a slide it interrupts. */
+  const go = useCallback((target: number, velocity: number | null, done?: () => void) => {
+    const carried = run.current?.stop() ?? 0;
     setMoving(true);
-    const finish = () => { setMoving(false); done?.(); };
+    wakeSystemControls();
+    const finish = () => { setMoving(false); wakeSystemControls(); done?.(); };
     if (prefersReducedMotion()) {
-      x.set(target === 0 ? 0 : width);
-      pageOpacity.set(target === 0 ? 0 : 1);
-      run.current = settleTo(pageOpacity, target === 0 ? 1 : 0, 0, finish);
+      x.set(0);
+      const fade = settleTo(pageOpacity, target === 0 ? 1 : 0, 0, () => { x.set(target); finish(); });
+      run.current = { stop: () => { fade.stop(); return 0; } };
       return;
     }
     const page = pageRef.current;
-    const curve = target === 0 ? (push ? PUSH : spring.settle) : EXIT;
+    const toward = Math.sign(target - x.get());
+    const speed = velocity ?? (carried !== 0 ? carried : toward * width * system.push);
     if (!page || typeof page.animate !== "function") {
-      run.current = settleTo(x, target, velocity, finish, curve);
+      run.current = { stop: () => { controls.stop(); return 0; } };
+      const controls = settleTo(x, target, speed, finish, NAV);
       return;
     }
-    const path = springPath(x.get(), target, velocity, curve);
+    const path = springPath(x.get(), target, speed, NAV);
     run.current = slideLayers({ page, base: baseRef.current, dim: dimRef.current }, x, width, path, finish, () => slid.current?.(null));
     slid.current?.(path);
   }, [x, pageOpacity, width]);
 
-  // the page mounts offscreen with its newest rows, and slides once it has painted them
+  const lockSafeTop = useCallback(() => {
+    const el = pageRef.current;
+    if (!el) return;
+    const top = readSafeTop(el);
+    if (top > 0) el.style.setProperty("--m-safe-top", `${top}px`);
+  }, []);
+
+  const unlockSafeTop = useCallback(() => {
+    pageRef.current?.style.removeProperty("--m-safe-top");
+  }, []);
+
   const preparing = useRef<{ cancelled: boolean } | null>(null);
   const push = useCallback(() => {
     if (preparing.current) preparing.current.cancelled = true;
     const signal = { cancelled: false };
     preparing.current = signal;
     sliding.current = true;
+    setLeavingPage(false);
+    unlockSafeTop();
     run.current?.stop();
     x.set(width);
     pageOpacity.set(prefersReducedMotion() ? 0 : 1);
@@ -164,67 +205,151 @@ export function NavStack({ base, page, pageKey, onBack, onSettled, onSlide, onLe
       void ready.then(() => {
         if (signal.cancelled) return;
         preparing.current = null;
-        go(0, 0, () => { landed(); settled.current?.(true); }, true);
+        go(0, null, () => { landed(); settled.current?.(true); });
       });
     });
-  }, [go, landed, x, pageOpacity, width]);
+  }, [go, landed, unlockSafeTop, x, pageOpacity, width]);
+
+  const popping = useRef(false);
+  const popped = useCallback(() => {
+    popping.current = false;
+    setLeavingPage(false);
+    unlockSafeTop();
+    setCovered(false);
+    setShownKey(null);
+    lastPage.current = null;
+    gone();
+    settled.current?.(false);
+  }, [gone, unlockSafeTop]);
+  const pop = useCallback(() => {
+    if (preparing.current) preparing.current.cancelled = true;
+    const signal = { cancelled: false };
+    preparing.current = signal;
+    popping.current = true;
+    sliding.current = true;
+    lockSafeTop();
+    setLeavingPage(true);
+    leaving.current?.();
+    setMoving(true);
+    requestAnimationFrame(() => {
+      if (signal.cancelled) return;
+      preparing.current = null;
+      go(width, null, popped);
+    });
+  }, [go, lockSafeTop, popped, width]);
+  const unpop = useCallback(() => {
+    if (preparing.current) preparing.current.cancelled = true;
+    const signal = { cancelled: false };
+    preparing.current = signal;
+    popping.current = false;
+    sliding.current = true;
+    setLeavingPage(false);
+    unlockSafeTop();
+    run.current?.stop();
+    requestAnimationFrame(() => {
+      if (signal.cancelled) return;
+      preparing.current = null;
+      go(0, null, () => { landed(); settled.current?.(true); });
+    });
+  }, [go, landed, unlockSafeTop]);
 
   useLayoutEffect(() => {
     if (pageKey && page) {
+      // opened again while it leaves (the same chat or another): the leaving page turns around with what is asked for
+      if (popping.current) { setShownKey(pageKey); unpop(); return; }
       if (shownKey === pageKey) return;
       // a page swapped for another (a notification opening a different chat) cuts over; only list to page slides
       if (shownKey && x.get() < width / 2) { setShownKey(pageKey); return; }
       setShownKey(pageKey);
       push();
-    } else if (shownKey) {
-      if (preparing.current) { preparing.current.cancelled = true; preparing.current = null; }
-      sliding.current = true;
-      leaving.current?.();
-      go(width, 0, () => { setShownKey(null); lastPage.current = null; gone(); settled.current?.(false); });
+    } else if (shownKey && !popping.current) {
+      pop();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pageKey, Boolean(page)]);
 
   useEffect(() => { if (shownKey && !moving) x.set(0); }, [width]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const takeHold = useCallback(() => {
+    run.current?.stop();
+    popping.current = false;
+    setLeavingPage(false);
+    unlockSafeTop();
+    // a slide that already landed is over for the chrome too: from here it follows the finger
+    slid.current?.(null);
+    sliding.current = true;
+    setMoving(true);
+    wakeSystemControls();
+    leaving.current?.();
+    const active = document.activeElement;
+    if (active instanceof HTMLElement && pageRef.current?.contains(active)) active.blur();
+  }, [unlockSafeTop]);
+
+  // Android 14+'s back gesture moves the page as a finger on it does, and lands or returns on the same spring
+  const platform = useContext(PlatformContext);
+  const backed = useRef(onBack);
+  backed.current = onBack;
+  const shownNow = useRef(shownKey);
+  shownNow.current = shownKey;
+  const gesture = useRef(false);
+  useEffect(() => platform?.onBackGesture?.((event) => {
+    if (event.phase === "start") {
+      if (!shownNow.current || popping.current) return false;
+      takeHold();
+      gesture.current = true;
+    }
+    if (!gesture.current) return false;
+    switch (event.phase) {
+      case "start": case "progress":
+        x.set(Math.max(0, event.progress) * width);
+        return true;
+      case "cancel":
+        gesture.current = false;
+        go(0, null, landed);
+        return true;
+      case "commit":
+        gesture.current = false;
+        popping.current = true;
+        lockSafeTop();
+        setLeavingPage(true);
+        go(width, null, () => { popped(); backed.current(); });
+        return true;
+    }
+  }), [platform, takeHold, go, landed, lockSafeTop, popped, x, width]);
+
   useDrag(pageRef, {
     axis: "x",
     enabled: Boolean(shownKey),
-    claim: (s) => s.dx > 0 && !ownsDrag(s.target) && !canScroll(s.target, pageRef.current!, "x", -1),
-    onStart: () => {
-      run.current?.stop();
-      // a slide that already landed is over for the chrome too: from here it follows the finger
-      slid.current?.(null);
-      sliding.current = true;
-      setMoving(true);
-      leaving.current?.();
-      const active = document.activeElement;
-      if (active instanceof HTMLElement && pageRef.current?.contains(active)) active.blur();
-    },
-    onMove: (s) => x.set(Math.max(0, s.dx)),
+    claim: (s, start) => s.dx > 0 && !ownsDrag(s.target) && !canScroll(s.target, pageRef.current!, "x", -1) && !replyRowAt(s.target, start.x),
+    onStart: takeHold,
+    onMove: (s) => { x.set(Math.max(0, s.dx)); wakeSystemControls(); },
     onEnd: (s) => {
       const landing = projectRelease(x.get(), s.vx);
       if ((landing > width / 2 && s.vx > -200) || s.vx > 500) {
-        go(width, Math.max(s.vx, 0), () => { setShownKey(null); lastPage.current = null; gone(); settled.current?.(false); onBack(); });
+        popping.current = true;
+        lockSafeTop();
+        setLeavingPage(true);
+        go(width, Math.max(s.vx, 0), () => { popped(); onBack(); });
       } else {
         go(0, s.vx, landed);
       }
     },
-    onCancel: () => go(0, 0, landed),
+    onCancel: () => go(0, null, landed),
   });
 
   const pageShown = Boolean(shownKey);
+  const still = prefersReducedMotion();
   return (
     <div className="mobile-nav relative h-full w-full overflow-hidden bg-app">
       <motion.div
         ref={baseRef}
         className="absolute inset-0"
-        style={{ x: pageShown ? baseX : 0, willChange: moving ? "transform" : undefined }}
-        inert={pageShown && !moving ? true : undefined}
-        aria-hidden={pageShown && !moving ? true : undefined}
+        style={{ x: pageShown && !still ? baseX : 0, willChange: moving ? "transform" : undefined }}
+        inert={pageShown && covered ? true : undefined}
+        aria-hidden={pageShown && covered ? true : undefined}
       >
         {base}
-        {pageShown && <motion.div ref={dimRef} aria-hidden className="pointer-events-none absolute inset-0 bg-[rgb(10_10_12/0.16)]" style={{ opacity: dim }} />}
+        {pageShown && <motion.div ref={dimRef} aria-hidden className="pointer-events-none absolute inset-0 bg-[rgb(10_10_12/0.16)]" style={{ opacity: still ? pageOpacity : dim }} />}
       </motion.div>
       {pageShown && (
         <motion.div
@@ -232,9 +357,12 @@ export function NavStack({ base, page, pageKey, onBack, onSettled, onSlide, onLe
           key={shownKey}
           className="mobile-page absolute inset-0 bg-app"
           data-moving={moving ? "" : undefined}
+          data-leaving={leavingPage ? "" : undefined}
           style={{ x, opacity: pageOpacity, willChange: moving ? "transform" : undefined }}
         >
-          <TranscriptStaging value={staging}>{page ?? lastPage.current}</TranscriptStaging>
+          <NavLeavingContext.Provider value={leavingPage}>
+            <TranscriptStaging value={staging}>{page ?? lastPage.current}</TranscriptStaging>
+          </NavLeavingContext.Provider>
         </motion.div>
       )}
     </div>

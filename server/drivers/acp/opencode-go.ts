@@ -10,6 +10,8 @@ import { DATA_DIR, OPENCODE_PROVIDER_ENV } from "../../config.ts";
 import { decodeInjectId, hostApiKey, localHost, mergeLocalInject } from "../local-inject.ts";
 import { applyStandaloneSpawnEnv } from "../../engine-install.ts";
 import { OPENCODE_STANDALONE } from "./opencode-release.ts";
+import { openCodeCommand } from "./opencode-pick.ts";
+import { refreshZenModels, zenServes } from "./zen-live-models.ts";
 import { PREINSTALL_FREE_BACKUP_ENV } from "../../free-backup.ts";
 import { createAcpDriver, type AccountErrorCode, type AcpConfig, type AcpSupport } from "./core.ts";
 import { offeredModels, surveyModelVariants } from "./config-options.ts";
@@ -649,11 +651,14 @@ export function openCodeFreeFallback(ownAccess: boolean, models: ModelCatalog): 
  * free model. Only models the catalog marks free are rungs: the V2 CLI lists its paid models without a login too, and
  * those answer 402. A catalog that marks none (an older CLI listing only free models) is all free without a login. */
 export function openCodeFreeModelOrder(model: string, ownAccess: boolean, models: ModelCatalog): string[] | null {
+  void refreshZenModels();
   const offered = models.options.filter((option) => option.custom !== true).map((option) => option.id);
   const marked = offered.filter(isFreeOpenCodeModel);
   const free = marked.length === 0 && openCodeFreeFallback(ownAccess, models) ? offered : marked;
   if (!free.includes(model) && !isFreeOpenCodeModel(model)) return null;
-  return [...free.filter((id) => id.startsWith("opencode/")), ...free.filter((id) => !id.startsWith("opencode/"))];
+  // a model Zen has retired, by its own list, is never a rung
+  const live = free.filter(zenServes);
+  return [...live.filter((id) => id.startsWith("opencode/")), ...live.filter((id) => !id.startsWith("opencode/"))];
 }
 
 function withinFolder(path: string, folder: string): boolean {
@@ -854,6 +859,7 @@ const support = (loadCatalog: OpenCodeCatalogLoader, ownAccess = new Map<string,
     standalone: OPENCODE_STANDALONE,
   },
   spawnArgs: () => ["acp"],
+  resolveCommand: (env, config) => openCodeCommand(config.cli, env.PATH),
   statusLog: { path: openCodeLogPath, parse: parseOpenCodeLogLine, shared: true },
   // A folder outside git files its session under OpenCode's global project, which every non-git folder of the person's
   // shares: a connection check or memory upkeep would show up in their history there.

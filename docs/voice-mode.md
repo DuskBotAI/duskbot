@@ -112,7 +112,12 @@ hand real work to specialists with `coordinate_bots` — no new machinery requir
 - **Rooms don't speak yet**, though per-bot voices already exist (`bot.voice`).
 - **No spend meter.** ElevenLabs bills per character. Auto-speak is off by
   default partly for that reason, but the app should eventually show usage.
-- **No voice barge-in** — see half-duplex above.
+- **Take turns is still half-duplex.** The built-in voice call
+  ([verification/voice-calls.md](verification/voice-calls.md)) is not: it
+  listens through the page's echo-cancelled microphone, so the person can talk
+  over the bot, and it needs no key (Kokoro-82M and Moonshine base on this
+  computer, downloaded on the first call). Take turns remains where the
+  built-in voice cannot run (an Intel Mac).
 
 ## Failure boundaries
 

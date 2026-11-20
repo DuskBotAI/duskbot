@@ -29,7 +29,10 @@ vi.mock("@/state/store", async (original) => {
   return { ...store, api: fixture.api, useStore: () => ({ state: { ...store.initialState, config: fixture.config, instances: [] }, dispatch: fixture.dispatch }) };
 });
 // sealing has its own tests (src/lib/sealed-send.test.ts): here the patch the row asked to save is what the server gets
-vi.mock("@/lib/sealed-send", () => ({ putConfig: (patch: unknown) => fixture.api("/api/config", { method: "PUT", body: JSON.stringify(patch) }) }));
+vi.mock("@/lib/sealed-send", () => ({
+  putConfig: (patch: unknown) => fixture.api("/api/config", { method: "PUT", body: JSON.stringify(patch) }),
+  sendSealed: (_purpose: unknown, _target: unknown, _values: unknown, send: (sealed: null) => unknown) => send(null),
+}));
 vi.mock("@/lib/analytics", () => ({ track: fixture.track }));
 const { ApiError } = await import("@/state/store");
 const { KeyRow } = await import("./KeyRow");
@@ -68,29 +71,48 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("a key saved in Settings → API keys", () => {
-  it.each([
-    ["ok", { ok: true, check: "authentication" }],
-    ["rejected", { ok: false, reason: "rejected" }],
-    ["unverified", { ok: false, reason: "unreachable" }],
-  ])("reports one save whose result is the key test's verdict (%s), and never the key", async (result, verdict) => {
-    fixture.api.mockResolvedValueOnce({ ...fixture.config, anthropic: { configured: true, last4: KEY.slice(-4) } }).mockResolvedValueOnce(verdict);
+  it("tests a key before saving it and reports the save with the test's verdict, never the key", async () => {
+    fixture.api.mockResolvedValueOnce({ ok: true, check: "models", result: "works" }).mockResolvedValueOnce({ ...fixture.config, anthropic: { configured: true, last4: KEY.slice(-4) } });
     await enterKey({ id: "anthropic" });
-    expect(fixture.api.mock.calls.map(([path]) => path)).toEqual(["/api/config", "/api/keys/test"]);
-    expect(fixture.track.mock.calls).toEqual([["api_key_saved", { provider: "anthropic", via: "settings", result }]]);
+    expect(fixture.api.mock.calls.map(([path]) => path)).toEqual(["/api/keys/test", "/api/config"]);
+    expect(fixture.track.mock.calls).toEqual([["api_key_saved", { provider: "anthropic", via: "settings", result: "ok" }]]);
     expectNoKeyIn(fixture.track.mock.calls);
+  });
+
+  it.each([
+    ["wrong key", { ok: false, reason: "rejected", result: "wrong_key" }, [["api_key_saved", { provider: "anthropic", via: "settings", result: "rejected" }]]],
+    ["no credit", { ok: false, reason: "credits", result: "no_credit" }, []],
+    ["not checked", { ok: false, reason: "unreachable", result: "unreachable" }, []],
+  ])("saves nothing on its own after a %s verdict", async (_name, verdict, tracked) => {
+    fixture.api.mockResolvedValueOnce(verdict);
+    await enterKey({ id: "anthropic" });
+    expect(fixture.api.mock.calls.map(([path]) => path)).toEqual(["/api/keys/test"]);
+    expect(fixture.track.mock.calls).toEqual(tracked);
+    expectNoKeyIn(fixture.track.mock.calls);
+  });
+
+  it("saves a key the provider could not be asked about once the person says Save anyway", async () => {
+    fixture.api.mockResolvedValueOnce({ ok: false, reason: "unreachable", result: "unreachable" }).mockResolvedValueOnce({ anthropic: { configured: true } });
+    await enterKey({ id: "anthropic" });
+    const note = render({ id: "anthropic" }).find((node) => (node.props as { onSaveAnyway?: unknown }).onSaveAnyway)!;
+    (note.props as { onSaveAnyway: () => void }).onSaveAnyway();
+    await flush();
+    expect(fixture.api.mock.calls.map(([path]) => path)).toEqual(["/api/keys/test", "/api/config"]);
+    expect(fixture.track.mock.calls).toEqual([["api_key_saved", { provider: "anthropic", via: "settings", result: "unverified" }]]);
   });
 
   it("still reports the verdict when typing again made the row stop showing it", async () => {
     let answer!: (value: unknown) => void;
-    fixture.api.mockResolvedValueOnce({ anthropic: { configured: true } }).mockReturnValueOnce(new Promise((resolve) => { answer = resolve; }));
+    fixture.api.mockReturnValueOnce(new Promise((resolve) => { answer = resolve; })).mockResolvedValueOnce({ anthropic: { configured: true } });
     await enterKey({ id: "anthropic" });
-    answer({ ok: true });
+    input(render({ id: "anthropic" })).props.onChange!({ target: { value: "typing" } });
+    answer({ ok: true, result: "works" });
     await flush();
     expect(fixture.track.mock.calls).toEqual([["api_key_saved", { provider: "anthropic", via: "settings", result: "ok" }]]);
   });
 
   it("reports a refused save as an error even when the server's words echo the key", async () => {
-    fixture.api.mockRejectedValueOnce(new ApiError(`Invalid key ${KEY}`, 400, { error: `Invalid key ${KEY}` }));
+    fixture.api.mockResolvedValueOnce({ ok: true, result: "works" }).mockRejectedValueOnce(new ApiError(`Invalid key ${KEY}`, 400, { error: `Invalid key ${KEY}` }));
     await enterKey({ id: "anthropic" });
     expect(fixture.track.mock.calls).toEqual([["api_key_saved", { provider: "anthropic", via: "settings", result: "error" }]]);
     expectNoKeyIn(fixture.track.mock.calls);

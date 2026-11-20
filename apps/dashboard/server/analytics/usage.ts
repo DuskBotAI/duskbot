@@ -19,7 +19,13 @@ export interface UsageRan { place: UsagePlace; os?: string; version?: string }
 export interface UsageRecord { id: string; kind: Kind; at: number; accountId: string; workspaceId: string; ran?: UsageRan; data: UsageTurn | UsageRun | UsageFrustration | UsageSession | UsageDigest | UsageSignal }
 /** `appTurns`: turns that used a connected app, so the adoption view can count people who use one; `bots` and `chats`:
  * turns per salted bot and chat hash, for per-bot share and turns per chat */
-export interface PersonDay { day: string; accountId: string; turns: number; failed: number; runs: number; frustrations: number; appTurns: number; bots?: Record<string, number>; chats?: Record<string, number> }
+/** `fails`: turns per failed tool and error class (`toolFailKey`), for the people column of tool failures */
+export interface PersonDay { day: string; accountId: string; turns: number; failed: number; runs: number; frustrations: number; appTurns: number; bots?: Record<string, number>; chats?: Record<string, number>; fails?: Record<string, number> }
+type PersonMaps = { bots?: Record<string, number>; chats?: Record<string, number>; fails?: Record<string, number> };
+const PERSON_MAPS = ["bots", "chats", "fails"] as const;
+const PERSON_MAP_KEY: Record<(typeof PERSON_MAPS)[number], RegExp> = { bots: /^[A-Za-z0-9_-]{10}$/, chats: /^[A-Za-z0-9_-]{10}$/, fails: /^[a-z]{2,12}(?::[a-z][a-z0-9_]{0,31})?\|[a-z_]{2,20}$/ };
+/** a failed tool and its error class as one counter key; the tool's `.` becomes `:` since Mongo reads a dot as a path */
+export const toolFailKey = (tool: string, error: string) => `${tool.replace(".", ":")}|${error}`;
 type PersonCounts = Partial<Pick<PersonDay, "turns" | "failed" | "runs" | "frustrations" | "appTurns">>;
 /** one routine by its salted hash: its first and last run, for "still running a week later" */
 export interface RoutineSpan { workspaceId: string; accountId: string; routine: string; first: number; last: number; runs: number }
@@ -30,7 +36,7 @@ export interface UsageStore {
   insert(records: UsageRecord[]): Promise<UsageRecord[]>;
   bump(day: string, inc: Record<string, number>): Promise<void>;
   /** adds to a person's day; true when it is the person's first record that day */
-  person(day: string, accountId: string, inc: PersonCounts, maps?: { bots?: Record<string, number>; chats?: Record<string, number> }): Promise<boolean>;
+  person(day: string, accountId: string, inc: PersonCounts, maps?: PersonMaps): Promise<boolean>;
   routine(span: Omit<RoutineSpan, "runs">): Promise<void>;
   routines(): Promise<RoutineSpan[]>;
   snapshot(row: SnapshotRow): Promise<void>;
@@ -60,7 +66,7 @@ export function memoryUsageStore(now: () => number = Date.now): UsageStore {
       const key = `${day}|${accountId}`, row = people.get(key), first = !row;
       const next: PersonDay = row ?? { day, accountId, turns: 0, failed: 0, runs: 0, frustrations: 0, appTurns: 0 };
       for (const [field, by] of Object.entries(inc)) (next as unknown as Record<string, number>)[field]! += by ?? 0;
-      for (const kind of ["bots", "chats"] as const) for (const [hash, by] of Object.entries(maps[kind] ?? {})) { const map = (next[kind] ??= {}); map[hash] = (map[hash] ?? 0) + by; }
+      for (const kind of PERSON_MAPS) for (const [hash, by] of Object.entries(maps[kind] ?? {})) { const map = (next[kind] ??= {}); map[hash] = (map[hash] ?? 0) + by; }
       people.set(key, next);
       return first;
     },
@@ -117,7 +123,7 @@ export async function mongoUsageStore(db: Db): Promise<UsageStore> {
     },
     async bump(day, inc) { await daily.updateOne({ _id: day }, { $setOnInsert: { day }, $inc: Object.fromEntries(Object.entries(inc).map(([key, by]) => [`c.${key}`, by])) }, { upsert: true }); },
     async person(day, accountId, inc, maps = {}) {
-      const mapped = Object.fromEntries((["bots", "chats"] as const).flatMap(kind => Object.entries(maps[kind] ?? {}).filter(([hash]) => /^[A-Za-z0-9_-]{10}$/.test(hash)).map(([hash, by]) => [`${kind}.${hash}`, by])));
+      const mapped = Object.fromEntries(PERSON_MAPS.flatMap(kind => Object.entries(maps[kind] ?? {}).filter(([key]) => PERSON_MAP_KEY[kind].test(key)).map(([key, by]) => [`${kind}.${key}`, by])));
       const result = await people.updateOne({ _id: `${day}|${accountId}` }, { $setOnInsert: { day, accountId, at: new Date(`${day}T12:00:00Z`) }, $inc: { turns: 0, failed: 0, runs: 0, frustrations: 0, appTurns: 0, ...inc, ...mapped } }, { upsert: true });
       return result.upsertedCount === 1;
     },
@@ -155,6 +161,7 @@ export function rollup(records: UsageRecord[]): Map<string, Record<string, numbe
       if (t.model) { add(day, `model:${t.model}`); add(day, `lat_model:${t.model}:${bucket}`); if (failed) add(day, `model_fail:${t.model}`); }
       for (const tool of t.failedTools ?? []) add(day, `tool_err:${tool}`);
       for (const app of t.failedApps ?? []) add(day, `app_err:${app}`);
+      for (const f of t.toolFailures ?? []) { const key = toolFailKey(f.tool, f.error); add(day, `tfail:${key}`); add(day, `tfail_calls:${key}`, f.count); }
       for (const action of t.actions ?? []) add(day, `action:${action}`);
       add(day, `engine:${t.engine}`); add(day, `lat_engine:${t.engine}:${bucket}`); add(day, `category:${t.category}`); add(day, `from:${t.from}`); add(day, `place:${t.place}`);
       if (t.room) add(day, "room");
@@ -246,14 +253,15 @@ export function createUsage(options: {
       const fresh = await store.insert(records);
       const writes: Array<Promise<unknown>> = [];
       for (const [day, inc] of rollup(fresh)) writes.push(store.bump(day, inc));
-      const perDay = new Map<string, { turns: number; failed: number; runs: number; frustrations: number; appTurns: number; bots: Record<string, number>; chats: Record<string, number> }>();
+      const perDay = new Map<string, { turns: number; failed: number; runs: number; frustrations: number; appTurns: number; bots: Record<string, number>; chats: Record<string, number>; fails: Record<string, number> }>();
       for (const record of fresh) {
-        const day = dayOf(record.at), row = perDay.get(day) ?? { turns: 0, failed: 0, runs: 0, frustrations: 0, appTurns: 0, bots: {}, chats: {} };
+        const day = dayOf(record.at), row = perDay.get(day) ?? { turns: 0, failed: 0, runs: 0, frustrations: 0, appTurns: 0, bots: {}, chats: {}, fails: {} };
         if (record.kind === "turn") {
           const t = record.data as UsageTurn;
           row.turns++; if (t.outcome === "failed") row.failed++; if (t.apps.length) row.appTurns++;
           if (t.bot) row.bots[t.bot] = (row.bots[t.bot] ?? 0) + 1;
           if (t.chat) row.chats[t.chat] = (row.chats[t.chat] ?? 0) + 1;
+          for (const f of t.toolFailures ?? []) { const key = toolFailKey(f.tool, f.error); row.fails[key] = (row.fails[key] ?? 0) + 1; }
         }
         if (record.kind === "run") {
           row.runs++;
@@ -263,7 +271,7 @@ export function createUsage(options: {
         if (record.kind === "frustration") row.frustrations++;
         perDay.set(day, row);
       }
-      for (const [day, { bots, chats, ...inc }] of perDay) writes.push(store.person(day, accountId, inc, { bots, chats }).then(first => first ? store.bump(day, { people: 1 }) : undefined));
+      for (const [day, { bots, chats, fails, ...inc }] of perDay) writes.push(store.person(day, accountId, inc, { bots, chats, fails }).then(first => first ? store.bump(day, { people: 1 }) : undefined));
       if (report.snapshot) writes.push(store.snapshot({ workspaceId, accountId, at: now(), snapshot: report.snapshot }));
       await Promise.all(writes);
       for (const record of fresh) if (record.kind === "frustration" && options.newProblem) {

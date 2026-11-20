@@ -376,7 +376,7 @@ export class Runtime {
       input = {
         turn,
         resumed: turn !== "first",
-        restartNote: interruption ? "" : restartNote(n, children, child => this.names(child, n).assignee),
+        restartNote: interruption ? "" : restartNote(n, children, child => this.names(child, n).assignee, n.restart === "rerun" ? this.progressOf(n) : []),
         envelope: composeEnvelope(n, names, parent),
         ...(n.answer !== undefined ? { answer: n.answer } : {}),
         ...(n.continuation ? { continuation: { note: n.continuation.note, ...(n.continuation.handoffPath ? { handoffPath: n.continuation.handoffPath } : {}) } } : {}),
@@ -770,6 +770,13 @@ export class Runtime {
     if (!port) return [];
     const labels = this.safe("outward", () => port.call(this.runner, n));
     return Array.isArray(labels) ? labels.filter(label => typeof label === "string" && label.trim() !== "") : [];
+  }
+
+  private progressOf(n: Assignment): string[] {
+    const port = this.runner.progress;
+    if (!port) return [];
+    const lines = this.safe("progress", () => port.call(this.runner, n));
+    return Array.isArray(lines) ? lines.filter(line => typeof line === "string" && line.trim() !== "") : [];
   }
 
   private names(n: Assignment, parent: Assignment | undefined): EnvelopeNames {

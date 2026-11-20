@@ -1,0 +1,91 @@
+{
+  "path": "/routines/google-docs-weekly-report-draft",
+  "type": "routine",
+  "title": "Draft a weekly report in Google Docs from dated work notes",
+  "nav": "weekly google docs report",
+  "h1": "draft the weekly report from the work log in google docs",
+  "description": "Use this Friday routine to turn a dated Google Docs work log into a report draft. Trace each result to its source and review it before creating the document.",
+  "keyword": "google docs weekly report draft",
+  "keywords": [
+    "weekly status report from notes",
+    "google docs weekly report routine"
+  ],
+  "answer": "**start friday’s report with what actually happened this week.** this routine reads dated entries in your google docs work log. it drafts a short account of outcomes, delays and decisions in dusk chat, with a source date for each claim. once you approve the text, it creates a separate report document.",
+  "updated": "2026-11-20",
+  "review": {
+    "status": "approved",
+    "by": "lead agent, after four independent reviewers read every page against seo/facts (2026-11-20); every finding applied",
+    "at": "2026-11-20"
+  },
+  "voice": 2,
+  "tags": [
+    "routine",
+    "googledocs",
+    "reporting",
+    "drafting"
+  ],
+  "connectors": [
+    "googledocs"
+  ],
+  "related": [
+    "/integrations/google-docs",
+    "/routines/notion-meeting-notes-to-tasks",
+    "/routines/slack-channel-digest"
+  ],
+  "art": {
+    "logo": "docs",
+    "props": [
+      "p-newspaper",
+      "s-notebook"
+    ],
+    "bubble": "ready for your edit"
+  },
+  "og_line": "let dated notes carry the weekly report.",
+  "routine": {
+    "message": "each friday at 3pm, read the work log in google docs. ask me once for its document link, relevant tabs and team name. use entries dated monday through today in my time zone, including table rows. ignore older entries even if someone edited the document this week.\n\ndraft at most 150 words in this chat under outcomes, delays and decisions needed. give the source tab and entry date for each bullet. call future work planned. omit empty headings. stay quiet after a complete read with no entries this week. flag inaccessible tabs or ambiguous dates.\n\nask me before you change anything. after approval, search for the exact title “weekly report draft” plus team name and friday's date. if one matches, return its link without edits. if several match, show their links and stop. if none match, create one new google doc with the approved text and return its link here. never overwrite the log or share the report.",
+    "when": "fridays at 3pm in your time zone, after the last work-log update",
+    "needs": "google docs reads by id, document search and permission to create a document from the approved draft",
+    "output": "weekly report draft · print team · 20 november\noutcomes: vera lane approved the winter sleeve proof. [production, 18 november]\ndelays: the binding sample has not arrived. [supplies, 19 november]\ndecision needed: keep monday’s press slot or release it? [production, 20 november]\ncreate this draft?"
+  },
+  "knobs": [
+    "**write for the reader.** for a department lead, keep only decisions they can make. for teammates, keep the work that affects handoffs.",
+    "**cap the length.** ask for one sentence per outcome when the report goes into a larger update.",
+    "**choose the evidence.** name the tab holding sign-offs if several tabs discuss the same work. a plan in monday’s notes can change by friday."
+  ],
+  "fails": [
+    "**old news fills the draft.** use dates inside the work log. the document’s last edit can belong to a spelling fix in an old entry.",
+    "**a table row loses its context.** read the column headers with its cells. if a date could belong to two entries, ask before including either.[^1]",
+    "**a retry finds several reports with the same title.** stop and show their links. use the approved document id before doing anything else."
+  ],
+  "sections": [
+    {
+      "h": "distinguish a finished result from a friday intention",
+      "md": "**look for the entry that confirms the work happened.** “proof due friday” belongs under plans. “buyer approved the proof” can go under outcomes. keep the tab and date so the reader can find the same line.\n\nif the team needs an audited report with signed figures, use its reporting process. dusk bot can prepare prose for review."
+    }
+  ],
+  "faq": [
+    {
+      "q": "can i run it with read-only google docs access?",
+      "a": "**yes, for the chat draft.** keep the approved text in chat or copy it into a document yourself. creating a new doc needs the corresponding write action.[^1]"
+    },
+    {
+      "q": "what if my work log has several tabs?",
+      "a": "**name the tabs that feed this report.** the text read can include selected tabs and tables. use a separate source label for each tab with a similar heading.[^1]"
+    }
+  ],
+  "sources": [
+    {
+      "label": "composio: google docs actions",
+      "url": "https://docs.composio.dev/toolkits/googledocs",
+      "checked": "2026-11-20"
+    },
+    {
+      "label": "dusk bot docs: routines",
+      "url": "/docs/routines"
+    },
+    {
+      "label": "dusk bot docs: connected apps",
+      "url": "/docs/files-and-apps"
+    }
+  ]
+}

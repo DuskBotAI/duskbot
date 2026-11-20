@@ -56,7 +56,7 @@ it("one round button like search and +: the place's icon, an online dot, and its
   await mount();
   const control = button()!;
   expect(control.className).toContain("rounded-full");
-  expect(control.className).toContain("size-9");
+  expect(control.className).toContain("size-10");
   expect(control.getAttribute("aria-haspopup")).toBe("menu");
   expect(control.getAttribute("aria-label")).toBe("Switch server: This computer · Online");
   expect(control.querySelector("[data-icon-name]")?.getAttribute("data-icon-name")).toBe("laptop");

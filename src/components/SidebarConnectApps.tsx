@@ -93,14 +93,14 @@ function AppFaceIcon({ face, className }: { face: AppFace; className?: string })
 }
 
 
-/** `circle` is the collapsed rail's round button; `small` its narrower size. */
-export function SidebarConnectApps({ circle = false, small = false }: { circle?: boolean; small?: boolean }) {
-  return <ConnectAppsButton circle={circle} small={small} apps={useSidebarApps()} />;
+/** `circle` is the collapsed rail's round button. */
+export function SidebarConnectApps({ circle = false }: { circle?: boolean }) {
+  return <ConnectAppsButton circle={circle} apps={useSidebarApps()} />;
 }
 
 /** The button for apps already read by its caller, as the footer does to fold it to a circle once one is connected. */
-export function ConnectAppsButton({ circle, small = false, apps: { faces }, engaged = false, onEngage }: {
-  circle: boolean; small?: boolean; apps: SidebarApps;
+export function ConnectAppsButton({ circle, apps: { faces }, engaged = false, onEngage }: {
+  circle: boolean; apps: SidebarApps;
   /** grok's folded footer button: under the pointer or focus it widens into the Connect apps pill */
   engaged?: boolean; onEngage?: (engaged: boolean) => void;
 }) {
@@ -121,9 +121,9 @@ export function ConnectAppsButton({ circle, small = false, apps: { faces }, enga
       onBlur={() => onEngage?.(false)}
       onClick={() => openConnectApps()}
       // grok's folded pill is a 36px circle (its basis), and widens to its content: 16/12 in, 12/9 beside the logos
-      className={circle ? cn(SIMPLE_TOP_BUTTON, "group/apps h-9 min-w-9 w-auto shrink text-[14px] font-medium leading-5 text-ink transition-[flex-grow,padding] duration-300 ease-[cubic-bezier(.2,0,0,1)] motion-reduce:transition-none",
-        engaged ? cn("grow basis-auto", logos.length ? "ps-3 pe-[9px]" : "ps-4 pe-3") : "grow-0 basis-9 px-2", small && "h-8 min-w-8 basis-8 px-1.5")
-        : cn("group/apps flex h-9 min-w-0 flex-1 items-center justify-center rounded-full border border-ink/[0.08] bg-composer ps-4 text-[14px] font-medium leading-5 tracking-[0.01em] text-ink", faces.length ? "pe-3" : "pe-4", GROK_HOVER_TINT, GROK_FOCUS)}
+      className={circle ? cn(SIMPLE_TOP_BUTTON, "group/apps h-10 min-w-10 w-auto shrink text-[14px] font-medium leading-5 text-ink transition-[flex-grow,padding] duration-300 ease-[cubic-bezier(.2,0,0,1)] motion-reduce:transition-none",
+        engaged ? cn("grow basis-auto", logos.length ? "ps-3 pe-[9px]" : "ps-4 pe-3") : "grow-0 basis-10 px-2")
+        : cn("group/apps flex h-9 min-w-0 flex-1 items-center justify-center rounded-full border border-ink/[0.08] bg-composer ps-3.5 text-[13px] font-medium leading-5 tracking-[0.01em] text-ink", faces.length ? "pe-3" : "pe-4", GROK_HOVER_TINT, GROK_FOCUS)}
     >
       {circle ? <>
         {/* grok's widened pill trades the grid glyph for the label and the app logos */}

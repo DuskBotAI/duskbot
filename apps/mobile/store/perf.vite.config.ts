@@ -16,7 +16,8 @@ const recordingGlass: Plugin = {
 const port = Number(process.env.DUSK_MOBILE_PORT) || 5320;
 export default {
   ...base,
-  plugins: [...(base.plugins ?? []), recordingGlass],
+  // android has no native glass: its page draws its own chrome
+  plugins: [...(base.plugins ?? []), ...(process.env.DUSK_STAGE_PLATFORM === "android" ? [] : [recordingGlass])],
   cacheDir: join(tmpdir(), "dusk-perf-vite"),
   build: { ...base.build, outDir: process.env.DUSK_PERF_OUT ?? join(tmpdir(), "dusk-perf-build"), minify: false },
   preview: { host: "127.0.0.1", port, strictPort: true, proxy: base.server?.proxy },

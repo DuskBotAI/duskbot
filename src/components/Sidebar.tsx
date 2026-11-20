@@ -1,7 +1,7 @@
 import { OrganizationIdentity } from "./OrganizationIdentity";
 import { StartFreshHost } from "./bot-panel/StartFresh";
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type Dispatch } from "react";
-import { motion, type MotionStyle } from "motion/react";
+import { motion, type MotionStyle, AnimatePresence } from "motion/react";
 import { createPortal } from "react-dom";
 import { Bot as BotIcon, Check, ClipboardCopy, Crown, FolderPlus, Library, Loader2, MoreHorizontal, Pencil, Phone, Pin, Plus, TextQuote, Trash2, Users, X } from "../icons";
 import { api, useStore, formatTime, visibleMessages, botOpensTo, openBot, openThread, type Action, type AppState, type Bot, type Group, type InstanceInfo, type Message } from "@/state/store";
@@ -61,6 +61,7 @@ import { onOpenTemplates } from "./SidebarTemplates";
 import { PHONE_TOP_BUTTON, SIMPLE_CORNER_BUTTON, SIMPLE_ROW_FOCUS, SIMPLE_TOP_BUTTON, SidebarSearchPill, SidebarSearchToggle } from "./SidebarSimpleTop";
 import { isSidebarToggle } from "@/lib/keyboard-shortcuts";
 import { SidebarRailSeparator, SimpleRailFooter } from "./SidebarSimpleRail";
+import { SidebarArchivedSection } from "./SidebarArchived";
 import { useBotUnread } from "./unread-notice";
 import { runningRoutineRun, SidebarBotActivity, sidebarBotActivityTasks, sidebarBotStatus } from "./SidebarBotActivity";
 import { SidebarNoBots, SidebarTileGrid } from "./SidebarTiles";
@@ -84,7 +85,7 @@ export { PinnedBotCircle, PinnedCircleThreadSection } from "./PinnedCircleThread
 export { ArchivedBotRow, ArchivedBotsPanel, archivedDeleteAllCopy, botConfirmCopy, type BotConfirmKind } from "./ArchivedBotsPanel";
 import { roomDeleteCopy } from "./room-delete-copy"; export { roomDeleteCopy };
 import { friendlyError } from "@/lib/plain-error";
-import { useActivityReorder, useNamesReturn } from "./sidebar-motion";
+import { useActivityReorder, useRailMorph } from "./sidebar-motion";
 
 /** The centre of macOS's traffic lights (14px tall) with the window's frame off, where the window puts them at 16,16. */
 export const MAC_TRAFFIC_LIGHT_CENTER_Y = 23;
@@ -133,7 +134,7 @@ export function GroupListItem({
     .filter((b): b is Bot => Boolean(b));
   const you = useGroupYou();
   return (
-    <div className={cn("group relative", railTile && "mx-auto w-12")}>
+    <div className={cn("group relative", railTile && "mx-auto w-[52px]")}>
     <button
       data-sidebar-group-row={group.id}
       aria-current={selected ? "page" : undefined}
@@ -151,14 +152,14 @@ export function GroupListItem({
       }}
       className={cn(
         "relative flex w-full items-center rounded-md text-left", SIMPLE_ROW_FOCUS,
-        railTile ? "h-12 justify-center" : simpleRow
-          ? cn("gap-2.5 rounded-[12px] p-2 md:h-[54px] md:py-0", ROW_PRESS) : "gap-2 py-1.5 pl-2.5 pr-3",
+        railTile ? "h-[52px] justify-center" : simpleRow
+          ? cn("gap-2.5 rounded-[12px] p-2 md:h-[58px] md:py-0", ROW_PRESS) : "gap-2 py-1.5 pl-2.5 pr-3",
         simpleRow ? rowSurface(selected) : selected ? "bg-raised" : "hover:bg-raised/50",
       )}
       title={density === "icons" ? group.name : undefined}
       aria-label={density === "icons" ? group.name : undefined}
     >
-      <GroupAvatar members={members} you={you} size={railTile ? 32 : 36} />
+      <span data-morph={`group:${group.id}`} className="flex shrink-0"><GroupAvatar members={members} you={you} size={railTile ? 36 : 40} /></span>
       <div data-row-words className={cn("min-w-0 flex-1", density === "icons" && "hidden")}>
         <div className={cn("flex items-baseline justify-between gap-2", simpleRow && "pr-7")}>
           <span className={cn("truncate text-[14px] text-ink", simpleRow ? "font-medium leading-5" : "font-semibold")}>{group.name}</span>
@@ -517,13 +518,13 @@ export const BotListItem = memo(function BotListItem(props: BotRowProps) {
   const iconOnly = density === "icons";
   useEffect(() => { if (iconOnly) setRenaming(false); }, [iconOnly]);
   const simpleRow = !iconOnly;
-  const avatarSize = iconOnly ? 32 : 36;
+  const avatarSize = iconOnly ? 36 : 40;
   const visible = useVisibleMessages(bot);
   const last = lastNonReceipt(visible);
   const title = bot.title.trim();
   const rowClass = cn(
     "flex w-full items-center rounded-xl text-left", SIMPLE_ROW_FOCUS,
-    iconOnly ? "h-12 justify-center" : cn("gap-2.5 rounded-[12px] p-2 leading-[normal] tracking-[0.24px] md:h-[54px]", ROW_PRESS),
+    iconOnly ? "h-[52px] justify-center" : cn("gap-2.5 rounded-[12px] p-2 leading-[normal] tracking-[0.24px] md:h-[58px]", ROW_PRESS),
     !iconOnly && "max-md:rounded-2xl max-md:py-2.5",
     simpleRow ? rowSurface(selected) : selected ? "bg-raised" : "hover:bg-raised/50",
   );
@@ -540,7 +541,7 @@ export const BotListItem = memo(function BotListItem(props: BotRowProps) {
   const onLiveCall = liveBadgeFor(bot.id, liveMedia, liveCall);
   const body = (
     <>
-      <span className="relative flex shrink-0">
+      <span data-morph={`bot:${bot.id}`} className="relative flex shrink-0">
         {simpleRow ? <RowGazeAvatar
           bot={bot}
           state={markState}
@@ -675,7 +676,7 @@ export const BotListItem = memo(function BotListItem(props: BotRowProps) {
 
   return (
     <>
-    <div className={cn("group relative", iconOnly && "mx-auto w-12", drag && !renaming && "select-none", botRowDropClass(dragging))} data-bot-reorder-row={drag ? bot.id : undefined} data-bot-lifted={dragging || undefined}
+    <div className={cn("group relative", iconOnly && "mx-auto w-[52px]", drag && !renaming && "select-none", botRowDropClass(dragging))} data-bot-reorder-row={drag ? bot.id : undefined} data-bot-lifted={dragging || undefined}
       {...(drag && !renaming ? drag.row(bot.id) : {})} title={iconOnly ? botTooltip(bot, instances) : undefined}>
       {/* Keep this wrapper mounted: replacing it remounts RenameTitle and leaves the row stuck in rename mode. */}
       <div
@@ -803,9 +804,8 @@ export function Sidebar({ open, onClose, collapseToIcons = false }: {
     if (density === "icons") setQuery("");
   }, [density]);
 
-  const toggleCollapsed = () => {
-    setSidebarDensity(density === "icons" ? "comfortable" : "icons");
-  };
+  const morph = useRailMorph(sidebarRef);
+  const toggleCollapsed = () => morph(() => setSidebarDensity(density === "icons" ? "comfortable" : "icons"));
   useEffect(() => {
     if (collapseToIcons || phone) return;
     const onKey = (event: KeyboardEvent) => { if (isSidebarToggle(event)) { event.preventDefault(); toggleCollapsed(); } };
@@ -887,7 +887,7 @@ export function Sidebar({ open, onClose, collapseToIcons = false }: {
   const framed = windowFramed(capabilities), corner = framed && simpleDesk;
   const lights = capabilities.windowChrome === "mac-inset" && !framed;
   // macOS draws the traffic lights from 16 to 76px: a rail holding them is wide enough to keep them inside it
-  const railWidth = lights ? 80 : 68;
+  const railWidth = 80;
   const draggableChrome = capabilities.windowChrome !== "native";
   // SAFETY: Electron's -webkit-app-region is not in React's CSSProperties type; the renderer accepts it as an inline
   // style.
@@ -902,7 +902,6 @@ export function Sidebar({ open, onClose, collapseToIcons = false }: {
   const q = query.trim().toLowerCase();
   const botOrder = useSidebarBotOrder();
   useActivityReorder(sidebarRef, !q);
-  useNamesReturn(sidebarRef, rail);
   const sections = useSidebarSections({ simple, rail, density, query: q, label: sectionLabel, sidebarRef });
   const botDrag = useSidebarBotDrag({ dispatch, announce: sections.announce, onNamed: sections.focusHeader, onRenamed: sections.renamed,
     onError: (text) => setTeamFeedback({ error: true, text }), onCancelled: () => sidebarRef.current?.focus() });
@@ -1004,7 +1003,7 @@ export function Sidebar({ open, onClose, collapseToIcons = false }: {
       ref={importReturnRef}
       onClick={() => setPlusOpen((o) => !o)}
       aria-label={remoteClient ? t("sidebar.new") : t("sidebar.newOrShare")}
-      className={phone ? PHONE_TOP_BUTTON : corner ? SIMPLE_CORNER_BUTTON : rail ? cn(SIMPLE_TOP_BUTTON, "size-8") : SIMPLE_TOP_BUTTON}
+      className={phone ? PHONE_TOP_BUTTON : corner ? SIMPLE_CORNER_BUTTON : SIMPLE_TOP_BUTTON}
       title={remoteClient ? t("sidebar.new") : t("sidebar.newOrShare")}
     >
       {!phone && !corner ? <Icon name="plus" size={16} /> : <Plus size={corner ? 18 : 20} strokeWidth={phone ? 2 : 1.5} />}
@@ -1067,8 +1066,8 @@ export function Sidebar({ open, onClose, collapseToIcons = false }: {
       style={{ ...drawer.props?.style, ["--sidebar-width" as string]: `${sizing.width}px` } as MotionStyle}
       className={cn(
         "relative flex h-full shrink-0 flex-col border-r-[0.5px] border-transparent bg-panel max-md:[--scroll-fade-surface:var(--color-app)]",
-        sizing.resizing && !sizing.snapping ? "transition-none" : "transition-[width] duration-500 ease-(--dusk-spring-soft) motion-reduce:transition-none",
-        rail ? (lights ? "w-[80px]" : "w-[68px]") : "w-[280px] md:w-[var(--sidebar-width)]",
+        sizing.resizing && !sizing.snapping ? "transition-none" : "transition-[width] duration-[calc(500ms*var(--motion-scale,1))] ease-(--dusk-spring-soft) motion-reduce:transition-none",
+        rail ? "w-[80px]" : "w-[288px] md:w-[var(--sidebar-width)]",
         "md:max-w-[calc(100vw-320px)]",
         // max-md: rather than an md: cancel: Tailwind v4 emits the native `translate`, and any value but `none` makes
         // this a containing block for its `fixed` descendants.
@@ -1138,7 +1137,7 @@ export function Sidebar({ open, onClose, collapseToIcons = false }: {
       </GlassBar>
 
       {!collapseToIcons && !phone && <SidebarResizeHandle sizing={sizing} sidebarRef={sidebarRef} avatars={density === "icons"} avatarsWidth={railWidth}
-        onAvatars={(avatars) => setSidebarDensity(avatars ? "icons" : "comfortable")} style={windowNoDragStyle} />}
+        onAvatars={(avatars) => morph(() => setSidebarDensity(avatars ? "icons" : "comfortable"))} style={windowNoDragStyle} />}
 
       <GlassScroller className={rail ? "[scrollbar-gutter:stable_both-edges]" : simpleDesk ? "px-3" : "px-2"}>
         <div className={cn("flex flex-col", simpleDesk ? "gap-2.5 pb-6 pt-1" : "gap-1 pb-2 pt-2")} onKeyDown={walkRows}
@@ -1248,6 +1247,7 @@ export function Sidebar({ open, onClose, collapseToIcons = false }: {
               </div>
             );
           })}
+          {simpleDesk && !q && <SidebarArchivedSection bots={state.bots} />}
           <MovedBotRows bots={state.bots} /><SearchResults query={query} onLanded={() => { setQuery(""); setSearchOpen(false); }} />
           {showPinnedCircleThreads && (
             <PinnedCircleThreadSection
@@ -1367,7 +1367,7 @@ export function Sidebar({ open, onClose, collapseToIcons = false }: {
             dispatch({ type: "patchGroup", groupId: roomSectionPicker.groupId, patch: { section } });
           }}
         />
-      {newRoom && <NewRoomPanel onClose={() => setNewRoom(false)} />}
+      <AnimatePresence>{newRoom && <NewRoomPanel key="new-room-panel" onClose={() => setNewRoom(false)} />}</AnimatePresence>
       {!remoteClient && archivedBotsOpen && (
         <ArchivedBotsPanel
           bots={archivedBots}

@@ -16,7 +16,7 @@ vi.mock("motion/react", async (original) => {
   return { ...actual, motion, AnimatePresence: ({ children }: { children: ReactNode }) => createElement(Fragment, null, children), useReducedMotion: () => true };
 });
 
-import { AUTO_RENEWALS, MobilePairingCard, RENEW_BEFORE_MS } from "./MobilePairingCard";
+import { AUTO_RENEWALS, MINT_RETRY_MS, MobilePairingCard, RENEW_BEFORE_MS } from "./MobilePairingCard";
 import { ServerPairingCard } from "./ServerPairingCard";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -56,18 +56,32 @@ const mount = async (props: Parameters<typeof MobilePairingCard>[0], pickIphone 
 };
 const qrs = () => host.querySelectorAll("[aria-label*=\"QR code\"]").length;
 
-it("always opens on the phone picker, Android shown but not pickable, then shows the iPhone's two numbered steps beside one qr", async () => {
+it("opens Android's link page with the APK download beside the same qr", async () => {
+  await mount({ remote: false }, false);
+  const android = host.querySelector<HTMLButtonElement>("[data-phone-platform=android]")!;
+  expect(android.getAttribute("aria-disabled")).toBeNull();
+  expect(android.textContent).not.toContain("Coming soon");
+  expect(android.textContent).not.toContain("Google Play");
+  expect(minted, "no code before a phone is picked").toBe(0);
+  await click("[data-phone-platform=android]");
+  await flush();
+  expect(host.textContent).toContain("Link your Android phone");
+  expect(minted).toBe(1);
+  const steps = host.querySelector("[data-phone-steps=android]")!;
+  expect(steps.querySelectorAll(":scope > li")).toHaveLength(2);
+  expect(steps.textContent).toContain("Get the dusk bot app");
+  const apk = steps.querySelector("[data-phone-apk]")!;
+  expect(apk.getAttribute("href")).toBe("https://dusk.bot/download#android");
+  expect(apk.textContent).toBe("Download");
+  expect(apk.getAttribute("aria-label")).toBe("Download dusk bot for Android");
+  expect(host.querySelector("[data-phone-qr]")?.getAttribute("data-phone-qr")).toBe("https://dusk.bot/m/pair#m=offer1&c=ABCDEFGH0001");
+});
+
+it("always opens on the phone picker, then shows the iPhone's two numbered steps beside one qr", async () => {
   window.localStorage.setItem("dusk.settings.phoneKind", "ios");
   await mount({ remote: false }, false);
   expect(host.textContent, "never straight to a remembered phone").toContain("Which phone do you have?");
   expect(host.querySelector("[data-phone-platform=ios] [data-store-mark=apple]")).not.toBeNull();
-  const android = host.querySelector<HTMLButtonElement>("[data-phone-platform=android]")!;
-  expect(android.getAttribute("aria-disabled")).toBe("true");
-  expect(android.textContent).toContain("Coming soon");
-  expect(android.className).not.toContain("hover:");
-  await click("[data-phone-platform=android]");
-  await flush();
-  expect(host.querySelector("[data-phone-flow=platform]"), "Android does not open a link page").not.toBeNull();
   expect(minted, "no code before a phone is picked").toBe(0);
   await click("[data-phone-platform=ios]");
   await flush();
@@ -145,7 +159,8 @@ it("on a dusk cloud shows one qr that opens the app's log in with the account's 
   await click("[data-phone-platform=ios]");
   expect(host.querySelector("[data-phone-cloud]")).not.toBeNull();
   expect(host.textContent).toContain("Log in on your iPhone");
-  expect(host.querySelector("[data-phone-steps=ios]")?.textContent).toContain("Open dusk bot and log in");
+  expect(host.querySelector("[data-phone-steps=ios]")?.textContent).toContain("Open it, tap log in to dusk cloud and use the same email");
+  expect(host.querySelector("[data-phone-camera-hint]")?.textContent).toBe("Or scan this with your iPhone's camera app");
   expect(host.querySelector("[data-phone-cloud-sign-in]")?.textContent).toContain("Log in with");
   expect(host.querySelector("[data-phone-cloud-sign-in]")?.textContent).toContain("owner@example.test");
   expect(host.querySelector("[data-phone-qr]")?.getAttribute("data-phone-qr")).toBe("https://dusk.bot/m/signin#email=owner%40example.test");
@@ -186,6 +201,8 @@ it("stops renewing after an hour or so and then says the code ended, with a new 
   expect(host.querySelector("[data-phone-code]")).not.toBeNull();
 });
 
+const retries = () => act(async () => { await vi.advanceTimersByTimeAsync(MINT_RETRY_MS.reduce((sum, ms) => sum + ms, 0) + 100); });
+
 it("when no code can be made, says why with one way to try again, and shows no empty code to copy", async () => {
   const base = api.getMockImplementation()!;
   let refuse = true;
@@ -195,6 +212,8 @@ it("when no code can be made, says why with one way to try again, and shows no e
   });
   await mount({ remote: false });
   await flush();
+  expect(host.querySelector("[data-pairing-failed]"), "it asks again before it says anything").toBeNull();
+  await retries();
   expect(host.querySelector("[data-pairing-failed] [role=alert]")?.textContent).toContain("cannot reach");
   expect(host.querySelector("[data-phone-qr]")).toBeNull();
   expect(host.querySelector("[data-phone-copy]")).toBeNull();
@@ -277,11 +296,203 @@ describe("a dusk cloud in the desktop app", () => {
     expect(host.querySelector("[data-pairing-failed] [role=alert]")?.textContent).toBe("Sign in to dusk cloud on this computer first, then try again.");
   });
 
+  it("asks again by itself while the account service does not answer, and shows the code once it does", async () => {
+    const real = answer;
+    let fails = 1;
+    answer = () => (fails-- > 0 ? { outcome: "failed" } : real());
+    await mount({ remote: false, cloudHome: true });
+    await flush();
+    expect(host.querySelector("[data-pairing-failed]")).toBeNull();
+    await retries();
+    expect(signIns, "the retry renews the checked code, so the person is not asked twice").toEqual([false, true]);
+    expect(host.querySelector("[data-phone-code]")?.textContent).toBe("ABCD EFGH");
+  });
+
+  it("when no account code can be made, the qr opens the app's email log in instead of an error", async () => {
+    answer = () => ({ outcome: "failed" });
+    await mount({ remote: false, cloudHome: true, email: "owner@example.test" });
+    await flush();
+    await retries();
+    expect(signIns).toEqual([false, true, true]);
+    expect(host.querySelector("[data-pairing-failed]")).toBeNull();
+    expect(host.querySelector("[data-phone-qr]")?.getAttribute("data-phone-qr")).toBe("https://dusk.bot/m/signin#email=owner%40example.test");
+    expect(host.querySelector("[data-phone-cloud-sign-in]")?.textContent).toContain("owner@example.test");
+  });
+
+  it("an account service without phone codes goes straight to the email log in, without retrying", async () => {
+    answer = () => ({ outcome: "unsupported" });
+    await mount({ remote: false, cloudHome: true, email: "owner@example.test" });
+    await flush();
+    expect(signIns).toEqual([false]);
+    expect(host.querySelector("[data-pairing-failed]")).toBeNull();
+    expect(host.querySelector("[data-phone-qr]")?.getAttribute("data-phone-qr")).toBe("https://dusk.bot/m/signin#email=owner%40example.test");
+  });
+
+  it("a signed-out desktop offers Sign in, not Try again", async () => {
+    const signIn = vi.fn(async () => {});
+    vi.stubGlobal("duskDesktop", { cloudPlan: { phoneSignIn: async () => ({ outcome: "signed-out" }), signIn } });
+    await mount({ remote: false, cloudHome: true });
+    await flush();
+    expect(host.querySelector("[data-pairing-failed] [role=alert]")?.textContent).toBe("Sign in to dusk cloud on this computer first, then try again.");
+    expect(host.querySelector("[data-pairing-failed] [data-phone-new-code]")?.textContent).toBe("Sign in");
+    await click("[data-pairing-failed] [data-phone-new-code]");
+    await flush();
+    expect(signIn).toHaveBeenCalledOnce();
+    expect(host.querySelector("[data-pairing-failed] [data-phone-new-code]")?.textContent).toBe("Try again");
+  });
+
   it("the local computer's pairing never asks the account for a phone code", async () => {
     await mount({ remote: false });
     await flush();
     expect(signIns).toEqual([]);
     expect(minted).toBe(1);
     expect(host.querySelector("[data-phone-qr]")?.getAttribute("data-phone-qr")).toBe("https://dusk.bot/m/pair#m=offer1&c=ABCDEFGH0001");
+  });
+});
+
+describe("no way for a phone to reach this workspace", () => {
+  const refuseUnreachable = async () => {
+    const { ApiError } = await import("@/state/store");
+    const base = api.getMockImplementation()!;
+    api.mockImplementation(async (path: string, init?: unknown) => {
+      if (path === "/api/mobile/pairing") throw Object.assign(new (ApiError as unknown as new (message: string) => Error)("A phone cannot reach this workspace yet: turn on phone access or give it a public address first."), { status: 409, body: { code: "unreachable" } });
+      return base(path, init);
+    });
+  };
+
+  it("asks for the account sign-in that turns on the relay when this computer is signed out", async () => {
+    const signIn = vi.fn(async () => {});
+    vi.stubGlobal("duskDesktop", { phoneRelay: { state: async () => ({ status: "signed-out" }) }, cloudPlan: { signIn } });
+    await refuseUnreachable();
+    await mount({ remote: false });
+    await flush();
+    const notice = host.querySelector("[data-pairing-failed]")!;
+    expect(notice.textContent).toContain("Sign in to your dusk bot account so your phone can reach this computer from anywhere.");
+    expect(notice.textContent).not.toMatch(/cannot reach this workspace|public address/);
+    await click("[data-pairing-failed] [data-phone-new-code]");
+    expect(signIn).toHaveBeenCalledOnce();
+  });
+
+  it("says this computer's phone access did not start, with Try again, when the relay is not the way", async () => {
+    vi.stubGlobal("duskDesktop", {});
+    await refuseUnreachable();
+    await mount({ remote: false });
+    await flush();
+    const notice = host.querySelector("[data-pairing-failed]")!;
+    expect(notice.textContent).toContain("Phone access could not start on this computer.");
+    expect(notice.querySelector("button")?.textContent).toBe("Try again");
+    expect(host.querySelector("[data-pairing-unreachable]")).toBeNull();
+  });
+
+  it("gives a server of the person's own the setup command, from the desktop app too", async () => {
+    vi.stubGlobal("duskDesktop", {});
+    await refuseUnreachable();
+    await mount({ remote: true });
+    await flush();
+    expect(host.querySelector("[data-pairing-unreachable]")?.textContent).toContain("npx duskbot setup");
+    expect(host.querySelector("[data-phone-access-copy]")).not.toBeNull();
+  });
+});
+
+describe("the Mac app's own account", () => {
+  const desktop = (signedIn: boolean, outcome: Record<string, unknown> = { outcome: "code", code: "WXYZ-QRST", expiresAt: Date.now() + 5 * 60_000, email: "owner@example.test", service: "https://preview.dusk.bot" }) => {
+    const bridge = { signedIn: vi.fn(async () => signedIn), signIn: vi.fn(async () => {}), phoneSignIn: vi.fn(async (_renew?: boolean) => outcome) };
+    vi.stubGlobal("duskDesktop", undefined);
+    (window as unknown as { duskDesktop: unknown }).duskDesktop = { cloudPlan: bridge };
+    return bridge;
+  };
+  afterEach(() => { delete (window as unknown as { duskDesktop?: unknown }).duskDesktop; });
+
+  it("signed out: the iPhone card opens the app's log in instead of going in, then goes on to its QR once signed in", async () => {
+    const bridge = desktop(false);
+    let release: () => void = () => {};
+    bridge.signIn.mockImplementation(() => new Promise<void>((resolve) => { release = resolve; }));
+    await mount({ remote: false });
+    expect(bridge.signIn).toHaveBeenCalledOnce();
+    expect(host.querySelector("[data-phone-log-in-first]")?.textContent).toBe("To connect your phone, log in to dusk bot");
+    expect(host.querySelector("[data-phone-flow=platform]")).not.toBeNull();
+    expect(host.querySelector("[data-phone-qr]")).toBeNull();
+    expect(minted).toBe(0);
+    bridge.signedIn.mockResolvedValue(true);
+    await act(async () => { release(); });
+    await flush(); await flush();
+    expect(host.querySelector("[data-phone-flow=platform]")).toBeNull();
+    expect(bridge.phoneSignIn).toHaveBeenCalledOnce();
+    expect(host.querySelector("[data-phone-qr]")?.getAttribute("data-phone-qr")).toContain("&a=WXYZQRST");
+  });
+
+  it("a log in left unfinished stays on the phone picker, never a pairing screen", async () => {
+    const bridge = desktop(false);
+    await mount({ remote: false });
+    await flush();
+    expect(bridge.signIn).toHaveBeenCalledOnce();
+    expect(host.querySelector("[data-phone-flow=platform]")).not.toBeNull();
+    expect(minted).toBe(0);
+  });
+
+  it("Touch ID is asked once a panel open: a cancel never brings it back by itself, and offers the plain QR or another try", async () => {
+    const bridge = desktop(true, { outcome: "canceled" });
+    await mount({ remote: false });
+    expect(bridge.phoneSignIn).toHaveBeenCalledOnce();
+    expect(host.querySelector("[data-phone-sign-in-declined]")).not.toBeNull();
+    // polls, refocus and time passing never ask again
+    window.dispatchEvent(new Event("focus"));
+    await act(async () => { await vi.advanceTimersByTimeAsync(30_000); });
+    expect(bridge.phoneSignIn).toHaveBeenCalledOnce();
+    expect(minted).toBe(0);
+    await click("[data-phone-plain-qr]");
+    await flush();
+    expect(host.querySelector("[data-phone-qr]")?.getAttribute("data-phone-qr")).toBe("https://dusk.bot/m/pair#m=offer1&c=ABCDEFGH0001");
+    expect(bridge.phoneSignIn).toHaveBeenCalledOnce();
+    bridge.phoneSignIn.mockResolvedValue({ outcome: "code", code: "WXYZ-QRST", expiresAt: Date.now() + 5 * 60_000, email: "owner@example.test" });
+    await click("[data-phone-include-sign-in]");
+    await flush();
+    expect(bridge.phoneSignIn).toHaveBeenCalledTimes(2);
+    expect(host.querySelector("[data-phone-qr]")?.getAttribute("data-phone-qr")).toContain("&a=WXYZQRST");
+  });
+
+  it("a renewal reuses the panel's approval: it never asks again", async () => {
+    const bridge = desktop(true);
+    await mount({ remote: false });
+    await act(async () => { await vi.advanceTimersByTimeAsync(10 * 60_000); });
+    expect(minted).toBeGreaterThan(1);
+    expect(bridge.phoneSignIn.mock.calls.slice(1).every(([renew]) => renew === true)).toBe(true);
+  });
+
+  it("signed in: the QR pairs and carries the account's sign-in for the phone, with the account named", async () => {
+    const bridge = desktop(true);
+    await mount({ remote: false });
+    expect(bridge.phoneSignIn).toHaveBeenCalledOnce();
+    expect(host.querySelector("[data-phone-qr]")?.getAttribute("data-phone-qr")).toBe("https://dusk.bot/m/pair#m=offer1&c=ABCDEFGH0001&a=WXYZQRST&ae=owner%40example.test&as=preview");
+    expect(host.querySelector("[data-phone-account-as]")?.textContent).toBe("Logs in as owner@example.test");
+  });
+
+  it("an account service that makes no phone codes yet still shows a QR that pairs", async () => {
+    desktop(true, { outcome: "unsupported" });
+    await mount({ remote: false });
+    expect(host.querySelector("[data-phone-qr]")?.getAttribute("data-phone-qr")).toBe("https://dusk.bot/m/pair#m=offer1&c=ABCDEFGH0001");
+  });
+
+  it("the Connect your phone dialog: one QR at once that also logs the phone in, for either phone, one Touch ID, Done closes it", async () => {
+    const bridge = desktop(true);
+    const onDone = vi.fn();
+    await mount({ remote: false, direct: { onDone } }, false);
+    await flush();
+    expect(host.querySelector("[data-phone-flow]"), "no picker and no linked phones list").toBeNull();
+    expect(bridge.phoneSignIn).toHaveBeenCalledOnce();
+    expect(minted).toBe(1);
+    expect(host.querySelector("[data-phone-qr]")?.getAttribute("data-phone-qr")).toContain("&a=WXYZQRST");
+    expect(host.querySelector("[data-phone-account-as]")?.textContent).toBe("Your phone logs in as owner@example.test and gets every place on your account.");
+    const steps = host.querySelector("[data-phone-steps=any]")!;
+    expect(steps.querySelector("[data-phone-app-store]")).not.toBeNull();
+    expect(steps.querySelector("[data-phone-apk]")?.textContent).toBe("Android");
+    window.dispatchEvent(new Event("focus"));
+    await act(async () => { await vi.advanceTimersByTimeAsync(10_000); });
+    expect(bridge.phoneSignIn, "polls and refocus never ask again").toHaveBeenCalledOnce();
+    api.mockImplementation(async (path: string) => path === "/api/mobile/devices"
+      ? { devices: [{ id: "p1", name: "Sam's iPhone", platform: "ios", createdAt: 1, lastSeenAt: 1 }], current: null } : { sessions: [], current: null });
+    await act(async () => { await vi.advanceTimersByTimeAsync(2_500); });
+    await click("[data-phone-linked] [data-primary]");
+    expect(onDone).toHaveBeenCalledOnce();
   });
 });

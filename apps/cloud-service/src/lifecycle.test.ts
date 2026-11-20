@@ -228,6 +228,46 @@ it("an ended plan's home that paused itself with no final backup is woken once t
   expect(f.api.deletes()).toHaveLength(1);
 });
 
+it("an ended plan's paused home is woken once for its final backup while its resume still reads as paused, then archived", async () => {
+  const f = await homeFixture();
+  const { c, sub } = await f.paid();
+  f.advance(60_000); f.api.autoPause(c.serverId!);
+  f.api.queueStarts();
+  sub.status = "ended"; sub.currentPeriodEnd = f.now(); sub.lastEventAt = f.now();
+  for (let n = 0; n < 16; n++) { f.advance(15_000); c.nextAttemptAt = 0; await f.service.reconcile(); }
+  expect(f.audit.entries(c.id).filter(e => e.action === "wake" && e.reason === "final_backup")).toHaveLength(1);
+  f.api.queueStarts(false); f.api.finishStarts();
+  await f.settle(c, x => x.managed!.archive?.serverId === null, 20, 15_000);
+  expect(c.serverId).toBeNull();
+  expect(f.api.machines.size).toBe(0);
+});
+
+it("an ended plan's home whose pause is refused for a while is asked again without outdating its final backup, then archived", async () => {
+  const f = await homeFixture();
+  const { c, sub } = await f.paid();
+  sub.status = "ended"; sub.currentPeriodEnd = f.now(); sub.lastEventAt = f.now();
+  f.api.busyNext(6);
+  for (let n = 0; n < 12 && !c.managed!.archive; n++) { f.advance(15_000); c.nextAttemptAt = 0; await f.service.reconcile(); }
+  const entries = f.audit.entries(c.id);
+  expect(entries.filter(e => e.action === "sleep" && e.reason === "plan")).toHaveLength(1);
+  expect(entries.filter(e => e.action === "backup").map(e => e.reason)).toEqual(["plan_ended"]);
+  expect(entries.filter(e => e.action === "wake")).toHaveLength(0);
+  expect(c.managed!.backups.at(-1)!.snapshotAt).toBeGreaterThanOrEqual(c.managed!.lastStopAt!);
+  expect(c.managed!.archive).toMatchObject({ serverId: null });
+  expect(c.serverId).toBeNull();
+});
+
+it("a failed lifecycle step is logged with its cause, not only counted", async () => {
+  const f = await homeFixture();
+  const { c } = await f.paid();
+  const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+  f.api.failNext(50);
+  c.nextAttemptAt = 0; await f.service.reconcile();
+  expect(c.attempts).toBe(1);
+  expect(warn).toHaveBeenCalledWith(expect.stringMatching(new RegExp(`^clouds: cloud ${c.id} step failed \\(attempt 1\\): \\w*Error: .+`)));
+  warn.mockRestore();
+});
+
 it("renewing before the end of retention brings the home back without losing anything", async () => {
   const f = await homeFixture();
   const { c, sub } = await f.paid();
@@ -300,6 +340,38 @@ it("pauses machines no live cloud runs on and never deletes one that may hold so
   expect(f.api.deletes()).toHaveLength(0);
   expect(f.audit.entries().map(e => e.action)).toContain("orphan_unclaimed");
   expect(f.api.machines.has(stray.id) && f.api.machines.has(duplicate.id) && f.api.machines.has(c.serverId!)).toBe(true);
+});
+
+it("a failed charge stops the cloud at once: a paid plan's data is kept 30 days from the failure, a trial's 7 from its end", async () => {
+  const problem = { since: 10 * DAY_MS, fixBy: 40 * DAY_MS, sent: ["first"] };
+  const sub = { id: "sub_x", cloudId: "c1", status: "payment_problem", cancelAtPeriodEnd: false, currentPeriodEnd: 10 * DAY_MS, paymentProblem: problem } as unknown as StoredSubscription;
+  const cloud = { id: "c1", subscriptionId: "sub_x" }, verdict = (entitlement: ReturnType<typeof entitlementOf>, now: number) =>
+    deletionVerdict({ now, retentionDays: 30, entitlement, finalBackup: null, lastStopAt: null, ownerRequest: null, hold: false });
+  expect(entitlementOf([sub], cloud, 10 * DAY_MS + 1)).toEqual({ active: false, until: 10 * DAY_MS, known: true, unpaid: { trial: false } });
+  // billing ends the plan at the deletion date: the clock still runs from the failure
+  const ended = { ...sub, status: "ended" } as StoredSubscription;
+  const at40 = entitlementOf([ended], { ...cloud, ended: true, endedAt: 40 * DAY_MS }, 40 * DAY_MS);
+  expect(at40).toMatchObject({ until: 10 * DAY_MS, unpaid: { trial: false } });
+  expect(verdict(at40, 40 * DAY_MS)).toMatchObject({ delete: false, reason: "no_final_backup", earliestAt: 40 * DAY_MS });
+  // a trial's first charge: kept 7 days from the trial's end, with no final backup owed
+  const trial = { ...sub, trialEndsAt: 9 * DAY_MS, paymentProblem: { ...problem, fixBy: 16 * DAY_MS, trial: true } } as unknown as StoredSubscription;
+  const trialEntitlement = entitlementOf([trial], cloud, 12 * DAY_MS);
+  expect(trialEntitlement).toMatchObject({ active: false, until: 9 * DAY_MS, unpaid: { trial: true } });
+  expect(verdict(trialEntitlement, 12 * DAY_MS)).toMatchObject({ delete: false, earliestAt: 16 * DAY_MS });
+  expect(verdict(trialEntitlement, 16 * DAY_MS)).toMatchObject({ delete: true, reason: "retention_over" });
+  // a trial billing gave a later date (it ended long before this policy): kept to that date
+  const late = entitlementOf([{ ...trial, paymentProblem: { ...problem, fixBy: 30 * DAY_MS, trial: true } } as unknown as StoredSubscription], cloud, 12 * DAY_MS);
+  expect(verdict(late, 29 * DAY_MS)).toMatchObject({ delete: false, earliestAt: 30 * DAY_MS });
+  const f = await homeFixture();
+  const { c, sub: paid } = await f.paid();
+  paid.status = "payment_problem"; paid.paymentProblem = { since: f.now(), fixBy: f.now() + 30 * DAY_MS, sent: ["first"] };
+  await f.settle(c, c => c.status === "stopped");
+  expect(c.status).toBe("stopped");
+  f.advance(25 * DAY_MS); for (let n = 0; n < 5; n++) { c.nextAttemptAt = 0; await f.service.reconcile(); }
+  expect(f.notices.filter(n => n.kind.startsWith("left_")), "billing sends this story's emails").toEqual([]);
+  paid.status = "active"; delete paid.paymentProblem; paid.currentPeriodEnd = f.now() + 30 * DAY_MS;
+  await f.settle(c, c => c.status === "running", 40);
+  expect(c.status).toBe("running");
 });
 
 it("a plan that drops the desktop ends its entitlement at the drop, and a renewal cancels a pending owner delete", async () => {

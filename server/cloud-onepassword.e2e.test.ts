@@ -120,11 +120,11 @@ async function startCloudHome(at: string, tree: string, port: number, onLog: (ch
   const contract = { DUSK_CLOUD_ROLE: "home", DUSK_CLOUD_MACHINE_ID: "3f9c2a4e-8b1d-4c6e-9a7f-2d5e8c1b0a93", DUSK_CLOUD_ADMIN_URL: "https://cloud.example.test",
     DUSK_CLOUD_BOOTSTRAP_SECRET: secret, DUSK_PUBLIC_URL: `https://${HOST}` };
   // What the image's ENV sets for the native modules, then the supervisor's own allow-list and secrets pipe.
-  const imageEnv = { PATH: process.env.PATH, DUSK_DUCKDB_DIR: tree, ...contract };
+  const imageEnv = { PATH: dirname(process.execPath), DUSK_DUCKDB_DIR: tree, ...contract };
   const { server, secrets } = cloudHomeChildEnvironments(cloudHomeConfiguration(imageEnv)!, imageEnv, at);
   const offline = `data:text/javascript,${encodeURIComponent('const real = globalThis.fetch; globalThis.fetch = async (url, init) => String(url).startsWith("http://127.0.0.1:") ? real(url, init) : new Response("offline fixture", { status: 503 });')}`;
   const started = spawnWithSecrets(process.execPath, ["--import", offline, join(SERVER_DIR, "index.ts")], {
-    ...server, DUSK_PORT: String(port), DUSK_WEBHOOK_PORT: String(port + 1), USERPROFILE: at,
+    ...server, DUSK_PORT: String(port), DUSK_WEBHOOK_PORT: String(port + 1), USERPROFILE: at, DUSK_TEST_SEALED_PATH: "1",
     ...(process.env.SystemRoot ? { SystemRoot: process.env.SystemRoot } : {}),
   }, secrets, null, true);
   let seen = "";

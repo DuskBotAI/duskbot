@@ -59,7 +59,7 @@ export function DeviceNotificationsRow() {
       <Switch
         checked={permission === "granted" && enabled}
         disabled={blocked}
-        aria-label={t("settings.deviceNotifications.show")}
+        aria-label={t("settings.deviceNotifications.title")}
         onClick={() => void toggle()}
       />
     </SettingRow>
@@ -72,7 +72,7 @@ function NotificationSoundsRow() {
     <SettingRow icon="speaker" title={t("settings.notificationSound.playTitle")}>
       <Switch
         checked={enabled}
-        aria-label={t("settings.notificationSounds.play")}
+        aria-label={t("settings.notificationSound.playTitle")}
         onClick={() => {
           setNotificationSounds(!enabled);
           if (!enabled) play(chosenSound(), { force: true });

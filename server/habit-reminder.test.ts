@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { chatMessageCount, HABIT_REMINDER, HABIT_REMINDER_AFTER, habitReminder } from "./habit-reminder.ts";
+import { chatMessageCount, HABIT_REMINDER, HABIT_REMINDER_AFTER, habitReminder, VENT_HINT, venting } from "./habit-reminder.ts";
 import { turnClockLine, withTurnClock } from "./turn-clock.ts";
 import { withoutTurnClock } from "./testing/turn-clock-text.ts";
 
@@ -27,5 +27,17 @@ describe("habit reminder", () => {
     expect(Math.ceil(Buffer.byteLength(HABIT_REMINDER) / 4)).toBeLessThanOrEqual(60);
     const clock = turnClockLine(Date.UTC(2026, 10, 11, 16, 0), "Asia/Kolkata") + habitReminder(25);
     expect(withoutTurnClock(withTurnClock(clock, "hi guys"))).toBe("hi guys");
+  });
+
+  it("adds the venting hint only to a message that is a feeling with no ask in it", () => {
+    for (const text of ["ugh mondays. my inbox is a disaster and i have 3 meetings before lunch", "so tired of this week", "honestly feeling burnt out"]) {
+      expect(venting(text), text).toBe(true);
+    }
+    for (const text of ["ugh, can you clear my inbox?", "remind me at 5, long day", "what's on my calendar", "thanks!", ""]) {
+      expect(venting(text), text).toBe(false);
+    }
+    expect(habitReminder(3, "ugh mondays")).toBe(` ${VENT_HINT}`);
+    expect(habitReminder(25, "ugh mondays")).toBe(` ${HABIT_REMINDER} ${VENT_HINT}`);
+    expect(VENT_HINT).not.toMatch(/\n|\u2014/);
   });
 });

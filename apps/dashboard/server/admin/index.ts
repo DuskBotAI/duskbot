@@ -10,11 +10,11 @@ import type { Analytics } from "../analytics/index.ts";
 import type { Usage } from "../analytics/usage.ts";
 import { summarize as summarizeUsage, type AdoptionInput } from "../analytics/usage-summary.ts";
 import { moreFocus, moreOf } from "../analytics/usage-more.ts";
-import { FEEDBACK_KINDS, feedbackAnswer } from "../analytics/feedback.ts";
+import { FEEDBACK_KINDS, allRecords, feedbackAnswer } from "../analytics/feedback.ts";
 /** the app and account events the deeper usage questions read */
 const MORE_EVENTS = ["app_action", "app_open", "app_close", "app_error", "app_feature", "onboarding_step", "onboarding_done", "page_view", "site_view", "cloud_state"] as const;
 import { EVENTS, EVENT_NAMES, isEventName } from "../analytics/events.ts";
-import type { AnalyticsSink, StoredEvent } from "../analytics/sink.ts";
+import { keepPartial, partialOf, type AnalyticsSink, type StoredEvent } from "../analytics/sink.ts";
 import type { LiveData } from "./live.ts";
 import { brevoChecker, waitlistCsv, type WaitlistSource } from "./waitlist.ts";
 import { healthTargets, newestBackup, probe, spoolCount, type ErrorCounter } from "./health.ts";
@@ -31,7 +31,12 @@ import type { OpsAccountsAnswer, OpsAccountsRange, OpsRelayCard } from "../../sr
 import { isTestEvent, isTestInstall, testAccountIds, testBuyerIds, withoutAccounts, withoutBilling } from "./test-accounts.ts";
 import { moneyIn, moneyViewOf, withoutOps, type MoneyView } from "./money-mode.ts";
 import { ReadUnavailable, createReadCache } from "./read-cache.ts";
-import { V2Error, overviewV2, paymentsV2, peopleV2, personV2, type V2Source } from "./v2.ts";
+import { NOW_SLACK_MS, createWebWarmer, type WarmStore } from "./web-warm.ts";
+import { SITE_VISIT_EVENTS, V2Error, overviewV2, paymentsV2, peopleV2, personV2, type V2Source } from "./v2.ts";
+import { countsAsBought, dailyMessages, launchStrip, SUBSCRIBER_FILTERS, subscriberRows, timelineOf, trialTotals, usageOf } from "./subscribers.ts";
+import type { BugReportStore } from "../bug-reports/store.ts";
+import { quote } from "../billing/pricing.ts";
+import type { StoredSubscription } from "../billing/store.ts";
 import type { Money } from "./payments.ts";
 import { ADMIN_ROLES, type Account, type AdminRole } from "../auth/store.ts";
 import { forGrowth, growthMay, growthUrl, type PanelRole } from "./roles.ts";
@@ -53,6 +58,8 @@ export interface AdminOptions {
   workspaces: () => StoredWorkspace[];
   analytics: Analytics;
   usage: Usage;
+  /** the in-app reports, for a subscriber's own */
+  bugReports?: BugReportStore;
   /** the slack edge's measured cloud wake times by desktop kind */
   wakeStats?: () => Partial<Record<string, { medianMs: number; p90Ms: number; samples: number }>>;
   waitlist: WaitlistSource | null;
@@ -68,6 +75,8 @@ export interface AdminOptions {
   ops?: { answer(): Promise<unknown>; collect(): Promise<unknown>; accounts(relays: readonly OpsRelayCard[], query?: { range?: OpsAccountsRange; limit?: number }): Promise<OpsAccountsAnswer> };
   /** how long an analytics answer is kept for the panel's refreshes (default 30 s); 0 keeps none, only joins identical reads in flight */
   readCacheMs?: number;
+  /** keeps the overview's default /web ranges computed ahead (web-warm.ts), every `everyMs` (default 10 minutes) */
+  warm?: { store: WarmStore; everyMs?: number } | null;
   /** the local fixture: made-up relay cards instead of asking the relays */
   relayFixture?: boolean;
   service: { version: string | null; startedAt: number; environment: string; dataDir: string; backupDir: string | null; database: () => { ok: boolean; detail: string } | null };
@@ -83,6 +92,12 @@ const rethrow = (error: unknown): never => {
 };
 export const parseAdminEmails = (value: string | undefined) => [...new Set((value ?? "").split(",").map(item => item.trim().toLowerCase()).filter(item => /^[^\s@]+@[^\s@]+$/.test(item)))];
 const ACTIVE_NAMES = EVENT_NAMES.filter(name => "active" in EVENTS[name]);
+/** "using the app": the app's own events and its server heartbeat, not site visits or sign-ins */
+const APP_NAMES = EVENT_NAMES.filter(name => EVENTS[name].source === "app" || name === "app_active");
+const REALTIME_TTL_MS = 4_000;
+/** how long past its freshness a kept read is still answered at once while a new one is computed behind it */
+const STALE_MS = 12 * 60 * 60_000;
+const SUBSCRIBER_EVENTS = ["app_messages", "app_open"];
 const bundleLabel = (id: string | null | undefined) => BILLING_CONFIG.bundles.find(bundle => bundle.id === id)?.label.toLowerCase() ?? (id ? "custom" : null);
 const regionLabel = (id: string, managed: boolean) => (labelOfRegion(managed ? MANAGED_REGION.id : id) ?? id).toLowerCase();
 const int = (value: string | null, fallback: number, min: number, max: number) => {
@@ -117,13 +132,24 @@ export function createAdmin(options: AdminOptions) {
     const hidden = () => new Set([...testAccountIds(view.directory().accounts, reviewEmail), ...testBuyerIds(view.store().checkouts, reviewEmail)]);
     const directory = () => withoutAccounts(view.directory(), hidden());
     const store = () => withoutBilling(view.store(), hidden());
-    const sink: AnalyticsSink = { ...view.sink, scan: async (since, until, names) => { const ids = hidden(); return (await view.sink.scan(since, until, names)).filter(event => !isTestEvent(event, ids)); },
+    const sink: AnalyticsSink = { ...view.sink, scan: async (since, until, names) => { const ids = hidden(), all = await view.sink.scan(since, until, names); return keepPartial(all, all.filter(event => !isTestEvent(event, ids))); },
       // the rollups read the unfiltered events and drop the same ones, keyed apart from the unfiltered view's
       rollupScope: () => {
         const base = view.sink.rollupScope?.();
         if (!base) return null;
         const ids = hidden();
         return { key: `${base.key}~clean`, sink: base.sink, hidden: ids, drops: event => isTestEvent(event, ids) };
+      },
+      events: async query => {
+        const ids = hidden(), kept: StoredEvent[] = [];
+        let before = query.before;
+        for (let page = 0; page < 5 && kept.length < query.limit; page++) {
+          const got = await view.sink.events({ ...query, before });
+          kept.push(...got.filter(event => !isTestEvent(event, ids)));
+          if (got.length < query.limit) break;
+          before = got.at(-1)!.at;
+        }
+        return kept.slice(0, query.limit);
       },
       person: async query => { const ids = hidden(); return (await view.sink.person(query)).filter(event => !isTestEvent(event, ids)); },
       lastSeen: async since => { const seen = await view.sink.lastSeen(since); for (const id of hidden()) seen.delete(id); return seen; },
@@ -232,7 +258,9 @@ export function createAdmin(options: AdminOptions) {
   function subsOf(accountId: string) { return billing.service.subscriptions(accountId); }
   function planOf(accountId: string) {
     const subs = subsOf(accountId).filter(sub => sub.status !== "ended" && sub.status !== "pending").sort((a, b) => b.createdAt - a.createdAt);
-    return subs[0] ? { plan: bundleLabel(subs[0].bundle), status: subs[0].status } : null;
+    if (!subs[0]) return null;
+    const time = now(), trial = store().subscriptions.some(sub => sub.accountId === accountId && sub.status === "active" && sub.trialEndsAt !== undefined && sub.trialEndsAt > time);
+    return { plan: bundleLabel(subs[0].bundle), status: subs[0].status, trial };
   }
   function lastSeen(accountId: string, sessions = directory().sessions) {
     return sessions.filter(session => session.accountId === accountId).reduce<number | null>((best, session) => best === null || session.lastSeenAt > best ? session.lastSeenAt : best, null);
@@ -268,7 +296,7 @@ export function createAdmin(options: AdminOptions) {
     const store = options.usage.store;
     const [daily, previousDaily, people, previousPeople, snapshots, frustrations, digests, recentPeople, signals, spans, events] = await Promise.all([
       store.daily(days[0]!, days.at(-1)!), store.daily(previousDays[0]!, previousDays.at(-1)!), store.people(days[0]!, days.at(-1)!),
-      store.people(previousDays[0]!, previousDays.at(-1)!), store.snapshots(), store.records("frustration", start, end, 500), store.records("digest", start, end, 500),
+      store.people(previousDays[0]!, previousDays.at(-1)!), store.snapshots(), allRecords(store, "frustration", start, end).then(read => read.rows), allRecords(store, "digest", start, end).then(read => read.rows),
       store.people(dayKey(now() - 90 * DAY), dayKey(now())), store.records("signal", start, end, 50_000), store.routines(),
       v.sink.scan(start, end, MORE_EVENTS),
     ]).then(([daily, previousDaily, ...rows]) => {
@@ -278,7 +306,7 @@ export function createAdmin(options: AdminOptions) {
       const [people, previousPeople, snapshots, frustrations, digests, recentPeople, signals, spans, events] = rows;
       return [daily, previousDaily, real(people), real(previousPeople), real(snapshots), real(frustrations), real(digests), real(recentPeople), real(signals), real(spans), events] as const;
     });
-    const answer = summarizeUsage({ days, daily, previousDaily, people, previousPeople: new Set(previousPeople.filter(row => row.turns > 0).map(row => row.accountId)).size, snapshots, frustrations, digests, adoption: adoption(snapshots, recentPeople) });
+    const answer = summarizeUsage({ days, daily, previousDaily, people, previousPeople: new Set(previousPeople.filter(row => row.turns > 0).map(row => row.accountId)).size, snapshots, frustrations, digests, adoption: adoption(snapshots, recentPeople, v) });
     const signIns = signals.filter(record => (record.data as { name: string }).name === "engine_sign_in")
       .map(record => ({ id: record.id, name: "engine_sign_in", at: record.at, accountId: record.accountId, props: (record.data as { props: StoredEvent["props"] }).props }));
     const billingState = v.store();
@@ -286,21 +314,21 @@ export function createAdmin(options: AdminOptions) {
       billing: { checkouts: billingState.checkouts, subscriptions: billingState.subscriptions, feedback: billingState.feedback ?? [] },
       accounts: v.directory().accounts, from: start, to: end, now: now(), wake: wakeOf() });
     const focus = [...answer.focus, ...moreFocus(more)].sort((a, b) => b.weight - a.weight).slice(0, 5);
-    return { ...answer, focus, more };
+    return { ...answer, focus, more, partialBefore: partialOf(events) };
   }
   /** the slack edge's measured wakes: the kind with the most samples stands for all */
   function wakeOf() {
     const stats = Object.values(options.wakeStats?.() ?? {}).filter((stat): stat is { medianMs: number; p90Ms: number; samples: number } => !!stat).sort((a, b) => b.samples - a.samples);
     return stats[0] ? { count: stats.reduce((sum, stat) => sum + stat.samples, 0), p50Ms: stats[0].medianMs, p90Ms: stats[0].p90Ms } : undefined;
   }
-  function adoption(snapshots: Awaited<ReturnType<Usage["store"]["snapshots"]>>, recent: Awaited<ReturnType<Usage["store"]["people"]>>): AdoptionInput {
-    const { accounts, sessions } = directory();
+  function adoption(snapshots: Awaited<ReturnType<Usage["store"]["snapshots"]>>, recent: Awaited<ReturnType<Usage["store"]["people"]>>, v: View): AdoptionInput {
+    const { accounts, sessions } = v.directory();
     const bot = new Set<string>(), routine = new Set<string>(), connector = new Set<string>(), phone = new Set<string>(), cloud = new Set<string>();
     for (const row of snapshots) {
       if (row.snapshot.bots > 0) bot.add(row.accountId);
       if (row.snapshot.routines + row.snapshot.webhooks + row.snapshot.appEvents > 0) routine.add(row.accountId);
     }
-    for (const ws of options.workspaces()) {
+    for (const ws of v.workspaces()) {
       const id = ws.ownerAccountId;
       if (!id) continue;
       if (ws.report?.bots?.length) bot.add(id);
@@ -310,7 +338,7 @@ export function createAdmin(options: AdminOptions) {
     }
     for (const session of sessions) if (session.kind === "mobile") phone.add(session.accountId);
     for (const row of recent) if (row.appTurns > 0) connector.add(row.accountId);
-    for (const c of allClouds()) if (!c.ended) cloud.add(c.accountId);
+    for (const c of v.clouds()) if (!c.ended) cloud.add(c.accountId);
     const known = new Set(accounts.map(account => account.id)), count = (set: Set<string>) => [...set].filter(id => known.has(id)).length;
     return { accounts: accounts.length, bot: count(bot), routine: count(routine), connector: count(connector), phone: count(phone), cloud: count(cloud) };
   }
@@ -318,17 +346,20 @@ export function createAdmin(options: AdminOptions) {
   async function overview(days: number, v: View) {
     const time = now(), range = dayRange(time, days), since = Date.parse(`${range[0]}T00:00:00Z`);
     const { accounts, sessions } = v.directory();
-    const [daily, waitlistDays, waitlistCount, wau, mau, marked] = await Promise.all([
+    const today = Date.parse(`${range.at(-1)}T00:00:00Z`);
+    const [daily, waitlistDays, waitlistCount, marked, appWau, activeNow, siteVisitors] = await Promise.all([
       v.sink.daily(["active_accounts", "site_visitors", "site_view", "app_active"], range[0]!, range.at(-1)!),
       v.waitlist?.byDay(since).catch(() => []) ?? Promise.resolve([]),
       v.waitlist?.count().catch(() => null) ?? Promise.resolve(null),
-      v.sink.accounts(ACTIVE_NAMES, time - 7 * DAY), v.sink.accounts(ACTIVE_NAMES, time - 30 * DAY),
       Promise.all(["onboarding_done", "app_paired", "first_bot_reply", "plan_chosen"].map(name => v.sink.accounts([name], since))),
+      v.sink.accounts(APP_NAMES, time - 7 * DAY), v.sink.accounts(ACTIVE_NAMES, today),
+      v.sink.visitorCount(since, time + 60_000, SITE_VISIT_EVENTS),
     ]);
     const hidden = v.hidden(), kept = (ids: Set<string>) => hidden.size ? new Set([...ids].filter(id => !hidden.has(id))) : ids;
-    const [wauKept, mauKept, markedKept] = [kept(wau), kept(mau), marked.map(kept)];
+    const [markedKept, appWauKept] = [marked.map(kept), kept(appWau)];
+    const activeToday = kept(new Set([...activeNow, ...sessions.filter(session => session.lastSeenAt >= today).map(session => session.accountId)])).size;
+    const untracked = v.live ? null : accounts.filter(account => analytics.optedOut(account.id)).length;
     const series = (name: string) => perDay(range, daily.filter(row => row.name === name));
-    const seenToday = new Set(sessions.filter(session => session.lastSeenAt >= Date.parse(`${range.at(-1)}T00:00:00Z`)).map(session => session.accountId));
     const activeSeries = series("active_accounts");
     const clouds = v.clouds();
     const byState = new Map<string, number>();
@@ -339,22 +370,18 @@ export function createAdmin(options: AdminOptions) {
       now: time, days, range, data: v.live ? live!.label : "own",
       totals: {
         accounts: accounts.length, newAccounts: accounts.filter(account => account.createdAt >= since).length,
-        activeToday: Math.max(activeSeries.at(-1) ?? 0, seenToday.size), wau: wauKept.size, mau: mauKept.size,
+        activeToday, untracked, appWau: appWauKept.size,
         paying: new Set(v.store().subscriptions.filter(isPaying).map(sub => sub.accountId)).size,
-        waitlist: waitlistCount, clouds: clouds.filter(c => c.status !== "destroyed").length,
-        devices: sessions.filter(session => session.kind !== "web").length,
+        waitlist: waitlistCount, clouds: [...byState].reduce((sum, [state, count]) => state === "destroyed" ? sum : sum + count, 0),
       },
       series: {
         signups: perDay(range, accounts.map(account => ({ day: dayKey(account.createdAt), count: 1 }))),
         waitlist: perDay(range, waitlistDays), active: activeSeries, visitors: series("site_visitors"), views: series("site_view"), apps: series("app_active"),
       },
-      funnel: funnel({ since, siteVisitors: series("site_visitors").reduce((a, b) => a + b, 0), accounts, checkouts: v.store().checkouts, subscriptions: v.store().subscriptions, sessions,
+      funnel: funnel({ since, siteVisitors, accounts, checkouts: v.store().checkouts, subscriptions: v.store().subscriptions, sessions,
         workspaces: owned, marked: { onboarded: markedKept[0]!, paired: markedKept[1]!, replied: markedKept[2]!, chosen: markedKept[3]! } }),
       clouds: [...byState].map(([state, count]) => ({ state, count })).sort((a, b) => b.count - a.count),
       bots: { workspaces: owned.length, bots: owned.reduce((sum, ws) => sum + (ws.report?.bots?.length ?? 0), 0), turns30d: owned.reduce((sum, ws) => sum + workspaceTurns(ws, sinceDay), 0) },
-      platforms: [...sessions.filter(session => session.kind !== "web").reduce((map, session) => map.set(session.platform ?? "unknown", (map.get(session.platform ?? "unknown") ?? 0) + 1), new Map<string, number>())]
-        .map(([platform, count]) => ({ platform, count })).sort((a, b) => b.count - a.count),
-      spend: { exposed: false, note: "the managed backend keeps its InstaBox cost book internally; it has no read for this panel yet" },
     };
   }
 
@@ -416,6 +443,55 @@ export function createAdmin(options: AdminOptions) {
     };
   }
 
+  const subscriberPlan = (sub: Pick<StoredSubscription, "cart">) => { try { return bundleLabel(quote(sub.cart, BILLING_CONFIG).bundle ?? null) ?? "custom"; } catch { return "custom"; } };
+  /** what the subscribers page reads about everyone with a subscription */
+  async function subscriberInputs(v: View, accountIds: ReadonlySet<string> | null) {
+    const time = now(), mine = <T extends { accountId?: string | null; ownerAccountId?: string | null }>(rows: readonly T[]): T[] =>
+      accountIds ? rows.filter(row => accountIds.has((row.accountId ?? row.ownerAccountId) as string)) : [...rows];
+    const { accounts, sessions } = v.directory();
+    const [events, people, snapshots] = await Promise.all([v.sink.scan(time - 90 * DAY, time + 60_000, SUBSCRIBER_EVENTS),
+      options.usage.store.people(dayKey(time - 90 * DAY), dayKey(time)), options.usage.store.snapshots()]);
+    const hidden = v.hidden(), real = <T extends { accountId: string; workspaceId?: string }>(rows: readonly T[]) => rows.filter(row => !hidden.has(row.accountId) && !isTestInstall(row.workspaceId));
+    const state = v.store();
+    return {
+      input: { now: time, accounts: accountIds ? accounts.filter(account => accountIds.has(account.id)) : accounts, sessions: mine(sessions), billing: { subscriptions: mine(state.subscriptions), invoices: state.invoices, feedback: state.feedback ?? [], customers: state.customers, ledger: state.ledger ?? [] },
+        events: mine(events), people: mine(real(people)), snapshots: mine(real(snapshots)), workspaces: mine(v.workspaces()),
+        clouds: mine(v.clouds()).map(c => ({ accountId: c.accountId, workspaceId: c.workspaceId ?? null, status: billing.clouds.view(c).status })), planOf: subscriberPlan },
+      state, accounts, partialBefore: partialOf(events),
+    };
+  }
+  async function subscribersAnswer(url: URL, v: View) {
+    const filter = url.searchParams.get("filter") ?? "trial";
+    if (!(SUBSCRIBER_FILTERS as readonly string[]).includes(filter)) throw new AdminError(400, "invalid_request", "Unknown filter.");
+    const { input, state, accounts, partialBefore } = await subscriberInputs(v, null);
+    const rows = subscriberRows(input);
+    const counts = Object.fromEntries(SUBSCRIBER_FILTERS.map(name => [name, name === "all" ? rows.length : rows.filter(row => row.bucket === name).length]));
+    return { now: input.now, filter, counts, rows: filter === "all" ? rows : rows.filter(row => row.bucket === filter), launch: launchStrip(state, accounts, input.now), trials: trialTotals(state.subscriptions, input.now), partialBefore };
+  }
+  async function subscriber(id: string, v: View) {
+    const time = now(), account = v.directory().accounts.find(item => item.id === id);
+    if (!account) throw new AdminError(404, "not_found", "Not found.");
+    const { input, state } = await subscriberInputs(v, new Set([id]));
+    const [row] = subscriberRows(input);
+    if (!row) throw new AdminError(404, "not_found", "This person has no subscription.");
+    const identifies = await v.sink.events({ accountId: id, name: "identify", limit: 200 });
+    const installs = [...new Set(identifies.map(event => event.ctx?.install).filter((install): install is string => !!install))];
+    const visitors = [...new Set(identifies.map(event => event.ctx?.visitor).filter((visitor): visitor is string => !!visitor))];
+    const [events, reports] = await Promise.all([v.sink.person({ accountId: id, visitors, installs, since: 0, limit: 5000 }),
+      options.bugReports ? options.bugReports.fromInstalls([...new Set([...installs, ...installs.map(install => install.replace(/^app:/, ""))])], 20) : Promise.resolve([])]);
+    const subs = input.billing.subscriptions.filter(countsAsBought);
+    const feedback = (state.feedback ?? []).filter(item => item.accountId === id).sort((a, b) => b.at - a.at);
+    const days = new Map<string, { turns: number; failed: number }>();
+    for (const day of input.people) { const had = days.get(day.day) ?? { turns: 0, failed: 0 }; days.set(day.day, { turns: had.turns + day.turns, failed: had.failed + day.failed }); }
+    const daily = dailyMessages(events, time).map(day => ({ ...day, turns: days.get(day.day)?.turns ?? 0, failed: days.get(day.day)?.failed ?? 0 }));
+    return {
+      account: { id, handle: row.handle, email: account.email, name: account.name ?? null, createdAt: account.createdAt }, row, daily,
+      timeline: timelineOf(events, subs, feedback, account.createdAt, time), usage: usageOf(events),
+      reports: reports.map(({ id: reportId, source, description, appVersion, platform, status, fixedIn, receivedAt }) => ({ id: reportId, source, description, appVersion, platform, status, fixedIn, receivedAt })),
+      cancel: feedback.map(({ answer, expected, improve, offer, outcome, at }) => ({ answer, expected: expected ?? null, improve: improve ?? null, offer: offer ?? null, outcome: outcome ?? "cancelled", at })),
+    };
+  }
+
   function clouds(url: URL, v: View) {
     const status = url.searchParams.get("status") ?? "live";
     const emails = emailMap();
@@ -466,7 +542,7 @@ export function createAdmin(options: AdminOptions) {
     const time = now(), since = time - days * DAY;
     const [list, counts] = await Promise.all([v.sink.events({ name, accountId, since, before, limit: limit + 1 }), v.sink.counts(since, time + 1)]);
     const emails = new Map(v.directory().accounts.map(account => [account.id, account.email]));
-    return { names: EVENT_NAMES, counts, events: list.slice(0, limit).map(event => ({ ...event, email: event.accountId ? emails.get(event.accountId) ?? null : null })),
+    return { names: EVENT_NAMES, counts, untracked: v.live ? null : v.directory().accounts.filter(account => analytics.optedOut(account.id)).length, events: list.slice(0, limit).map(event => ({ ...event, email: event.accountId ? emails.get(event.accountId) ?? null : null })),
       next: list.length > limit ? list[limit - 1]!.at : null };
   }
 
@@ -501,18 +577,28 @@ export function createAdmin(options: AdminOptions) {
   const reads = createReadCache({ now });
   /** how long a GET answer is kept: null for the ones that are never kept (an audited view, an export, live probes) */
   function readTtl(route: string): number | null {
-    if (/^\/(?:me|health|audit|waitlist\.csv|ops\/relays|experience\/timeline)$/.test(route) || /^\/(?:users|journeys|v2\/people)\/[^/]+$/.test(route) || /^\/clouds\/[^/]+\/usage$/.test(route)) return null;
-    return route === "/realtime" ? 0 : options.readCacheMs ?? 30_000;
+    if (/^\/(?:me|health|audit|waitlist\.csv|ops\/relays|experience\/timeline)$/.test(route) || /^\/(?:users|journeys|v2\/people|subscribers)\/[^/]+$/.test(route) || /^\/clouds\/[^/]+\/usage$/.test(route)) return null;
+    return route === "/realtime" ? REALTIME_TTL_MS : options.readCacheMs ?? 30_000;
   }
-  /** one question: the path, its query (a `to` near now rounded to 30 s, so a refresh shares the answer) and the panel's switches */
-  function readKey(req: IncomingMessage, url: URL) {
+  const switchesOf = (req: IncomingMessage) => {
+    const header = (name: string) => String(req.headers[name] ?? "");
+    return { data: header("x-dusk-admin-data"), tests: header("x-dusk-admin-tests"), money: header("x-dusk-admin-money") };
+  };
+  /** one question: the path, its query (a `to` within 10 minutes of now reads as now, so every "until now" view shares one answer) and the panel's switches */
+  function readKey(url: URL, switches: { data: string; tests: string; money: string }) {
     const params = [...url.searchParams].map(([key, value]) => {
       const at = Number(value);
-      return key === "to" && Number.isSafeInteger(at) && Math.abs(now() - at) < 120_000 ? [key, String(Math.floor(at / 30_000))] : [key, value];
+      return key === "to" && Number.isSafeInteger(at) && Math.abs(now() - at) < NOW_SLACK_MS ? [key, "now"] : [key, value];
     }).sort(([a], [b]) => a!.localeCompare(b!));
-    const header = (name: string) => String(req.headers[name] ?? "");
-    return `${url.pathname}?${new URLSearchParams(params as Array<[string, string]>)}|${header("x-dusk-admin-data")}|${header("x-dusk-admin-tests")}|${header("x-dusk-admin-money")}`;
+    return `${url.pathname}?${new URLSearchParams(params as Array<[string, string]>)}|${switches.data}|${switches.tests}|${switches.money}`;
   }
+  const requestWith = (switches: { data: string; tests: string; money: string }) => ({ headers: Object.fromEntries(
+    Object.entries({ "x-dusk-admin-data": switches.data, "x-dusk-admin-tests": switches.tests, "x-dusk-admin-money": switches.money }).filter(([, value]) => value)) }) as unknown as IncomingMessage;
+  const warmer = options.warm ? createWebWarmer({ store: options.warm.store, reads, now, everyMs: options.warm.everyMs ?? 10 * 60_000, keepMs: (options.readCacheMs ?? 30_000) + STALE_MS,
+    keyOf: (viewer, url) => readKey(url, viewer), answer: async (viewer, urls) => (await viewOf(requestWith(viewer))).deep.webMany(urls) }) : null;
+  void warmer?.start();
+  /** the view whose live numbers (online now) a request reads, without reloading the live service's accounts */
+  const onlineViewOf = (req: IncomingMessage) => !liveView || req.headers["x-dusk-admin-data"] === "own" ? ownViewOf(req) : showTests(req) ? liveView : liveClean!;
 
   async function handle(req: IncomingMessage, res: ServerResponse, url: URL): Promise<boolean> {
     const path = url.pathname, method = req.method ?? "GET";
@@ -523,17 +609,20 @@ export function createAdmin(options: AdminOptions) {
     if (role === "growth" && !growthMay(method, route)) throw new AdminError(403, "not_allowed", "This admin role can't open that.");
     if (role === "growth") url = growthUrl(route, url);
     const shape = (data: unknown) => role === "growth" ? forGrowth(route, data) : data;
-    if (mutation) reads.clear();
+    if (mutation) { reads.clear(); warmer?.forget(); }
     try {
       if (method !== "GET") return await answer(req, res, url, owner, route, method, data => { options.json(res, 200, data); return true; });
       const ttlMs = readTtl(route);
       if (ttlMs === null) return await reads.bounded(answer(req, res, url, owner, route, method, data => { options.json(res, 200, shape(data)); return true; }));
-      const data = await reads.get(readKey(req, url), ttlMs, async () => {
+      if (route === "/web") warmer?.note(url, switchesOf(req));
+      const data = await reads.get(readKey(url, switchesOf(req)), ttlMs, async () => {
         const out: { data?: unknown } = {};
         await answer(req, res, url, owner, route, method, data => { out.data = data; return true; });
         return out.data;
-      });
-      options.json(res, 200, shape(data));
+      }, route === "/realtime" ? 0 : STALE_MS);
+      // a kept answer may be minutes old; who is online is always now
+      const fresh = route === "/web" && data && typeof data === "object" ? { ...data, online: await onlineViewOf(req).deep.onlineNow() } : data;
+      options.json(res, 200, shape(fresh));
       return true;
     } catch (error) {
       if (error instanceof ReadUnavailable) throw new AdminError(error.status, error.code, error.message);
@@ -553,6 +642,13 @@ export function createAdmin(options: AdminOptions) {
         await audit(owner.id, "user.view", userMatch[1]!);
         return send(answer);
       }
+      if (route === "/subscribers") return send(await subscribersAnswer(url, ownViewOf(req)));
+      const subscriberMatch = /^\/subscribers\/([A-Za-z0-9_-]{1,80})$/.exec(route);
+      if (subscriberMatch) {
+        const answer = await subscriber(subscriberMatch[1]!, ownViewOf(req));
+        await audit(owner.id, "subscriber.view", subscriberMatch[1]!);
+        return send(answer);
+      }
       if (route === "/clouds") return send(clouds(url, ownViewOf(req)));
       const usage = /^\/clouds\/(c[0-9a-f]{24})\/usage$/.exec(route);
       if (usage) {
@@ -566,9 +662,8 @@ export function createAdmin(options: AdminOptions) {
         if (!options.waitlist) return send({ configured: false, total: 0, entries: [], brevo: { state: "not_configured", listCount: null, waitlistCount: null, checkedAt: null } });
         const q = (url.searchParams.get("q") ?? "").slice(0, 100);
         const offset = int(url.searchParams.get("offset"), 0, 0, 10_000_000), limit = int(url.searchParams.get("limit"), 50, 1, 200);
-        const [page, count] = await Promise.all([options.waitlist.list({ search: q, limit, offset }), options.waitlist.count()]);
         const days = dayRange(now(), 30);
-        const byDay = await options.waitlist.byDay(Date.parse(`${days[0]}T00:00:00Z`));
+        const [page, count, byDay] = await Promise.all([options.waitlist.list({ search: q, limit, offset }), options.waitlist.count(), options.waitlist.byDay(Date.parse(`${days[0]}T00:00:00Z`))]);
         return send({ configured: true, count, total: page.total, offset, limit, entries: page.entries, days, series: perDay(days, byDay), brevo: await brevo(count) });
       }
       if (route === "/waitlist.csv") {
@@ -603,14 +698,17 @@ export function createAdmin(options: AdminOptions) {
           view.live ? Promise.resolve([]) : options.usage.store.records("signal", since, until, 50_000)
             .then(rows => clean ? rows.filter(row => !isTestInstall(row.workspaceId) && !(row.accountId && ids.has(row.accountId))) : rows)]);
         const items = itemsOf(events, signals);
-        if (!timeline) return send(experienceAnswer(items, { from, to, now: time }));
+        // a read cut at its limit starts the chart at the first whole day it holds, so the cut never draws as growth
+        const partialBefore = partialOf(events), whole = partialBefore === null ? from : Math.max(from, Math.ceil(partialBefore / DAY) * DAY);
+        if (!timeline) return send({ ...experienceAnswer(items, { from: whole, to, now: time }), partialBefore });
         await audit(owner.id, "experience.timeline", who);
         return send(timelineAnswer(items, who, time));
       }
       if (route === "/ops/relays") return send(await relays.list());
       if (route === "/ops/sharing") {
         const time = now();
-        return send(sharingOf(await (await viewOf(req)).sink.scan(time - SHARING_LOOKBACK_DAYS * DAY, time + 1, ["app_action", "app_open"]), time));
+        const events = await (await viewOf(req)).sink.scan(time - SHARING_LOOKBACK_DAYS * DAY, time + 1, ["app_action", "app_open"]);
+        return send({ ...sharingOf(events, time), partialBefore: partialOf(events) });
       }
       if (route === "/ops/accounts") {
         if (!options.ops) throw new AdminError(404, "not_found", "The ops page is not connected.");

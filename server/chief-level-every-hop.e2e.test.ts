@@ -65,7 +65,7 @@ it("carries a Chief's level down every hop it hands out, in threads and in a roo
     const current = await bots();
     expect(current.find(bot => bot.id === ada.id).approvalMode).toBe("ask");
     expect(current.find(bot => bot.id === bea.id).approvalMode).toBe("ask");
-    expect(current.find(bot => bot.id === bea.id).tasks.find((task: any) => task.threadId === beaTurn.threadId).approvalMode).toBe("auto");
+    expect(current.find(bot => bot.id === bea.id).tasks.find((task: any) => task.threadId === beaTurn.threadId).approvalMode ?? "ask").toBe("ask");
     expect(await chips(adaTurn.threadId)).toEqual(["Approve for me: handed on by Clive, a Chief of Staff on Approve for me"]);
     expect(await chips(beaTurn.threadId)).toEqual(["Approve for me: handed on by Ada, from Clive, a Chief of Staff on Approve for me"]);
 
@@ -78,9 +78,10 @@ it("carries a Chief's level down every hop it hands out, in threads and in a roo
     await expect.poll(() => providerTurns().filter(turn => turn.botId === ola.id).length, { timeout: 30_000 }).toBe(2);
     expect((await cli("wait", "--bot", ola.id, "--task", ola.activeTaskId, "--timeout", "25")).status).toBe("settled");
     const ordinaryTurn = turnOf(bea.id, 1);
-    expect(ordinaryTurn.threadId).not.toBe(beaTurn.threadId);
+    // the same chat of Bea's: the Chief's level rode only its own hand-off's turn
+    expect(ordinaryTurn.threadId).toBe(beaTurn.threadId);
     expect(ordinaryTurn.permissionMode).toBe("default");
-    expect(await chips(ordinaryTurn.threadId)).toEqual([]);
+    expect(await chips(ordinaryTurn.threadId)).toEqual(["Approve for me: handed on by Ada, from Clive, a Chief of Staff on Approve for me"]);
 
     // The same chain inside a room. The room thread is shared, so nothing is patched onto it: each turn's level rides
     // its hand-off back up to Clive.

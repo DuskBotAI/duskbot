@@ -170,16 +170,31 @@ describe("choosing a model with the keyboard", () => {
     expect(focused()?.hasAttribute("data-current-model")).toBe(true);
   });
 
-  it("moves through the Thinking steps with the arrow keys and applies one only on Enter, staying open", async () => {
+  it("opens the thinking selector with the arrow keys, moves through its levels and applies one only on Enter, staying open", async () => {
     await openWith("click");
-    const low = document.querySelector<HTMLElement>("[data-effort-pill]")!;
-    low.focus();
-    press("ArrowRight");
-    expect(focused()?.textContent).toBe("Medium");
+    const trigger = document.querySelector<HTMLElement>("[data-effort-trigger]")!;
+    trigger.focus();
+    press("ArrowDown");
+    expect(document.querySelector("[data-effort-listbox]")).not.toBeNull();
+    expect(focused()?.getAttribute("role")).toBe("listbox");
+    press("ArrowDown");
+    press("ArrowDown");
     expect(fixture.dispatch).not.toHaveBeenCalled();
-    flushSync(() => focused()!.click());
+    press("Enter");
     expect(fixture.dispatch).toHaveBeenLastCalledWith(expect.objectContaining({ selection: expect.objectContaining({ effort: "medium" }) }));
     expect(menu()).not.toBeNull();
+    expect(focused()).toBe(trigger);
+  });
+
+  it("closes only the thinking selector on Escape, leaving the model menu open", async () => {
+    await openWith("click");
+    const trigger = document.querySelector<HTMLElement>("[data-effort-trigger]")!;
+    flushSync(() => trigger.click());
+    expect(trigger.getAttribute("aria-expanded")).toBe("true");
+    press("Escape");
+    expect(trigger.getAttribute("aria-expanded")).toBe("false");
+    expect(menu()).not.toBeNull();
+    expect(focused()).toBe(trigger);
   });
 
   it("clears a search with Escape before closing, keeps every Escape from the panel around it, and returns focus to the chip", async () => {
@@ -288,7 +303,7 @@ describe("picking a model that has reasoning levels", () => {
       }));
       expect(menu()).not.toBeNull();
       expect(chip().getAttribute("aria-expanded")).toBe("true");
-      expect(menu()!.querySelector(advanced ? 'select[aria-label="Reasoning effort"]' : "[data-effort-pill]")).not.toBeNull();
+      expect(menu()!.querySelector(advanced ? 'select[aria-label="Reasoning effort"]' : "[data-effort-trigger]")).not.toBeNull();
 
       // The store applies the pick; the picked row may be redrawn elsewhere, but focus stays in the menu.
       render(scout("claude-sonnet-5-5"));

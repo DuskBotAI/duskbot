@@ -11,6 +11,7 @@ import { promisify } from "node:util";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { createLinkService, publicIp } from "../src/app.mjs";
+import { createFleet, FLEET_WINDOW_MS } from "../src/packages.mjs";
 import { SERVER_RELEASE_KEYS, createServerUpdater, createTunnelAgent, serverReleaseSigned, open as agentOpen, openFrame as agentOpenFrame, sealBytes as agentSealBytes } from "../agent.mjs";
 import { PINNED_RELEASE_KEYS, signRelease } from "../../cloud-service/src/release-signing.ts";
 import { createRelayClient, createTunnelProxy, frameGuard, newLinkKeys, openFrame, openResult, seal, sealBytes, sealFrame, sha256hex, vpsTokenOf } from "../../../electron/vps-link-protocol.mjs";
@@ -389,6 +390,21 @@ describe("a linked server's own update", () => {
     const part = await get(`/v1/tunnels/${id}/server/${sha}.tgz`, token, { range: "bytes=13-" });
     expect(part.status).toBe(206);
     expect(Buffer.from(await part.arrayBuffer())).toEqual(bytes.subarray(13));
+  });
+
+  it("offers a linked server no build while the operator's policy is paused, and counts the versions servers report", async () => {
+    publish(Buffer.from("paused build"));
+    const { id, token } = await linked();
+    writeFileSync(join(dir, "data", "packages", "update-policy.json"), JSON.stringify({ body: JSON.stringify({ serial: 2, floor: null, blocked: [], paused: true }), signature: "r1.x.y.z" }));
+    const held = await get(`/v1/tunnels/${id}/server`, token, { "x-dusk-server-version": "1.1.0", "x-dusk-agent-version": "2.4.7" });
+    expect(held.status).toBe(404);
+    expect((await held.json()).code).toBe("paused");
+    let t = 0;
+    const fleet = createFleet(() => t);
+    fleet.saw("a", "1.1.0", "2.4.7"); fleet.saw("b", "1.2.0", "2.4.7"); fleet.saw("c", "not a version", undefined);
+    expect(fleet.counts().servers).toEqual([{ version: "1.2.0", count: 1 }, { version: "1.1.0", count: 1 }, { version: "unknown", count: 1 }]);
+    t = FLEET_WINDOW_MS + 1; fleet.saw("a", "1.2.0", "2.4.7");
+    expect(fleet.counts()).toMatchObject({ servers: [{ version: "1.2.0", count: 1 }], agents: [{ version: "2.4.7", count: 1 }] });
   });
 
   it("the agent pins the same release keys as the service and the installer, and only those", () => {

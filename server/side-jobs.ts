@@ -40,7 +40,7 @@ export function helperSelection(cfg: HelperConfig, env: Record<string, string | 
 /** "frustration-summary": an abstract line about a chat that went badly, for usage-signals.ts; scrubbed before it leaves. */
 /** "side-reply": the quick reply to the person's message sent while a turn works (host/side-replies.ts), on the engine's
  * quick model; with neither an engine call nor a helper, OpenCode's free backup writes it. */
-export type SideJob = "compaction" | "memory" | "skill-review" | "setup-suggestions" | "representative" | "status-reply" | "room-routing" | "turn-beat" | "frustration-summary" | "side-reply";
+export type SideJob = "compaction" | "memory" | "skill-review" | "setup-suggestions" | "representative" | "status-reply" | "room-routing" | "turn-beat" | "frustration-summary" | "side-reply" | "suggestions";
 
 export type SideJobInstance = Pick<ProviderInstance, "instanceId" | "driverKind" | "enabled" | "generateText" | "generateMemoryText" | "models" | "quickModelsUsable"> & {
   adapter: { capabilities: Pick<ProviderAdapter["capabilities"], "agentsMcp"> };
@@ -202,7 +202,7 @@ export function createSideJobs(deps: SideJobsDeps): SideJobs {
       const call = ownCall(job, own);
       if (call) {
         if (job === "compaction") return { via: "engine", generateText: call };
-        if (job === "setup-suggestions" || job === "room-routing" || job === "turn-beat" || job === "frustration-summary" || job === "side-reply") {
+        if (job === "setup-suggestions" || job === "skill-review" || job === "room-routing" || job === "turn-beat" || job === "frustration-summary" || job === "side-reply") {
           const quick = quickModel(bot, own);
           const write = booked(job, bot, own, call, { kind: "bot", botId: bot.id }, () => ({ fallback: ownFallback(bot, own), ...quick }));
           return { via: "engine", generateText: quick.model ? rememberRefusal(write, own, quick.model) : write };

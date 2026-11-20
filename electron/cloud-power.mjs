@@ -23,6 +23,9 @@ export class CloudAsleepError extends Error {
 /** My Cloud's answer to a held or new background call while it goes to sleep. */
 export const asleepAnswer = response => response?.status === 503 && readHeader(response.headers, CLOUD_POWER_HEADER) === "asleep";
 
+/** The edge's answer for a dusk cloud that was deleted (apps/cloud-service/edge/worker.js): it never answers again. */
+export const goneAnswer = response => response?.status === 410 && readHeader(response.headers, CLOUD_POWER_HEADER) === "gone";
+
 /** `power()`: the Admin's last word (`{ state, since, sleeps }`) or null. `wanted()`: background work waits for My Cloud. */
 export function createCloudPowerGate({ power = () => null, wanted = () => true, now = Date.now, holdMs = ASLEEP_HOLD_MS, setTimer = setTimeout, clearTimer = clearTimeout } = {}) {
   let held = null, timer = null, napping = new AbortController();

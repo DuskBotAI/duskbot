@@ -2,8 +2,10 @@ import { Fragment, useEffect, useId, useLayoutEffect, useRef, useState, type Rea
 import { createPortal } from "react-dom";
 
 import { cn } from "@/lib/cn";
+import { triggerSystemControl, useSystemControl } from "@/lib/system-control";
 import { Icon, type IconName } from "../Icon";
 import { useMenuMotion } from "../MenuMotion";
+import { systemMenu } from "@/lib/system-menu";
 
 export interface SelectPillOption<V extends string> {
   value: V;
@@ -21,6 +23,19 @@ const GAP = 4;
 const MENU_MIN = 200;
 const ROW = 30;
 const ROW_GAP = 2;
+const MENU_MAX = 360;
+const EDGE = 8;
+
+export interface MenuPlace { top?: number; bottom?: number; right: number; up: boolean; maxHeight: number }
+
+export function placeMenu(box: { top: number; bottom: number; right: number }, height: number, viewport: { width: number; height: number }): MenuPlace {
+  const wanted = Math.min(height, MENU_MAX);
+  const below = viewport.height - EDGE - (box.bottom + GAP);
+  const above = box.top - GAP - EDGE;
+  const up = wanted > below && above > below;
+  const maxHeight = Math.max(0, Math.min(wanted, up ? above : below));
+  return { right: viewport.width - box.right, up, maxHeight, ...(up ? { bottom: viewport.height - box.top + GAP } : { top: box.bottom + GAP }) };
+}
 
 /** Grok's ghost select in a pane row ("Liora", "1x", "Auto-detect"): a 24px hairline pill sized to its value, and the
  * white 200px listbox under its right edge, 30px rows 2px apart with an inset highlight and a check on the chosen one.
@@ -39,10 +54,34 @@ export function SelectPill<V extends string>({ value, options, onChange, disable
   const [open, setOpen] = useState(false);
   const motion = useMenuMotion(open);
   const [active, setActive] = useState(-1);
-  const [place, setPlace] = useState<{ top?: number; bottom?: number; right: number; up: boolean } | null>(null);
+  const [place, setPlace] = useState<MenuPlace | null>(null);
   const trigger = useRef<HTMLButtonElement>(null);
   const list = useRef<HTMLDivElement>(null);
   const id = useId();
+  const plain = options.every((option) => typeof option.label === "string");
+  const system = useSystemControl(
+    trigger,
+    plain
+      ? {
+          kind: "popup",
+          title: String(selected?.label ?? value),
+          value,
+          options: options.map((option) => ({
+            key: option.value,
+            label: option.label as string,
+            disabled: option.disabled,
+            separated: option.separated,
+          })),
+          disabled,
+          label,
+        }
+      : null,
+    (next) => {
+      if (typeof next !== "string") return;
+      const option = options.find((item) => item.value === next);
+      if (option && !option.disabled && option.value !== value) onChange(option.value);
+    },
+  );
 
   const close = (refocus = true) => {
     setOpen(false);
@@ -56,17 +95,34 @@ export function SelectPill<V extends string>({ value, options, onChange, disable
   };
   const show = () => {
     if (disabled) return;
-    setActive(Math.max(0, options.findIndex((option) => option.value === value)));
-    setOpen(true);
+    const openFallback = () => {
+      const menu = systemMenu();
+      if (menu && trigger.current && options.every((option) => typeof option.label === "string")) {
+        void menu(trigger.current.getBoundingClientRect(), options.map((option) => ({
+          key: option.value, label: option.label as string, checked: option.value === value, disabled: option.disabled, separated: option.separated,
+        }))).then((key) => { if (key !== null) choose(options.findIndex((option) => option.value === key)); });
+        return;
+      }
+      setActive(Math.max(0, options.findIndex((option) => option.value === value)));
+      setOpen(true);
+    };
+    if (system && trigger.current) {
+      void triggerSystemControl(trigger.current).then((triggered) => { if (!triggered) openFallback(); });
+      return;
+    }
+    openFallback();
   };
 
   useLayoutEffect(() => {
     if (!open || !trigger.current) return;
     const box = trigger.current.getBoundingClientRect();
     const height = options.length * (ROW + ROW_GAP) - ROW_GAP + 12 + options.filter((option) => option.separated).length * (9 + ROW_GAP);
-    const up = box.bottom + GAP + height > window.innerHeight - 8 && box.top - GAP - height > 8;
-    setPlace({ right: window.innerWidth - box.right, up, ...(up ? { bottom: window.innerHeight - box.top + GAP } : { top: box.bottom + GAP }) });
+    setPlace(placeMenu(box, height, { width: window.innerWidth, height: window.innerHeight }));
   }, [open, options.length]);
+
+  useEffect(() => {
+    if (open && place && active >= 0) document.getElementById(`${id}-${active}`)?.scrollIntoView?.({ block: "nearest" });
+  }, [open, place, active, id]);
 
   // the listbox mounts once it is placed: focus it then, so its keys (and Escape) are its own
   useEffect(() => {
@@ -104,10 +160,13 @@ export function SelectPill<V extends string>({ value, options, onChange, disable
         type="button"
         role="combobox"
         data-select-pill=""
+        data-system-popup={system ? "" : undefined}
         aria-label={label}
+        aria-hidden={system || undefined}
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-controls={open ? `${id}-list` : undefined}
+        tabIndex={system ? -1 : undefined}
         title={title}
         disabled={disabled}
         onClick={() => (open ? close() : show())}
@@ -127,10 +186,11 @@ export function SelectPill<V extends string>({ value, options, onChange, disable
           "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus",
           "disabled:cursor-default disabled:opacity-50 disabled:hover:bg-transparent",
           className,
+          system && "m-0 h-auto min-h-6 max-w-[62%] gap-1.5 rounded-none border-0 bg-transparent p-0 text-[17px] leading-[22px] opacity-0",
         )}
       >
         <span className="min-w-0 flex-1 truncate text-start">{selected?.label ?? value}</span>
-        <Icon name="chevron-down" size={10} className="shrink-0 text-ink-secondary" />
+        <Icon name="chevron-down" size={system ? 16 : 10} className="shrink-0 text-ink-secondary" />
       </button>
       {typeof document !== "undefined" && createPortal(
           motion.shown && place && (
@@ -152,8 +212,8 @@ export function SelectPill<V extends string>({ value, options, onChange, disable
                 else if (event.key === "End") { event.preventDefault(); setActive(step(options.length, -1)); }
                 else if (event.key === "Enter" || event.key === " ") { event.preventDefault(); choose(active); }
               }}
-              style={{ top: place.top, bottom: place.bottom, right: place.right, minWidth: MENU_MIN, transformOrigin: place.up ? "right bottom" : "right top" }}
-              className={cn(motion.className, "fixed z-[2147482000] flex max-h-[min(360px,calc(100vh-16px))] max-w-[320px] flex-col gap-0.5 overflow-y-auto rounded-2xl bg-menu py-1.5 text-[13px] leading-[18px] tracking-[-0.08px] text-ink shadow-(--shadow-popover) outline-none [scrollbar-width:none]")}
+              style={{ top: place.top, bottom: place.bottom, right: place.right, maxHeight: place.maxHeight, minWidth: MENU_MIN, transformOrigin: place.up ? "right bottom" : "right top" }}
+              className={cn(motion.className, "fixed z-[2147482000] flex max-w-[320px] flex-col gap-0.5 overflow-y-auto rounded-2xl bg-menu py-1.5 text-[13px] leading-[18px] tracking-[-0.08px] text-ink shadow-(--shadow-popover) outline-none [scrollbar-width:none]")}
             >
               {options.map((option, index) => (
                 <Fragment key={option.value}>

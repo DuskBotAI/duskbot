@@ -1,5 +1,6 @@
 // Security: local browse only, with no registry and no network fetch, so an import is exactly the bytes pasted here.
 import { ModalLayer } from "./ui/ModalLayer";
+import { AnimatePresence } from "motion/react";
 import { Search, X } from "../icons";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { t } from "@/lib/i18n";
@@ -295,8 +296,8 @@ export function SkillsSection() {
         <NavRow data-settings-open="skill-import" title={t("skills.library.importTitle")} hint={t("settings.s2.skills.importHint")} onClick={() => setImportOpen(true)} />
         {importMessage && !importOpen && <NoteRow>{importMessage}</NoteRow>}
       </RowsCard>
-      {importOpen && (
-        <FormDialog data-panel-modal="skill-import" title={t("skills.library.importTitle")} description={t("skills.library.importHint")} width={520}
+      <AnimatePresence>{importOpen && (
+        <FormDialog key="skill-import" data-panel-modal="skill-import" title={t("skills.library.importTitle")} description={t("skills.library.importHint")} width={520}
           saveLabel={importing ? t("skills.library.importing") : t("skills.library.importButton")} canSave={!importing && !working && Boolean(importText.trim())} busy={importing}
           error={error || undefined} onSave={async () => { await importSkill(); }} onClose={() => setImportOpen(false)}>
           <textarea
@@ -307,7 +308,7 @@ export function SkillsSection() {
             onChange={(e) => setImportText(e.target.value)}
           />
         </FormDialog>
-      )}
+      )}</AnimatePresence>
 
       {viewing && <SkillSourceDialog viewing={viewing} error={error} working={Boolean(working)} onClose={() => { if (!working) setViewing(null); }} onEnable={() => void toggle(viewing.skill, true)} />}
     </div>

@@ -18,8 +18,26 @@ import { seal, sealKeyOf, sha256hex, x25519Pair } from "./vps-link-protocol.mjs"
 export const PHONE_RELAY_BASE = "https://link.dusk.bot";
 const DESKTOP_OWNER_HEADER = "x-dusk-desktop-owner";
 const CHECK_MS = 15_000;
-const RETRY_MS = [5_000, 30_000, 120_000, 600_000];
+const RETRY_MS = [5_000, 30_000, 120_000];
 const ID = /^[a-z2-7]{10}$/;
+
+/** One answer of Electron's `session.resolveProxy` ("PROXY host:port; DIRECT", a PAC script's list) as the link hub's
+ * proxy: the first plain http proxy, or null to go direct. SOCKS and https proxies are not spoken by the hub. */
+export function proxyFromResolved(answer) {
+  for (const entry of String(answer ?? "").split(";").map((part) => part.trim())) {
+    if (/^DIRECT$/i.test(entry)) return null;
+    const match = /^PROXY\s+(\[[^\]]+\]|[^\s:]+):(\d{1,5})$/i.exec(entry);
+    if (match) return { host: match[1].replace(/^\[|\]$/g, ""), port: Number(match[2]) };
+  }
+  return null;
+}
+
+/** the computer's own proxy settings (system, PAC or WPAD) for each relay address, as Chromium resolves them. Electron
+ * throws when `session.defaultSession` is read before the app is ready, so it is read only when a relay address is. */
+export const systemProxy = (session) => async (target) => {
+  const answer = await Promise.resolve().then(() => session().resolveProxy(target.href)).catch(() => "DIRECT");
+  return proxyFromResolved(answer);
+};
 
 /** what the link service said, as a reason the pane can show; `code` is the service's own when it gave one */
 export class RelaySetupError extends Error {
@@ -109,6 +127,7 @@ export function desktopHarnessSync({ port, ownerToken, request = httpRequest }) 
  *   loadHub(): Promise<{ createPhoneHub: Function }>,
  *   port(): number,
  *   ownerToken(): string,
+ *   sync?: Function,
  *   scope?(): string,
  *   fetch?: typeof fetch,
  *   log?: (line: string) => void,
@@ -148,11 +167,13 @@ export function createPhoneRelay(deps) {
     if (stopped || running || scope() !== at || !deps.wanted()) return;
     const { tunnel, keys } = saved;
     const one = { scope: at };
-    const sync = desktopHarnessSync({ port: deps.port, ownerToken: deps.ownerToken });
+    const sync = deps.sync ?? desktopHarnessSync({ port: deps.port, ownerToken: deps.ownerToken });
     // a sync reporting an applied revision means the relay took this computer's channels
     one.hub = createPhoneHub({
-      base: tunnel.base, id: tunnel.id, token: tunnel.token, keys,
-      server: { host: "127.0.0.1", get port() { return deps.port(); } },
+      base: tunnel.base, id: tunnel.id, token: tunnel.token, keys, ...(deps.proxy ? { proxy: deps.proxy } : {}),
+      // a phone's request must never reach another workspace's harness, which would answer 401 and unpair it: until the
+      // check stops this hub, port 0 fails each one as unreachable
+      server: { host: "127.0.0.1", get port() { return one.scope === scope() ? deps.port() : 0; } },
       sync: async (input) => {
         // another workspace's harness must never replace this tunnel's channels: that would cut its phones off
         const moved = () => { if (one.scope === scope()) return; void check(); throw new Error("the workspace changed"); };
@@ -256,6 +277,13 @@ export function createPhoneRelay(deps) {
       set({ status: "off" });
     },
     state: () => ({ ...status }),
+    /** the computer woke or its network came back: a relay still waiting out a failure tries again now */
+    wake() {
+      if (stopped || running) return;
+      failures = 0;
+      notBefore = 0;
+      schedule(0);
+    },
     /** asked right before a pairing code is made: start now if wanted and wait for the relay, at most `timeoutMs` */
     async ready(timeoutMs = 8_000) {
       // a person asking skips the wait after a failure, but not more often than the first retry
@@ -313,9 +341,10 @@ export function phoneRelayStore({ jsonFile, userData, encryption }) {
  * Electron main's wiring: `phone-relay:state` and `phone-relay:ready` for the local page, and a relay kept up while
  * `wanted()`. Returns the relay.
  */
-export function installPhoneRelay({ ipcMain, guard, jsonFile, userData, dataDir, encryption, ...deps }) {
+export function installPhoneRelay({ ipcMain, guard, jsonFile, userData, dataDir, encryption, powerMonitor, session, ...deps }) {
   const relay = createPhoneRelay({
     base: (process.env.DUSK_LINK_BASE || PHONE_RELAY_BASE).replace(/\/+$/, ""),
+    proxy: systemProxy(() => session.defaultSession),
     store: phoneRelayStore({ jsonFile, userData, encryption }),
     scope: () => String(dataDir() ?? ""),
     loadHub: () => import("../apps/link-service/agent.mjs"),
@@ -323,6 +352,9 @@ export function installPhoneRelay({ ipcMain, guard, jsonFile, userData, dataDir,
   });
   ipcMain.handle("phone-relay:state", guard("phone-relay:state", () => relay.state()));
   ipcMain.handle("phone-relay:ready", guard("phone-relay:ready", () => relay.ready()));
-  if (process.env.DUSK_PHONE_RELAY !== "off") relay.start();
+  if (process.env.DUSK_PHONE_RELAY !== "off") {
+    relay.start();
+    for (const event of ["resume", "unlock-screen"]) powerMonitor?.on(event, () => relay.wake());
+  }
   return relay;
 }

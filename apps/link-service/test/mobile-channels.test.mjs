@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { createLinkService, sha256hex } from "../src/app.mjs";
-import { MAX_CHANNELS_PER_TUNNEL, TUNNEL_IDLE_MS } from "../src/store.mjs";
+import { MAX_CHANNELS_PER_TUNNEL, PHONE_TUNNEL_IDLE_MS, TUNNEL_IDLE_MS } from "../src/store.mjs";
 
 const root = fileURLToPath(new URL("..", import.meta.url));
 const id = "abcdefghij", other = "klmnopqrst", cid = "phoneaaaaa", second = "phoneaaaab";
@@ -94,6 +94,19 @@ describe("mobile channel registration", () => {
     for (const token of [null, wrong, app, phone]) expect((await put([device()], id, token)).status).toBe(404);
     expect((await put([device()], other)).status).toBe(404);
     expect(service.store.channels.size).toBe(0);
+  });
+
+  it("moves a phone's channel to another tunnel of the same account only with the same phone credential", async () => {
+    tunnel(other);
+    service.store.tunnels.get(id).acct = "acct-a";
+    service.store.tunnels.get(other).acct = "acct-a";
+    await put([device(second)], other);
+    expect((await put([device(second, wrong)])).status).toBe(409);
+    expect((await put([device(second)])).status).toBe(200);
+    expect(service.store.channels.get(second).tunnel).toBe(id);
+    service.store.tunnels.get(other).acct = "acct-b";
+    await put([device("phoneaaaac")], other);
+    expect((await put([device("phoneaaaac")])).status).toBe(409);
   });
 
   it("refuses tunnel, session and another tunnel's channel ids atomically", async () => {
@@ -335,7 +348,30 @@ describe("mobile channel rate limits", () => {
     expect(limited.status).toBe(429);
     expect(await limited.json()).toMatchObject({ code: "rate_limited" });
     time += 60_000;
+    await take();
     expect((await post()).status).toBe(200);
+  });
+});
+
+describe("a server that is not reading its channels", () => {
+  it("answers a phone's frames at once instead of holding them, from a short while after its last read", async () => {
+    await put();
+    expect((await post()).status).toBe(200);
+    time += 25_000;
+    const away = await post();
+    expect(away.status).toBe(503);
+    expect(await away.json()).toMatchObject({ code: "server_away" });
+    await take();
+    expect((await post()).status).toBe(200);
+  });
+
+  it("counts a server in the middle of a long read as there, however long it has waited", async () => {
+    await put();
+    const lines = await stream(`/v1/tunnels/${id}/channels/to-vps`, vps);
+    expect(await next(lines)).toEqual({ frames: [] });
+    time += 60_000;
+    expect((await post()).status).toBe(200);
+    expect(await next(lines)).toMatchObject({ channel: cid, frames: ["aaaa"] });
   });
 });
 
@@ -409,7 +445,7 @@ describe("tunnel retention", () => {
   it("drops a tunnel whose server stayed silent past the idle limit, with its channels and readers", async () => {
     tunnel(other);
     await put();
-    time += TUNNEL_IDLE_MS - 1000;
+    time += PHONE_TUNNEL_IDLE_MS - 1000;
     expect((await request(`/v1/tunnels/${other}/to-vps`, vps)).status).toBe(200);
     const lines = await stream(`/v1/channels/${cid}/to-app`, phone);
     await next(lines);
@@ -420,6 +456,23 @@ describe("tunnel retention", () => {
     expect(service.store.tunnels.has(other)).toBe(true);
     expect(service.store.channels.size).toBe(0);
     expect((await request(`/v1/tunnels/${id}/to-vps`, vps)).status).toBe(404);
+  });
+
+  it("keeps a tunnel with paired phones past a week off, so its phones are not told they were removed", async () => {
+    tunnel(other);
+    await put();
+    expect((await put([{ id: second, verifier: sha256hex(phone), kind: "grant", expiresAt: time + 60_000 }], other)).status).toBe(200);
+    time += TUNNEL_IDLE_MS + 60_000;
+    service.store.sweep();
+    expect(service.store.tunnels.has(id)).toBe(true);
+    expect(service.store.tunnels.has(other)).toBe(false);
+    const meanwhile = await request(`/v1/channels/${cid}/to-vps`, phone, "POST", { frames: ["aaaa"], epoch, seq: 0 });
+    expect(meanwhile.status).toBe(503);
+    expect(await meanwhile.json()).toMatchObject({ code: "server_away" });
+    time += PHONE_TUNNEL_IDLE_MS - TUNNEL_IDLE_MS;
+    service.store.sweep();
+    expect(service.store.tunnels.has(id)).toBe(false);
+    expect((await request(`/v1/channels/${cid}/to-vps`, phone, "POST", { frames: ["aaaa"], epoch, seq: 1 })).status).toBe(404);
   });
 
   it("counts the phone hub's channel poll as the server being alive", async () => {

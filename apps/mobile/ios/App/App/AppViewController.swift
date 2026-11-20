@@ -7,6 +7,29 @@ import WebKit
 /// can cover a layer and take its touches.
 final class WebContainerView: UIView {}
 
+/// The page's web view. The chat's keyboard lifts it whole with a transform, inside the keyboard's own animation, so
+/// WebKit never lays the page out again mid-move. While lifted it keeps its resting safe area: UIKit may report the moved
+/// frame's insets, and WebKit would lay the page out again for them.
+final class PageWebView: WKWebView {
+    private var restingSafeArea: UIEdgeInsets?
+
+    override var safeAreaInsets: UIEdgeInsets { restingSafeArea ?? super.safeAreaInsets }
+
+    var keyboardLift: CGFloat = 0 {
+        didSet {
+            if keyboardLift > 0, restingSafeArea == nil { restingSafeArea = super.safeAreaInsets }
+            transform = keyboardLift > 0 ? CGAffineTransform(translationX: 0, y: -keyboardLift) : .identity
+        }
+    }
+
+    /// Back at rest, once the move down has finished: the safe area follows the screen again.
+    func landed() {
+        guard keyboardLift <= 0, let resting = restingSafeArea else { return }
+        restingSafeArea = nil
+        if super.safeAreaInsets != resting { safeAreaInsetsDidChange() }
+    }
+}
+
 extension CAPBridgeProtocol {
     /// Where the app's native layers go: the container round the web view, or the web view itself before it has one.
     var nativeHost: UIView? {
@@ -35,6 +58,10 @@ class AppViewController: CAPBridgeViewController {
         scene.requestGeometryUpdate(.iOS(interfaceOrientations: mask)) { _ in }
     }
 
+    override open func webView(with frame: CGRect, configuration: WKWebViewConfiguration) -> WKWebView {
+        PageWebView(frame: frame, configuration: configuration)
+    }
+
     override open func capacitorDidLoad() {
         bridge?.registerPluginInstance(QrScannerPlugin())
         bridge?.registerPluginInstance(AppleSignInPlugin())
@@ -44,6 +71,13 @@ class AppViewController: CAPBridgeViewController {
         bridge?.registerPluginInstance(OrientationPlugin())
         bridge?.registerPluginInstance(TurnActivityPlugin())
         bridge?.registerPluginInstance(PhoneNotificationsPlugin())
+        bridge?.registerPluginInstance(DuskHapticsPlugin())
+        bridge?.registerPluginInstance(PickerPlugin())
+        bridge?.registerPluginInstance(ShortcutsPlugin())
+        bridge?.registerPluginInstance(AppearancePlugin())
+        bridge?.registerPluginInstance(PulldownMenuPlugin())
+        bridge?.registerPluginInstance(ChromePlugin())
+        bridge?.registerPluginInstance(ControlsPlugin())
         // iOS 26 gives the web view's scroll view a top edge effect that draws a pale band under the status bar; the
         // page scrolls inside itself, so the effect never tracks its content
         if #available(iOS 26.0, *) {

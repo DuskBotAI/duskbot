@@ -108,3 +108,21 @@ test("a linked server is paused through its agent", async () => {
   await back.run();
   assert.deepEqual(calls, ["backup-here", "link-freeze", "backup-from https://box.example", "restore b1", "finish"]);
 });
+
+test("a backup of this computer that fails stops before the server is touched, and a retry can go through", async () => {
+  let failing = true;
+  const { back, calls, server } = fixture({ backupHere: async () => { calls.push("backup-here"); if (failing) throw new Error("disk full"); } });
+  await assert.rejects(back.run("env-box"), /backup of this computer could not be saved first, so nothing was moved/);
+  assert.deepEqual(calls, ["backup-here"]);
+  assert.equal(server.frozen, false);
+  assert.equal(back.view().status, "failed");
+  failing = false;
+  assert.deepEqual(await back.run("env-box"), { ok: true });
+});
+
+test("a copy that runs out of time says so plainly, and the server's pause is lifted", async () => {
+  const { back, server } = fixture({ backupFrom: async () => { throw new DOMException("The operation was aborted due to timeout", "TimeoutError"); } });
+  await assert.rejects(back.run("env-box"), /box took too long to answer\. Your bots are still there\. Try again\./);
+  assert.equal(back.view().status, "failed");
+  assert.equal(server.frozen, false);
+});

@@ -204,6 +204,32 @@ describe("connect flow stages", () => {
     expect(flow.state.stage).toBe("connected");
   });
 
+  it("keeps the paste box with the server's reason when it turns a pasted code away, and takes another", async () => {
+    let done = false;
+    let tries = 0;
+    const { flow, calls } = harness([
+      [{ instanceId: "claude", driverKind: "claudeAgent", snapshot: { state: "available", authenticated: false }, authentication: { method: "paste-code" } }],
+      () => [{ instanceId: "claude", driverKind: "claudeAgent", snapshot: { state: "available", authenticated: done } }],
+    ], {
+      "POST /api/instances/claude/auth/start": () => ({ auth: { phase: "waiting", flowId: "c1", authorizationUrl: "https://claude.ai/oauth/authorize?x=1" } }),
+      "POST /api/instances/claude/auth/complete": () => {
+        tries += 1;
+        if (tries === 1) throw Object.assign(new Error("Paste the whole code shown on Anthropic's page after signing in."), { status: 400 });
+        done = true;
+        return { ok: true };
+      },
+    });
+    flow.start({ tile: "claude", candidates: ["claude"] });
+    await vi.advanceTimersByTimeAsync(0);
+    flow.submit("bad");
+    await vi.advanceTimersByTimeAsync(0);
+    expect(flow.state).toMatchObject({ stage: "waiting", kind: "paste", flowId: "c1", problem: "Paste the whole code shown on Anthropic's page after signing in." });
+    flow.submit("GOODCODE#123");
+    await vi.advanceTimersByTimeAsync(0);
+    expect(calls.filter((call) => call === "POST /api/instances/claude/auth/complete")).toHaveLength(2);
+    expect(flow.state.stage).toBe("connected");
+  });
+
   it("one at a time: starting another cancels the sign-in under way on the server", async () => {
     const { flow, calls, seen } = harness([[codex({ state: "available", authenticated: false }), { ...codex({ state: "available", authenticated: false }), instanceId: "githubCopilot", driverKind: "copilotAgent" }]], {
       "POST /api/instances/codex/auth/start": () => device,

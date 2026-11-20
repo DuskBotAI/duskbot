@@ -7,7 +7,10 @@ import { AFTER_RESET_MS, NEAR_LIMIT_PERCENT, nearLimit, type EngineLimit, type E
 import { t } from "@/lib/i18n";
 import type { Routine } from "@/lib/routines";
 import { unlessRefused } from "@/lib/admin-scope";
+import { shownShare, type UsageDisplay } from "@/lib/usage-display";
 import { api } from "@/state/store";
+import { listenLiveFrames } from "@/lib/live-events";
+import type { RuntimeEvent } from "../../shared/runtime-events";
 
 export { AFTER_RESET_MS, nearLimit, NEAR_LIMIT_PERCENT, isLimitResetSchedule, type EngineLimit, type LimitResetSchedule } from "../../shared/limit-reset";
 
@@ -16,6 +19,7 @@ const names = new Map<string, string>();
 let report: EngineLimitsReport | null = null;
 let loading: Promise<void> | null = null;
 let timer: ReturnType<typeof setInterval> | null = null;
+let unlisten: (() => void) | null = null;
 const listeners = new Set<(next: EngineLimitsReport) => void>();
 
 /** "Claude", "Codex", or the engine's own name; an engine the server has not named yet reads as its id, capitalised. */
@@ -48,6 +52,14 @@ export function loadLimits(refresh = false): Promise<void> {
   return loading;
 }
 
+/** A limit refusal, or a turn that worked while an engine reads as blocked, changes what the server holds: ask again
+ * now rather than leave the at-limit banner up until the next poll. */
+export function noteTurnForLimits(event: Pick<RuntimeEvent, "type"> & { ok?: boolean; limit?: string; limitResetsAt?: number }): void {
+  const refused = event.type === "runtime.error" && (event.limit !== undefined || event.limitResetsAt !== undefined);
+  const workedWhileBlocked = event.type === "turn.completed" && event.ok === true && Boolean(report?.engines.some((limit) => limit.blocked));
+  if (refused || workedWhileBlocked) void loadLimits(true);
+}
+
 /** Every engine's limit, kept fresh while something on screen shows it. */
 export function useEngineLimits(): EngineLimit[] {
   const [engines, setEngines] = useState<EngineLimit[]>(() => report?.engines ?? []);
@@ -57,9 +69,11 @@ export function useEngineLimits(): EngineLimit[] {
     if (report) setEngines(report.engines);
     void loadLimits();
     timer ??= setInterval(() => void loadLimits(), POLL_MS);
+    unlisten ??= listenLiveFrames({ onFrame: (frame) => { if (frame.kind === "runtime") noteTurnForLimits(frame.event); } });
     return () => {
       listeners.delete(listener);
       if (!listeners.size && timer) { clearInterval(timer); timer = null; }
+      if (!listeners.size && unlisten) { unlisten(); unlisten = null; }
     };
   }, []);
   return engines;
@@ -72,11 +86,12 @@ export function resetTime(at: number, now = Date.now()): string {
   return date.toLocaleString([], sameDay ? { hour: "numeric", minute: "2-digit" } : { weekday: "short", hour: "numeric", minute: "2-digit" });
 }
 
-/** "Claude: 92% used · resets 3:40 PM", or "Claude: at its limit · resets 3:40 PM"; a screen reader's copy joins with a comma. */
-export function limitLine(limit: EngineLimit, now = Date.now(), separator = " · "): string {
-  const used = limit.blocked ? t("limits.atLimit", { engine: limit.name }) : t("limits.used", { engine: limit.name, percent: Math.round(limit.usedPercent ?? 0) });
+/** "Claude: 92% used · resets 3:40 PM" (or "8% left"), or "Claude: at its limit · resets 3:40 PM"; a screen reader's copy joins with a comma. */
+export function limitLine(limit: EngineLimit, now = Date.now(), separator = " · ", display: UsageDisplay = "used"): string {
+  const share = limit.blocked ? t("limits.atLimit", { engine: limit.name })
+    : t(display === "left" ? "limits.left" : "limits.used", { engine: limit.name, percent: shownShare(limit.usedPercent ?? 0, display) });
   const resets = limit.resetsAt !== null ? t("limits.resets", { time: resetTime(limit.resetsAt, now) }) : "";
-  return limit.resetsAt !== null && limit.resetsAt > now ? `${used}${separator}${separator === " · " ? resets : lowerFirst(resets)}` : used;
+  return limit.resetsAt !== null && limit.resetsAt > now ? `${share}${separator}${separator === " · " ? resets : lowerFirst(resets)}` : share;
 }
 
 export const nearLimitEngines = (engines: readonly EngineLimit[]) => engines.filter(nearLimit);
@@ -124,6 +139,9 @@ export function usageRows(limit: EngineLimit): UsageRow[] {
     return { window: entry.window, left: tone === "out" ? 0 : Math.max(0, 100 - Math.round(entry.usedPercent)), resetsAt: refused ? limit.resetsAt : entry.resetsAt, tone };
   });
 }
+
+/** The whole percent a window's figure shows: the share used, or the share left. */
+export const rowShare = (row: Pick<UsageRow, "left">, display: UsageDisplay): number => (display === "left" ? row.left : 100 - row.left);
 
 export function windowLabel(window: LimitWindowName): string {
   return window === "5-hour" ? t("planUsage.fiveHour") : window === "weekly" ? t("planUsage.weekly") : t("usage.title");

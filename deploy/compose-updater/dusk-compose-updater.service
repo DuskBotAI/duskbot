@@ -1,0 +1,13 @@
+[Unit]
+Description=Update the official dusk bot Compose server
+
+[Service]
+WorkingDirectory=%h/duskbot/deploy
+ExecStart=/usr/bin/python3 compose-updater/updater.py
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=yes
+UMask=0077
+
+[Install]
+WantedBy=default.target

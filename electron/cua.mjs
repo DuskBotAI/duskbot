@@ -122,6 +122,11 @@ function notifyState(connection) {
   stateListener(connection);
 }
 
+/** The driver record now: what cloud-screen.mjs speaks to for a dusk cloud's screen jobs. */
+export function cuaConnection() {
+  return connectionStore.get();
+}
+
 export function setCuaStateListener(listener) {
   stateListener = typeof listener === "function" ? listener : () => {};
 }

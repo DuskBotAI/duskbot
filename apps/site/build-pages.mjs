@@ -398,7 +398,7 @@ const licenseSummary = `<section class="lic-sum" aria-label="the license in shor
 <div><dt>you can't</dt><dd>use it, or a changed copy, for commercial purposes without our license: at or for a business, inside a product, or as a commercial service. this applies to every version, including older copies.</dd></div>
 <div><dt>commercial license</dt><dd><a href="mailto:hello@dusk.bot">hello@dusk.bot</a></dd></div>
 </dl>
-<p>the license is the <a href="https://polyformproject.org/licenses/noncommercial/1.0.0">polyform noncommercial license 1.0.0</a>; its full text is at the end of this page. parts originally from the open source openmausbot project stay under their original apache 2.0 license, listed in <a href="https://github.com/DuskBotAI/duskbot/tree/main/third_party/openmausbot">third_party/openmausbot</a>.</p>
+<p>the license is the <a href="https://polyformproject.org/licenses/noncommercial/1.0.0">polyform noncommercial license 1.0.0</a>; its full text is at the end of this page. dusk bot is a fork of <a href="https://github.com/milind-soni/OpenMausBot">openmausbot</a>; the parts originally from it stay under their original apache 2.0 license, listed in <a href="https://github.com/DuskBotAI/duskbot/tree/main/third_party/openmausbot">third_party/openmausbot</a>.</p>
 </section>
 `;
 // the LICENSE file under its own heading, its headings a level down so they sit under it

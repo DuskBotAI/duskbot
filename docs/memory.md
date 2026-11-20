@@ -286,7 +286,23 @@ enough words, a name or the asked-about time), so an unrelated message
 recalls nothing. Superseded and expired facts are searched only when the
 message asks about the past, and are shown as `no longer true; held <from> to
 <until>`. Facts already in the prompt are not recalled again, and one fact
-kept in two places is recalled once.
+kept in two places is recalled once, with one exception: a note in the prompt
+that answers the message and took over from a struck one is repeated first,
+as `current; it replaced the old note "<old>" on <date>`.
+
+A correction leaves the old words in the chat where it was made ("remember my
+gym days are Monday and Thursday" … "actually, Tuesday and Friday"), so a
+conversation passage said on or before the day of a current note that shares
+a matched word with it is left out: the note already holds what was settled
+then. Passages newer than the note still come, and a question about the past
+gets them all. When the only notes that answer the message are already in the
+prompt, recall adds nothing rather than saying nothing matches.
+
+A chat is titled by its first message, so after a correction its title may
+still state the old fact. A note that supersedes or replaces another names its
+source without the title (`from chat, corrected`), and a chat whose title
+shares two words with a note struck from it is listed in Recent work without
+its title.
 
 The best facts (at most 14) come first, each numbered with its id, where it is
 kept and its dates; the top two carry the words they were learned from when

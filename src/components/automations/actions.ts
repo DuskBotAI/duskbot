@@ -82,6 +82,19 @@ export function useAutomationActions() {
     setTimeout(() => setCopied((current) => (current === webhookId ? null : current)), 1_800);
   });
 
+  /** A routine's own address: the one it has, or a new one made now. */
+  const copyRoutineAddress = (automation: Automation) => automation.addressId
+    ? copyAddress(automation.addressId)
+    : attempt(`copy:${automation.id}`, async () => {
+      const response = await api("/api/webhooks", { method: "POST", body: JSON.stringify({ name: automation.name.slice(0, 80) || "Routine", prompt: "", botId: automation.botId, routineId: automation.id }) });
+      const credential = response.credential as WebhookCredential;
+      dispatch({ type: "webhookPatched", webhook: response.webhook });
+      saveWebhookCredential(webhookCredentialStore(), response.webhook.id, credential);
+      if (await copyText(credential.url) !== "copied") throw new Error("Couldn't copy the address");
+      setCopied(automation.id);
+      setTimeout(() => setCopied((current) => (current === automation.id ? null : current)), 1_800);
+    });
+
   const openRun = (automation: Automation, run: RoutineRun | undefined) => {
     const bot = state.bots.find((candidate) => candidate.id === automation.botId);
     if (bot && run?.threadId) openBotThread(dispatch, bot, run.threadId);
@@ -96,5 +109,5 @@ export function useAutomationActions() {
     if (!thread || thread.activity !== "waiting-on-you") dispatch({ type: "notice", notice: { kind: "note", botName: bot?.name ?? null, text: t("automations.answer.nothingWaiting") } });
   };
 
-  return { busy, error, errorFor, setError, copied, toggle, runNow, test, remove, copyAddress, openRun, answerRun };
+  return { busy, error, errorFor, setError, copied, toggle, runNow, test, remove, copyAddress, copyRoutineAddress, openRun, answerRun };
 }

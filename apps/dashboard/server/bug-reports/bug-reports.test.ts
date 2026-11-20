@@ -156,6 +156,33 @@ describe("bug reports", () => {
     expect(filtered.reports.map(report => report.id)).toEqual([a.id]);
   });
 
+  it("groups reports by theme, leaves harness and unreleased builds out unless asked, and changes many at once", async () => {
+    const phone = await sendDevsReport(endpoint(), payload({ description: "iphone pairing never finishes" })) as { id: string };
+    const update = await sendDevsReport(endpoint(), payload({ installId: "other-install-02", description: "I had to reinstall to get the update" })) as { id: string };
+    await sendDevsReport(endpoint(), payload({ installId: "qatest_harness01", description: "iphone pairing from the harness" }));
+    await sendDevsReport(endpoint(), payload({ installId: "other-install-03", appVersion: "0.0.0-e2e", description: "dev build crash" }));
+    const owner = await signIn(ADMIN);
+    type List = { reports: Array<{ id: string; theme: string; status: string }>; counts: Record<string, number>; themes: Array<{ theme: string; count: number; open: number }> };
+    const list = await (await fetch(`${url}/v1/admin/bug-reports`, { headers: { cookie: owner } })).json() as List;
+    expect(list.counts.new).toBe(2);
+    expect(list.themes).toEqual([{ theme: "phone", count: 1, open: 1 }, { theme: "updates", count: 1, open: 1 }]);
+    expect(list.reports.find(report => report.id === phone.id)?.theme).toBe("phone");
+    const all = await (await fetch(`${url}/v1/admin/bug-reports`, { headers: { cookie: owner, "x-dusk-admin-tests": "show" } })).json() as List;
+    expect(all.counts.new).toBe(4);
+    const phones = await (await fetch(`${url}/v1/admin/bug-reports?theme=phone`, { headers: { cookie: owner } })).json() as List;
+    expect(phones.reports.map(report => report.id)).toEqual([phone.id]);
+    expect((await fetch(`${url}/v1/admin/bug-reports?theme=nope`, { headers: { cookie: owner } })).status).toBe(400);
+
+    const bulk = (body: unknown) => fetch(`${url}/v1/admin/bug-reports/bulk`, { method: "POST", headers: { "content-type": "application/json", origin, cookie: owner, [CSRF_HEADER]: csrf.get(owner)! }, body: JSON.stringify(body) });
+    expect((await bulk({ ids: [], status: "fixed" })).status).toBe(400);
+    expect((await bulk({ ids: [phone.id], status: "fixed", fixedIn: "soon" })).status).toBe(400);
+    const done = await (await bulk({ ids: [phone.id, update.id, "dr-nosuchreport"], status: "fixed", fixedIn: "0.2.21" })).json() as { reports: Array<{ id: string; status: string; fixedIn: string }> };
+    expect(done.reports.map(report => [report.id, report.status, report.fixedIn]).sort()).toEqual([[phone.id, "fixed", "0.2.21"], [update.id, "fixed", "0.2.21"]].sort());
+    const after = await (await fetch(`${url}/v1/admin/bug-reports`, { headers: { cookie: owner } })).json() as List;
+    expect(after.counts).toMatchObject({ new: 0, fixed: 2 });
+    expect(after.themes.every(row => row.open === 0)).toBe(true);
+  });
+
   it("takes feedback with pictures, signed out or not, keeps them for an admin only, and mails it as feedback", async () => {
     const jpeg = readFileSync(new URL("../../../../server/testing/fixtures/banner-metadata.jpg", import.meta.url));
     const png = readFileSync(new URL("../../../../server/testing/fixtures/banner-metadata.png", import.meta.url));

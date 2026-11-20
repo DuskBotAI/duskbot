@@ -29,6 +29,17 @@ describe("feedback view", () => {
     expect(answer.themes[0]!.pain).toBe(true);
     expect(answer.themes.map(theme => theme.key)).toContain("connecting");
   });
+  it("counts every note of the window past one read's page, harness notes left out, several in one millisecond included", async () => {
+    const store = memoryUsageStore(() => NOW);
+    const many: UsageRecord[] = Array.from({ length: 1210 }, (_, i) => {
+      const id = `frust${String(i).padStart(5, "0")}`, at = NOW - 10_000 - Math.floor(i / 3);
+      return { ...base, ...(i < 10 ? { workspaceId: "qatest_ws" } : {}), id, kind: "frustration", at, data: { ...records[0]!.data, id, at } } as UsageRecord;
+    });
+    await store.insert(many);
+    const answer = await feedbackAnswer(store, { now: NOW, kind: null, before: null, hidden: record => record.workspaceId.startsWith("qatest_") });
+    expect(answer.counts.bad).toBe(1200);
+    expect(answer.countsCapped).toBe(false);
+  });
   it("says where a note ran and the app version when the record has them", async () => {
     const store = memoryUsageStore(() => NOW);
     await store.insert([{ ...records[0]!, ran: { place: "desktop", os: "mac", version: "0.2.15" } }, { ...records[1]!, ran: { place: "server", os: "vps" } }, { ...records[2]!, ran: { place: "cloud" } }]);

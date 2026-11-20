@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ChatRepeatGuard } from "./chat-repeat-guard.ts";
+import { ChatRepeatGuard, STUB_MIN_CHARS } from "./chat-repeat-guard.ts";
 
 const failed = { ok: false, text: "ENOENT" };
 
@@ -67,5 +67,55 @@ describe("ChatRepeatGuard", () => {
     guard.noteAfter("status", "{}", { ok: true, text: "a" });
     guard.noteAfter("status", "{}", { ok: true, text: "b" });
     expect(guard.noteAfter("status", "{}", { ok: true, text: "b" })).toBeUndefined();
+  });
+
+  it("says to change approach on the third identical call in a row", () => {
+    const guard = new ChatRepeatGuard({ stops: false });
+    const same = { ok: true, text: "3 results" };
+    expect(guard.noteAfter("search", '{"q":"a"}', same)).toBeUndefined();
+    expect(guard.noteAfter("search", '{"q":"a"}', same)).toBeUndefined();
+    expect(guard.noteAfter("search", '{"q":"a"}', same)).toContain("third identical call to search in a row");
+    expect(guard.noteAfter("search", '{"q":"a"}', same)).toContain("fourth");
+  });
+
+  it("notes an A/B cycle with the same results, and a cycle of up to four calls, once per two laps", () => {
+    const guard = new ChatRepeatGuard({ stops: false });
+    const run = (name: string) => guard.noteAfter(name, "{}", { ok: true, text: `${name} page` });
+    expect([run("a"), run("b"), run("a")]).toEqual([undefined, undefined, undefined]);
+    expect(run("b")).toContain("repeated the same 2 calls twice");
+    expect(run("a")).toContain("same result 3 times");
+    const cycle = new ChatRepeatGuard({ stops: false });
+    const notes = ["a", "b", "c", "d", "a", "b", "c", "d"].map((name) => cycle.noteAfter(name, "{}", { ok: true, text: name }));
+    expect(notes.slice(0, 7).every((note) => note === undefined)).toBe(true);
+    expect(notes[7]).toContain("same 4 calls twice");
+  });
+
+  it("does not call a cycle progress made in between, or changed results", () => {
+    const guard = new ChatRepeatGuard({ stops: false });
+    let page = 0;
+    const notes = ["a", "b", "a", "b"].map((name) => guard.noteAfter(name, "{}", { ok: true, text: name === "b" ? `page ${page++}` : "a" }));
+    expect(notes.every((note) => note === undefined)).toBe(true);
+  });
+
+  it("without stops, never refuses a call or ends the turn", () => {
+    const guard = new ChatRepeatGuard({ stops: false });
+    for (let i = 0; i < 12; i++) {
+      guard.noteAfter("read", "{}", failed);
+      guard.noteAfter("status", "{}", { ok: true, text: "same" });
+      expect(guard.refuses("read", "{}")).toBeNull();
+    }
+    expect(guard.stopped).toBeNull();
+  });
+
+  it("points a long answer repeated word for word at the first call that got it", () => {
+    const guard = new ChatRepeatGuard({ stops: false });
+    const long = { ok: true, text: "x".repeat(STUB_MIN_CHARS) };
+    expect(guard.sameAnswerAs("read", '{"p":1}', long, "call-1")).toBeUndefined();
+    expect(guard.sameAnswerAs("read", '{"p":1}', long, "call-2")).toBe("call-1");
+    expect(guard.sameAnswerAs("read", '{"p":1}', long, "call-3")).toBe("call-1");
+    expect(guard.sameAnswerAs("read", '{"p":2}', long, "call-4")).toBeUndefined();
+    expect(guard.sameAnswerAs("read", '{"p":1}', { ok: true, text: "short" }, "call-5")).toBeUndefined();
+    expect(guard.sameAnswerAs("read", '{"p":1}', { ...long, images: [{}] }, "call-6")).toBeUndefined();
+    expect(guard.sameAnswerAs("read", '{"p":1}', { ...long, ok: false }, "call-7")).toBeUndefined();
   });
 });

@@ -13,9 +13,10 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { setTimeout as delay } from "node:timers/promises";
 import { openHeadlessChrome, type HeadlessPage } from "../../../scripts/testing/headless-chrome.ts";
-import { ROOM, ROUTINES, TEAM } from "./team.mjs";
 
 const repoRoot = fileURLToPath(new URL("../../../", import.meta.url));
+/** DUSK_STAGE_TEAM names another team module shaped like team.mjs, for screens the store set does not show */
+const { ROOM, ROUTINES, TEAM } = await import(process.env.DUSK_STAGE_TEAM ?? "./team.mjs") as typeof import("./team.mjs");
 const RESERVED = new Set([5199, 8799, 5299, 8899, 9335, 5320]);
 const work = mkdtempSync(join(tmpdir(), "dusk-store-"));
 const children = new Set<ChildProcess>();
@@ -41,8 +42,8 @@ async function freePort(): Promise<number> {
   }
 }
 
-function launchFixture(): Promise<string> {
-  writeFileSync(join(work, "markers.json"), "{}");
+function launchFixture(replies: Record<string, string>): Promise<string> {
+  writeFileSync(join(work, "markers.json"), JSON.stringify(replies));
   writeFileSync(join(work, "tools.json"), "[]");
   const child = spawn(process.execPath, ["--experimental-strip-types", "scripts/control-dusk.ts", "launch"], {
     cwd: repoRoot,
@@ -80,7 +81,7 @@ async function seed(base: string): Promise<Seeded> {
   const starter = existing.find((bot: { chiefOfStaff?: boolean }) => bot.chiefOfStaff) ?? existing[0];
   for (const one of TEAM) {
     const created = one.chief && starter ? starter : (await api(base, "POST", "/api/bots", { name: one.name })).bot;
-    const { bot } = await api(base, "PATCH", `/api/bots/${encodeURIComponent(created.id)}`, { name: one.name, color: one.color, mascotBody: one.body, ...(one.pinned ? { pinned: true } : {}) });
+    const { bot } = await api(base, "PATCH", `/api/bots/${encodeURIComponent(created.id)}`, { name: one.name, color: one.color, mascotBody: one.body, ...(one.pinned ? { pinned: true } : {}), ...("section" in one && one.section ? { section: one.section } : {}) });
     bots.set(one.name, bot);
   }
   const memberIds = ROOM.members.map((name) => bots.get(name)!.id);
@@ -105,6 +106,7 @@ async function startLiveTurns(base: string, seeded: Seeded) {
 }
 
 type Message = Record<string, unknown> & { id: string; at: number; role: string; kind: string; parentId?: string | null };
+type Line = [string, string, number, Record<string, unknown>?];
 
 function scripted(seeded: Seeded) {
   const now = Date.now();
@@ -113,16 +115,17 @@ function scripted(seeded: Seeded) {
     const bot = seeded.bots.get(name);
     return bot ? { from: { botId: bot.id, name: bot.name, color: bot.color } } : {};
   };
-  const build = (threadId: string, chat: Array<[string, string, number]>, room: boolean) => {
+  /** a chat line is [who, text, minutesAgo] and may add message fields (attachments, a card) as a fourth entry */
+  const build = (threadId: string, chat: Line[], room: boolean) => {
     const messages: Message[] = [];
-    chat.forEach(([who, text, ago], index) => {
-      messages.push({ id: `store-${threadId}-${index}`, at: now - ago * MINUTE, parentId: messages.at(-1)?.id ?? null, role: who === "me" ? "user" : "bot", kind: "text", text, ...(room && who !== "me" ? from(who) : {}) });
+    chat.forEach(([who, text, ago, extra], index) => {
+      messages.push({ id: `store-${threadId}-${index}`, at: now - ago * MINUTE, parentId: messages.at(-1)?.id ?? null, role: who === "me" ? "user" : "bot", kind: "text", text, ...(room && who !== "me" ? from(who) : {}), ...extra });
     });
     return messages;
   };
   for (const one of TEAM) {
     const bot = seeded.bots.get(one.name)!;
-    const messages = build(bot.threadId, one.chat as Array<[string, string, number]>, false);
+    const messages = build(bot.threadId, one.chat as Line[], false);
     let tail: Message | undefined;
     if ("approval" in one && one.approval) {
       tail = { id: `store-${bot.threadId}-approval`, at: now - MINUTE, parentId: messages.at(-1)!.id, role: "bot", kind: "options", text: "",
@@ -130,7 +133,7 @@ function scripted(seeded: Seeded) {
     }
     threads.set(bot.threadId, { messages, unread: Boolean(one.unread), tail });
   }
-  if (seeded.room) threads.set(seeded.room.threadId, { messages: build(seeded.room.threadId, ROOM.chat as Array<[string, string, number]>, true), unread: false });
+  if (seeded.room) threads.set(seeded.room.threadId, { messages: build(seeded.room.threadId, ROOM.chat as Line[], true), unread: false });
   return threads;
 }
 
@@ -142,8 +145,15 @@ function rewrite(threadId: string, real: Message[], threads: ReturnType<typeof s
   const kept = (firstUser < 0 ? [] : real.slice(firstUser)).map(({ unconfirmed: _unconfirmed, ...message }) => message as Message);
   const head = script.tail ? [...script.messages, script.tail] : script.messages;
   if (kept[0]) kept[0] = { ...kept[0], parentId: head.at(-1)!.id };
-  return [...head, ...kept];
+  const all = [...head, ...kept];
+  if (all.length <= SERVER_PAGE) return all;
+  const page = all.slice(-SERVER_PAGE);
+  page[0] = { ...page[0]!, parentId: null };
+  return page;
 }
+
+/** the newest messages a server hands over at once; the rest come as the phone asks for older ones */
+const SERVER_PAGE = 120;
 
 function patchOwner(owner: Record<string, any>, threads: ReturnType<typeof scripted>) {
   const script = threads.get(owner.threadId);
@@ -161,10 +171,23 @@ function patchOwner(owner: Record<string, any>, threads: ReturnType<typeof scrip
   }
 }
 
+/** a made-up photo for a chat to show, at /api/stage-picture/<n> */
+export const stagePictureUrl = (n: number) => `/api/stage-picture/${n}`;
+function stagePicture(n: number): string {
+  const hue = (n * 47) % 360;
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="800"><defs><linearGradient id="g" x2="1" y2="1"><stop offset="0" stop-color="hsl(${hue} 70% 62%)"/><stop offset="1" stop-color="hsl(${(hue + 60) % 360} 60% 40%)"/></linearGradient></defs><rect width="1200" height="800" fill="url(#g)"/><circle cx="${300 + (n % 5) * 120}" cy="380" r="160" fill="rgb(255 255 255 / .35)"/></svg>`;
+}
+
 function startProxy(target: string, threads: () => ReturnType<typeof scripted> | null): Promise<number> {
   const upstream = new URL(target);
   const server = http.createServer((req, res) => {
     const path = req.url ?? "/";
+    const picture = /^\/api\/stage-picture\/(\d+)/.exec(path);
+    if (picture) {
+      res.writeHead(200, { "content-type": "image/svg+xml", "cache-control": "max-age=3600" });
+      res.end(stagePicture(Number(picture[1])));
+      return;
+    }
     const patch = req.method === "GET" && (/^\/api\/bots(\?|$)/.test(path) || path.startsWith("/api/transcripts?") || path.startsWith("/api/notifications") || path in CONNECTED);
     const headers = { ...req.headers, host: upstream.host, ...(patch ? { "accept-encoding": "identity" } : {}) };
     const forward = http.request({ host: upstream.hostname, port: upstream.port, path, method: req.method, headers }, (answer) => {
@@ -188,7 +211,7 @@ function startProxy(target: string, threads: () => ReturnType<typeof scripted> |
           for (const owner of [...(data.bots ?? []), ...(data.groups ?? [])]) patchOwner(owner, map);
           for (const thread of data.threads ?? []) {
             const messages = rewrite(thread.threadId, thread.messages ?? [], map);
-            if (messages) { thread.messages = messages; if ("activeLeafId" in thread) thread.activeLeafId = messages.at(-1)?.id ?? null; if ("hasMore" in thread) thread.hasMore = false; }
+            if (messages) { thread.messages = messages; if ("activeLeafId" in thread) thread.activeLeafId = messages.at(-1)?.id ?? null; if ("hasMore" in thread) thread.hasMore = messages.length >= SERVER_PAGE; }
           }
           body = JSON.stringify(data);
         } catch {}
@@ -228,8 +251,10 @@ export const click = async (page: HeadlessPage, expression: string) => {
 export type Scheme = "light" | "dark";
 export type Stage = Awaited<ReturnType<typeof startStage>>;
 
-export async function startStage(serve: Serve = DEV_SERVER) {
-  const fixture = await launchFixture();
+/** `replies`: the fake engine answers a message holding one of these markers with its text, streamed at
+ * FAKE_CLAUDE_STREAM_CADENCE when that is set */
+export async function startStage(serve: Serve = DEV_SERVER, replies: Record<string, string> = {}) {
+  const fixture = await launchFixture(replies);
   console.log(`fixture ${fixture}`);
   const seeded = await seed(fixture);
   let threads: ReturnType<typeof scripted> | null = null;
@@ -243,18 +268,21 @@ export async function startStage(serve: Serve = DEV_SERVER) {
 
   const profile = mkdtempSync(join(tmpdir(), "dusk-store-chrome-"));
   const page = await openHeadlessChrome(profile);
-  await page.send("Emulation.setDeviceMetricsOverride", { width: 440, height: 956, deviceScaleFactor: 3, mobile: true });
+  // a Pixel 7 for an android run
+  const screen = process.env.DUSK_STAGE_PLATFORM === "android" ? { width: 412, height: 915, deviceScaleFactor: 2.625 } : { width: 440, height: 956, deviceScaleFactor: 3 };
+  await page.send("Emulation.setDeviceMetricsOverride", { ...screen, mobile: true });
   await page.send("Emulation.setTouchEmulationEnabled", { enabled: true });
   await page.send("Emulation.setFocusEmulationEnabled", { enabled: true });
   // the store build marks <html data-mobile-app="ios"> from the native shell, which hides screen view (4.2.7) and every
   // plan line; the browser preview would say "web", so the mark is pinned before the app renders
   await page.send("Page.enable");
-  await page.send("Page.addScriptToEvaluateOnNewDocument", { source: `new MutationObserver(() => { const root = document.documentElement; if (root && root.dataset.mobileApp && root.dataset.mobileApp !== "ios") root.dataset.mobileApp = "ios"; }).observe(document, { attributes: true, subtree: true, attributeFilter: ["data-mobile-app"] });` });
+  const mark = process.env.DUSK_STAGE_PLATFORM === "android" ? "android" : "ios";
+  await page.send("Page.addScriptToEvaluateOnNewDocument", { source: `new MutationObserver(() => { const root = document.documentElement; if (root && root.dataset.mobileApp && root.dataset.mobileApp !== "${mark}") root.dataset.mobileApp = "${mark}"; }).observe(document, { attributes: true, subtree: true, attributeFilter: ["data-mobile-app"] });` });
 
   const open = async (scheme: Scheme, query = "", storage: Record<string, string> = { "dusk.mobile.introSeen": "1" }) => {
     await page.send("Page.navigate", { url: `${base}/?frame=1&scheme=${scheme}${query}` });
     await delay(1200);
-    await page.evaluate(`localStorage.clear(); for (const [k, v] of Object.entries(${js(storage)})) localStorage.setItem(k, v); location.reload()`);
+    await page.evaluate(`localStorage.clear(); sessionStorage.clear(); for (const [k, v] of Object.entries(${js(storage)})) localStorage.setItem(k, v); location.reload()`);
     await delay(2500);
   };
   const home = async (scheme: Scheme) => {
@@ -278,5 +306,5 @@ export async function startStage(serve: Serve = DEV_SERVER) {
     writeFileSync(join(work, "release"), "");
     stopAll();
   };
-  return { page, open, home, chat, stop };
+  return { page, open, home, chat, stop, base, fixture };
 }

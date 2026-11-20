@@ -48,6 +48,12 @@ export function toolHint(tool: unknown): [string, McpToolHint] | null {
   }];
 }
 
+/** A tool that only reads by its server's own word: marked read-only, not destructive, with no write word in its name. */
+export function readsByHint(tool: string, hint: McpToolHint | undefined): boolean {
+  if (!hint?.readOnly || hint.destructive) return false;
+  return !nameWords(tool).some((word) => WRITE_WORDS.has(word));
+}
+
 const nameWords = (name: string) => name.replace(/([a-z0-9])([A-Z])/g, "$1 $2").toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
 
 export class McpToolHints {
@@ -100,9 +106,7 @@ export class McpToolHints {
     if (isOutboundTool(full)) return false;
     if (input.apiServer) return input.tool === "api_request" && input.facts?.method?.toUpperCase() === "GET";
     if (isConnectedAppsServer(input.server)) return isReadOnlyTool(full);
-    const hint = this.get(input.server, input.spec, input.tool);
-    if (!hint?.readOnly || hint.destructive) return false;
-    return !nameWords(input.tool).some((word) => WRITE_WORDS.has(word));
+    return readsByHint(input.tool, this.get(input.server, input.spec, input.tool));
   }
 }
 

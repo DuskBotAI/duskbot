@@ -42,7 +42,7 @@ export function ComposerSendButton({ compact, waits, label, title, look, disable
       style={waits ? undefined : look.style}
       className={cn(
         "flex shrink-0 items-center justify-center rounded-full disabled:cursor-default",
-        compact ? "composer-press size-7" : "size-8 max-md:size-10",
+        compact ? "composer-press size-7" : "size-8",
         waits ? "bg-raised text-ink-secondary hover:bg-raised-hover" : look.className,
       )}
     >

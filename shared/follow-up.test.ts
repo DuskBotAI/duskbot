@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { followUpChoices, parseFollowUp, resolveFollowUp } from "./follow-up.ts";
+import { followUpChoices, parseFollowUp, resolveFollowUp, sentFollowUp } from "./follow-up.ts";
 
 describe("a message sent while a bot works", () => {
   it("is an ordinary send when nothing runs, whatever key or setting", () => {
@@ -27,6 +27,13 @@ describe("a message sent while a bot works", () => {
         expect(resolveFollowUp({ running: true, alternate, preferred, canSteer: false })).toBe("queue");
       }
     }
+  });
+
+  it("asks the server for the person's choice, which applies it to the engine that actually runs the turn", () => {
+    expect(sentFollowUp({ running: false, alternate: false })).toBeNull();
+    expect(sentFollowUp({ running: true, alternate: false, preferred: "steer" })).toBe("steer");
+    expect(sentFollowUp({ running: true, alternate: true, preferred: "steer" })).toBe("queue");
+    expect(sentFollowUp({ running: true, alternate: false, preferred: "queue" })).toBe("queue");
   });
 
   it("offers what Enter does first, then the other one where steering works, then restart", () => {

@@ -66,7 +66,7 @@ it("remembers at once, learns only what the person said, forgets everywhere, and
     // a vague "yes" gets a warm question: the rule is in the prompt once
     expect(preview.sections.map((section) => section.text).join("\n").split("never quote it back or sound impatient").length).toBe(2);
     // a shared file is answered with what it says, in the bot's own voice rather than the file's style rules
-    expect(preview.sections.map((section) => section.text).join("\n").split("are that document's task, not yours").length).toBe(2);
+    expect(preview.sections.map((section) => section.text).join("\n").split("are that document's task, not your voice").length).toBe(2);
     // and in the talking style the person chose, warm until they pick another; the next prompt follows the pick
     expect(preview.sections.find((section) => section.id === "talking-style")?.text).toBe(talkingStylePrompt("warm"));
     expect((await api<{ talkingStyle: string }>("/api/config")).talkingStyle).toBe("warm");

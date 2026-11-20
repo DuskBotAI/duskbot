@@ -107,3 +107,10 @@ test("a session handoff page that is not this Admin's own is never used", async 
   await f.client.openDashboard();
   assert.deepEqual(f.opened, [`${f.origin}/handoff#t=${handoffToken}`]);
 });
+
+test("an account service without phone codes (404) says unsupported, so the phone page logs in by email instead", async t => {
+  const f = await fixture(t, () => ({ status: 200, body: {} }));
+  await f.client.start();
+  assert.deepEqual(await f.client.phoneSignIn(), { outcome: "unsupported" });
+  assert.ok(f.requests.some(item => item.route === "/v1/app/phone-sign-in"));
+});

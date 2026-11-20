@@ -1,18 +1,18 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { ChevronDown } from "../icons";
 import { cn } from "@/lib/cn";
+import { pacedMs } from "@/lib/motion-speed";
 import { usePrefersReducedMotion } from "@/components/mascot-clock";
 import { phraseAt, phraseHoldMs, rotationHoldMs } from "@/lib/live-activity";
 import { quietText } from "@/lib/now-steps";
 import { t } from "@/lib/i18n";
 import { plainWord, startsAnywhere, TYPING_PHASE, workingWord } from "@/lib/friendly-activity";
+import { wordGroup } from "@/lib/working-mood";
 import type { StepQuiet } from "../../shared/turn-progress";
 
 const FADE_MS = 320;
 /** Grok's activity line leaves in 140ms. */
-export const STATUS_EXIT_MS = 140;
-/** A turn that finished: the words leave as ever, the mascot stays for its happy hop, then fades. */
-export const STATUS_DONE_EXIT_MS = 380;
+export const STATUS_EXIT_MS = pacedMs(140);
 
 export function useRotatingPhrase(
   phrases: readonly string[],
@@ -57,11 +57,22 @@ function ShimmerPhrase({ text, className }: { text: string; className?: string }
   );
 }
 
+/** How the line's words change: the old words blur out as the new ones come in from a blur, both in the same cell at
+ * once, so the line never shows neither; the cell's width eases from the old words' to the new. */
+export const WORD_SWAP = { duration: 880, easing: "cubic-bezier(0.22, 1, 0.36, 1)", blurPx: 4 } as const;
+/** How long words stay fully readable once their blur in has ended, before anything may replace them. */
+export const WORD_DWELL_MS = 5000;
+/** A pool's words rotate only once the turn has run this long; a shorter turn keeps its one phrase. */
+export const LONG_TURN_MS = 15_000;
+
 /** The status label rules: the mark comes alone, its first words follow 1.8 to 2.6 s after the send (drawn per turn,
- * about 1.2 to 1.4 s after the mark), then each step keeps its words at least 800ms before the next step's. A step with a
- * pool of words moves to another of them every 2.5 to 3.5 s. "Typing…" is the line's own and comes and goes at once. */
+ * about 1.2 to 1.4 s after the mark). Whatever the line says then stays for its swap and a full dwell (STATUS_HOLD_MS)
+ * before the next step's words, however fast the steps come: the newest step wins and the ones between are never said.
+ * Steps in one coarse group (wordGroup) keep the words they found. In a long turn a pool's words move to another of them
+ * 7 to 9 s after the last swap ended. */
 export const STATUS_QUIET_MS = { min: 1800, max: 2600 } as const;
-export const STATUS_HOLD_MS = 800;
+export const STATUS_HOLD_MS = WORD_SWAP.duration + WORD_DWELL_MS;
+const wordHoldMs = (seed: string, step: number) => WORD_SWAP.duration + rotationHoldMs(seed, step);
 export { TYPING_PHASE };
 
 function quietFor(seed: string): number {
@@ -77,9 +88,14 @@ const OPENING_PHASE = "friendly:opening";
 /** A line first seen this long into its turn (a chat opened mid-turn) says what is happening at once. */
 const OPENING_WITHIN_MS = STATUS_QUIET_MS.max + 1_500;
 
+/** Writing a reply only moves forward: its words in order, then the last one held, never back to the first. */
+export function typingWord(pool: readonly string[], step: number): string {
+  return pool[Math.min(step, pool.length - 1)] ?? "";
+}
+
 /** The step label the simple status line shows now, or null while the line is still quiet. Plain work rotates through
  * `phrases` with `fun` ones mixed in as the turn runs long (workingWord); a step leads with its own words. */
-export function useStatusLabel(phrases: readonly string[] | null, phase: string, seed: string, since: number | null, active: boolean, fun: readonly string[] = NOTHING): { key: string; text: string } | null {
+export function useStatusLabel(phrases: readonly string[] | null, phase: string, seed: string, since: number | null, active: boolean, fun: readonly string[] = NOTHING, wordsAtOnce = false): { key: string; text: string; phase: string } | null {
   const [, wake] = useState(0);
   const shown = useRef<ShownLabel | null>(null);
   const firstSeen = useRef<number | null>(null);
@@ -88,24 +104,25 @@ export function useStatusLabel(phrases: readonly string[] | null, phase: string,
   else firstSeen.current ??= now;
   const typing = phase === TYPING_PHASE;
   const start = since ?? firstSeen.current ?? now;
-  const quietUntil = start + quietFor(`${seed}|quiet`);
+  const quietUntil = wordsAtOnce ? start : start + quietFor(`${seed}|quiet`);
   const pool = phrases && phrases.length > 0 ? phrases : null;
   const phaseSeed = `${seed}|${phase}`;
   const plain = startsAnywhere(phase);
-  const say = (step: number, previous?: string) => pool ? (plain ? workingWord(pool, fun, phaseSeed, step, now - start, previous) : phraseAt(pool, phaseSeed, step)) : "";
+  const say = (step: number, previous?: string) => !pool ? "" : typing ? typingWord(pool, step) : plain ? workingWord(pool, fun, phaseSeed, step, now - start, previous) : phraseAt(pool, phaseSeed, step);
   const label = (step: number, previous?: string): ShownLabel => ({ phase, step, text: say(step, previous), at: now, key: `${phase}#${step}` });
   const held = shown.current;
-  const holdUntil = held && !typing && held.phase !== TYPING_PHASE ? held.at + STATUS_HOLD_MS : 0;
-  const rotateAt = held && pool && held.phase === phase && pool.length > 1 ? held.at + rotationHoldMs(phaseSeed, held.step) : 0;
+  const holdUntil = held ? held.at + STATUS_HOLD_MS : 0;
+  const rotateAt = (from: ShownLabel) => Math.max(from.at + wordHoldMs(phaseSeed, from.step), start + LONG_TURN_MS);
+  const rotates = (from: ShownLabel) => Boolean(pool && pool.length > 1 && !(typing && from.step >= pool.length - 1));
   let next: ShownLabel | null;
-  if (held?.phase === OPENING_PHASE && plain && pool) next = { ...held, phase };
+  if (held && pool && held.phase !== phase && wordGroup(held.phase) === wordGroup(phase)) next = { ...held, phase };
   else if (held && (held.phase !== phase || !pool) && now < holdUntil) next = held;
-  else if (held && pool && held.phase === phase) next = rotateAt && now >= rotateAt ? label(held.step + 1, held.text) : held;
+  else if (held && pool && held.phase === phase) next = rotates(held) && now >= rotateAt(held) ? label(held.step + 1, held.text) : held;
   else if (!pool || !(typing || now >= quietUntil)) next = null;
   else if (!held && !typing && !plain && phase.startsWith("friendly:") && now - start < OPENING_WITHIN_MS) next = { phase: OPENING_PHASE, step: 0, text: plainWord("thinking"), at: now, key: OPENING_PHASE };
   else next = label(0);
   shown.current = next;
-  const nextTurn = next && pool && next.phase === phase && pool.length > 1 ? next.at + rotationHoldMs(phaseSeed, next.step) : 0;
+  const nextTurn = next && pool && next.phase === phase && rotates(next) ? rotateAt(next) : 0;
   const opened = next?.phase === OPENING_PHASE ? next.at + STATUS_HOLD_MS : 0;
   const due = Math.min(...[quietUntil, holdUntil, nextTurn, opened].filter((at) => at > now));
   useEffect(() => {
@@ -113,7 +130,7 @@ export function useStatusLabel(phrases: readonly string[] | null, phase: string,
     const timer = setTimeout(() => wake((tick) => tick + 1), due - Date.now());
     return () => clearTimeout(timer);
   }, [active, due]);
-  return active && next ? { key: next.key, text: next.text } : null;
+  return active && next ? { key: next.key, text: next.text, phase: next.phase } : null;
 }
 
 /** Grok's shimmer: the words in 40% ink with a full-ink band swept across them by background-position, 2.2s in 60
@@ -121,10 +138,6 @@ export function useStatusLabel(phrases: readonly string[] | null, phase: string,
 function StatusShimmer({ text }: { text: string }) {
   return <span className="status-shimmer">{text}</span>;
 }
-
-/** How the line's words change: the old words blur out as the new ones come in from a blur, both in the same cell at
- * once, so the line never shows neither; the cell's width eases from the old words' to the new. */
-export const WORD_SWAP = { duration: 880, easing: "cubic-bezier(0.22, 1, 0.36, 1)", blurPx: 4 } as const;
 
 type StepWords = { key: string; text: string };
 
@@ -222,10 +235,13 @@ export function TurnPresence({
   quiet,
   card,
   cardLabel,
-  done = false,
+  wordsAtOnce,
   className,
 }: {
-  avatar: ReactNode;
+  /** a mark before the words; without one the line is the words alone, from its first frame */
+  avatar?: ReactNode | ((shownPhase: string | null) => ReactNode);
+  /** with a mark, the words still come from the first frame (Thinking) instead of after the mark's quiet beat */
+  wordsAtOnce?: boolean;
   visible: boolean;
   label?: string;
   phrases?: readonly string[];
@@ -244,8 +260,6 @@ export function TurnPresence({
   quiet?: StepQuiet;
   card?: ReactNode;
   cardLabel?: string;
-  /** Simple mode: the turn finished well, so the mark lingers past the words for its happy hop. */
-  done?: boolean;
   className?: string;
 }) {
   const [mounted, setMounted] = useState(visible);
@@ -272,9 +286,9 @@ export function TurnPresence({
       return;
     }
     setPhase("out");
-    const timer = setTimeout(() => setMounted(false), simple ? (done ? STATUS_DONE_EXIT_MS : STATUS_EXIT_MS) : 280);
+    const timer = setTimeout(() => setMounted(false), simple ? STATUS_EXIT_MS : 280);
     return () => clearTimeout(timer);
-  }, [visible, answering, mounted, simple, done]);
+  }, [visible, answering, mounted, simple]);
 
   const showWorking = presencePhase === "think";
   // grok's line leaves with the words it was saying
@@ -299,8 +313,12 @@ export function TurnPresence({
   const lead = label ?? t("chat.activity.working");
   const now = phrases && phrases.length > 0 ? phrases : null;
   const { current, previous } = useRotatingPhrase(now ?? NOTHING, phase ?? now?.[0] ?? "", seed, !simple && mounted && showWorking && now !== null);
-  const step = useStatusLabel(label ? [label] : now, label ? `label:${label}` : phase ?? now?.[0] ?? "", seed, since, mounted && simpleStatus, label ? NOTHING : fun);
+  const marked = avatar !== undefined;
+  const wordless = !label && !now;
+  const atOnce = wordsAtOnce ?? !marked;
+  const step = useStatusLabel(label ? [label] : now ?? (atOnce ? [plainWord("thinking")] : null), label ? `label:${label}` : wordless && atOnce ? "label:thinking" : phase ?? now?.[0] ?? "", seed, since, mounted && simpleStatus, label ? NOTHING : fun, atOnce);
   if (!mounted) return null;
+  const mark = typeof avatar === "function" ? avatar(step?.phase ?? null) : avatar;
   const status = simpleStatus ? (
     <span id={statusId} className="turn-label-slot flex h-[22px] min-w-0 items-center gap-x-1.5 text-[13.5px] leading-[21px]" data-turn-status>
       {step && <StepPhrase step={step} hover={hover} />}
@@ -336,13 +354,13 @@ export function TurnPresence({
       <div
         title={simple && showWorking ? [lead, detail ?? (now ? current : null), size].filter(Boolean).join(" · ") : undefined}
         className={cn(
-          simple ? "flex h-9 min-w-0 max-w-full items-center gap-[8.5px] ps-2" : "flex min-w-0 max-w-full items-center gap-2",
+          simple ? cn("flex h-9 min-w-0 max-w-full items-center gap-[8.5px]", marked ? "ps-2" : "ps-3") : "flex min-w-0 max-w-full items-center gap-2",
           presencePhase === "think" && (simple ? "turn-status-in" : "turn-mascot-in"),
-          presencePhase === "out" && (simple ? (done ? "turn-status-out turn-status-done" : "turn-status-out") : "turn-mascot-out"),
+          presencePhase === "out" && (simple ? "turn-status-out" : "turn-mascot-out"),
         )}
       >
         {/* a px down: the words' optical middle sits between cap and x-height, below their line box's middle */}
-        {simple ? <span className="turn-status-mark relative top-px inline-flex shrink-0">{avatar}</span> : avatar}
+        {marked && (simple ? <span className="turn-status-mark relative top-px inline-flex shrink-0">{mark}</span> : mark)}
         {expandable && (!simple || step) ? (
           <button
             ref={toggle}

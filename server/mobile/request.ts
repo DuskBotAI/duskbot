@@ -35,6 +35,9 @@ export function answerMobilePreflight(req: IncomingMessage, res: ServerResponse,
   allowOrigin(res, origin);
   res.setHeader("access-control-allow-methods", method);
   res.setHeader("access-control-allow-headers", HEADERS.filter(header => requested.includes(header.toLowerCase())).join(", "));
+  // WebKit keeps a preflight 5 s unless told longer (600 s at most): each live stream dial from the phone otherwise
+  // costs a second trip to the place before it opens
+  res.setHeader("access-control-max-age", "600");
   res.setHeader("cache-control", "no-store");
   res.writeHead(204).end();
   return true;

@@ -1,0 +1,77 @@
+{
+  "path": "/glossary/background-agent",
+  "type": "glossary",
+  "title": "What is a background agent, and when will it need you?",
+  "nav": "background agent",
+  "h1": "what is a background agent?",
+  "description": "Learn what it means to leave an AI task running, how to tell a finished result from partial work, and what happens to Dusk Bot routines when a laptop sleeps.",
+  "keyword": "background agent",
+  "keywords": [
+    "what is a background agent",
+    "ai agent running in the background"
+  ],
+  "answer": "**a background agent works on a task while you turn your attention elsewhere.** you might start it once and come back for the result. before walking away, agree on what it should leave for you and what should make it stop. switching windows and shutting your laptop have different consequences.",
+  "updated": "2026-11-20",
+  "review": {
+    "status": "approved",
+    "by": "lead agent, after four independent reviewers read every page against seo/facts (2026-11-20); every finding applied",
+    "at": "2026-11-20"
+  },
+  "tags": [
+    "agents",
+    "routine",
+    "cloud",
+    "glossary"
+  ],
+  "connectors": [],
+  "related": [
+    "/glossary/always-on-ai-agent",
+    "/glossary/ai-routine",
+    "/scheduled-ai-tasks"
+  ],
+  "art": {
+    "props": [
+      "p-briefcase",
+      "s-clock"
+    ],
+    "bubble": "what did you finish?"
+  },
+  "og_line": "know what you will come back to.",
+  "definition": "a background agent is an ai that can work without you following each step as it happens.",
+  "example": "**gordon wants a list of missing costume sizes before a dress rehearsal.** in this example, he leaves an agent comparing the cast list with the fitting sheets while he sets out chairs. one fitting sheet won't open. a useful result distinguishes people with no size on file from those whose sheets it couldn't read.",
+  "sections": [
+    {
+      "h": "make a partial result easy to spot",
+      "md": "**ask for a count of the sheets the agent could actually read.** a tidy list of missing sizes can hide a whole unreadable sheet. ask it to name that sheet and leave the affected names unresolved.\n\nif the wardrobe team needs an answer before rehearsal, agree when someone will look at the result. a background task can still get stuck on a question only you can answer."
+    },
+    {
+      "h": "can you walk away from a dusk bot routine?",
+      "md": "**for recurring work in dusk bot, pick where the routine will run.** on your computer, routines stop when the app closes or the machine sleeps. dusk cloud runs routines on time with your computer off.[^1]\n\nopen automations for the routine's run history. if you want to follow up from the venue, the phone can pair with dusk cloud. a phone paired with your own computer still depends on that computer running the app.[^1][^2]"
+    },
+    {
+      "h": "when leaving it running buys you little",
+      "md": "**stay with the task if each missing size needs an immediate fitting.** dusk bot can help organize the questions. if the next step always needs you and the performer in the same room, working through the sheets together is simpler."
+    }
+  ],
+  "faq": [
+    {
+      "q": "does background mean the task repeats?",
+      "a": "no. comparing today's fitting sheets can be a one-off. use a routine when you also want a time or event to start the work again."
+    },
+    {
+      "q": "will dusk bot catch up on a missed routine?",
+      "a": "on your computer, a routine less than 12 hours late runs once when you return. older runs are skipped. plan around the rehearsal deadline if a late list would be useless.[^1]"
+    }
+  ],
+  "sources": [
+    {
+      "label": "dusk bot docs: routines and missed runs",
+      "url": "/docs/routines"
+    },
+    {
+      "label": "dusk bot docs: phone pairing",
+      "url": "/docs/phone"
+    }
+  ],
+  "voice": 2
+}

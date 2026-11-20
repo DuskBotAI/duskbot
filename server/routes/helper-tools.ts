@@ -15,7 +15,8 @@ import type { ExtractImage, ExtractInput, FieldSchema } from "../extractor/types
 import type { json as sendJson } from "../harness/http.ts";
 import { botFileSource, PageBundleError, type BotFolders } from "../pages/bundle.ts";
 import { openMessageFile, type OpenedMessageFile } from "../message-file.ts";
-import { pdfText, PdfTextError } from "../pdf-text.ts";
+import { passagesAbout } from "../document-excerpts.ts";
+import { DOCUMENT_EXTENSIONS, documentText, DocumentTextError } from "../document-text.ts";
 import { PASS } from "./table.ts";
 
 export interface HelperToolDeps {
@@ -40,6 +41,7 @@ const EXTRACT = "/api/internal/helpers/extract";
 export const HELPER_TOOL_TIMEOUT_MS = 20_000;
 const IMAGE_TYPES: Record<string, ExtractImage["mime"]> = { ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp" };
 const TEXT_FILE_BYTES = 1024 * 1024;
+const FALLBACK_TEXT_CHARS = 20_000;
 
 export const HELPER_MESSAGES = {
   decideOff: "Decisions aren't set up on this computer. Ask the person to add a free Cloudflare Workers AI key (or a Jev key) in Settings → Decision and extraction.",
@@ -131,7 +133,7 @@ async function readInput(body: Record<string, unknown>, fields: FieldSchema, ctx
   }
   try {
     const extension = extname(target).toLowerCase();
-    if (extension === ".pdf") return fittedText(fields, await pdfText(await opened.handle.readFile(), signal));
+    if (DOCUMENT_EXTENSIONS.has(extension)) return fittedText(fields, await documentText(await opened.handle.readFile(), extension, signal));
     const mime = IMAGE_TYPES[extension];
     if (mime) {
       if (opened.bytes > EXTRACT_LIMITS.imageBytes) return "The image is over 1 MB. Make it smaller first.";
@@ -142,11 +144,27 @@ async function readInput(body: Record<string, unknown>, fields: FieldSchema, ctx
     if (content.includes("\u0000")) return "That file is not text or a PNG, JPEG or WebP image.";
     return fittedText(fields, content);
   } catch (error) {
-    if (error instanceof PdfTextError) return error.message;
+    if (error instanceof DocumentTextError) return error.message;
     throw error;
   } finally {
     await opened.handle.close();
   }
+}
+
+/** No extraction model answered: the text itself, which every engine can read the values from; of a long text, the
+ * passages that mention the fields. */
+function readItYourself(content: string, fields: FieldSchema, cutAt: number | undefined): string {
+  const fence = (text: string) => text.replace(/<\/?file-text\b/gi, (tag) => tag.replace("<", "&lt;"));
+  if (content.length <= FALLBACK_TEXT_CHARS) {
+    return `No extraction model is set up here, so this is the text itself: read the values from it yourself.\n<file-text>\n${fence(content)}\n</file-text>`
+      + (cutAt === undefined ? "" : `\nOnly the first ${cutAt.toLocaleString("en-US")} characters are shown.`);
+  }
+  const about = Object.entries(fields).map(([name, spec]) => `${name.replace(/_/g, " ").replace(/([a-z])([A-Z])/g, "$1 $2")} ${spec.description ?? ""} ${spec.options?.join(" ") ?? ""}`).join(" ");
+  const passages = passagesAbout(content, about, FALLBACK_TEXT_CHARS);
+  if (!passages.length) {
+    return `No extraction model is set up here, and nothing in this ${content.length.toLocaleString("en-US")}-character text mentions those fields. Name the fields in the words the document would use, or ask for a different part.`;
+  }
+  return `No extraction model is set up here, so these are the passages of the text that mention the fields (the text has ${content.length.toLocaleString("en-US")} characters): read the values from them yourself. Name the fields differently to get other passages.\n<file-text>\n${fence(passages.join("\n[…]\n"))}\n</file-text>`;
 }
 
 export function createHelperToolRoutes(deps: HelperToolDeps) {
@@ -185,6 +203,9 @@ export function createHelperToolRoutes(deps: HelperToolDeps) {
       const result = await deps.extractor.extract("botExtract", fields, input, { timeoutMs: HELPER_TOOL_TIMEOUT_MS, signal: abort.signal });
       if (abort.signal.aborted) return;
       if (!result.ok) {
+        if (result.reason !== "cancelled" && input.text?.trim() && !input.images?.length) {
+          return void ctx.json(ctx.res, 200, { text: readItYourself(input.text, fields, cutAt) });
+        }
         const off = result.reason === "disabled" || result.reason === "no_key";
         return void ctx.json(ctx.res, off ? 409 : 502, { error: off ? HELPER_MESSAGES.extractOff : FAILURE[result.reason] ?? "The extraction model's answer could not be read. Try again." });
       }

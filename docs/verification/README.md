@@ -57,6 +57,7 @@ Use only mapped, tested commands:
 - [Profile proposal and credential-card lifecycle](proposal-cards.md)
 - [Full Access without duplicate approvals](full-access.md)
 - [Gmail draft creation, send approval and revision](gmail-drafts.md)
+- [Purchases, email review and product cards](purchases.md)
 - [Exact command allowlist UI and saved rules](command-allowlist.md)
 - [The safety floor: a never-list no grant can allow](safety-floor.md)
 - [Peer approval denial, expiry, and cancellation](peer-approvals.md)
@@ -66,6 +67,7 @@ Use only mapped, tested commands:
 - [Taking control of a bot's computer](take-control.md)
 - [What a bot can do on its VPS desktop](vps-computer-tools.md)
 - [Native dictation retention and send-to-stop](dictation.md)
+- [Voice calls with the built-in voice](voice-calls.md)
 - [Proactive routines and the brief](proactive-routines.md)
 - [Waits: tell me when, with no AI while waiting](waits.md)
 - [Chat widgets](widgets.md)
@@ -291,6 +293,8 @@ reports into the bot's chat as one captioned bot message, that quiet runs write
 nothing, that a run's question is answered in that chat, and the concurrency
 rule with the person's own turn, in the real renderer and end to end.
 
+The [Compose update fixture](../../scripts/testing/compose-update-smoke.py) uses an empty Linux Docker daemon with a local registry, the real server bundle and Caddy. In a disposable Linux Docker host with Python 3, curl and Compose v2.24.4+, run `pnpm build:server` and then `python3 scripts/testing/compose-update-smoke.py` from the checkout. It publishes fixture images only to the temporary registry, checks owner access, pins and a mismatched tag, then verifies manual replacement and an automatic upgrade after a fake-engine turn finishes. Its release feed and timer are local fixtures.
+
 The [server settings recipe](server-settings.md) checks browser provider sign-in
 with an offline CLI and custom-domain validation without touching live accounts.
 
@@ -329,6 +333,9 @@ desktop routing, cancellation, and computer authority cleanup.
 The [Gemini speech fixture](gemini-speech.md) checks write-only credentials,
 voice selection and WAV synthesis against an offline provider in an isolated
 server, with manual steps for real Google access and playback.
+
+The [speed benchmark](speed.md) times server start, a reply from send to the first text on the live
+stream hop by hop, chat switches and opens, and the bookkeeping writes a chat open makes, on fake-engine fixtures.
 
 The [persistence responsiveness benchmark](persistence-performance.md) measures
 synthetic message/log bursts and history scans, with isolated chat, visibility

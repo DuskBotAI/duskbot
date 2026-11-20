@@ -11,8 +11,7 @@ import { useDeleteAllThreads } from "../BotMenuDelete";
 import { useDesktopCapabilities } from "../DesktopCapabilities";
 import { SoulField } from "../SoulField";
 import { LIMIT_MODES } from "../../../shared/wire";
-import { BackupAis } from "./BackupAis";
-import { radioArrows, RadioRow } from "./rows";
+import { radioArrows, RadioRow, SwitchRow } from "./rows";
 import { BotConversations } from "./Conversations";
 import { panelMemoryNotes } from "./memory-notes";
 import type { SheetPage } from "./modals/panel-modal";
@@ -50,7 +49,8 @@ export function SettingsPage({ bot, onOpen, more }: {
   const open = (page: SheetPage) => () => onOpen?.(page);
 
   const skillsOn = skills.skills.filter((skill) => skill.enabled).length;
-  const backups = bot.fallback?.length ?? 0;
+  // absent: the automatic backup; empty: Off; a list someone set: on, that list first
+  const backupOn = bot.fallback === undefined || bot.fallback.length > 0;
   const engineCoordinates = state.instances.find((instance) => instance.instanceId === bot.modelSelection.instanceId)?.capabilities?.agentsMcp;
   const editable = bot.yourAccess !== "view";
 
@@ -70,7 +70,9 @@ export function SettingsPage({ bot, onOpen, more }: {
           <NavRow data-panel-page="tools" title={t("botPanel.page.tools")} value={bot.toolScope !== undefined ? t("botPanel.tools.custom") : undefined} onClick={open("tools")} />
           <NavRow data-panel-page="permissions" title={t("botPanel.ui.botSettingsSectionsPermissions")} value={bot.chiefOfStaff ? t("botPanel.ui.permissionsChiefTitle") : undefined} onClick={open("permissions")} />
           <NavRow data-panel-page="folder" title={t("botPanel.page.folder")} value={bot.cwd ? shortPath(bot.cwd, capabilities.host?.homeDir) : t("botPanel.folder.private")} tooltip={bot.cwd ?? undefined} onClick={open("folder")} />
-          <NavRow data-panel-page="backups" title={t("botPanel.page.backups")} value={backups > 0 ? t("botPanel.backups.count", { count: backups }) : t("botPanel.none")} onClick={open("backups")} />
+          <SwitchRow data-panel-row="backup-ai" color={bot.color} title={t("botPanel.backupAi")} label={t("botPanel.backupAi")}
+            tooltip={backupOn ? t("botPanel.backupAi.on") : t("botPanel.backupAi.off")} checked={backupOn} disabled={!editable}
+            onChange={() => dispatch({ type: "updateBot", botId: bot.id, patch: { fallback: backupOn ? [] : null } })} />
         </Card>
 
         {editable && (
@@ -141,12 +143,7 @@ export function LimitModeCard({ bot, derived }: { bot: Bot; derived: Derived }) 
 }
 
 export function BackupsPage({ bot, derived }: { bot: Bot; derived: Derived }) {
-  return (
-    <>
-      <BackupAis bot={bot} onChange={(fallback) => derived.patch({ fallback })} />
-      <LimitModeCard bot={bot} derived={derived} />
-    </>
-  );
+  return <LimitModeCard bot={bot} derived={derived} />;
 }
 
 export function ThreadsPage({ bot }: { bot: Bot }) {

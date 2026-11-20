@@ -1,33 +1,16 @@
-import { useEffect, useRef, useState, type KeyboardEvent } from "react";
-import { Loader2, Trash2 } from "../../icons";
-
+import { useEffect, useRef, type KeyboardEvent } from "react";
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
-import type { LocaleKey } from "@/locales";
+import { upperFirst } from "@/lib/lower-first";
 import { MAUS_COLOR_LABEL, PICKER_COLORS, colorSwatch, rowsOfFive, type MausState } from "@/lib/mascot";
 import type { Bot } from "@/state/store";
 import { DEFAULT_BOT_BODY, wearsBody, type BotBodyId } from "../../../shared/bot-body";
 import { DUSK_BODY_IDS } from "../../../shared/body-migration";
 import { MausAvatar } from "../Avatar";
 import { BodyRing } from "../mascot-view";
-import { AvatarImageGenerator } from "../AvatarImageGenerator";
-import { AvatarFraming, OrganizationAvatarIcons, RESET_MASCOT_PATCH, useAvatarImage, type AvatarPatch } from "../avatar-editing";
-import { Segmented } from "./rows";
+import { useAvatarImage, type AvatarPatch } from "../avatar-editing";
 
 export type AvatarEditorTab = "bot" | "generate" | "upload";
-
-const TABS: ReadonlyArray<readonly [AvatarEditorTab, LocaleKey]> = [
-  ["bot", "botPanel.avatar.tabBot"],
-  ["generate", "botPanel.avatar.tabGenerate"],
-  ["upload", "botPanel.avatar.tabUpload"],
-];
-
-const IMAGE_CROPS = ["circle", "rounded", "square"] as const;
-const CROP_KEY: Record<(typeof IMAGE_CROPS)[number], LocaleKey> = {
-  circle: "botPanel.avatar.circle",
-  rounded: "botPanel.avatar.rounded",
-  square: "botPanel.avatar.square",
-};
 
 /** Our bodies, in two rows of five. */
 const SHAPE_ROWS = rowsOfFive(DUSK_BODY_IDS);
@@ -39,13 +22,14 @@ export function AvatarEditorCard({ bot, onPatch, onClose }: {
   onClose: () => void;
 }) {
   const image = useAvatarImage(bot, onPatch);
-  const { fileRef, crop, uploading, generating, setSavingConnection, busy, error, upload, removeImage, generate } = image;
+  const { crop, busy, error } = image;
   const showsImage = crop !== "mascot" && Boolean(bot.avatarUrl);
-  const [tab, setTab] = useState<AvatarEditorTab>(showsImage ? "upload" : "bot");
-  const tabsRef = useRef<HTMLDivElement>(null);
-  // The card is a dialog: focus moves into it, onto the tab it opened on, so Escape and Tab work from the start.
+  const cardRef = useRef<HTMLDivElement>(null);
+  // The card is a dialog: focus moves into it, onto the chosen shape, so Escape and Tab work from the start.
   useEffect(() => {
-    tabsRef.current?.querySelector<HTMLElement>('[aria-selected="true"]')?.focus();
+    const card = cardRef.current;
+    if (!card || typeof card.querySelector !== "function") return;
+    (card.querySelector<HTMLElement>('[aria-pressed="true"]') ?? card.querySelector<HTMLElement>("button"))?.focus();
   }, []);
   const pickMascot = (patch: AvatarPatch) => onPatch(crop === "mascot" ? patch : { ...patch, avatarCrop: "mascot" });
   const body = bot.mascotBody ?? DEFAULT_BOT_BODY;
@@ -57,7 +41,7 @@ export function AvatarEditorCard({ bot, onPatch, onClose }: {
         type="button"
         disabled={busy}
         aria-pressed={chosen}
-        aria-label={`${id} character shape`}
+        aria-label={t("botPanel.avatar.shapeNamed", { name: upperFirst(id) })}
         title={id}
         onClick={() => pickMascot({ mascotBody: id })}
         className="group/shape relative flex size-12 cursor-pointer items-center justify-center disabled:opacity-50"
@@ -81,41 +65,13 @@ export function AvatarEditorCard({ bot, onPatch, onClose }: {
     <div
       role="dialog"
       aria-label={t("botPanel.avatar.edit")}
+      ref={cardRef}
       data-panel-avatar-editor
       onKeyDown={onKeyDown}
       className="popover-surface absolute inset-x-[-5px] top-[78px] z-30 overflow-hidden rounded-[16px] border border-ink/[0.08] bg-menu text-left shadow-(--shadow-popover)"
     >
-      <div ref={tabsRef} role="tablist" aria-label={t("botPanel.avatar.edit")} className="flex items-center gap-0.5 border-b border-ink/[0.08] p-2">
-        {TABS.map(([id, label]) => (
-          <button
-            key={id}
-            type="button"
-            role="tab"
-            aria-selected={tab === id}
-            data-avatar-tab={id}
-            onClick={() => setTab(id)}
-            className={cn(
-              "h-[26px] cursor-pointer rounded-full px-2 py-1 text-[13px] leading-[18px] tracking-[0.015em] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus",
-              tab === id ? "bg-ink/[0.06] text-ink" : "text-ink-secondary hover:bg-ink/[0.06]",
-            )}
-          >
-            {t(label)}
-          </button>
-        ))}
-        {tab === "bot" && <button
-          type="button"
-          data-avatar-reset
-          disabled={busy}
-          onClick={() => onPatch(RESET_MASCOT_PATCH)}
-          aria-label={t("botPanel.avatar.resetAria")}
-          className="ml-auto h-[22px] cursor-pointer rounded-lg border border-transparent px-2 text-[13px] leading-[18px] tracking-[0.015em] text-ink-secondary transition-colors duration-[140ms] hover:bg-ink/[0.06] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus disabled:opacity-50"
-        >
-          {t("botPanel.avatar.reset")}
-        </button>}
-      </div>
-
       <div className="p-3">
-        {tab === "bot" && (
+        {(
           <div className="flex flex-col gap-3">
             <div aria-label={t("botPanel.avatar.shapes")} className="flex flex-col gap-2 py-1.5">
               {SHAPE_ROWS.map((row, index) => (
@@ -129,7 +85,7 @@ export function AvatarEditorCard({ bot, onPatch, onClose }: {
                   type="button"
                   disabled={busy}
                   aria-pressed={bot.color === color}
-                  aria-label={`${t(MAUS_COLOR_LABEL[color])} character color`}
+                  aria-label={t("botPanel.avatar.colorNamed", { color: t(MAUS_COLOR_LABEL[color]) })}
                   title={t(MAUS_COLOR_LABEL[color])}
                   onClick={() => pickMascot({ color })}
                   className="flex size-8 cursor-pointer items-center justify-center rounded-full border border-transparent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus disabled:opacity-50"
@@ -144,70 +100,6 @@ export function AvatarEditorCard({ bot, onPatch, onClose }: {
           </div>
         )}
 
-        {tab === "generate" && (
-          <div className="[&>div:first-child]:mt-0 [&>div:first-child]:border-0 [&>div:first-child]:pt-0">
-            <AvatarImageGenerator
-              botLabel={bot.title || bot.name}
-              disabled={uploading}
-              generating={generating}
-              onGenerate={generate}
-              onSavingChange={setSavingConnection}
-            />
-          </div>
-        )}
-
-        {tab === "upload" && (
-          <>
-            <OrganizationAvatarIcons busy={busy} onUpload={(file) => void upload(file)} />
-            {showsImage && <AvatarFraming bot={bot} disabled={busy} onPatch={onPatch} />}
-            <input
-              ref={fileRef}
-              type="file"
-              accept="image/png,image/jpeg,image/gif,image/webp"
-              className="sr-only"
-              onChange={(event) => void upload(event.target.files?.[0])}
-            />
-            <button
-              type="button"
-              data-avatar-drop
-              disabled={busy}
-              onClick={() => fileRef.current?.click()}
-              onDragOver={(event) => event.preventDefault()}
-              onDrop={(event) => {
-                event.preventDefault();
-                void upload(event.dataTransfer.files?.[0]);
-              }}
-              className="flex min-h-[120px] w-full cursor-pointer flex-col items-center justify-center gap-1 rounded-[10px] border border-dashed border-ink/[0.12] px-3 py-5 text-center text-[14px] leading-[22px] text-ink-secondary transition-[border-color,color] duration-[120ms] ease-[ease] hover:border-ink/[0.24] hover:text-ink disabled:opacity-50"
-            >
-              {uploading && <Loader2 size={16} className="animate-spin" aria-hidden="true" />}
-              <span>{t("botPanel.avatar.drop")}</span>
-              <span className="text-[12px] leading-4 text-ink/[0.56]">{t("botPanel.avatar.types")}</span>
-            </button>
-            <div className="mt-2 flex items-center gap-2">
-              <span className="shrink-0 text-[12px] leading-4 text-ink-secondary">{t("botPanel.avatar.shape")}</span>
-              <Segmented
-                compact
-                attr="data-avatar-crop"
-                label={t("botPanel.avatar.shape")}
-                value={showsImage ? crop : null}
-                onChange={(next) => onPatch({ avatarCrop: next })}
-                options={IMAGE_CROPS.map((value) => ({ value, label: t(CROP_KEY[value]), disabled: busy || !bot.avatarUrl }))}
-              />
-              {bot.avatarUrl && (
-                <button
-                  type="button"
-                  onClick={removeImage}
-                  disabled={busy}
-                  aria-label={t("botPanel.ui.botIdentityRemoveAvatar")}
-                  title={t("botPanel.avatar.remove")}
-                  className="ml-auto flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-full text-ink-secondary hover:bg-ink/[0.06] hover:text-danger focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus disabled:opacity-50"
-                >
-                  <Trash2 size={14} aria-hidden="true" />
-                </button>
-              )}
-            </div>
-          </>
-        )}
 
         {error && <div role="alert" className="mt-3 text-[12px] text-danger">{error}</div>}
       </div>

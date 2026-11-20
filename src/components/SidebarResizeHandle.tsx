@@ -10,7 +10,7 @@ import {
   saveSidebarWidth,
 } from "@/lib/sidebar-preferences";
 
-const DEFAULT_WIDTH = 280;
+const DEFAULT_WIDTH = 288;
 const MAX_WIDTH = 400;
 
 /** Narrower than this, the sidebar's dragged edge leaves its column of avatars; wider again, the sidebar opens. */

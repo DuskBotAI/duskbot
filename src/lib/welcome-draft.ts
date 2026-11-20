@@ -1,4 +1,4 @@
-import { BEAT_ORDER, WELCOME_VERSION, type BeatId } from "./onboarding";
+import { knownBeat, WELCOME_VERSION, type BeatId } from "./onboarding";
 
 /** The first run in progress: the screen it is on, so a reload resumes there. */
 export interface WelcomeDraft {
@@ -16,8 +16,9 @@ export function readWelcomeDraft(): WelcomeDraft | null {
     const raw = localStorage.getItem(WELCOME_DRAFT_KEY);
     const draft = raw ? (JSON.parse(raw) as (Partial<WelcomeDraft> & { version?: unknown }) | null) : null;
     if (!draft || typeof draft !== "object" || draft.version !== WELCOME_VERSION) return null;
-    if (!BEAT_ORDER.includes(draft.beat as BeatId)) return null;
-    return { beat: draft.beat as BeatId, ...(draft.cloud === true ? { cloud: true as const } : {}) };
+    const beat = knownBeat(draft.beat);
+    if (!beat) return null;
+    return { beat, ...(draft.cloud === true ? { cloud: true as const } : {}) };
   } catch {
     return null;
   }

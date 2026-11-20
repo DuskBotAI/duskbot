@@ -98,6 +98,16 @@ export function progressAt(t, expectedMs) {
   return 90 + 9 * (1 - Math.exp(-(t - expectedMs) / (expectedMs * 1.5)));
 }
 
+export const STARTUP_TRY_AGAIN = "Something got in the way. Try again: it starts fresh.";
+const PLAIN_STARTUP = /^[A-Z][^\n/\\{}[\]]{8,160}[.!]$/;
+
+/** What the startup card says went wrong: a plain sentence of ours as it is, else one line that says what to do (the
+ * error itself is in the log). */
+export function startupFailureWords(error) {
+  const text = String(error?.message ?? error ?? "").trim();
+  return PLAIN_STARTUP.test(text) && !/\b[A-Z]{4,}\b|Error\b|\bcode\b/.test(text) ? text : STARTUP_TRY_AGAIN;
+}
+
 /**
  * Light or dark for the card. `saved` is the last skin the app wore and whether the system was dark then:
  * a skin that matched the system then follows the system now, one that went against it was picked on purpose.
@@ -440,7 +450,7 @@ export function createStartupScreen({
   };
   /** Startup gave up: the card says so and offers try again and quit instead of waiting forever. */
   const fail = (error) => {
-    failure = String(error?.message ?? error ?? "").slice(0, 200);
+    failure = startupFailureWords(error);
     showSplash();
     tell();
   };

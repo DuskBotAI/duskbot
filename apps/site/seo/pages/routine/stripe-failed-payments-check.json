@@ -1,0 +1,91 @@
+{
+  "path": "/routines/stripe-failed-payments-check",
+  "type": "routine",
+  "title": "Stripe failed payments check for the morning billing queue",
+  "nav": "stripe failed payments",
+  "h1": "which of yesterday's failed stripe payments still need attention?",
+  "description": "Review yesterday’s failed Stripe payment attempts against their current status. See which payment IDs still need attention before contacting a customer.",
+  "keyword": "stripe failed payments check",
+  "keywords": [
+    "daily failed payment report",
+    "stripe payment failure routine"
+  ],
+  "answer": "**look up the payment again before chasing the customer.** yesterday’s failure can belong to an order that went through on a later attempt. this morning routine matches stripe failure events to their current payment intents. the list in dusk chat keeps only payments that still need attention and flags any status it couldn’t confirm.",
+  "updated": "2026-11-20",
+  "review": {
+    "status": "approved",
+    "by": "lead agent, after four independent reviewers read every page against seo/facts (2026-11-20); every finding applied",
+    "at": "2026-11-20"
+  },
+  "voice": 2,
+  "tags": [
+    "routine",
+    "stripe",
+    "billing",
+    "payments"
+  ],
+  "connectors": [
+    "stripe"
+  ],
+  "related": [
+    "/integrations/stripe",
+    "/routines/weekly-receipts-sweep",
+    "/use-cases/expense-reports"
+  ],
+  "art": {
+    "logo": "stripe",
+    "label": "Stripe",
+    "props": [
+      "p-receipt",
+      "s-clock"
+    ],
+    "bubble": "already paid this one"
+  },
+  "og_line": "a failed attempt can end in a paid order.",
+  "routine": {
+    "message": "every morning at 9am utc, read payment_intent.payment_failed events from the previous utc calendar day in my live stripe account. fetch every results page. group failed attempts by payment intent id. retrieve each intent again for its current status.\n\nfor intents that require a payment method or customer action, put the id, amount, currency and current status here. include the last failure time. omit succeeded and canceled intents. list other statuses separately by their actual name. if a lookup fails, list the id as unknown.\n\nnever retry a payment, issue a refund or contact anyone. skip card details and customer emails. stay quiet when all reads succeed and no item remains.",
+    "when": "daily at 09:00 utc, covering midnight to midnight the day before",
+    "needs": "read-only stripe access to events and payment intents in the intended live account",
+    "output": "billing review for paul lewis · 18 november utc\npi_7142 · 48.00 usd · requires_payment_method · last failure 21:13 utc\nother statuses: pi_7151 · processing · leave pending\none later success omitted."
+  },
+  "knobs": [
+    "**use your billing day.** if the team closes its books in another time zone, change both midnights and the report label.",
+    "**narrow by currency.** keep the original currency beside every amount. never add pounds and dollars into a single total.",
+    "**keep distinct attempts visible.** ask for the number of failure events beside each intent if repeated retries matter."
+  ],
+  "fails": [
+    "**a payment shows up twice.** compare intent ids first. the same customer can place two separate orders for the same amount.",
+    "**a test decline makes the queue.** confirm which stripe account the bot can read. rerun for the same date using live data."
+  ],
+  "sections": [
+    {
+      "h": "what to do with a payment on the list",
+      "md": "**open the intent before deciding on follow-up.** the customer might pay after the morning run. the amount beside a failed attempt tells you what someone tried to pay. it does not tell you how much revenue you lost.\n\nif you need to collect money automatically, dusk bot’s read-only morning list is the wrong pick. use your billing process for collections."
+    }
+  ],
+  "faq": [
+    {
+      "q": "does a failed attempt mean an invoice is overdue?",
+      "a": "**a payment attempt alone can’t answer that.** this routine reads events and payment intents. consult the invoice and its due date before treating a balance as overdue."
+    },
+    {
+      "q": "how far back can i run the event search?",
+      "a": "**the stripe events read covers the past 30 days.** choose a date inside that window. an older intent’s current status can’t reconstruct each earlier attempt.[^1]"
+    }
+  ],
+  "sources": [
+    {
+      "label": "composio: stripe actions",
+      "url": "https://docs.composio.dev/toolkits/stripe",
+      "checked": "2026-11-12"
+    },
+    {
+      "label": "dusk bot docs: routines",
+      "url": "/docs/routines"
+    },
+    {
+      "label": "dusk bot docs: connected apps",
+      "url": "/docs/files-and-apps"
+    }
+  ]
+}

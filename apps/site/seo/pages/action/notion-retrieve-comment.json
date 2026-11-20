@@ -1,0 +1,92 @@
+{
+  "path": "/integrations/notion/retrieve-comment",
+  "type": "action",
+  "title": "Look up the exact wording of one Notion comment",
+  "nav": "read one comment",
+  "h1": "what did the reviewer actually say in that notion comment?",
+  "description": "Retrieve one Notion comment by its ID and quote the reviewer's words. Separate a requested edit from a suggestion before working on the next proof.",
+  "keyword": "read a notion comment with ai",
+  "keywords": [
+    "chatgpt retrieve a notion comment",
+    "claude look up notion comment by id",
+    "find original reviewer wording in notion"
+  ],
+  "answer": "**“could we crop this?” reads differently from “crop this.”** when a proof brief refers to one notion comment, ask your bot to retrieve that comment and quote it. it needs the comment's own id. a page link can help you find the discussion, but it can't identify which remark the brief meant.",
+  "updated": "2026-11-20",
+  "review": {
+    "status": "approved",
+    "by": "lead agent, after four independent reviewers read every page against seo/facts (2026-11-20); every finding applied",
+    "at": "2026-11-20"
+  },
+  "tags": [
+    "notion",
+    "read one comment"
+  ],
+  "connectors": [
+    "notion"
+  ],
+  "related": [
+    "/integrations/notion",
+    "/integrations/notion/fetch-comments",
+    "/integrations/notion/get-page-markdown"
+  ],
+  "art": {
+    "logo": "notion",
+    "label": "Notion",
+    "props": [
+      "p-bubbles",
+      "p-newspaper"
+    ],
+    "bubble": "what was the correction"
+  },
+  "og_line": "the reviewer's words beside the proof.",
+  "action": {
+    "toolkit": "notion",
+    "slug": "NOTION_RETRIEVE_COMMENT"
+  },
+  "what": "**read the original remark before you act on a secondhand summary.** the bot can look up a known comment directly. if you have only a page or block reference, have it list unresolved comments there first. select the remark you meant and keep its id with the proof brief.",
+  "uses": [
+    "quote the caption correction that the layout artist needs to see",
+    "settle whether the editor posed a question or requested a cut",
+    "recover the precise spelling a reviewer gave for a jacket credit"
+  ],
+  "routine": {
+    "message": "every friday at noon until the jacket proof is approved, read the comment id in my current jacket proof file. quote that one notion comment here, then say what change it requests, if any. if the comment is a question, leave it as a question. never alter the proof or reply to the reviewer.",
+    "when": "fridays at noon while the jacket proof is in review",
+    "needs": "notion read only with comment access, plus the current jacket proof file containing the comment id",
+    "output": "dorothy lane wrote: “could the spine credit say illustrations by instead of art by?”\nquestion for the designer. no instruction to replace the credit yet."
+  },
+  "steps": [
+    "use **Connected apps** to connect the notion account that can read the review. allow **read only**.",
+    "start with the comment id from your review notes. if it's missing, list unresolved comments on the relevant page or block.",
+    "get the words back before asking for an interpretation. keep the quote beside that interpretation."
+  ],
+  "watch": [
+    "**one comment has no search box.** looking it up by a phrase or a reviewer name alone won't work.",
+    "**an isolated remark can predate a later decision.** read the discussion in notion yourself if you need to know what the team finally agreed."
+  ],
+  "faq": [
+    {
+      "q": "can i give it the id for the whole discussion?",
+      "a": "**use the id for the individual comment.** if you're unsure, pick the remark from the comments on the relevant block."
+    },
+    {
+      "q": "what if the bot can't retrieve the correction?",
+      "a": "**ask which id it tried and whether the connection can read comments there.** a failed lookup gives you no basis for guessing what the reviewer wanted."
+    }
+  ],
+  "sources": [
+    {
+      "label": "dusk bot docs: files and apps",
+      "url": "/docs/files-and-apps"
+    },
+    {
+      "label": "dusk bot docs: routines",
+      "url": "/docs/routines"
+    }
+  ],
+  "voice": 2,
+  "tip": {
+    "text": "if the reviewer and designer are still debating the change, open the thread together. a quotation can settle the wording without settling the decision."
+  }
+}

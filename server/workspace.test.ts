@@ -80,6 +80,8 @@ describe("workspace", () => {
       expect(prompt).toContain("Chat links and inline images open only files in currentWorkingFolder and sharedBotFolder.");
     }
     expect(workspaceLocationsPrompt(BOT, thread)).toContain("Save a file or picture you want to show in chat there.");
+    expect(workspaceLocationsPrompt(BOT, thread)).not.toContain("moved or deleted");
+    expect(workspaceLocationsPrompt(BOT, thread, undefined, { lostFolder: "client-site" })).toContain('The folder "client-site" this conversation worked in was moved or deleted');
   });
 
   it("creates distinct private task desks outside shared memory and refuses path traversal", () => {
@@ -205,17 +207,17 @@ describe("workspace", () => {
     expect(updateMemory(BOT, { action: "append", text: "Shipping day: Friday" }, opts).ok).toBe(true);
     const later = { source: 'chat "Setup"', now: new Date(2026, 8, 12, 12) };
     expect(updateMemory(BOT, { action: "replace", oldText: "manager: npm", text: "manager: pnpm" }, later)).toMatchObject({
-      ok: true, entry: '- 2026-09-10 · from chat "Setup" · Preferred package manager: pnpm · updated 2026-09-12',
+      ok: true, entry: '- 2026-09-10 · from chat, corrected · Preferred package manager: pnpm · updated 2026-09-12',
     });
     expect(readMemoryFile(BOT).text).toBe(
-      '- 2026-09-10 · from chat "Setup" · Preferred package manager: pnpm · updated 2026-09-12\n' +
+      '- 2026-09-10 · from chat, corrected · Preferred package manager: pnpm · updated 2026-09-12\n' +
       '- 2026-09-10 · from chat "Setup" · Shipping day: Friday\n',
     );
     const beforeConflict = readMemoryFile(BOT).text;
     expect(updateMemory(BOT, { action: "replace", oldText: "manager: npm", text: "manager: yarn" }, later)).toMatchObject({ ok: false, code: "conflict" });
     expect(readMemoryFile(BOT).text).toBe(beforeConflict);
     expect(updateMemory(BOT, { action: "remove", oldText: '- 2026-09-10 · from chat "Setup" · Shipping day: Friday' })).toMatchObject({ ok: true });
-    expect(readMemoryFile(BOT).text).toBe('- 2026-09-10 · from chat "Setup" · Preferred package manager: pnpm · updated 2026-09-12\n');
+    expect(readMemoryFile(BOT).text).toBe('- 2026-09-10 · from chat, corrected · Preferred package manager: pnpm · updated 2026-09-12\n');
     writeMemoryFile(BOT, "- Edited by the user");
     expect(updateMemory(BOT, { action: "append", text: "Another thread's fact" }, opts)).toEqual({
       ok: true, truncated: false, entry: '- 2026-09-10 · from chat "Setup" · Another thread\'s fact', moved: [],
@@ -250,14 +252,14 @@ describe("workspace", () => {
     writeMemoryFile(BOT, `${readMemoryFile(BOT).text}- undated note from the person\n`);
     const later = { source: 'room "Ops"', now: new Date(2026, 8, 11, 12) };
     expect(updateMemory(BOT, { action: "replace", oldText: '- 2026-09-10 · from chat "Setup" · Timezone: IST', text: "- Timezone: CET" }, later)).toMatchObject({
-      ok: true, entry: '- 2026-09-10 · from chat "Setup" · Timezone: CET · updated 2026-09-11',
+      ok: true, entry: '- 2026-09-10 · from chat, corrected · Timezone: CET · updated 2026-09-11',
     });
     expect(updateMemory(BOT, { action: "replace", oldText: "Timezone: CET · updated 2026-09-11", text: '- 2026-09-11 · from room "Ops" · Timezone: UTC' }, later)).toMatchObject({
-      ok: true, entry: '- 2026-09-10 · from chat "Setup" · Timezone: UTC · updated 2026-09-11',
+      ok: true, entry: '- 2026-09-10 · from chat, corrected · Timezone: UTC · updated 2026-09-11',
     });
     expect(updateMemory(BOT, { action: "replace", oldText: "undated note", text: "undated fact" }, later)).toMatchObject({ ok: true });
     expect(readMemoryFile(BOT).text).toBe(
-      '- 2026-09-10 · from chat "Setup" · Timezone: UTC · updated 2026-09-11\n' +
+      '- 2026-09-10 · from chat, corrected · Timezone: UTC · updated 2026-09-11\n' +
       '- 2026-09-10 · from chat "Setup" · Hand-written line stays\n' +
       "- undated fact from the person\n",
     );
@@ -269,7 +271,7 @@ describe("workspace", () => {
     writeMemoryFile(BOT, `${readMemoryFile(BOT).text}- Old hand-written office: Paris\nplain paragraph\n`);
     const later = { source: 'chat "Move"', now: new Date(2026, 8, 20, 12) };
     expect(updateMemory(BOT, { action: "supersede", oldText: "Office: Berlin", text: "Office: Lisbon" }, later)).toMatchObject({
-      ok: true, entry: '- 2026-09-20 · from chat "Move" · Office: Lisbon',
+      ok: true, entry: '- 2026-09-20 · from chat, corrected · Office: Lisbon',
     });
     expect(updateMemory(BOT, { action: "supersede", oldText: "office: Paris", text: "office: Porto" }, later).ok).toBe(true);
     expect(updateMemory(BOT, { action: "supersede", oldText: "plain paragraph", text: "plain fact" }, later).ok).toBe(true);
@@ -277,9 +279,9 @@ describe("workspace", () => {
       '- 2026-09-10 · from chat "Setup" · ~~Office: Berlin~~ · superseded 2026-09-20\n' +
       "- ~~Old hand-written office: Paris~~ · superseded 2026-09-20\n" +
       "~~plain paragraph~~ · superseded 2026-09-20\n" +
-      '- 2026-09-20 · from chat "Move" · Office: Lisbon\n' +
-      '- 2026-09-20 · from chat "Move" · office: Porto\n' +
-      '- 2026-09-20 · from chat "Move" · plain fact\n',
+      '- 2026-09-20 · from chat, corrected · Office: Lisbon\n' +
+      '- 2026-09-20 · from chat, corrected · office: Porto\n' +
+      '- 2026-09-20 · from chat, corrected · plain fact\n',
     );
     expect(updateMemory(BOT, { action: "supersede", oldText: "Office: Berlin", text: "Office: Rome" }, later)).toMatchObject({ ok: false, code: "conflict" });
     expect(updateMemory(BOT, { action: "supersede", oldText: "Porto\n- 2026-09-20", text: "x" }, later)).toMatchObject({ ok: false, code: "invalid" });

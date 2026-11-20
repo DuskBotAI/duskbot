@@ -32,6 +32,18 @@ const user = (text: string, extra: Partial<Message> = {}): Message => ({ id: id(
 const bot = (text: string, extra: Partial<Message> = {}): Message => ({ id: id("b"), role: "bot", kind: "text", text, at: at(), turnTerminal: true, ...extra });
 const row = (kind: Message["kind"], extra: Partial<Message>): Message => ({ id: id(kind), role: "bot", kind, at: at(), ...extra });
 
+const KETTLES = [
+  { name: "Breville Crystal Clear Kettle 1.7L", price: "$49.95", url: "https://shop.example.com/breville-kettle", merchant: "Acme Home", note: "4.7 stars, arrives Fri" },
+  { name: "Cosori Electric Gooseneck Kettle with temperature control", price: "$54.99", url: "https://shop.example.com/cosori", merchant: "Kitchen Co", note: "Variable temperature" },
+  { name: "Basics Stainless Kettle", price: "$24.99", url: "https://shop.example.com/basics", merchant: "Shopmart", note: "Best value" },
+];
+const PURCHASE = {
+  merchant: "Acme Home", total: "$70.84", shipping: "$4.99", paymentMethod: "Visa ending 4242", address: "221B Baker St, London NW1 6XE", delivery: "Friday, Nov 21",
+  items: [{ name: "Breville Crystal Clear Kettle 1.7L", quantity: 1, price: "$49.95" }, { name: "Descaling tablets, 12 pack", quantity: 2, price: "$7.50" }],
+};
+const EMAIL = { app: "Gmail", to: ["sam@example.com"], subject: "Friday works", body: "Hi Sam,\n\nFriday works for the kettle delivery. Anytime after 2pm is fine; just ring the bell.\n\nThanks,\nAlex" };
+const EMAIL_ARGS = { user_id: "me", recipient_email: "sam@example.com", subject: EMAIL.subject, body: EMAIL.body };
+
 function widget(name: string, settled?: WidgetPayload["settled"]): Message {
   const parsed = parseWidgetInput(WIDGET_SAMPLES[name]);
   if (!parsed.ok) throw new Error(`${name}: ${parsed.error}`);
@@ -126,6 +138,47 @@ const RAW_SCENARIOS: GalleryScenario[] = [
       row("options", { card: { title: "Which day works for the call?", subtitle: "", options: ["Monday", "Tuesday"], requestType: "question", answered: "Tuesday" } }),
       row("options", { card: { title: "Which day works for the call?", subtitle: "", options: ["Monday", "Tuesday"], requestType: "question", expired: true } }),
       bot("All set."),
+    ],
+  },
+  {
+    id: "shopping-before",
+    title: "Shopping as a bot did it before the cards: links in text, a generic send card, an order placed unasked",
+    messages: () => [
+      user("Find me an electric kettle under $60 and order the best one. Also email Sam that Friday works."),
+      bot(`Here are a few options:\n\n1. [${KETTLES[0]!.name}](${KETTLES[0]!.url}), ${KETTLES[0]!.price}\n2. [${KETTLES[1]!.name}](${KETTLES[1]!.url}), ${KETTLES[1]!.price}\n3. [${KETTLES[2]!.name}](${KETTLES[2]!.url}), ${KETTLES[2]!.price}`),
+      bot("I placed the order for the Breville kettle. It arrives Friday."),
+      row("options", { card: { title: "Send on your behalf?", subtitle: `Gmail · Send email\n${JSON.stringify(EMAIL_ARGS)}`, options: ["Allow", "Deny"], requestId: "gallery-send", tool: "GMAIL_SEND_EMAIL", outboundRequest: { tool: "GMAIL_SEND_EMAIL", app: "Gmail", calls: [{ app: "Gmail", label: "Send email" }] } } }),
+    ],
+  },
+  {
+    id: "shopping-purchase",
+    title: "Product cards, then the order summary waiting on Confirm purchase",
+    messages: () => [
+      user("Find me an electric kettle under $60 and order the best one."),
+      row("widget", { text: "Electric kettles under $60", products: { title: "Electric kettles under $60", items: KETTLES } }),
+      bot("The Breville is the best of these: the clearest water window and the best reviews. Here is the order before I place it."),
+      row("options", { card: { title: "Confirm purchase", subtitle: "", options: ["Confirm purchase", "Cancel"], requestId: "gallery-purchase", tool: "confirm_purchase", purchase: PURCHASE, outboundRequest: { tool: "confirm_purchase", app: null, purchase: true } } }),
+    ],
+  },
+  {
+    id: "shopping-email",
+    title: "An email waiting on Send email, with Edit",
+    messages: () => [
+      user("Email Sam that Friday works for the kettle delivery."),
+      bot("Here is the email. Send it as it is, or edit it first."),
+      row("options", { card: { title: "Send this email?", subtitle: "", options: ["Send email", "Don't send"], requestId: "gallery-email", tool: "GMAIL_SEND_EMAIL", email: EMAIL, outboundRequest: { tool: "GMAIL_SEND_EMAIL", app: "Gmail" } } }),
+    ],
+  },
+  {
+    id: "shopping-records",
+    title: "A confirmed purchase, one bought without asking as the person said, and a sent email, kept as records",
+    messages: () => [
+      row("options", { card: { title: "Confirm purchase", subtitle: "", options: ["Confirm purchase", "Cancel"], requestId: "gallery-p1", tool: "confirm_purchase", purchase: PURCHASE, answered: "allow" } }),
+      bot("Ordered. Your kettle arrives Friday, order #A-10422."),
+      user("Reorder the descaling tablets, no need to ask me."),
+      row("options", { card: { title: "Purchase", subtitle: "", options: [], requestId: "gallery-p2", tool: "confirm_purchase", purchase: { ...PURCHASE, items: [PURCHASE.items[1]!], total: "$19.99", recorded: true }, answered: "allow" } }),
+      row("options", { card: { title: "Send this email?", subtitle: "", options: [], requestId: "gallery-e1", tool: "GMAIL_SEND_EMAIL", email: EMAIL, answered: "allow" } }),
+      bot("Sent to Sam."),
     ],
   },
   {

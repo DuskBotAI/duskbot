@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { appleNonce, createMobileAccount, isAccountAuthUrl, mobileFace } from "./account-client";
+import { appleNonce, createMobileAccount, isAccountAuthUrl, mobileFace, parseComputerPair, parsePairGrant } from "./account-client";
 import { webPlatform, type MobilePlatform } from "../platform";
 
 const origin = "https://accounts.example";
@@ -187,6 +187,11 @@ describe("own clouds", () => {
     const clouds = await client.clouds();
     expect(clouds?.map((cloud) => [cloud.id, cloud.asleep])).toEqual([["c0123456789abcdef01234567", false], ["second", true]]);
     expect(fetcher.mock.calls[0][0]).toBe(`${origin}/api/cloud/desktop/session`);
+  });
+  it("keeps a cloud's failed renewal date, and nothing malformed", async () => {
+    await signIn();
+    fetcher.mockResolvedValueOnce(response({ clouds: [listed({ payment: { fixBy: 1_900_000_000_000 } }), listed({ id: "second", primary: false, payment: { fixBy: "x" } })] }));
+    expect((await client.clouds())?.map((cloud) => cloud.payment ?? null)).toEqual([{ fixBy: 1_900_000_000_000 }, null]);
   });
   it("drops an origin that is not plain https", async () => {
     await signIn();
@@ -390,5 +395,102 @@ describe("phone code", () => {
     expect(await client.phoneCode("ABCDEFGH")).toEqual({ outcome: "offline" });
     expect(await client.phoneCode("ABCD-EFGH-JKLM")).toEqual({ outcome: "wrong-code" });
     expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("two accounts on one phone", () => {
+  const tokenA = `omc_${"a".repeat(43)}`, tokenB = `omc_${"b".repeat(43)}`;
+  const alice = { id: "alice", email: "alice@example.com" }, bob = { id: "bob", email: "bob@example.com" };
+  const grantFor = (who: typeof alice, accessToken: string) => ({ ...grant(), accessToken, account: who });
+  const storedFor = (who: typeof alice, at: string) => stored({ token: at, account: who });
+  const authOf = (call: Parameters<typeof fetch>) => (call[1]?.headers as Record<string, string> | undefined)?.authorization;
+  const others = () => (JSON.parse(secrets.get("dusk.account.others") ?? "[]") as { account: { id: string } }[]).map((one) => one.account.id);
+  const signedInAsBoth = async () => {
+    secrets.set("dusk.account", JSON.stringify(storedFor(alice, tokenA)));
+    await client.cached();
+    fetcher.mockResolvedValueOnce(response(grantFor(bob, tokenB)));
+    expect((await client.phoneCode("ABCDEFGH")).outcome).toBe("signed-in");
+  };
+
+  it("a second account signs in beside the first, whose session stays and is never ended", async () => {
+    await signedInAsBoth();
+    expect(client.account()).toEqual(bob);
+    expect(client.accounts()).toEqual([bob, alice]);
+    expect(others()).toEqual(["alice"]);
+    expect(fetcher.mock.calls.filter(([, init]) => init?.method === "DELETE")).toEqual([]);
+  });
+
+  it("each account's clouds are asked with its own session, and either one pairs its cloud", async () => {
+    await signedInAsBoth();
+    fetcher.mockImplementation(async () => response({ clouds: [] }));
+    await client.places();
+    await client.places("alice");
+    expect(fetcher.mock.calls.slice(-4).map(authOf)).toEqual([`Bearer ${tokenB}`, `Bearer ${tokenB}`, `Bearer ${tokenA}`, `Bearer ${tokenA}`]);
+    await client.pairCloud({ id: "c1", origin: null }, "alice");
+    expect(authOf(fetcher.mock.calls.at(-1)!)).toBe(`Bearer ${tokenA}`);
+    expect(await client.places("nobody")).toBeNull();
+  });
+
+  it("switching puts the other account in use and keeps the one before it", async () => {
+    await signedInAsBoth();
+    expect(await client.switchAccount("alice")).toEqual(alice);
+    expect(client.account()).toEqual(alice);
+    expect(JSON.parse(secrets.get("dusk.account")!).account.id).toBe("alice");
+    expect(others()).toEqual(["bob"]);
+    expect(await client.switchAccount("nobody")).toBeNull();
+    expect(client.account()).toEqual(alice);
+  });
+
+  it("signing out of one ends only its session, and the other takes over", async () => {
+    await signedInAsBoth();
+    fetcher.mockResolvedValue(response({ ok: true }));
+    expect(await client.signOut()).toEqual(alice);
+    expect(client.account()).toEqual(alice);
+    expect(client.accounts()).toEqual([alice]);
+    const ended = fetcher.mock.calls.filter(([, init]) => init?.method === "DELETE");
+    expect(ended.map(authOf)).toEqual([`Bearer ${tokenB}`]);
+    expect(others()).toEqual([]);
+  });
+
+  it("a launch checks every kept session: one the service forgot leaves, the other stays", async () => {
+    const tokenC = `omc_${"c".repeat(43)}`;
+    secrets.set("dusk.account", JSON.stringify(storedFor(bob, tokenB)));
+    secrets.set("dusk.account.others", JSON.stringify([storedFor(alice, tokenA), storedFor({ id: "carol", email: "carol@example.com" }, tokenC)]));
+    fetcher.mockImplementation(async (_url, init) => (init?.headers as Record<string, string> | undefined)?.authorization === `Bearer ${tokenC}` ? response({ error: "invalid_token" }, 401) : response({}));
+    expect(await client.restore()).toEqual(bob);
+    await vi.waitFor(() => expect(others()).toEqual(["alice"]));
+  });
+
+  it("the account in use that the service forgot hands over to the next one", async () => {
+    secrets.set("dusk.account", JSON.stringify(storedFor(bob, tokenB)));
+    secrets.set("dusk.account.others", JSON.stringify([storedFor(alice, tokenA)]));
+    fetcher.mockImplementation(async (_url, init) => (init?.headers as Record<string, string> | undefined)?.authorization === `Bearer ${tokenB}` ? response({ error: "invalid_token" }, 401) : response({}));
+    expect(await client.restore()).toEqual(alice);
+    expect(JSON.parse(secrets.get("dusk.account")!).account.id).toBe("alice");
+  });
+});
+
+describe("the platform analytics counts a phone as", () => {
+  it("is the native app's own, or the browser's phone from its user agent", async () => {
+    const { analyticsPlatform } = await import("./account-client");
+    expect(analyticsPlatform("ios", "")).toBe("ios");
+    expect(analyticsPlatform("android", "")).toBe("android");
+    expect(analyticsPlatform("web", "Mozilla/5.0 (iPhone; CPU iPhone OS 26_1 like Mac OS X)")).toBe("ios");
+    expect(analyticsPlatform("web", "Mozilla/5.0 (Linux; Android 16; SM-S931B)")).toBe("android");
+    expect(analyticsPlatform("web", "Mozilla/5.0 (X11; Linux x86_64)")).toBe("linux");
+  });
+});
+
+describe("a pairing grant on a phone whose clock is off", () => {
+  const at = 1_900_000_000_000;
+  const cloudGrant = (expiresAt: number) => ({ cloudContractVersion: 1, origin: "https://d1.dusk.bot", code: "ABCD-EFGH-JKLM", expiresAt });
+  const computerPair = (expiresAt: number) => ({ v: 1, link: "duskbot://pair?m=abc", expiresAt });
+  it("takes a fresh grant with the phone minutes ahead or behind, and refuses nonsense", () => {
+    for (const skew of [-8 * 60_000, 8 * 60_000]) {
+      expect(parsePairGrant(cloudGrant(at + 5 * 60_000), null, at + skew)).not.toBeNull();
+      expect(parseComputerPair(computerPair(at + 5 * 60_000), at + skew)).toBe("duskbot://pair?m=abc");
+    }
+    expect(parsePairGrant(cloudGrant(at + 24 * 60 * 60_000), null, at)).toBeNull();
+    expect(parsePairGrant(cloudGrant(at - 60 * 60_000), null, at)).toBeNull();
   });
 });

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { AnimatePresence } from "motion/react";
 import { Check, Loader2 } from "../icons";
 
 import { api, useStore, type InstanceInfo } from "@/state/store";
@@ -215,14 +216,14 @@ function EngineAdvanced({ instance }: { instance: InstanceInfo }) {
       <NavRow data-settings-open="engine-cli" title={t("engines.setCli")} hint={t("settings.s2.engine.setCliHint")} disabled={updating} onClick={() => setOpen(true)} />
       {updatedVersion && <NoteRow>{t("engines.claudeUpdated", { version: updatedVersion })}</NoteRow>}
       {error && <NoteRow tone="danger">{error}</NoteRow>}
-      {open && (
-        <CustomPicker
+      <AnimatePresence>{open && (
+        <CustomPicker key="custom-picker"
           instance={instance}
           cliDefault={instance.cliDefault}
           onClose={() => setOpen(false)}
           onSaved={refreshInstances}
         />
-      )}
+      )}</AnimatePresence>
     </RowsCard>
   );
 }
@@ -391,10 +392,18 @@ function SimpleEngines({ rows, isReady, renderEngine, more }: {
   renderEngine: (instance: InstanceInfo, bare?: boolean) => ReactNode;
   more: { id: string; open: boolean; onToggle: () => void };
 }) {
-  const { at, open } = useSubPage();
+  const { at, open, back } = useSubPage();
   const featured = rows.filter((instance) => isReady(instance) || instance.authentication !== undefined);
   const others = rows.filter((instance) => !featured.includes(instance));
   const shown = at?.startsWith("engine:") ? rows.find((instance) => `engine:${instance.instanceId}` === at) : undefined;
+  const gone = Boolean(at?.startsWith("engine:")) && !shown;
+  const backOnce = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    if (!gone || backOnce.current === at) return;
+    backOnce.current = at;
+    back();
+  }, [gone, at, back]);
+  if (gone) return null;
   if (shown) return <div data-simple-engine={shown.instanceId} className="flex flex-col gap-5">{renderEngine(shown, true)}</div>;
   if (at === CUSTOM_PROVIDER_PAGE) return <Card><div className="px-2 py-1.5"><OtherOpenAiCompatServers /></div></Card>;
   // the panel's row: the provider's mark and name, its status on the right, a chevron to its page

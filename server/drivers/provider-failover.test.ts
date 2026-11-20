@@ -14,18 +14,24 @@ describe("provider failures", () => {
     "429 Too Many Requests: rate limit",
     "stream error: connection reset by peer",
     "codex turn/start timed out after 180000ms",
+    "The model `gpt-9` does not exist: model not found",
+    "unexpected status 401 Unauthorized",
+    "unexpected status 400 Bad Request",
+    "Internal error (session/prompt)",
+    "OpenCode refused this turn because this model takes at most 128 tools and this bot offers more, even with its tool lists trimmed, so nothing ran.",
+    "the run ended without a result",
   ])("counts %s", (cause) => expect(providerFailure(cause, "exit_before_result")).toBe(true));
 
   it.each([
     "You've hit your weekly limit · resets Oct 12",
-    "unexpected status 401 Unauthorized",
-    "unexpected status 400 Bad Request",
     "This task was blocked by our safety systems.",
-    "the run ended without a result",
+    "prompt is too long: 250000 tokens > 200000 maximum context length",
+    "The model refused to answer this request.",
   ])("never counts %s", (cause) => expect(providerFailure(cause, "exit_before_result")).toBe(false));
 
-  it("never counts a tool's own failure", () => {
+  it("never counts a tool's own failure or the person's Stop", () => {
     expect(providerFailure("503 Service Unavailable", "tool_error")).toBe(false);
+    expect(providerFailure("503 Service Unavailable", "cancelled")).toBe(false);
   });
 });
 

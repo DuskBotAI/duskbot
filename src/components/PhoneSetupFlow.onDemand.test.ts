@@ -9,6 +9,8 @@ import { setLocale } from "@/lib/i18n";
 import type { CompanionAccountState } from "../types/duskDesktop";
 import { PhoneSetupFlowView, usePhoneSetupController, type CompanionState } from "./PhoneSetupFlow";
 
+vi.mock("@/state/store", async (actual) => ({ ...(await actual<object>()), useStore: () => ({ dispatch: vi.fn() }) }));
+
 /** Settings' pairing panel: the flow with its own controller, as CompanionSection mounts it. */
 function PhoneSetupFlow() {
   return createElement(PhoneSetupFlowView, { controller: usePhoneSetupController() });
@@ -78,6 +80,9 @@ function desktop() {
     },
     stopRetrying() {
       account = { available: true, status: "ready", email: "ada@example.com" };
+    },
+    noHostedService() {
+      account = { available: false, status: "signed-out", reason: "unsupported", message: "Secure access is not available right now. Local pairing still works." };
     },
   };
 }
@@ -198,5 +203,48 @@ describe("the person at the computer confirms it is them first", () => {
     await vi.waitFor(() => expect(host.querySelector('[aria-label="Device pairing QR code"]')).not.toBeNull());
     expect(fake.bridge.requireUserPresence).toHaveBeenCalledTimes(2);
     expect(fake.bridge.requireUserPresence).toHaveBeenCalledWith("show a code that links a phone");
+  });
+});
+
+describe("pairing when the hosted secure service is not there", () => {
+  it("opens the Wi-Fi code at once when this build has no relay", async () => {
+    const fake = desktop();
+    fake.noHostedService();
+    await startPairing(fake);
+
+    await vi.waitFor(() => expect(host.querySelector('[aria-label="Device pairing QR code"]')).not.toBeNull());
+    expect(fake.bridge.companion.pairing).toHaveBeenCalledWith(true);
+    expect(text()).not.toMatch(/Secure access|isn’t offered|Tailscale/);
+    expect(host.querySelector('[role="alert"]')).toBeNull();
+  });
+
+  it("asks for a sign-in to pair from anywhere in one line, with Wi-Fi beside it", async () => {
+    const fake = desktop();
+    fake.noHostedService();
+    const relay = { state: vi.fn(async () => ({ status: "signed-out" as const })), ready: vi.fn(async () => ({ status: "signed-out" as const })) };
+    await startPairing({ ...fake, bridge: { ...fake.bridge, phoneRelay: relay } as typeof fake.bridge });
+
+    await vi.waitFor(() => expect(text()).toContain("Pair from anywhere"));
+    expect(text()).toContain("Sign in to your dusk bot account to pair from anywhere");
+    expect(button("Sign in")).not.toBeNull();
+    expect(button("Use Wi-Fi")).not.toBeNull();
+    expect(text()).not.toMatch(/Secure access|isn’t offered|Tailscale/);
+    expect(host.querySelectorAll('[role="alert"]')).toHaveLength(0);
+    expect(fake.bridge.companion.pairing).not.toHaveBeenCalled();
+  });
+
+  it("tries the relay again when it could not start", async () => {
+    const fake = desktop();
+    fake.noHostedService();
+    const relay = {
+      state: vi.fn(async () => ({ status: "error" as const, code: "unreachable", message: "dusk bot could not reach its relay." })),
+      ready: vi.fn(async () => ({ status: "error" as const, code: "unreachable", message: "dusk bot could not reach its relay." })),
+    };
+    await startPairing({ ...fake, bridge: { ...fake.bridge, phoneRelay: relay } as typeof fake.bridge });
+
+    await vi.waitFor(() => expect(text()).toContain("Pairing from anywhere could not start"));
+    flushSync(() => button("Try again")!.click());
+    await vi.waitFor(() => expect(relay.ready).toHaveBeenCalledOnce());
+    expect(button("Use Wi-Fi")).not.toBeNull();
   });
 });

@@ -113,7 +113,7 @@ export function FunnelStrip({ steps }: { steps: FunnelStep[] }) {
   );
 }
 
-const TONES: Record<string, "good" | "warn" | "bad" | "quiet" | "accent"> = {
+const TONES: Record<string, "good" | "warn" | "bad" | "quiet" | "accent"> = { trial: "accent",
   running: "good", active: "good", synced: "good", ok: "good", paid: "good",
   provisioning: "accent", checkout: "quiet", sleeping: "quiet", stopped: "quiet", destroyed: "quiet", ended: "quiet", pending: "quiet", not_configured: "quiet", cancelled: "warn",
   payment_problem: "warn", suspended: "warn", behind: "warn", destroying: "warn", error: "bad", failed: "bad", refunded: "warn",
@@ -169,6 +169,12 @@ export function Failed({ error, retry }: { error: { message: string }; retry(): 
       <Button size="sm" onClick={retry}>try again</Button>
     </div>
   );
+}
+
+/** a read that hit its event limit: what it covers, so a short count is never read as a drop */
+export function PartialNote({ before }: { before: number | null | undefined }) {
+  if (!before) return null;
+  return <p role="status" className="mb-3 rounded-[14px] bg-wash-lemon px-4 py-2.5 text-13 text-ink">too many events to read them all: counts start at {stamp(before)} utc, earlier events are left out.</p>;
 }
 
 export function Section({ title, action, children, className }: { title: string; action?: ReactNode; children: ReactNode; className?: string }) {

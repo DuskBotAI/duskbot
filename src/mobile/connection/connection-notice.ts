@@ -3,6 +3,8 @@ import type { MobileConnectionRecord } from "../../../shared/mobile-link";
 
 /** "Reconnecting" shows this long; after it the phone says it can't reach the place and offers to try again */
 export const STUCK_AFTER_MS = 15_000;
+/** a live stream that opens, or comes back, within this says nothing at all */
+export const RECONNECTING_AFTER_MS = 2_500;
 /** a dusk cloud usually wakes within a minute; after this the phone says it is taking a while */
 export const WAKE_SLOW_AFTER_MS = 90_000;
 
@@ -24,6 +26,7 @@ export function connectionNotice(input: NoticeInput): ConnectionNotice {
   if (input.offline) return "offline";
   if (input.waking) return input.wakingSince !== null && input.now - input.wakingSince >= WAKE_SLOW_AFTER_MS ? "wake-slow" : "waking";
   if (input.connected || input.resuming || input.asleep) return null;
+  if (input.downSince !== null && input.now - input.downSince < RECONNECTING_AFTER_MS) return null;
   if (answeredRecently(input)) return "reconnecting";
   return input.downSince !== null && input.now - input.downSince >= STUCK_AFTER_MS ? "stuck" : "reconnecting";
 }
@@ -70,7 +73,8 @@ export function useConnectionNotice(input: Omit<NoticeInput, "downSince" | "waki
     setWakingSince(since.waking);
   }, [wakingNow, clock]);
   const stuckAt = downSince === null ? null : Math.max(downSince, answeredAt ?? -Infinity) + STUCK_AFTER_MS;
-  const deadline = stuckAt ?? (wakingSince !== null ? wakingSince + WAKE_SLOW_AFTER_MS : null);
+  const quietUntil = downSince === null ? null : downSince + RECONNECTING_AFTER_MS;
+  const deadline = quietUntil !== null && quietUntil > clock() ? quietUntil : stuckAt ?? (wakingSince !== null ? wakingSince + WAKE_SLOW_AFTER_MS : null);
   useEffect(() => {
     if (deadline === null) return;
     const wait = deadline - clock();

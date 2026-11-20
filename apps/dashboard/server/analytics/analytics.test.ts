@@ -8,7 +8,7 @@ import { createAnalytics } from "./index.ts";
 import { memorySink, mongoSink } from "./sink.ts";
 import { deviceOf, requestContext, touchContext } from "./context.ts";
 import { cleanProps, routeOf } from "./events.ts";
-import { funnel, dayRange, perDay } from "../admin/metrics.ts";
+import { funnel, dayRange, isPaying, perDay, wasPaid } from "../admin/metrics.ts";
 import { brevoChecker, csvField } from "../admin/waitlist.ts";
 import { healthTargets } from "../admin/health.ts";
 
@@ -51,6 +51,15 @@ describe("analytics", () => {
     expect(deviceOf(chrome, { hint: "arc" }).browser).toBe("arc");
     expect(deviceOf(chrome, { hint: "netscape" }).browser).toBe("chrome");
     expect(deviceOf(SAFARI_UA, { hint: "arc" }).browser).toBe("safari");
+    const iphone = "Mozilla/5.0 (iPhone; CPU iPhone OS 18_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148";
+    expect(deviceOf(`${iphone} Twitter for iPhone/11.20`).browser).toBe("x app");
+    expect(deviceOf(`${iphone} Barcelona 360.0.0.30.109`).browser).toBe("threads app");
+    expect(deviceOf(`${iphone} Instagram 360.0.0.30.109`).browser).toBe("instagram app");
+    expect(deviceOf(`${iphone} [FBAN/FBIOS;FBAV/490.0]`).browser).toBe("facebook app");
+    expect(deviceOf(`${iphone} [LinkedInApp]/9.30`).browser).toBe("linkedin app");
+    expect(deviceOf(iphone).browser, "an iOS web view with no app named is still Safari's engine").toBe("safari");
+    expect(deviceOf("Mozilla/5.0 (Linux; Android 14; SM-S918B) AppleWebKit/537.36 (KHTML, like Gecko) SamsungBrowser/26.0 Chrome/122 Mobile Safari/537.36").browser).toBe("samsung");
+    expect(deviceOf(`${chrome} OPR/115.0`).browser).toBe("opera");
   });
 
   it("counts an app device active once a day, and the first bot reply once ever", async () => {
@@ -163,5 +172,13 @@ describe("ai crawlers", () => {
     expect(await sink.crawls(0, 2000)).toEqual([{ at: 1000, bot: "GPTBot", kind: "training", path: "/llms.txt", host: "dusk.bot" }, { at: 1000, bot: "ChatGPT-User", kind: "answers", path: "/pricing", host: "dusk.bot" }]);
     expect(sink.all).toEqual([]);
     analytics.close(); rmSync(dataDir, { recursive: true, force: true });
+  });
+});
+
+describe("paying", () => {
+  it("never counts a failed charge as paying, though it was paid for", () => {
+    expect(isPaying({ status: "payment_problem" })).toBe(false);
+    expect(isPaying({ status: "active" })).toBe(true);
+    expect(wasPaid({ status: "payment_problem", currentPeriodStart: null })).toBe(true);
   });
 });

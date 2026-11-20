@@ -306,7 +306,7 @@ function canonicalImageName(originalName: string, path: string, mime: string): s
 
 export function optimisticImageAttachment(file: File): ImageAttachment | null {
   if (!isImageFile(file)) return null;
-  if (file.size > IMAGE_MAX_BYTES) throw Object.assign(new Error(`${file.name} exceeds 10 MB`), { status: 413 });
+  if (file.size > IMAGE_MAX_BYTES) throw Object.assign(new Error(`${file.name} is over 10 MB.`), { status: 413 });
   const mime = file.type.split(";", 1)[0]!.trim().toLowerCase();
   const previewUrl = typeof URL.createObjectURL === "function" ? URL.createObjectURL(file) : undefined;
   return {
@@ -327,7 +327,7 @@ export async function imageAttachmentFromFile(
   transfer?: UploadTransfer,
 ): Promise<ImageAttachment | null> {
   if (!isImageFile(file)) return null;
-  if (file.size > IMAGE_MAX_BYTES) throw Object.assign(new Error(`${file.name} exceeds 10 MB`), { status: 413 });
+  if (file.size > IMAGE_MAX_BYTES) throw Object.assign(new Error(`${file.name} is over 10 MB.`), { status: 413 });
   const bytes = new Uint8Array(await file.arrayBuffer());
   const uploadId = newUploadId();
   const saved = await uploadWithRetry<{ path: string; mime: string; bytes: number; media?: MediaSize }>(
@@ -358,7 +358,7 @@ function uploadableFileMime(file: Pick<File, "name" | "type" | "size">): string 
     (ACCEPTED_AUDIO_MIMES.has(declared) ? declared : AUDIO_MIMES_BY_EXTENSION[extension]);
   if (!mime) return null;
   if (file.size > FILE_MAX_BYTES) {
-    throw Object.assign(new Error(`${file.name} exceeds ${FILE_MAX_BYTES / (1024 * 1024)} MB`), { status: 413 });
+    throw Object.assign(new Error(`${file.name} is over ${FILE_MAX_BYTES / (1024 * 1024)} MB.`), { status: 413 });
   }
   return mime;
 }
@@ -491,6 +491,7 @@ export type TranscriptFileAttachment = {
   path: string;
   name: string;
   private?: boolean;
+  bytes?: number;
 };
 
 export type TranscriptImageAttachment = {
@@ -771,6 +772,12 @@ export function attachmentAudioUrl(path: string): string | null {
   return `/api/attachments/${encodeURIComponent(name)}`;
 }
 
+function uploadFailure(name: string, err: unknown): string {
+  const message = err instanceof Error ? err.message : "upload failed";
+  const said = message.includes(name) ? message : `${name}: ${message}`;
+  return /[.!?]$/.test(said) ? said : `${said}.`;
+}
+
 export async function intakeFiles<T extends DroppedFile & { type: string }>(
   _files: readonly T[],
   _opts: {
@@ -807,7 +814,7 @@ export async function intakeFiles<T extends DroppedFile & { type: string }>(
         return {
           attachments: [],
           rejectedNames: [],
-          uploadError: `${file.name}: ${err instanceof Error ? err.message : "upload failed"}`,
+          uploadError: uploadFailure(file.name, err),
         };
       }
     }
@@ -821,7 +828,7 @@ export async function intakeFiles<T extends DroppedFile & { type: string }>(
       return {
         attachments: [],
         rejectedNames: [],
-        uploadError: `${file.name}: ${err instanceof Error ? err.message : "upload failed"}`,
+        uploadError: uploadFailure(file.name, err),
       };
     }
     const result = await attachmentsFromDroppedFiles([file], getPath);
@@ -833,11 +840,10 @@ export async function intakeFiles<T extends DroppedFile & { type: string }>(
   const unsupported = rejectedNames.filter((name) => !ARCHIVE_NAME.test(name));
   const uploadErrors = results.flatMap((result) => result.uploadError ? [result.uploadError] : []);
   const pathless = [
-    unsupported.length ? `unable to attach ${unsupported.join(", ")}. choose a supported image, document, or audio file.` : "",
-    archives.length ? `archives can't be attached: unzip ${archives.join(", ")} and attach the files inside.` : "",
+    unsupported.length ? `Unable to attach ${unsupported.join(", ")}. Choose a supported image, document, or audio file.` : "",
+    archives.length ? `Archives can't be attached: unzip ${archives.join(", ")} and attach the files inside.` : "",
   ].filter(Boolean).join(" ") || null;
-  const failed = uploadErrors.length ? uploadErrors.join("; ") : null;
-  const notice = pathless && failed ? `${pathless} (${failed})` : (pathless ?? failed);
+  const notice = [pathless, ...uploadErrors].filter(Boolean).join(" ") || null;
   const limited = leftOut.length ? imageLimitNotice(leftOut) : null;
   return {
     attachments,

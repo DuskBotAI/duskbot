@@ -1,6 +1,10 @@
+import { appliedTextScale } from "./text-scale";
 import { useCallback, useEffect, useRef, type RefObject } from "react";
 import type { SlidePath } from "./NavStack";
 import type { MobilePlatform } from "./platform";
+import { composerHandoff } from "./native-composer-ack";
+import type { HomeGlassState } from "./native-home-glass";
+import { kbTrace } from "./keyboard";
 
 /** A rect in css px from the top left of the screen, which on the phone is the native view's own point space. */
 export interface GlassFrame { x: number; y: number; w: number; h: number }
@@ -16,7 +20,7 @@ export interface GlassHeader {
   rightLabel: string;
 }
 
-export type GlassButtonKind = "stop" | "mic" | "micSend" | "send" | "waits" | "followUp" | "discard" | "keep";
+export type GlassButtonKind = "stop" | "mic" | "micSend" | "send" | "waits" | "followUp" | "discard" | "keep" | "call" | "hangUp";
 /** `fill` and `ink` are the page's own colours for the button (#rrggbb or #rrggbbaa), so Send wears the bot's button as on the desktop. */
 export interface GlassButton { kind: GlassButtonKind; disabled: boolean; label: string; fill?: string; ink?: string }
 
@@ -28,10 +32,17 @@ export interface GlassComposer {
   plusLabel: string;
   placeholder: string;
   disabled: boolean;
-  /** what dictation has heard so far, while it listens; the field is hidden then */
+  /** what dictation has heard so far, or its waiting words, while it listens: the capsule shows it by a live waveform in
+   * the field's place */
   voice: string | null;
+  /** `voice` is words heard, not the waiting words (apps before 1.3 ignore it) */
+  voiceHeard?: boolean;
   buttons: GlassButton[];
   returnSends: boolean;
+  /** the page's text zoom, so the native field's text matches the page's (apps before 1.3 ignore it) */
+  fontScale: number;
+  /** the empty space under the transcript's last row: a keyboard opening over a short chat lifts the page that much less */
+  room: number;
 }
 
 export interface GlassState {
@@ -41,32 +52,58 @@ export interface GlassState {
   /** the chat is open but something covers its chrome: the page draws its own at once, so the native one goes at once */
   handoff: boolean;
   accent: string;
+  /** the page's ground colour (#rrggbb), which the native side paints where the page lifts away from */
+  ground: string;
   header: GlassHeader | null;
   composer: GlassComposer | null;
+  /** a call's bar has the composer's place: the composer fades out under it as it comes, and back in as it goes, instead
+   * of swapping at once (apps before 1.4 ignore it) */
+  call?: boolean;
+}
+
+/** A call's bar holding the composer's place (it marks itself `data-call-leaving` as it goes, for the composer to come
+ * back under it). */
+export function callHoldsComposer(chat: Element | null): boolean {
+  return Boolean(chat?.querySelector("[data-call-surface]:not([data-call-leaving])"));
 }
 
 export type GlassEvent =
-  | { type: "tap"; target: "back" | "title" | "right" | "plus" }
+  | { type: "tap"; target: "back" | "title" | "right" | "plus" | "search" | "newBot" }
   | { type: "button"; index: number; kind?: GlassButtonKind }
   | { type: "text"; text: string }
   | { type: "submit" }
   | { type: "focus"; focused: boolean }
-  | { type: "height"; height: number };
+  | { type: "height"; height: number }
+  /** the native field was emptied for the send `clearText` named */
+  | { type: "cleared"; id: number }
+  /** answers every update that asked for a composer: whether it is on screen now, or why not */
+  | { type: "composer"; shown: boolean; reason?: string; frame?: GlassFrame }
+  /** the keyboard starts to move: how far it will cover, its duration in seconds and when it started, in epoch ms. With
+   * `lift` the native composer's field has it, and the native side lifts the whole web view by `lift` in the keyboard's
+   * own animation; `settled` comes once that move has stopped, for the page to take the space itself. */
+  | { type: "keyboard"; height: number; duration?: number; at?: number; lift?: number; settled?: boolean };
 
 /** The phone's native glass chrome (ios/App/App/GlassChromePlugin.swift): it draws the chat header and composer
  * over the web view so the glass bends the transcript under it, and hands taps and typing back to the page. */
 export interface GlassBridge {
+  /** the native side answers each composer it is asked for with a `composer` event (apps before 1.3.1 never do) */
+  acks?: boolean;
   update(state: GlassState): void;
   setText(text: string, seq: number): void;
+  /** Empties the native field for a send the page took, whatever it holds or the sequence it last took, and answers with
+   * a `cleared` event (apps before 1.4 have none: their field follows `setText` alone). */
+  clearText?(id: number): void;
   setAvatar(data: string | null): void;
   focus(): void;
   blur(): void;
   clear(): void;
-  /** The chat's page starts a slide along `path`: the header and composer play the same path natively from this frame,
-   * with no frame updates in between. null stops them where they are. */
-  slide(path: SlidePath | null): void;
+  /** The chat's page starts a slide along `path` at `at` (epoch ms): the header and composer play the same path natively,
+   * as far into it as the message took to arrive, with no frame updates in between. null stops them where they are. */
+  slide(path: SlidePath | null, at?: number): void;
   /** The native header's own symbols, for the page's header to draw while it stands in for the glass. */
   glyphs?(): Promise<GlassGlyphs>;
+  /** Home's top buttons, or null to hide them at once (apps before 1.3 have no home bar). */
+  home?(state: HomeGlassState | null): void;
   onEvent(listener: (event: GlassEvent) => void): () => void;
 }
 
@@ -130,6 +167,7 @@ export function buttonKind(el: HTMLElement): GlassButtonKind | null {
   if (el.matches("[data-composer-send]")) return el.dataset.composerSend === "waits" ? "waits" : "send";
   if (el.closest("[data-composer-follow-up]") && el.getAttribute("aria-haspopup")) return "followUp";
   if (el.matches("[data-composer-discard]")) return "discard";
+  if (el.matches('[data-call-button="composer"]')) return el.hasAttribute("data-call-active") ? "hangUp" : "call";
   return null;
 }
 
@@ -298,7 +336,22 @@ export function keyboardRide(shell: Element): number {
   return (matrix[1] ? parts[13] : parts[5]) || 0;
 }
 
-function readComposer(shell: HTMLElement, baseline: number, dx: number): { composer: GlassComposer; elements: HTMLElement[]; field: HTMLTextAreaElement | null } | null {
+/** The empty space between the transcript's last row and the bottom of its scroller, in whole px. */
+export function transcriptRoom(chat: Element | null): number {
+  const list = chat?.querySelector(".glass-scroller");
+  // scrollHeight never drops below clientHeight, so a short transcript is measured by its content's own boxes
+  if (!list || list.scrollHeight > list.clientHeight + 1) return 0;
+  const top = list.getBoundingClientRect().top;
+  let end = 0;
+  for (const child of list.children) {
+    const position = getComputedStyle(child).position;
+    if (position === "absolute" || position === "fixed") continue;
+    end = Math.max(end, child.getBoundingClientRect().bottom - top);
+  }
+  return Math.max(0, Math.round(list.clientHeight - end));
+}
+
+function readComposer(shell: HTMLElement, baseline: number, dx: number, room: number): { composer: GlassComposer; elements: HTMLElement[]; field: HTMLTextAreaElement | null } | null {
   if (hasStrips(shell)) return null;
   const field = shell.querySelector<HTMLTextAreaElement>("textarea");
   const actions = composerButtons(shell.querySelector("[data-composer-actions]"));
@@ -311,23 +364,95 @@ function readComposer(shell: HTMLElement, baseline: number, dx: number): { compo
   return {
     composer: {
       frame,
-      gap: round(baseline - (frame.y + frame.h - keyboardRide(shell))),
+      // whole pixels: mid-ride the measured gap wobbles by half a pixel, and each wobble would re-pin the native composer
+      gap: Math.round(baseline - (frame.y + frame.h - keyboardRide(shell))),
       plus: Boolean(plus),
       plusLabel: plus?.closest("button")?.getAttribute("aria-label") ?? plus?.getAttribute("aria-label") ?? "",
       placeholder: field?.placeholder ?? "",
       disabled: Boolean(field?.disabled),
       voice: recording ? spoken(voiceStrip) : null,
+      voiceHeard: recording && Boolean(voiceStrip?.querySelector("[data-voice-heard]")),
       buttons: actions.buttons,
       returnSends: field?.getAttribute("enterkeyhint") === "send",
+      fontScale: appliedTextScale(),
+      room,
     },
     elements: actions.elements,
     field,
   };
 }
 
+/** Why the page keeps its own composer instead of the native one, for the trace. */
+function handoffReason(shell: HTMLElement | null, chat: HTMLElement): string {
+  if (callHoldsComposer(chat)) return "call";
+  if (!shell) return "no composer";
+  if (covered(shell, chat)) return "covered";
+  if (hasStrips(shell)) return "strip";
+  if (!composerButtons(shell.querySelector("[data-composer-actions]"))) return "button without a twin";
+  return "no field";
+}
+
+/** When a slide begun this frame shows its first moved frame, on the clock the native side reads (epoch ms): a web
+ * animation started now draws from the next frame, about half a 60 Hz frame on average from here. */
+export function slideStart(now = performance.timeOrigin + performance.now()): number {
+  return Math.round(now + 1000 / 120);
+}
+
+/** The native field keeps the highest sequence it has taken for as long as the app runs, across chats: a count that
+ * started again with each chat had every later chat's text (a send clearing the field among it) refused as stale. */
+let textSeq = 0;
+export function nextTextSeq(): number {
+  textSeq += 1;
+  return textSeq;
+}
+
+/** A send the page took out of the native field: text the native side reports within this long that still begins with
+ * what was sent is the field's own text from before the clear (a late keystroke, a committed autocorrection or dictation
+ * guess), never new typing, and is not typed back into the emptied composer. */
+export const SENT_ECHO_MS = 1500;
+/** a tap on Send the page did not take (an upload still running, nothing to send) stops waiting for the field to empty */
+const SEND_TAKE_MS = 1000;
+
+/** Watches each native Send for the page taking it: once the page's field empties, the native one is cleared outright
+ * (keyed to that send, not left to a text diff), and the old text the native side may still send is refused. */
+export function sendClearing() {
+  let tapped: { text: string; at: number } | null = null;
+  let sent: { id: number; text: string; until: number } | null = null;
+  return {
+    tapped(text: string, now: number) { tapped = text.trim() ? { text, at: now } : null; },
+    /** the send the page just took, once its field shows it emptied */
+    taken(value: string, now: number): { id: number; text: string } | null {
+      if (!tapped) return null;
+      if (value.trim() !== "") {
+        if (now - tapped.at > SEND_TAKE_MS) tapped = null;
+        return null;
+      }
+      sent = { id: nextTextSeq(), text: tapped.text, until: now + SENT_ECHO_MS };
+      tapped = null;
+      return sent;
+    },
+    /** the native field's text from before a send's clear, arriving after the tap: `taken` once the native field has
+     * been told to empty, else the page is still taking it and empties it then */
+    echo(text: string, now: number): { taken: boolean } | null {
+      const old = (from: string) => {
+        const before = from.trimEnd();
+        let same = 0;
+        while (same < before.length && same < text.length && text[same] === before[same]) same += 1;
+        // an autocorrection or a dictation guess settling rewrites the end of what was sent; new typing shares little of it
+        return text.trim() !== "" && same >= Math.ceil(before.length * 0.6) && same >= before.length - 32;
+      };
+      if (tapped && now - tapped.at <= SEND_TAKE_MS && old(tapped.text)) return { taken: false };
+      return sent && now <= sent.until && old(sent.text) ? { taken: true } : null;
+    },
+  };
+}
+
 const FRESH_FRAMES = 30;
 const IDLE_EVERY = 15;
 const AVATAR_MS = 1000;
+/** The native side gets the whole state again this often even when nothing changed: chrome it lost (a page reload's
+ * reset, a hide it missed) comes back within this long. */
+export const REASSERT_MS = 1000;
 
 /** Inside a chat's transcript, whose rows (a reply streaming in) never move the header or the composer. */
 function inTranscript(node: Node): boolean {
@@ -361,7 +486,7 @@ export function useNativeGlass(platform: MobilePlatform, rootRef: RefObject<HTML
       return;
     }
     slideRef.current = { until: performance.now() + path.duration, to: path.points.at(-1) ?? 0 };
-    glass.slide(path);
+    glass.slide(path, slideStart());
   }, [platform]);
 
   useEffect(() => {
@@ -377,13 +502,18 @@ export function useNativeGlass(platform: MobilePlatform, rootRef: RefObject<HTML
     let last: GlassState | null = null;
     let elements: HTMLElement[] = [];
     let field: HTMLTextAreaElement | null = null;
-    let fromNative = "";
+    // null until the first frame: a chat opening hands the native field its own text (or none), whatever the last one left
+    let fromNative: string | null = null;
     let toNative: string | null = null;
-    let seq = 0;
     let avatar: string | null | undefined;
     let avatarAt = 0;
     let avatarName: string | null = null;
     let nativeFocused = false;
+    let sentAt = 0;
+    let composerShown = false;
+    const handoff = composerHandoff();
+    const sends = sendClearing();
+    const liveField = () => (field?.isConnected ? field : shell()?.querySelector("textarea") ?? null);
     let safeBottom = cssPx(root, "var(--m-safe-bottom)");
 
     const chat = () => root.querySelector<HTMLElement>("[data-mobile-chat]");
@@ -399,6 +529,12 @@ export function useNativeGlass(platform: MobilePlatform, rootRef: RefObject<HTML
     });
     changed.observe(document.body, { subtree: true, childList: true, attributes: true, characterData: true });
     const skinChanged = new MutationObserver(() => { fresh = FRESH_FRAMES; });
+    const onVisible = () => {
+      if (document.hidden) return;
+      fresh = FRESH_FRAMES;
+      last = null;
+      handoff.recheck();
+    };
     skinChanged.observe(html, { attributes: true, attributeFilter: ["data-skin", "class", "style"] });
     const flag = (name: "nativeGlassHeader" | "nativeGlassComposer", on: boolean) => {
       if (on && html.dataset[name] === undefined) html.dataset[name] = "";
@@ -409,11 +545,19 @@ export function useNativeGlass(platform: MobilePlatform, rootRef: RefObject<HTML
       frame = requestAnimationFrame(tick);
       if (document.hidden) return;
       count += 1;
+      const took = sends.taken(liveField()?.value ?? "", performance.now());
+      if (took) {
+        kbTrace("send taken", { id: took.id, length: took.text.length });
+        // a draft put back after a failed send differs from both, so it goes to the native field again
+        fromNative = null;
+        toNative = "";
+        glass.setText("", took.id);
+        glass.clearText?.(took.id);
+      }
       // what the page itself put in its field (a draft, a cleared send, a picked mention) goes to the native field
       if (field && field.value !== fromNative && field.value !== toNative) {
         toNative = field.value;
-        seq += 1;
-        glass.setText(field.value, seq);
+        glass.setText(field.value, nextTextSeq());
       }
       const now = performance.now();
       // a slide holds its target until the page says it stopped: its compositor may land a frame after this clock
@@ -432,7 +576,11 @@ export function useNativeGlass(platform: MobilePlatform, rootRef: RefObject<HTML
       const header = chatEl && navEl && title && !covered(title, chatEl) ? readHeader(navEl, left) : null;
       const kb = parseFloat(root.style.getPropertyValue("--m-kb")) || 0;
       const baseline = window.innerHeight - Math.max(safeBottom, kb);
-      const read = chatEl && shellEl && !covered(shellEl, chatEl) ? readComposer(shellEl, baseline, left) : null;
+      const calling = callHoldsComposer(chatEl);
+      const read = chatEl && shellEl && !calling && !covered(shellEl, chatEl) ? readComposer(shellEl, baseline, left, transcriptRoom(chatEl)) : null;
+      handoff.want(Boolean(read));
+      const nativeComposer = read && (!glass.acks || handoff.native()) ? read.composer : null;
+      if (glass.acks && handoff.pending()) fresh = Math.max(fresh, 1);
       elements = read?.elements ?? [];
       field = read?.field ?? null;
       const styles = getComputedStyle(root);
@@ -441,9 +589,11 @@ export function useNativeGlass(platform: MobilePlatform, rootRef: RefObject<HTML
         // with nothing drawn natively (a sheet over the chat, scaling the page back) the offset has nothing to move
         offset: slide ? slide.to : header || read ? round(left) : last?.offset ?? round(left),
         accent: styles.getPropertyValue("--color-accent").trim(),
+        ground: cssHex(styles.getPropertyValue("--color-app")) ?? "",
         header,
-        composer: read?.composer ?? null,
-        handoff: Boolean(chatEl) && (!header || !read),
+        composer: nativeComposer,
+        handoff: Boolean(chatEl) && (!header || !nativeComposer),
+        ...(calling ? { call: true } : {}),
       };
       // the pill's picture goes before the update that shows it: a chat's header never arrives with the last chat's
       // avatar, and a new name brings its avatar along. A drawn one is checked again once a second, never mid-slide;
@@ -457,15 +607,22 @@ export function useNativeGlass(platform: MobilePlatform, rootRef: RefObject<HTML
         if (drawn !== avatar) { avatar = drawn; glass.setAvatar(drawn); }
       }
       flag("nativeGlassHeader", Boolean(header));
-      flag("nativeGlassComposer", Boolean(next.composer));
-      if (!sameState(last, next)) {
+      const nativeOwns = glass.acks ? handoff.pageHidden() : Boolean(next.composer);
+      flag("nativeGlassComposer", nativeOwns);
+      if (nativeOwns !== composerShown) {
+        composerShown = nativeOwns;
+        kbTrace(composerShown ? "native composer" : "page composer", { why: composerShown ? "shown" : handoff.refusal() ?? (chatEl ? handoffReason(shellEl, chatEl) : "chat closed") });
+        // the page's field kept the keyboard while it had the composer (a reply, a popover): the native one takes it back
+        if (composerShown && field && document.activeElement === field) glass.focus();
+      }
+      if (!sameState(last, next) || (!slide && !dragged && now - sentAt > REASSERT_MS)) {
         last = next;
+        sentAt = now;
         glass.update(next);
       }
       if (field && field.value !== fromNative && field.value !== toNative) {
         toNative = field.value;
-        seq += 1;
-        glass.setText(field.value, seq);
+        glass.setText(field.value, nextTextSeq());
       }
     };
 
@@ -478,16 +635,34 @@ export function useNativeGlass(platform: MobilePlatform, rootRef: RefObject<HTML
           break;
         }
         // the control the native one stood in for, by kind: the page's set may have moved on since that frame
-        case "button": click((event.kind && elements.find((el) => buttonKind(el) === event.kind)) || elements[event.index]); break;
+        case "button": {
+          if (event.kind === "send" || event.kind === "micSend") {
+            kbTrace("send tap", { kind: event.kind, keyboard: root.dataset.keyboard ?? "down" });
+            sends.tapped(liveField()?.value ?? "", performance.now());
+          }
+          click((event.kind && elements.find((el) => buttonKind(el) === event.kind)) || elements[event.index]);
+          break;
+        }
         case "text": {
+          const echo = sends.echo(event.text, performance.now());
+          if (echo) {
+            kbTrace("stale text dropped", { taken: echo.taken ? 1 : 0, length: event.text.length });
+            if (echo.taken) {
+              glass.setText("", nextTextSeq());
+              glass.clearText?.(nextTextSeq());
+            }
+            break;
+          }
           fromNative = event.text;
           toNative = null;
-          const target = field ?? shell()?.querySelector("textarea");
+          const target = liveField();
           if (target) typeInto(target, event.text);
           break;
         }
+        case "cleared": kbTrace("native cleared", { id: event.id }); break;
         case "submit": {
-          const target = field ?? shell()?.querySelector("textarea");
+          const target = liveField();
+          sends.tapped(target?.value ?? "", performance.now());
           target?.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", code: "Enter", bubbles: true, cancelable: true }));
           break;
         }
@@ -497,6 +672,12 @@ export function useNativeGlass(platform: MobilePlatform, rootRef: RefObject<HTML
           break;
         }
         case "height": shell()?.style.setProperty("--glass-composer-h", `${event.height}px`); break;
+        case "composer": {
+          handoff.ack(event);
+          fresh = FRESH_FRAMES;
+          kbTrace("composer ack", { shown: event.shown ? 1 : 0, reason: event.reason ?? "" });
+          break;
+        }
       }
     });
 
@@ -509,6 +690,7 @@ export function useNativeGlass(platform: MobilePlatform, rootRef: RefObject<HTML
     };
     const onResize = () => { safeBottom = cssPx(root, "var(--m-safe-bottom)"); };
     document.addEventListener("focus", onFocus, true);
+    document.addEventListener("visibilitychange", onVisible);
     window.addEventListener("resize", onResize);
     frame = requestAnimationFrame(tick);
     return () => {
@@ -517,6 +699,7 @@ export function useNativeGlass(platform: MobilePlatform, rootRef: RefObject<HTML
       skinChanged.disconnect();
       stop();
       document.removeEventListener("focus", onFocus, true);
+      document.removeEventListener("visibilitychange", onVisible);
       window.removeEventListener("resize", onResize);
       if (nativeFocused) glass.blur();
       delete root.dataset.glassFocused;

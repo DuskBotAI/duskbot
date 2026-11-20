@@ -66,8 +66,20 @@ through the relay. Running the install again with `--repair` and another way mov
 the server to it; the app follows. The line is single use and expires after 30
 minutes; [the link service](../apps/link-service/README.md) has the details.
 
-Already running dusk bot with `npx duskbot serve`? The sheet's last choice
-connects to it by the address and pairing code that command prints.
+The line also puts `duskbot` on the server's PATH for every login (a small
+`/usr/local/bin/duskbot` that runs the server account's own build as that
+account), so `duskbot pair --label desktop` there makes a code for another
+computer. A server installed before this has it after its next update; until
+then run `sudo -u dusk /home/dusk/.local/bin/duskbot pair --label desktop`.
+
+Already running dusk bot? The sheet's last choice takes what
+`duskbot pair --label desktop` (or `npx duskbot pair --label desktop`, for a
+server started with npx) prints on it: paste the whole output into the first
+field and the app picks the server's public pairing link out of it. With no
+public address it prints only a code; then enter the address and that code.
+A server linked only through the relay has no address to enter: a new line from
+the other computer's app moves its link there (the server keeps one link, so the
+computer it was linked to before stops reaching it).
 
 ## What works headless (and what doesn't)
 
@@ -236,7 +248,7 @@ That uses the image published for each release
 (`ghcr.io/duskbotai/duskbot`, tagged `v…` and `latest`, for amd64 and
 arm64, with Claude Code and Codex installed). Set `DUSK_IMAGE` in `.env` to
 pin a version. To build from your checkout instead, with the engines
-`ENGINES` lists: `docker compose up -d --build`.
+`ENGINES` lists: `docker compose up -d --build`. The server owner can also [update from the workspace](#update-an-official-compose-server-from-its-workspace) after installing the optional host helper.
 
 Then sign the engine CLIs in **inside the container** (their logins live on
 the `data` volume, so they survive restarts and image upgrades) and mint a
@@ -381,6 +393,7 @@ Pair once, then use the server from any browser on any machine that can
 reach it. On the server:
 
 ```sh
+duskbot pair                             # the app's one-line install
 npx duskbot pair                         # npm install
 pnpm dusk pair                                # from a checkout
 docker compose exec dusk node dist-server/duskbot.js pair   # Docker
@@ -398,7 +411,7 @@ From the **desktop app**, use the server dropdown above Search → **Connect
 to a server…**, or **Settings → Servers**. Enter the server's
 HTTPS address or full pairing link, with an optional name. Custom domains and
 Cloudflare tunnel addresses work; Tailscale is not required. Generate a fresh
-link for each device: `npx duskbot pair --label "My desktop"` creates an
+link for each device: `duskbot pair --label "My desktop"` (with `npx` in front on an npm install) creates an
 owner link without the phone wizard; add `--client` for chat-only access.
 A code already used by your phone cannot also pair your desktop.
 
@@ -1203,7 +1216,7 @@ For a foreground invocation, `npx --yes duskbot@X.Y.Z serve --tunnel`
 selects a particular published release; replace `X.Y.Z` with that version.
 
 ```sh
-docker compose -f deploy/docker-compose.yml pull dusk && docker compose -f deploy/docker-compose.yml up -d   # Docker
+(cd deploy && docker compose pull dusk && docker compose up -d)   # Docker, with the project overrides
 git pull && pnpm install && sudo systemctl restart duskbot          # from source
 ```
 
@@ -1219,3 +1232,22 @@ engine credentials, browser state, and external workspaces. For Docker, the
 whole `/data` volume includes the CLI homes. See the
 [backup and restore instructions](deploy-vps.md#back-up) for the exact scope
 and stop/start commands.
+
+### Update an official Compose server from its workspace
+
+On a server running an official image release containing the update check, open **Settings → Updates → Check for updates** in the server's web UI or its linked desktop workspace. The check compares the running server version with the latest stable GitHub release. An operator using a version tag or digest keeps control of that pin. The normal `docker compose pull dusk && docker compose up -d` procedure still works.
+
+**Bootstrapping from 0.2.22** requires one manual upgrade to a release containing this feature. Use the updated Compose file to identify your configured image and enable the optional host integration. Keep the existing project name, directory, overrides and `.env` (including `DOMAIN` and `DUSK_IMAGE`).
+
+#### Install the optional host updater
+
+The **Update now** action supports a single-owner workspace on a Linux Docker host using the published `ghcr.io/duskbotai/duskbot:latest` image and the official Caddy sidecar. Run the helper as the host account that already manages this project, with its usual Docker context and Compose environment. It needs Python 3.9+ and Docker Compose v2 with `config --hash` and `up --wait`. Keep the deployment files and helper under the operator's control.
+
+1. In the existing `deploy` directory, create the socket directory with `install -d -m 700 .dusk-updater && install -d -m 755 .dusk-updater/socket`. Add the volume in [the updater override](../deploy/compose-updater/override.yml) to the existing `dusk` service's overrides. If you have no override yet, copy that file to `docker-compose.override.yml`. Keep the override in every subsequent Compose invocation.
+2. At an idle moment, run `docker compose up -d --no-build dusk caddy` to mount the directory. The server gets a read-only mount containing one narrow control socket. Docker credentials and the Docker socket stay on the host.
+3. From the same directory, run `python3 compose-updater/updater.py`, or install [the example user service](../deploy/compose-updater/dusk-compose-updater.service) in `~/.config/systemd/user/`. Set its `WorkingDirectory` to this deployment and supply any project environment your normal Compose commands need. Run `systemctl --user daemon-reload && systemctl --user enable --now dusk-compose-updater.service`. For unattended operation the user service manager must run after logout and at boot.
+4. Sign in as the server owner and check again. Select **Update now**, or enable **Automatically update this server when idle**. Automatic updates start off. The server checks the helper every five minutes and caches successful release lookups for one hour. After a failed install, inspect the message and retry manually.
+
+The updater pulls the official version tag and the configured `latest` image and checks that their image IDs match. Just before replacement the server reserves an idle window. New turns and workspace writes wait or receive a retry response. Compose replaces the server and reconnects Caddy with the project's existing volumes. The helper checks the resulting image ID, running version, health response and Caddy network namespace before reporting success.
+
+If the workspace cannot reconnect, run `docker compose ps -a` and `docker compose logs --tail=100 dusk caddy` on the host. For the example service, use `journalctl --user -u dusk-compose-updater.service`. The helper's last result and opt-in live on the operator's host, outside the container and its workspace backups. Inspect the last result with `curl --unix-socket .dusk-updater/socket/control.sock http://localhost/status`. To recover a failed deployment, set `DUSK_IMAGE` to the intended published tag in the existing project, then run the manual Compose upgrade when idle. Stopping the helper returns updates to manual operation.

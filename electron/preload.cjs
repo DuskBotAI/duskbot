@@ -327,7 +327,8 @@ const bridge = {
   },
   routines: {
     wakeState: () => ipcRenderer.invoke("routines:wake-state"),
-    keepAwake: (enabled) => ipcRenderer.invoke("routines:keep-awake", enabled),
+    keepAwake: (enabled) => ipcRenderer.invoke("routines:keep-awake", { keepAwake: Boolean(enabled) }),
+    keepAwakePluggedIn: (enabled) => ipcRenderer.invoke("routines:keep-awake", { pluggedIn: Boolean(enabled) }),
   },
   /** Secrets stay in the main process; the renderer sees only status and narrow actions. */
   companionAccount: {
@@ -750,7 +751,7 @@ const bridge = {
       return () => ipcRenderer.removeListener("start-fresh:changed", handler);
     },
   },
-  cloudMac: {
+  cloudMac: process.platform !== "darwin" ? undefined : {
     state: () => ipcRenderer.invoke("cloud-mac:state"),
     setEnabled: on => ipcRenderer.invoke("cloud-mac:setEnabled", on === true),
     setMode: mode => ipcRenderer.invoke("cloud-mac:setMode", String(mode)),
@@ -758,6 +759,8 @@ const bridge = {
     addFolder: () => ipcRenderer.invoke("cloud-mac:addFolder"),
     removeFolder: folder => ipcRenderer.invoke("cloud-mac:removeFolder", String(folder)),
     openLog: () => ipcRenderer.invoke("cloud-mac:openLog"),
+    setScreen: on => ipcRenderer.invoke("cloud-mac:setScreen", on === true),
+    stopScreen: () => ipcRenderer.invoke("cloud-mac:stopScreen"),
     onChange: listener => {
       const handler = (_event, view) => listener(view);
       ipcRenderer.on("cloud-mac:changed", handler);
@@ -831,6 +834,7 @@ const bridge = {
     noticeSeen: () => ipcRenderer.invoke("cloud-plan:notice-seen"),
     // a code that logs a phone in to the account; main checks the person is here first (renew: a silent swap of the code on screen)
     phoneSignIn: renew => ipcRenderer.invoke("cloud-plan:phone-sign-in", renew === true),
+    signedIn: () => ipcRenderer.invoke("cloud-plan:signed-in"),
     openPage: (page, workspaceId) => isLocalPage || navigator.userActivation?.isActive === true
       ? ipcRenderer.invoke("cloud-plan:open-page", String(page), workspaceId === undefined ? undefined : String(workspaceId)) : Promise.reject(new Error("Choose the account dashboard to open it.")),
     // The usage meter's Upgrade: both only from the person's click (Upgrade, then the confirm's Upgrade), never by themselves.

@@ -14,6 +14,8 @@ const OWN_WORK_OR_URGENCY = new Set(["now", "please", "right", "immediately", "a
 const STOP_COMMANDS = new Set(["stop", "halt", "cancel", "abort", "stopp", "stoppen", "detener", "arrêter", "रोकें", "interrompi", "ferma", "停止",
   "중지", "멈추기", "zatrzymaj", "parar", "стоп", "остановить", "durdur", "зупинити", "dừng"]);
 const STOP_FILLERS = new Set(["now", "please", "right", "immediately", "asap", "it", "that", "this", "everything", "all", "alles", "bitte", "sofort", "jetzt",
+  "ok", "okay", "wait", "just", "hey", "pls", "plz", "the", "task", "job", "work", "working", "doing", "what", "you", "re", "s", "enough",
+  "already", "seriously", "dude", "bro", "guys",
   "todo", "ahora", "tout", "maintenant", "tutto", "ora", "subito", "tudo", "agora", "wszystko", "teraz", "всё", "все", "сейчас", "пожалуйста", "зараз",
   "hepsini", "şimdi", "lütfen"]);
 export const MAX_HELD_MESSAGES = 20;

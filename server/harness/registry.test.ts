@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import type { ModelCatalog, StandaloneRelease } from "../contracts.ts";
+import type { ModelCatalog, ProviderSnapshot, StandaloneRelease } from "../contracts.ts";
 import { standalonePlatformKey } from "../engine-standalone.ts";
 import { findCliCandidates, registerFallbackPathDir, registerPathDir, resetPathCache, resetPathCacheForTests } from "../env-path.ts";
 import { removeTempDir } from "../testing/cleanup.ts";
@@ -415,6 +415,33 @@ describe("ProviderRegistry", () => {
     await Promise.all([before, after]);
     await registry.describe();
     expect(fake.probes).toHaveLength(4);
+  });
+
+  it("keeps a status read after a sign-in when a read begun before it finishes later", async () => {
+    const fake = makeFakeDriver();
+    const create = fake.driver.create.bind(fake.driver);
+    let release!: () => void;
+    const answers: Array<Promise<ProviderSnapshot>> = [
+      new Promise((resolve) => { release = () => resolve({ state: "available", authenticated: false }); }),
+      Promise.resolve({ state: "available", authenticated: true }),
+    ];
+    fake.driver.create = async (input) => {
+      const instance = await create(input);
+      let read = 0;
+      instance.snapshot = () => answers[read++]!;
+      return instance;
+    };
+    const registry = new ProviderRegistry([fake.driver]);
+    await registry.load({ a: { driver: "fake" } });
+    const heard: Array<boolean | undefined> = [];
+    registry.onSnapshot((_id, snapshot) => heard.push(snapshot.authenticated));
+    const before = registry.readEngine("a", true);
+    registry.forgetSnapshots();
+    expect((await registry.readEngine("a", true))?.authenticated).toBe(true);
+    release();
+    expect((await before)?.authenticated).toBe(false);
+    expect(registry.knownSnapshot("a")?.authenticated).toBe(true);
+    expect(heard).toEqual([true]);
   });
 
   it("answers the engine list from earlier reads, reads again in the background once they are old, and never after forgetSnapshots() or a reload", async () => {

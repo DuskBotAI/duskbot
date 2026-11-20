@@ -66,6 +66,7 @@ describe("failed replies in a room", () => {
     expect(markup).toContain('aria-label="Dismiss"');
     expect(markup).not.toContain("/login");
     expect(markup).not.toContain("Not logged in");
+    expect(markup).not.toContain("Copy details");
   });
 
   it("says the most actionable reason when they differ, and never the engine's raw words", () => {
@@ -75,14 +76,14 @@ describe("failed replies in a room", () => {
     expect(markup).not.toContain("529");
   });
 
-  it("maps a stored reason, says a plain cause as it is, and a technical one as a short generic line", () => {
-    expect(card([ask, failed("Echo", "x", { reason: "rate_limit" })])).toContain("This request has been rate limited, try again shortly");
-    expect(card([ask, failed("Echo", "The operation timed out.")])).toContain("The reply timed out");
+  it("maps a stored reason or the words to its kind's one sentence, never the cause itself", () => {
+    expect(card([ask, failed("Echo", "x", { reason: "rate_limit" })])).toContain("Claude is busy right now. Try again in a moment.");
+    expect(card([ask, failed("Echo", "The operation timed out.")])).toContain("Claude didn&#x27;t reply. Try again.");
     const plain = card([ask, failed("Echo", "Your Pro plan includes 2 cloud computers at once.")]);
     expect(plain).toContain("Echo couldn&#x27;t respond");
-    expect(plain).toContain("Your Pro plan includes 2 cloud computers at once.");
+    expect(plain).not.toContain("Your Pro plan includes");
     const technical = card([ask, failed("Echo", "TypeError: Cannot read properties of undefined (reading 'id')")]);
-    expect(technical).toContain("Something went wrong. Try again.");
+    expect(technical).toContain("Your bot couldn&#x27;t finish this reply. Try again.");
     expect(technical).not.toContain("TypeError");
   });
 
@@ -153,7 +154,7 @@ describe("a member's hand-off that failed", () => {
     };
     const markup = renderToStaticMarkup(createElement(RoomToolChip, { message, roomId: "room" }));
     expect(markup).toContain('data-handoff-row="result"');
-    expect(markup).toContain("Model provider is overloaded");
+    expect(markup).toContain("Your AI is busy right now. Try again in a moment.");
     expect(markup).not.toContain("529");
     expect(markup).not.toContain("text-danger");
   });

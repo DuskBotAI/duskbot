@@ -69,7 +69,7 @@ describe("local browser", () => {
   it("widens the panel to about 60% of the room it shares with the chat, keeping the chat readable", () => {
     expect(wideWidth(1160)).toBe(696);
     expect(wideWidth(2000)).toBe(880);
-    expect(wideWidth(800)).toBe(400);
+    expect(wideWidth(800), "the chat keeps 420px beside the panel").toBe(380);
     expect(wideWidth(600)).toBe(320);
   });
 });

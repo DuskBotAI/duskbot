@@ -25,6 +25,7 @@ export const SESSION_TTL_MS = daysMs(process.env.DUSK_SESSION_TTL_DAYS, 30);
 /** DUSK_SESSION_MAX_DAYS (default 180): renewal never passes this, so a stolen cookie has a bounded life. */
 export const SESSION_MAX_AGE_MS = daysMs(process.env.DUSK_SESSION_MAX_DAYS, 180);
 export const SESSION_RENEW_WHEN_LEFT_MS = SESSION_TTL_MS / 2;
+export const PAIRED_DEVICE_SESSION_MS = 10 * 365 * 24 * 60 * 60_000;
 
 export function cookieMaxAgeSeconds(session: { expiresAt: number }, now = Date.now()): number {
   return Math.max(1, Math.floor((session.expiresAt - now) / 1000));
@@ -580,6 +581,18 @@ export class SessionRegistry {
     this.lastSeenWrites.set(record.id, now);
     this.persist();
     return true;
+  }
+
+  /** A paired phone's session lasts until the phone is removed: phones are listed and removed on their own, and one
+   * left unused while its computer was off must still connect when it is back. Never a team member's. */
+  holdForPairedDevice(sessionId: string): void {
+    const record = this.sessions.find((s) => s.id === sessionId);
+    const now = this.now();
+    if (!record || record.expiresAt <= now || record.membershipAuthority === "team" || record.cookieOnly) return;
+    const held = now + PAIRED_DEVICE_SESSION_MS;
+    if (record.expiresAt - now > PAIRED_DEVICE_SESSION_MS / 2) return;
+    record.expiresAt = held;
+    this.persist();
   }
 
   isLive(sessionId: string): boolean {

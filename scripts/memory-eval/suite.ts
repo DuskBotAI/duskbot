@@ -125,6 +125,7 @@ async function main() {
     }
 
     out.forget = await forgetCase(api, proxy, bots);
+    out.correction = await correctionCase(api, proxy, bots);
     out.planted = await plantedCases(api, proxy, bots);
     out.summary = summarise(out.cases);
     out.calls = proxy.totals();
@@ -207,6 +208,32 @@ async function forgetCase(api: ReturnType<typeof client>, proxy: Awaited<ReturnT
   };
   log("forget:", JSON.stringify(result));
   proxy.script.length = 0;
+  return result;
+}
+
+/** The person corrects a fact in the chat that saved it; a new chat must get the new value only. The old words stay in
+ * the first chat, where conversation recall can find them. */
+async function correctionCase(api: ReturnType<typeof client>, proxy: Awaited<ReturnType<typeof startProxy>>, bots: Record<BotKey, { id: string; threadId: string }>) {
+  proxy.setMode("script");
+  const first = "remember my climbing days are monday and thursday";
+  const change = "actually change that, climbing is tuesday and friday now";
+  proxy.script.push({ trigger: first, steps: [{ tool: /memory_update$/, args: () => ({ action: "append", text: "Climbing days are Monday and Thursday." }) }], reply: "Got it: Monday and Thursday." });
+  proxy.script.push({ trigger: change, steps: [{ tool: /memory_update$/, args: () => ({ action: "supersede", old_text: "Climbing days are Monday and Thursday.", text: "Climbing days are Tuesday and Friday." }) }], reply: "Updated: Tuesday and Friday." });
+  const threadId = await api.newThread(bots.Scout.id);
+  await api.say(bots.Scout.id, threadId, first);
+  await api.say(bots.Scout.id, threadId, change);
+  proxy.script.length = 0;
+  proxy.setMode("echo");
+  const question = "which days do I go climbing?";
+  const sent = Date.now();
+  await api.say(bots.Scout.id, await api.newThread(bots.Scout.id), question);
+  const rec = [...proxy.records].reverse().find((item) => item.kind === "chat" && item.at >= sent && item.user.includes(question));
+  const seen = `${rec?.system ?? ""}\n${rec?.user ?? ""}`.split("\n").filter((line) => /climb/i.test(line));
+  const result = {
+    current: seen.some((line) => /tuesday/i.test(line) && /friday/i.test(line)),
+    staleShown: seen.filter((line) => /monday|thursday/i.test(line) && !/tuesday/i.test(line) && !HISTORY_MARK.test(line)).length,
+  };
+  log("correction:", JSON.stringify(result));
   return result;
 }
 
@@ -300,6 +327,7 @@ function printTable(out: any) {
     console.log(`${category.padEnd(15)} ${String(row.cases).padStart(5)} ${String(row.hitRate ?? "-").padStart(5)} ${String(row.fullyAnswered).padStart(4)} ${String(row.staleCurrent).padStart(5)} ${String(row.leaks).padStart(4)} ${String(row.memoryTokens).padStart(6)} ${String(row.recallChars).padStart(8)} ${String(row.nothingSignal).padStart(7)} ${String(row.latencyMsMedian).padStart(7)}`);
   }
   console.log("forget:", JSON.stringify({ ...out.forget, toolResult: undefined }));
+  console.log("correction:", JSON.stringify(out.correction));
   for (const p of out.planted) console.log(`planted ${p.id}: aboutMe=${p.aboutMe} coreNotes=${p.coreNotes} otherNotes=${p.anyNotes}`);
 }
 

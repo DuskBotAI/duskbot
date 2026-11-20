@@ -25,6 +25,18 @@ export interface Recorded {
   usage?: { prompt?: number; completion?: number };
   reply?: string;
   toolCall?: { name: string; args: unknown };
+  /** forward mode: the tools the real model called in this reply, a bridged call as use_tool:<name> */
+  toolCalls?: string[];
+}
+
+function forwardedCalls(calls: unknown): string[] {
+  if (!Array.isArray(calls)) return [];
+  return calls.map((call) => {
+    const name = String(call?.function?.name ?? "");
+    let args: { name?: unknown } = {};
+    try { args = JSON.parse(String(call?.function?.arguments ?? "{}")) ?? {}; } catch { args = {}; }
+    return name.endsWith("use_tool") && typeof args.name === "string" ? `use_tool:${args.name}` : name;
+  });
 }
 
 /** One scripted tool call: when a chat request's user text contains `trigger` (and no tool result has come back for it
@@ -172,6 +184,7 @@ export async function startProxy(opts: { mode: ProxyMode; gateway?: Gateway; por
       const { status, json } = await forward(body as Record<string, unknown>);
       rec.usage = { prompt: json?.usage?.prompt_tokens, completion: json?.usage?.completion_tokens };
       rec.reply = text(json?.choices?.[0]?.message?.content);
+      rec.toolCalls = forwardedCalls(json?.choices?.[0]?.message?.tool_calls);
       send(status, json);
       return;
     }

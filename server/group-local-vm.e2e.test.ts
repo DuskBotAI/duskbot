@@ -752,7 +752,7 @@ describe("Group Local VM ownership on the real isolated server", () => {
     try {
       await api("PATCH", `/api/bots/${bots[0].id}`, { computer: "local" });
       await send(group.id);
-      const sent = await dump();
+      const sent: any = await dump();
       expect(sent.mcpConfig?.mcpServers?.computer).toBeUndefined();
       writeFileSync(finishFile, "finish");
       await idle(bots[0].id);

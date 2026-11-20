@@ -1,4 +1,5 @@
 import { t } from "@/lib/i18n";
+import { AnimatePresence } from "motion/react";
 import { useEffect, useRef, useState } from "react";
 import { Trash2 } from "../icons";
 import { Card as RowsCard, FormDialog, FormField, ItemRow, NavRow, NoteRow, SwitchRow, pillCls } from "./ListRows";
@@ -7,7 +8,7 @@ import { cloudColor } from "@/lib/cloud-look";
 import { askConfirm } from "./ConfirmDialog";
 import { textFieldCls } from "./ui/GrokDialog";
 import { PixelIcon } from "./ui/PixelIcon";
-import { openPlaceSetup } from "@/lib/place-setup";
+import { openPlaceSetup, pastedPairingLink } from "@/lib/place-setup";
 import { vpsLinkAvailable } from "@/lib/vps-link";
 
 type SavedWorkspaces = Awaited<ReturnType<NonNullable<NonNullable<Window["duskDesktop"]>["environments"]>["state"]>>;
@@ -96,9 +97,9 @@ export function ConnectedWorkspacesSettings() {
       <NavRow data-settings-open="connect-server" title={t("vpsLink.connectByAddress")} hint={t("settings.s2.servers.connectHint")} onClick={() => { setError(""); setAdding(true); }} />
       {error && saved && !adding && <NoteRow tone="danger">{error}</NoteRow>}
     </RowsCard>
-    {adding && <FormDialog data-panel-modal="connect-server" title={t("settings.s2.servers.connect")} description={t("settings.s2.servers.commandNote")}
+    <AnimatePresence>{adding && <FormDialog key="connect-server" data-panel-modal="connect-server" title={t("settings.s2.servers.connect")} description={t("settings.s2.servers.commandNote")}
       saveLabel={t("settings.s2.servers.connectAction")} canSave={Boolean(address.trim())} busy={busy} error={error || undefined}
-      onSave={() => perform(async () => { const done = await bridge.addFromLink(address.trim(), name.trim()); setAdding(false); return done; })}
+      onSave={() => perform(async () => { const done = await bridge.addFromLink(pastedPairingLink(address) ?? address.trim(), name.trim()); setAdding(false); return done; })}
       onClose={() => setAdding(false)}>
       <FormField label={t("settings.s2.servers.address")}>
         <input required value={address} disabled={busy} onChange={(event) => setAddress(event.target.value)}
@@ -107,8 +108,8 @@ export function ConnectedWorkspacesSettings() {
       <FormField label={t("settings.s2.servers.name")}>
         <input value={name} disabled={busy} maxLength={60} onChange={(event) => setName(event.target.value)} placeholder={t("settings.s2.servers.namePlaceholder")} className={textFieldCls} />
       </FormField>
-    </FormDialog>}
-    {creating && <FormDialog data-panel-modal="new-environment" title={t("connectedWorkspaces.newEnvironment")} saveLabel={t("connectedWorkspaces.create")}
+    </FormDialog>}</AnimatePresence>
+    <AnimatePresence>{creating && <FormDialog key="new-environment" data-panel-modal="new-environment" title={t("connectedWorkspaces.newEnvironment")} saveLabel={t("connectedWorkspaces.create")}
       canSave={Boolean(envName.trim())} busy={busy} error={envError || undefined}
       onSave={() => perform(async () => {
         const created = await bridge.create(envName.trim(), envDir.trim() || undefined);
@@ -128,8 +129,8 @@ export function ConnectedWorkspacesSettings() {
           }, setEnvError)}>{t("connectedWorkspaces.choose")}</button>
         </span>
       </FormField>
-    </FormDialog>}
-    {forgetEntry && <FormDialog data-panel-modal="forget-environment" title={t("settings.s2.env.forgetTitle", { name: forgetEntry.name })}
+    </FormDialog>}</AnimatePresence>
+    <AnimatePresence>{forgetEntry && <FormDialog key="forget-environment" data-panel-modal="forget-environment" title={t("settings.s2.env.forgetTitle", { name: forgetEntry.name })}
       saveLabel={t("connectedWorkspaces.forget")} cancelLabel={t("connectedWorkspaces.cancel")} busy={busy} error={envError || undefined}
       onSave={() => perform(async () => {
         const result = envPurge ? await bridge.forget(forgetEntry.id, true) : await bridge.forget(forgetEntry.id);
@@ -140,6 +141,6 @@ export function ConnectedWorkspacesSettings() {
       <div className="-mx-2 flex flex-col">
         <SwitchRow title={t("settings.s2.env.purge")} hint={forgetEntry.dataDir} checked={envPurge} disabled={busy} onChange={() => setEnvPurge(!envPurge)} />
       </div>
-    </FormDialog>}
+    </FormDialog>}</AnimatePresence>
   </>;
 }

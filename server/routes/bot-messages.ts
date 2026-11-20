@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { parseVoiceCall, VOICE_CALL_NOTE } from "../local-voice/call-note.ts";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { z } from "zod";
 
@@ -63,6 +64,8 @@ export interface BotMessageRouteDeps {
   /** The turn running in a thread now, as its runtime events name it. */
   liveTurn(threadId: string): string | undefined;
   phoneSecretSubmissions: Pick<PhoneSecretSubmissionRegistry, "hasThread">;
+  /** A typed line in this thread: a waiting send or purchase card stops waiting so the turn reads it, and a routine run's question there is answered. */
+  typedOverHeldCards?(threadId: string): void;
   directTurnDispatchClaims: { get(threadId: string): { threadId: string } | undefined };
   groupSpeakers: ReadonlyMap<string, { botId: string }>;
   desktopManaged: boolean;
@@ -97,7 +100,7 @@ export interface BotMessageRouteDeps {
   clearUnattended(threadId: string): void;
   drainQueuedSends(): void;
   answeringCardAs(auth: RequestAuth, threadId: string, requestId: string, work: () => Promise<unknown>): Promise<void>;
-  resolveAndSendTrust(res: ServerResponse, threadId: string, requestId: string, behavior: Behavior): boolean;
+  resolveAndSendTrust(res: ServerResponse, threadId: string, requestId: string, behavior: Behavior, edits?: unknown): boolean;
   resolveAndSendTeamSetup(res: ServerResponse, args: { botId: string; threadId: string; requestId: string; behavior: string }, ownerReview: boolean): Promise<boolean>;
   resolveAndSendMcp(res: ServerResponse, args: { botId: string; threadId: string; requestId: string; behavior: string }, ownerReview: boolean): Promise<boolean>;
   resolveAndSendRoutine(res: ServerResponse, args: CardAnswer): boolean;
@@ -116,7 +119,7 @@ export interface BotMessageRouteDeps {
   cancelGroupTurnOperations(groupId: string, threadId: string): void;
   closeOpenApprovals(threadId: string): void;
   /** The outcome of a card the harness raised itself (a peer approval, a quota-switch offer); undefined for any other card. */
-  harnessCardOutcome(threadId: string, requestId: string, behavior: Behavior, message: unknown): Promise<string | undefined>;
+  harnessCardOutcome(threadId: string, requestId: string, behavior: Behavior, message: unknown, always?: boolean): Promise<string | undefined>;
   /** What a press on one of the bot's own server-built cards is about, from the server's records; null leaves the press the person's plain answer. */
   pressRecords(bot: BotRecord, action: WidgetAction): string | null;
   /** A press the server answers itself, with no turn: handled, refused (not the owner or an admin), or null for an ordinary press. */
@@ -206,6 +209,8 @@ export function createBotMessageRoutes(deps: BotMessageRouteDeps): RouteHandler 
       const mentions = parseMentionPicks(body.mentions);
       if (mentions === null) return json(res, 400, { error: "mentions must be a list of up to 20 bot ids" });
       if (followUp && (guarded || pressed || fromAnApp)) return json(res, 400, { error: "only a typed message can choose how it meets the running turn" });
+      const voiceCall = parseVoiceCall(body.voiceCall);
+      if (voiceCall === null || (voiceCall && (guarded || pressed || fromAnApp || pointing))) return json(res, 400, { error: "voiceCall must be { callId } on a plain spoken message" });
       // A distinct route, so an older server answers 404 instead of ignoring the safety preconditions.
       const guardedBody = guarded ? guardedSendSchema.safeParse(body) : null;
       if (guardedBody && !guardedBody.success) {
@@ -274,6 +279,7 @@ export function createBotMessageRoutes(deps: BotMessageRouteDeps): RouteHandler 
       const typedAnswer = passedBack || guarded || press || appSent || pointed ? null : await deps.typedCardAnswer?.(auth, threadId, text, target, { sendId, sender: messageSender(auth) });
       const answeredBack = passedBack ?? typedAnswer;
       if (answeredBack) return json(res, answeredBack.status, answeredBack.message ? { ok: true, threadId, message: answeredBack.message } : { error: answeredBack.error });
+      if (!guarded && !press && !appSent && !relayed) deps.typedOverHeldCards?.(threadId);
       // Only a real press or reaction, or an app's own words, marks the reply; a typed reply to the same row never does, whatever its words.
       const records = press && target ? pressRecords(bot, press.action) : null;
       const replyTo: ReplyTarget | undefined = press && target ? { ...target, widgetPress: { label: press.label, action: press.action, ...(records ? { records } : {}) } }
@@ -289,7 +295,7 @@ export function createBotMessageRoutes(deps: BotMessageRouteDeps): RouteHandler 
       if (appSent && !slot) return json(res, 429, { error: "This app has sent too many messages. Wait a while, or type your message." });
       // A relay is not the person at this screen: it never carries what their apps last showed.
       const appContext = guarded || retried ? null : appContextBlock(store, threadId);
-      const context = `${appContext?.block ?? ""}${pointed?.block ?? ""}`;
+      const context = `${voiceCall ? VOICE_CALL_NOTE : ""}${appContext?.block ?? ""}${pointed?.block ?? ""}`;
       const app = context || appSent || pointed
         ? {
             ...(context ? { context } : {}),
@@ -333,7 +339,7 @@ export function createBotMessageRoutes(deps: BotMessageRouteDeps): RouteHandler 
       try {
         const receipt = await acceptDirectSend({
           botId: bot.id, threadId, text, sendId, replyTo, sender, trigger, dataContext, ...(app ? { app } : {}),
-          personPresent, ...(followUp ? { followUp } : {}),
+          personPresent, ...(followUp ? { followUp } : {}), ...(voiceCall ? { via: "call" as const, callId: voiceCall.callId } : {}),
           ...(mentions?.length && !press && !appSent ? { mentions } : {}),
         }, guardedStart);
         press?.settle("queueId" in receipt ? receipt.queueId : undefined);
@@ -581,7 +587,7 @@ export function createBotMessageRoutes(deps: BotMessageRouteDeps): RouteHandler 
       return await answeringCardAs(auth, bot.threadId, String(body.requestId), async () => {
         const access = deps.resolveAccessRequest?.(bot.threadId, String(body.requestId), behavior, body.message);
         if (access) return json(res, access.status, access.body);
-        if (resolveAndSendTrust(res, bot.threadId, String(body.requestId), behavior)) return;
+        if (resolveAndSendTrust(res, bot.threadId, String(body.requestId), behavior, body.edits)) return;
         const answer = { botId: bot.id, threadId: bot.threadId, requestId: String(body.requestId), behavior };
         if (await resolveAndSendTeamSetup(res, answer, ownerReview(auth, req))) return;
         if (await resolveAndSendMcp(res, answer, ownerReview(auth, req))) return;
@@ -615,7 +621,7 @@ export function createBotMessageRoutes(deps: BotMessageRouteDeps): RouteHandler 
           reviewedSha256,
         }))) return;
         const requestId = String(body.requestId);
-        const own = await harnessCardOutcome(bot.threadId, requestId, behavior, body.message);
+        const own = await harnessCardOutcome(bot.threadId, requestId, behavior, body.message, body.always === true);
         if (own) return json(res, 200, { ok: true, outcome: own });
         const pending = store.messagesFor(bot.threadId).find((message) => message.card?.requestId === requestId);
         const dismissed = dismissQuestionCard(store, bot.threadId, pending, body);
@@ -652,7 +658,7 @@ export function createBotMessageRoutes(deps: BotMessageRouteDeps): RouteHandler 
       return await answeringCardAs(auth, threadId, requestId, async () => {
         const access = deps.resolveAccessRequest?.(threadId, requestId, behavior, body.message);
         if (access) return json(res, access.status, access.body);
-        if (resolveAndSendTrust(res, threadId, requestId, behavior)) return;
+        if (resolveAndSendTrust(res, threadId, requestId, behavior, body.edits)) return;
         const skillCard = store.messagesFor(threadId).find(
           (message) => message.card?.requestId === requestId && message.card.skillRequest,
         );
@@ -727,7 +733,7 @@ export function createBotMessageRoutes(deps: BotMessageRouteDeps): RouteHandler 
             behavior,
           })) return;
         }
-        const own = await harnessCardOutcome(threadId, requestId, behavior, body.message);
+        const own = await harnessCardOutcome(threadId, requestId, behavior, body.message, body.always === true);
         if (own) return json(res, 200, { ok: true, outcome: own });
         const group = store.groupByThread(threadId);
         const pending = store.messagesFor(threadId).find((message) => message.card?.requestId === requestId);

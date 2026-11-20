@@ -1,0 +1,90 @@
+{
+  "path": "/routines/sentry-error-digest",
+  "type": "routine",
+  "title": "Sentry error digest for the morning engineering handoff",
+  "nav": "sentry error digest",
+  "h1": "a morning digest of unresolved sentry errors",
+  "description": "Give the next engineer a short list of unresolved production errors in Sentry, with issue IDs and the last time each error appeared in the past day.",
+  "keyword": "sentry error digest",
+  "keywords": [
+    "daily sentry issue summary",
+    "production error handoff"
+  ],
+  "answer": "**give the morning engineer an issue to open for each error that kept happening overnight.** this routine reads unresolved sentry issues with production events in the last day. you get one line per issue in dusk chat, with the latest occurrence you can inspect. repeated events stay together.",
+  "updated": "2026-11-20",
+  "review": {
+    "status": "approved",
+    "by": "lead agent, after four independent reviewers read every page against seo/facts (2026-11-20); every finding applied",
+    "at": "2026-11-20"
+  },
+  "voice": 2,
+  "tags": [
+    "routine",
+    "sentry",
+    "errors",
+    "handoff"
+  ],
+  "connectors": [
+    "sentry"
+  ],
+  "related": [
+    "/integrations/sentry",
+    "/use-cases/bug-triage",
+    "/routines/github-issue-triage"
+  ],
+  "art": {
+    "logo": "sentry",
+    "props": [
+      "p-newspaper",
+      "s-clock"
+    ],
+    "bubble": "seen again overnight"
+  },
+  "og_line": "one issue can explain a noisy night.",
+  "routine": {
+    "message": "every day at 8am, list unresolved sentry issues with production events in the past 24 hours. use only project id 427136 in the organization millbank-tools.\n\nfollow the issue pages. for each group, read its events in that same window and environment. take the newest event time you can verify. in this chat list the five most recently seen groups, newest first. include the issue id, error title, latest event time with zone, and owner if available. say how many other groups qualified.\n\nnever resolve or assign an issue. leave raw event bodies out of chat. stay quiet if the whole search succeeds with no matches. if any read fails, name the missing coverage.",
+    "when": "daily at 8am in your time zone, looking back 24 hours",
+    "needs": "sentry read access to your organization, the project’s issues and their events. replace the organization slug and project id with yours.",
+    "output": "production · past 24 hours · 08:00 utc\nweb-418 · timeout saving delivery address · latest 07:42 utc · owner nell finch\nweb-405 · missing receipt template · latest 03:16 utc · no owner listed\nno other groups qualified."
+  },
+  "knobs": [
+    "**pick the handoff hour.** schedule the digest just before someone takes the queue. keep the time zone beside each event.",
+    "**separate test traffic.** use the exact environment name your project uses for live traffic.",
+    "**choose the cutoff.** for a weekend handoff, widen the event window and label it in the digest."
+  ],
+  "fails": [
+    "**an old error looks new.** the latest event tells you when it happened again. open the issue before calling it a new defect.",
+    "**a familiar error disappears.** compare the project id, environment and time window with a known event. a mistyped filter can return an empty list.[^1]"
+  ],
+  "sections": [
+    {
+      "h": "what the handoff leaves out",
+      "md": "**this digest answers which errors recurred and still need a look.** a burst that someone resolved overnight falls outside the search. if you need an incident timeline, include resolved issues in a separate review.\n\na morning routine is the wrong pick for waking the on-call engineer during an outage. keep your incident alerts for that job."
+    }
+  ],
+  "faq": [
+    {
+      "q": "does the first issue have the biggest impact?",
+      "a": "**the order tells you which error happened most recently.** an event at 07:59 can outrank an older outage. use the issue details to judge severity."
+    },
+    {
+      "q": "why does the same id appear on consecutive mornings?",
+      "a": "**the error happened in both windows and still qualifies.** keeping the id makes it easier to follow the investigation across handoffs."
+    }
+  ],
+  "sources": [
+    {
+      "label": "composio: sentry actions",
+      "url": "https://docs.composio.dev/toolkits/sentry",
+      "checked": "2026-11-20"
+    },
+    {
+      "label": "dusk bot docs: routines",
+      "url": "/docs/routines"
+    },
+    {
+      "label": "dusk bot docs: connected apps",
+      "url": "/docs/files-and-apps"
+    }
+  ]
+}

@@ -18,12 +18,19 @@ import { botPreview, groupPreview } from "./sidebar-preview";
 import { openBotSettingsPage } from "./bot-panel/panel-link";
 import { switchPlaceCommand } from "./SidebarPlaceButton";
 import { friendlyError } from "@/lib/plain-error";
+import { desktopMotion } from "@/lib/desktop-motion";
+import { usePaletteExits } from "./palette-exits";
+import { pacedMs } from "@/lib/motion-speed";
+
+/** A row's 49px and the 2px gap under it. */
+const ROW_STEP = 51;
 
 /** What a row does once picked: what it opens, or what it changes. */
 type Command = { id: string; name: string; detail?: string; also?: string; icon: IconName; run: () => void };
 
 type PaletteEntry =
   | { kind: "bot"; bot: Bot }
+  | { kind: "archived"; bot: Bot }
   | { kind: "room"; group: Group }
   | { kind: "message"; hit: SearchHit }
   | { kind: "command"; command: Command };
@@ -76,6 +83,7 @@ export function CommandPalette({ onOpenChange }: { onOpenChange?: (open: boolean
   const selectedRef = useRef<HTMLButtonElement>(null);
   const openerRef = useRef<HTMLElement | null>(null);
   const listId = useId();
+  const exits = usePaletteExits(open);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -147,6 +155,7 @@ export function CommandPalette({ onOpenChange }: { onOpenChange?: (open: boolean
   }, [cursor, messageHits]);
 
   if (!open) return null;
+  const { glideMs, rowsMs } = desktopMotion().palette;
 
   const settings = (section: AppSettingsSection): Action => ({ type: "toggleAppSettings", open: true, section });
   // Settings stays its own lazy chunk: its pane map is read once the command is picked.
@@ -180,8 +189,10 @@ export function CommandPalette({ onOpenChange }: { onOpenChange?: (open: boolean
   const slot = new Map(liveBots.slice(0, 9).map((bot, index) => [bot.id, index + 1]));
   const bots = q ? ranked(liveBots, (bot) => bot.name, q) : liveBots;
   const rooms = ranked(state.groups, (group) => group.name, q);
+  const archived = q ? ranked(state.bots.filter((b) => b.hidden), (bot) => bot.name, q) : [];
   const entries: PaletteEntry[] = [
     ...bots.map((bot): PaletteEntry => ({ kind: "bot", bot })),
+    ...archived.map((bot): PaletteEntry => ({ kind: "archived", bot })),
     ...rooms.map((group): PaletteEntry => ({ kind: "room", group })),
     ...(q ? messageHits.map((hit): PaletteEntry => ({ kind: "message", hit })) : []),
     ...shownCommands.map((command): PaletteEntry => ({ kind: "command", command })),
@@ -199,6 +210,14 @@ export function CommandPalette({ onOpenChange }: { onOpenChange?: (open: boolean
       }
     } else if (entry.kind === "bot") {
       openBot(dispatch, entry.bot);
+    } else if (entry.kind === "archived") {
+      try {
+        const response = await api(`/api/bots/${entry.bot.id}`, { method: "PATCH", body: JSON.stringify({ hidden: false }) });
+        dispatch({ type: "botPatched", bot: response.bot });
+        openBot(dispatch, response.bot);
+      } catch (error) {
+        dispatch({ type: "error", message: friendlyError(error) });
+      }
     } else if (entry.kind === "room") {
       dispatch({ type: "select", id: entry.group.id });
     } else {
@@ -241,8 +260,9 @@ export function CommandPalette({ onOpenChange }: { onOpenChange?: (open: boolean
       onMouseMove={() => setCursor(index)}
       className={cn(
         "m-0 flex h-[49px] w-full shrink-0 cursor-pointer appearance-none items-center gap-2.5 rounded-[10px] border-0 py-1.5 pl-2 pr-2.5 text-left text-[13px] leading-[18px] tracking-[0.195px] text-ink outline-none",
-        index === selected ? "bg-ink/8" : "bg-transparent",
+        index === selected && !glideMs ? "bg-ink/8" : "bg-transparent",
       )}
+      data-palette-row={key}
     >
       <span className="flex size-6 shrink-0 items-center justify-center">{leading}</span>
       <span className="flex min-w-0 flex-1 flex-col justify-center gap-px tracking-[-0.08px]">
@@ -258,7 +278,7 @@ export function CommandPalette({ onOpenChange }: { onOpenChange?: (open: boolean
   );
 
   return (
-    <div className="fixed inset-0 z-50" onKeyDown={onKeyDown}>
+    <div ref={exits.wrap} className="fixed inset-0 z-50" onKeyDown={onKeyDown}>
       <div aria-hidden className="palette-scrim absolute inset-0 bg-black/50" onMouseDown={() => setOpen(false)} />
       {/* opened often, so it opens and closes raw, as grok's does */}
       <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
@@ -301,7 +321,7 @@ export function CommandPalette({ onOpenChange }: { onOpenChange?: (open: boolean
             aria-label="Results"
             className="min-h-0 flex-1 overflow-y-auto [mask-image:linear-gradient(transparent_0px,black_0px,black_calc(100%-24px),transparent_100%)]"
           >
-            <div className="flex flex-col gap-0.5 p-2">
+            <div ref={exits.list} className={cn("flex flex-col gap-0.5 p-2", (glideMs > 0 || rowsMs > 0) && "relative isolate")}>
               {entries.map((entry, index) => {
                 if (entry.kind === "bot") {
                   const { bot } = entry;
@@ -314,6 +334,12 @@ export function CommandPalette({ onOpenChange }: { onOpenChange?: (open: boolean
                       {/* grok's rows carry no keycap; the shortcut stays, read out only */}
                       {key && <span className="sr-only">Command {key}</span>}
                     </>);
+                }
+                if (entry.kind === "archived") {
+                  const { bot } = entry;
+                  return row(`archived:${bot.id}`, index, entry, <BotAvatar bot={bot} size={24} animated={false} trackPointer={false} />,
+                    <Marked text={bot.name} query={q} />, t("search.archivedBot"), t("sidebar.archived.restore"),
+                    <span className="shrink-0 rounded-full bg-ink/6 px-2 py-0.5 text-[12px] text-ink-secondary">{t("sidebar.archived.restore")}</span>);
                 }
                 if (entry.kind === "room") {
                   const { group } = entry;
@@ -333,6 +359,8 @@ export function CommandPalette({ onOpenChange }: { onOpenChange?: (open: boolean
                 const { command } = entry;
                 return row(`cmd:${command.id}`, index, entry, tile(command.icon), command.name, command.detail, "Action");
               })}
+              {glideMs > 0 && <span aria-hidden data-palette-glide="" className="pointer-events-none absolute inset-x-2 top-2 -z-10 h-[49px] rounded-[10px] bg-ink/8"
+                style={{ transform: `translateY(${selected * ROW_STEP}px)`, transition: `transform ${pacedMs(glideMs)}ms var(--motion-ease-out, ease-out)` }} />}
             </div>
           </div>
         )}

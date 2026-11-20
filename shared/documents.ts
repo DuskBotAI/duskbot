@@ -32,6 +32,8 @@ export interface DocumentMeta {
   updatedAt: number;
   version: number;
   by: DocumentAuthor;
+  /** The person's manual for a bot or workflow: bots read it and never change it; only the person edits it. */
+  manual?: true;
 }
 
 export interface DocumentVersionMeta {

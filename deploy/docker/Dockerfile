@@ -144,6 +144,33 @@ RUN apt-get update \
   && install -m 0755 /tmp/uv-install/uv /tmp/uv-install/uvx /usr/local/bin/ \
   && bwrap --version && socat -V | head -1 && HOME=/tmp/dusk-build-home pnpm --version && uv --version | grep -qF "uv ${UV_VERSION}" \
   && rm -rf /tmp/dusk-build-home /tmp/uv-install /tmp/node-compile-cache
+# What a bot's shell reaches for to make files people ask for: PDF, Word, PowerPoint and Excel files, charts, data,
+# images, audio and video, and LibreOffice to convert and render documents. A boxed shell cannot write /usr, so
+# without these a turn spends its time on installs; pip and venv stay for anything else, and pip.conf lets a plain
+# `pip install` land in the bot's own ~/.local (pip falls back to a user install when site-packages is read-only).
+# The box reaches the internet only through the egress proxy, so a git@github.com: address (ssh) is cloned over https.
+# About 600 MB unpacked, in its own layer beneath the engines.
+ARG BOT_PYTHON_PACKAGES="reportlab==5.1.0 python-docx==1.2.0 python-pptx==1.0.2 openpyxl==3.1.5 matplotlib==3.11.2 pandas==3.1.1 numpy==2.4.6 pillow==13.0.0 requests==2.34.2 beautifulsoup4==4.15.0 lxml==6.1.3 pypdf==7.1.1"
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends python3-pip python3-venv python-is-python3 ffmpeg imagemagick librsvg2-bin \
+    zip jq sqlite3 wget file fonts-dejavu-core fonts-liberation2 \
+    libreoffice-writer-nogui libreoffice-calc-nogui libreoffice-impress-nogui \
+  && rm -rf /var/lib/apt/lists/* \
+  && pip install --no-cache-dir --break-system-packages $BOT_PYTHON_PACKAGES \
+  && printf '[global]\nbreak-system-packages = true\n' > /etc/pip.conf \
+  && git config --system url."https://github.com/".insteadOf "git@github.com:" \
+  && git config --system --add url."https://github.com/".insteadOf "ssh://git@github.com/" \
+  && python3 -c "import reportlab, docx, pptx, openpyxl, matplotlib, pandas, numpy, PIL, requests, bs4, lxml, pypdf" \
+  && ffmpeg -version | head -1 && soffice --version && rsvg-convert --version && convert -version | head -1 \
+  && rm -rf /tmp/node-compile-cache
+# Finding the song in a reel or video (skills/song-from-video): yt-dlp (Unlicense) downloads it and shazamio-core (MIT)
+# fingerprints it for Shazam's matcher. About 50 MB unpacked (13 MB to pull), in their own layer above the big one, so a yt-dlp bump re-pulls
+# only this. The voice remover (Demucs on CPU torch, about 700 MB) stays out of the image: the skill installs it into
+# the volume's cache the first time a song is buried under a voiceover.
+ARG BOT_MEDIA_PACKAGES="yt-dlp[default]==2026.10.26 shazamio-core==2.0.0"
+RUN pip install --no-cache-dir --break-system-packages $BOT_MEDIA_PACKAGES \
+  && python3 -c "import yt_dlp, shazamio_core" && yt-dlp --version \
+  && rm -rf /tmp/node-compile-cache
 # Caddy and Grok are pinned, so they sit beneath the engines, which change
 # more often.
 COPY --from=edge /caddy /usr/local/bin/caddy
@@ -212,6 +239,8 @@ CMD ["node", "/app/dist-server/cloud-home-start.js"]
 
 # The self-hosted server, last so a build without --target builds it.
 FROM runtime AS server
+ARG RELEASE_IMAGE
+ENV DUSK_RELEASE_IMAGE=${RELEASE_IMAGE}
 # Optional engine CLIs baked into the image (space-separated npm packages).
 ARG ENGINES=""
 RUN if [ -n "$ENGINES" ]; then HOME=/tmp/dusk-build-home npm install -g $ENGINES && rm -rf /tmp/dusk-build-home /tmp/node-compile-cache; fi

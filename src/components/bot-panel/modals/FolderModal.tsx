@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { AnimatePresence } from "motion/react";
 
 import { t } from "@/lib/i18n";
 import { shortPath } from "@/lib/short-path";
@@ -42,8 +43,8 @@ export function FolderModal({ bot }: { bot: Bot; onClose: () => void }) {
         </div>
         {error && !typing && <NoteRow tone="warn">{error}</NoteRow>}
       </Card>
-      {typing && (
-        <FolderPathDialog
+      <AnimatePresence>{typing && (
+        <FolderPathDialog key="folder-path-dialog"
           title={t("botPanel.ui.botAccessFolderTitle")}
           initial={bot.cwd ?? ""}
           saving={saving}
@@ -51,7 +52,7 @@ export function FolderModal({ bot }: { bot: Bot; onClose: () => void }) {
           onSave={(path) => save(path)}
           onClose={() => setTyping(false)}
         />
-      )}
+      )}</AnimatePresence>
     </SheetPane>
   );
 }

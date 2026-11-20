@@ -172,6 +172,22 @@ describe("a phone's send on a dead connection", () => {
     expect(post).toHaveBeenCalledTimes(4);
   });
 
+  it("ends a retry wait when the phone's network returns while the live stream never dropped", async () => {
+    vi.useFakeTimers();
+    const network = new EventTarget();
+    vi.stubGlobal("window", network);
+    stopLimit = limitSendAttempts(20_000);
+    const post = vi.fn().mockRejectedValueOnce(new TypeError("Load failed")).mockRejectedValueOnce(new TypeError("Load failed"))
+      .mockRejectedValueOnce(new TypeError("Load failed")).mockResolvedValueOnce(body);
+    const result = sendReconciled(post, () => false, undefined, delivery);
+    await vi.advanceTimersByTimeAsync(3_000);
+    expect(post).toHaveBeenCalledTimes(3);
+    network.dispatchEvent(new Event("online"));
+    await expect(result).resolves.toEqual({ body });
+    expect(post).toHaveBeenCalledTimes(4);
+    vi.unstubAllGlobals();
+  });
+
   it("hands the send to the outbox after its cut tries", async () => {
     vi.useFakeTimers();
     stopLimit = limitSendAttempts(1_000);

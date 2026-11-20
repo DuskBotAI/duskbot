@@ -1,4 +1,4 @@
-import { accountDeletedEmail, cancelledEmail, cloudBackEmail, cloudDeletedEmail, cloudDeletionEmail, cloudReadyEmail, codeEmail, paymentFailedEmail, promoEmail, receiptEmail,
+import { accountDeletedEmail, cancelledEmail, cloudBackEmail, cloudDeletedEmail, cloudDeletionEmail, cloudReadyEmail, codeEmail, paymentFailedEmail, paymentRecoveredEmail, paymentReminderEmail, promoEmail, receiptEmail,
   recoveryEmail, welcomeEmail } from "./templates.ts";
 import type { EmailConfig, Rendered } from "./templates.ts";
 
@@ -16,7 +16,11 @@ export function samples(cfg: EmailConfig): Array<{ id: string; trigger: string; 
     { id: "03-cloud-ready", trigger: "a cloud's first time running (clouds service save)", email: cloudReadyEmail(cfg, cloud) },
     { id: "04-receipt", trigger: "a paid invoice (billing webhook payment.succeeded)", email: receiptEmail(cfg, { amountCents: 2000, currency: "USD", description: "dusk cloud plus", paidAt: at,
       receiptId: "inv_7Qm2xK9", periodStart: at, periodEnd: at + 30 * DAY, renews: true, first: true, cloud: true }) },
-    { id: "05-payment-failed", trigger: "subscription on_hold or failed (billing webhook)", email: paymentFailedEmail(cfg, { amountCents: 2000, currency: "USD", description: "dusk cloud plus", cloudName: cloud.name, fixBy: at + 7 * DAY }) },
+    { id: "05-payment-failed", trigger: "subscription on_hold or failed (billing webhook)", email: paymentFailedEmail(cfg, { amountCents: 2000, currency: "USD", description: "dusk cloud plus", cloudName: cloud.name, fixBy: at + 30 * DAY }) },
+    { id: "05d-trial-unpaid", trigger: "a trial's first charge failed (billing webhook)", email: paymentFailedEmail(cfg, { amountCents: 2000, currency: "USD", description: "dusk cloud plus", cloudName: cloud.name, fixBy: at + 7 * DAY, trial: true }) },
+    { id: "05a-payment-reminder", trigger: "billing dunning sweep: 14 days after a renewal failed", email: paymentReminderEmail(cfg, { amountCents: 2000, currency: "USD", description: "dusk cloud plus", cloudName: cloud.name, fixBy: at + 16 * DAY, final: false }) },
+    { id: "05b-payment-final", trigger: "billing dunning sweep: 3 days before the fix-by date", email: paymentReminderEmail(cfg, { amountCents: 2000, currency: "USD", description: "dusk cloud plus", cloudName: cloud.name, fixBy: at + 3 * DAY, final: true }) },
+    { id: "05c-payment-recovered", trigger: "subscription active or renewed after a payment problem (billing webhook)", email: paymentRecoveredEmail(cfg, { description: "dusk cloud plus", cloudName: cloud.name }) },
     { id: "06-cancelled", trigger: "plan set to end at period end (cancel route or webhook)", email: cancelledEmail(cfg, { description: "dusk cloud plus", cloudName: cloud.name, endsAt: at + 20 * DAY, keepDays: 30, keptPaused: true }) },
     { id: "08-cloud-deleted", trigger: "cloud deleted (managed notice deleted, or generic lifecycle)", email: cloudDeletedEmail(cfg, { name: cloud.name, at }) },
     { id: "09-account-deleted", trigger: "account deleted (auth.onAccountDeleted)", email: accountDeletedEmail(cfg, { email: "sam@example.com" }) },

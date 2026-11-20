@@ -18,3 +18,11 @@ export function settledActive(before, next, why = null) {
   const kept = before.activeId === environments.LOCAL_ID || next.environments.some((entry) => entry.id === before.activeId);
   return kept ? { ...next, activeId: before.activeId } : next;
 }
+
+/** What showing this computer's page does to the window. `stay`: it isn't `leaving` a place. `open`: a window with no
+ * page yet (re-created after it was closed) while a server is chosen, which opens that server and never moves the
+ * choice. `switch`: back to this computer's page, which becomes the chosen workspace. */
+export function localPageStep({ leaving, url, serverChosen }) {
+  if (!leaving) return "stay";
+  return !url && serverChosen ? "open" : "switch";
+}

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { closeOpenMarks, nextReveal, noteRevealed, revealedWords, REVEAL_MIN_CPS, rehypeRevealWords, revealStep, REVEAL_SPAN_MS} from "./text-reveal";
+import { streamingBlocks, closeOpenMarks, nextReveal, noteRevealed, revealedWords, REVEAL_MIN_CPS, rehypeRevealWords, revealStep, REVEAL_SPAN_MS} from "./text-reveal";
 
 type Node = { type: string; value?: string; tagName?: string; properties?: Record<string, unknown>; children?: Node[] };
 const el = (tagName: string, children: Node[], properties: Record<string, unknown> = {}): Node => ({ type: "element", tagName, properties, children });
@@ -79,5 +79,20 @@ describe("closeOpenMarks", () => {
     expect(closeOpenMarks("```ts\nconst a")).toBe("```ts\nconst a\n```");
     expect(closeOpenMarks("**done** and `ok`")).toBe("**done** and `ok`");
     expect(closeOpenMarks("a `**` literal")).toBe("a `**` literal");
+  });
+});
+
+describe("streamingBlocks", () => {
+  it("cuts a reply at blank lines into finished blocks and the growing one", () => {
+    expect(streamingBlocks("first para\n\nsecond para\n\nthird is gro")).toEqual(["first para", "second para", "third is gro"]);
+  });
+
+  it("never cuts inside a code fence, a list, a quote or a table", () => {
+    const text = "```ts\na\n\nb\n```\n\n1. one\n\n2. two\n\n> quote\n>\n> more\n\n| a |\n| - |\n\ntail";
+    expect(streamingBlocks(text)).toEqual(["```ts\na\n\nb\n```\n\n1. one\n\n2. two\n\n> quote\n>\n> more\n\n| a |\n| - |", "tail"]);
+  });
+
+  it("keeps a trailing blank line on the growing block", () => {
+    expect(streamingBlocks("done\n\n")).toEqual(["done\n\n"]);
   });
 });

@@ -1,7 +1,8 @@
-import type { ComponentProps, CSSProperties } from "react";
+import { useRef, type ComponentProps, type CSSProperties } from "react";
 
 import { cn } from "@/lib/cn";
 import { useOptimisticSwitch } from "./optimistic-switch";
+import { SYSTEM_SWITCH_ROOM, useSystemControl } from "@/lib/system-control";
 
 /** Grok's switch: a 32 by 20 track, the switch blue when on, its colours on a 200ms ease; the 16px knob travels 240ms on
  * the web's ease-out (the dashboard's switch) and stretches along its travel while pressed. Reduced motion keeps the
@@ -12,13 +13,17 @@ export function Toggle({ checked: owned, className, tone, style, disabled: owned
   tone?: { on: string; hover: string };
 }) {
   const { checked, disabled, busy, onClick } = useOptimisticSwitch(owned, ownedDisabled, ownedClick);
+  const room = useRef<HTMLButtonElement>(null);
+  // where the device draws its own switch, this button is its room: unseen, and pressed for it so every owner's click runs
+  const system = useSystemControl(room, { kind: "switch", on: checked, tint: tone?.on, disabled, label: props["aria-label"] }, (on) => { if (on !== checked) room.current?.click(); });
   return (
     <button
       {...props}
+      ref={room}
       disabled={disabled}
       aria-busy={busy || undefined}
       onClick={onClick}
-      style={tone ? { ...style, "--toggle-on": tone.on, "--toggle-on-hover": tone.hover } as CSSProperties : style}
+      style={{ ...(tone ? { ...style, "--toggle-on": tone.on, "--toggle-on-hover": tone.hover } as CSSProperties : style), ...(system ? SYSTEM_SWITCH_ROOM : undefined) }}
       type="button"
       role="switch"
       aria-checked={checked}

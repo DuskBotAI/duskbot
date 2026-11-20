@@ -260,17 +260,17 @@ describe("a message sent while a one-to-one bot works", () => {
     expect(sendButton()).not.toBeNull();
   });
 
-  it("always queues for a bot whose turn cannot be steered", () => {
+  it("sends the person's choice even when it believes the turn cannot be steered: the server queues what the running engine cannot take", () => {
     fixture.instances = [cannotSteer];
     render(createElement(Composer, { bot: working }));
     type(textarea(), "a");
     press(textarea());
     type(textarea(), "b");
     press(textarea(), { ctrlKey: true });
-    expect(followUps()).toEqual(["queue", "queue"]);
+    expect(followUps()).toEqual(["steer", "queue"]);
     type(textarea(), "c");
     flushSync(() => sendButton().click());
-    expect(followUps()).toEqual(["queue", "queue", "queue"]);
+    expect(followUps()).toEqual(["steer", "queue", "steer"]);
   });
 
   it("leaves an idle bot and a room's queue as they were", () => {

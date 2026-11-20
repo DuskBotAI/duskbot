@@ -645,7 +645,7 @@ describe("Dusk's Chief-level team setup", () => {
     const h = harness();
     const maus = h.bot("Maus", { defaultBot: {} });
     expect(() => h.service.proposeDeletion({ botId: h.chief.id, threadId: h.chief.threadId, targetBotId: maus.id, reason: "remove" }))
-      .toThrow(/Maus can't be deleted or archived/);
+      .toThrow(/Maus is the person's helper: only they can delete it/);
   });
 });
 

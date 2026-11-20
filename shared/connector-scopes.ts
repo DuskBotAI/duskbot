@@ -5,6 +5,8 @@
 import { KNOWN_READ_SLUGS } from "./outbound.ts";
 
 const READ_VERBS = new Set(["GET", "LIST", "FETCH", "SEARCH", "READ", "FIND", "RETRIEVE", "LOOKUP", "DOWNLOAD", "VIEW", "CHECK", "COUNT"]);
+// a write word anywhere after the read verb (FIND_REPLACE, GET_OR_CREATE) makes it a write
+const WRITE_WORDS = new Set(["REPLACE", "CREATE", "UPDATE", "UPSERT", "DELETE", "REMOVE", "ADD", "SET", "SEND", "MOVE", "INSERT", "APPEND", "WRITE", "CLEAR", "EDIT", "MODIFY", "POST", "PUT", "PATCH", "UPLOAD", "ARCHIVE", "MARK", "RENAME", "COPY", "SHARE", "INVITE", "APPROVE", "CANCEL", "MERGE", "TRASH", "RESTORE"]);
 
 interface ScopedCall {
   slug: string;
@@ -33,8 +35,8 @@ export function isReadOnlyAction(slug: string, toolkit?: string): boolean {
   if (KNOWN_READ_SLUGS.has(slug)) return true;
   const cut = toolkit ? toolkit.length : slug.indexOf("_");
   const action = cut > 0 ? slug.slice(cut + 1) : "";
-  const first = action.toUpperCase().split(/[^A-Z0-9]+/).find(Boolean);
-  return first !== undefined && READ_VERBS.has(first);
+  const words = action.toUpperCase().split(/[^A-Z0-9]+/).filter(Boolean);
+  return words.length > 0 && READ_VERBS.has(words[0]) && !words.some((word) => WRITE_WORDS.has(word));
 }
 
 /** The stored shape, or null when the value is not one. */

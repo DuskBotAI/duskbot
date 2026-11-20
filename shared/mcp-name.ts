@@ -10,6 +10,7 @@ export const RESERVED_MCP_NAMES: ReadonlySet<string> = new Set([
   "dweb",
   "duskbot_connectors",
   "duskbot_phone",
+  "duskbot_browser",
 ]);
 
 /** A server name from any text: lowercase letters, numbers, `_` and `-`, starting with a letter, at most 32. */

@@ -45,8 +45,9 @@ export type MobileTransport =
 export interface MobileLinkPayload {
   v: typeof MOBILE_LINK_VERSION;
   workspace: { name: string; environmentId: string | null; kind: "vps" | "mac" | "server" };
-  /** `secret` is a single-use pairing credential; `expiresAt` is epoch ms. */
-  grant: { id: string; secret: string; expiresAt: number };
+  /** `secret` is a single-use pairing credential; `expiresAt` is epoch ms; `issuedAt` is the issuing server's clock when
+   * it made the grant, so a phone can time the grant's lifetime on its own clock whatever either clock says. */
+  grant: { id: string; secret: string; expiresAt: number; issuedAt?: number };
   via: MobileTransport[];
 }
 
@@ -70,7 +71,9 @@ export interface MobileRedeemRequest {
   secret: string;
   /** Stable across retries of one attempt, so a lost answer can be fetched again. */
   attemptId: string;
-  device: { name: string; platform: MobilePlatform; app?: string };
+  /** `install`: made once per phone app install and kept in its preferences; a pairing that carries the install of an
+   * earlier pairing with this workspace replaces it. */
+  device: { name: string; platform: MobilePlatform; app?: string; install?: string };
   /** Ask for a long-lived relay channel: the phone's X25519 public key and sha256 hex of a token it generated. */
   relay?: { pub: string; verifier: string };
 }
@@ -95,6 +98,23 @@ export interface MobileRedeemResponse {
   /** The phone's own relay channel when it asked for one and this workspace has a relay. */
   relay?: { base: string; channel: string; agentPub: string };
 }
+
+/** GET /api/mobile/routes with a paired phone's own session: the ways to this workspace now, so a phone that paired
+ * before an address changed (a new Wi-Fi address, a domain, a renamed tunnel) learns them. `companion` is null when
+ * the computer did not say, and the phone keeps the ones it has; a relay is the phone's own channel and never listed. */
+export interface MobileRoutesResponse {
+  https: Extract<MobileTransport, { kind: "https" }>[];
+  companion: Extract<MobileTransport, { kind: "companion" }>[] | null;
+  /** The asking phone's relay channel as the place serves it now; null when the place has a relay but no channel for
+   * this phone (POST /api/mobile/relay with a MobileRelayAsk opens one); absent when the place has no relay now. */
+  relay?: MobileRelayChannel | null;
+}
+
+/** POST /api/mobile/relay with the phone's own session: its X25519 public key and sha256 hex of a token it made. */
+export interface MobileRelayAsk { pub: string; verifier: string }
+
+/** A phone's own relay channel: where it is, and the place's key half to derive the channel key with. */
+export interface MobileRelayChannel { base: string; channel: string; agentPub: string }
 
 /** PUT /api/mobile/push with the device's own session. */
 export interface MobilePushRegistration {
@@ -188,7 +208,7 @@ export function parseMobilePayload(value: unknown): MobileLinkPayload | null {
   return {
     v: MOBILE_LINK_VERSION,
     workspace: { name: workspace.name.slice(0, 80), environmentId: typeof workspace.environmentId === "string" ? workspace.environmentId : null, kind: workspace.kind },
-    grant: { id: grant.id, secret: grant.secret, expiresAt: grant.expiresAt },
+    grant: { id: grant.id, secret: grant.secret, expiresAt: grant.expiresAt, ...(Number.isSafeInteger(grant.issuedAt) && grant.issuedAt! <= grant.expiresAt ? { issuedAt: grant.issuedAt } : {}) },
     via,
   };
 }
@@ -222,6 +242,7 @@ export interface MobilePairingPayload {
   environmentId?: string;
   endpoints?: CompanionEndpoint[];
   expiresAt?: number;
+  issuedAt?: number;
   /** Every route of a v2 link, in the order to try them. Absent for an older link. */
   via?: MobileTransport[];
   grantId?: string;
@@ -248,6 +269,8 @@ export interface MobileConnectionRecord {
   transport: MobileTransportKind;
   origin?: string;
   relay?: MobileRelayRoute;
+  /** The relay channel was opened after pairing, so `via` has no relay entry for it: it is walked as a route all the same. */
+  relayLate?: true;
   /** Every route the workspace offered, tried in order on reconnect. */
   via?: MobileTransport[];
   /** Key of the bearer token in secure storage. */
@@ -257,6 +280,8 @@ export interface MobileConnectionRecord {
   capabilities: MobileCapabilities;
   /** Server identity pin (SPKI) recorded at pairing. */
   identityPin?: string;
+  /** The dusk bot account this place belongs to, as that account listed it while the phone was signed in to it. */
+  account?: { id: string; email: string };
   addedAt: number;
   lastUsedAt: number;
 }
@@ -290,6 +315,7 @@ export function pairingFromPayload(payload: MobileLinkPayload): MobilePairingPay
     ...(payload.workspace.environmentId ? { environmentId: payload.workspace.environmentId } : {}),
     ...(companions.length ? { endpoints: companions.map((route) => ({ url: route.url, kind: route.net, priority: route.priority })) } : {}),
     expiresAt: payload.grant.expiresAt,
+    ...(payload.grant.issuedAt !== undefined ? { issuedAt: payload.grant.issuedAt } : {}),
     via: payload.via,
     grantId: payload.grant.id,
     workspaceKind: payload.workspace.kind,
@@ -345,13 +371,35 @@ export function mobileOpenLink(target: MobileOpenTarget): string {
 /** The hosts whose `/m/` pages the phone app opens itself (the app's associated domains). */
 export const UNIVERSAL_LINK_HOSTS: readonly string[] = ["dusk.bot"];
 
+/** The account sign-in a signed-in desktop's pairing QR carries beside the pairing: its phone sign-in code (`a=`,
+ * shared/account-api.ts PhoneSignInGrant), the account's email (`ae=`) and its service (`as=`). The phone logs in to that
+ * account and pairs in one step; apps that predate it pair alone. */
+export type PairSignIn = { code: string; email: string; service?: SignInService };
+
 /** The desktop's one QR: `https://dusk.bot/m/pair#m=...&c=CODE`. With the app, iOS opens it there (the `m` pairs); without
  * it, the site's page sends them to the store and shows the typed code. Both ride after the `#`, which no server sees. */
-export function universalPairLink(deepLink: string, code: string | null): string {
+export function universalPairLink(deepLink: string, code: string | null, signIn?: { code: string; email: string; serviceOrigin?: string | null } | null): string {
   let query = "";
   try { query = new URL(deepLink).search.slice(1); } catch {}
   const typed = code?.replace(/[^a-z0-9]/gi, "").toUpperCase();
-  return `https://${UNIVERSAL_LINK_HOSTS[0]}/m/pair#${query}${typed ? `${query ? "&" : ""}c=${typed}` : ""}`;
+  const account = signIn?.code.replace(/[^a-z]/gi, "").toUpperCase();
+  const service = signIn?.serviceOrigin ? SIGN_IN_SERVICES[signIn.serviceOrigin] : undefined;
+  const fields = [query, ...(typed ? [`c=${typed}`] : []), ...(account && signIn?.email.trim() ? [`a=${account}`, `ae=${encodeURIComponent(signIn.email.trim())}`] : []),
+    ...(account && service ? [`as=${service}`] : [])].filter(Boolean);
+  return `https://${UNIVERSAL_LINK_HOSTS[0]}/m/pair#${fields.join("&")}`;
+}
+
+/** The account sign-in a pairing QR or link carries, or null for one without it. */
+export function pairSignIn(link: string): PairSignIn | null {
+  const app = appLinkFromUniversal(link) ?? link.trim();
+  let url: URL;
+  try { url = new URL(app); } catch { return null; }
+  if (url.protocol !== "duskbot:" || (url.hostname || url.pathname.replace(/^\/+/, "")) !== "pair") return null;
+  const code = (url.searchParams.get("a") ?? "").toUpperCase();
+  const email = (url.searchParams.get("ae") ?? "").trim();
+  const service = url.searchParams.get("as");
+  if (!/^[A-Z]{8}$/.test(code) || email.length > 254 || !/^[^\s@]+@[^\s@]+$/.test(email)) return null;
+  return { code, email, ...(service === "production" || service === "preview" ? { service } : {}) };
 }
 
 /** A dusk cloud's QR: `https://dusk.bot/m/signin#c=CODE&email=...`. `c`, a desktop's phone sign-in code
@@ -361,16 +409,21 @@ export function universalPairLink(deepLink: string, code: string | null): string
 export type SignInService = "production" | "preview";
 const SIGN_IN_SERVICES: Record<string, SignInService> = { "https://dusk.bot": "production", "https://preview.dusk.bot": "preview" };
 
-export function universalSignInLink(email?: string | null, code?: string | null, serviceOrigin?: string | null): string {
+/** A dusk cloud's own address (`o=`): the cloud a QR drawn on it opens once the phone is logged in. */
+const CLOUD_ORIGIN = /^https:\/\/d[0-9a-f]{20}\.dusk\.bot$/;
+
+export function universalSignInLink(email?: string | null, code?: string | null, serviceOrigin?: string | null, cloudOrigin?: string | null): string {
   const value = email?.trim(), typed = code?.replace(/[^a-z]/gi, "").toUpperCase();
   const service = serviceOrigin ? SIGN_IN_SERVICES[serviceOrigin] : undefined;
-  const fields = [...(typed ? [`c=${typed}`] : []), ...(value ? [`email=${encodeURIComponent(value)}`] : []), ...(service ? [`s=${service}`] : [])];
+  const cloud = cloudOrigin && CLOUD_ORIGIN.test(cloudOrigin) ? cloudOrigin : undefined;
+  const fields = [...(typed ? [`c=${typed}`] : []), ...(value ? [`email=${encodeURIComponent(value)}`] : []), ...(service ? [`s=${service}`] : []),
+    ...(cloud ? [`o=${encodeURIComponent(cloud)}`] : [])];
   return `https://${UNIVERSAL_LINK_HOSTS[0]}/m/signin${fields.length ? `#${fields.join("&")}` : ""}`;
 }
 
 /** `duskbot://signin?c=...&email=...` (or the https link it stands for): the email to sign in with ("" when it names none)
  * and the phone sign-in code it carries, if any. */
-export function parseSignInLink(link: string): { email: string; code?: string; service?: SignInService } | null {
+export function parseSignInLink(link: string): { email: string; code?: string; service?: SignInService; cloud?: string } | null {
   const app = appLinkFromUniversal(link) ?? link.trim();
   let url: URL;
   try { url = new URL(app); } catch { return null; }
@@ -378,8 +431,9 @@ export function parseSignInLink(link: string): { email: string; code?: string; s
   const email = (url.searchParams.get("email") ?? "").trim();
   const code = (url.searchParams.get("c") ?? "").toUpperCase();
   const service = url.searchParams.get("s");
+  const cloud = url.searchParams.get("o") ?? "";
   return { email: email.length <= 254 && /^[^\s@]+@[^\s@]+$/.test(email) ? email : "", ...(/^[A-Z]{8}$/.test(code) ? { code } : {}),
-    ...(service === "production" || service === "preview" ? { service } : {}) };
+    ...(service === "production" || service === "preview" ? { service } : {}), ...(CLOUD_ORIGIN.test(cloud) ? { cloud } : {}) };
 }
 
 /** `https://dusk.bot/m/open?...`, `https://dusk.bot/m/pair#...` and `https://dusk.bot/m/signin#...` as the `duskbot://`

@@ -76,9 +76,10 @@ const toBot = (botId: string, parentId: string, brief = `Build it, ${botId}`, pa
 });
 
 interface World { store: RuntimeStore; runner: Fake; clock: FakeClock; runtime: Runtime; logs: string[]; limits: Partial<Limits> }
-function world(script?: Script, limits: Partial<Limits> = {}, store = openRuntimeStore(":memory:"), ports: Pick<TurnRunner, "outward"> = {}): World {
+function world(script?: Script, limits: Partial<Limits> = {}, store = openRuntimeStore(":memory:"), ports: Pick<TurnRunner, "outward" | "progress"> = {}): World {
   const runner = fakeRunner(script);
   if (ports.outward) runner.outward = ports.outward;
+  if (ports.progress) runner.progress = ports.progress;
   const clock = fakeClock();
   const logs: string[] = [];
   const runtime = new Runtime(store, runner, { clock, limits, log: line => logs.push(line) });
@@ -921,6 +922,22 @@ describe("Runtime: a root's later executions (every turn a root)", () => {
     expect(v.store.get(child2.id)?.status).toBe("needs_input");
     expect(v.store.get(root2.id)?.status).toBe("waiting");
     invariants(v);
+  });
+
+  it("tells a rerun what its cut turn already did, so it carries on instead of starting over", () => {
+    const store = openRuntimeStore(":memory:");
+    const first = world(undefined, {}, store);
+    first.runtime.begin(beginReq({ id: "root-cut" }));
+    first.runtime.close();
+    const asked: string[] = [];
+    const second = world(() => "hold", {}, store, { progress: a => { asked.push(a.id); return ["web_search (fares to Lisbon): done", "write_file (notes.md): cut off, may not have finished"]; } });
+    second.runtime.tick();
+    const note = second.runner.runs[0]!.input.restartNote;
+    expect(asked).toEqual(["root-cut"]);
+    expect(note).toContain("1. web_search (fares to Lisbon): done; 2. write_file (notes.md): cut off, may not have finished.");
+    expect(note).toContain("Carry on from where it stopped instead of starting over.");
+    expect(note).toContain("Never repeat a step that changed something");
+    second.runtime.close();
   });
 
   it("open() re-parks a root on its cards without a new item, and reruns a cut root once before failing it interrupted", async () => {

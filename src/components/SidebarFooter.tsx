@@ -37,7 +37,7 @@ export function SidebarFooter({ owner = null, archived }: { owner?: string | nul
   // The move's words open the account menu just below them, where the move's row is.
   const openAccount = () => footer.current?.querySelector("[data-sidebar-account]")?.closest("button")?.click();
   return (
-    <div ref={footer} data-sidebar-footer="simple" className="px-4 pb-4">
+    <div ref={footer} data-sidebar-footer="simple" className="px-3 pb-4">
       <CloudRoomCard />
       <CloudUsageCard />
       <SidebarPlaceStatus place={place} className="mb-2 px-1" />
@@ -46,10 +46,10 @@ export function SidebarFooter({ owner = null, archived }: { owner?: string | nul
       <SpotView className="mb-1.5" state={spot} cta={cta} />
       <div className="flex items-center gap-1.5" onPointerLeave={() => setAppsEngaged(false)}>
         {apps.connected ? <>
-          <div className="me-auto min-w-0"><SidebarProfileMenu simple={account} named nameHidden={appsEngaged} /></div>
+          <div className="me-auto min-w-0 ps-2"><SidebarProfileMenu simple={account} named nameHidden={appsEngaged} /></div>
           <ConnectAppsButton circle apps={apps} engaged={appsEngaged} onEngage={setAppsEngaged} />
         </> : <>
-          <SidebarProfileMenu simple={account} />
+          <div className="shrink-0 ps-2"><SidebarProfileMenu simple={account} /></div>
           <ConnectAppsButton circle={false} apps={apps} />
         </>}
       </div>

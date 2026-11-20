@@ -94,7 +94,8 @@ describe("room member holds", () => {
 
 describe("isStopCommand", () => {
   it("reads a message made only of stop words and fillers as a stop", () => {
-    for (const text of ["stop", "Stop now!", "please stop", "STOP STOP", "cancel that", "abort", "halt it", "stop everything"]) {
+    for (const text of ["stop", "Stop now!", "please stop", "STOP STOP", "cancel that", "abort", "halt it", "stop everything", "please stop the task now",
+      "ok stop, that's enough", "STOP!!", "wait stop", "stop what you're doing", "just stop", "stop working", "cancel the task", "stop doing that"]) {
       expect(isStopCommand(text), text).toBe(true);
     }
   });
@@ -125,7 +126,8 @@ describe("isStopCommand", () => {
 
   it("reads any other message as a message, including a quoted or coded stop", () => {
     for (const text of ["", "all right", "stop using tabs", "don't stop", "pause", "stop the build and run tests", "`stop`", "\"stop\"", "> stop",
-      "why did it stop?", "it stopped", "never stop", "non-stop", "stop-loss at 5%", "cancel my 3pm", "please stop the server and restart it", "stop\nthen deploy"]) {
+      "why did it stop?", "it stopped", "never stop", "non-stop", "stop-loss at 5%", "cancel my 3pm", "please stop the server and restart it", "stop\nthen deploy",
+      "no don't stop", "wait", "ok", "that's enough", "cancel the meeting", "stop the music"]) {
       expect(isStopCommand(text), text).toBe(false);
     }
   });

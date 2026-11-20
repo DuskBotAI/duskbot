@@ -410,7 +410,7 @@ describe("list_rooms discovery", () => {
     expect(asked.status, JSON.stringify(asked.body)).toBe(200);
     const requestId = str(field((Array.isArray(asked.body.receipts) ? asked.body.receipts : [])[0] as Record<string, unknown>, "requestId"));
     await expect.poll(() => readHandoffs(join(home, ".duskbot")).find((node) => node.id === requestId)?.status, { timeout: 15_000 }).toBe("completed");
-    expect(readHandoffs(join(home, ".duskbot")).find((node) => node.id === requestId)?.threadId).not.toBe(b.threadId);
+    expect(readHandoffs(join(home, ".duskbot")).find((node) => node.id === requestId)?.threadId, "one chat per bot: a consultation runs in the teammate's own chat").toBe(b.threadId);
 
     const listed = await internal("GET", `/api/internal/rooms?fromBotId=${a.id}&fromThreadId=${a.threadId}`);
     const rooms = Array.isArray(listed.body.rooms) ? listed.body.rooms : [];

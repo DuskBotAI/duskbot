@@ -349,7 +349,7 @@ itHost("R5 queues a member's root on the computer seat at the wait ceiling, FIFO
       cwd: ROOT, env: {
         PATH: dirname(process.execPath), ...(process.env.SystemRoot ? { SystemRoot: process.env.SystemRoot } : {}),
         HOME: home, USERPROFILE: home, DUSK_DATA_DIR: data, APPDATA: join(home, "appdata"), LOCALAPPDATA: join(home, "localappdata"),
-        TEMP: home, TMP: home, TMPDIR: home, DUSK_PORT: String(port), DUSK_WEBHOOK_PORT: String(port + 1), DUSK_STATIC_DIR: ui, DUSK_TEST_VM_STATE: stateFile,
+        TEMP: home, TMP: home, TMPDIR: home, DUSK_PORT: String(port), DUSK_WEBHOOK_PORT: String(port + 1), DUSK_STATIC_DIR: ui, DUSK_TEST_VM_STATE: stateFile, DUSK_TEST_SEALED_PATH: "1",
         DUSK_TEST_DESKTOP_CUA_CONNECTION: join(home, "user-data", "cua-connection.json"), DUSK_COMPUTER_CALL_WAIT_MS: "4000", DUSK_COMPUTER_CALL_ACT_WITHIN_MS: "1000",
         DUSK_COMPUTER_WAIT_MAX_MS: String(CEILING_MS),
       }, stdio: ["ignore", "pipe", "pipe"],

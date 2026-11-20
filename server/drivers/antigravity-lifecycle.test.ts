@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { DATA_DIR } from "../config.ts";
 import { killCliTree, spawnCli } from "../procs.ts";
-import { AntigravityAcpClient, validateAntigravityRuntime } from "./antigravity-acp.ts";
+import { AntigravityAcpClient, AntigravityAuthController, validateAntigravityRuntime } from "./antigravity-acp.ts";
 import type { AntigravityRuntime } from "./antigravity-runtime.ts";
 import { VERIFICATION_TEMP_KEY, antigravityTempDir, folderBytes } from "./antigravity-temp.ts";
 
@@ -372,5 +372,21 @@ describe("Antigravity validation shutdown", () => {
     await expect(validateAntigravityRuntime(runtime, "1.1.1")).resolves.toBeUndefined();
     expect(rm).toHaveBeenCalledWith(scratch[0], { recursive: true, force: true, maxRetries: 4, retryDelay: 250 });
     expect(console.warn).toHaveBeenCalledWith(expect.stringContaining(`verification files ${scratch[0]}: cleanup EPERM`));
+  });
+});
+
+describe("Antigravity sign-in network", () => {
+  it("starts the sign-in on this host's network so Google's redirect and a pasted address reach its 127.0.0.1 listener, while other runs keep the box's own", async () => {
+    fakeChild();
+    const profile = { directory: "/fixture", tokenPath: "/fixture/token", environment: {} };
+    await expect(new AntigravityAuthController().start(runtime, profile)).resolves.toMatchObject({ phase: "succeeded" });
+    expect(vi.mocked(spawnCli).mock.calls[0]![2]).toMatchObject({ box: { net: "shared" } });
+    expect(vi.mocked(spawnCli).mock.calls[0]![3]).toBe("bot");
+
+    vi.mocked(spawnCli).mockReset();
+    fakeChild();
+    const turn = client();
+    expect(vi.mocked(spawnCli).mock.calls[0]![2]).not.toHaveProperty("box");
+    turn.close();
   });
 });

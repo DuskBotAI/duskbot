@@ -110,3 +110,36 @@ describe("spend", () => {
     expect(validCap({ kind: "team", id: "a", usd: 1 })).toBeNull();
   });
 });
+
+describe("routine usage", () => {
+  const routineRow = (routineId: string, runId: string, ago: number, costUsd = 0.2) =>
+    row({ botId: "b", costUsd, at: new Date(NOW - ago).toISOString(), trigger: { kind: "routine", routineId, label: "Poller", runId } });
+
+  it("reads runs and use over 7 and 30 days, counting its address's runs as its own", async () => {
+    const data = dir();
+    await appendUsage(data, routineRow("r", "old", 20 * 24 * HOUR, 1));
+    await appendUsage(data, routineRow("r", "a", 2 * HOUR));
+    await appendUsage(data, routineRow("hook", "h", 3 * HOUR));
+    await appendUsage(data, routineRow("other", "o", 3 * HOUR, 5));
+    await flushUsageLedger(data);
+    const spend = createSpend({ dataDir: data, now: () => NOW });
+    const forecast = spend.forecast({ id: "r", botId: "b", schedule: { type: "daily", time: "09:00", weekdays: [1] } }, ["hook"]);
+    expect(forecast.usage?.week).toEqual({ runs: 2, usd: 0.4, tokens: 2_200 });
+    expect(forecast.usage?.month.runs).toBe(3);
+    expect(forecast.usage?.month.usd).toBeCloseTo(1.4);
+    expect(spend.routineUsage().map((one) => [one.routineId, one.month.runs])).toEqual([["other", 1], ["r", 2], ["hook", 1]]);
+  });
+
+  it("warns once when a routine suddenly takes most of the day, and not for its steady pace", () => {
+    const spikes: unknown[] = [];
+    const spend = createSpend({ dataDir: dir(), now: () => NOW, onSpike: (hit) => spikes.push(hit) });
+    for (let day = 1; day <= 6; day += 1) spend.booked(routineRow("steady", `s${day}`, day * 24 * HOUR + HOUR, 1));
+    for (let n = 0; n < 4; n += 1) spend.booked(routineRow("steady", `t${n}`, HOUR, 0.25));
+    expect(spikes).toEqual([]);
+    for (let n = 0; n < 12; n += 1) spend.booked(routineRow("poller", `p${n}`, HOUR, 0.5));
+    expect(spikes).toEqual([expect.objectContaining({ routineId: "poller", runs: 12 })]);
+    spend.booked(routineRow("poller", "p13", HOUR, 0.5));
+    expect(spikes).toHaveLength(1);
+    expect(spend.forecast({ id: "poller", botId: "b", schedule: { type: "interval", everyMinutes: 15, anchorAt: NOW } }).warnings).toContain("spike");
+  });
+});

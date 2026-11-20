@@ -54,6 +54,7 @@ public class SpeechRecognizerPlugin: CAPPlugin, CAPBridgedPlugin {
     private var task: SFSpeechRecognitionTask?
     private var taskNumber = 0
     private var failures = 0
+    private var serverOnly = false
     private var taskStarted: TimeInterval = 0
     private var engine: AVAudioEngine?
     private var feed = Feed()
@@ -102,6 +103,24 @@ public class SpeechRecognizerPlugin: CAPPlugin, CAPBridgedPlugin {
         }
     }
 
+    /// The recognizer for the page's language. SFSpeechRecognizer takes only the locales it lists (es-ES, es-MX, never
+    /// bare "es"), so a language without its region listens in the phone's own region for it, else the language's main one.
+    static func recognizer(for identifier: String?) -> SFSpeechRecognizer? {
+        guard let identifier, !identifier.isEmpty else { return SFSpeechRecognizer() }
+        let tag = { (locale: Locale) in locale.identifier.replacingOccurrences(of: "_", with: "-").lowercased() }
+        let wanted = Locale(identifier: identifier)
+        let supported = SFSpeechRecognizer.supportedLocales()
+        if let exact = supported.first(where: { tag($0) == tag(wanted) }) { return SFSpeechRecognizer(locale: exact) }
+        guard let language = wanted.language.languageCode?.identifier else { return nil }
+        let same = supported.filter { $0.language.languageCode?.identifier == language }.sorted { tag($0) < tag($1) }
+        let home = Locale(identifier: wanted.language.maximalIdentifier).region?.identifier
+        let pick = same.first { $0.region?.identifier == wanted.region?.identifier && wanted.region != nil }
+            ?? same.first { $0.region?.identifier == Locale.current.region?.identifier }
+            ?? same.first { $0.region?.identifier == home }
+            ?? same.first
+        return pick.flatMap { SFSpeechRecognizer(locale: $0) }
+    }
+
     @objc func start(_ call: CAPPluginCall) {
         let locale = call.getString("locale")
         let number = call.getInt("session") ?? 0
@@ -113,7 +132,7 @@ public class SpeechRecognizerPlugin: CAPPlugin, CAPBridgedPlugin {
                 call.reject("the microphone or speech recognition is not allowed", "microphone-blocked")
                 return
             }
-            let found = locale.flatMap { $0.isEmpty ? nil : SFSpeechRecognizer(locale: Locale(identifier: $0)) } ?? (locale?.isEmpty == false ? nil : SFSpeechRecognizer())
+            let found = Self.recognizer(for: locale)
             guard let recognizer = found else {
                 call.reject("speech recognition does not support this language", "unsupported-locale")
                 return
@@ -182,6 +201,7 @@ public class SpeechRecognizerPlugin: CAPPlugin, CAPBridgedPlugin {
             DispatchQueue.main.async {
                 guard let self, self.active, !self.finishing, self.session == number else { return }
                 self.notifyListeners("level", data: ["level": level, "session": number])
+                NotificationCenter.default.post(name: .duskSpeechLevel, object: nil, userInfo: ["level": level])
             }
         }
         engine.prepare()
@@ -211,7 +231,7 @@ public class SpeechRecognizerPlugin: CAPPlugin, CAPBridgedPlugin {
         request.shouldReportPartialResults = true
         request.taskHint = .dictation
         request.addsPunctuation = true
-        if recognizer.supportsOnDeviceRecognition { request.requiresOnDeviceRecognition = true }
+        if recognizer.supportsOnDeviceRecognition && !serverOnly { request.requiresOnDeviceRecognition = true }
         self.request = request
         feed.set(request)
         transcript.newTask()
@@ -245,6 +265,8 @@ public class SpeechRecognizerPlugin: CAPPlugin, CAPBridgedPlugin {
         // the recognizer ends a task on a long quiet spell or its own time limit; keep dictating with a fresh one, unless
         // tasks keep failing the moment they start
         let quick = ProcessInfo.processInfo.systemUptime - taskStarted < 2
+        // the on-device model can be listed and still not be ready (its download unfinished): Apple's servers listen instead
+        if quick, request?.requiresOnDeviceRecognition == true { serverOnly = true }
         failures = quick ? failures + 1 : 0
         if failures >= 3 { return end(code: 1, reason: "recognition-error") }
         beginTask()
@@ -358,4 +380,9 @@ struct SpeechTranscript {
         if start != nil { finalStart = start }
         return text
     }
+}
+
+extension Notification.Name {
+    /// the microphone's loudness while dictation listens, 0 to about 1, for native views that draw it
+    static let duskSpeechLevel = Notification.Name("DuskSpeechLevel")
 }

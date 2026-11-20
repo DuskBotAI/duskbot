@@ -26,6 +26,8 @@ const TECHNICAL: RegExp[] = [
   /^[a-z]+(?:_[a-z0-9]+)+$/,
   // a JSON-RPC -32603 from an engine's agent server: what follows is its own internals (once, the whole prompt it was sent)
   /^Internal error\b/i,
+  // the chat-completions drivers' own protocol failures (server/drivers/openai-chat*.ts)
+  /^provider (?:stream|returned|reasoning|tool calls)\b/i,
   // nobody reads a wall of engine text in a one-line card
   /^[\s\S]{280,}$/,
 ];
@@ -101,12 +103,19 @@ function rawTextOf(reason: unknown): string {
 
 /** The words a person reads for any caught failure, wherever it is shown. A plain sentence (often the server's own)
  * passes as it is; anything technical becomes one short plain line; `fallback` stands in when nothing better fits. */
+/** The server's own English refusals a person can meet, said in the app's words and language instead. */
+const SERVER_REFUSALS: Array<[RegExp, LocaleKey]> = [
+  [/^the message being replied to is no longer available$/i, "chat.error.replyGone"],
+];
+
 export function friendlyError(reason: unknown, fallback?: string): string {
   // only the first line of a message that carries its stack, without a bare "Error: " in front
   const whole = rawTextOf(reason).replace(IPC_PREFIX, "").trim();
   const text = STACKED.test(whole) ? whole.split("\n")[0]!.replace(/^Error: /, "").trim() : whole;
   const generic = () => fallback ?? t("error.plain.generic");
   if (!text) return generic();
+  const refusal = SERVER_REFUSALS.find(([pattern]) => pattern.test(text));
+  if (refusal) return t(refusal[1]);
   if (isStaleChunkError(text)) return t("error.plain.updated");
   if (reason instanceof Error && (reason.name === "AbortError" || reason.name === "TimeoutError") && !isPlainSentence(text)) return t("error.plain.timeout");
   const plain = plainErrorLine(text);

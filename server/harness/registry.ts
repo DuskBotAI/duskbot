@@ -111,6 +111,7 @@ export class ProviderRegistry {
   private byId = new Map<InstanceId, RegistryEntry>();
   private cliByInstance = new Map<InstanceId, string>();
   private lastSnapshots = new Map<InstanceId, ProviderSnapshot>();
+  private lastGenerations = new Map<InstanceId, number>();
   private seeds = new Map<InstanceId, ProviderSnapshot>();
   private seedObjects = new WeakSet<ProviderSnapshot>();
   /** Engines the start-up read has not probed yet; null outside that read. */
@@ -489,11 +490,13 @@ export class ProviderRegistry {
     }
     // Only while this is still the live instance: a reload may have replaced it during the read.
     if (this.byId.get(instance.instanceId)?.live === instance) {
-      this.lastSnapshots.set(instance.instanceId, snapshot);
-      for (const listener of this.snapshotListeners) try { listener(instance.instanceId, snapshot); } catch {}
-      const firstRead = this.unread?.delete(instance.instanceId);
-      this.saveStatus();
-      if (firstRead) this.startupProgress?.();
+      if (generation >= (this.lastGenerations.get(instance.instanceId) ?? -1)) {
+        this.lastSnapshots.set(instance.instanceId, snapshot);
+        this.lastGenerations.set(instance.instanceId, generation);
+        for (const listener of this.snapshotListeners) try { listener(instance.instanceId, snapshot); } catch {}
+        this.saveStatus();
+      }
+      if (this.unread?.delete(instance.instanceId)) this.startupProgress?.();
     }
     return snapshot;
   }
@@ -587,6 +590,7 @@ export class ProviderRegistry {
     this.byId.clear();
     this.cliByInstance.clear();
     this.lastSnapshots.clear();
+    this.lastGenerations.clear();
     this.seeds.clear();
   }
 
@@ -595,6 +599,7 @@ export class ProviderRegistry {
     this.byId.delete(instanceId);
     this.cliByInstance.delete(instanceId);
     this.lastSnapshots.delete(instanceId);
+    this.lastGenerations.delete(instanceId);
     this.seeds.delete(instanceId);
     await entry?.live?.dispose();
   }

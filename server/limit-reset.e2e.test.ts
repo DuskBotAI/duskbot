@@ -161,7 +161,7 @@ it("continues on the backup engine with one line, and goes back to its own engin
     await control("send", "--bot", bot.id, "--task", threadId, "--text", "Draft the launch plan");
     expect((await control("wait", "--bot", bot.id, "--task", threadId, "--timeout", "30")).status).toBe("settled");
     const first = await messagesOf(api, threadId);
-    expect(recoveryLines(first)).toEqual([expect.stringMatching(/^recovery: Verification fixture hit its limit \(resets .+\), so Codex took over\.$/)]);
+    expect(recoveryLines(first)).toEqual([expect.stringMatching(/^recovery: Verification fixture hit its limit until .+, Codex is answering\.$/)]);
     expect(first.some((message) => message.tool?.ok === false)).toBe(false);
     expect(first.findLast((message) => message.role === "bot" && message.kind === "text")).toMatchObject({ text: "done from fake codex", turnSucceeded: true });
     const task = async (id: string) => (await api("GET", "/api/bots")).bots.find((entry: any) => entry.id === bot.id).tasks.find((entry: any) => entry.threadId === id);
@@ -182,7 +182,7 @@ it("continues on the backup engine with one line, and goes back to its own engin
     expect((await control("wait", "--bot", bot.id, "--task", threadId, "--timeout", "30")).status).toBe("settled");
     const back = await messagesOf(api, threadId);
     expect(recoveryLines(back)).toEqual([
-      expect.stringContaining("so Codex took over"),
+      expect.stringMatching(/, Codex is answering\.$/),
       "recovery: Verification fixture's limit has reset, so this conversation is back on Verification fixture.",
     ]);
     expect((await task(threadId)).modelSelection).toEqual(claudeModel);
@@ -261,46 +261,37 @@ it("a turn that works on the engine afterwards ends a refusal's hold long before
   });
 }, 120_000);
 
-it("with nothing set up for it, carries the person's request on with another AI they have, says so once, and goes back after the reset", async () => {
+it("with another AI signed in and no backup chosen, that AI carries the turn on by itself and the conversation goes back after the reset", async () => {
   await withLimitFixture({}, async ({ api, control, limit, lift, claudePrompts, evidence }) => {
-    const resetsAt = Math.floor(Date.now() / 1000) + 25;
+    const resetsAt = Math.floor(Date.now() / 1000) + 20;
     limit(resetsAt);
     const { bot } = await control("new-bot", "--name", "Kai");
     const threadId = bot.activeTaskId;
     const claudeModel = (await api("GET", "/api/bots")).bots.find((entry: any) => entry.id === bot.id).modelSelection;
     await control("send", "--bot", bot.id, "--task", threadId, "--text", "Draft the launch plan");
-    const reply = async (id: string) => (await messagesOf(api, id)).findLast((message) => message.role === "bot" && message.kind === "text")?.text;
-    await expect.poll(() => reply(threadId), { timeout: 40_000 }).toBe("done from fake codex");
-    const first = await messagesOf(api, threadId);
-    expect(first.map((message) => message.tool?.name)).toContain("notice: continuing on Codex after hitting the usage limit");
+    expect((await control("wait", "--bot", bot.id, "--task", threadId, "--timeout", "30")).status).toBe("settled");
+    const moved = await messagesOf(api, threadId);
+    expect(noticeLines(moved), "Codex carries on by itself").toEqual([expect.stringMatching(/^notice: Verification fixture hit its limit until .+, Codex is answering\.$/)]);
+    expect(moved.filter((message) => message.tool?.ok === false).every((message) => message.tool.resolvedAt), "the refused turn shows no card").toBe(true);
+    expect(moved.findLast((message) => message.role === "bot" && message.kind === "text")).toMatchObject({ text: "done from fake codex" });
     const task = async (id: string) => (await api("GET", "/api/bots")).bots.find((entry: any) => entry.id === bot.id).tasks.find((entry: any) => entry.threadId === id);
-    expect((await task(threadId)).modelSelection).toEqual(codex);
-    const notified = async () => (await api("GET", "/api/notifications")).notifications as any[];
-    await expect.poll(async () => (await notified()).filter((entry) => entry.kind === "notice").length, { timeout: 10_000 }).toBe(1);
-    expect((await notified()).find((entry) => entry.kind === "notice").body).toMatch(/^Verification fixture reached its limit until .+, so Kai is using Codex meanwhile\.$/);
-    expect((await notified()).filter((entry) => entry.kind === "incident" || entry.kind === "turn-failed"), "one notice, never an incident").toEqual([]);
-
-    // Known to be refusing: another conversation goes to Codex without spending a refused turn on Claude, and no new notice.
-    const { task: other } = await api("POST", `/api/bots/${bot.id}/tasks`, { title: "Another thing" });
-    await control("send", "--bot", bot.id, "--task", other.threadId, "--text", "And the budget");
-    expect((await control("wait", "--bot", bot.id, "--task", other.threadId, "--timeout", "30")).status).toBe("settled");
-    expect(recoveryLines(await messagesOf(api, other.threadId))).toEqual([expect.stringMatching(/so Codex took over\.$/)]);
-    expect(claudePrompts()).toHaveLength(1);
-    expect((await notified()).filter((entry) => entry.kind === "notice")).toHaveLength(1);
+    expect((await task(threadId)).modelSelection.instanceId).toBe("codex");
 
     lift();
     await expect.poll(() => Date.now() > resetsAt * 1000 + 500, { timeout: 40_000, interval: 500 }).toBe(true);
     await control("send", "--bot", bot.id, "--task", threadId, "--text", "Now polish it");
     expect((await control("wait", "--bot", bot.id, "--task", threadId, "--timeout", "30")).status).toBe("settled");
+    const back = await messagesOf(api, threadId);
+    expect(recoveryLines(back).at(-1)).toBe("recovery: Verification fixture's limit has reset, so this conversation is back on Verification fixture.");
     expect((await task(threadId)).modelSelection).toEqual(claudeModel);
-    expect(recoveryLines(await messagesOf(api, threadId))).toContain("recovery: Verification fixture's limit has reset, so this conversation is back on Verification fixture.");
-    expect(await reply(threadId)).toBe("hello from fake claude");
-    evidence.push({ first, notices: await notified() });
+    expect(back.findLast((message) => message.role === "bot" && message.kind === "text")).toMatchObject({ text: "hello from fake claude" });
+    expect(claudePrompts()).toHaveLength(2);
+    evidence.push({ moved, back });
   });
-}, 150_000);
+}, 180_000);
 
-it("after a restart, a new conversation still starts on the AI that carries on, and the limited Claude is not asked again", async () => {
-  await withLimitFixture({}, async ({ api, control, limit, claudePrompts, restart, evidence }) => {
+it("after a restart, a new conversation still starts on the backup that carries on, and the limited Claude is not asked again", async () => {
+  await withLimitFixture({ recovery: { enabled: true, backup: codex } }, async ({ api, control, limit, claudePrompts, restart, evidence }) => {
     limit(Math.floor(Date.now() / 1000) + 11 * 86_400);
     const { bot } = await control("new-bot", "--name", "Kai");
     const threadId = bot.activeTaskId;
@@ -314,7 +305,7 @@ it("after a restart, a new conversation still starts on the AI that carries on, 
     const { task: other } = await api("POST", `/api/bots/${bot.id}/tasks`, { title: "After the restart" });
     await control("send", "--bot", bot.id, "--task", other.threadId, "--text", "And the budget");
     expect((await control("wait", "--bot", bot.id, "--task", other.threadId, "--timeout", "30")).status).toBe("settled");
-    expect(recoveryLines(await messagesOf(api, other.threadId))).toEqual([expect.stringMatching(/so Codex took over\.$/)]);
+    expect(recoveryLines(await messagesOf(api, other.threadId))).toEqual([expect.stringMatching(/, Codex is answering\.$/)]);
     expect(await reply(other.threadId)).toBe("done from fake codex");
     await control("send", "--bot", bot.id, "--task", threadId, "--text", "Now the timeline");
     expect((await control("wait", "--bot", bot.id, "--task", threadId, "--timeout", "30")).status).toBe("settled");
@@ -360,7 +351,8 @@ it.each([
   ["as its turns end", false],
   ["as Automatic recovery stops its turns before they start, with no other AI to take them", true],
 ])("a signed-out Claude with nothing to carry on: every refused turn fails, but the way to sign in is said once (%s)", async (_how, recovering) => {
-  await withLimitFixture({ signedOut: true }, async ({ api, control, claudePrompts, evidence }) => {
+  // nothing to carry on: no other AI is set up here
+  await withLimitFixture({ signedOut: true, codex: false }, async ({ api, control, claudePrompts, evidence }) => {
     const { bot } = await control("new-bot", "--name", "Kai");
     const threadId = bot.activeTaskId;
     if (recovering) await api("PUT", "/api/config", { automaticRecovery: { enabled: true, backup: bot.modelSelection } });
@@ -376,7 +368,7 @@ it.each([
     const messages = [...await messagesOf(api, threadId), ...await messagesOf(api, other.threadId)];
     const refused = { name: "error: Not logged in · Please run /login", ok: false, setup: true };
     expect(messages.filter((message) => message.tool?.ok === false), "each refused turn shows it failed, with the sign-in that fixes it")
-      .toEqual(Array(3).fill(expect.objectContaining({ tool: { ...refused, reason: "signed_out" } })));
+      .toEqual(Array(3).fill(expect.objectContaining({ tool: { ...refused, reason: "signed_out", errorRef: expect.stringMatching(/^D-/) } })));
     expect(messages.filter((message) => message.tool?.name?.startsWith("notice:")).map((message) => message.tool))
       .toEqual([{ name: `notice: ${told}`, ok: true, setup: true }]);
     const notified = (await api("GET", "/api/notifications")).notifications as any[];

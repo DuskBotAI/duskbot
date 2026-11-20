@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useId, useLayoutEffect, useRef, useState, type FormEvent, type ReactElement, type ReactNode, type Ref } from "react";
+import { createContext, useContext, useEffect, useId, useLayoutEffect, useRef, useState, type FormEvent, type MouseEventHandler, type ReactElement, type ReactNode, type Ref } from "react";
 import { Check, ChevronRight, Copy, type GlyphIcon } from "../icons";
 
 import { cn } from "@/lib/cn";
@@ -184,6 +184,7 @@ export function ItemRow({ title, hint, value, icon, pixel, tone, children, ...re
   pixel?: SettingGlyphName | ReactElement;
   tone?: "danger" | "warn";
   children?: ReactNode;
+  onClick?: MouseEventHandler<HTMLDivElement>;
   "data-panel-row"?: string;
   "data-sheet-row"?: string;
 }) {
@@ -348,17 +349,30 @@ export function useSubPage(): SubPageNav {
 export const WIPE_MS = 200;
 export const reducedMotion = () => document.documentElement.dataset.reducedMotion === "true" || window.matchMedia?.("(prefers-reduced-motion: reduce)").matches === true;
 
+/** The page on screen as it is drawn now, without ids: the outgoing layer of a wipe shows this copy, so leaving a page never
+ * mounts it a second time (its effects, reads and prompts would all run again for a 200ms slide). */
+export function snapshotLayer(layer: HTMLElement | null): DocumentFragment | null {
+  if (!layer) return null;
+  const copy = document.createDocumentFragment();
+  for (const child of layer.childNodes) copy.append(child.cloneNode(true));
+  copy.querySelectorAll("[id]").forEach((element) => element.removeAttribute("id"));
+  return copy;
+}
+
 /** Grok's in-dialog push between a list and a page of it (200ms, the app "out" curve): the incoming layer slides over the
  * outgoing one on push, the outgoing slides off it on pop. A change of `group` (another pane) swaps without motion. The
- * outgoing copy is drawn by `layer(at, false)`, inert and without ids. */
+ * outgoing layer is a still copy of what was on screen, inert; `layer(at, false)` draws it only when there is none. */
 export function WipeStack({ at, depth, group, layer }: { at: string; depth: number; group: string; layer: (at: string, live: boolean) => ReactNode }) {
   const [shown, setShown] = useState({ at, depth, group });
   const [wipe, setWipe] = useState<{ direction: "push" | "pop" | "fade"; from: string; scrollTop: number; id: number } | null>(null);
   const live = useRef<HTMLDivElement>(null);
+  const still = useRef<{ id: number; copy: DocumentFragment } | null>(null);
   if (at !== shown.at) {
     setShown({ at, depth, group });
     const within = group === shown.group && depth !== shown.depth;
     const scroller = live.current?.querySelector<HTMLElement>("[data-wipe-scroll]");
+    const copy = within ? snapshotLayer(live.current) : null;
+    still.current = copy ? { id: (wipe?.id ?? 0) + 1, copy } : null;
     // with reduced motion the page only fades in, no slide
     setWipe(within ? { direction: reducedMotion() ? "fade" : depth > shown.depth ? "push" : "pop", from: shown.at, scrollTop: scroller?.scrollTop ?? 0, id: (wipe?.id ?? 0) + 1 } : null);
   }
@@ -391,12 +405,13 @@ export function WipeStack({ at, depth, group, layer }: { at: string; depth: numb
           data-wipe={wipe.direction}
           data-wipe-out=""
           ref={(element) => {
+            if (element && still.current?.id === wipe.id && !element.childNodes.length) element.append(still.current.copy);
             const scroller = element?.querySelector<HTMLElement>("[data-wipe-scroll]");
             if (scroller) scroller.scrollTop = wipe.scrollTop;
           }}
           onAnimationEnd={(event) => { if (event.target === event.currentTarget) setWipe((current) => (current?.id === wipe.id ? null : current)); }}
         >
-          {layer(wipe.from, false)}
+          {still.current?.id === wipe.id ? null : layer(wipe.from, false)}
         </div>
       )}
     </div>

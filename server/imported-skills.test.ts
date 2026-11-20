@@ -179,7 +179,7 @@ describe("skills brought in from this computer", () => {
     });
     const record = { id: bot } as BotRecord;
     const index = host.skillsIndex(record, undefined, { instanceId: "claude", driverKind: "claudeAgent" });
-    expect(index).toContain("Imported skills:\n- zeta-own: Works with zeta-own.");
+    expect(index).toContain("Skills:\n- zeta-own: Works with zeta-own.");
     expect(index.indexOf("zeta-own")).toBeLessThan(index.indexOf("Skills from this computer:"));
     expect(index).toMatch(/\d+ more skills from this computer are not listed here/);
     expect(Buffer.byteLength(index.slice(index.indexOf("Skills from this computer:")), "utf8")).toBeLessThanOrEqual(4_000);

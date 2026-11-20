@@ -61,6 +61,7 @@ claim a success). Tests and local fixtures keep JSON files in the data folder.
 | `analytics_events` | raw product events (allowlisted props, no content); written directly by `server/analytics/sink.ts`, outside the writer lease | `id` | `at` TTL 400 days, `(accountId, at)`, `(name, at)`, `(ctx.session, at)`, `(ctx.visitor, at)`, `(ctx.install, at)` |
 | `analytics_daily`, `analytics_marks` | daily counts (kept); once-only marks | `day\|name` / key | `(day, name)`; marks: `expiresAt` TTL |
 | `admin_audit` | the admin panel's actions and record views, kept | `id` | `at` |
+| `admin_web_warm` | the overview's readers (time zone and panel switches, kept 7 days after last seen) and their `/web` answers for today, 7, 30 and 90 days on every surface, computed ahead every 10 minutes and gzipped; written outside the writer lease | `viewer\|…` / `answer\|…` | `expiresAt` TTL, `(kind, at)` |
 | `analytics_notes` | chart notes the admin adds (a day and a line of text), kept | `id` | `at` |
 | `infra_usage_daily` | each managed cloud's InstaBox usage and cost per UTC day, collected hourly (yesterday and today rewritten in place); written outside the writer lease | `day\|cloudId` | `day`, `(cloudId, day)` |
 | `locks` | the writer lease | | |

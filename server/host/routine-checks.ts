@@ -8,16 +8,21 @@ import { z } from "zod";
 
 import { writeFileAtomic } from "../atomic.ts";
 import { SourceError, type CalendarEvent, type ConnectedReads, type EmailHeader, type ReadApp, type ReadSession } from "../connected-reads.ts";
+import type { RoutineCheckContext } from "../routine-check-pacing.ts";
 import type { Routine, RoutineCheckResult, RoutineChecks, RoutineRun } from "../routines.ts";
-import type { CheckHold } from "../routine-check-pacing.ts";
 import {
   clashes, emailSince, fingerprint, keepNewest, LOOKAHEAD_MS, mergeMeetings, nextMeetingDue, planMail, planMeetings, pruneMeetings, type MeetingRecord,
 } from "./check-plan.ts";
 import { checkedPrompt, watchPrompt, type CheckItems } from "./check-prompts.ts";
 import type { InboxTriage } from "./inbox-triage.ts";
+import { isQuiet, localMinute, type QuietHours } from "./proactive-prefs.ts";
 
 const MINUTE = 60_000;
 const CHECK_MS = 15 * MINUTE;
+/** Between its scheduled checks, a brief routine looks again this often while the person is around. */
+export const PROACTIVE_MS = 30 * MINUTE;
+/** The local hours a proactive check may happen in: from the brief's morning to the evening. */
+const PROACTIVE_HOURS = { from: 8, until: 22 };
 const MAX_JUDGED = 1_000;
 const MAIL_READ_LIMIT = 100;
 /** A run that took items and was never heard of again gives them back after this long. */
@@ -45,6 +50,8 @@ const routineStateSchema = z.object({
   address: z.string().max(320).optional(),
   pending: z.record(id, pendingSchema).optional(),
   failures: z.object({ gmail: failureSchema.optional(), googlecalendar: failureSchema.optional() }).optional(),
+  /** Its next wake is a proactive check, not a meeting's. */
+  proactiveWake: z.literal(true).optional(),
 });
 const fileSchema = z.object({ version: z.literal(1), routines: z.record(id, routineStateSchema) });
 type RoutineState = z.infer<typeof routineStateSchema>;
@@ -93,6 +100,21 @@ export interface RoutineChecksDeps {
   report(report: CheckReport): void | Promise<void>;
   /** The helper models' inbox triage (server/host/inbox-triage.ts); absent or not ready means an AI run sorts mail. */
   inbox?: Pick<InboxTriage, "ready" | "triage">;
+  /** The bot is working (a turn of its own runs): a proactive check then skips its reads. Absent, always idle. */
+  busy?(botId: string): boolean;
+  /** The person's quiet hours (host/proactive-prefs.ts): no proactive check falls inside them. */
+  quietHours?(): QuietHours | null;
+}
+
+/** The next proactive check after `at`, while it falls inside the day's hours in `timeZone`; undefined after them, when
+ * the brief's next scheduled check comes first. */
+export function nextProactiveAt(at: number, timeZone: string | undefined, quiet: QuietHours | null = null): number | undefined {
+  const next = at + PROACTIVE_MS;
+  if (isQuiet(quiet, localMinute(next, timeZone))) return undefined;
+  let hour: number;
+  try { hour = Number(new Intl.DateTimeFormat("en-US", { hour: "numeric", hourCycle: "h23", ...(timeZone ? { timeZone } : {}) }).format(next)); }
+  catch { hour = new Date(next).getHours(); }
+  return hour >= PROACTIVE_HOURS.from && hour < PROACTIVE_HOURS.until ? next : undefined;
 }
 
 const ACTIVE = new Set(["queued", "running", "waiting"]);
@@ -193,17 +215,21 @@ export function createRoutineChecks(deps: RoutineChecksDeps): RoutineChecks & {
     if (entry.failures?.[app]) delete entry.failures[app];
   };
 
-  async function check(routine: Routine, context: { manual: boolean; hold?: CheckHold }): Promise<RoutineCheckResult> {
-    const checks = routine.checks ?? [];
+  async function check(routine: Routine, context: RoutineCheckContext): Promise<RoutineCheckResult> {
     const entry = of(routine.id);
     const at = now();
+    const brief = routine.deliver === "brief";
+    const proactive = brief ? nextProactiveAt(at, deps.timeZone(), deps.quietHours?.() ?? null) : undefined;
+    if (brief && entry.proactiveWake && !context.manual && !context.scheduled && deps.busy?.(routine.botId)) {
+      return proactive !== undefined ? { wakeAt: proactive, held: true } : { held: true };
+    }
+    const checks = routine.checks ?? [];
     for (const [key, pending] of Object.entries(entry.pending ?? {})) {
       const run = deps.runs().find((candidate) => candidate.checkKey === key);
       if ((run && !ACTIVE.has(run.status)) || (!run && at - pending.at > PENDING_MS)) release(key);
     }
     // The first check fixes where mail is watched from, so mail a failed read or run gave back is read again.
     if (checks.includes("mail")) entry.mailCursor ??= emailSince({ now: at });
-    const brief = routine.deliver === "brief";
     const aiAllowed = !context.hold && (routine.access !== "read-and-draft" || deps.fenced(routine.botId));
     const report: CheckReport = { routine, at };
     const trouble: Array<{ app: ReadApp; signedOut: boolean }> = [];
@@ -322,6 +348,10 @@ export function createRoutineChecks(deps: RoutineChecksDeps): RoutineChecks & {
           : checkedPrompt({ instructions: routine.prompt, items, timeZone: deps.timeZone() }),
       };
     }
+    if (proactive !== undefined && (wakeAt === undefined || proactive < wakeAt)) {
+      wakeAt = proactive;
+      entry.proactiveWake = true;
+    } else delete entry.proactiveWake;
     save();
     if (brief) await deps.report(report);
     const sentence = troubleSentence(trouble);

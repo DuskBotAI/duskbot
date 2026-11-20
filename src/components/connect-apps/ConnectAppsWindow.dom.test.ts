@@ -26,7 +26,7 @@ const fixture = vi.hoisted(() => ({
 
 vi.mock("@/state/store", async (original) => {
   const store = await original<typeof import("@/state/store")>();
-  return { ...store, api: fixture.api, useStore: () => ({ state: store.initialState, dispatch: fixture.dispatch }) };
+  return { ...store, api: fixture.api, useStore: () => ({ state: { ...store.initialState, config: { ...store.initialState.config, features: { skillsLibrary: true } } }, dispatch: fixture.dispatch }) };
 });
 vi.mock("./composio-snapshot", async (original) => ({
   ...await original<typeof import("./composio-snapshot")>(),

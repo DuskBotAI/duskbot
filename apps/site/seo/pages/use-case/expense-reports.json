@@ -1,0 +1,124 @@
+{
+  "path": "/use-cases/expense-reports",
+  "type": "use-case",
+  "title": "Prepare an expense report from receipts and card lines",
+  "nav": "expense reports",
+  "h1": "match receipts to card lines for an expense report",
+  "description": "Build an expense report draft from a card sheet and receipt images. See missing evidence, possible duplicates and personal items before filing a claim.",
+  "keyword": "ai expense reports",
+  "keywords": [
+    "match receipts to card transactions",
+    "prepare expense report"
+  ],
+  "answer": "**the station receipt and the card slip can be the same train fare.** give a bot the receipts for one trip and the relevant card lines. ask for a draft expense report that ties each claim to its evidence. you get missing receipts and ambiguous matches back before they reach the expense approver.",
+  "updated": "2026-11-20",
+  "review": {
+    "status": "approved",
+    "by": "lead agent, after four independent reviewers read every page against seo/facts (2026-11-20); every finding applied",
+    "at": "2026-11-20"
+  },
+  "voice": 2,
+  "tags": [
+    "expenses",
+    "receipts",
+    "reconciliation"
+  ],
+  "connectors": [
+    "googlesheets"
+  ],
+  "related": [
+    "/routines/weekly-receipts-sweep",
+    "/integrations/google-sheets",
+    "/use-cases/invoice-follow-up"
+  ],
+  "art": {
+    "props": [
+      "p-receipt",
+      "s-coins"
+    ],
+    "bubble": "one fare, two slips"
+  },
+  "og_line": "account for every line before filing.",
+  "routine": {
+    "intro": "**name the trip and the statement range before matching.** store legible receipts together in the trip’s folder.",
+    "message": "every friday at 2 pm, prepare the trip marked ready in the \"travel ledger\" google sheet. read its card lines and trip notes from trips!a2:j80. in your project folder, look under travel/receipts/ for the folder named for that trip id. compare each receipt there with merchant, transaction date, amount and currency. give each proposed claim its statement row and receipt filename. list unpaired card rows and unpaired receipts separately.\n\nkeep posted amounts and original currencies in separate columns. group possible duplicates for my review. leave business purpose blank unless my trip notes explain it. leave personal items out of the claim. return a draft here without editing the sheet or submitting anything.",
+    "when": "fridays at 2 pm for the trip you marked ready",
+    "needs": "read only google sheets, receipt files and trip notes with a business purpose. use your workbook, range and receipts folder in the message.",
+    "output": "example trip draft for monica\nrow 14 | rail fare | £23.60 | rail-ticket.pdf | depot visit\npossible second copy | card-slip.jpg | same fare and time, no extra claim\nrow 17 | £8.40 | no receipt match | ask traveller"
+  },
+  "sections": [
+    {
+      "h": "give each purchase a trail",
+      "md": "**one purchase should lead back to one claim.** number the card rows and keep the original receipt filenames. a ticket shows the journey. a terminal slip shows payment. both can support the same expense. counting the files would double it."
+    },
+    {
+      "h": "reconcile the two piles",
+      "md": "**work from the card rows, then look at what's left.**\n\n1. read the trip's rows from google sheets and the receipts in its folder.[^1][^2]\n2. compare merchant, currency and amount. a posting date one day later can still fit.\n3. put ambiguous pairs aside. look at leftover receipts for cash purchases and ask how the traveller paid."
+    },
+    {
+      "h": "let the traveller explain the awkward entries",
+      "md": "**only the traveller knows who paid for lunch.** ask for the attendees or project when your policy needs them. the approver decides whether a split bill, tip or missing receipt qualifies.\n\nif your employer requires expense software with policy enforcement and an approval trail, file there. dusk bot can prepare the evidence before you open it."
+    }
+  ],
+  "safeguards": [
+    "hide full card numbers and unrelated purchases before sharing the files. keep the last few digits only if needed for matching.",
+    "use read only access for the statement sheet. keep originals intact for the expense approver.",
+    "never convert currencies using a guessed rate. keep the posted charge and original receipt amount visible."
+  ],
+  "worked": {
+    "intro": "an invented depot visit",
+    "before": "monica has a rail ticket and a card slip for £23.60. the statement shows one charge. a separate £8.40 line has no matching image.",
+    "after": "the rail fare appears once with both files beside it. the smaller charge stays under missing evidence until monica finds the receipt or uses the employer's exception process."
+  },
+  "saves": {
+    "estimate": "around 15 minutes per trip with this workload",
+    "formula": "10 purchases × 3 minutes collating evidence = 30 minutes\n30 minutes - 15 minutes preparing files and reviewing matches = 15 minutes",
+    "assumptions": [
+      "use a recent trip with ten purchases",
+      "include photographing, filing and correcting receipts in the comparison",
+      "count filing and approval time if either method changes it"
+    ]
+  },
+  "mistakes": [
+    {
+      "mistake": "claiming the whole restaurant bill after splitting it",
+      "fix": "use the amount the traveller actually paid. keep the itemized bill for context."
+    },
+    {
+      "mistake": "pairing by amount alone",
+      "fix": "two identical fares can be separate journeys. look at dates, ticket references and payment evidence."
+    }
+  ],
+  "quick": {
+    "steps": [
+      "pick a trip with a receipt and its card slip",
+      "save both in the folder for that trip id",
+      "ask how many distinct purchases the evidence supports"
+    ]
+  },
+  "faq": [
+    {
+      "q": "what happens to a receipt for a cash purchase?",
+      "a": "keep it under unpaired receipts. confirm how you paid, record the business purpose and follow the employer's cash expense rules."
+    },
+    {
+      "q": "can the bot decide which expenses are reimbursable?",
+      "a": "give that decision to your approver. the draft shows what you spent and where the evidence sits. a good match alone says nothing about eligibility."
+    }
+  ],
+  "sources": [
+    {
+      "label": "composio: google sheets actions",
+      "url": "https://docs.composio.dev/toolkits/googlesheets",
+      "checked": "2026-11-12"
+    },
+    {
+      "label": "dusk bot docs: files and connected apps",
+      "url": "/docs/files-and-apps"
+    },
+    {
+      "label": "dusk bot docs: routines",
+      "url": "/docs/routines"
+    }
+  ]
+}

@@ -1,4 +1,5 @@
 import { animate, type AnimationPlaybackControls, type MotionValue } from "motion/react";
+import { MOTION, pacedSpring } from "@/lib/motion-speed";
 
 /** The bencho token set (~/dusk-ref BENCHO-MOTION.md): every phone surface draws from these and nothing else. */
 export const dur = { fast: 0.16, base: 0.22, slow: 0.42, long: 0.6 } as const;
@@ -18,15 +19,14 @@ export const spring = {
 export const withFade = <T extends object>(s: T) => ({ ...s, opacity: { duration: dur.fast } });
 
 /** The phone's feel, measured off designbookmark.com/motion (omb-ref/designbookmark-motion/NOTES.md): soft springs that
- * land with a few percent of give, fades on a shorter clock than the travel, and content that swaps through a small
- * blur instead of cutting. Every interaction on the phone takes its numbers from here. */
+ * land with a few percent of give, and fades on a shorter clock than the travel. Every interaction on the phone takes its numbers from here. */
 export const feel = {
   /** a finger down: in on a quick ease, out on a spring that gives a hair past rest (press .952, release 1.008 there) */
   press: { scale: 0.96, wide: 0.985, inMs: 110, release: { stiffness: 620, damping: 30 } },
-  /** something arriving: from 8px low, 4px soft and transparent; opacity done in 200ms, the travel on `soft` */
-  enter: { y: 8, blur: 4, fade: 0.2 },
+  /** something arriving: from 8px low and transparent, never blurred; opacity done in 200ms, the travel on `soft` */
+  enter: { y: 8, fade: 0.2 },
   /** something leaving: faster and smaller than its entrance (130ms, scale .96) */
-  exit: { scale: 0.96, blur: 4, fade: 0.13 },
+  exit: { scale: 0.96, fade: 0.13 },
   /** a held thing lifting out of the page (a message, a chat row) */
   lift: { scale: 1.035, spring: { type: "spring", stiffness: 460, damping: 26 } as const },
   /** morphs and slides between places (a pill, a highlight, a menu's height): t90 ~140ms, ~5% overshoot, ~420ms */
@@ -37,6 +37,51 @@ export const feel = {
   stagger: 0.028,
   /** the dim and blur over the page behind a held thing */
   scrim: { in: 0.22, out: 0.16, blur: 10 },
+};
+
+/** UIKit's own transitions (push, pop, sheet), measured off an iOS 26 recording: they leave at full speed and decelerate
+ * with no overshoot. `push` is the start velocity in distances per second, for a push, a tapped pop and a rising sheet. */
+export const system = { ...pacedSpring({ stiffness: 600, damping: 54 }), push: 10 / MOTION.scale } as const;
+/** Content moving to a new place (rows reordering, a list making room): the vertical curve iOS, Telegram iOS and both
+ * Telegram web clients use for a sent message's flight. */
+export const contentMove = { ms: 250, css: "cubic-bezier(0.1992, 0.0106, 0.2792, 0.9103)" } as const;
+/** A long press as Telegram iOS answers it: still for 120ms, then the held thing shrinks by 15pt of its width over 200ms. */
+export const holdPress = { stillMs: 120, shrinkMs: 200, inset: 15 } as const;
+
+export interface PhoneTabMove {
+  direction: number;
+  span: number;
+}
+
+/** Synchronized with iOS 26 UISegmentedControl's Liquid Glass thumb travel (~280ms across one segment, ~340ms across two):
+ * outgoing yields while the lens leaves its segment, then incoming glides cleanly into place as the lens arrives and settles. */
+export const phoneTabSlide = {
+  enter: ({ direction, span }: PhoneTabMove) => ({
+    opacity: 0,
+    x: direction * (span > 1 ? 44 : 32),
+  }),
+  center: ({ span }: PhoneTabMove) => ({
+    opacity: 1,
+    x: 0,
+    transition: {
+      x: { duration: span > 1 ? 0.26 : 0.22, delay: span > 1 ? 0.1 : 0.08, ease: [0.22, 1, 0.36, 1] as const },
+      opacity: { duration: span > 1 ? 0.21 : 0.18, delay: span > 1 ? 0.11 : 0.09, ease: [0.25, 0.1, 0.25, 1] as const },
+    },
+  }),
+  exit: ({ direction, span }: PhoneTabMove) => ({
+    opacity: 0,
+    x: -direction * (span > 1 ? 28 : 20),
+    transition: {
+      x: { duration: span > 1 ? 0.13 : 0.11, ease: [0.32, 0, 0.67, 0] as const },
+      opacity: { duration: span > 1 ? 0.11 : 0.09, ease: [0.32, 0, 0.67, 0] as const },
+    },
+  }),
+};
+
+export const phoneTabFade = {
+  enter: { opacity: 0 },
+  center: { opacity: 1, transition: { duration: 0.18, delay: 0.09, ease: [0.25, 0.1, 0.25, 1] as const } },
+  exit: { opacity: 0, transition: { duration: 0.1, ease: [0.32, 0, 0.67, 0] as const } },
 };
 
 /** A spring as a WAAPI/CSS duration and linear() easing, for things that must not wait on React. */
@@ -81,11 +126,12 @@ export function springPath(from: number, to: number, velocity: number, { stiffne
   return { duration: Math.round((points.length - 1) * step), points };
 }
 
-/** The software keyboard's own curve: iOS slides it on a damped spring that this bezier traces within a frame, Android
- * on its emphasized decelerate. */
+const IOS_KEYBOARD = springEasing(555.027, 47.118);
+/** The software keyboard's own curve: iOS 26 slides it on a critically damped spring (mass 1, stiffness 555.027, damping
+ * 47.118, about 0.383 s, as Telegram iOS reads it off UIKit), Android on its emphasized decelerate. */
 export const keyboardCurve = {
-  ios: { duration: 0.25, css: "cubic-bezier(.32,.72,0,1)", bezier: [0.32, 0.72, 0, 1] as const },
-  android: { duration: 0.28, css: "cubic-bezier(.2,0,0,1)", bezier: [0.2, 0, 0, 1] as const },
+  ios: { duration: IOS_KEYBOARD.duration / 1000, css: IOS_KEYBOARD.easing },
+  android: { duration: 0.28, css: "cubic-bezier(.2,0,0,1)" },
 };
 
 export function prefersReducedMotion(): boolean {

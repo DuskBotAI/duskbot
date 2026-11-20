@@ -13,6 +13,8 @@ export interface ReconnectView {
   host: string;
   /** Added by hand and never opened: it can't be reached yet, and there is nothing it showed before. */
   neverConnected?: boolean;
+  /** A dusk cloud that was deleted: nothing is looked at again; the person removes it or opens another place. */
+  gone?: true;
   attempt: number;
   nextAt: number | null;
   checking: boolean;
@@ -36,7 +38,7 @@ export declare const FRAME_EVERY_MS: number;
 export declare function proxyAnswersForDownServer(code: number): boolean;
 export declare function frameOf(body: unknown, at: number): WorkspaceFrame | null;
 export declare function createWorkspaceReconnect(deps: Record<string, unknown>): {
-  lost(entry: { id: string; name: string; origin: string }): void;
+  lost(entry: { id: string; name: string; origin: string; gone?: boolean }): void;
   loaded(url: string): void;
   retry(): ReconnectView | null;
   stop(): void;

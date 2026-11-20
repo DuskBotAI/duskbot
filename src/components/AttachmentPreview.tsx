@@ -32,6 +32,7 @@ import { Icon } from "./Icon";
 import { imageReady, knownImageSize, noteImageLoaded, reservedAspect, type MediaSize } from "@/lib/image-cache";
 import { canonicalDownloadFilename } from "@/lib/download-filename";
 import { friendlyError } from "@/lib/plain-error";
+import { phoneBridge } from "@/lib/phone-bridge";
 
 export { canonicalDownloadFilename, contentDispositionFilename, safeDownloadFilename } from "@/lib/download-filename";
 
@@ -136,10 +137,15 @@ export async function requestMessageFile(
   });
   if (!response.ok) {
     const body = await response.json().catch(() => null) as { error?: string; code?: string } | null;
+    if (response.status === 404 || response.status === 410) throw Object.assign(new Error(t("attach.gone")), { code: FILE_GONE });
     throw Object.assign(new Error(body?.error ?? t("attach.downloadFailed")), { code: body?.code });
   }
   return response;
 }
+
+/** The error code a message file request fails with when the file or its message is no longer there. */
+export const FILE_GONE = "gone";
+export const fileGone = (reason: unknown) => (reason as { code?: unknown } | null)?.code === FILE_GONE;
 
 export interface MessageFolderListing {
   name: string;
@@ -207,13 +213,22 @@ export function useLocalFileSave(filePath: string, name?: string, message?: Mess
       }
       const blob = await response.blob();
       if (!mounted.current || controller.signal.aborted) return;
-      const url = URL.createObjectURL(blob);
       const saved = canonicalDownloadFilename({
         contentDisposition: response.headers.get("content-disposition"),
         fallback: name || entry || attachmentBasename(filePath),
         source: filePath,
         mime: blob.type || response.headers.get("content-type"),
       });
+      const phone = phoneBridge();
+      // a phone's web view drops a download link's click: the file goes to the share sheet (Save to Files) instead
+      if (phone) {
+        if (!phone.shareFile) throw new Error(t("mobile.file.cannotSave"));
+        await phone.shareFile(new File([blob], saved, { type: blob.type || "application/octet-stream" }));
+        if (!mounted.current || controller.signal.aborted) return;
+        setState("idle");
+        return;
+      }
+      const url = URL.createObjectURL(blob);
       try {
         const link = document.createElement("a");
         link.href = url;
@@ -360,17 +375,27 @@ const VIEWER_BUTTON = "flex size-8 items-center justify-center rounded-full bord
 const ZOOMED = 2.5;
 
 /** grok's media viewer: the whole window fading in, the image rising into place, a caption and a filmstrip under it. */
-export function AttachmentPreviewDialog({
-  image,
-  images,
-  initialIndex = 0,
-  onClose,
-}: {
+interface PreviewDialogProps {
   image: PreviewImage;
   images?: PreviewImage[];
   initialIndex?: number;
   onClose: () => void;
-}) {
+}
+
+/** Full screen pictures: the phone's own viewer in the phone app, this dialog elsewhere. */
+export function AttachmentPreviewDialog(props: PreviewDialogProps) {
+  const phone = phoneBridge();
+  const opened = useRef(false);
+  useEffect(() => {
+    if (!phone || opened.current) return;
+    opened.current = true;
+    const items = props.images?.length ? props.images : [props.image];
+    phone.view({ kind: "images", images: items.map(({ src, name, openUrl }) => ({ src, name, openUrl })), index: props.initialIndex ?? 0 }, props.onClose);
+  }, []);
+  return phone ? null : <PreviewDialog {...props} />;
+}
+
+function PreviewDialog({ image, images, initialIndex = 0, onClose }: PreviewDialogProps) {
   const items = images?.length ? images : [image];
   const [index, setIndex] = useState(() => Math.min(Math.max(initialIndex, 0), items.length - 1));
   const current = items[index] ?? image;
@@ -471,7 +496,7 @@ export function AttachmentPreviewDialog({
       className="fixed inset-0 z-[70] bg-black/95 outline-none"
       onMouseDown={(event) => event.target === event.currentTarget && onClose()}
     >
-      <div className="absolute end-3 top-3 z-[1] flex items-center gap-2">
+      <div data-viewer-controls="" className="absolute end-[calc(var(--safe-area-inset-right,env(safe-area-inset-right,0px))+12px)] top-[calc(var(--safe-area-inset-top,env(safe-area-inset-top,0px))+12px)] z-[1] flex items-center gap-2">
         {current.downloadUrl && (
           <a
             href={current.downloadUrl}
@@ -494,7 +519,7 @@ export function AttachmentPreviewDialog({
         </button>
       </div>
       <SheetMotion
-        className={cn("absolute inset-x-0 top-11 flex items-center justify-center overflow-hidden px-[38px] pt-[38px]", strip ? "bottom-[132px]" : "bottom-[68px]")}
+        className={cn("absolute inset-x-0 top-[calc(var(--safe-area-inset-top,env(safe-area-inset-top,0px))+44px)] flex items-center justify-center overflow-hidden px-[38px] pt-[38px]", strip ? "bottom-[calc(var(--safe-area-inset-bottom,env(safe-area-inset-bottom,0px))+132px)]" : "bottom-[calc(var(--safe-area-inset-bottom,env(safe-area-inset-bottom,0px))+68px)]")}
         onMouseDown={(event) => event.target === event.currentTarget && onClose()}
       >
         {!loaded && !failed && (
@@ -554,7 +579,7 @@ export function AttachmentPreviewDialog({
           </button>
         </>
       )}
-      <div className="absolute inset-x-0 bottom-5 flex flex-col items-center gap-4">
+      <div className="absolute inset-x-0 bottom-[calc(var(--safe-area-inset-bottom,env(safe-area-inset-bottom,0px))+20px)] flex flex-col items-center gap-4">
         <span className="flex h-8 max-w-[80vw] items-center truncate text-[12px] leading-4 text-[rgb(245_245_245/0.54)]">{caption}</span>
         {strip && (
           <div className="flex max-w-[90vw] gap-2 overflow-x-auto [scrollbar-width:none]">
@@ -880,7 +905,8 @@ function FileCard({ file, message, save, preview, retryable, className }: {
   const dot = file.name.lastIndexOf(".");
   const base = dot > 0 ? file.name.slice(0, dot) : file.name;
   const ext = dot > 0 ? file.name.slice(dot) : "";
-  const meta = save.state === "saving" ? t("attach.downloading") : save.state === "saved" ? t("attach.downloaded") : failed ? saveFailureText(save) : ext.slice(1).toUpperCase() || t("attach.file");
+  const kind = ext.slice(1).toUpperCase() || t("attach.file");
+  const meta = save.state === "saving" ? t("attach.downloading") : save.state === "saved" ? t("attach.downloaded") : failed ? saveFailureText(save) : file.bytes ? `${kind} · ${folderFileSize(file.bytes)}` : kind;
   return (
     <section data-file-card="" className={cn("chat-file-card relative flex h-[72px] w-[354px] max-w-full items-center gap-[14px] rounded-[22px] bg-composer ps-5 pe-5", className)}
       title={save.state === "saved" && save.savedTo ? t("attach.savedTo", { path: save.savedTo }) : file.name}>

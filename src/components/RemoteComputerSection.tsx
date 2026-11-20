@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { AnimatePresence } from "motion/react";
 import { t } from "@/lib/i18n";
 import { Card as RowsCard, FormDialog, FormField, ItemRow, NavRow, NoteRow } from "./ListRows";
 import { textFieldCls } from "./ui/GrokDialog";
@@ -90,8 +91,8 @@ export function RemoteComputerSection({ hideWhenUnavailable = false, simple = fa
   return (
     <RowsCard label={simple ? undefined : t("remote.client.idle")} data-settings-block="remote-client">
       <NavRow data-settings-open="companion-pair" title={t(simple ? "remote.client.idle" : "settings.s2.remote.pair")} hint={t(simple ? "settings.elsewhere.connectHint" : "settings.s2.remote.pairHint")} onClick={() => { setError(""); setOpen(true); }} />
-      {open && (
-        <FormDialog
+      <AnimatePresence>{open && (
+        <FormDialog key="companion-pair"
           data-panel-modal="companion-pair"
           title={t(simple ? "remote.client.idle" : "settings.s2.remote.pair")}
           description={t("remote.client.restartNote")}
@@ -111,7 +112,7 @@ export function RemoteComputerSection({ hideWhenUnavailable = false, simple = fa
               placeholder="000000" inputMode="numeric" autoComplete="one-time-code" className={`${textFieldCls} max-w-32 font-mono tracking-[0.2em]`} />
           </FormField>
         </FormDialog>
-      )}
+      )}</AnimatePresence>
     </RowsCard>
   );
 }

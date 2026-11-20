@@ -19,7 +19,7 @@ export const WAIT_TOOL_DEFINITIONS = [
     // Short on purpose: it rides every turn. Its result says when the condition already holds, when this computer cannot
     // check files or programs, and when My Cloud's sleep can delay the message.
     description:
-      `Tell the person in this chat when something happens. No AI runs while you wait, only plain code checks. Ends after hours (default ${WAIT_HOURS.default}, 1-${WAIT_HOURS.max}).`,
+      `Tell the person in this chat when something happens, or come back here later yourself (time: "check back in 20 min") instead of polling. No AI runs while you wait, only plain code checks. Ends after hours (default ${WAIT_HOURS.default}, 1-${WAIT_HOURS.max}).`,
     inputSchema: {
       type: "object",
       additionalProperties: false,
@@ -28,17 +28,19 @@ export const WAIT_TOOL_DEFINITIONS = [
         kind: {
           type: "string",
           enum: [...WAIT_KINDS],
-          description: "url_*: the page at url has or lacks text. file_*: path exists, is gone or changes. process_*: process (name or pid) runs or stops. bot_idle: bot (name or id) finishes its work.",
+          description: "url_*: the page at url has or lacks text. file_*: path exists, is gone or changes. process_*: process (name or pid) runs or stops. bot_idle: bot (name or id) finishes its work. time: at (with offset) or minutes.",
         },
         url: { type: "string" },
         text: { type: "string" },
         path: { type: "string" },
         process: { type: "string" },
         bot: { type: "string" },
+        at: { type: "string" },
+        minutes: { type: "integer", minimum: 1 },
         follow_up: {
           type: "string",
           maxLength: 2000,
-          description: "Only if the person asked for something to be done then: that request, for a run that won't see this chat. You carry it out here.",
+          description: "Only if something is to be done then: that request, for a run that won't see this chat. You carry it out here.",
         },
         hours: { type: "integer", minimum: 1, maximum: WAIT_HOURS.max },
       },

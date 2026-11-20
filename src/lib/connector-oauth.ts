@@ -1,3 +1,5 @@
+import { externalOpener } from "./app-links";
+
 export interface PendingAuthorization {
   url: string;
   createdAt: number;
@@ -15,7 +17,7 @@ export const opensPagesExternally = () => Boolean(window.duskDesktop);
 
 /** Reserve the tab during the click, before an authorization request consumes the browser's user activation. */
 export function reserveConnectionPage() {
-  const openExternal = window.duskDesktop?.openExternal;
+  const openExternal = externalOpener();
   // a workspace page in the desktop app has no openExternal, and its window.open always comes back null because the
   // app hands the link to the system browser (no popup blocker there), so it opens the real link, never a blank
   const handsOff = !openExternal && opensPagesExternally();

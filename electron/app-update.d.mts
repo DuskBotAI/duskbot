@@ -29,6 +29,11 @@ export interface AppUpdateBridge {
 export declare const DESKTOP_MANIFEST_URL: string;
 export declare const RELEASE_KEYS: readonly { kid: string; x: string }[];
 export declare const QUIET_IDLE_MS: number;
+export declare const POLICY_SOURCES: readonly string[];
+export interface DesktopUpdatePolicy { serial: number; floor: string | null; blocked: string[]; paused: boolean; rollout: Record<string, number> }
+export declare function verifiedPolicy(doc: unknown, keys?: readonly { kid: string; x: string }[]): DesktopUpdatePolicy | null;
+export declare function policyHolds(policy: DesktopUpdatePolicy | null, version: string, bucket: () => number): "paused" | "blocked" | "below_floor" | "rollout" | null;
+export declare function storedBucket(file: string, random?: () => number): number;
 export declare function sumsUrl(version: string): string;
 export declare function zipUrl(version: string, name: string): string;
 export declare const DOWNLOAD_PAGE: string;
@@ -56,5 +61,6 @@ export declare function createAppUpdater(options: {
   signed?(): Promise<boolean>; installer?: AppInstaller; quiet?(): Promise<boolean>; fallback: { check(): Promise<unknown> };
   onState?(state: AppUpdateState): void; /** a check or download failed: its message, the stage and a short reason word */ onFailed?(message: string, info: { stage: string | null; reason: string }): void;
   download?: Partial<{ attempts: number; stallMs: number; headersMs: number; backoffMs: readonly number[]; wait(ms: number): Promise<void> }>; log?(line: string): void; firstDelayMs?: number; intervalMs?: number; jitterMs?: number; random?: () => number; quietEveryMs?: number;
+  /** where the signed update policy is read; `bucket`: this install's fixed 0 to 99 for staged rollouts */ policySources?: readonly string[]; bucket?: () => number;
   timers?: Pick<typeof globalThis, "setTimeout" | "clearTimeout">;
 }): AppUpdater;

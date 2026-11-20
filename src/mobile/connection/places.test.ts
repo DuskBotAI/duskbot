@@ -37,6 +37,15 @@ describe("places", () => {
     ]);
   });
 
+  it("lists the clouds of the phone's other accounts too, each opened through its own account, and a linked one once", () => {
+    const places = mergePlaces({ records: [record("a", "Alice cloud", "https://ca.dusk.bot")], activeId: "a", connected: true,
+      account: { clouds: [cloud("ca")], teams: [], computers: [] },
+      others: [{ accountId: "bob", places: { clouds: [cloud("cb"), cloud("ca")], teams: [team("tb")], computers: [] } }] });
+    expect(places.map((place) => [place.name, place.target.kind, "accountId" in place.target ? place.target.accountId : undefined])).toEqual([
+      ["Alice cloud", "linked", undefined], ["Cloud cb", "cloud", "bob"], ["Team tb", "team", "bob"],
+    ]);
+  });
+
   it("hands the pairing step the cloud's address and its code", () => {
     expect(pairingText({ origin: "https://c1.dusk.bot", code: "ABCD-EFGH-JKLM", expiresAt: 1 })).toBe("https://c1.dusk.bot ABCDEFGHJKLM");
   });

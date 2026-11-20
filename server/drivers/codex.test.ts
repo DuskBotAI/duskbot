@@ -1881,14 +1881,15 @@ process.stdout.write(JSON.stringify({jsonrpc:'2.0',id:m.id,result})+'\\n');});`)
     await recorder.until((event) => event.type === "turn.completed");
 
     const seen = JSON.parse(readFileSync(dump, "utf8"));
-    expect(seen.argv.join(" ")).toContain("mcp_servers.browser.command");
+    expect(seen.argv.join(" ")).toContain("mcp_servers.duskbot_browser.command");
     expect(seen.argv).toContain("features.browser_use=false");
     expect(seen.argv).toContain("features.browser_use_external=false");
     expect(seen.argv).toContain("features.computer_use=false");
     expect(seen.argv.some((arg: string) => arg.startsWith("web_search="))).toBe(false);
     expect(seen.argv).toContain('plugins={ "browser@openai-bundled" = { enabled = false }, "computer-use@openai-bundled" = { enabled = false }, "unified-computer-use@openai-bundled" = { enabled = false } }');
-    expect(seen.argv).toContain('mcp_servers.browser.default_tools_approval_mode="auto"');
-    expect(seen.argv).not.toContain('mcp_servers.browser.default_tools_approval_mode="approve"');
+    expect(seen.argv).toContain('mcp_servers.duskbot_browser.default_tools_approval_mode="auto"');
+    expect(seen.argv).not.toContain('mcp_servers.duskbot_browser.default_tools_approval_mode="approve"');
+    expect(seen.argv.join(" "), "OpenAI reserves the browser namespace").not.toContain("mcp_servers.browser.");
     expect(seen.argv.join(" ")).toContain("/tmp/harness-mcp-proxy.js");
     expect(seen.argv.join(" ")).not.toContain("browser-capability-secret");
     expect(seen.env.DUSK_MCP_TOKEN_BROWSER).toBe("browser-capability-secret");

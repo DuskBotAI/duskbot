@@ -6,7 +6,18 @@ import { cleanProbe, cleanTiming } from "./routine-quiet.ts";
 import { cleanSchedule } from "./routine-schedules.ts";
 import type { Routine, RoutineInput } from "./routines.ts";
 
-export function sanitizeInput(input: RoutineInput, after: number): Omit<Routine, "id" | "createdAt" | "updatedAt" | "nextRunAt"> {
+type CleanRoutine = Omit<Routine, "id" | "createdAt" | "updatedAt" | "nextRunAt">;
+
+/** What was asked is at fault when it can't be cleaned: the request answers 400 with the reason, never 500. */
+export function sanitizeInput(input: RoutineInput, after: number): CleanRoutine {
+  try {
+    return cleanInput(input && typeof input === "object" ? input : {} as RoutineInput, after);
+  } catch (error) {
+    throw error instanceof Error && !("status" in error) ? Object.assign(error, { status: 400 }) : error;
+  }
+}
+
+function cleanInput(input: RoutineInput, after: number): CleanRoutine {
   const name = String(input.name ?? "").trim().slice(0, 80);
   const prompt = String(input.prompt ?? "").trim().slice(0, 20_000);
   const botId = String(input.botId ?? "").trim();
@@ -45,6 +56,7 @@ export function sanitizeInput(input: RoutineInput, after: number): Omit<Routine,
   if (asked != null && (!checks || checks.length !== new Set(asked).size)) throw new Error("Choose checks from calendar, mail and runs");
   if (probe && checks!.length > 1) throw new Error("A page, feed or price check runs on its own, without other checks");
   if (probe && input.deliver === "brief") throw new Error("A page, feed or price check reports in its chat, not the brief");
+  if (probe?.kind === "script" && runOn !== "maus") throw new Error("A script check runs on this computer, so its routine runs here too");
   if (checks && (target !== "bot" || runsOnce(schedule))) throw new Error("Checks need a bot routine that repeats");
   if (input.access != null && input.access !== "read-and-draft") throw new Error("Choose read-and-draft access or none");
   if (input.deliver != null && (input.deliver !== "brief" || target !== "bot")) throw new Error("Only a bot routine can deliver to the brief");

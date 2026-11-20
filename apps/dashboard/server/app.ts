@@ -24,7 +24,7 @@ import type { BillingNotice } from "./billing/service.ts";
 import { BILLING_CONFIG, MANAGED_REGION, regionLabel } from "./billing/plans.ts";
 import type { StoredCloud } from "./clouds/types.ts";
 import { DEFAULT_RETENTION_DAYS } from "../../cloud-service/src/retention.ts";
-import { CODE_SUBJECT, accountDeletedEmail, cancelledEmail, cloudDeletedEmail, cloudNoticeEmail, cloudReadyEmail, emailConfig, paymentFailedEmail, receiptEmail, teamInviteEmail, teamSeatFullEmail, welcomeEmail } from "./email/templates.ts";
+import { CODE_SUBJECT, accountDeletedEmail, cancelledEmail, cloudDeletedEmail, cloudNoticeEmail, cloudReadyEmail, emailConfig, paymentFailedEmail, paymentRecoveredEmail, paymentReminderEmail, receiptEmail, teamInviteEmail, teamSeatFullEmail, welcomeEmail } from "./email/templates.ts";
 import type { Rendered } from "./email/templates.ts";
 import { render } from "./email/layout.ts";
 import { BillingError } from "./billing/service.ts";
@@ -41,6 +41,8 @@ import { memorySink, type AnalyticsSink } from "./analytics/sink.ts";
 import { createUsage, memoryUsageStore, type UsageStore } from "./analytics/usage.ts";
 import { createInfraCollector, memoryInfraStore, type InfraStore } from "./admin/infra.ts";
 import { opsFixture } from "./admin/ops/fixture.ts";
+import type { WarmStore } from "./admin/web-warm.ts";
+import { CANARY_IDS, cloudFleetOf, serverFleet, type FleetAnswer } from "./admin/ops/fleet.ts";
 import { createOps } from "./admin/ops/index.ts";
 import { memoryOpsStore, type OpsStore } from "./admin/ops/store.ts";
 import { AsyncLocalStorage } from "node:async_hooks";
@@ -102,7 +104,9 @@ export interface DashboardAppOptions {
   /** the owner's panel at /admin: DUSK_ADMIN_EMAILS by default */
   admin?: { emails?: string[]; growthEmails?: string[]; backupDir?: string | null; environment?: string; env?: NodeJS.ProcessEnv; opsFixture?: boolean; live?: LiveData | null;
     /** how long the admin keeps an analytics answer (main.ts: 30 s); none by default, so a fixture shows each event at once */
-    readCacheMs?: number };
+    readCacheMs?: number;
+    /** keeps the overview's default ranges computed ahead (main.ts: in MongoDB); none by default */
+    warm?: { store: WarmStore; everyMs?: number } | null };
   /** the owner's alert emails (main.ts); without it incidents are kept in memory and nothing is mailed */
   incidents?: Incidents;
   /** @devs reports from the apps: MongoDB in production (main.ts), memory otherwise; mail goes where the alert emails go */
@@ -307,6 +311,8 @@ export function createDashboardApp(options: DashboardAppOptions) {
     if (notice.kind === "receipt") { if (courtesy(emailOf(notice.accountId))) sendTo(notice.accountId, "required", receiptEmail(emailCfg, { ...notice, receiptId: notice.invoiceId, cloud: notice.cloudId !== null })); }
     else if (!courtesy(emailOf(notice.accountId))) return;
     else if (notice.kind === "payment_failed") sendTo(notice.accountId, "required", paymentFailedEmail(emailCfg, { ...notice, cloudName: cloud?.name ?? null }));
+    else if (notice.kind === "payment_reminder") sendTo(notice.accountId, "required", paymentReminderEmail(emailCfg, { ...notice, cloudName: cloud?.name ?? null, final: notice.step === "final" }));
+    else if (notice.kind === "payment_recovered") sendTo(notice.accountId, "required", paymentRecoveredEmail(emailCfg, { description: notice.description, cloudName: cloud?.name ?? null }));
     else sendTo(notice.accountId, "required", cancelledEmail(emailCfg, { description: notice.description, cloudName: cloud?.name ?? null, endsAt: notice.endsAt,
       keptPaused: cloud?.backend === "managed", keepDays: cloud?.backend === "managed" ? retentionDays : notice.graceDays }));
   }
@@ -386,9 +392,10 @@ export function createDashboardApp(options: DashboardAppOptions) {
   const infraStore = options.analytics?.infra ?? memoryInfraStore();
   const infra = createInfraCollector({ store: infraStore, clouds: () => billing.clouds.all?.() ?? [], usage: managedUsage ? (c, from) => managedUsage(c, from) : null, now });
   infra.start();
-  const admin = createAdmin({ emails: adminEmails, growthEmails: options.admin?.growthEmails ?? parseAdminEmails(process.env.DUSK_GROWTH_ADMIN_EMAILS), auth, billing, workspaces: () => state.workspaces, analytics, usage, infra: { store: infraStore },
+  const bugReportStore = options.bugReports?.store ?? memoryBugReportStore();
+  const admin = createAdmin({ emails: adminEmails, growthEmails: options.admin?.growthEmails ?? parseAdminEmails(process.env.DUSK_GROWTH_ADMIN_EMAILS), auth, billing, workspaces: () => state.workspaces, analytics, usage, bugReports: bugReportStore, infra: { store: infraStore },
     ops: { answer: () => ops.answer(), collect: () => ops.collect(), accounts: (relays, query) => ops.accounts(relays, query) }, wakeStats: () => slackEdge?.edge.wakeStats() ?? {},
-    waitlist: options.analytics?.waitlist ?? null, live: options.admin?.live ?? null, now, fetch: options.fetch, env: options.admin?.env, errors: errorsSeen, readBody, bodyObject, json, relayFixture: options.admin?.opsFixture, readCacheMs: options.admin?.readCacheMs ?? 0,
+    waitlist: options.analytics?.waitlist ?? null, live: options.admin?.live ?? null, now, fetch: options.fetch, env: options.admin?.env, errors: errorsSeen, readBody, bodyObject, json, relayFixture: options.admin?.opsFixture, readCacheMs: options.admin?.readCacheMs ?? 0, warm: options.admin?.warm ?? null,
     service: { version: options.version ?? null, startedAt, environment: options.admin?.environment ?? (dev ? "development" : "production"), dataDir: options.dataDir,
       backupDir: options.admin?.backupDir ?? null, database: () => stateBackend()?.health() ?? null } });
   // only production's numbers are news: preview and development share the env but never email the admins
@@ -422,7 +429,7 @@ export function createDashboardApp(options: DashboardAppOptions) {
     admin: (req, mutation) => { const owner = auth.requireWeb(req, { mutation }); if (!admin.isAdmin(owner.email)) throw new AdminError(403, "not_admin", "This account is not an admin."); } });
   const reportMail = options.bugReports?.mail;
   const cloudSealer = createSealer((options.admin?.env ?? process.env).DUSK_CLOUD_SEAL_KEY ? parseSealKey((options.admin?.env ?? process.env).DUSK_CLOUD_SEAL_KEY!) : null);
-  const bugReports = createBugReports({ store: options.bugReports?.store ?? memoryBugReportStore(), now, json, bodyObject, ip: req => rateIp(clientIp(req, options.trustProxy ?? false)),
+  const bugReports = createBugReports({ store: bugReportStore, now, json, bodyObject, ip: req => rateIp(clientIp(req, options.trustProxy ?? false)),
     admin: (req, mutation) => { const owner = auth.requireWeb(req, { mutation }); if (!admin.isAdmin(owner.email)) throw new AdminError(403, "not_admin", "This account is not an admin."); return owner.id; },
     audit: (actor, action, target, detail) => { void analytics.sink.audit({ id: `aud_${random(12)}`, at: now(), actor, action, target, detail }).catch(() => {}); },
     clouds: { get: id => billing.clouds.get(id), unseal: sealed => cloudSealer.unseal(sealed) },
@@ -827,6 +834,16 @@ export function createDashboardApp(options: DashboardAppOptions) {
       if (!isTestAddress(to)) fail(400, "invalid_request", "Only test addresses have a test mailbox.");
       const found = testMail.latest(to, Number(url.searchParams.get("since")) || 0);
       return found ? json(res, 200, found) : fail(404, "not_found", "No mail yet.");
+    }
+    // the release tool's view of the fleet (scripts/release-all.mjs status): counts only, to DUSK_OPS_TOKEN only
+    if (path === "/v1/ops/fleet" && method === "GET") {
+      const token = adminEnv.DUSK_OPS_TOKEN, given = String(req.headers.authorization ?? "");
+      if (!token || given.length !== token.length + 7 || !timingSafeEqual(Buffer.from(given), Buffer.from(`Bearer ${token}`))) { rate(req, "ops-fleet-denied", 20); fail(404, "not_found", "Route not found."); }
+      const days = Number(url.searchParams.get("days") ?? 14), canary = (url.searchParams.get("canary") ?? "").split(",").filter(Boolean);
+      if (!Number.isInteger(days) || days < 1 || days > 60 || canary.length > 200 || !canary.every(id => CANARY_IDS.test(id))) fail(400, "invalid_request", "Invalid fleet query.");
+      const at = now();
+      const [desktops, servers] = await Promise.all([analytics.sink.fleet?.(at - days * 86_400_000, at + 1) ?? Promise.resolve([]), serverFleet(adminEnv, options.fetch)]);
+      return json(res, 200, { at, desktops: { days, versions: desktops }, clouds: cloudFleetOf(billing.clouds.all?.() ?? [], canary), servers } satisfies FleetAnswer);
     }
     if (path === "/v1/ops/report" && method === "POST") {
       const verdict = ops.authorizeReport(typeof req.headers.authorization === "string" ? req.headers.authorization : undefined);

@@ -10,6 +10,37 @@ The first run has one job: get the person to the first useful bot reply (the "wo
 For people who want their bots running 24/7, it also has to make buying dusk cloud quick and calm. It is a Persuade
 surface that has to feel like Operate: short, quiet, nothing to read twice.
 
+## Now: two screens, then Dusk speaks first
+
+About 40% of sign-ups never sent a message, 128 people went on with no Mac permission granted, and almost half of Claude
+sign-ins were cancelled. The desktop first run is now two screens before the chat (it was up to seven: welcome,
+account, place, AI, bring, phone, permissions):
+
+1. **Hello** ("Meet dusk bot", Get started). The free model downloads at the server's start (`DUSK_PREINSTALL_FREE_BACKUP`)
+   and, once ready, gets one test message while the hello shows (`free-warmup.ts`), so its first answer is warm.
+2. **One AI choice** (`AiStep.tsx`): **Use the Claude you're already signed into** (the AI already signed in on this
+   computer that answered its test, one tap, no new sign-in), **Use free models**, or **Use my plan** (the grid of AIs;
+   Other choices goes back).
+
+Then the chat: Dusk says one message and shows one question card, "What should we start with?", with three first jobs
+fitted to what is connected (`introAsks`: Summarize my inbox, What's on my calendar today?, Help me plan my week, Watch
+a price for me, Research something for me) and a "Something else" field. Whatever is picked is sent as the person's
+first message; the card and the setup chips go as soon as they write anything.
+
+Everything else is raised when it is needed, never as a step: the account (signing in to sync or to buy), dusk cloud
+(the Try cloud chip, the sidebar, and `LateCloudPlan` for a plan bought later), what other AI apps hold (the chip, then
+Settings > Import), the phone (the chip), apps (the chip and connector cards), and the Mac's permissions
+(`ScreenAccessNotice` when a computer job first needs one). Only an install that requires an account
+(`DUSK_REQUIRE_ACCOUNT=1`) keeps the account step, and a run already on its way to dusk cloud (a saved checkout, or an
+account that owns a cloud) keeps the checkout and the cloud being made.
+
+A first run saved on a screen that is gone (place, bring, phone, permissions) resumes on the AI choice
+(`knownBeat`, `resumeBeat`); `WELCOME_VERSION` is unchanged, so nobody who finished is asked again.
+
+Analytics: `onboarding_step` keeps its step ids (`welcome`, `ai`, and `account` / `checkout` / `making` where they
+show); `onboarding_ai` `{ action: own | free | connected | later }`; `onboarding_starter` `{ task: inboxSummary | today
+| week | price | research | own }` for what the first message was.
+
 ## Before (as shipped up to 2be8b8cbc)
 
 | # | Screen | What the person sees and feels | Friction and drop-off risk |

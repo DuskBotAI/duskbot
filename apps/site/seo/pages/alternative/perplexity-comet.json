@@ -11,7 +11,7 @@
     "perplexity comet vs chatgpt atlas"
   ],
   "answer": "**want help with the tabs in front of you? comet fits that job.** it researches and acts on pages inside your browser. dusk gives named bots their own ongoing work, files, memory and routines, with a separate browser and desktop available. choose dusk when you want the helper to keep its own workspace while you keep yours.",
-  "updated": "2026-11-12",
+  "updated": "2026-11-20",
   "review": {
     "status": "approved",
     "by": "lead agent: independent reviewer pass against seo/facts (4 reviewers), every finding applied, automated gate",
@@ -89,7 +89,7 @@
         "label": "platforms",
         "cells": [
           "mac, windows, ios and android",
-          "macos 12+, windows 10/11, ubuntu 24.04 beta; paired phone browser"
+          "macos 12+, windows 10/11, ubuntu 24.04 beta; iphone app and paired android browser"
         ],
         "src": [
           2,

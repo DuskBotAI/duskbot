@@ -102,6 +102,17 @@ describe("routeTurn", () => {
     expect(routeTurn({ ...base, automated: true })).toEqual(kept);
   });
 
+  it("runs a default bot's quick question at low effort when its engine takes effort per turn and none was picked", () => {
+    const quick = { ...base, conversational: false, effort: undefined, effortPerTurn: true };
+    expect(routeTurn(quick)).toEqual({ tier: "simple", model: "claude-opus-5", effort: "low", variant: "v" });
+    expect(routeTurn({ ...quick, signals: { ...base.signals, text: "deploy the app" } })).toEqual({ tier: null, model: "claude-opus-5", effort: undefined, variant: "v" });
+    expect(routeTurn({ ...quick, effort: "high" }).effort).toBe("high");
+    expect(routeTurn({ ...quick, effortPerTurn: false }).effort).toBeUndefined();
+    expect(routeTurn({ ...quick, effortLevels: ["medium", "high"] }).effort).toBeUndefined();
+    expect(routeTurn({ ...quick, followsBotModel: false }).effort).toBeUndefined();
+    expect(routeTurn({ ...quick, automated: true }).effort).toBeUndefined();
+  });
+
   it("lowers an explicit effort when the engine has no quick model", () => {
     expect(routeTurn({ ...base, catalog: { default: "x", options: [{ id: "claude-opus-5", label: "Opus" }] } }))
       .toEqual({ tier: "simple", model: "claude-opus-5", effort: "low", variant: "v" });

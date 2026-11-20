@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 import {
-  USAGE_DIGEST_KEYS, USAGE_FRUSTRATION_KEYS, USAGE_SESSION_KEYS, SESSION_NOTE_MAX, cleanUsageSession, USAGE_RUN_KEYS, USAGE_TURN_KEYS, categorize, cleanUsageDigest, cleanUsageFrustration, cleanUsageReport, cleanUsageTurn, failureReason, scrubSummary, toolSignals,
+  USAGE_DIGEST_KEYS, USAGE_FRUSTRATION_KEYS, USAGE_SESSION_KEYS, SESSION_NOTE_MAX, SUMMARY_MAX, cleanUsageSession, USAGE_RUN_KEYS, USAGE_TURN_KEYS, categorize, cleanUsageDigest, cleanUsageFrustration, cleanUsageReport, cleanUsageTurn, failureReason, scrubSummary, toolSignals,
   type UsageFrustration, type UsageSession,
 } from "../shared/usage-signals.ts";
 import { parseWorkspaceReport } from "../shared/dashboard-protocol.ts";
@@ -121,6 +121,8 @@ describe("scrubSummary", () => {
     expect(scrubSummary("i can't summarize this chat because the conversation itself isn't in what been given, only your instruction. if you paste the exchange here, write the two lowercase sentences.")).toBeNull();
     expect(scrubSummary("the bot was given only setup rules and no record of the work this person asked for, so the summary cannot say what went wrong.")).toBeNull();
     expect(scrubSummary("I'm unable to see the chat, please share the transcript.")).toBeNull();
+    expect(scrubSummary("there is nothing to summarize because the conversation isn't here, only the request.")).toBeNull();
+    expect(scrubSummary("user wants a compact digest in at most 90 words of lowercase prose about what they use it for.")).toBeNull();
     expect(scrubSummary("the bot can't open the sheet and the user retried 3 times.")).toBe("the bot can't open the sheet and the user retried 3 times.");
   });
   it("is stable: a scrubbed line passes the server's check unchanged", () => {
@@ -173,6 +175,14 @@ describe("anonymous notes", () => {
     expect(note).toContain("could not open the browser or the chat");
     expect(leaks(note)).toEqual([]);
     expect(scrubSummary("The bot in Dusk Bot could not reach LinkedIn from the Browser.", SESSION_NOTE_MAX)).toBe("the bot in dusk bot could not reach linkedin from the browser.");
+  });
+  it("drops a writer that repeats its own instruction, and keeps the bot as the subject when its name is taken out", () => {
+    expect(scrubSummary("user wants a compact digest in at most 90 words of lowercase prose about their recent chats.", 600)).toBeNull();
+    expect(scrubSummary("the person was frustrated. reply with the sentences only, in 2 lowercase sentences.")).toBeNull();
+    const note = scrubSummary("the user asked Luna to rename the project folder, but the Luna could not find it and said it was done anyway.", SUMMARY_MAX, { avoid: ["Luna"] })!;
+    expect(note).toBe("the user asked bot to rename the project folder, but the bot could not find it and said it was done anyway.");
+    expect(scrubSummary("the user asked the Radar bot to check prices; the Radar could not open the site.", SUMMARY_MAX, { avoid: ["Radar"] })).toBe("the user asked the bot to check prices; the bot could not open the site.");
+    expect(scrubSummary(note, SUMMARY_MAX)).toBe(note);
   });
   it("is stable, so a scrubbed note passes the account service's check unchanged", () => {
     const once = scrubSummary("Connecting Gmail took 3 tries, then the session went smoothly with the browser and calendar.", SESSION_NOTE_MAX)!;

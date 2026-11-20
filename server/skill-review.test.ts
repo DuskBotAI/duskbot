@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import {
   createSkillReview,
+  DAILY_CHANGE_CAP,
   frontmatterName,
   MAX_FAILED_REVIEWS,
   MAX_REVIEW_CHANGES,
@@ -36,6 +37,10 @@ describe("counting tool steps", () => {
   it("counts the turn's tool rows, without setup chips or other turns", () => {
     const messages = [tool("t1", "Read"), tool("t1", "Bash"), tool("t1", "setting up", { setup: true }), tool("t2", "Edit"), say("bot", "done", "t1")];
     expect(turnToolSteps(messages, "t1", BOT.id, false)).toBe(2);
+  });
+
+  it("counts only tool steps that worked", () => {
+    expect(turnToolSteps([tool("t1", "Read"), tool("t1", "Bash", { ok: false })], "t1", BOT.id, false)).toBe(1);
   });
 
   it("counts only the speaker's rows in a room", () => {
@@ -90,12 +95,14 @@ const skills: ReviewSkill[] = [
 ];
 
 describe("the review prompt", () => {
-  it("shows learned skills in full, marks imported ones read-only, and puts the in-play skill first", () => {
+  it("shows its own learned skills in full, marks the person's and imported ones read-only, and puts the in-play skill first", () => {
     const prompt = skillReviewPrompt({ botName: "Scout", transcript: "Person: use weekly-report again", skills });
     expect(prompt.startsWith(SKILL_REVIEW_MARKER)).toBe(true);
-    expect(prompt).toContain("weekly-report (learned, may update; named in this conversation)");
-    expect(prompt).toContain("imported-tool (imported, read-only)");
-    expect(prompt).toContain("huge-skill (learned, too long to show: do not update)");
+    expect(prompt).toContain("weekly-report (learned by you, may update; named in this conversation)");
+    expect(prompt).toContain("imported-tool (the person's own or imported, read-only)");
+    expect(prompt).toContain("huge-skill (learned by you, too long to show: do not update)");
+    expect(prompt).toContain("at most 1 change");
+    expect(prompt).toContain("even when Scout also noted it in memory");
     expect(prompt).toContain('<skill name="weekly-report">');
     expect(prompt).not.toContain('<skill name="huge-skill">');
     expect(prompt).toContain("## When to Use");
@@ -112,7 +119,7 @@ describe("parsing a review", () => {
     expect(frontmatterName("# no frontmatter")).toBeNull();
   });
 
-  it("keeps a create and an update of a shown learned skill, against the version shown", () => {
+  it("keeps one change: an update of a shown learned skill, against the version shown", () => {
     const answer = "```json\n" + JSON.stringify({
       changes: [
         { action: "update", skill_name: "weekly-report", skill_md: skillMd("weekly-report", "Ask for the week first."), gist: "Asks for the week first." },
@@ -124,9 +131,10 @@ describe("parsing a review", () => {
     expect(note).toBe("two lessons");
     expect(changes).toEqual([
       expect.objectContaining({ action: "update", name: "weekly-report", baseSha256: "a".repeat(64) }),
-      expect.objectContaining({ action: "create", name: "chart-making" }),
     ]);
-    expect(changes[1]!.baseSha256).toBeUndefined();
+    const created = parseSkillReview(JSON.stringify({ changes: [{ action: "create", skill_md: skillMd("chart-making") }] }), skills, shown).changes;
+    expect(created).toEqual([expect.objectContaining({ action: "create", name: "chart-making" })]);
+    expect(created[0]!.baseSha256).toBeUndefined();
   });
 
   it("refuses updates it may not make and creates under taken names", () => {
@@ -142,7 +150,7 @@ describe("parsing a review", () => {
     expect(parseSkillReview(answer, skills, shown).changes).toEqual([]);
   });
 
-  it("takes at most a few changes and one per skill", () => {
+  it("takes at most one change", () => {
     const answer = JSON.stringify({ changes: [
       { action: "create", skill_md: skillMd("one") },
       { action: "create", skill_md: skillMd("one", "again") },
@@ -150,7 +158,8 @@ describe("parsing a review", () => {
       { action: "create", skill_md: skillMd("three") },
       { action: "create", skill_md: skillMd("four") },
     ] });
-    expect(parseSkillReview(answer, skills, shown).changes.map((change) => change.name)).toEqual(["one", "two", "three"].slice(0, MAX_REVIEW_CHANGES));
+    expect(parseSkillReview(answer, skills, shown).changes.map((change) => change.name)).toEqual(["one"]);
+    expect(MAX_REVIEW_CHANGES).toBe(1);
   });
 
   it("treats junk and Nothing to save as no change", () => {
@@ -227,6 +236,43 @@ describe("the scheduler", () => {
     expect(second.state.prompts[0]).toContain("Person: make me a chart");
     expect(second.state.applied).toEqual([{ threadId: "thread-a", change: expect.objectContaining({ action: "create", name: "chart-making" }) }]);
     expect(second.review.status(BOT.id, "thread-a").steps).toBe(0);
+  });
+
+  it("saves at most three changes a day per bot, then waits without calling the model", async () => {
+    let clock = 1_000_000;
+    let made = 0;
+    const { review, state } = harness({
+      now: () => clock,
+      answer: () => JSON.stringify({ changes: [{ action: "create", skill_md: skillMd(`skill-${made++}`) }] }),
+    });
+    for (let i = 0; i < DAILY_CHANGE_CAP; i++) {
+      review.noteTurn(BOT.id, `thread-${i}`, 3);
+      await review.run(BOT.id, `thread-${i}`);
+    }
+    expect(state.applied).toHaveLength(DAILY_CHANGE_CAP);
+    review.noteTurn(BOT.id, "thread-x", 3);
+    expect(await review.run(BOT.id, "thread-x")).toEqual(expect.objectContaining({ state: "skipped" }));
+    expect(state.prompts).toHaveLength(DAILY_CHANGE_CAP);
+    review.stop();
+
+    clock += 24 * 60 * 60_000;
+    const later = harness({ now: () => clock });
+    await later.review.run(BOT.id, "thread-x");
+    expect(later.state.applied).toHaveLength(1);
+  });
+
+  it("keeps the day's count across a restart", async () => {
+    let made = 0;
+    const first = harness({ answer: () => JSON.stringify({ changes: [{ action: "create", skill_md: skillMd(`skill-${made++}`) }] }) });
+    for (let i = 0; i < DAILY_CHANGE_CAP; i++) {
+      first.review.noteTurn(BOT.id, `thread-${i}`, 3);
+      await first.review.run(BOT.id, `thread-${i}`);
+    }
+    first.review.stop();
+    const second = harness();
+    second.review.noteTurn(BOT.id, "thread-x", 3);
+    expect((await second.review.run(BOT.id, "thread-x")).state).toBe("skipped");
+    expect(second.state.prompts).toEqual([]);
   });
 
   it("does nothing below the threshold or while switched off", async () => {

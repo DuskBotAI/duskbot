@@ -190,7 +190,7 @@ it("F1 hands Clive's correction to the turn Mira is running for him, and her one
   }
 }), hostTimeout(90_000));
 
-it("F2 sends Clive's follow-up to the one thread he names, among those he opened on Mira, and its result comes back to him", () => scenario(async (f) => {
+it("F2 keeps Clive's two briefs and his follow-up in Mira's one chat, opens no thread for them, and the result comes back to him", () => scenario(async (f) => {
   f.script(f.clive.id,
     { key: "C0", match: ["F2-JOB"], steps: [
       { arguments: { bot_ids: [f.mira.id], message: "F2-A-BRIEF: draft report A.", thread: "new", title: "Report A" } },
@@ -201,7 +201,9 @@ it("F2 sends Clive's follow-up to the one thread he names, among those he opened
     { key: "MB", match: ["F2-B-BRIEF"], reply: "F2-B-RESULT: report B drafted." });
   await f.say(f.clive.id, f.job, "F2-JOB: have Mira draft reports A and B.");
   await expect.poll(async () => await f.said(f.job, "F2-DRAFTS"), { timeout: 30_000 }).toBe(1);
-  const threadA = (await f.tasks(f.mira.id)).find((task: any) => task.title === "Report A")!.threadId as string;
+  // one chat per bot: "thread: new" with a title still lands in Mira's own chat
+  const threadA = f.mira.activeTaskId as string;
+  expect((await f.tasks(f.mira.id)).map((task: any) => task.title)).not.toContain("Report A");
   const before = (await f.tasks(f.mira.id)).length;
 
   f.script(f.clive.id,
@@ -270,21 +272,22 @@ it("P1 lets Clive, as Mira's Chief, answer for the person the question she asks 
   expect(f.keys(f.mira.id)).toEqual(["M1"]);
 }), hostTimeout(120_000));
 
-it("P2 refuses the person's chat with Mira to a bot that is not her Chief, and her question stays the person's", () => scenario(async (f) => {
+it("P2 never lets a bot that is not Mira's Chief answer her question to the person: its line only queues in her chat", () => scenario(async (f) => {
   await f.askMeFirst();
   expect((await f.api("PATCH", `/api/bots/${f.clive.id}`, { chiefOfStaff: false })).status).toBe(200);
   const chat = f.mira.activeTaskId as string;
   askThePerson(f, "P2");
-  f.script(f.clive.id, { key: "C0", match: ["P2-SAG"], steps: [{ arguments: { bot_ids: [f.mira.id], message: "Keep it", thread: chat }, expectError: true }], reply: "C0: refused." });
+  f.script(f.clive.id, { key: "C0", match: ["P2-SAG"], steps: [{ arguments: { bot_ids: [f.mira.id], message: "Keep it", thread: chat } }], reply: "C0: queued." });
   await f.say(f.mira.id, chat, "P2: redo the pricing page.");
   await expect.poll(async () => (await asking(f, chat)) !== undefined, { timeout: 30_000 }).toBe(true);
 
   await f.say(f.clive.id, f.job, "P2-SAG: tell Mira to keep it.");
   await expect.poll(() => f.keys(f.clive.id), { timeout: 30_000 }).toEqual(["C0"]);
   expect(f.given("C0")).not.toContain("Teammates you manage wait on the person's answer");
-  expect(f.replies("C0")).toEqual([`"${chat}" is not a thread you opened on Mira: use a threadId one of your coordinate_bots receipts gave, or one list_threads shows on them`]);
+  // one chat per bot: a teammate's message goes to Mira's own chat, after what runs there, never into her question
+  expect(f.replies("C0")).toEqual([expect.objectContaining({ receipts: [expect.objectContaining({ outcome: "queued", threadId: chat })] })]);
   expect((await asking(f, chat))?.answered).toBeUndefined();
-  expect(f.children()).toEqual([]);
+  expect(f.children(), "it is ordinary work for Mira, not an answer").toHaveLength(1);
 }), hostTimeout(90_000));
 
 it("P3 lets the person replace Clive's answer: the card shows theirs, and Mira gets it in a new turn", () => scenario(async (f) => {
@@ -338,7 +341,7 @@ it("P5 does not take a message that names other work as the answer to Mira's que
 
   await f.say(f.clive.id, f.job, "P5-SAG: answer the other job.");
   await expect.poll(() => f.keys(f.clive.id), { timeout: 30_000 }).toEqual(["C-ANSWERS"]);
-  expect(f.replies("C-ANSWERS")).toEqual([`"${chat}" is not a thread you opened on Mira: use a threadId one of your coordinate_bots receipts gave, or one list_threads shows on them`]);
+  expect(f.replies("C-ANSWERS")).toEqual(["nothing of Mira's waits on an answer as no-such-work: it was answered or its work ended. Send it without answers if it still needs doing"]);
   expect((await asking(f, chat))?.answered).toBeUndefined();
 }), hostTimeout(90_000));
 
@@ -355,12 +358,11 @@ it("P6 does not take a one-way notice as the answer to Mira's question to the pe
   expect((await asking(f, chat))?.answered).toBeUndefined();
 }), hostTimeout(90_000));
 
-it("F3 refuses a thread Clive did not open on Mira, saying where thread ids come from", () => scenario(async (f) => {
+it("F3 sends work Clive names for Mira's own chat to that one chat as one job", () => scenario(async (f) => {
   f.script(f.clive.id, { key: "C0", match: ["F3-JOB"], steps: [
-    { arguments: { bot_ids: [f.mira.id], message: "F3-BRIEF: look at this.", thread: f.mira.activeTaskId }, expectError: true }], reply: "C0: refused." });
+    { arguments: { bot_ids: [f.mira.id], message: "F3-BRIEF: look at this.", thread: f.mira.activeTaskId } }], reply: "C0: sent." });
   await f.say(f.clive.id, f.job, "F3-JOB: have Mira look at this in her own chat.");
   await expect.poll(() => f.keys(f.clive.id), { timeout: 30_000 }).toEqual(["C0"]);
-  const [refused] = f.replies("C0");
-  expect(refused).toBe(`"${f.mira.activeTaskId}" is not a thread you opened on Mira: use a threadId one of your coordinate_bots receipts gave, or one list_threads shows on them`);
-  expect(f.children()).toEqual([]);
+  expect(f.replies("C0")).toEqual([expect.objectContaining({ receipts: [expect.objectContaining({ outcome: "queued", threadId: f.mira.activeTaskId })] })]);
+  expect(f.children()).toHaveLength(1);
 }), hostTimeout(60_000));

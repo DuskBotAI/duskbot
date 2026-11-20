@@ -24,6 +24,7 @@ LOGS_DIR=/var/log/duskbot-link
 OPT=/opt/duskbot-link
 MANIFEST=/var/lib/duskbot/install-manifest
 FENCE=/usr/local/sbin/omb-host-fence
+CLI=/usr/local/bin/duskbot
 UNITS=/etc/systemd/system
 OUR_UNITS="duskbot-server-update.timer duskbot-server-update.service duskbot-link.service duskbot-cloudflared.service duskbot.service duskbot-engines.path duskbot-restart.service duskbot-handoff.service omb-docker-gate.service omb-box-fence.service"
 # the accounts install.sh splits the server into (link agent, docker gate) and their files
@@ -313,8 +314,10 @@ our_paths() {
     [ -e "$_p" ] && printf '%s\n' "$_p"
   done
   for _u in $OUR_UNITS; do [ -e "$UNITS/$_u" ] && printf '%s\n' "$UNITS/$_u"; done
+  cli_ours && printf '%s\n' "$CLI"
   return 0
 }
+cli_ours() { grep -qs "managed by duskbot-link" "$CLI"; }
 # packages install.sh added that are still installed (the ones --all takes away)
 our_pkgs() {
   _have=$(dpkg-query -W -f '${db:Status-Abbrev} ${Package}\n' 2>/dev/null | awk '$1 ~ /^ii/ { print $2 }')
@@ -763,6 +766,7 @@ do_files() {
   for path in "$OPT" "$LOGS_DIR" "$STATE" "$FENCE" "$LIB" "$ETC" /etc/duskbot-address.json /etc/duskbot-cloudflared; do
     if [ -e "$path" ]; then x rm -rf "$path"; removed="$removed $path"; fi
   done
+  if cli_ours; then x rm -f "$CLI"; removed="$removed $CLI"; fi
   # the manifest keeps only what is still installed (packages, apt sources), so a later --all can take those too
   if [ -f "$MANIFEST" ] && [ "$ALL" = 0 ]; then
     grep -E '^(pkg|file) ' "$MANIFEST" > "$TMP/manifest" || true

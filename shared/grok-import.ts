@@ -97,6 +97,9 @@ export interface GrokBot {
   distill?: string[];
   /** A picture it already had: PNG, JPEG or WebP, base64, at most 64 KB. */
   avatar?: { mime: "image/png" | "image/jpeg" | "image/webp"; data: string };
+  /** Where its Telegram or Discord bot was set up in the app it came from (`openclaw:<folder>` or `hermes:<folder>`), so
+   * the server can connect the same chat-app bot after the move. Never the token itself. */
+  channelRef?: string;
 }
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>

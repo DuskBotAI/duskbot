@@ -1,0 +1,92 @@
+{
+  "path": "/integrations/notion/fetch-database-row",
+  "type": "action",
+  "title": "Read the details of one Notion database entry with AI",
+  "nav": "read one database row",
+  "h1": "look up the fields on one notion database row",
+  "description": "Get the date, status or reference saved on one Notion row. Give the bot the entry itself and keep a blank field separate from notes in the page body.",
+  "keyword": "read notion database row with ai",
+  "keywords": [
+    "chatgpt get notion row properties",
+    "claude read one notion entry",
+    "look up notion database row by page id"
+  ],
+  "answer": "**need the return date for one loan? give the bot that loan's row.** each notion database entry has its own page id. the bot reads the properties on that entry, including a return date if someone filled it in. notes written inside the page body need a separate block read.",
+  "updated": "2026-11-20",
+  "review": {
+    "status": "approved",
+    "by": "lead agent, after four independent reviewers read every page against seo/facts (2026-11-20); every finding applied",
+    "at": "2026-11-20"
+  },
+  "tags": [
+    "notion",
+    "read one database row"
+  ],
+  "connectors": [
+    "notion"
+  ],
+  "related": [
+    "/integrations/notion",
+    "/integrations/notion/fetch-database",
+    "/integrations/notion/fetch-all-notion-block-contents"
+  ],
+  "art": {
+    "logo": "notion",
+    "label": "Notion",
+    "props": [
+      "p-receipt",
+      "p-magnifier"
+    ],
+    "bubble": "which date is on file"
+  },
+  "og_line": "one entry, exactly as filed.",
+  "action": {
+    "toolkit": "notion",
+    "slug": "NOTION_FETCH_ROW"
+  },
+  "what": "**use the link for the individual entry when the question has a single subject.** open the row as a page and copy its link. the bot can use its page id to fetch the entry's fields and metadata. give the date column its exact name if the tracker also has a collection date or a booking date.",
+  "uses": [
+    "read the collection reference from a single loan before arriving at the counter",
+    "compare a framed print's promised return date with today's packing slip",
+    "see whether the condition field on one consignment has a value before accepting it"
+  ],
+  "routine": {
+    "message": "at 4 on weekdays, open the notion row linked in my current print loan file. put the print title, borrower and agreed return date here. if the return field is empty, say no return date recorded and leave it there. never fill it from another date or edit the loan.",
+    "when": "weekdays at 4 pm during the print loan",
+    "needs": "notion read only for the row and access to the current print loan file",
+    "output": "low tide, lithograph\nborrower: audrey miles\nagreed return: no return date recorded\ncollection date is present but doesn't answer the question."
+  },
+  "steps": [
+    "connect notion with **read only** for the bot that handles loans.",
+    "open one loan entry as a page. paste its link or place it in the loan file the routine reads.",
+    "ask for the title and one known field to confirm the match before relying on the daily note."
+  ],
+  "watch": [
+    "**the whole database has a different id.** use the page id belonging to the record. a title alone can match several loans.",
+    "**blank properties can coexist with long notes.** reading the row won't discover an extension written in a paragraph underneath it."
+  ],
+  "faq": [
+    {
+      "q": "why does the bot need a page id for a table row?",
+      "a": "**a notion row is also a page.** its page id follows that individual record. the database id points to the collection."
+    },
+    {
+      "q": "can it look up a clause i wrote below the properties?",
+      "a": "**ask it to read the content blocks for that same row.** keep the quoted clause separate from the value shown in the date field."
+    }
+  ],
+  "sources": [
+    {
+      "label": "dusk bot docs: files and apps",
+      "url": "/docs/files-and-apps"
+    },
+    {
+      "label": "dusk bot docs: routines",
+      "url": "/docs/routines"
+    }
+  ],
+  "voice": 2,
+  "tip": {
+    "text": "if you need every overdue loan, query the database by date. reading one row is the right size for a question about a particular print."
+  }
+}

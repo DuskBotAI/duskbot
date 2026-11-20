@@ -1,0 +1,230 @@
+{
+  "path": "/vs/grok-bot",
+  "type": "comparison",
+  "title": "Dusk bot vs Grok Bot for a month of everyday use",
+  "nav": "dusk bot vs grok bot",
+  "h1": "dusk bot vs grok bot for a month of use",
+  "description": "Compare a light month and a heavy month on dusk bot and Grok Bot, then see where your chats live, how phone access works and what happens if you leave.",
+  "keyword": "dusk bot vs grok bot",
+  "keywords": [
+    "grok bot vs",
+    "grok bot free",
+    "grok bot review"
+  ],
+  "answer": "**if you already pay for ai and mostly work at your desk, dusk bot adds no personal desktop fee.** if you already have x premium, grok bot includes a cloud computer in that bill. the difference shows up when you hit a limit, switch phones or want your files back.[^1][^2][^3][^4]",
+  "tags": [
+    "grok bot",
+    "comparison",
+    "billing",
+    "phone"
+  ],
+  "related": [
+    "/guides/grok-bot-pricing",
+    "/guides/move-from-grok-bot",
+    "/alternatives/grok-bot",
+    "/use-your-ai-subscription"
+  ],
+  "art": {
+    "props": [
+      "s-mobile",
+      "p-laptop"
+    ],
+    "bubble": "where will it live",
+    "label": "Grok Bot"
+  },
+  "og_line": "price a month, then plan the exit.",
+  "competitor": {
+    "key": "grok-bot",
+    "name": "Grok Bot",
+    "url": "https://x.ai/news/introducing-grok-bot"
+  },
+  "verdict": {
+    "them_title": "grok bot",
+    "them": [
+      "**you already use the x bundle.** try its included computer before you buy hosting elsewhere.[^1][^5]",
+      "**you rely on a native android app.** grok bot has one and can finish cloud work after your phone goes away.[^2]"
+    ],
+    "dusk": [
+      "**you want your notes on your own disk.** choose the desktop and decide which ai handles each bot.[^6][^7]",
+      "**you want different models for different jobs.** changing one bot's model leaves its files and memory in place.[^7]"
+    ]
+  },
+  "compare": {
+    "h": "from sign-in to cancellation",
+    "intro": "**follow a chat from the device in your hand to the machine that keeps it.** these choices affect what you can still reach at the end of the month.",
+    "cols": [
+      "dusk bot",
+      "Grok Bot"
+    ],
+    "rows": [
+      {
+        "label": "time to get started",
+        "cells": [
+          "desktop setup starts with your ai sign-in. optional dusk cloud takes about a minute",
+          "download the app and sign in with cursor. the faq gives no time estimate"
+        ],
+        "src": [
+          2,
+          3,
+          8
+        ]
+      },
+      {
+        "label": "where your data lives",
+        "cells": [
+          "chats and files live on your desktop, your server or your dusk cloud machine",
+          "cloud storage required. bots share files, browser sessions and logins on your cloud computer"
+        ],
+        "src": [
+          5,
+          6,
+          9
+        ]
+      },
+      {
+        "label": "who sees the prompt",
+        "cells": [
+          "from the bot’s machine straight to the ai provider you chose",
+          "cursor’s privacy settings apply. a provider on its sub-processor list may handle the task"
+        ],
+        "src": [
+          6,
+          9
+        ]
+      },
+      {
+        "label": "if you change your mind about the ai",
+        "cells": [
+          "switch a single bot to another model and keep its chat",
+          "no model picker, visible model name or personal api key"
+        ],
+        "src": [
+          2,
+          7
+        ]
+      },
+      {
+        "label": "what works on your phone",
+        "cells": [
+          "iphone app. android uses a paired browser until the store app arrives. that browser has no notifications",
+          "iphone, ipad and android apps. no general web chat"
+        ],
+        "src": [
+          2,
+          10
+        ]
+      },
+      {
+        "label": "if you stop paying",
+        "cells": [
+          "local bots carry on. dusk holds a canceled cloud machine for 30 days before deletion",
+          "access depends on a qualifying plan. account deletion is a separate decision that also deletes cursor"
+        ],
+        "src": [
+          2,
+          3
+        ]
+      },
+      {
+        "label": "what you can save first",
+        "cells": [
+          "password-protected full backup, excluding sign-ins and keys",
+          "download individual files or all files. a bot template leaves out conversations and memory"
+        ],
+        "src": [
+          6,
+          11
+        ]
+      }
+    ]
+  },
+  "sections": [
+    {
+      "h": "a light month at your own desk",
+      "md": "**compare the extra cost against what you already pay.** suppose you use a bot occasionally for personal work. your current ai plan covers it, and your computer is awake when you need it. for grok, assume monthly premium and usage within the weekly pool.[^1][^4][^12]\n\n```text\ndusk desktop: existing ai bill + $0 = existing ai bill\ngrok, new subscriber: $30 premium + $0 overage = $30\ngrok, already on premium: $30 total - $30 already budgeted = $0 extra\n```\n\nif you plan to keep premium for cursor anyway, switching the bot alone won't save that $30."
+    },
+    {
+      "h": "a heavy month with the laptop shut",
+      "md": "**price the computer and the extra ai separately.** suppose you want a hosted machine for work. dusk pro includes a work license. on grok, compare a monthly tier such as ultra. neither price tells you how much your particular job will use.[^1][^3][^4][^12]\n\n```text\ndusk pro: $12 work license + $38 hosting = $50\nmonth on dusk pro = $50 + your provider's ai charges\nmonth on x ultra = $200 + prepaid credits used beyond the pool\n```\n\nultra is an example, not a requirement for heavy use. grok publishes relative allowances but no fixed number of finished tasks. on dusk, a larger cloud machine does not buy more ai from your provider. use your own bill to fill in the missing amount.[^3][^4][^12]"
+    },
+    {
+      "h": "the last day of the subscription",
+      "md": "**save anything you need before you give up access.** a dusk backup leaves out credentials. restoring it replaces the current setup and brings routines back paused.[^6]\n\non grok, downloading files and sharing a bot template serve different purposes. neither gives you a full chat archive.[^11] deleting the cursor account removes bots, chats and computers, with a purge within 30 days.[^2] use the [migration steps](/guides/move-from-grok-bot) if you want to keep the bot’s working setup."
+    }
+  ],
+  "method": "**these examples show bills, not a speed test.** we make dusk bot. the grok plan and app details come from sources checked on 20 november 2026. for each example we state what the person already pays for. neither company quotes a per-task price for the work in those examples.",
+  "faq": [
+    {
+      "q": "do i need a dusk subscription to use it on my phone?",
+      "a": "**you can pair your phone to the desktop for personal use.** leave the computer on and dusk running. pair to dusk cloud instead if you need replies when the computer is off.[^4][^10]"
+    },
+    {
+      "q": "is grok bot free if i have a cursor subscription?",
+      "a": "**eligible legacy cursor plans already include it.** paid individual plans and self-serve teams qualify. usage beyond the weekly pool can still reach on-demand billing. see the [pricing breakdown](/guides/grok-bot-pricing).[^2][^12]"
+    }
+  ],
+  "updated": "2026-11-20",
+  "review": {
+    "status": "approved",
+    "by": "lead agent, after four independent reviewers read every page against seo/facts (2026-11-20); every finding applied",
+    "at": "2026-11-20"
+  },
+  "voice": 2,
+  "connectors": [],
+  "sources": [
+    {
+      "label": "x subscription plans",
+      "url": "https://docs.x.ai/x-subscription/pricing.md",
+      "checked": "2026-11-20"
+    },
+    {
+      "label": "grok bot access, apps and account closure",
+      "url": "https://docs.x.ai/grok-bot/faq.md",
+      "checked": "2026-11-20"
+    },
+    {
+      "label": "dusk cloud setup and cancellation",
+      "url": "/docs/dusk-cloud"
+    },
+    {
+      "label": "dusk bot billing",
+      "url": "/docs/account-and-billing"
+    },
+    {
+      "label": "grok bot computer and apps",
+      "url": "https://docs.x.ai/grok-bot/computer-and-apps.md",
+      "checked": "2026-11-20"
+    },
+    {
+      "label": "dusk storage, privacy and backups",
+      "url": "/docs/privacy-and-data"
+    },
+    {
+      "label": "dusk model changes",
+      "url": "/docs/bots"
+    },
+    {
+      "label": "dusk desktop setup",
+      "url": "/docs/getting-started"
+    },
+    {
+      "label": "grok bot security and privacy",
+      "url": "https://docs.x.ai/grok-bot/approvals-security-and-privacy.md",
+      "checked": "2026-11-20"
+    },
+    {
+      "label": "dusk phone apps and pairing",
+      "url": "/docs/phone"
+    },
+    {
+      "label": "grok bot files and template copies",
+      "url": "https://docs.x.ai/grok-bot/bots.md",
+      "checked": "2026-11-20"
+    },
+    {
+      "label": "x subscription usage",
+      "url": "https://docs.x.ai/x-subscription/usage-limits.md",
+      "checked": "2026-11-20"
+    }
+  ]
+}

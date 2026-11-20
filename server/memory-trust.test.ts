@@ -36,6 +36,13 @@ describe("whether a turn read outside content", () => {
     expect(readOutsideContent([ask, { role: "bot", kind: "activity", tool: { name: "mcp__agents__web_search_many" } }])).toBe(true);
     expect(readOutsideContent([ask, { role: "bot", kind: "activity", tool: { name: "mcp__github__get_repo" } }])).toBe(true);
   });
+
+  it("does not count the person's own Mac as outside content, so a download there does not make the rest of the turn ask", () => {
+    for (const mac of ["device_mac_download", "mcp__device__mac_download", "mcp__device__mac_exec", "device__mac_list", "device.mac_read_file"]) {
+      expect(readOutsideContent([ask, { role: "bot", kind: "activity", tool: { name: mac } }]), mac).toBe(false);
+    }
+    expect(readOutsideContent([ask, { role: "bot", kind: "activity", tool: { name: "mcp__device__phone_notifications" } }])).toBe(true);
+  });
 });
 
 describe("what the person said themselves", () => {

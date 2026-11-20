@@ -1,0 +1,2354 @@
+{
+  "toolkit": "calendly",
+  "name": "Calendly",
+  "version": "20261120_00",
+  "description": "Calendly is an appointment scheduling tool that automates meeting invitations, availability checks, and reminders, helping individuals and teams avoid email back-and-forth",
+  "managed_sign_in": true,
+  "auth": [
+    "OAuth2"
+  ],
+  "tools_count": 57,
+  "triggers_count": 10,
+  "tools": [
+    {
+      "name": "Cancel scheduled event",
+      "slug": "CALENDLY_CANCEL_SCHEDULED_EVENT",
+      "kind": "write",
+      "description": "Tool to cancel a scheduled Calendly event by creating a cancellation record. Use when you need to permanently cancel an existing, active event. The cancellation will trigger notifications to all invitees.",
+      "inputs": [
+        {
+          "name": "reason",
+          "type": "string",
+          "required": false,
+          "about": "Optional text explanation for why the event is being canceled. This reason will be included in the cancellation notification sent to invitees."
+        },
+        {
+          "name": "event_uuid",
+          "type": "string",
+          "required": true,
+          "about": "The unique identifier (UUID) of the scheduled event to cancel. This can be extracted from the scheduled_events URI or event details."
+        }
+      ],
+      "scopes": [
+        "default"
+      ],
+      "tags": [
+        "important",
+        "idempotentHint",
+        "scheduled_events",
+        "updateHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Create event invitee (Deprecated)",
+      "slug": "CALENDLY_CREATE_EVENT_INVITEE",
+      "kind": "write",
+      "description": "DEPRECATED: Use CALENDLY_POST_INVITEE instead. Tool to programmatically schedule Calendly meetings without UI redirects. Use when you need to book a meeting on behalf of an invitee via API. Requires a paid Calendly plan.",
+      "inputs": [
+        {
+          "name": "invitee",
+          "type": "object",
+          "required": true,
+          "about": "Details of the attendee being scheduled for the meeting"
+        },
+        {
+          "name": "location",
+          "type": "object",
+          "required": true,
+          "about": "Meeting location details. Required unless the event type omits location specification."
+        },
+        {
+          "name": "tracking",
+          "type": "object",
+          "required": false,
+          "about": "UTM parameters and tracking information for marketing attribution."
+        },
+        {
+          "name": "event_type",
+          "type": "string",
+          "required": true,
+          "about": "The event type to book. Accepts either the full URI (e.g., 'https://api.calendly.com/event_types/AAAAAAAAAAAAAAAA') or just the UUID (e.g., 'AAAAAAAAAAAAAAAA'). Use list_user_s_event_types action to get available event types."
+        },
+        {
+          "name": "start_time",
+          "type": "string",
+          "required": true,
+          "about": "Meeting start time in ISO 8601 UTC format (e.g., '2025-10-02T18:30:00Z'). Use list_event_type_available_times action to check available slots before booking."
+        },
+        {
+          "name": "event_guests",
+          "type": "array",
+          "required": false,
+          "about": "List of additional email addresses to include as guests in the meeting"
+        },
+        {
+          "name": "questions_and_answers",
+          "type": "array",
+          "required": false,
+          "about": "List of custom question responses from the booking form. Include only if the event type has custom questions."
+        }
+      ],
+      "scopes": "$undefined",
+      "tags": [
+        "Scheduling",
+        "Invitees",
+        "deprecated",
+        "createHint"
+      ],
+      "deprecated": true
+    },
+    {
+      "name": "Create Event Type",
+      "slug": "CALENDLY_CREATE_EVENT_TYPE",
+      "kind": "write",
+      "description": "Tool to create a new one-on-one event type (kind: solo) in Calendly. Use when you need to programmatically create a new event type for scheduling meetings.",
+      "inputs": [
+        {
+          "name": "name",
+          "type": "string",
+          "required": true,
+          "about": "The event type name that will be displayed to invitees"
+        },
+        {
+          "name": "color",
+          "type": "string",
+          "required": false,
+          "about": "Hexadecimal color value for the scheduling page. Must match pattern ^#[a-f\\d]{6}$ (e.g., '#fff200')"
+        },
+        {
+          "name": "owner",
+          "type": "string",
+          "required": true,
+          "about": "The owner URI for this event type (e.g., 'https://api.calendly.com/users/AAAAAAAAAAAAAAAA'). Must be a valid user URI."
+        },
+        {
+          "name": "active",
+          "type": "boolean",
+          "required": false,
+          "about": "Indicates if the event type is active and available for booking. Defaults to false if not provided."
+        },
+        {
+          "name": "locale",
+          "type": "string",
+          "required": false,
+          "about": "Locale for the event type's scheduling page language"
+        },
+        {
+          "name": "duration",
+          "type": "integer",
+          "required": false,
+          "about": "Length of sessions in minutes. Must be between 1 and 720 minutes. Should be one of the duration_options if both are provided."
+        },
+        {
+          "name": "locations",
+          "type": "array",
+          "required": false,
+          "about": "Configuration information for each possible location where the event can take place"
+        },
+        {
+          "name": "description",
+          "type": "string",
+          "required": false,
+          "about": "The event type description that will be shown on the scheduling page"
+        },
+        {
+          "name": "duration_options",
+          "type": "array",
+          "required": false,
+          "about": "Alternative duration choices for flexible meetings. Maximum 4 unique values allowed. Each must be between 1 and 720 minutes."
+        }
+      ],
+      "scopes": [
+        "default"
+      ],
+      "tags": [
+        "important",
+        "event_types",
+        "createHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Create One-Off Event Type",
+      "slug": "CALENDLY_CREATE_ONE_OFF_EVENT_TYPE",
+      "kind": "write",
+      "description": "Creates a temporary Calendly one-off event type for a host, with a duration and date setting for the meeting availability.",
+      "inputs": [
+        {
+          "name": "host",
+          "type": "string",
+          "required": true,
+          "about": "The URI of the user who will be the host of the one-off event (e.g., 'https://api.calendly.com/users/xxx')"
+        },
+        {
+          "name": "name",
+          "type": "string",
+          "required": true,
+          "about": "Name of the one-off event type"
+        },
+        {
+          "name": "duration",
+          "type": "integer",
+          "required": true,
+          "about": "Duration of the event in minutes. Note: Pass this as 'duration', not 'duration_minutes'."
+        },
+        {
+          "name": "location",
+          "type": "object",
+          "required": false,
+          "about": "Location configuration for the event."
+        },
+        {
+          "name": "timezone",
+          "type": "string",
+          "required": false,
+          "about": "IANA timezone identifier for the event scheduling. Determines how times are interpreted and displayed to invitees."
+        },
+        {
+          "name": "date_setting",
+          "type": "",
+          "required": true,
+          "about": "Date & time availability for this one-off event. Must be an object with a `type` key equal to ONE of: `'date_range'`, `'days_in_future'`, or `'spots'`.\n• `date_range` → include `start_date` & `end_date` (YYYY-MM-DD).\n• `days_in_future` → include `days` (int) and `only_weekdays` (bool).\n• `spots` → i"
+        }
+      ],
+      "scopes": [
+        "default",
+        "event_types:write"
+      ],
+      "tags": [
+        "Event Types",
+        "openWorldHint",
+        "createHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Create scheduling link",
+      "slug": "CALENDLY_CREATE_SCHEDULING_LINK",
+      "kind": "write",
+      "description": "Create a single-use scheduling link. Creates a scheduling link that can be used to book an event. The link allows invitees to schedule up to the specified maximum number of events. Once the limit is reached, the link becomes inactive.",
+      "inputs": [
+        {
+          "name": "owner",
+          "type": "string",
+          "required": true,
+          "about": "Event type URI (e.g., 'https://api.calendly.com/event_types/...')"
+        },
+        {
+          "name": "owner_type",
+          "type": "string",
+          "required": false,
+          "about": "Type of owner, typically 'EventType'"
+        },
+        {
+          "name": "max_event_count",
+          "type": "integer",
+          "required": false,
+          "about": "The max number of events that can be scheduled using this scheduling link. Must be exactly 1 for single-use scheduling links."
+        }
+      ],
+      "scopes": [
+        "default",
+        "scheduling_links:write"
+      ],
+      "tags": [
+        "Scheduling Links",
+        "openWorldHint",
+        "createHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Create share",
+      "slug": "CALENDLY_CREATE_SHARE",
+      "kind": "send",
+      "description": "Creates a customizable, one-time share link for a Calendly event type, allowing specific overrides to its settings (e.g., duration, availability, location) without altering the original event type.",
+      "inputs": [
+        {
+          "name": "name",
+          "type": "string",
+          "required": false,
+          "about": "Custom name for the shared link; defaults to event type name if unspecified."
+        },
+        {
+          "name": "duration",
+          "type": "integer",
+          "required": false,
+          "about": "Custom event duration in minutes, overriding event type default."
+        },
+        {
+          "name": "end_date",
+          "type": "string",
+          "required": false,
+          "about": "End date (YYYY-MM-DD) for shared link availability; required if `period_type` is 'fixed'."
+        },
+        {
+          "name": "event_type",
+          "type": "string",
+          "required": true,
+          "about": "URI of the event type to base this share on."
+        },
+        {
+          "name": "start_date",
+          "type": "string",
+          "required": false,
+          "about": "Start date (YYYY-MM-DD) for shared link availability; required if `period_type` is 'fixed'."
+        },
+        {
+          "name": "period_type",
+          "type": "string",
+          "required": false,
+          "about": "Availability period type: 'available_moving' (shows actual available slots for `max_booking_time` days), 'moving' (available for `max_booking_time` days), 'fixed' (within `start_date`/`end_date`), 'unlimited'."
+        },
+        {
+          "name": "hide_location",
+          "type": "boolean",
+          "required": false,
+          "about": "If true, hides event location until booking (only if event type has a single custom location)."
+        },
+        {
+          "name": "duration_options",
+          "type": "array",
+          "required": false,
+          "about": "Alternative selectable durations in minutes, overriding event type options."
+        },
+        {
+          "name": "max_booking_time",
+          "type": "integer",
+          "required": false,
+          "about": "Max days in advance an invitee can book; required if `period_type` is 'moving' or 'available_moving'."
+        },
+        {
+          "name": "location_configurations",
+          "type": "array",
+          "required": false,
+          "about": "Custom location settings that override the event type's default locations. Each configuration specifies a location type and associated details."
+        },
+        {
+          "name": "availability__rule__rules",
+          "type": "array",
+          "required": false,
+          "about": "List of custom availability rules that override the event type's default schedule. Provide an array of objects EACH containing: `type`=`'wday'`, `wday` (weekday), and `intervals` (list of `{from, to}` times). Field names are case-sensitive – use **`wday`, `from`, `to`** exactly. Must be combined wit"
+        },
+        {
+          "name": "availability__rule__timezone",
+          "type": "string",
+          "required": false,
+          "about": "IANA timezone (e.g., 'America/New_York') for custom availability rules. Required with `availability_rule_rules`."
+        }
+      ],
+      "scopes": [
+        "default",
+        "scheduling_links:write"
+      ],
+      "tags": [
+        "Shares",
+        "openWorldHint",
+        "createHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Create single use scheduling link",
+      "slug": "CALENDLY_CREATE_SINGLE_USE_SCHEDULING_LINK",
+      "kind": "write",
+      "description": "Creates a one-time, single-use scheduling link for an active Calendly event type, expiring after one booking.",
+      "inputs": [
+        {
+          "name": "owner",
+          "type": "string",
+          "required": true,
+          "about": "The URI of the Calendly Event Type that will own this single-use scheduling link. This Event Type's settings (e.g., duration, availability) will apply to the scheduled meeting."
+        },
+        {
+          "name": "owner_type",
+          "type": "string",
+          "required": true,
+          "about": "Identifies the owner resource type, which is 'EventType'."
+        },
+        {
+          "name": "max_event_count",
+          "type": "integer",
+          "required": true,
+          "about": "The maximum number of events that can be scheduled using this link. For a single-use link, this value must be 1."
+        }
+      ],
+      "scopes": [
+        "default",
+        "scheduling_links:write"
+      ],
+      "tags": [
+        "Scheduling Links",
+        "openWorldHint",
+        "createHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Create webhook subscription",
+      "slug": "CALENDLY_CREATE_WEBHOOKS",
+      "kind": "write",
+      "description": "Tool to create a webhook subscription for receiving Calendly event notifications. Use when you need to set up automated notifications for events like meeting bookings or cancellations. Organization scope triggers webhooks for all events organization-wide, while user/group scopes limit triggering to specific users or groups.",
+      "inputs": [
+        {
+          "name": "url",
+          "type": "string",
+          "required": true,
+          "about": "The publicly accessible HTTPS callback URL where webhook events will be sent via POST requests. Must be active and able to receive POST requests."
+        },
+        {
+          "name": "user",
+          "type": "string",
+          "required": false,
+          "about": "URI reference to the user for user-scoped webhooks (e.g., 'https://api.calendly.com/users/AAAAAAAAAAAAAAAA'). Required when scope is 'user', otherwise omit."
+        },
+        {
+          "name": "group",
+          "type": "string",
+          "required": false,
+          "about": "URI reference to the group for group-scoped webhooks (e.g., 'https://api.calendly.com/groups/AAAAAAAAAAAAAAAA'). Required when scope is 'group', otherwise omit."
+        },
+        {
+          "name": "scope",
+          "type": "string",
+          "required": true,
+          "about": "Subscription scope determining which events trigger the webhook. 'organization' triggers for all events in the organization, 'user' triggers only for a specific user's events, 'group' triggers only for a specific group's events."
+        },
+        {
+          "name": "events",
+          "type": "array",
+          "required": true,
+          "about": "List of event types to subscribe to. Valid values: 'invitee.created', 'invitee.canceled', 'invitee_no_show.created', 'invitee_no_show.deleted', 'routing_form_submission.created', 'event_type.created', 'event_type.deleted', 'event_type.updated'. At least one event must be specified."
+        },
+        {
+          "name": "signing_key",
+          "type": "string",
+          "required": false,
+          "about": "Optional secret key (6-24 characters) used to generate signatures for webhook security validation. Helps verify that webhook POST requests are genuinely from Calendly."
+        },
+        {
+          "name": "organization",
+          "type": "string",
+          "required": true,
+          "about": "URI reference to the organization that owns this webhook subscription (e.g., 'https://api.calendly.com/organizations/AAAAAAAAAAAAAAAA'). Required for all webhook subscriptions."
+        }
+      ],
+      "scopes": [
+        "routing_forms:read"
+      ],
+      "tags": [
+        "important",
+        "webhooks",
+        "createHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Delete invitee data",
+      "slug": "CALENDLY_DELETE_INVITEE_DATA",
+      "kind": "write",
+      "description": "Permanently removes all invitee data associated with the provided emails from past organization events, for data privacy compliance (requires Enterprise subscription; deletion may take up to one week).",
+      "inputs": [
+        {
+          "name": "emails",
+          "type": "array",
+          "required": true,
+          "about": "Invitee email addresses for whom all associated data will be permanently removed."
+        }
+      ],
+      "scopes": [
+        "default",
+        "data_compliance:write"
+      ],
+      "tags": [
+        "Data Compliance",
+        "destructiveHint",
+        "openWorldHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Delete invitee no show",
+      "slug": "CALENDLY_DELETE_INVITEE_NO_SHOW",
+      "kind": "write",
+      "description": "Deletes an Invitee No-Show record by its `uuid` to reverse an invitee's 'no-show' status; the `uuid` must refer to an existing record.",
+      "inputs": [
+        {
+          "name": "uuid",
+          "type": "string",
+          "required": true,
+          "about": "The unique identifier (UUID) of the Invitee No-Show record to be removed."
+        }
+      ],
+      "scopes": [
+        "default",
+        "scheduled_events:write"
+      ],
+      "tags": [
+        "Scheduled Events",
+        "updateHint",
+        "openWorldHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Delete organization membership",
+      "slug": "CALENDLY_DELETE_ORGANIZATION_MEMBERSHIP",
+      "kind": "write",
+      "description": "Tool to remove a user from a Calendly organization by membership UUID. Use when you need to revoke a user's access to an organization. Requires admin rights; organization owners cannot be removed.",
+      "inputs": [
+        {
+          "name": "uuid",
+          "type": "string",
+          "required": true,
+          "about": "The unique identifier of the organization membership to be removed. This is the membership UUID, not the user UUID."
+        }
+      ],
+      "scopes": [
+        "organizations:write"
+      ],
+      "tags": [
+        "important",
+        "updateHint",
+        "idempotentHint",
+        "organization_and_team"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Delete scheduled event data",
+      "slug": "CALENDLY_DELETE_SCHEDULED_EVENT_DATA",
+      "kind": "write",
+      "description": "For Enterprise users, initiates deletion of an organization's scheduled event data between a `start_time` and `end_time` (inclusive, where `start_time` must be <= `end_time`); actual data deletion may take up to 7 days to complete.",
+      "inputs": [
+        {
+          "name": "end_time",
+          "type": "string",
+          "required": true,
+          "about": "Defines the end of the data deletion period (UTC). Events ending at or before this time will be included. Must be within the past 24 months."
+        },
+        {
+          "name": "start_time",
+          "type": "string",
+          "required": true,
+          "about": "Defines the start of the data deletion period (UTC). Events starting at or after this time will be included. Must be within the past 24 months."
+        }
+      ],
+      "scopes": [
+        "default",
+        "data_compliance:write"
+      ],
+      "tags": [
+        "Data Compliance",
+        "destructiveHint",
+        "openWorldHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Delete webhook subscription",
+      "slug": "CALENDLY_DELETE_WEBHOOK_SUBSCRIPTION",
+      "kind": "write",
+      "description": "Deletes an existing webhook subscription to stop Calendly sending event notifications to its registered callback URL; this operation is idempotent.",
+      "inputs": [
+        {
+          "name": "webhook_uuid",
+          "type": "string",
+          "required": true,
+          "about": "The unique identifier (UUID) of the webhook subscription to be deleted."
+        }
+      ],
+      "scopes": [
+        "organization"
+      ],
+      "tags": [
+        "Webhooks",
+        "destructiveHint",
+        "idempotentHint",
+        "openWorldHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get current user (Deprecated)",
+      "slug": "CALENDLY_GET_CURRENT_USER",
+      "kind": "read",
+      "description": "DEPRECATED: Use CALENDLY_GET_USER instead. Retrieves detailed information about the currently authenticated Calendly user.",
+      "inputs": [
+        {
+          "name": "0",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "1",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "2",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "3",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "4",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "5",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "6",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "7",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "8",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "9",
+          "type": "",
+          "required": false,
+          "about": ""
+        }
+      ],
+      "scopes": [
+        "default"
+      ],
+      "tags": [
+        "Users",
+        "openWorldHint",
+        "readOnlyHint",
+        "deprecated"
+      ],
+      "deprecated": true
+    },
+    {
+      "name": "Get event",
+      "slug": "CALENDLY_GET_EVENT",
+      "kind": "read",
+      "description": "Use to retrieve a specific Calendly scheduled event by its UUID, provided the event exists in the user's Calendly account.",
+      "inputs": [
+        {
+          "name": "uuid",
+          "type": "string",
+          "required": true,
+          "about": "Unique identifier (UUID) of the Calendly event."
+        }
+      ],
+      "scopes": [
+        "scheduled_events:read"
+      ],
+      "tags": [
+        "Scheduled Events",
+        "openWorldHint",
+        "readOnlyHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get event invitee",
+      "slug": "CALENDLY_GET_EVENT_INVITEE",
+      "kind": "read",
+      "description": "Retrieves detailed information about a specific invitee of a scheduled event, using their unique UUIDs.",
+      "inputs": [
+        {
+          "name": "event_uuid",
+          "type": "string",
+          "required": true,
+          "about": "The unique identifier (UUID) of the scheduled event."
+        },
+        {
+          "name": "invitee_uuid",
+          "type": "string",
+          "required": true,
+          "about": "The unique identifier (UUID) of the invitee for the specified event."
+        }
+      ],
+      "scopes": [
+        "default",
+        "scheduled_events:read"
+      ],
+      "tags": [
+        "Scheduled Events",
+        "openWorldHint",
+        "readOnlyHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get event type",
+      "slug": "CALENDLY_GET_EVENT_TYPE",
+      "kind": "read",
+      "description": "Retrieves details for a specific Calendly event type, identified by its UUID, which must be valid and correspond to an existing event type.",
+      "inputs": [
+        {
+          "name": "uuid",
+          "type": "string",
+          "required": false,
+          "about": "Unique identifier (UUID) for the event type. This is a required path parameter - extract the UUID from the event type URI (e.g., for 'https://api.calendly.com/event_types/abc123', use 'abc123')."
+        }
+      ],
+      "scopes": [
+        "user:read"
+      ],
+      "tags": [
+        "Event Types",
+        "openWorldHint",
+        "readOnlyHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get event type availability",
+      "slug": "CALENDLY_GET_EVENT_TYPE_AVAILABILITY",
+      "kind": "read",
+      "description": "Tool to retrieve availability schedules configured for a specific Calendly event type. Use when you need to get the availability rules including day-of-week schedules and date-specific overrides.",
+      "inputs": [
+        {
+          "name": "user",
+          "type": "string",
+          "required": false,
+          "about": "URI of the user associated with the event type. Optional parameter to filter by user."
+        },
+        {
+          "name": "event_type",
+          "type": "string",
+          "required": true,
+          "about": "URI of the event type whose availability schedules are to be listed. Must be a valid Calendly event type URI. Retrieve this URI from CALENDLY_LIST_EVENT_TYPES; using a URI not owned by the authenticated user returns a 403 error."
+        }
+      ],
+      "scopes": [
+        "default"
+      ],
+      "tags": [
+        "important",
+        "readOnlyHint",
+        "event_types"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get group",
+      "slug": "CALENDLY_GET_GROUP",
+      "kind": "read",
+      "description": "Retrieves all attributes of a specific Calendly group by its UUID; the group must exist.",
+      "inputs": [
+        {
+          "name": "uuid",
+          "type": "string",
+          "required": true,
+          "about": "Unique identifier (UUID) of the Calendly group."
+        }
+      ],
+      "scopes": [
+        "default"
+      ],
+      "tags": [
+        "Groups",
+        "openWorldHint",
+        "readOnlyHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get group relationship",
+      "slug": "CALENDLY_GET_GROUP_RELATIONSHIP",
+      "kind": "read",
+      "description": "Retrieves a specific Calendly group relationship by its valid and existing UUID, providing details on user-group associations and membership.",
+      "inputs": [
+        {
+          "name": "uuid",
+          "type": "string",
+          "required": true,
+          "about": "The unique identifier (UUID) of the group relationship to be retrieved."
+        }
+      ],
+      "scopes": [
+        "default",
+        "groups:read"
+      ],
+      "tags": [
+        "Groups",
+        "openWorldHint",
+        "readOnlyHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get invitee no show",
+      "slug": "CALENDLY_GET_INVITEE_NO_SHOW",
+      "kind": "read",
+      "description": "Retrieves details for a specific Invitee No Show record by its UUID; an Invitee No Show is marked when an invitee does not attend a scheduled event.",
+      "inputs": [
+        {
+          "name": "uuid",
+          "type": "string",
+          "required": true,
+          "about": "The unique identifier (UUID) of the Invitee No Show record to retrieve."
+        }
+      ],
+      "scopes": [
+        "default",
+        "scheduled_events:read"
+      ],
+      "tags": [
+        "Scheduled Events",
+        "openWorldHint",
+        "readOnlyHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get organization",
+      "slug": "CALENDLY_GET_ORGANIZATION",
+      "kind": "read",
+      "description": "Tool to retrieve information about a specific Calendly organization. Use when you need to get organization details such as name, slug, or timestamps.",
+      "inputs": [
+        {
+          "name": "uuid",
+          "type": "string",
+          "required": true,
+          "about": "The unique identifier (UUID) of the organization to retrieve. This is the alphanumeric string at the end of the organization URI."
+        }
+      ],
+      "scopes": [
+        "organizations:read"
+      ],
+      "tags": [
+        "important",
+        "readOnlyHint",
+        "organization_and_team"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get organization invitation",
+      "slug": "CALENDLY_GET_ORGANIZATION_INVITATION",
+      "kind": "read",
+      "description": "Retrieves a specific Calendly organization invitation using its UUID and the parent organization's UUID.",
+      "inputs": [
+        {
+          "name": "uuid",
+          "type": "string",
+          "required": true,
+          "about": "The unique identifier (UUID) of the specific organization invitation to retrieve."
+        },
+        {
+          "name": "org_uuid",
+          "type": "string",
+          "required": true,
+          "about": "The unique identifier (UUID) of the Calendly organization to which the invitation belongs."
+        }
+      ],
+      "scopes": [
+        "default",
+        "organizations:read"
+      ],
+      "tags": [
+        "Organizations",
+        "openWorldHint",
+        "readOnlyHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get organization membership",
+      "slug": "CALENDLY_GET_ORGANIZATION_MEMBERSHIP",
+      "kind": "read",
+      "description": "Retrieves a specific Calendly organization membership by its UUID, returning all its attributes.",
+      "inputs": [
+        {
+          "name": "uuid",
+          "type": "string",
+          "required": true,
+          "about": "The unique identifier (UUID) of the organization membership to retrieve."
+        }
+      ],
+      "scopes": [
+        "default",
+        "organizations:read"
+      ],
+      "tags": [
+        "Organizations",
+        "openWorldHint",
+        "readOnlyHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get routing form",
+      "slug": "CALENDLY_GET_ROUTING_FORM",
+      "kind": "read",
+      "description": "Retrieves a specific routing form by its UUID, including its questions and other configuration details.",
+      "inputs": [
+        {
+          "name": "uuid",
+          "type": "string",
+          "required": true,
+          "about": "The unique identifier (UUID) of the routing form to retrieve."
+        }
+      ],
+      "scopes": [
+        "default",
+        "routing_forms:read"
+      ],
+      "tags": [
+        "Routing Forms",
+        "openWorldHint",
+        "readOnlyHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get routing form submission",
+      "slug": "CALENDLY_GET_ROUTING_FORM_SUBMISSION",
+      "kind": "read",
+      "description": "Tool to retrieve details about a specific routing form submission by its UUID. Use when you need submission details including questions, answers, and routing results.",
+      "inputs": [
+        {
+          "name": "uuid",
+          "type": "string",
+          "required": true,
+          "about": "The unique identifier (UUID) of the routing form submission to retrieve. Extract from submission URI or webhook payload."
+        }
+      ],
+      "scopes": [
+        "routing_forms:read"
+      ],
+      "tags": [
+        "readOnlyHint",
+        "invitees_and_communications"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get sample webhook data",
+      "slug": "CALENDLY_GET_SAMPLE_WEBHOOK_DATA",
+      "kind": "read",
+      "description": "Tool to retrieve sample webhook payload data for testing webhook subscriptions. Use when you need to verify webhook setup and understand the data structure before creating actual webhook subscriptions.",
+      "inputs": [
+        {
+          "name": "user",
+          "type": "string",
+          "required": false,
+          "about": "The URI of the user to retrieve sample webhook data for. Required when scope is 'user', optional when scope is 'organization'. Format: https://api.calendly.com/users/{user_uuid}"
+        },
+        {
+          "name": "event",
+          "type": "string",
+          "required": true,
+          "about": "The webhook event type to retrieve sample data for. Valid values: 'invitee.created', 'invitee.canceled', 'routing_form_submission.created'"
+        },
+        {
+          "name": "scope",
+          "type": "string",
+          "required": true,
+          "about": "The scope level for the webhook data. Valid values: 'user' or 'organization'. Note: routing_form_submission.created events require 'organization' scope."
+        },
+        {
+          "name": "organization",
+          "type": "string",
+          "required": true,
+          "about": "The URI of the organization to retrieve sample webhook data for. This parameter is always required. Format: https://api.calendly.com/organizations/{organization_uuid}"
+        }
+      ],
+      "scopes": [
+        "default"
+      ],
+      "tags": [
+        "readOnlyHint",
+        "webhooks"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get user",
+      "slug": "CALENDLY_GET_USER",
+      "kind": "read",
+      "description": "Retrieves comprehensive details for an existing Calendly user.",
+      "inputs": [
+        {
+          "name": "uuid",
+          "type": "string",
+          "required": false,
+          "about": "The unique identifier (UUID) of the user. Alternatively, use the literal string \"me\" to refer to the currently authenticated user (the caller). Defaults to \"me\" (current user) if not specified."
+        }
+      ],
+      "scopes": [
+        "user"
+      ],
+      "tags": [
+        "Users",
+        "important",
+        "openWorldHint",
+        "readOnlyHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get user availability schedule",
+      "slug": "CALENDLY_GET_USER_AVAILABILITY_SCHEDULE",
+      "kind": "read",
+      "description": "Retrieves a user availability schedule by its UUID, including its availability rules and whether it is the user's default schedule.",
+      "inputs": [
+        {
+          "name": "uuid",
+          "type": "string",
+          "required": true,
+          "about": "Unique identifier (UUID) of the availability schedule."
+        }
+      ],
+      "scopes": [
+        "default",
+        "availability:read"
+      ],
+      "tags": [
+        "Availability",
+        "openWorldHint",
+        "readOnlyHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Get webhook subscription",
+      "slug": "CALENDLY_GET_WEBHOOK_SUBSCRIPTION",
+      "kind": "read",
+      "description": "Retrieves the details of an existing webhook subscription, identified by its UUID, including its callback URL, subscribed events, scope, and state.",
+      "inputs": [
+        {
+          "name": "webhook_uuid",
+          "type": "string",
+          "required": true,
+          "about": "Unique identifier (UUID) of the webhook subscription to retrieve."
+        }
+      ],
+      "scopes": [
+        "organization:read",
+        "user:read"
+      ],
+      "tags": [
+        "Webhooks",
+        "openWorldHint",
+        "readOnlyHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Mark invitee as no-show",
+      "slug": "CALENDLY_INVITEE_NO_SHOW",
+      "kind": "write",
+      "description": "Tool to mark an invitee as a no-show for a scheduled event. Use when an invitee fails to attend their scheduled meeting and you need to record their absence in Calendly.",
+      "inputs": [
+        {
+          "name": "invitee",
+          "type": "string",
+          "required": true,
+          "about": "URI of the Invitee to be marked as a no-show. This must be a valid URI referencing an existing invitee from a scheduled event (e.g., 'https://api.calendly.com/scheduled_events/GBGBDCAADAEDCRZ2/invitees/AAAAAAAAAAAAAAAA')."
+        }
+      ],
+      "scopes": [
+        "scheduled_events:write"
+      ],
+      "tags": [
+        "invitees_and_communications",
+        "updateHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "List activity log entries",
+      "slug": "CALENDLY_LIST_ACTIVITY_LOG_ENTRIES",
+      "kind": "read",
+      "description": "Retrieves a list of activity log entries for a specified Calendly organization (requires an active Enterprise subscription), supporting filtering, sorting, and pagination.",
+      "inputs": [
+        {
+          "name": "sort",
+          "type": "array",
+          "required": false,
+          "about": "Specifies the sort order for the results. Provide a list of sort criteria strings, each in the format 'field:direction' (e.g., 'occurred_at:asc'). Valid fields and directions are defined by SortEnm."
+        },
+        {
+          "name": "actor",
+          "type": "array",
+          "required": false,
+          "about": "Filters activity log entries by the users who performed the actions. Provide a list of user URIs."
+        },
+        {
+          "name": "count",
+          "type": "integer",
+          "required": false,
+          "about": "The maximum number of activity log entries to return per page."
+        },
+        {
+          "name": "action",
+          "type": "array",
+          "required": false,
+          "about": "Filters entries by the specific action performed (e.g., 'user.created', 'event_type.updated'). Provide a list of action strings."
+        },
+        {
+          "name": "namespace",
+          "type": "array",
+          "required": false,
+          "about": "Filters entries by their category or domain (namespace). Provide a list of namespace strings. Common examples include 'user_management' or 'event_type_management'."
+        },
+        {
+          "name": "page_token",
+          "type": "string",
+          "required": false,
+          "about": "Token for pagination, used to fetch the next page of results if the collection spans multiple pages."
+        },
+        {
+          "name": "search_term",
+          "type": "string",
+          "required": false,
+          "about": "Filters entries based on the search term. Supported operators: `|` (OR, e.g., `user.created | group.created`), `+` (AND, e.g., `user.created + user.invited`), `\" \"` (exact phrase, e.g., `\"John Doe\"`), `-` (exclude term, e.g., `user.created -admin`), `()` (precedence, e.g., `(user.created | user.invi"
+        },
+        {
+          "name": "organization",
+          "type": "string",
+          "required": true,
+          "about": "URI of the Calendly organization for which to retrieve activity log entries."
+        },
+        {
+          "name": "max_occurred_at",
+          "type": "string",
+          "required": false,
+          "about": "Timestamp in ISO 8601 UTC format (e.g., '2020-01-02T03:04:05.678Z'). Filters entries to include only those that occurred at or before this time."
+        },
+        {
+          "name": "min_occurred_at",
+          "type": "string",
+          "required": false,
+          "about": "Timestamp in ISO 8601 UTC format (e.g., '2020-01-02T03:04:05.678Z'). Filters entries to include only those that occurred at or after this time."
+        }
+      ],
+      "scopes": [
+        "default",
+        "organizations:read"
+      ],
+      "tags": [
+        "Activity Log",
+        "openWorldHint",
+        "readOnlyHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "List event invitees",
+      "slug": "CALENDLY_LIST_EVENT_INVITEES",
+      "kind": "read",
+      "description": "Retrieves a list of invitees for a specified Calendly event UUID, with options to filter by status or email, and sort by creation time.",
+      "inputs": [
+        {
+          "name": "sort",
+          "type": "string",
+          "required": false,
+          "about": "Order results by the `created_at` field; use 'created_at:asc' for ascending or 'created_at:desc' for descending."
+        },
+        {
+          "name": "uuid",
+          "type": "string",
+          "required": true,
+          "about": "The unique identifier (UUID) of the event for which to list invitees."
+        },
+        {
+          "name": "count",
+          "type": "integer",
+          "required": false,
+          "about": "The number of invitees to return per page. Default is 20."
+        },
+        {
+          "name": "email",
+          "type": "string",
+          "required": false,
+          "about": "Filter results by a specific invitee's email address."
+        },
+        {
+          "name": "status",
+          "type": "string",
+          "required": false,
+          "about": "Filter invitees by their status. Can be 'active' or 'canceled'."
+        },
+        {
+          "name": "page_token",
+          "type": "string",
+          "required": false,
+          "about": "A token to retrieve the next or previous page of results in a paginated collection."
+        }
+      ],
+      "scopes": [
+        "default",
+        "scheduled_events:read"
+      ],
+      "tags": [
+        "Scheduled Events",
+        "openWorldHint",
+        "readOnlyHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "List events (Deprecated)",
+      "slug": "CALENDLY_LIST_EVENTS",
+      "kind": "read",
+      "description": "DEPRECATED: Use CALENDLY_LIST_SCHEDULED_EVENTS instead. Retrieves a list of scheduled Calendly events. Exactly one of `user`, `organization`, or `group` must be provided to scope the query. The `invitee_email` parameter is a filter and cannot be used as a scope. Admin rights may be needed when filtering by `organization` or `group`.",
+      "inputs": [
+        {
+          "name": "sort",
+          "type": "string",
+          "required": false,
+          "about": "Sort order for the results. Accepts comma-separated `field:direction` values. Supported field: `start_time`. Supported directions: `asc` (ascending), `desc` (descending)."
+        },
+        {
+          "name": "user",
+          "type": "string",
+          "required": false,
+          "about": "Full Calendly API URI of the user whose events you want to list. MUST be a complete URI in the format 'https://api.calendly.com/users/{uuid}'. Shortcuts like 'me' are NOT supported - use CALENDLY_GET_CURRENT_USER to get the user URI first. Exactly ONE of `user`, `organization`, or `group` must be su"
+        },
+        {
+          "name": "count",
+          "type": "integer",
+          "required": false,
+          "about": "The number of events to return per page."
+        },
+        {
+          "name": "group",
+          "type": "string",
+          "required": false,
+          "about": "Full Calendly API URI of the group (team) whose events you want to list. MUST be a complete URI in the format 'https://api.calendly.com/groups/{uuid}'. Exactly ONE of `user`, `organization`, or `group` must be provided to scope the query."
+        },
+        {
+          "name": "status",
+          "type": "string",
+          "required": false,
+          "about": "Filter events by their status."
+        },
+        {
+          "name": "page_token",
+          "type": "string",
+          "required": false,
+          "about": "Token for pagination to retrieve the next or previous set of results from the collection."
+        },
+        {
+          "name": "organization",
+          "type": "string",
+          "required": false,
+          "about": "Full Calendly API URI of the organization whose events you want to list. MUST be a complete URI in the format 'https://api.calendly.com/organizations/{uuid}'. Exactly ONE of `user`, `organization`, or `group` is required. Admin privileges may be required."
+        },
+        {
+          "name": "invitee_email",
+          "type": "string",
+          "required": false,
+          "about": "Invitee's email address to filter events by. This is a filter parameter and cannot be used as a scope. Exactly one of `user`, `organization`, or `group` must be provided to scope the query."
+        },
+        {
+          "name": "max_start_time",
+          "type": "string",
+          "required": false,
+          "about": "Include events with start times at or before this UTC timestamp (e.g., '2020-01-02T03:04:05.678123Z')."
+        },
+        {
+          "name": "min_start_time",
+          "type": "string",
+          "required": false,
+          "about": "Include events with start times at or after this UTC timestamp (e.g., '2020-01-02T03:04:05.678123Z')."
+        }
+      ],
+      "scopes": [
+        "scheduled_events:read"
+      ],
+      "tags": [
+        "Scheduled Events",
+        "openWorldHint",
+        "readOnlyHint",
+        "deprecated"
+      ],
+      "deprecated": true
+    },
+    {
+      "name": "List event type available times",
+      "slug": "CALENDLY_LIST_EVENT_TYPE_AVAILABLE_TIMES",
+      "kind": "read",
+      "description": "Fetches available time slots for a Calendly event type within a future time range of at most seven days; results are not paginated.",
+      "inputs": [
+        {
+          "name": "end_time",
+          "type": "string",
+          "required": true,
+          "about": "End datetime (exclusive) of the requested availability range, in UTC ISO 8601 format (e.g., 'YYYY-MM-DDTHH:MM:SSZ'). The duration between start_time and end_time cannot exceed 7 days."
+        },
+        {
+          "name": "event_type",
+          "type": "string",
+          "required": true,
+          "about": "The URI of the event type for which to find available times. This can be obtained by listing event types or from an event type object."
+        },
+        {
+          "name": "start_time",
+          "type": "string",
+          "required": true,
+          "about": "Start datetime (inclusive) of the requested availability range, in UTC ISO 8601 format (e.g., 'YYYY-MM-DDTHH:MM:SSZ'). Must be in the future."
+        }
+      ],
+      "scopes": [
+        "event_types:read"
+      ],
+      "tags": [
+        "Event Types",
+        "openWorldHint",
+        "readOnlyHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "List event type hosts",
+      "slug": "CALENDLY_LIST_EVENT_TYPE_MEMBERSHIPS",
+      "kind": "read",
+      "description": "Tool to retrieve a list of event type hosts (memberships) for a specific event type. Use when you need to see which users are configured as hosts for an event type.",
+      "inputs": [
+        {
+          "name": "count",
+          "type": "integer",
+          "required": false,
+          "about": "Number of results to return per page. Must be a positive integer."
+        },
+        {
+          "name": "event_type",
+          "type": "string",
+          "required": true,
+          "about": "URI of the event type to retrieve memberships for. Format: 'https://api.calendly.com/event_types/{uuid}'. Pass the complete URI, not just the UUID."
+        },
+        {
+          "name": "page_token",
+          "type": "string",
+          "required": false,
+          "about": "Pagination token to retrieve a specific page of results. Use the 'next_page_token' from a previous response to get the next page."
+        }
+      ],
+      "scopes": "$undefined",
+      "tags": [
+        "readOnlyHint",
+        "event_types"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "List Event Types",
+      "slug": "CALENDLY_LIST_EVENT_TYPES",
+      "kind": "read",
+      "description": "Lists event types associated with a specified user or organization, with filtering and pagination. Use scheduling_url from results directly rather than constructing event type URLs.",
+      "inputs": [
+        {
+          "name": "sort",
+          "type": "string",
+          "required": false,
+          "about": "Order results by field(s) and direction. Accepts comma-separated list of field:direction values (e.g., 'name:asc,created_at:desc'). Default: name:asc"
+        },
+        {
+          "name": "user",
+          "type": "string",
+          "required": false,
+          "about": "URI of the user whose event types to list. Exactly one of 'user' or 'organization' must be provided (mutually exclusive)."
+        },
+        {
+          "name": "count",
+          "type": "integer",
+          "required": false,
+          "about": "Number of results per page."
+        },
+        {
+          "name": "active",
+          "type": "boolean",
+          "required": false,
+          "about": "Filter by active status. Return only active event types if true, only inactive if false, or all event types if omitted."
+        },
+        {
+          "name": "page_token",
+          "type": "string",
+          "required": false,
+          "about": "Pagination token for retrieving subsequent pages. Check pagination.next_page_token in the response; if non-null, pass it as page_token in the next call. Repeat until next_page_token is null."
+        },
+        {
+          "name": "organization",
+          "type": "string",
+          "required": false,
+          "about": "URI of the organization whose event types to list. Exactly one of 'organization' or 'user' must be provided (mutually exclusive)."
+        },
+        {
+          "name": "admin_managed",
+          "type": "boolean",
+          "required": false,
+          "about": "Filter by admin management status. True for admin-managed only, false to exclude admin-managed, or omitted to include all."
+        },
+        {
+          "name": "user_availability_schedule",
+          "type": "string",
+          "required": false,
+          "about": "URI of the user's availability schedule. Used with 'user' parameter to filter event types by primary availability schedule."
+        }
+      ],
+      "scopes": [
+        "default"
+      ],
+      "tags": [
+        "important",
+        "readOnlyHint",
+        "event_types"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "List group relationships",
+      "slug": "CALENDLY_LIST_GROUP_RELATIONSHIPS",
+      "kind": "read",
+      "description": "Lists Calendly group relationships, with optional organization, owner, and group filters and pagination.",
+      "inputs": [
+        {
+          "name": "count",
+          "type": "integer",
+          "required": false,
+          "about": "Number of records per page (max 100)."
+        },
+        {
+          "name": "group",
+          "type": "string",
+          "required": false,
+          "about": "Filter results by group URI."
+        },
+        {
+          "name": "owner",
+          "type": "string",
+          "required": false,
+          "about": "Filter results by owner URI (Organization Membership or Invitation URI)."
+        },
+        {
+          "name": "page_token",
+          "type": "string",
+          "required": false,
+          "about": "Token for retrieving a specific page of results, obtained from `next_page_token` or `previous_page_token` in a previous response."
+        },
+        {
+          "name": "organization",
+          "type": "string",
+          "required": false,
+          "about": "Filter results by organization URI."
+        }
+      ],
+      "scopes": [
+        "default",
+        "groups:read"
+      ],
+      "tags": [
+        "Groups",
+        "openWorldHint",
+        "readOnlyHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "List groups",
+      "slug": "CALENDLY_LIST_GROUPS",
+      "kind": "read",
+      "description": "Returns a list of groups for a specified Calendly organization URI, supporting pagination.",
+      "inputs": [
+        {
+          "name": "count",
+          "type": "integer",
+          "required": false,
+          "about": "The maximum number of groups to return per page. The value can range from 1 to 100."
+        },
+        {
+          "name": "page_token",
+          "type": "string",
+          "required": false,
+          "about": "A token to retrieve a specific page of results. Pass this value from a previous response's 'next_page_token' to fetch the next set of groups, or 'previous_page_token' for the previous set."
+        },
+        {
+          "name": "organization",
+          "type": "string",
+          "required": true,
+          "about": "The URI of the organization to filter groups by. For example, 'https://api.calendly.com/organizations/ORGANIZATION_UUID'."
+        }
+      ],
+      "scopes": [
+        "default",
+        "groups:read"
+      ],
+      "tags": [
+        "Groups",
+        "openWorldHint",
+        "readOnlyHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "List organization invitations",
+      "slug": "CALENDLY_LIST_ORGANIZATION_INVITATIONS",
+      "kind": "read",
+      "description": "Retrieves a list of invitations for a specific organization, identified by its UUID.",
+      "inputs": [
+        {
+          "name": "sort",
+          "type": "string",
+          "required": false,
+          "about": "Order of results by field(s) and direction (asc/desc); e.g., 'created_at:asc' or 'email:desc,status:asc'."
+        },
+        {
+          "name": "uuid",
+          "type": "string",
+          "required": true,
+          "about": "Unique identifier (UUID) of the organization."
+        },
+        {
+          "name": "count",
+          "type": "integer",
+          "required": false,
+          "about": "Number of results to return per page."
+        },
+        {
+          "name": "email",
+          "type": "string",
+          "required": false,
+          "about": "Filter by the recipient's email address."
+        },
+        {
+          "name": "status",
+          "type": "string",
+          "required": false,
+          "about": "Filter by invitation status."
+        },
+        {
+          "name": "page_token",
+          "type": "string",
+          "required": false,
+          "about": "Pagination token to access a specific page of results."
+        }
+      ],
+      "scopes": [
+        "default",
+        "organizations:read"
+      ],
+      "tags": [
+        "Organizations",
+        "openWorldHint",
+        "readOnlyHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "List organization memberships",
+      "slug": "CALENDLY_LIST_ORGANIZATION_MEMBERSHIPS",
+      "kind": "read",
+      "description": "Retrieves a list of organization memberships.",
+      "inputs": [
+        {
+          "name": "user",
+          "type": "string",
+          "required": false,
+          "about": "Filter memberships by the URI of the user. At least one of 'organization' or 'user' is required."
+        },
+        {
+          "name": "count",
+          "type": "integer",
+          "required": false,
+          "about": "The number of membership records to return per page. Must be an integer between 1 and 100, inclusive."
+        },
+        {
+          "name": "email",
+          "type": "string",
+          "required": false,
+          "about": "Filter memberships by the email address of the user. Must be used with 'organization' or 'user'."
+        },
+        {
+          "name": "page_token",
+          "type": "string",
+          "required": false,
+          "about": "The token to retrieve the next or previous page of results in a paginated collection."
+        },
+        {
+          "name": "organization",
+          "type": "string",
+          "required": false,
+          "about": "Filter memberships by the URI of the organization. At least one of 'organization' or 'user' is required."
+        }
+      ],
+      "scopes": [
+        "organization:read"
+      ],
+      "tags": [
+        "Organizations",
+        "openWorldHint",
+        "readOnlyHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "List outgoing communications",
+      "slug": "CALENDLY_LIST_OUTGOING_COMMUNICATIONS",
+      "kind": "read",
+      "description": "Retrieves a list of outgoing SMS communications for a specified organization; requires an Enterprise subscription and if filtering by creation date, both `min_created_at` and `max_created_at` must be provided to form a valid range.",
+      "inputs": [
+        {
+          "name": "count",
+          "type": "integer",
+          "required": false,
+          "about": "The number of records to return per page. Must be between 1 and 100, inclusive."
+        },
+        {
+          "name": "page_token",
+          "type": "string",
+          "required": false,
+          "about": "The token to retrieve the next page of results. Provided in the `next_page_token` field of a previous response."
+        },
+        {
+          "name": "organization",
+          "type": "string",
+          "required": true,
+          "about": "The URI of the organization whose outgoing communications are to be retrieved."
+        },
+        {
+          "name": "max_created_at",
+          "type": "string",
+          "required": false,
+          "about": "Include outgoing communications that were created before this timestamp. Formatted as \"YYYY-MM-DDTHH:MM:SS.sssZ\" in UTC."
+        },
+        {
+          "name": "min_created_at",
+          "type": "string",
+          "required": false,
+          "about": "Include outgoing communications that were created after this timestamp. Formatted as \"YYYY-MM-DDTHH:MM:SS.sssZ\" in UTC."
+        }
+      ],
+      "scopes": [
+        "default",
+        "organizations:read"
+      ],
+      "tags": [
+        "Outgoing Communications",
+        "openWorldHint",
+        "readOnlyHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "List routing forms",
+      "slug": "CALENDLY_LIST_ROUTING_FORMS",
+      "kind": "read",
+      "description": "Retrieves routing forms for a specified organization; routing forms are questionnaires used to direct invitees to appropriate booking pages or external URLs.",
+      "inputs": [
+        {
+          "name": "sort",
+          "type": "string",
+          "required": false,
+          "about": "Specifies the order of results. Use a comma-separated list of `field:direction` pairs. Supported field: `created_at`. Supported directions: `asc` (ascending), `desc` (descending)."
+        },
+        {
+          "name": "count",
+          "type": "integer",
+          "required": false,
+          "about": "The number of routing forms to return per page."
+        },
+        {
+          "name": "page_token",
+          "type": "string",
+          "required": false,
+          "about": "Token to retrieve a specific page of results, usually from a previous response's pagination details."
+        },
+        {
+          "name": "organization",
+          "type": "string",
+          "required": true,
+          "about": "The URI of the organization for which to retrieve routing forms."
+        }
+      ],
+      "scopes": [
+        "default"
+      ],
+      "tags": [
+        "Routing Forms",
+        "openWorldHint",
+        "readOnlyHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "List routing form submissions",
+      "slug": "CALENDLY_LIST_ROUTING_FORM_SUBMISSIONS",
+      "kind": "read",
+      "description": "Lists a page of submissions for a specific routing form, including questions and answers and, when available, routing results and tracking data.",
+      "inputs": [
+        {
+          "name": "form",
+          "type": "string",
+          "required": true,
+          "about": "The URI of the routing form whose submissions you want to retrieve. Required to identify which form's submissions to list."
+        },
+        {
+          "name": "sort",
+          "type": "string",
+          "required": false,
+          "about": "Order results by field and direction. Format: 'field:direction'. Supported field: 'created_at'. Directions: 'asc', 'desc'."
+        },
+        {
+          "name": "count",
+          "type": "integer",
+          "required": false,
+          "about": "Number of submissions to return per page. Defaults to 25 to keep responses manageable."
+        },
+        {
+          "name": "page_token",
+          "type": "string",
+          "required": false,
+          "about": "Pagination token for retrieving subsequent pages. Check pagination.next_page_token in the response; if non-null, pass it as page_token in the next call. Repeat until next_page_token is null."
+        }
+      ],
+      "scopes": [
+        "routing_forms:read"
+      ],
+      "tags": [
+        "important",
+        "readOnlyHint",
+        "openWorldHint",
+        "Routing Forms"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "List scheduled events",
+      "slug": "CALENDLY_LIST_SCHEDULED_EVENTS",
+      "kind": "read",
+      "description": "Tool to retrieve a list of scheduled Calendly events. Use when you need to view events for a specific user, organization, or group. Provide one scope parameter, or organization plus user or group to list that member's or group's events as an organization admin/owner. Use user alone for your own personal events.",
+      "inputs": [
+        {
+          "name": "sort",
+          "type": "string",
+          "required": false,
+          "about": "Order results by the specified field and direction. Format: 'field:direction'. Supported field: 'start_time'. Supported directions: 'asc' (ascending), 'desc' (descending)."
+        },
+        {
+          "name": "user",
+          "type": "string",
+          "required": false,
+          "about": "Full Calendly API URI of the user whose events you want to list. MUST be a complete URI in the format 'https://api.calendly.com/users/{uuid}'. Shortcuts like 'me' are NOT supported - use CALENDLY_GET_CURRENT_USER to get the user URI first. Use `user` alone for your own events. To list another user's"
+        },
+        {
+          "name": "count",
+          "type": "integer",
+          "required": false,
+          "about": "Number of events to return per page. Must be a positive integer."
+        },
+        {
+          "name": "group",
+          "type": "string",
+          "required": false,
+          "about": "Full Calendly API URI of the group (team) whose events you want to list. MUST be a complete URI in the format 'https://api.calendly.com/groups/{uuid}'. Use alone with organization admin/owner or group admin privilege. Organization admins/owners can also provide `organization` to list this group's ev"
+        },
+        {
+          "name": "status",
+          "type": "string",
+          "required": false,
+          "about": "Filter events by their status. Can be 'active' for active events or 'canceled' for canceled events."
+        },
+        {
+          "name": "page_token",
+          "type": "string",
+          "required": false,
+          "about": "Pagination token to retrieve a specific page of results. Use the 'next_page_token' from a previous response to get the next page."
+        },
+        {
+          "name": "organization",
+          "type": "string",
+          "required": false,
+          "about": "Full Calendly API URI of the organization whose events you want to list. MUST be a complete URI in the format 'https://api.calendly.com/organizations/{uuid}'. Use alone for organization events, with `user` for that member's events, or with `group` for that group's events. Requires organization admin"
+        },
+        {
+          "name": "invitee_email",
+          "type": "string",
+          "required": false,
+          "about": "Return events that are scheduled with the invitee associated with this email address. This is a filter parameter and must be used together with one of the scope parameters (user, organization, or group)."
+        },
+        {
+          "name": "max_start_time",
+          "type": "string",
+          "required": false,
+          "about": "Include events with start times prior to this time. Must be in UTC format (ISO 8601)."
+        },
+        {
+          "name": "min_start_time",
+          "type": "string",
+          "required": false,
+          "about": "Include events with start times after this time. Must be in UTC format (ISO 8601)."
+        }
+      ],
+      "scopes": [
+        "scheduled_events:read"
+      ],
+      "tags": [
+        "important",
+        "readOnlyHint",
+        "scheduled_events"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "List user availability schedules",
+      "slug": "CALENDLY_LIST_USER_AVAILABILITY_SCHEDULES",
+      "kind": "read",
+      "description": "Retrieves all availability schedules for the specified Calendly user.",
+      "inputs": [
+        {
+          "name": "user",
+          "type": "string",
+          "required": true,
+          "about": "URI of the user whose availability schedules are to be listed; must be a valid Calendly user URI."
+        }
+      ],
+      "scopes": "$undefined",
+      "tags": [
+        "Availability",
+        "openWorldHint",
+        "readOnlyHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "List user busy times",
+      "slug": "CALENDLY_LIST_USER_BUSY_TIMES",
+      "kind": "read",
+      "description": "Fetches a user's busy time intervals (internal and external calendar events) in ascending order for a period up to 7 days; keyset pagination is not supported.",
+      "inputs": [
+        {
+          "name": "user",
+          "type": "string",
+          "required": true,
+          "about": "The URI of the user whose busy times are being queried. This is typically the user's Calendly API URI."
+        },
+        {
+          "name": "end_time",
+          "type": "string",
+          "required": true,
+          "about": "The end of the time range for which to fetch busy times, in RFC3339 format (e.g., '2023-10-26T11:00:00Z'). Must be after start_time."
+        },
+        {
+          "name": "start_time",
+          "type": "string",
+          "required": true,
+          "about": "The start of the time range for which to fetch busy times, in RFC3339 format (e.g., '2023-10-26T10:00:00Z')."
+        }
+      ],
+      "scopes": [
+        "default"
+      ],
+      "tags": [
+        "Availability",
+        "openWorldHint",
+        "readOnlyHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "List User Meeting Locations",
+      "slug": "CALENDLY_LIST_USER_LOCATIONS",
+      "kind": "read",
+      "description": "Tool to retrieve configured meeting location information for a given Calendly user. Use when you need to see all available location options configured by a user for their meetings.",
+      "inputs": [
+        {
+          "name": "user",
+          "type": "string",
+          "required": true,
+          "about": "URI of the user whose locations to list. This should be the full Calendly user URI (e.g., 'https://api.calendly.com/users/AAAAAAAAAAAAAAAA')."
+        }
+      ],
+      "scopes": [
+        "event_types:read"
+      ],
+      "tags": [
+        "readOnlyHint",
+        "organization_and_team"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "List user event types (Deprecated)",
+      "slug": "CALENDLY_LIST_USER_S_EVENT_TYPES",
+      "kind": "read",
+      "description": "DEPRECATED: Use CALENDLY_LIST_EVENT_TYPES instead. Retrieves event types for a user or organization; requires either the `user` or `organization` URI.",
+      "inputs": [
+        {
+          "name": "sort",
+          "type": "string",
+          "required": false,
+          "about": "Order results by field(s) and direction ('asc' or 'desc'), e.g., 'name:asc,created_at:desc'. Supported fields: name, position, created_at, updated_at. Defaults to 'name:asc' if omitted."
+        },
+        {
+          "name": "user",
+          "type": "string",
+          "required": false,
+          "about": "URI of the **user** whose event types to list. Provide **either** `user` **or** `organization` (exactly one is required). **IMPORTANT:** Must be the actual resolved user URI (e.g., https://api.calendly.com/users/5dc7b7a8-1d8c-4fcc-8b63-5f5a17eea4a3). The shorthand 'https://api.calendly.com/users/me'"
+        },
+        {
+          "name": "count",
+          "type": "integer",
+          "required": false,
+          "about": "Number of event types per page (max 100)."
+        },
+        {
+          "name": "active",
+          "type": "boolean",
+          "required": false,
+          "about": "Filter by active status (true for active, false for inactive). If omitted, all event types are returned."
+        },
+        {
+          "name": "page_token",
+          "type": "string",
+          "required": false,
+          "about": "Token for retrieving the next or previous page of event types."
+        },
+        {
+          "name": "organization",
+          "type": "string",
+          "required": false,
+          "about": "URI of the **organization** whose event types to list. Provide **either** `organization` **or** `user` (exactly one is required)."
+        },
+        {
+          "name": "admin_managed",
+          "type": "boolean",
+          "required": false,
+          "about": "Filter by admin management: true for admin-managed only, false to exclude admin-managed. If omitted, all types are returned (respecting other filters)."
+        },
+        {
+          "name": "user_availability_schedule",
+          "type": "string",
+          "required": false,
+          "about": "URI of the user's availability schedule; use with `user` to filter event types by this primary schedule. Example: 'https://api.calendly.com/user_availability_schedules/SCHEDULE_UUID'."
+        }
+      ],
+      "scopes": [
+        "event_types:read"
+      ],
+      "tags": [
+        "Event Types",
+        "openWorldHint",
+        "readOnlyHint",
+        "deprecated"
+      ],
+      "deprecated": true
+    },
+    {
+      "name": "List webhook subscriptions",
+      "slug": "CALENDLY_LIST_WEBHOOK_SUBSCRIPTIONS",
+      "kind": "read",
+      "description": "Retrieves webhook subscriptions for a Calendly organization; `scope` determines if `user` or `group` URI is also required for filtering.",
+      "inputs": [
+        {
+          "name": "sort",
+          "type": "string",
+          "required": false,
+          "about": "Sort order for results (e.g., 'created_at:asc'). Supported fields: `created_at`, `updated_at`. Supported directions: `asc`, `desc`."
+        },
+        {
+          "name": "user",
+          "type": "string",
+          "required": false,
+          "about": "URI of the Calendly user; required if `scope` is 'user'."
+        },
+        {
+          "name": "count",
+          "type": "integer",
+          "required": false,
+          "about": "Number of results per page (maximum 100)."
+        },
+        {
+          "name": "group",
+          "type": "string",
+          "required": false,
+          "about": "URI of the Calendly group; required if `scope` is 'group'."
+        },
+        {
+          "name": "scope",
+          "type": "string",
+          "required": true,
+          "about": "Scope of the webhook subscriptions: 'organization', 'user', or 'group'."
+        },
+        {
+          "name": "page_token",
+          "type": "string",
+          "required": false,
+          "about": "Token for paginating to the next or previous page of results."
+        },
+        {
+          "name": "organization",
+          "type": "string",
+          "required": true,
+          "about": "URI of the Calendly organization for which to list webhook subscriptions."
+        }
+      ],
+      "scopes": [
+        "organization",
+        "user",
+        "group"
+      ],
+      "tags": [
+        "Webhooks",
+        "openWorldHint",
+        "readOnlyHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Invite user to organization",
+      "slug": "CALENDLY_ORGANIZATION_INVITATION",
+      "kind": "write",
+      "description": "Tool to invite a user to a Calendly organization via email. Use when you need to send an organization invitation to a new user. Requires organization owner or admin privileges.",
+      "inputs": [
+        {
+          "name": "email",
+          "type": "string",
+          "required": true,
+          "about": "The email address of the user to invite to the organization. An invitation email will be automatically sent to this address."
+        },
+        {
+          "name": "org_uuid",
+          "type": "string",
+          "required": true,
+          "about": "The unique identifier (UUID) of the organization to invite the user to. This is extracted from the organization URI."
+        }
+      ],
+      "scopes": [
+        "default"
+      ],
+      "tags": [
+        "important",
+        "organization_and_team",
+        "createHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Create Event Invitee",
+      "slug": "CALENDLY_POST_INVITEE",
+      "kind": "send",
+      "description": "Tool to create a new Event Invitee with standard notifications, calendar invites, reschedules, and workflows. Use when programmatically scheduling meetings via API. Requires paid Calendly plan (Standard+).",
+      "inputs": [
+        {
+          "name": "invitee",
+          "type": "object",
+          "required": true,
+          "about": "Details of the invitee being scheduled"
+        },
+        {
+          "name": "location",
+          "type": "object",
+          "required": false,
+          "about": "Meeting location configuration."
+        },
+        {
+          "name": "tracking",
+          "type": "object",
+          "required": false,
+          "about": "UTM and tracking parameters for marketing attribution."
+        },
+        {
+          "name": "event_type",
+          "type": "string",
+          "required": true,
+          "about": "URI reference to the event type being scheduled (e.g., 'https://api.calendly.com/event_types/AAAAAAAAAAAAAAAA')"
+        },
+        {
+          "name": "start_time",
+          "type": "string",
+          "required": true,
+          "about": "Start time of the scheduled event in ISO 8601 UTC format (e.g., '2025-12-16T10:00:00Z')"
+        },
+        {
+          "name": "event_guests",
+          "type": "array",
+          "required": false,
+          "about": "List of email addresses for additional invitee guests (max 10)"
+        },
+        {
+          "name": "questions_and_answers",
+          "type": "array",
+          "required": false,
+          "about": "Custom question responses from the booking form"
+        }
+      ],
+      "scopes": [
+        "default"
+      ],
+      "tags": [
+        "important",
+        "invitees_and_communications",
+        "createHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Remove user from organization",
+      "slug": "CALENDLY_REMOVE_USER_FROM_ORGANIZATION",
+      "kind": "write",
+      "description": "Removes a user (who is not an owner) from an organization by their membership UUID, requiring administrative privileges.",
+      "inputs": [
+        {
+          "name": "uuid",
+          "type": "string",
+          "required": true,
+          "about": "The UUID of the organization membership to remove. This is the unique identifier from the membership URI (e.g., from 'https://api.calendly.com/organization_memberships/UUID'). Get membership UUIDs by calling list_organization_memberships. Note: Cannot remove organization owners - use this for admin "
+        }
+      ],
+      "scopes": [
+        "organizations:write"
+      ],
+      "tags": [
+        "Organizations",
+        "updateHint",
+        "openWorldHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Revoke a user's organization invitation",
+      "slug": "CALENDLY_REVOKE_USER_S_ORGANIZATION_INVITATION",
+      "kind": "write",
+      "description": "Revokes a pending and revokable (not yet accepted or expired) organization invitation using its UUID and the organization's UUID, rendering the invitation link invalid.",
+      "inputs": [
+        {
+          "name": "uuid",
+          "type": "string",
+          "required": true,
+          "about": "The unique identifier of the organization invitation to be revoked."
+        },
+        {
+          "name": "org_uuid",
+          "type": "string",
+          "required": true,
+          "about": "The unique identifier of the organization."
+        }
+      ],
+      "scopes": "$undefined",
+      "tags": [
+        "Organizations",
+        "updateHint",
+        "openWorldHint"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Update Event Type",
+      "slug": "CALENDLY_UPDATE_EVENT_TYPE",
+      "kind": "write",
+      "description": "Tool to update an existing one-on-one event type (kind: solo) in Calendly. Use when you need to modify event type settings such as name, duration, location, or description. NOTE: Currently only supports one-on-one event types.",
+      "inputs": [
+        {
+          "name": "name",
+          "type": "string",
+          "required": false,
+          "about": "The event type name that will be displayed to invitees"
+        },
+        {
+          "name": "uuid",
+          "type": "string",
+          "required": true,
+          "about": "Unique identifier (UUID) of the event type to update. Can be provided as either the full event type URI (e.g., 'https://api.calendly.com/event_types/AAAAAAAAAAAAAAAA') or just the UUID portion (e.g., 'AAAAAAAAAAAAAAAA'). Supports both alphanumeric format (e.g., 'GBGBDCAADAEDCRZ2') and standard UUID "
+        },
+        {
+          "name": "color",
+          "type": "string",
+          "required": false,
+          "about": "Hexadecimal color value for the scheduling page. Must match pattern ^#[a-f\\d]{6}$ (e.g., '#fff200')"
+        },
+        {
+          "name": "active",
+          "type": "boolean",
+          "required": false,
+          "about": "Indicates if the event type is active and available for booking"
+        },
+        {
+          "name": "locale",
+          "type": "string",
+          "required": false,
+          "about": "Locale for the event type's scheduling page language"
+        },
+        {
+          "name": "duration",
+          "type": "integer",
+          "required": false,
+          "about": "Length of sessions in minutes. Must be between 1 and 720 minutes. Should be one of the duration_options if both are provided."
+        },
+        {
+          "name": "locations",
+          "type": "array",
+          "required": false,
+          "about": "Configuration information for each possible location where the event can take place"
+        },
+        {
+          "name": "description",
+          "type": "string",
+          "required": false,
+          "about": "The event type description that will be shown on the scheduling page (plain text format)"
+        },
+        {
+          "name": "duration_options",
+          "type": "array",
+          "required": false,
+          "about": "Alternative duration choices for flexible meetings. Maximum 4 unique values allowed. Each must be between 1 and 720 minutes."
+        }
+      ],
+      "scopes": [
+        "event_types:write"
+      ],
+      "tags": [
+        "important",
+        "updateHint",
+        "event_types"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Update Event Type Availability",
+      "slug": "CALENDLY_UPDATE_EVENT_TYPE_AVAILABILITY",
+      "kind": "write",
+      "description": "Tool to update an event type availability schedule in Calendly. Use when you need to change the timezone or availability rules for an event type. WARNING: Updating rules will overwrite all existing rules - retrieve existing rules first using GET /event_type_availability_schedules.",
+      "inputs": [
+        {
+          "name": "user",
+          "type": "string",
+          "required": false,
+          "about": "URI of the user associated with the event type. Required when an admin or org owner is updating a specific user's schedule."
+        },
+        {
+          "name": "event_type",
+          "type": "string",
+          "required": true,
+          "about": "URI of the event type whose availability schedule is to be updated. Must follow the pattern https://api.calendly.com/event_types/{uuid} and contain '/event_types/' in the path. Other Calendly URIs (e.g., user_availability_schedules, scheduling_links, users) are NOT valid for this field."
+        },
+        {
+          "name": "availability_rule",
+          "type": "object",
+          "required": true,
+          "about": "Availability rule configuration containing timezone and rules for when the event type is available. WARNING: Rules will overwrite all existing rules."
+        },
+        {
+          "name": "availability_setting",
+          "type": "string",
+          "required": false,
+          "about": "Indicates how availability is determined. Valid values: 'host' or 'all'. Default: 'host'."
+        }
+      ],
+      "scopes": [
+        "default"
+      ],
+      "tags": [
+        "important",
+        "updateHint",
+        "event_types"
+      ],
+      "deprecated": false
+    },
+    {
+      "name": "Who Am I",
+      "slug": "CALENDLY_WHO_AM_I",
+      "kind": "write",
+      "description": "Return the identity (name, email) of the connected Calendly account.",
+      "inputs": [
+        {
+          "name": "0",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "1",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "2",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "3",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "4",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "5",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "6",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "7",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "8",
+          "type": "",
+          "required": false,
+          "about": ""
+        },
+        {
+          "name": "9",
+          "type": "",
+          "required": false,
+          "about": ""
+        }
+      ],
+      "scopes": "$undefined",
+      "tags": [
+        "important",
+        "readOnlyHint",
+        "idempotentHint",
+        "auth"
+      ],
+      "deprecated": false
+    }
+  ],
+  "triggers": [],
+  "source": "https://docs.composio.dev/toolkits/calendly",
+  "fetched_at": "2026-11-20"
+}

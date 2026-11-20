@@ -74,10 +74,17 @@ export class FakeLoginPage {
     throw new Error(`unexpected engine command: ${args[0]}`);
   }
 
+  /** The element a keystroke would reach: the focused one, looking through open shadow roots like the browser does. */
+  private focused(): unknown {
+    let el = this.window.document.activeElement as unknown as { shadowRoot?: { activeElement?: unknown } | null } | null;
+    while (el?.shadowRoot?.activeElement) el = el.shadowRoot.activeElement as typeof el;
+    return el;
+  }
+
   /** `keyboard insertText` over the relay: into the focused field at its caret, with beforeinput and input events. */
   async insertText(text: string): Promise<void> {
     this.typed.push(text);
-    const field = this.window.document.activeElement as unknown as { value: string; dispatchEvent(event: unknown): boolean } | null;
+    const field = this.focused() as unknown as { value: string; dispatchEvent(event: unknown): boolean } | null;
     if (!field || typeof field.value !== "string") return;
     const InputEvent = this.window.InputEvent;
     field.dispatchEvent(new InputEvent("beforeinput", { bubbles: true, data: text, inputType: "insertText" }));
@@ -90,7 +97,7 @@ export class FakeLoginPage {
   async press(key: string): Promise<void> {
     this.pressed.push(key);
     this.onKey?.(key);
-    const field = this.window.document.activeElement as unknown as { form?: unknown } | null;
+    const field = this.focused() as unknown as { form?: unknown } | null;
     const form = field?.form as unknown as { requestSubmit(): void; querySelectorAll(selector: string): ArrayLike<{ type?: string }> } | null | undefined;
     if (key !== "Enter" || !form) return;
     const buttons = Array.from(form.querySelectorAll("button, input[type=submit]")).filter((el) => el.type === "submit");

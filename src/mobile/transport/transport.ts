@@ -1,7 +1,8 @@
 import { RelayGoneError, type RelayChannel } from "./relay";
 import { noteRefusedRequest } from "@/lib/session-ended";
-import { asleepAnswer, BACKGROUND_HEADERS, markCloudAsleep } from "@/lib/cloud-power";
+import { asleepAnswer, BACKGROUND_HEADERS, forgetCloudGone, goneAnswer, markCloudAsleep, markCloudGone } from "@/lib/cloud-power";
 import { setUploadRoute } from "@/lib/upload-request";
+import { forgetLocalVoiceCall } from "@/lib/voice-call/availability";
 import { limitSendAttempts } from "@/state/optimistic-send";
 import { forgetWorkspaceAnswers, noteWorkspaceAnswer, placeAnswered } from "../connection/reachability";
 
@@ -138,6 +139,7 @@ export class BearerEventSource extends EventTarget {
       // a stream refused for its credential is the one request a quiet phone makes: it asks whether the session still stands
       if (response.status === 401) noteRefusedRequest();
       if (asleepAnswer(response)) markCloudAsleep();
+      else if (goneAnswer(response)) markCloudGone();
       else if (!response.ok) context.failed?.();
       if (!response.ok || !response.body) { this.fail(); return; }
       reader = response.body.getReader();
@@ -189,6 +191,12 @@ function srcsetPaths(value: string): Array<{ start: number; end: number; path: s
   return paths;
 }
 
+const FAILED = "data-dusk-media-failed";
+
+function awaitingBlob(element: Element): boolean {
+  return (element.getAttribute("src") ?? "").startsWith("/api/") || srcsetPaths(element.getAttribute("srcset") ?? "").length > 0;
+}
+
 function installMedia(): () => void {
   const selector = "img,audio,video,source,image,link[rel~='icon']";
   const attributes = ["src", "srcset", "poster", "href"];
@@ -221,6 +229,7 @@ function installMedia(): () => void {
   const replace = async (element: Element, attribute: string) => {
     const value = element.getAttribute(attribute);
     if (!value || processed.get(element)?.get(attribute) === value) return;
+    if (attribute === "src" && value.startsWith("/api/")) element.removeAttribute(FAILED);
     let next = value;
     if (attribute === "srcset") {
       const replacements = await Promise.all(srcsetPaths(value).map(async (candidate) => ({ ...candidate, url: await blobUrl(candidate.path) })));
@@ -229,7 +238,15 @@ function installMedia(): () => void {
         next = next.slice(0, start) + url + next.slice(end);
       }
     } else if (value.startsWith("/api/")) {
-      next = await blobUrl(value) ?? value;
+      const url = await blobUrl(value);
+      if (!url) {
+        if (!stopped && attribute === "src" && element.getAttribute(attribute) === value) {
+          element.setAttribute(FAILED, "");
+          element.dispatchEvent(new Event("error"));
+        }
+        return;
+      }
+      next = url;
     }
     if (stopped || next === value || element.getAttribute(attribute) !== value) return;
     let marks = processed.get(element);
@@ -252,10 +269,18 @@ function installMedia(): () => void {
       for (const node of mutation.addedNodes) scan(node);
     }
   });
+  // the app's own origin serves no /api, so a workspace path's first load fails before its blob is swapped in; that
+  // error is held back (it would show a broken image), and the real one is sent if the blob cannot be had
+  const early = (event: Event) => {
+    const element = event.target;
+    if (element instanceof Element && element.matches(selector) && !element.hasAttribute(FAILED) && awaitingBlob(element)) event.stopImmediatePropagation();
+  };
+  document.addEventListener("error", early, true);
   observer.observe(document, { subtree: true, childList: true, attributes: true, attributeFilter: attributes });
   scan(document);
   return () => {
     stopped = true;
+    document.removeEventListener("error", early, true);
     observer.disconnect();
     controller.abort();
     for (const url of cache.values()) URL.revokeObjectURL(url);
@@ -275,7 +300,7 @@ export function asleepProbe(send: typeof fetch, origin: string, token: string, n
     if (now() - last < ASLEEP_PROBE_GAP_MS) return;
     last = now();
     void send(`${origin}/api/health`, { headers: { Authorization: `Bearer ${token}`, ...BACKGROUND_HEADERS }, credentials: "omit", redirect: "error", signal: AbortSignal.timeout(10_000) })
-      .then((response) => { if (asleepAnswer(response)) markCloudAsleep(); void response.body?.cancel().catch(() => {}); })
+      .then((response) => { if (asleepAnswer(response)) markCloudAsleep(); else if (goneAnswer(response)) markCloudGone(); void response.body?.cancel().catch(() => {}); })
       .catch(() => {});
   };
 }
@@ -306,9 +331,11 @@ export function installTransport(transport: PhoneTransport, onGone?: () => void)
   // every answer from the place proves it is reachable, whatever the live stream is doing
   const fetchWorkspace: typeof fetch = (input, init) => sendWorkspace(input, init).then((response) => {
     if (placeAnswered(response)) noteWorkspaceAnswer();
+    else if (goneAnswer(response)) markCloudGone();
     return response;
   });
   forgetWorkspaceAnswers();
+  forgetCloudGone();
   const context = { transport, streamFetch: inPage(transport) ? fetchWorkspace : streamFetch.bind(window) };
   const probeAsleep = transport.kind === "bearer" ? asleepProbe(fetchWorkspace, origin, transport.token ?? "") : undefined;
   installed = context;
@@ -359,6 +386,7 @@ export function installTransport(transport: PhoneTransport, onGone?: () => void)
   window.fetch = patchedFetch;
   window.EventSource = PatchedEventSource;
   window.WebSocket = PatchedWebSocket;
+  forgetLocalVoiceCall();
   // the relay sends a body from the page in chunks, so it can count them; bearer requests go out through native http
   const stopUploads = transport.kind === "relay" ? setUploadRoute((input, init, onProgress) => {
     const url = rewriteApiUrl(input, window.location.origin, origin);

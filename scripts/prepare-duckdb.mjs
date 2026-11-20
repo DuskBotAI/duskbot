@@ -7,7 +7,7 @@
 // binding and its libduckdb must come from the same release. Each single-arch
 // mac app keeps only its slice of the universal libduckdb.dylib and re-signs it.
 import { execFile } from "node:child_process";
-import { cpSync, existsSync, lstatSync, mkdirSync, readFileSync, realpathSync, rmSync, statSync } from "node:fs";
+import { cpSync, existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { promisify } from "node:util";
@@ -105,6 +105,39 @@ export function pinnedDataChannelVersion(root) {
 
 /** The exact `x.y.z-r.n` package.json pins; a range would let the binding
  *  and the pre-baked extensions drift apart. */
+/** The built-in voice's runtime (server/local-voice). Only its own platform's binaries are kept; a target with none
+ *  (an Intel Mac since 1.24) ships without it and the voice says it cannot run there. */
+export const ONNX_PACKAGES = ["onnxruntime-node", "onnxruntime-common"];
+
+export function onnxBinaryDir(platform, arch) {
+  return join("bin", "napi-v6", platform, arch);
+}
+
+export function stageOnnxRuntime(nodeModules, modules, platform, arch) {
+  const source = installedPackage(nodeModules, ONNX_PACKAGES[0], "", [ONNX_PACKAGES[0]]);
+  if (!source || !existsSync(join(source, onnxBinaryDir(platform, arch)))) return null;
+  for (const name of ONNX_PACKAGES) {
+    const from = installedPackage(nodeModules, name, "", [ONNX_PACKAGES[0]]);
+    if (!from) throw new Error(`${name} is not installed; run pnpm install`);
+    cpSync(from, join(modules, name), { recursive: true, dereference: true });
+  }
+  const bins = join(modules, ONNX_PACKAGES[0], "bin", "napi-v6");
+  for (const os of ["darwin", "linux", "win32"]) {
+    for (const cpu of ["arm64", "x64"]) {
+      if (os !== platform || cpu !== arch) rmSync(join(bins, os, cpu), { recursive: true, force: true });
+    }
+  }
+  const kept = join(modules, ONNX_PACKAGES[0], onnxBinaryDir(platform, arch));
+  // onnxruntime.dll (1.31.1) only delay-loads DirectML.dll, for the DirectML provider the voice never asks for, and
+  // imports no dxcompiler.dll: about 37 MB the Windows app need not carry.
+  for (const unused of ONNX_WINDOWS_GPU_ONLY) rmSync(join(kept, unused), { force: true });
+  // the mac package carries the library twice; the addon links @rpath/libonnxruntime.1.dylib
+  for (const file of readdirSync(kept)) if (/^libonnxruntime\.\d+\.\d+\.\d+\.dylib$/.test(file)) rmSync(join(kept, file), { force: true });
+  return kept;
+}
+
+export const ONNX_WINDOWS_GPU_ONLY = ["DirectML.dll", "dxcompiler.dll"];
+
 export function pinnedDuckdbVersion(root) {
   const manifest = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
   const pin = manifest.dependencies?.[`${SCOPE}/node-api`];
@@ -324,7 +357,11 @@ export async function stageDuckdb({
         cpSync(source, to, { recursive: true, dereference: true });
       }
     }
+    const onnx = stageOnnxRuntime(nodeModules, join(destination, "node_modules"), platform, arch);
+    if (!onnx) log?.(`No ONNX Runtime for ${platform}-${arch}: the built-in voice will not run there`);
     if (platform === "darwin") {
+      // The npm package's dylib and addon carry Microsoft's signature; re-signed ad hoc like the others for dev runs.
+      if (sign && onnx) for (const file of readdirSync(onnx)) await run("/usr/bin/codesign", ["--force", "--sign", "-", join(onnx, file)]);
       const native = join(scope, platformPackage(platform, arch));
       for (const file of ["duckdb.node", LIBRARY_FILE.darwin]) {
         const path = join(native, file);
@@ -340,7 +377,7 @@ export async function stageDuckdb({
     }
     await verifyDuckdbTree(destination, platform, arch, version, resvgVersion, onePasswordVersion, dataChannelVersion);
     staged.push(destination);
-    log?.(`Staged DuckDB ${version}${dataChannelNative ? ` and ${DATACHANNEL_PACKAGE} ${dataChannelVersion}` : ""} for ${platform}-${arch} at ${destination}`);
+    log?.(`Staged DuckDB ${version}${dataChannelNative ? ` and ${DATACHANNEL_PACKAGE} ${dataChannelVersion}` : ""}${onnx ? " and ONNX Runtime" : ""} for ${platform}-${arch} at ${destination}`);
   }
   return staged;
 }

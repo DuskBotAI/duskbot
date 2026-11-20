@@ -1,0 +1,92 @@
+{
+  "path": "/integrations/google-sheets/get-spreadsheet-info",
+  "type": "action",
+  "title": "List the tabs and IDs in a Google Sheets workbook",
+  "nav": "inspect a workbook",
+  "h1": "see which tabs are in a google sheets file",
+  "description": "Give a bot a Google Sheets link and get a map of the workbook, including tab names and IDs. Inspect its structure before choosing a range to read.",
+  "keyword": "google sheets workbook info with ai",
+  "keywords": [
+    "google sheets bot list tab ids",
+    "chatgpt inspect google sheets structure",
+    "claude list spreadsheet tabs"
+  ],
+  "answer": "**find out which workbook you have before trusting a tab called final.** paste the google sheets url into dusk chat. your bot can return the workbook title and each tab's name and numeric id. the usual lookup reads the structure, so you can choose a tab without bringing anyone's figures into the conversation.",
+  "updated": "2026-11-20",
+  "review": {
+    "status": "approved",
+    "by": "lead agent, after four independent reviewers read every page against seo/facts (2026-11-20); every finding applied",
+    "at": "2026-11-20"
+  },
+  "tags": [
+    "google sheets",
+    "inspect a workbook"
+  ],
+  "connectors": [
+    "googlesheets"
+  ],
+  "related": [
+    "/integrations/google-sheets",
+    "/integrations/google-sheets/search-spreadsheets",
+    "/integrations/google-sheets/add-sheet-to-existing-spreadsheet"
+  ],
+  "art": {
+    "logo": "sheets",
+    "label": "Google Sheets",
+    "props": [
+      "s-map",
+      "p-folder"
+    ],
+    "bubble": "which tab is current"
+  },
+  "og_line": "the workbook map before the figures.",
+  "action": {
+    "toolkit": "googlesheets",
+    "slug": "GOOGLESHEETS_GET_SPREADSHEET_INFO"
+  },
+  "what": "**ask for a map when you're choosing where to work.** a spreadsheet has a file id. each tab inside it has its own id and properties. ask for the exact title and id together when handing a range to someone else.\n\ncell contents take a different request. for a small sample, ask for a range and grid data. if you choose individual fields, those fields decide what comes back.",
+  "uses": [
+    "distinguish the working budget from an archive with a similar filename",
+    "give a colleague the tab id they need for a range-specific change",
+    "spot a missing session tab before volunteers start entering attendance"
+  ],
+  "routine": {
+    "message": "every saturday at 7 am, read the structure of the swimming lessons workbook at https://docs.google.com/spreadsheets/d/1b4g7r2s5j8q3w6x9v4t7n2k5p8c3z6d9a4h7m2f5y8/edit. compare its tab names with the session names in classes/saturday-roster.txt in your project folder. list any missing session here beside the workbook title. never read student cells or add a tab.",
+    "when": "saturdays at 7 am before classes",
+    "needs": "google sheets read only for spreadsheet info and access to the class roster file",
+    "output": "louisa reed's saturday classes\nworkbook: winter swimming lessons. tabs include beginners and lane practice.\nroster session without a matching tab: water confidence."
+  },
+  "steps": [
+    "connect the account with access to the class workbook in **Connected apps**.",
+    "set the bot to **read only** and allow spreadsheet info. put your workbook url and roster file path in the message.",
+    "ask for the title and tab properties alone. compare an exact tab name with the roster before scheduling."
+  ],
+  "watch": [
+    "**a title alone doesn't identify the file for this lookup.** paste its url or use spreadsheet search first.",
+    "**a field selection takes priority over the grid-data switch.** requesting only titles won't bring back a sample cell."
+  ],
+  "faq": [
+    {
+      "q": "does a bot have to read student names to tell me which tabs exist?",
+      "a": "**no.** ask for the default workbook details. those include sheet properties and leave out the cell grid."
+    },
+    {
+      "q": "does a google sheets tab id mean the same thing as the file id?",
+      "a": "**each points to a different place.** the file id opens the workbook. use a tab's numeric id when another action asks which sheet inside it to use."
+    }
+  ],
+  "sources": [
+    {
+      "label": "dusk bot docs: files and apps",
+      "url": "/docs/files-and-apps"
+    },
+    {
+      "label": "dusk bot docs: routines",
+      "url": "/docs/routines"
+    }
+  ],
+  "voice": 2,
+  "tip": {
+    "text": "if you want the total from one known cell, ask for that cell. a list of tabs answers a different question."
+  }
+}

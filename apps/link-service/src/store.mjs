@@ -13,6 +13,12 @@ export const MAX_TUNNELS = 20000;
 export const MAX_CHANNELS_PER_TUNNEL = 32;
 /** a tunnel whose server has not polled for this long is dropped, so dead links cannot fill MAX_TUNNELS for good */
 export const TUNNEL_IDLE_MS = 7 * 24 * 60 * 60_000;
+/**
+ * a tunnel that carries paired phones' channels waits a year for its server: a phone reads its channel's 404 as "this
+ * phone was removed" and unpairs (shipped apps cannot be changed), and a paired phone's session lasts until it is
+ * removed, so a computer that is off for months must still find its phones when it is back.
+ */
+export const PHONE_TUNNEL_IDLE_MS = 400 * 24 * 60 * 60_000;
 
 /**
  * @param {{ dir?: string | null, now?: () => number, onChannelDelete?: (channel: any) => void, onTunnelDelete?: (tunnel: any) => void, mayExpire?: (tunnel: any) => boolean }} options
@@ -67,8 +73,11 @@ export function createStore({ dir = null, now = Date.now, onChannelDelete = () =
       const endedAt = session.endedAt ?? (state === "expired" ? session.createdAt + (session.state === "waiting" ? SESSION_CLAIM_MS : SESSION_LIFE_MS) : null);
       if (endedAt !== null && t > endedAt + SESSION_KEEP_MS) { sessions.delete(id); changed = true; }
     }
+    const phones = new Set();
+    for (const channel of channels.values()) if (channel.kind === "device") phones.add(channel.tunnel);
     for (const [id, tunnel] of tunnels) {
-      if (t - (tunnel.seenAt ?? tunnel.createdAt ?? 0) > TUNNEL_IDLE_MS && mayExpire(tunnel)) { tunnels.delete(id); onTunnelDelete(tunnel); changed = true; }
+      const idle = phones.has(id) ? PHONE_TUNNEL_IDLE_MS : TUNNEL_IDLE_MS;
+      if (t - (tunnel.seenAt ?? tunnel.createdAt ?? 0) > idle && mayExpire(tunnel)) { tunnels.delete(id); onTunnelDelete(tunnel); changed = true; }
     }
     for (const [id, channel] of channels) {
       if ((channel.expiresAt != null && channel.expiresAt <= t) || !tunnels.has(channel.tunnel)) {

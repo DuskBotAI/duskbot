@@ -64,7 +64,18 @@ describe("every pairing code waits for the presence check", () => {
       .filter((file) => readFileSync(new URL(file, root), "utf8").includes('from "qrcode.react"'))
       .map((file) => file.replace(/^components[\\/]/, "").split("\\").join("/"))
       .sort();
-    expect(drawing).toEqual(["MobilePairingCard.tsx", "PhoneSetupFlow.tsx", "ServerPairingCard.tsx", "TeamPhoneCard.tsx", "onboarding/FunnelSteps.tsx"]);
-    for (const file of drawing) expect(source(file)).toContain("requireUserPresence");
+    expect(drawing).toEqual(["MobilePairingCard.tsx", "PhoneFlowRows.tsx", "PhoneSetupFlow.tsx", "ServerPairingCard.tsx", "TeamPhoneCard.tsx", "onboarding/FunnelSteps.tsx"]);
+    for (const file of drawing.filter((name) => name !== "PhoneFlowRows.tsx")) expect(source(file)).toContain("requireUserPresence");
+  });
+
+  it("draws the relay's code only inside the gated phone setup flow", () => {
+    const users = (readdirSync(new URL("../", import.meta.url), { recursive: true }) as string[])
+      .filter((file) => /\.tsx?$/.test(file) && !file.endsWith("PhoneFlowRows.tsx") && !file.includes(".test."))
+      .filter((file) => readFileSync(new URL(`../${file}`, import.meta.url), "utf8").includes('from "./PhoneFlowRows"'))
+      .map((file) => file.split("\\").join("/"));
+    expect(users).toEqual(["components/PhoneSetupFlow.tsx"]);
+    const flow = source("PhoneSetupFlow.tsx");
+    expect(flow).toMatch(/relayPairing: flow\.active && /);
+    expect(flow).toContain("if (c.relayPairing) return <RelayPairingRows ");
   });
 });

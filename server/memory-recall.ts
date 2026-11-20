@@ -60,7 +60,7 @@ function names(text: string): string[] {
   return [...new Set([...text.matchAll(PROPER)].map((m) => m[0]).filter((word) => !NOT_NAMES.has(word)))];
 }
 
-function factDay(fact: FactRow): string | null {
+export function factDay(fact: FactRow): string | null {
   return fact.validFrom ?? (Number.isFinite(fact.learnedAt) ? new Date(fact.learnedAt).toISOString().slice(0, 10) : null);
 }
 
@@ -119,7 +119,9 @@ function ftsMatch(terms: readonly string[]): string | null {
   return usable.length ? usable.map((term) => `"${term}"`).join(" OR ") : null;
 }
 
-export async function recallFacts(input: FactRecallInput): Promise<{ facts: RecalledFact[]; searched: boolean }> {
+/** `facts`: what to recall. `current`: the live facts that answer it but are already in the prompt (`loaded`), so a
+ * caller can weigh older conversation passages against them. */
+export async function recallFacts(input: FactRecallInput): Promise<{ facts: RecalledFact[]; current: FactRow[]; searched: boolean }> {
   warmEmbedder();
   const owners = [...input.memoryIds];
   for (const id of input.memoryIds) syncWorkspaceFacts(id);
@@ -131,7 +133,7 @@ export async function recallFacts(input: FactRecallInput): Promise<{ facts: Reca
   const time = queryTime(input.query, input.today);
   const statuses: FactStatus[] = time.past ? ["active", "superseded", "expired"] : ["active"];
   const all = factsOf(owners, statuses);
-  if (!all.length) return { facts: [], searched: true };
+  if (!all.length) return { facts: [], current: [], searched: true };
   const byId = new Map(all.map((fact) => [fact.id, fact]));
   const asked = queryTerms(input.query);
   const said = asked.filter((term) => !TIME_WORDS.has(term));
@@ -180,15 +182,20 @@ export async function recallFacts(input: FactRecallInput): Promise<{ facts: Reca
   const loaded = loadedIdents(input.loaded ?? []);
   const today = Date.parse(`${input.today}T12:00:00Z`);
   const scored: RecalledFact[] = [];
+  const current: FactRow[] = [];
   for (const [id, rrf] of fused) {
     const fact = byId.get(id)!;
-    if ((fact.status === "active" && loaded.has(fact.ident)) || looksLikeInstruction(fact.text)) continue;
+    if (looksLikeInstruction(fact.text)) continue;
     const sim = similarity.get(id) ?? 0;
     const relevant = (input.wide && (sim >= SIMILAR_WITH_WORDS || lexicalSet.has(id) || entitySet.has(id))) || sim >= similar
       || (lexicalSet.has(id) && (sim >= SIMILAR_WITH_WORDS || (!similarity.size && (wordHits(content, fact) >= need || keyHit(content, fact))) || wordHits(content, fact) >= Math.min(2, said.length)))
       || (entitySet.has(id) && (sim >= SIMILAR_WITH_WORDS || !similarity.size || lexicalSet.has(id)))
       || (inWindow.has(id) && (timeOnly || lexicalSet.has(id) || sim >= SIMILAR_WITH_WORDS));
     if (!relevant) continue;
+    if (fact.status === "active" && loaded.has(fact.ident)) {
+      current.push(fact);
+      continue;
+    }
     const day = factDay(fact);
     const age = day ? Math.max(0, (today - Date.parse(`${day}T12:00:00Z`)) / 86_400_000) : RECENCY_DAYS;
     const recency = Math.max(0.1, 1 - age / RECENCY_DAYS);
@@ -206,7 +213,7 @@ export async function recallFacts(input: FactRecallInput): Promise<{ facts: Reca
   // one fact said in two places (About me and a bot's notes) is recalled once
   const seen = new Set<string>();
   const facts = scored.filter((item) => (seen.has(item.fact.ident) ? false : (seen.add(item.fact.ident), true))).slice(0, MAX_FACTS);
-  return { facts, searched: true };
+  return { facts, current, searched: true };
 }
 
 /** Cosine similarity past which two facts say the same thing, unless their numbers, names or a negation differ. */

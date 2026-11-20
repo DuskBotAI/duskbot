@@ -13,18 +13,28 @@ let limitSkip: (runId: string) => boolean = () => false;
  * (server/host/routine-quiet-host.ts): each marked on the strip. */
 export function useFreeReruns(isFree: (runId: string) => boolean, isSkipped: (runId: string) => boolean = () => false): void { freeRerun = isFree; limitSkip = isSkipped; }
 
+const MAX_COMMAND = 2_000;
+const SELECTOR = /^[a-z][a-z0-9-]*$|^[a-z][a-z0-9-]*[#.][\w-]+$|^[#.][\w-]+$/i;
+
 /** A probe as asked for: undefined for none, an error for one that cannot be read. */
 export function cleanProbe(value: unknown): RoutineProbe | undefined {
   if (value == null) return undefined;
-  const { kind, url } = value as Partial<RoutineProbe>;
-  if (kind !== "page" && kind !== "feed" && kind !== "price") throw new Error("Choose a page, a feed or a price to check");
+  const { kind, url, selector, command } = value as Partial<RoutineProbe>;
+  if (kind === "script") {
+    const line = typeof command === "string" ? command.trim() : "";
+    if (!line || line.length > MAX_COMMAND || /[\0\r\n]/.test(line)) throw new Error("Give the script check one command line of at most 2,000 characters");
+    return { kind, url: "", command: line };
+  }
+  if (kind !== "page" && kind !== "feed" && kind !== "price") throw new Error("Choose a page, a feed, a price or a script to check");
   const text = typeof url === "string" ? url.trim() : "";
   let parsed: URL;
   try { parsed = new URL(text); } catch { throw new Error("Give the page's full web address, starting with https://"); }
   if ((parsed.protocol !== "http:" && parsed.protocol !== "https:") || parsed.username || parsed.password || text.length > MAX_URL) {
     throw new Error("Only an http or https address with no sign-in details can be checked");
   }
-  return { kind, url: parsed.toString() };
+  const part = typeof selector === "string" ? selector.trim() : "";
+  if (part && (kind !== "page" || !SELECTOR.test(part) || part.length > 200)) throw new Error("A selector applies only to a page check, as #id, .class, tag, tag#id or tag.class");
+  return { kind, url: parsed.toString(), ...(part ? { selector: part } : {}) };
 }
 
 /** A probe as kept on disk; anything out of range is dropped. */

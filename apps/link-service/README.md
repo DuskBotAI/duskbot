@@ -263,13 +263,13 @@ secret set. The node checks its own coturn with a STUN binding every 30 s (`turn
   `/.well-known/duskbot/environment`). Protocol numbers decide, never versions; an optional feature is a capability
   the app checks for. The app's view gets `compat: { update: null | "app" | "agent" | "server", message, ... }`. An
   agent from before the handshake answers "unknown request" and works as protocol 1.
-- **Self-update.** Every 6 hours (5 minutes after start first) the tunnel reads `GET /v1/release` (the version, protocol
+- **Self-update.** Every hour (5 minutes after start first) the tunnel reads `GET /v1/release` (the version, protocol
   and sha256 of the agent this service serves, and `agent.mjs.sig` when there is one) and stages a newer release in
   `~/.config/duskbot-link/releases/<version>/` only when the file matches its hash and its own version line, a
   signature checks out when release keys are pinned (`RELEASE_KEYS` in agent.mjs or `DUSK_LINK_RELEASE_KEYS`; sign with
   `node release.mjs sign <key>`), and `agent.mjs selftest` runs; `ready.json` is written last. It never takes an older
   version or a lower protocol. It applies only after 5 minutes without a request, a stream byte or an egress stream
-  from the app (or at once for the `update` op with `apply: "now"`), by ending the tunnel so systemd starts it again.
+  from the app or a phone (or at once for the `update` op with `apply: "now"`), by ending the tunnel so systemd starts it again.
   The installed `/opt/duskbot-link/agent.mjs` then launches the staged file, and stops launching one that did not
   stay up for 2 minutes three starts in a row, so a bad release leaves the installed agent running.
   One release key is pinned (`RELEASE_KEYS`); its private half is the repository secret `DUSK_LINK_RELEASE_KEY` (and
@@ -278,8 +278,10 @@ secret set. The node checks its own coturn with a STUN binding every 30 s (`turn
   any change servers should get. `DUSK_LINK_UPDATES=off` turns it off for good.
 - **The server's own build.** The server is root's, so the agent only stages it and root installs it:
   - The agent reads `GET /v1/tunnels/<id>/server` with the tunnel's own VPS token (`{v:1, package:{sha256,size,version,signature?}, policy?}`,
-    404 `no_build` when none is published; 12 reads an hour per tunnel) 10 to 30 minutes after start, then every 60 to
-    80 minutes (the spread keeps servers from asking together). Only a build signed by a pinned release key and newer
+    404 `no_build` when none is published, 404 `paused` while `packages/update-policy.json` says `paused`; 12 reads an hour
+    per tunnel) 2 to 7 minutes after start, then every 10 to 15 minutes (the spread keeps servers from asking together).
+    It sends the server's and its own version (`x-dusk-server-version`, `x-dusk-agent-version`); the service keeps the
+    last 24 h of them in memory and counts them at `GET /ops/fleet` (`LINK_STATS_TOKEN`). Only a build signed by a pinned release key and newer
     than the server's version (its well-known descriptor) is downloaded: `GET /v1/tunnels/<id>/server/<sha256>.tgz`
     (only the current build, open byte ranges to resume, 12 a day per tunnel) into
     `~/.config/duskbot-link/server-release/`, checked against its hash, with `ready.json` written last.
@@ -662,7 +664,8 @@ cd apps/link-service && npm start                       # PORT (default 8790)
 
 `.env.example` lists the same names. The proxy must set `X-Real-IP` to the connecting address (overwriting any the
 client sent), or every per-address rate limit can be dodged. A tunnel whose server has not polled for 7 days is
-dropped by the sweep; that server links again with a new command. Health: `GET /healthz` (or `/health`).
+dropped by the sweep (35 days when it carries a paired phone's channel, so a phone never hears "removed" from a
+computer that was off a week); that server links again with a new command. Health: `GET /healthz` (or `/health`).
 
 ## Limits
 

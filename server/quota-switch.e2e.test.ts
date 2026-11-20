@@ -102,48 +102,38 @@ async function withQuotaFixture(
   }
 }
 
-/** A bot whose conversation runs on the limited engine, and the turn that meets the limit. `carriedOn`: another AI may
- * already have taken the request over by the time the wait ends. */
-async function meetTheLimit(api: (method: string, path: string, body?: unknown) => Promise<any>, control: (...args: string[]) => Promise<any>, text: string, carriedOn = false) {
+/** A bot whose conversation runs on the limited engine, and the turn that meets the limit. */
+async function meetTheLimit(api: (method: string, path: string, body?: unknown) => Promise<any>, control: (...args: string[]) => Promise<any>, text: string, botPatch?: Record<string, unknown>, ends = "failed") {
   const { bot } = await control("new-bot", "--name", "Out of quota");
   const threadId = bot.activeTaskId as string;
   const limited = (await api("GET", "/api/bots")).bots.find((entry: any) => entry.id === bot.id).modelSelection;
   await api("PATCH", `/api/bots/${bot.id}/tasks/${threadId}`, { modelSelection: { ...limited, instanceId: "claude" }, updateBotDefault: true });
+  if (botPatch) await api("PATCH", `/api/bots/${bot.id}`, botPatch);
   await control("send", "--bot", bot.id, "--task", threadId, "--text", text);
-  expect(carriedOn ? ["failed", "settled"] : ["failed"]).toContain((await control("wait", "--bot", bot.id, "--task", threadId, "--timeout", "30")).status);
+  expect((await control("wait", "--bot", bot.id, "--task", threadId, "--timeout", "30")).status).toBe(ends);
   const messages = async () => (await api("GET", `/api/threads/${threadId}/messages?limit=100`)).messages as any[];
   const state = async () => (await api("GET", "/api/bots")).bots.find((entry: any) => entry.id === bot.id);
   return { bot, threadId, messages, state };
 }
 
-it("carries the request on with another AI by itself: the exact message once more there, one notice, the failed root left settled", async () => {
-  await withQuotaFixture({}, async ({ api, control, backupPrompts, dataDir }) => {
-    const text = "SUMMARISE_THE_QUARTER_4K";
-    const { bot, threadId, messages, state } = await meetTheLimit(api, control, text, true);
-    const { task: sibling } = await api("POST", `/api/bots/${bot.id}/tasks`, { title: "Sibling keeps its engine" });
+it("with no backup chosen, carries the request on with another AI the person has working", async () => {
+  await withQuotaFixture({}, async ({ api, control, backupPrompts }) => {
+    await meetTheLimit(api, control, "CARRY_IT_ON_ANYWAY_3Q", undefined, "settled");
+    await expect.poll(() => backupPrompts().length, { timeout: 30_000 }).toBe(1);
+  });
+}, 240_000);
 
-    await expect.poll(async () => (await messages()).findLast((message) => message.role === "bot" && message.kind === "text")?.text, { timeout: 30_000 }).toBe("done from fake codex");
+it("set to No backup, never carries the request on with another AI: the turn waits for its own AI and nothing is sent again", async () => {
+  await withQuotaFixture({}, async ({ api, control, backupPrompts }) => {
+    const { bot, threadId, messages, state } = await meetTheLimit(api, control, "SUMMARISE_THE_QUARTER_4K", { fallback: [] });
+    const mine = async () => (await api("GET", "/api/notifications")).notifications.filter((entry: any) => entry.kind === "notice" && entry.botId === bot.id);
+    await expect.poll(async () => (await mine()).length, { timeout: 20_000 }).toBe(1);
+    expect((await mine())[0].body).toMatch(/, so Out of quota waits.*: no other AI you have set up can take over\.$/);
     const after = await messages();
-    const failures = after.filter((message) => message.tool?.name?.startsWith("error:"));
-    expect(failures).toHaveLength(1);
-    expect(failures[0].tool.name).toMatch(/This Claude account has reached its usage limit/);
-    expect(after.some((message) => message.card?.quotaSwitch), "nothing to answer").toBe(false);
-    expect(after.filter((message) => message.tool?.name === "notice: continuing on Codex after hitting the usage limit")).toHaveLength(1);
-    // The message whose turn failed, sent once more: twice in the conversation, once to the AI that works.
-    expect(after.filter((message) => message.role === "user" && message.text === text)).toHaveLength(2);
-    expect(backupPrompts()).toHaveLength(1);
-    expect(JSON.stringify(backupPrompts()[0])).toContain(text);
-
-    // This conversation moved; the bot's own engine and its other conversation did not.
-    const bots = await state();
-    expect(bots.tasks.find((task: any) => task.threadId === threadId)).toMatchObject({ modelSelection: { instanceId: "codex" }, busy: false });
-    expect(bots.modelSelection.instanceId).toBe("claude");
-    expect(bots.tasks.find((task: any) => task.threadId === sibling.threadId).modelSelection?.instanceId ?? bots.modelSelection.instanceId).toBe("claude");
-    // No job twice: the failed turn's root stayed settled, and the resend is one new root that completed.
-    expect(readHandoffs(dataDir).filter((node) => node.threadId === threadId).map((node) => [node.status, node.executions])).toEqual([["failed", 1], ["completed", 1]]);
-    // One notice for this bot; the Chief, told of the incident, hears its own if its own turn meets the limit too.
-    const notices = (await api("GET", "/api/notifications")).notifications.filter((entry: any) => entry.kind === "notice" && entry.botId === bot.id);
-    expect(notices.map((entry: any) => entry.body)).toEqual([expect.stringMatching(/^Limited Claude reached its limit.*, so Out of quota is using Codex meanwhile\.$/)]);
+    expect(after.filter((message) => message.role === "user")).toHaveLength(1);
+    expect(after.find((message) => message.tool?.name?.startsWith("error:")).tool.limitHold).toBeDefined();
+    expect((await state()).tasks.find((task: any) => task.threadId === threadId).modelSelection?.instanceId ?? "claude").toBe("claude");
+    expect(backupPrompts()).toHaveLength(0);
   });
 }, 240_000);
 

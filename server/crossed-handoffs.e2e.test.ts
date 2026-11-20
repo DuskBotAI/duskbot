@@ -47,9 +47,11 @@ it("refuses a request back to a bot that is waiting on you, and the same hand-of
 
     await cli("send", "--bot", post.id, "--task", post.activeTaskId, "--text", "P1-JOB: fetch my mail through the Mac mini");
     await expect.poll(() => existsSync(ready), { timeout: 20_000 }).toBe(true);
-    // The chief of staff is answering the mail bot in its work thread when the person writes to it in its own chat.
-    await cli("send", "--bot", cos.id, "--task", cos.activeTaskId, "--text", "C1-JOB: mail worked yesterday, find out why it fails");
-    await expect.poll(() => said(cos.activeTaskId, "C1: Post is already asking me about this; I'll answer it there."), { timeout: 20_000 }).toBe(true);
+    // The chief of staff is answering the mail bot in its own chat (one chat per bot) when the person writes to it in another
+    // thread of its.
+    const side = (await api(`/api/bots/${cos.id}/tasks`, { title: "Mail" })).task.threadId as string;
+    await cli("send", "--bot", cos.id, "--task", side, "--text", "C1-JOB: mail worked yesterday, find out why it fails");
+    await expect.poll(() => said(side, "C1: Post is already asking me about this; I'll answer it there."), { timeout: 20_000 }).toBe(true);
     const refusal = evidence().find((turn) => turn.planKey === "C1").evidence.find((entry: any) => entry.step).response.result;
     expect(refusal.isError).toBe(true);
     expect(JSON.stringify(refusal)).toContain("@Post is already waiting on you: it handed you a request");

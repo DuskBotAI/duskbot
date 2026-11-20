@@ -2,8 +2,8 @@ import { createCipheriv, hkdfSync, randomBytes } from "node:crypto";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { mobileLinkUrl, pairingFromPayload, type MobileLinkPayload, type MobilePairingPayload, type MobileRedeemResponse } from "../../../shared/mobile-link";
 import type { MobilePlatform } from "../platform";
-import { connectToWorkspace, createConnectionStore } from "./connections";
-import { PairError, parseTypedPairing, readScanned, redeemPairing, resolveTypedCode } from "./pair";
+import { connectToWorkspace, createConnectionStore, PlaceGoneError } from "./connections";
+import { LINK_DEADLINE_MS, linkDeadline, PairError, parseTypedPairing, readScanned, redeemPairing, resolveTypedCode } from "./pair";
 import { MOBILE_LINK_VERSION, universalPairLink, universalSignInLink } from "../../../shared/mobile-link";
 import * as relay from "../transport/relay";
 import { createRelaySecrets } from "../transport/link-crypto";
@@ -109,7 +109,7 @@ describe("pairing exchange", () => {
     vi.stubGlobal("fetch", fetcher);
     const { platform } = fakePlatform();
     await expect(redeemPairing({ ...payload, transport: "relay" }, platform)).rejects.toEqual(new PairError("relay-unavailable"));
-    await expect(redeemPairing({ ...payload, expiresAt: Date.now() - 3 * 60_000 }, platform)).rejects.toMatchObject({ code: "expired" });
+    await expect(redeemPairing({ ...payload, expiresAt: Date.now() - 11 * 60_000 }, platform)).rejects.toMatchObject({ code: "expired" });
     await expect(redeemPairing({ ...payload, origin: "https://workspace.test/path" }, platform)).rejects.toMatchObject({ code: "invalid" });
     await expect(redeemPairing({ ...payload, credential: "placeholder" }, platform)).rejects.toMatchObject({ code: "invalid" });
     expect(fetcher).not.toHaveBeenCalled();
@@ -118,7 +118,7 @@ describe("pairing exchange", () => {
   it("leaves a grant that only just ended by the phone's clock for the desktop to judge", async () => {
     const fetcher = vi.fn().mockResolvedValue(response({}, 410));
     vi.stubGlobal("fetch", fetcher);
-    await expect(redeemPairing({ ...payload, expiresAt: Date.now() - 30_000 }, fakePlatform().platform)).rejects.toMatchObject({ code: "expired" });
+    await expect(redeemPairing({ ...payload, expiresAt: Date.now() - 8 * 60_000 }, fakePlatform().platform)).rejects.toMatchObject({ code: "expired" });
     expect(fetcher).toHaveBeenCalled();
   });
 });
@@ -217,6 +217,35 @@ describe("v2 pairing", () => {
     expect(channel.close).toHaveBeenCalledOnce();
   });
 
+  it("sends this install's own id with every pairing, the same one each time, kept in its preferences", async () => {
+    const { platform, preferences } = fakePlatform();
+    const fetcher = vi.fn<typeof fetch>().mockImplementation(async () => response(v2Answer()));
+    vi.stubGlobal("fetch", fetcher);
+    vi.spyOn(relay, "open").mockReturnValue({ request: vi.fn().mockRejectedValue(new TypeError("offline")), close: vi.fn() });
+    await redeemPairing(pairingFromPayload(v2Payload()), platform);
+    await redeemPairing(pairingFromPayload({ ...v2Payload(), grant: { ...v2Payload().grant, id: "grant-two" } }), platform);
+    const [first, second] = fetcher.mock.calls.map((call) => JSON.parse(String(call[1]?.body)).device.install);
+    expect(first).toMatch(/^[0-9a-f-]{36}$/);
+    expect(second).toBe(first);
+    expect(preferences.get("dusk.mobile.install")).toBe(first);
+  });
+
+  it("times a grant that says when it was issued on the phone's own clock, so a computer an hour slow still pairs", async () => {
+    const { platform, preferences } = fakePlatform();
+    const fetcher = vi.fn<typeof fetch>().mockImplementation(async () => response(v2Answer()));
+    vi.stubGlobal("fetch", fetcher);
+    vi.spyOn(relay, "open").mockReturnValue({ request: vi.fn().mockRejectedValue(new TypeError("offline")), close: vi.fn() });
+    const slow = Date.now() - 60 * 60_000;
+    const late = pairingFromPayload({ ...v2Payload(), grant: { ...v2Payload().grant, issuedAt: slow, expiresAt: slow + 10 * 60_000 } });
+    expect(late.issuedAt).toBe(slow);
+    await expect(redeemPairing(late, platform)).resolves.toMatchObject({ token: expect.any(String) });
+    expect(fetcher).toHaveBeenCalled();
+    fetcher.mockClear();
+    preferences.set("dusk.mobile.grantSeen.grant-id", String(Date.now() - 11 * 60_000));
+    await expect(redeemPairing(late, platform)).rejects.toMatchObject({ code: "expired" });
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+
   it("falls back to grant relay and records the device channel", async () => {
     const channel = { request: vi.fn().mockResolvedValue(response(v2Answer())), close: vi.fn() };
     const opened = vi.spyOn(relay, "open").mockReturnValue(channel);
@@ -228,6 +257,24 @@ describe("v2 pairing", () => {
     expect(opened).toHaveBeenCalledWith(grantRoute.base, grantRoute.channel, grantRoute.token, expect.any(Uint8Array));
     expect(channel.request.mock.calls[0].slice(0, 2)).toEqual(["POST", "/api/mobile/redeem"]);
     expect(channel.close).toHaveBeenCalledOnce();
+  });
+
+  it("asks the relay once more when the desktop answered before its device channel was open, so the phone can reach it off wi-fi", async () => {
+    const late = { ...v2Answer(), relay: undefined };
+    const channel = { request: vi.fn().mockResolvedValueOnce(response(late)).mockResolvedValueOnce(response(v2Answer())), close: vi.fn() };
+    vi.spyOn(relay, "open").mockReturnValue(channel);
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("offline")));
+    const { record, token } = await redeemPairing(pairingFromPayload(v2Payload()), fakePlatform().platform);
+    expect(record.relay).toEqual(v2Answer().relay);
+    expect(token).toBe("dusk_sess_test");
+    expect(channel.request).toHaveBeenCalledTimes(2);
+    expect(channel.request.mock.calls[1][3]).toEqual(channel.request.mock.calls[0][3]);
+
+    const stillLate = { request: vi.fn().mockResolvedValueOnce(response(late)).mockRejectedValueOnce(new TypeError("dropped")), close: vi.fn() };
+    vi.spyOn(relay, "open").mockReturnValue(stillLate);
+    const kept = await redeemPairing(pairingFromPayload(v2Payload()), fakePlatform().platform);
+    expect(kept.record).toMatchObject({ transport: "relay", deviceId: "device-1", relay: { base: grantRoute.base, channel: grantRoute.channel } });
+    expect(stillLate.close).toHaveBeenCalledOnce();
   });
 
   it("stops on the first HTTP answer, including a refusal", async () => {
@@ -348,11 +395,39 @@ describe("workspace reconnect", () => {
     await expect(connectToWorkspace(record, token, platform, new AbortController().signal)).rejects.toMatchObject({ code: "unreachable" });
   });
 
+  it("says a dusk cloud whose edge answers gone was deleted, never unreachable or unpaired", async () => {
+    const { record, token, platform } = await saved();
+    record.via = [{ kind: "https", url: "https://workspace.test" }];
+    const gone = () => new Response("This dusk bot was deleted.", { status: 410, headers: { "x-dusk-cloud-power": "gone" } });
+    vi.stubGlobal("fetch", vi.fn().mockImplementation(async () => gone()));
+    await expect(connectToWorkspace(record, token, platform, new AbortController().signal)).rejects.toBeInstanceOf(PlaceGoneError);
+    // a 410 without the edge's word is no more than a failed route
+    vi.stubGlobal("fetch", vi.fn().mockImplementation(async () => response({}, 410)));
+    await expect(connectToWorkspace(record, token, platform, new AbortController().signal)).rejects.toMatchObject({ code: "unreachable" });
+  });
+
   it("falls back after a server failure and stops after a successful companion check", async () => {
     const { record, token, platform } = await saved();
     record.via = [{ kind: "https", url: "https://workspace.test" }, { kind: "companion", url: "http://mac.test:8810", net: "lan", priority: 1 }];
     vi.stubGlobal("fetch", vi.fn().mockResolvedValueOnce(response({}, 503)).mockResolvedValueOnce(response({})));
     expect(await connectToWorkspace(record, token, platform, new AbortController().signal)).toEqual({ kind: "bearer", origin: "http://mac.test:8810", token });
+  });
+
+  it("opens on the computer's wi-fi at once while a secure access route and a tailnet name never answer", async () => {
+    const { record, token, platform } = await saved();
+    record.via = [
+      { kind: "companion", url: "https://mac.access.test", net: "hosted", priority: 0 },
+      { kind: "companion", url: "http://mac.tail.ts.net:8810", net: "tailnet", priority: 100 },
+      { kind: "companion", url: "http://192.168.1.20:8810", net: "lan", priority: 200 },
+    ];
+    const hung: string[] = [];
+    vi.stubGlobal("fetch", vi.fn((url: string, init: RequestInit) => url.startsWith("http://192.168.1.20")
+      ? Promise.resolve(response({}))
+      : new Promise((_, reject) => init.signal!.addEventListener("abort", () => { hung.push(url); reject(new DOMException("aborted", "AbortError")); }))));
+    const started = Date.now();
+    expect(await connectToWorkspace(record, token, platform, new AbortController().signal)).toEqual({ kind: "bearer", origin: "http://192.168.1.20:8810", token });
+    expect(Date.now() - started).toBeLessThan(2_000);
+    expect(hung).toHaveLength(2);
   });
 
   it("removes relay keys with a saved connection", async () => {
@@ -396,6 +471,23 @@ describe("workspace reconnect", () => {
     expect(preferences.has(outboxKey(record.id))).toBe(false);
     expect(preferences.get(outboxKey(again.id))).toBe("[\"held\"]");
     expect(deleted).toEqual([`dusk-transcripts.${record.id}`]);
+  });
+
+  it("replaces a dusk cloud linked again at its new address, and keeps two places that only share an address fallback", async () => {
+    const { record, token, platform, preferences } = await saved();
+    deletedShelves();
+    const store = createConnectionStore(platform);
+    const cloud = { ...record, transport: "https" as const, origin: "https://old.dusk.bot", environmentId: "env-cloud", relay: undefined, via: undefined };
+    await store.save(cloud, token);
+    preferences.set(outboxKey(cloud.id), "[\"held\"]");
+    const moved = { ...cloud, id: `${cloud.id}-moved`, sessionRef: `token.${cloud.id}-moved`, origin: "https://new.dusk.bot" };
+    await store.save(moved, "token-2");
+    expect((await store.list()).map((one) => one.origin)).toEqual(["https://new.dusk.bot"]);
+    expect(preferences.get(outboxKey(moved.id))).toBe("[\"held\"]");
+    const bare = { ...cloud, id: "bare-a", sessionRef: "token.bare-a", origin: "https://a.example", environmentId: "https://a.example" };
+    await store.save(bare, "token-3");
+    await store.save({ ...bare, id: "bare-b", sessionRef: "token.bare-b", origin: "https://b.example" }, "token-4");
+    expect((await store.list()).map((one) => one.id)).toEqual([moved.id, "bare-a", "bare-b"]);
   });
 });
 
@@ -485,5 +577,23 @@ describe("the app's own scanner reads every qr the desktop, the site or an older
     expect(readScanned("https://dusk.bot/download")).toEqual({ kind: "store" });
     expect(readScanned("qwer-typl-kmnb")).toEqual({ kind: "code", code: "QWERTYPLKMNB" });
     for (const text of ["https://dusk.bot/m/pair?m=x", "https://evil.example/m/pair#m=x", "https://dusk.bot/pricing", "hello", ""]) expect(readScanned(text), text).toBeNull();
+  });
+});
+
+describe("a link attempt never spins forever", () => {
+  it("one the computer never answers ends at the deadline with can't reach, for Try again", async () => {
+    vi.useFakeTimers();
+    try {
+      vi.stubGlobal("fetch", vi.fn(() => new Promise<Response>(() => {})));
+      const attempt = redeemPairing(payload, fakePlatform().platform);
+      const outcome = expect(attempt).rejects.toMatchObject({ name: "PairError", code: "unreachable" });
+      await vi.advanceTimersByTimeAsync(LINK_DEADLINE_MS + 1);
+      await outcome;
+    } finally { vi.useRealTimers(); }
+  });
+
+  it("the guard passes a result or a failure that comes in time through as it is", async () => {
+    await expect(linkDeadline(Promise.resolve("ok"), 50)).resolves.toBe("ok");
+    await expect(linkDeadline(Promise.reject(new PairError("used")), 50)).rejects.toMatchObject({ code: "used" });
   });
 });

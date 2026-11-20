@@ -3,7 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
-import { checkNativeMachine, dataChannelPlatformPackage, installedPackage, pinnedDataChannelVersion, pinnedDuckdbVersion, pinnedOnePasswordVersion, pinnedResvgVersion, platformPackage, resvgPlatformPackage, stageDuckdb, targetsFor, verifyDuckdbTree } from "./prepare-duckdb.mjs";
+import { checkNativeMachine, dataChannelPlatformPackage, installedPackage, pinnedDataChannelVersion, pinnedDuckdbVersion, pinnedOnePasswordVersion, pinnedResvgVersion, platformPackage, resvgPlatformPackage, stageDuckdb, stageOnnxRuntime, targetsFor, verifyDuckdbTree } from "./prepare-duckdb.mjs";
 
 const PIN = "9.9.9-r.9";
 const RESVG_PIN = "8.8.8";
@@ -427,5 +427,43 @@ describe.skipIf(!canBuildMachO)("macOS slices", () => {
     const only = fs.readFileSync(binaries.x86_64);
     const { root } = flatInstall({ platform: "darwin", arch: "arm64", nativeFiles: { "duckdb.node": only, "libduckdb.dylib": only }, resvgBinary: only });
     await expect(stageDuckdb({ root, targets: [{ platform: "darwin", arch: "arm64" }], sign: false, log: null })).rejects.toThrow(/no arm64 slice/);
+  });
+});
+
+describe("the built-in voice's runtime", () => {
+  it("keeps one platform's ONNX Runtime binaries, without GPU-only DLLs or the mac library's second copy", () => {
+    const base = fs.mkdtempSync(path.join(os.tmpdir(), "ort-stage-"));
+    try {
+      const pkg = path.join(base, "node_modules", "onnxruntime-node");
+      const files = {
+        "darwin/arm64": ["libonnxruntime.1.31.1.dylib", "libonnxruntime.1.dylib", "onnxruntime_binding.node"],
+        "linux/x64": ["libonnxruntime.so.1", "onnxruntime_binding.node"],
+        "win32/x64": ["DirectML.dll", "dxcompiler.dll", "onnxruntime.dll", "onnxruntime_binding.node"],
+      };
+      for (const [dir, names] of Object.entries(files)) {
+        fs.mkdirSync(path.join(pkg, "bin", "napi-v6", dir), { recursive: true });
+        for (const name of names) fs.writeFileSync(path.join(pkg, "bin", "napi-v6", dir, name), "x");
+      }
+      fs.writeFileSync(path.join(pkg, "package.json"), "{}");
+      fs.mkdirSync(path.join(base, "node_modules", "onnxruntime-common"));
+      fs.writeFileSync(path.join(base, "node_modules", "onnxruntime-common", "package.json"), "{}");
+      const staged = (platform, arch) => {
+        const out = path.join(base, `out-${platform}-${arch}`);
+        const kept = stageOnnxRuntime(path.join(base, "node_modules"), out, platform, arch);
+        if (!kept) return null;
+        const bins = path.join(out, "onnxruntime-node", "bin", "napi-v6");
+        return {
+          files: fs.readdirSync(kept).sort(),
+          platforms: fs.readdirSync(bins).flatMap((name) => fs.readdirSync(path.join(bins, name)).map((cpu) => `${name}/${cpu}`)),
+          common: fs.existsSync(path.join(out, "onnxruntime-common")),
+        };
+      };
+      expect(staged("darwin", "arm64")).toEqual({ files: ["libonnxruntime.1.dylib", "onnxruntime_binding.node"], platforms: ["darwin/arm64"], common: true });
+      expect(staged("win32", "x64")).toEqual({ files: ["onnxruntime.dll", "onnxruntime_binding.node"], platforms: ["win32/x64"], common: true });
+      expect(staged("darwin", "x64")).toBeNull();
+      expect(stageOnnxRuntime(path.join(base, "missing"), path.join(base, "none"), "linux", "x64")).toBeNull();
+    } finally {
+      fs.rmSync(base, { recursive: true, force: true });
+    }
   });
 });

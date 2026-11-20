@@ -27,7 +27,7 @@ const NUDGE = 22;
 const NUDGE_MS = 1600;
 /** Everything answered or seen: the island smiles this long, then shrinks back to the bare notch. */
 export const SMILE_MS = 2400;
-const FALLBACK: IslandLayout["collapsed"] = { kind: "pill", width: 208, height: 34, top: 6, notch: 0 };
+const FALLBACK: IslandLayout["collapsed"] = { kind: "pill", width: 208, height: 34, top: 6, notch: 0, notchHeight: 0 };
 
 export interface IslandProps {
   bridge: AmbientBridge;
@@ -83,7 +83,8 @@ export function Island({ bridge, embedded = false, forceOpen = false }: IslandPr
   const openH = Math.min(maxH, c.height + contentH);
   const restW = minimal ? (notch ? c.notch : c.height + 20) : c.width + (nudged && !reduced ? NUDGE : 0);
   const targetW = open ? panelW : restW;
-  const targetH = open ? openH : c.height;
+  const restH = minimal && notch ? c.notchHeight || c.height : c.height;
+  const targetH = open ? openH : restH;
 
   const traceAs = (what: string) => (bridge.trace ? (event: string, detail?: string) => bridge.trace!(`${what}:${event}`, detail) : undefined);
   const w = useSurfaceValue(targetW, reduced, undefined, ISLAND_EXIT, traceAs("width"));
@@ -107,7 +108,9 @@ export function Island({ bridge, embedded = false, forceOpen = false }: IslandPr
   });
   const leftEdge = useTransform(w, (value) => stageW / 2 - value / 2);
   const rightEdge = useTransform(w, (value) => stageW / 2 + value / 2);
-  const leftEar = useTransform(leftEdge, (value) => value - EAR);
+  // at rest the island hides behind the camera housing, flares and all: they grow in as it widens past it
+  const ear = useTransform(w, [c.notch, c.notch + 2 * EAR], [0, EAR], { clamp: true });
+  const leftEar = useTransform(() => leftEdge.get() - ear.get());
   const tile = island?.tile ?? 20;
   const inset = notch ? 12 : Math.max(6, Math.round((c.height - tile) / 2) + 1);
   const tileX = useTransform(leftEdge, (value) => value + inset);
@@ -174,8 +177,8 @@ export function Island({ bridge, embedded = false, forceOpen = false }: IslandPr
     <div ref={stage} className="amb-stage" data-open={open || undefined} data-empty={bots.length ? undefined : ""} style={{ width: stageW, height: stageH }} onKeyDown={onKeyDown}>
       {notch && (
         <>
-          <motion.div aria-hidden className="amb-ear amb-ear-left" style={{ x: leftEar, width: EAR, height: EAR }} />
-          <motion.div aria-hidden className="amb-ear amb-ear-right" style={{ x: rightEdge, width: EAR, height: EAR }} />
+          <motion.div aria-hidden className="amb-ear amb-ear-left" style={{ x: leftEar, width: ear, height: ear }} />
+          <motion.div aria-hidden className="amb-ear amb-ear-right" style={{ x: rightEdge, width: ear, height: ear }} />
         </>
       )}
       <motion.section

@@ -1,0 +1,128 @@
+{
+  "path": "/use-cases/job-applications",
+  "type": "use-case",
+  "title": "Prepare a job application you can defend in an interview",
+  "nav": "job applications",
+  "h1": "draft job application answers from work you actually did",
+  "description": "Compare a job posting with your experience in Google Docs. Get evidence for each requirement, a draft answer and gaps to resolve before you apply.",
+  "keyword": "ai job application assistant",
+  "keywords": [
+    "tailor job application answers",
+    "job application evidence"
+  ],
+  "answer": "**write the answer you could explain in an interview tomorrow.** give a bot a job posting and a google doc of your own work examples. it can match a requirement to a project, draft an answer in your words and flag the experience it couldn't find. you decide what to claim and where to apply.",
+  "updated": "2026-11-20",
+  "review": {
+    "status": "approved",
+    "by": "lead agent, after four independent reviewers read every page against seo/facts (2026-11-20); every finding applied",
+    "at": "2026-11-20"
+  },
+  "voice": 2,
+  "tags": [
+    "careers",
+    "applications",
+    "writing"
+  ],
+  "connectors": [
+    "googledocs"
+  ],
+  "related": [
+    "/use-cases/form-filling",
+    "/integrations/google-docs",
+    "/use-cases/meeting-notes"
+  ],
+  "art": {
+    "props": [
+      "p-briefcase",
+      "p-magnifier"
+    ],
+    "bubble": "can i back that up?"
+  },
+  "og_line": "every answer starts with your own work.",
+  "routine": {
+    "intro": "**prepare one role at a time.** keep the posting text, employer and application question together.",
+    "message": "each wednesday at 6 pm, read the posting marked next in the google doc “roles to apply for”. use my experience doc at https://docs.google.com/document/d/1m7c3r9n5v2k8p6b4x7t3a9s5f2j8q6h4w7z3d9l5y2/edit. copy the application question and its word limit. map the role's required skills to specific work in my doc. separate my contribution from what the team did. show the source heading for every match.\n\nfor the strongest match, draft a first-person answer under the limit. put missing facts in a question for me. don't invent dates, tools, credentials or results. leave the draft in chat. don't open a hiring portal, contact anyone or submit an application.",
+    "when": "wednesdays at 6 pm, for the posting you chose",
+    "needs": "posting text, the actual question and a read only google docs connection. use your postings doc title and experience doc link.",
+    "output": "example application prep for warren\nrequirement | train seasonal staff → experience doc, 'winter intake'\ndraft | i ran the first stockroom walkthrough for our seasonal hires and wrote the shelf guide they used during the shift.\ngap | the posting asks about managing staff. did you supervise anyone beyond training?"
+  },
+  "sections": [
+    {
+      "h": "build an evidence file worth quoting",
+      "md": "**record what you personally did on the project.** give each example a heading, your role, an action and an outcome you can defend. “i tested the returns screen” tells the bot more than “worked on a launch.” remove client names if they belong in confidence."
+    },
+    {
+      "h": "fit the evidence to the actual question",
+      "md": "**a screening question deserves its own answer.**\n\n1. copy the wording and word limit from the posting you chose.\n2. have the bot read the named google doc and return headings for matching examples.[^1]\n3. draft around one example. keep an unsupported requirement visible so you can address it honestly."
+    },
+    {
+      "h": "read the draft in your own voice",
+      "md": "**stop on any sentence you couldn't follow up with a story.** fix verbs that overstate responsibility. read the final version against the employer's question before pasting it into the application.\n\nif you want applications sent in bulk, dusk bot is the wrong pick for this job. choosing a role and attesting to the answers belong with you."
+    }
+  ],
+  "safeguards": [
+    "leave the experience doc read only. rewrite your source material yourself if you spot an error.",
+    "answer eligibility, work authorization and personal declarations yourself. keep identity documents out of the writing sample.",
+    "sending through connected apps asks first by default. this routine needs no recruiter mailbox.[^4]"
+  ],
+  "worked": {
+    "intro": "an invented application for a stockroom lead",
+    "before": "warren's notes say he trained incoming staff. the posting asks about line management. a cover letter that calls him a manager would misstate his role.",
+    "after": "the answer describes the walkthrough and shelf guide. warren can now clarify his responsibilities or choose a vacancy that values training experience."
+  },
+  "saves": {
+    "estimate": "possibly 10 minutes on one written question",
+    "formula": "18 minutes locating and drafting an example\n- 8 minutes selecting evidence and editing the draft\n= 10 minutes per question",
+    "assumptions": [
+      "compare questions with similar length limits",
+      "include time spent preparing the experience doc across the applications that use it",
+      "count your final fact review in the drafting time"
+    ]
+  },
+  "mistakes": [
+    {
+      "mistake": "turning the employer's wish list into your skills list",
+      "fix": "use the posting to choose evidence. only your own history can support the claim."
+    },
+    {
+      "mistake": "adding a percentage to make a story sound stronger",
+      "fix": "describe an observable result you can explain. add a number only if your records support it."
+    }
+  ],
+  "quick": {
+    "steps": [
+      "choose a question from one role you want",
+      "give the bot a short doc with a relevant project",
+      "read the proposed answer aloud and correct the verbs"
+    ]
+  },
+  "faq": [
+    {
+      "q": "what if i have no direct experience with a requirement?",
+      "a": "describe adjacent work in plain language if it helps. leave the gap clear. training someone on a tool doesn't necessarily mean you administered it."
+    },
+    {
+      "q": "can i reuse the draft for a different company?",
+      "a": "start from the same work example, then read the new question. the second employer might ask what went wrong instead of what you achieved."
+    }
+  ],
+  "sources": [
+    {
+      "label": "composio: google docs actions",
+      "url": "https://docs.composio.dev/toolkits/googledocs",
+      "checked": "2026-11-20"
+    },
+    {
+      "label": "dusk bot docs: files and connected apps",
+      "url": "/docs/files-and-apps"
+    },
+    {
+      "label": "dusk bot docs: routines",
+      "url": "/docs/routines"
+    },
+    {
+      "label": "dusk bot docs: a bot’s computer",
+      "url": "/docs/computer"
+    }
+  ]
+}

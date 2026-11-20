@@ -1,5 +1,6 @@
 // agent-browser 0.37.0's core profile advertises 29 tools at ~12.5k tokens, mostly fifteen launch/session parameters
 // repeated on every tool, and every result arrives twice (text plus a 3-5x larger structuredContent that Codex keeps in history).
+import { withDialogTool } from "./browser-relayed-tools.ts";
 import { trimResultText } from "./mcp-trim.ts";
 
 /** A model must never set these: `session` reaches another bot's browser, `extraArgs`/`caCert`/`headed`/`webgpu`/`webmcp`
@@ -152,7 +153,7 @@ export function shapeBrowserToolResult(result: unknown, options: { toolName?: st
   const content = (result.content as unknown[]).map((part) => {
     if (!isRecord(part) || part.type !== "text" || typeof part.text !== "string") return part;
     textParts++;
-    const outcome = trimResultText({ text: withoutLifecycle(part.text), budget, toolName: options.toolName });
+    const outcome = trimResultText({ text: withDialogTool(withoutLifecycle(part.text)), budget, toolName: options.toolName });
     return { ...part, text: outcome.trimmed ? outcome.text + BROWSER_NARROWING_HINT : outcome.text };
   });
   if (!textParts) return { ...result, content };

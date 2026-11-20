@@ -10,7 +10,8 @@ import { AdminHeader, Failed, Loading, SearchBox, n } from "./ui";
 interface Row { key: string; visitors: number; signups: number; paid: number; pageviews?: number; conversion?: number | null; bounce?: number | null; visitMs?: number | null }
 const TITLE: Record<string, string> = { channel: "channels", source: "sources", referrer: "referrers", campaign: "campaigns", keyword: "keywords", ref: "ref links", page: "pages", entry: "entry pages", exit: "exit pages", host: "hostnames",
   country: "countries", region: "regions", city: "cities", browser: "browsers", os: "operating systems", device: "devices", surface: "surfaces", goal: "goals" };
-type Sort = "visitors" | "signups" | "conversion" | "bounce" | "visitMs";
+type Sort = "visitors" | "signups" | "trials" | "conversion" | "bounce" | "visitMs";
+const SORTS: readonly Sort[] = ["visitors", "signups", "trials", "conversion", "bounce", "visitMs"];
 
 /** one card's dimension as a full table: every row, sortable, with conversion, bounce and visit time */
 export function DetailsPage({ dimension }: { dimension: string }) {
@@ -20,11 +21,14 @@ export function DetailsPage({ dimension }: { dimension: string }) {
   const surface = (query.get("site") ?? "all") as Surface;
   const filters: Record<string, string> = {};
   for (const [k, v] of query) if (k.startsWith("f.")) filters[k.slice(2)] = v;
-  const [sort, setSort] = useState<Sort>("visitors");
+  const [sort, setSort] = useState<Sort>(() => SORTS.find((s) => s === query.get("sort")) ?? "visitors");
   const [q, setQ] = useState("");
   const { data, error, loading, reload } = useAdmin<{ rows: Row[] }>(`/web/${dimension}?${webQuery(range, surface, filters)}`);
+  // the overview's own read, usually already kept: its trials per row
+  const web = useAdmin<{ revenue?: { trials?: { cards: Record<string, Record<string, number>> } } }>(`/web?${webQuery(range, surface, filters)}&tz=${new Date().getTimezoneOffset()}`);
+  const trials = web.data?.revenue?.trials?.cards[dimension] ?? {};
   const needle = q.trim().toLowerCase();
-  const rows = (data?.rows ?? []).filter((row) => !needle || dimLabel(dimension, row.key).toLowerCase().includes(needle))
+  const rows = (data?.rows ?? []).map((row) => ({ ...row, trials: trials[row.key] ?? 0 })).filter((row) => !needle || dimLabel(dimension, row.key).toLowerCase().includes(needle))
     .sort((a, b) => ((b[sort] ?? -1) as number) - ((a[sort] ?? -1) as number));
   const max = Math.max(1, ...rows.map((row) => row.visitors));
   const head = (id: Sort, label: string) => (
@@ -42,7 +46,7 @@ export function DetailsPage({ dimension }: { dimension: string }) {
       {!data && loading && <Loading rows={10} />}
       {data && (
         <Table label={TITLE[dimension] ?? dimension}>
-          <thead><tr><Th>{dimension}</Th>{head("visitors", "visitors")}{head("signups", "signups")}{head("conversion", "conversion")}{head("bounce", "bounce")}{head("visitMs", "visit time")}</tr></thead>
+          <thead><tr><Th>{dimension}</Th>{head("visitors", "visitors")}{head("signups", "signups")}{head("trials", "trials")}{head("conversion", "conversion")}{head("bounce", "bounce")}{head("visitMs", "visit time")}</tr></thead>
           <tbody>
             {rows.map((row) => (
               <tr key={row.key} className="hover-row">
@@ -52,12 +56,13 @@ export function DetailsPage({ dimension }: { dimension: string }) {
                 </Td>
                 <Td className="text-end font-mono num">{n(row.visitors)}</Td>
                 <Td className="text-end font-mono text-coral-deep num">{n(row.signups)}</Td>
+                <Td className="text-end font-mono text-money num">{row.trials ? n(row.trials) : "-"}</Td>
                 <Td className="text-end font-mono num">{percent(row.conversion ?? (row.visitors ? row.signups / row.visitors : null))}</Td>
                 <Td className="text-end font-mono num">{percent(row.bounce ?? null)}</Td>
                 <Td className="text-end font-mono num">{duration(row.visitMs ?? null)}</Td>
               </tr>
             ))}
-            {!rows.length && <tr><Td colSpan={6} className="py-8 text-center text-ink-3">nothing here in this window.</Td></tr>}
+            {!rows.length && <tr><Td colSpan={7} className="py-8 text-center text-ink-3">nothing here in this window.</Td></tr>}
           </tbody>
         </Table>
       )}

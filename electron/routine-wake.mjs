@@ -12,30 +12,48 @@ const NOTIFY_ATTEMPTS = 3;
 /** Keeps the system from idle-sleeping while letting the display turn off. */
 export const ROUTINE_WAKE_BLOCKER = "prevent-app-suspension";
 
-export function routineWakeDecision({ enabled, onBattery, status }) {
-  if (!enabled) return { hold: false, reason: "off", at: null };
+/**
+ * `enabled`: hold the hour before a run is due. `pluggedIn`: hold whenever a routine is enabled on this computer
+ * (`status.routines`, from GET /api/routines/wake). Either only on AC power.
+ */
+export function routineWakeDecision({ enabled, pluggedIn = false, onBattery, status }) {
+  if (!enabled && !pluggedIn) return { hold: false, reason: "off", at: null };
   if (onBattery) return { hold: false, reason: "battery", at: null };
-  if (!status || status.hold !== true) return { hold: false, reason: "idle", at: null };
+  if (pluggedIn && (status?.routines ?? 0) > 0) return { hold: true, reason: "plugged-in", at: null };
+  if (!enabled || !status || status.hold !== true) return { hold: false, reason: "idle", at: null };
   return { hold: true, reason: status.reason === "running" ? "running" : "due", at: typeof status.at === "number" ? status.at : null };
 }
 
+/** Going to sleep is worth a word only while a routine here would miss its time and the person has not chosen to stay awake. */
+export const sleepMissesRoutines = ({ pluggedIn, status }) => !pluggedIn && (status?.routines ?? 0) > 0;
+
 const settingsFile = (userData) => path.join(userData, "routine-wake.json");
 
+/** routine-wake.json: `keepAwake` (default on) and `keepAwakePluggedIn` (default off). */
 export function routineWakeSettings(userData) {
   try {
     const parsed = JSON.parse(fs.readFileSync(settingsFile(userData), "utf8"));
-    return { keepAwake: parsed?.keepAwake !== false };
+    return { keepAwake: parsed?.keepAwake !== false, pluggedIn: parsed?.keepAwakePluggedIn === true };
   } catch {
-    return { keepAwake: true };
+    return { keepAwake: true, pluggedIn: false };
   }
 }
 
-export function rememberRoutineWake(userData, keepAwake) {
+/** The renderer's `{ keepAwake?, pluggedIn? }`: only booleans pass. */
+export function routineWakePatch(patch) {
+  const out = {};
+  for (const key of ["keepAwake", "pluggedIn"]) if (typeof patch?.[key] === "boolean") out[key] = patch[key];
+  return out;
+}
+
+/** `patch`: `{ keepAwake?, pluggedIn? }`, merged over what is saved. */
+export function rememberRoutineWake(userData, patch) {
+  const next = { ...routineWakeSettings(userData), ...patch };
   const file = settingsFile(userData);
   const temporary = `${file}.${process.pid}.tmp`;
   try {
     fs.mkdirSync(path.dirname(file), { recursive: true });
-    fs.writeFileSync(temporary, JSON.stringify({ keepAwake: keepAwake !== false }, null, 2));
+    fs.writeFileSync(temporary, JSON.stringify({ keepAwake: next.keepAwake !== false, keepAwakePluggedIn: next.pluggedIn === true }, null, 2));
     fs.renameSync(temporary, file);
   } catch {
     try {
@@ -50,9 +68,10 @@ export function rememberRoutineWake(userData, keepAwake) {
  * - fetchStatus(): Promise<{hold, reason?, at?} | null>, the server's answer, null when unreachable
  * - isOnBattery(): boolean
  * - blocker: { start(type): id, stop(id), isStarted(id): boolean }, Electron's powerSaveBlocker
- * - settings(): { keepAwake: boolean }
+ * - settings(): { keepAwake: boolean, pluggedIn: boolean }
  * - log(line)
  * - powerMonitor?: { on(event, listener) }, Electron's, once the app is ready
+ * - now?(): number
  * - isOnline?(): boolean, Electron's net.isOnline
  * - notify?(event): Promise<unknown>, tells the server "suspend", "resume" or "online" (POST /api/routines/wake)
  */
@@ -60,6 +79,9 @@ export function createRoutineWakeHold(deps) {
   let blockerId = null;
   let timer = null;
   let last = { hold: false, reason: "idle", at: null };
+  let status = null;
+  let sleptAt = null;
+  let listening = false;
 
   const apply = (decision) => {
     if (decision.hold && blockerId === null) {
@@ -74,14 +96,31 @@ export function createRoutineWakeHold(deps) {
   };
 
   const poll = async () => {
-    const status = await Promise.resolve()
+    status = await Promise.resolve()
       .then(() => deps.fetchStatus())
       .catch(() => null);
-    apply(routineWakeDecision({ enabled: deps.settings().keepAwake, onBattery: deps.isOnBattery(), status }));
+    const settings = deps.settings();
+    apply(routineWakeDecision({ enabled: settings.keepAwake, pluggedIn: settings.pluggedIn, onBattery: deps.isOnBattery(), status }));
     return state();
   };
 
-  const state = () => ({ ...last, keepAwake: deps.settings().keepAwake, onBattery: deps.isOnBattery() });
+  const state = () => {
+    const settings = deps.settings();
+    return { ...last, keepAwake: settings.keepAwake, pluggedIn: settings.pluggedIn, onBattery: deps.isOnBattery(), sleptAt };
+  };
+
+  const suspended = () => {
+    if (sleepMissesRoutines({ pluggedIn: deps.settings().pluggedIn, status })) sleptAt = (deps.now ?? Date.now)();
+  };
+
+  const listen = () => {
+    if (listening || !deps.powerMonitor) return;
+    listening = true;
+    deps.powerMonitor.on("suspend", suspended);
+    // a plug or unplug changes the answer at once, not at the next poll
+    deps.powerMonitor.on("on-ac", () => void poll());
+    deps.powerMonitor.on("on-battery", () => void poll());
+  };
 
   const wake = watchWake(deps);
 
@@ -89,6 +128,7 @@ export function createRoutineWakeHold(deps) {
     start() {
       if (timer) return;
       wake.watch();
+      listen();
       void poll();
       timer = setInterval(() => void poll(), deps.pollMs ?? ROUTINE_WAKE_POLL_MS);
       timer.unref?.();

@@ -11,6 +11,8 @@ export interface RouteWatch {
   visible: () => boolean;
   /** walks the record's routes again in the background; the screen stays as it is */
   rewalk: () => Promise<void>;
+  /** the phone changed networks: the route it holds may be gone at once, so the walk runs without waiting for silence */
+  onNetworkChange?: (listener: () => void) => () => void;
   now?: () => number;
   every?: (run: () => void, ms: number) => () => void;
 }
@@ -24,16 +26,17 @@ export function watchRoute(watch: RouteWatch): () => void {
   let lastWalk = -Infinity;
   let walking = false;
   let stopped = false;
-  const check = () => {
+  const check = (moved = false) => {
     if (stopped || walking || !watch.online() || !watch.visible()) return;
     const at = now();
-    if (at - Math.max(watch.heardAt() ?? startedAt, startedAt) < ROUTE_STUCK_MS || at - lastWalk < ROUTE_STUCK_MS) return;
+    if (!moved && (at - Math.max(watch.heardAt() ?? startedAt, startedAt) < ROUTE_STUCK_MS || at - lastWalk < ROUTE_STUCK_MS)) return;
     lastWalk = at;
     walking = true;
     void watch.rewalk().catch(() => {}).finally(() => { walking = false; });
   };
-  const stop = every(check, ROUTE_CHECK_MS);
-  return () => { stopped = true; stop(); };
+  const stop = every(() => check(), ROUTE_CHECK_MS);
+  const unlisten = watch.onNetworkChange?.(() => check(true));
+  return () => { stopped = true; stop(); unlisten?.(); };
 }
 
 /** the same way to the place: a new transport over it would only drop the one that works as well */

@@ -846,15 +846,22 @@ export function ConnectAppsWindow({ page: requested, nonce, onClose, onTemplates
                   <div className="ca-home">
                     <div className="ca-head">
                       <h2 className="ca-title" id="ca-title">{t("connectApps.title")}</h2>
-                      <button type="button" className="ca-installed" aria-label={t("connectApps.yours")} onClick={() => go({ kind: "yours" })}>
-                        {connected.length > 0 && (
-                          <span className="ca-stack" aria-hidden="true">
-                            {connected.slice(0, 4).map((entry) => <span key={entry.id}><AppTile entry={entry} size={18} /></span>)}
-                          </span>
-                        )}
-                        <span>{t("apps.connectedCount", { count: connected.length })}</span>
-                        <span data-chevron="" aria-hidden="true" className="inline-flex"><Icon name="chevron-right" size={12} /></span>
-                      </button>
+                      {connectors.stale && connected.length === 0 ? (
+                        <div className="ca-unchecked" role="alert">
+                          <span>{t("connectApps.unchecked")}</span>
+                          <button type="button" className="ca-pill" onClick={connectors.reload}>{t("connectApps.retry")}</button>
+                        </div>
+                      ) : (
+                        <button type="button" className="ca-installed" aria-label={t("connectApps.yours")} onClick={() => go({ kind: "yours" })}>
+                          {connected.length > 0 && (
+                            <span className="ca-stack" aria-hidden="true">
+                              {connected.slice(0, 4).map((entry) => <span key={entry.id}><AppTile entry={entry} size={18} /></span>)}
+                            </span>
+                          )}
+                          <span>{t("apps.connectedCount", { count: connected.length })}</span>
+                          <span data-chevron="" aria-hidden="true" className="inline-flex"><Icon name="chevron-right" size={12} /></span>
+                        </button>
+                      )}
                     </div>
                     <div className="ca-controls">
                       <div className="ca-search-row">

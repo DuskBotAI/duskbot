@@ -885,3 +885,24 @@ describe("the Connect Apps window", () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("connected apps that could not be read", () => {
+  const reopen = async () => {
+    act(() => root.unmount());
+    root = createRoot(document.body.appendChild(document.createElement("div")));
+    await act(async () => { root.render(createElement(ConnectAppsWindow, { page: { kind: "home" }, nonce: 2, onClose, onTemplates: vi.fn() })); });
+    await flush();
+  };
+
+  it("says it could not check, never 0 connected, and Try again reads them again", async () => {
+    fixture.inventory = Promise.resolve({ services: {}, authoritative: false });
+    await reopen();
+    expect(dialog().querySelector(".ca-head")?.textContent).toContain("Couldn't check your apps");
+    expect(dialog().querySelector(".ca-head")?.textContent).not.toContain("0 connected");
+    fixture.inventory = Promise.resolve({ services: fixture.connected, authoritative: true });
+    await act(async () => { button("Try again")!.click(); });
+    await flush();
+    expect(button("Your plugins")?.textContent).toContain("1 connected");
+    expect(dialog().querySelector(".ca-head")?.textContent).not.toContain("Couldn't check");
+  });
+});

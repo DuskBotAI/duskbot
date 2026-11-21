@@ -227,6 +227,19 @@
   transform: translateY(-50%);
 }
 .ca-installed:hover { background: var(--ca-hover); }
+.ca-unchecked {
+  position: absolute;
+  top: 50%;
+  inset-inline-end: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--ca-ink-68);
+  font-size: 12px;
+  line-height: 16px;
+  white-space: nowrap;
+  transform: translateY(-50%);
+}
 .ca-installed > [data-chevron] { color: var(--ca-ink-56); }
 .ca-stack { display: inline-flex; align-items: center; }
 .ca-stack > span {

@@ -61,7 +61,7 @@ export function SettingsPage({ bot, onOpen, more }: {
         <NavRow data-panel-page="identity" title={t("botPanel.ui.botSettingsSectionsIdentity")} value={bot.title?.trim() || undefined} onClick={open("identity")} />
         <NavRow data-panel-page="instructions" title={t("botPanel.ui.botSettingsSimpleInstructions")} value={(bot.soul ?? "").trim() ? undefined : t("botPanel.none")} onClick={open("instructions")} />
         <NavRow data-panel-page="memory" title={t("botPanel.memoryRow")} value={memoryLine} onClick={open("memory")} />
-        <NavRow data-panel-page="skills" title={t("botPanel.ui.botSettingsSimpleSkills")} value={skills.loading ? undefined : skillsOn > 0 ? t("botPanel.skills.on", { count: skillsOn }) : t("botPanel.none")} onClick={open("skills")} />
+        <NavRow data-panel-page="skills" title={t("botPanel.ui.botSettingsSimpleSkills")} value={skills.loading ? undefined : skills.loadFailed ? t("botPanel.skills.notLoaded") : skillsOn > 0 ? t("botPanel.skills.on", { count: skillsOn }) : t("botPanel.none")} onClick={open("skills")} />
         {slackAvailable && <NavRow data-panel-page="slack" title={t("slack.title")} value={slackValue} onClick={open("slack")} />}
       </Card>
 

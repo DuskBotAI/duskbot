@@ -7,6 +7,7 @@ import { useStore, type Bot } from "@/state/store";
 import { OrgSkillsCard } from "../../bot-settings/OrgSkillsCard";
 import { SkillReviewSheet } from "../../bot-settings/SkillsSection";
 import { Card, FormDialog, FormField, NavRow, NoteRow, rowCls, RowText, SheetPane, useSubPage } from "../../ListRows";
+import { buttonCls } from "../rows";
 import { RowIconButton, textFieldCls } from "../../ui/GrokDialog";
 import { Toggle } from "../../ui/Toggle";
 import { useSkillActions } from "./use-skill-actions";
@@ -30,7 +31,15 @@ function SkillRows({ bot }: { bot: Bot }) {
   const [adding, setAdding] = useState(false);
   const busy = Boolean(skills.working);
   const on = skills.skills.filter((skill) => skill.enabled).length;
-  const errorRow = skills.error && !skills.reviewing && !adding ? <Card><NoteRow tone="warn">{skills.error}</NoteRow></Card> : null;
+  const notLoaded = skills.loadFailed && !skills.loading;
+  const failedRows = (
+    <>
+      <NoteRow tone="warn" data-sheet-row="skills-load-failed">{t("botPanel.skills.loadFailed")}</NoteRow>
+      <div className={rowCls}><button type="button" className={buttonCls} onClick={() => void skills.refresh()}>{t("botPanel.skills.retry")}</button></div>
+    </>
+  );
+  const errorRow = notLoaded && !adding ? <Card>{failedRows}</Card>
+    : skills.error && !skills.reviewing && !adding ? <Card><NoteRow tone="warn">{skills.error}</NoteRow></Card> : null;
   const review = (
     <SkillReviewSheet
       reviewing={skills.reviewing}
@@ -47,6 +56,7 @@ function SkillRows({ bot }: { bot: Bot }) {
         <>
           <Card data-sheet-group="installed">
             {skills.loading ? <NoteRow>{t("botPanel.ui.skillsLoading")}</NoteRow>
+              : notLoaded ? failedRows
               : skills.skills.length === 0 ? <ArtState data-art-state="skills" art="cap" title={t("empty.skills.title")} className="py-6">{t("empty.skillsSheet.hint", { name: bot.name })}</ArtState>
                 : skills.skills.map((skill) => (
                   <div key={skill.name} data-panel-row={`skill:${skill.name}`} className={cn(rowCls, "group/row")}>
@@ -68,7 +78,7 @@ function SkillRows({ bot }: { bot: Bot }) {
                   </div>
                 ))}
           </Card>
-          {errorRow}
+          {!notLoaded && errorRow}
           <OrgSkillsCard bot={bot} onAdded={() => void skills.refresh()} />
         </>
       ) : (
@@ -77,7 +87,7 @@ function SkillRows({ bot }: { bot: Bot }) {
             <NavRow
               data-sheet-row="installed"
               title={t("botPanel.ui.sheetRowsInstalled")}
-              value={skills.loading ? t("botPanel.ui.skillsLoading") : skills.skills.length === 0 ? t("botPanel.sheet.noSkills") : t("botPanel.skills.on", { count: on })}
+              value={skills.loading ? t("botPanel.ui.skillsLoading") : notLoaded ? t("botPanel.skills.notLoaded") : skills.skills.length === 0 ? t("botPanel.sheet.noSkills") : t("botPanel.skills.on", { count: on })}
               onClick={() => open("installed", t("botPanel.ui.sheetRowsInstalled"))}
             />
             <NavRow data-sheet-row="add-skill" title={t("botPanel.ui.sheetRowsAddSkill")} onClick={() => setAdding(true)} />

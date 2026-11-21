@@ -76,7 +76,7 @@ describe("Discord chat channel", () => {
     expect(status.pairCode).toMatch(/^[A-Z2-9]{8}$/);
     expect(status.openUrl).toContain("client_id=900000000000000001");
     await until(() => f.host.status("bot-nova").platforms[1]!.state === "online");
-    expect(f.fake.identifies[0]).toMatchObject({ intents: 1 | (1 << 9) | (1 << 12) });
+    expect(f.fake.identifies[0]).toMatchObject({ intents: 1 | (1 << 9) | (1 << 10) | (1 << 12) | (1 << 13) });
 
     f.fake.message({ author: STRANGER, channelId: "300", content: "hi" });
     await until(() => f.fake.posted().find((call) => /private/.test(String(call.body.content))));

@@ -174,7 +174,7 @@ export function summarize(input: {
   return answer;
 }
 
-const TOUCH: Record<string, string> = { browser: "the browser", computer: "the computer", terminal: "the terminal", files: "files", web: "web search", image: "images", data: "data tools", app: "connected apps", mcp: "mcp tools" };
+const TOUCH: Record<string, string> = { browser: "the browser", computer: "the computer", terminal: "the terminal", files: "files", web: "web search", x: "X search", image: "images", data: "data tools", app: "connected apps", mcp: "mcp tools" };
 const touchWords = (key: string) => TOUCH[key] ?? key;
 
 /** 3 to 5 plain lines on where to look first, strongest first; fixed rules over the answer, nothing guessed */

@@ -126,7 +126,8 @@ it("keeps a turn on the whole catalog until the switch is on, then mounts the br
       // a Claude turn loads only the hot tools up front; the rest are found through tool search
       const upFront = listed.filter((tool) => tool._meta?.["anthropic/alwaysLoad"] !== false).map((tool) => tool.name);
       expect(upFront).toEqual(expect.arrayContaining(["coordinate_bots", "memory_update"]));
-      expect(upFront).not.toContain("trigger_info");
+      expect(upFront).toContain("trigger_info");
+      expect(upFront).not.toContain("delete_trigger");
       whole = listed.map(({ _meta, ...tool }) => tool);
       expect(whole.map((tool) => tool.name)).toEqual(expect.arrayContaining(["coordinate_bots", "trigger", "trigger_info", "session_search"]));
       expect(whole.map((tool) => tool.name)).not.toEqual(expect.arrayContaining(["find_tool"]));
@@ -161,13 +162,14 @@ it("keeps a turn on the whole catalog until the switch is on, then mounts the br
       expect(namesOf(list).slice(-2)).toEqual(["find_tool", "use_tool"]);
       expect(namesOf(list)).toEqual(expect.arrayContaining(["coordinate_bots", "post_to_room", "memory_update", "request_sign_in"]));
       expect(namesOf(list)).toContain("trigger");
-      expect(namesOf(list)).not.toContain("trigger_info");
+      expect(namesOf(list)).toContain("trigger_info");
+      expect(namesOf(list)).not.toContain("delete_trigger");
       expect(JSON.stringify(list.result!.tools).length).toBeLessThan(JSON.stringify(whole).length / 2);
 
       // found from how a person would ask, with the schema the whole catalog lists
-      const found = (JSON.parse(textOf(await call(ask, "find_tool", { query: "what routines do I have" }))) as { matches: BridgeTool[] }).matches;
-      expect(found[0]!.name).toBe("trigger_info");
-      expect(found[0]!.inputSchema).toEqual(whole.find((tool) => tool.name === "trigger_info")!.inputSchema);
+      const found = (JSON.parse(textOf(await call(ask, "find_tool", { query: "delete one of my routines for good" }))) as { matches: BridgeTool[] }).matches;
+      expect(found[0]!.name).toBe("delete_trigger");
+      expect(found[0]!.inputSchema).toEqual(whole.find((tool) => tool.name === "delete_trigger")!.inputSchema);
       // then run: the harness itself answered, with this turn's capability,
       // what it answers the same tool called by its own name
       const routines = await use(ask, "list_triggers");

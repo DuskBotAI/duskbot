@@ -346,7 +346,7 @@ const PENDING: Readonly<Record<string, ReadonlyArray<readonly [file: string, sni
     ["server/routine-requests.ts", "Every  …  minutes, anchored at  …   …"],
     ["server/routine-requests.ts", "each run starts a fresh session with the previous run's report"],
     ["server/routine-requests.ts", "each run starts a fresh session"],
-    ["server/routine-requests.ts", "Will run at matching calendar times,  … ;  … ."],
+    ["server/routine-requests.ts", "Will run at matching calendar times,  … "],
     ["server/routine-requests.ts", "Will run once; that run starts a fresh session."],
     ["server/routine-requests.ts", "Will run a minute after each time that usage limit resets, in this con"],
     ["server/routine-requests.ts", "Will run once, a minute after that usage limit resets, and continue in"],

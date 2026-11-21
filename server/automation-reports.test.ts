@@ -11,7 +11,12 @@ import { Store, type BotRecord, type Message } from "./store.ts";
 const selection = () => ({ instanceId: "claude", model: "claude-sonnet-5" });
 
 describe("readRunReply", () => {
-  it.each(["NOTHING NEW", "Nothing new.", "**NOTHING NEW**", "Checked 14 emails.\n\nNOTHING NEW", "  nothing new  "])("keeps %j quiet", (text) => {
+  it("delivers a finding that ends on NOTHING NEW, without the token", () => {
+    expect(readRunReply("Acme's invoice #4411 is now 3 days overdue.\n\nNOTHING NEW")).toEqual({ quiet: false, text: "Acme's invoice #4411 is now 3 days overdue." });
+    expect(readRunReply("Checked the inbox.\n- Priya asked to move Friday's call to 4pm.\nNOTHING NEW")).toEqual({ quiet: false, text: "Checked the inbox.\n- Priya asked to move Friday's call to 4pm." });
+  });
+
+  it.each(["NOTHING NEW", "Nothing new.", "**NOTHING NEW**", "Checked 14 emails.\n\nNOTHING NEW", "  nothing new  ", "No new invoices since yesterday.\nI looked at Stripe and Gmail.\nNOTHING NEW"])("keeps %j quiet", (text) => {
     expect(readRunReply(text)).toEqual({ quiet: true });
   });
 

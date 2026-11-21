@@ -198,6 +198,26 @@ describe("Telegram chat channel", () => {
     expect(f.fake.webhook().url).toBe("");
   });
 
+  it("sends an alert to the owner's own chat once claimed, and not before", async () => {
+    const f = await fixture();
+    const call = async (body: unknown) => {
+      let answer: { status: number; body: Record<string, unknown> } | null = null;
+      await f.host.internal({ method: "POST", path: "/api/internal/messengers", res: {} as never, botId: "bot-nova", threadId: "app-thread",
+        json: ((_res: unknown, status: number, value: Record<string, unknown>) => { answer = { status, body: value }; }) as never, readBody: async () => body });
+      return answer!;
+    };
+    const status = await f.host.connect("bot-nova", "telegram", TOKEN);
+    const early = await call({ action: "send", platform: "telegram", text: "Loomio Pro: $39 to $29" });
+    expect(early.status).toBe(409);
+    expect(String(early.body.error)).toContain("not claimed");
+    f.fake.message({ from: OWNER, text: `/start ${status.pairCode}` });
+    await until(() => f.fake.sent().find((one) => String(one.params.text).startsWith("Connected.")));
+    expect(await call({ action: "send", platform: "telegram", text: "Loomio Pro: $39 to $29" })).toMatchObject({ status: 200, body: { text: "Sent to Sid on Telegram." } });
+    const alert = f.fake.sent().find((one) => String(one.params.text).includes("$29"))!;
+    expect(String(alert.params.chat_id)).toBe("501");
+    expect((await call({ action: "send", platform: "telegram" })).status).toBe(400);
+  });
+
   it("connects from the token the person pasted in chat and keeps the token out of the status", async () => {
     const f = await fixture();
     f.threads.set("app-thread", [{ id: "u1", role: "user", kind: "text", text: `here you go ${TOKEN} thanks` } as unknown as Message]);

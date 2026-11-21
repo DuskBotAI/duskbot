@@ -7,7 +7,7 @@ import { ownerOnlyConversation } from "./cloud-owner-turns.ts";
 import { stampOwner } from "./cloud-owner-lines.ts";
 import {
   DREAM_CONVERSATION_BYTES, DREAM_MARKER, DREAM_TOTAL_BYTES, MAX_IDEAS, MAX_LEARNED,
-  dreamConversations, dreamPrompt, parseDream, type DreamConversation, type DreamSource,
+  dreamConversations, dreamNoticedEvidenced, dreamPrompt, parseDream, type DreamConversation, type DreamSource,
 } from "./memory-dream.ts";
 import { parseMemoryEntries } from "./memory-entries.ts";
 import { flushMemoryJournal, readMemoryJournal } from "./memory-journal.ts";
@@ -212,8 +212,27 @@ describe("the dream prompt and its answer", () => {
     expect(answer.ideas).toHaveLength(MAX_IDEAS);
   });
 
+  it("keeps asks left undone and offers turned down only with the person's words, and drops ideas they turned down", () => {
+    const chats: DreamConversation[] = [
+      { threadId: "a", lines: [{ by: "person", text: "Can you find me a dentist near Indiranagar?" }, { by: "bot", text: "Sure, looking now." }] },
+      { threadId: "b", lines: [{ by: "bot", text: "Want me to send you the Monday numbers each week?" }, { by: "person", text: "No thanks, I check them myself." }] },
+    ];
+    const answer = parseDream(JSON.stringify({
+      missed: [{ text: "Find a dentist near Indiranagar", from: [1], evidence: "find me a dentist near Indiranagar" }, { text: "No evidence", from: [1] }, { text: "Bad chat", from: [9], evidence: "x" }],
+      declined: [{ text: "Monday numbers each week", from: 2, evidence: "No thanks, I check them myself" }],
+      ideas: [{ text: "Send the Monday numbers each week", from: [1, 2] }, { text: "Save a dentist-finding skill", from: [1, 2] }],
+    }), 2, 0);
+    expect(answer.missed).toEqual([{ text: "Find a dentist near Indiranagar", from: [1], evidence: "find me a dentist near Indiranagar" }]);
+    expect(answer.declined.map((item) => item.text)).toEqual(["Monday numbers each week"]);
+    expect(answer.ideas.map((idea) => idea.text)).toEqual(["Save a dentist-finding skill"]);
+    expect(dreamNoticedEvidenced(answer.missed[0]!, chats)).toBe(true);
+    expect(dreamNoticedEvidenced({ text: "Invented", from: [1], evidence: "book me a flight" }, chats)).toBe(false);
+    expect(dreamNoticedEvidenced({ text: "Bot words", from: [1], evidence: "looking now" }, chats)).toBe(false);
+    expect(dreamPrompt({ botName: "Scout", today: "2026-11-21", conversations: chats, notebook: [] })).toMatch(/missed: at most 3[\s\S]*declined: at most 3/);
+  });
+
   it("reads nothing out of an answer that is not JSON", () => {
-    expect(parseDream("I could not find anything.", 3, 0)).toEqual({ learned: [], outdated: [], ideas: [] });
+    expect(parseDream("I could not find anything.", 3, 0)).toEqual({ learned: [], outdated: [], ideas: [], missed: [], declined: [] });
   });
 });
 

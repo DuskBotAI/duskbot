@@ -37,7 +37,7 @@ describe("the address", () => {
     expect(address).toMatchObject({ url: `https://acme.example.com/hooks/wh_abc/${SECRET}`, endpoint: "https://acme.example.com/hooks/wh_abc", bearer: SECRET });
     expect(address).toMatchObject({ note: expect.stringContaining("never repeat it in chat, notes, files or messages to other bots") });
     expect(JSON.stringify(address)).not.toContain("only apps running on it");
-    expect(JSON.stringify(webhookAddress(kept, "hook-1", "http://127.0.0.1:8800"))).toContain("This address is on this computer, so only apps running on it can reach it.");
+    expect(JSON.stringify(webhookAddress(kept, "hook-1", "http://127.0.0.1:8800"))).toContain("turning on Settings > Remote access gives it an internet address");
     expect(webhookAddress(kept, "missing", "http://127.0.0.1:8800")).toBeNull();
   });
 

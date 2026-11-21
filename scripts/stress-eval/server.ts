@@ -60,10 +60,13 @@ export async function launchServer(repo: string, tmp: string, gateway: Gateway, 
     ...extraConfig,
   }, null, 2), { mode: 0o600 });
   const logPath = join(root, "server.log");
+  // agent-browser keeps its sockets under XDG_RUNTIME_DIR, and a Unix socket path has at most 103 bytes on macOS
+  const sockets = mkdtempSync("/tmp/dsk-");
   const env: NodeJS.ProcessEnv = {
     PATH: process.env.PATH,
     HOME: dataDir,
     TMPDIR: join(dataDir, "tmp"),
+    XDG_RUNTIME_DIR: sockets,
     LANG: process.env.LANG ?? "en_US.UTF-8",
     TZ: process.env.TZ,
     DUSK_DATA_DIR: dataDir,
@@ -97,6 +100,7 @@ export async function launchServer(repo: string, tmp: string, gateway: Gateway, 
         await new Promise((r) => { child.once("exit", r); setTimeout(r, 8_000); });
       }
       taken.delete(port);
+      rmSync(sockets, { recursive: true, force: true });
       // an engine's own child (OpenCode) can still be writing for a moment after the server exits
       if (!keep) try { rmSync(dataDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 500 }); } catch { /* left for the next tmp clean */ }
     },

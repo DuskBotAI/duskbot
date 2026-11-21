@@ -16,43 +16,20 @@ import {
   STARTUP_TIMEOUT_MS,
   antigravityAcpArgs,
   antigravityProfileAuthenticated,
-  parseAntigravityAuthorizationUrl,
   takeLines,
-  type AntigravityAuthorizationUrl,
   type AntigravityProfile,
 } from "./antigravity-acp.ts";
+import {
+  antigravityLoginResponse,
+  parseAntigravityAuthorizationUrl,
+  type AntigravityAuthorizationUrl,
+} from "./antigravity-oauth.ts";
 import type { AntigravityRuntime } from "./antigravity-runtime.ts";
+
+export { antigravityLoginResponse };
 
 const AUTH_TIMEOUT_MS = 5 * 60_000;
 const COMPLETE_TIMEOUT_MS = 90_000;
-
-/** Validates what `agy acp --login` accepts on stdin: the code from the Antigravity page or that page's full URL. */
-export function antigravityLoginResponse(
-  pending: Pick<AntigravityAuthorizationUrl, "redirectUri" | "state">,
-  response: string,
-): string | undefined {
-  const value = response.trim();
-  if (/^[\w./~-]{1,2048}$/u.test(value)) return value;
-  if (value.length > 16_384 || /\s/u.test(value)) return undefined;
-  let url: URL;
-  try {
-    url = new URL(value);
-  } catch {
-    return undefined;
-  }
-  if (
-    `${url.origin}${url.pathname}` !== pending.redirectUri ||
-    url.username !== "" ||
-    url.password !== "" ||
-    url.searchParams.getAll("state").length !== 1 ||
-    url.searchParams.get("state") !== pending.state ||
-    url.searchParams.getAll("code").length !== 1 ||
-    !url.searchParams.get("code")
-  ) {
-    return undefined;
-  }
-  return value;
-}
 
 export interface AntigravityAuthStart {
   phase: "waiting" | "succeeded";

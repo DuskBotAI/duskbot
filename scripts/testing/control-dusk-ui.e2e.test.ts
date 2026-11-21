@@ -222,13 +222,14 @@ describe("control-dusk ui drives the real renderer", () => {
     await expect.poll(() => evaluate(`${dialog}.querySelector('[data-key-check]')?.disabled ?? null`), { timeout: 10_000 }).toBe(false);
     await evaluate(`${dialog}.querySelector('[data-key-check]').click(); true`);
     await expect.poll(() => evaluate("window.keyTests")).toEqual([{ provider: "openaiCompat" }]);
-    await expect.poll(verdict).toBe("Saved key: Model catalog reachable: fixture-model. Authentication and chat not verified.");
+    await expect.poll(verdict).toBe("Key works127.0.0.1 accepted this key.");
 
     await type("  fixture-draft-key  ");
     await enter();
     await expect.poll(() => evaluate(`${input} ?? null`), { timeout: 10_000 }).toBe(null);
     await expect.poll(masked, { timeout: 10_000 }).toContain("••••••••-key");
-    await expect.poll(() => evaluate("window.keyTests")).toEqual([{ provider: "openaiCompat" }, { provider: "openaiCompat" }]);
+    // a pasted key is checked, sealed, before it is saved
+    await expect.poll(() => evaluate("window.keyTests")).toEqual([{ provider: "openaiCompat" }, { provider: "openaiCompat", sealed: expect.objectContaining({ ciphertext: expect.any(String) }) }]);
     expect(await evaluate("window.keySaves")).toBe(1);
 
     await replace();
@@ -248,8 +249,8 @@ describe("control-dusk ui drives the real renderer", () => {
     await focusField();
     await enter();
     await expect.poll(() => evaluate(`${input} ?? null`), { timeout: 10_000 }).toBe(null);
-    await expect.poll(() => evaluate("window.keyTests.length")).toBe(3);
-    await expect.poll(verdict).toBe("Saved key: Model catalog reachable: fixture-model. Authentication and chat not verified.");
+    await expect.poll(() => evaluate("window.keyTests.length")).toBe(4);
+    await expect.poll(verdict).toBe("Key works127.0.0.1 accepted this key.");
     await waitForExit(launched.child, { signal: "SIGINT", graceMs: 30_000 });
     expect(launched.child.exitCode).toBe(0);
     expect(existsSync(info.dataDir)).toBe(false);

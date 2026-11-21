@@ -130,7 +130,7 @@ it.each([false, true])("gives an engine with its own web search no paid search b
   expect(f.seen.filter((entry: Seen) => entry.path.endsWith("/call/perplexity.web.search.fast"))).toEqual([]);
 }, { plan: !ownKey, ownKey }), 90_000);
 
-it("shows no research tools without a treg key or a Cloud plan, even to a bot switched on", async () => withFixture(async (f) => {
+it("without a treg key or a Cloud plan, a bot switched on gets x_search (its free routes) and no paid research tools", async () => withFixture(async (f) => {
   const config = await f.api("/api/config", undefined, "GET");
   expect(await f.status()).toEqual({ using: null, ownKey: false, included: false });
   expect(config.xResearch).toEqual({ included: false });
@@ -138,7 +138,8 @@ it("shows no research tools without a treg key or a Cloud plan, even to a bot sw
   const bot = await f.newBot("No research");
   await f.api("/api/bots/" + bot.id, { xResearch: true }, "PATCH");
   const { tools } = await f.turn(bot, []);
-  for (const tool of RESEARCH_TOOLS) expect(tools).not.toContain(tool);
+  expect(tools).toContain("x_search");
+  for (const tool of RESEARCH_TOOLS.filter((name) => name !== "x_search")) expect(tools).not.toContain(tool);
   expect(f.seen).toEqual([]);
 }, { plan: false, ownKey: false }), 90_000);
 

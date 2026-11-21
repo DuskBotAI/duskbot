@@ -8,7 +8,7 @@ it("tells a failure in plain words, never as pasted error text, paths or a list 
 });
 
 it("prefers batches for independent searches and keeps a native batching fallback", () => {
-  expect(TOOL_HABITS_PROMPT).toContain("For 2 or more web searches, prefer web_search_many when it is listed, up to 10 queries in one call");
+  expect(TOOL_HABITS_PROMPT).toContain("For 2 or more web searches, use web_search_many when it is listed, up to 10 queries in one call");
   expect(TOOL_HABITS_PROMPT).toContain("make them all in the same step, not one after another");
   expect(REPLY_HABITS_PROMPT).toContain(TOOL_HABITS_PROMPT);
 });
@@ -28,7 +28,7 @@ it("finishes the job without asking leave for safe work, keeps a role from becom
   for (const quick of [false, true]) {
     const habits = replyHabitsPrompt(quick);
     expect(habits).toContain("Act without asking on whatever is reversible and inside the ask: searching, reading, calculating, drafting, making files, setting up what they asked for.");
-    expect(habits).toContain("Ask once, and only before what cannot be undone or goes out to other people (sending, posting, buying, booking, deleting, publishing), or when your standing instructions say to.");
+    expect(habits).toContain("Ask once, and only before what cannot be undone or goes out to other people (sending, posting, buying, booking, deleting, publishing), or when your standing instructions say to; when Just do it is on, its line wins.");
     expect(habits).toContain("Your role is what you are best at, not a fence");
     expect(habits).toContain("Say done only when the result reached them or a check showed it; otherwise say where it stands: drafted, sent, waiting (and when they will hear back) or blocked (by what).");
     expect(habits).toContain("An \"Open items\" line lists their earlier asks not yet delivered: deliver them, or say in one line what stops you.");
@@ -96,9 +96,9 @@ it("sounds like a friend, not a help desk: no stock phrases or flattery, wit onl
     expect(habits).toContain("When they vent or are upset: the feeling first, in one line of your own words, no fixing or advice they did not ask for");
     expect(habits).toContain("Never invent a number, price, quote, source, name or link");
     expect(habits).toContain("one per line, the linked name, the price (labelled rough when unchecked) and a few words on why it suits them");
-    expect(habits).toContain("own it in a few words and fix it in the same message");
-    expect(habits).toContain("say what went wrong as they saw it, never how it happened inside");
-    expect(habits).toContain("Use what you know about them as if you simply remember it");
+    expect(habits).toContain("own it in a few words and fix it in the same message, no groveling");
+    expect(habits).toContain("saying what went wrong as they saw it, never how it happened inside");
+    expect(habits).toContain("use what you know about them as if you simply remember it");
     expect(habits).not.toContain(String.fromCharCode(0x2014));
   }
 });
@@ -115,7 +115,9 @@ it("names each change a tool confirmed in the result, and none it did not", () =
 it("runs independent parts at once and keeps a first ask going when a second one arrives", () => {
   for (const quick of [false, true]) {
     const prompt = replyHabitsPrompt(quick);
-    expect(prompt).toContain("runs its parts at once, each in its own subagent where you can start them, then merge; clicks and typing in a browser go one at a time");
+    expect(prompt).toContain("runs its parts at once, each in its own subagent where you can start them, then merge;");
+    expect(prompt).toContain("separate jobs they want to read on their own run here with start_thread (a long process with background_job), and the reply names each thread; coordinate_bots only for a teammate they named or work needing another bot's tools; clicks and typing in a browser go one at a time");
+    expect(prompt).toContain("Stop researching once what you read supports the answer: no extra round to be thorough");
     expect(prompt).toContain("A separate new ask does not replace the first: do both, and send each result when it is ready, opening with which ask it finishes.");
   }
 });
@@ -129,7 +131,7 @@ it("ends every turn on a result, a blocker or a real watch, and retries a thin l
 
 it("leads an angry person with the fix, never a sorry or a confession it cannot see", () => {
   for (const quick of [false, true]) {
-    expect(replyHabitsPrompt(quick)).toContain("the first words are the fix or the check you are making, never \"sorry\"");
-    expect(replyHabitsPrompt(quick)).toContain("own a mistake in a few words only when you can see you made it");
+    expect(replyHabitsPrompt(quick)).toContain("the first words are the fix or the check you are making, never a \"sorry\" opener or a defence");
+    expect(replyHabitsPrompt(quick)).toContain("own a mistake in a few words (\"That's on me.\") only when you can see you made it");
   }
 });

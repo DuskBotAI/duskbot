@@ -5,10 +5,9 @@
 export interface CatalogProfile {
   skillAuthoring: boolean;
   voiceNotes: boolean;
-  /** A treg key or a Cloud plan's research credential is held and this bot's research switch is on: x_search is mounted.
-   * Absent means off. */
+  /** This bot's research switch is on: x_search is mounted (its free routes need no key). Absent means off. */
   xResearch?: boolean;
-  /** As xResearch, and research works for that credential (the person's treg key, or a plan whose relay has research
+  /** As xResearch, and research works for a held credential (the person's treg key, or a plan whose relay has research
    * on): research_search, research_endpoint and research_call are mounted too. Absent means off. */
   research?: boolean;
   /** This bot holds its own Slack app with a bot token: the slack_* tools are mounted. Absent means off. */

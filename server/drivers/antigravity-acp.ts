@@ -18,6 +18,7 @@ import type { ChildProcess } from "node:child_process";
 import type { AntigravityRuntime } from "./antigravity-runtime.ts";
 import { acpVariantOption, surveyModelVariants } from "./acp/config-options.ts";
 import { StderrTail, exitDetail } from "./acp/exit-report.ts";
+import { parseAntigravityAuthorizationUrl } from "./antigravity-oauth.ts";
 import {
   VERIFICATION_TEMP_KEY,
   antigravityTempDir,
@@ -26,9 +27,10 @@ import {
   sweepAntigravityTemp,
 } from "./antigravity-temp.ts";
 
+export * from "./antigravity-oauth.ts";
+
 // Legacy 1.4 standalone server printed this prefix on stderr.
 export const ANTIGRAVITY_AUTH_PREFIX = "Open the following link to authenticate the ACP server: ";
-export const ANTIGRAVITY_CODE_REDIRECT_URI = "https://antigravity.google/oauth-callback";
 const LOGOUT_TIMEOUT_MS = 90_000;
 // Cold start can take tens of seconds, especially on Windows.
 export const STARTUP_TIMEOUT_MS = 90_000;
@@ -493,50 +495,6 @@ export class AntigravityAcpClient {
       clearTimeout(timer);
     }
   }
-}
-
-export interface AntigravityAuthorizationUrl {
-  authorizationUrl: string;
-  redirectUri: string;
-  state: string;
-}
-
-export function parseAntigravityAuthorizationUrl(
-  authorizationUrl: string,
-  kind: "loopback" | "code" = "loopback",
-): AntigravityAuthorizationUrl {
-  if (authorizationUrl.length > 16_384 || /\s/u.test(authorizationUrl)) {
-    throw new Error("Antigravity returned an invalid Google sign-in URL.");
-  }
-  const url = new URL(authorizationUrl);
-  const state = url.searchParams.get("state");
-  const redirectUri = url.searchParams.get("redirect_uri");
-  const validPath = kind === "loopback"
-    ? url.pathname === "/o/oauth2/v2/auth"
-    : url.pathname === "/o/oauth2/auth" || url.pathname === "/o/oauth2/v2/auth";
-  const validRedirect = kind === "loopback"
-    ? Boolean(redirectUri && /^http:\/\/127\.0\.0\.1:[1-9][0-9]{0,4}\/$/u.test(redirectUri))
-    : redirectUri === ANTIGRAVITY_CODE_REDIRECT_URI;
-  if (
-    url.origin !== "https://accounts.google.com" ||
-    !validPath ||
-    url.username || url.password || url.hash ||
-    url.searchParams.getAll("state").length !== 1 ||
-    url.searchParams.getAll("redirect_uri").length !== 1 ||
-    url.searchParams.getAll("response_type").length !== 1 ||
-    url.searchParams.get("response_type") !== "code" ||
-    !state || state.length > 512 || /\s/u.test(state) ||
-    !redirectUri || !validRedirect
-  ) {
-    throw new Error("Antigravity returned an invalid Google sign-in URL.");
-  }
-  if (kind === "loopback") {
-    const redirect = new URL(redirectUri);
-    if (Number(redirect.port) < 1024 || Number(redirect.port) > 65535) {
-      throw new Error("Antigravity returned an invalid Google sign-in URL.");
-    }
-  }
-  return { authorizationUrl, redirectUri, state };
 }
 
 function modelOptions(value: unknown): ModelCatalog["options"] {

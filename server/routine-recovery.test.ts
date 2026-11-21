@@ -325,6 +325,31 @@ describe("an unattended run whose bot is busy when it starts", () => {
     expect(h.tasks()).toBe(1);
   });
 
+  it("starts right after the turn it waited on ends, not at its next recheck", async () => {
+    const h = harness();
+    h.refuse(busy());
+    const run = await h.start(h.routine().id);
+    h.refuse(null);
+    h.manager.threadFreed("thread-other");
+    await h.advance(SECOND);
+    expect(h.started).toEqual([]);
+    h.manager.threadFreed("thread-1");
+    expect(h.run(run.id).retryAt).toBe(h.now());
+    await h.advance(0);
+    expect(h.started.map((turn) => turn.threadId)).toEqual(["thread-1"]);
+  });
+
+  it("leaves a run waiting on a usage limit to its own time when its thread frees", async () => {
+    const h = harness();
+    const run = await h.start(h.routine().id);
+    h.fail(run.threadId!, "You've hit your usage limit");
+    const waiting = h.run(run.id);
+    expect(waiting.status).toBe("queued");
+    expect(waiting.retryAt).toBeGreaterThan(h.now());
+    h.manager.threadFreed(run.threadId!);
+    expect(h.run(run.id).retryAt).toBe(waiting.retryAt);
+  });
+
   it("stops waiting after an hour, and a refusal without a busy code fails at once", async () => {
     const h = harness();
     h.refuse(busy());

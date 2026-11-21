@@ -6,6 +6,7 @@ import type { WebhookRequestCardData, WebhookRequestDefinition, WebhookRequestOp
 import { newId } from "./contracts.ts";
 import { UNDO_STALE } from "./direct-apply.ts";
 import { redactSecretsInText } from "./redact.ts";
+import type { JsonValue } from "./schema.ts";
 import type { WebhookManager, WebhookTrigger } from "./webhooks.ts";
 
 export interface WebhookRequestCard {
@@ -139,6 +140,8 @@ export class WebhookRequestService {
     operation: unknown;
     from?: { botId: string; name: string; color: string };
     canCommit?: () => boolean;
+    /** run_now: the body the test delivery carries instead of a generic test event. */
+    payload?: JsonValue;
   }): WebhookRequestResult {
     const parsed = operationSchema.safeParse(args.operation);
     if (!parsed.success) throw new WebhookRequestError(parsed.error.issues[0]?.message ?? "Invalid webhook trigger request");
@@ -168,7 +171,7 @@ export class WebhookRequestService {
         after = webhooks.update(operation.webhookId, { enabled: operation.action === "resume", verificationPending: false });
         break;
       case "run_now": {
-        const result = webhooks.test(operation.webhookId);
+        const result = webhooks.test(operation.webhookId, args.payload);
         runId = result?.runId;
         after = before ?? null;
         break;

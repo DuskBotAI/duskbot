@@ -1,10 +1,12 @@
 import { createHash, randomBytes } from "node:crypto";
 import { MESSENGER_LABELS, type MessengerPlatform } from "../../shared/messengers.ts";
 import { isErrorDump } from "../../shared/failed-turn.ts";
+import { liveCardKind } from "../../shared/live-approval.ts";
 import { requestNeedsInput } from "../guarded-requests.ts";
 import type { Message } from "../store.ts";
 import type { MessengerLink } from "./secrets.ts";
 import { cardChoices, cardText, type CardChoice } from "./cards.ts";
+import { GroupContext, withGroupContext } from "./group-context.ts";
 import type { MessengerOffer, MessengerPending, MessengerState } from "./state.ts";
 
 export interface MessengerPerson { id: string; name: string; handle?: string }
@@ -25,6 +27,8 @@ export interface InboundMessage {
 export interface OutboundFile { bytes: Buffer; mime: string; name: string; kind: "image" | "file" | "audio" }
 /** A tap on one of a card's buttons: Telegram's callback query, or Discord's interaction (its id and token). */
 export interface ChoiceAck { id: string; token?: string; appId?: string }
+/** An emoji someone put on a message in a chat the bot is in. */
+export interface InboundReaction { platform: MessengerPlatform; botId: string; chatId: string; senderId: string; messageId: string; emoji: string }
 export interface InboundChoice { platform: MessengerPlatform; botId: string; chatId: string; senderId: string; data: string; sentId?: string; ack: ChoiceAck }
 export interface MessengerTransport {
   sendText(botId: string, chatId: string, text: string, replyTo?: string): Promise<void>;
@@ -34,6 +38,8 @@ export interface MessengerTransport {
   settleChoices(botId: string, chatId: string, sentId: string | undefined, note: string, ack?: ChoiceAck & { toast?: string }): Promise<void>;
   sendFile(botId: string, chatId: string, file: OutboundFile, replyTo?: string): Promise<void>;
   typing(botId: string, chatId: string): Promise<void>;
+  /** Puts one emoji on a message; a chat app that cannot leaves it out. */
+  react?(botId: string, chatId: string, messageId: string, emoji: string): Promise<void>;
   typingEveryMs: number;
 }
 
@@ -69,6 +75,12 @@ const START_FAILED = "I couldn't start on that. Check dusk bot for details.";
 const TURN_FAILED = "I couldn't finish that. Check dusk bot for details.";
 const NEEDS_INPUT = "I need you in dusk bot to continue: an approval or a question is waiting there.";
 const TELL_STRANGER_EVERY_MS = 6 * 60 * 60_000;
+const THANKS = /^(?:thanks?|thank (?:you|u)|thx|ty|tysm|thanks (?:a lot|so much)|many thanks|cheers)(?: (?:so much|a lot|again|mate|man))?[\s!.]*(?:🙏|❤️|👍)?[\s!.]*$/iu;
+const YES_REACTIONS = new Set(["👍", "❤", "❤️", "✅", "👌"]);
+const YES_CHOICE = /^\s*(?:yes|yep|yeah|sure|ok|okay|go ahead|do it|confirm|approve)\b/i;
+const LISTEN_ON = "From now on, when someone mentions me here I also read what the group said since my last reply (up to 30 messages from the last day). Telegram shows me those only while my privacy mode is off: in @BotFather send /setprivacy, pick me, then Disable. /unlisten stops it.";
+const LISTEN_DISCORD = "On Discord I only see messages that mention me or reply to me, so I can't read the rest of this channel.";
+const LISTEN_OFF = "I no longer read this group's messages that aren't for me.";
 
 /** Security: words from a chat app never carry the app's own attachment markup, which would point the bot at a file. */
 function defuse(text: string): string {
@@ -102,6 +114,7 @@ export function createMessengerBridge(deps: MessengerBridgeDeps) {
   const inbound = new Map<string, Promise<void>>();
   const offering = new Set<string>();
   const generations = new Map<string, number>();
+  const groupContext = new GroupContext();
   let sweep: { cancel(): void } | undefined;
   let stopped = false;
 
@@ -261,12 +274,12 @@ export function createMessengerBridge(deps: MessengerBridgeDeps) {
     }
   }
 
-  async function choose(choice: InboundChoice): Promise<void> {
+  async function choose(choice: InboundChoice, tap = true): Promise<void> {
     const transport = deps.transport(choice.platform);
     if (!transport) return;
     const [, id, index] = /^dk:([\w-]{6,20}):(\d{1,2})$/.exec(choice.data) ?? [];
     const one = deps.state.offers().find((offer) => offer.id === id);
-    const ack = (toast: string) => transport.settleChoices(choice.botId, choice.chatId, undefined, "", { ...choice.ack, toast }).catch(() => {});
+    const ack = (toast: string) => tap ? transport.settleChoices(choice.botId, choice.chatId, undefined, "", { ...choice.ack, toast }).catch(() => {}) : undefined;
     if (!one || one.botId !== choice.botId || one.platform !== choice.platform || one.chatId !== choice.chatId) { await ack("That choice is no longer open."); return; }
     const link = deps.link(choice.botId, choice.platform);
     if (!link?.owner || link.owner.id !== choice.senderId) { await ack("Only the bot's owner can answer this."); return; }
@@ -275,7 +288,7 @@ export function createMessengerBridge(deps: MessengerBridgeDeps) {
     const picked = choices?.[Number(index)];
     if (one.settled || !choices || !picked || picked.label !== one.labels[Number(index)]) {
       deps.state.patchOffer(one.id, { settled: true });
-      await transport.settleChoices(choice.botId, choice.chatId, one.sentId ?? choice.sentId, "This was already answered.", { ...choice.ack, toast: "Already answered." }).catch(() => {});
+      if (tap) await transport.settleChoices(choice.botId, choice.chatId, one.sentId ?? choice.sentId, "This was already answered.", { ...choice.ack, toast: "Already answered." }).catch(() => {});
       return;
     }
     deps.state.patchOffer(one.id, { settled: true });
@@ -284,7 +297,22 @@ export function createMessengerBridge(deps: MessengerBridgeDeps) {
     catch { result = { ok: false, error: "It could not be answered." }; }
     const text = card ? cardText(card) : "";
     await transport.settleChoices(choice.botId, choice.chatId, one.sentId ?? choice.sentId,
-      result.ok ? `${text}\n\nYou chose: ${picked.label}` : `${text}\n\n${result.error}`, { ...choice.ack, toast: result.ok ? picked.label : result.error }).catch(() => {});
+      result.ok ? `${text}\n\nYou chose: ${picked.label}` : `${text}\n\n${result.error}`, tap ? { ...choice.ack, toast: result.ok ? picked.label : result.error } : undefined).catch(() => {});
+  }
+
+  /** Security: a 👍 answers only a question card with exactly one yes-like choice among at most three, never an approval,
+   * a review or a send to others, and only from the owner (choose checks that). */
+  async function reacted(reaction: InboundReaction): Promise<void> {
+    if (!YES_REACTIONS.has(reaction.emoji)) return;
+    const one = deps.state.offers().find((offer) => !offer.settled && offer.sentId === reaction.messageId && offer.platform === reaction.platform
+      && offer.botId === reaction.botId && offer.chatId === reaction.chatId);
+    const card = one && deps.messages(one.threadId).find((m) => m.id === one.cardMessageId)?.card;
+    if (!one || !card || liveCardKind(card) !== "question" || card.outboundRequest) return;
+    const choices = cardChoices(card) ?? [];
+    const yes = choices.flatMap((choice, index) => YES_CHOICE.test(choice.label) ? [index] : []);
+    if (yes.length !== 1 || choices.length > 3) return;
+    await choose({ platform: reaction.platform, botId: reaction.botId, chatId: reaction.chatId, senderId: reaction.senderId, data: `dk:${one.id}:${yes[0]}`,
+      ...(one.sentId ? { sentId: one.sentId } : {}), ack: { id: "" } }, false);
   }
 
   async function files(message: InboundMessage): Promise<string[]> {
@@ -302,6 +330,13 @@ export function createMessengerBridge(deps: MessengerBridgeDeps) {
       } catch { notes.push(`(${name} could not be downloaded)`); }
     }
     return [notes.join("\n"), tags.join("\n")].filter(Boolean);
+  }
+
+  /** A bare thanks once the bot has answered and is idle in that chat gets a 👍 instead of a turn. */
+  async function thanked(message: InboundMessage, key: string): Promise<boolean> {
+    const transport = deps.transport(message.platform);
+    if (!transport?.react || !deps.state.conversation(key) || deps.state.pending().some((p) => conversationKey(p.platform, p.botId, p.chatId) === key)) return false;
+    try { await transport.react(message.botId, message.chatId, message.messageId, "👍"); return true; } catch { return false; }
   }
 
   function pairCodeIn(text: string): string | null {
@@ -334,7 +369,11 @@ export function createMessengerBridge(deps: MessengerBridgeDeps) {
 
     const personIn = personLetIn(link, message.sender.id);
     const chatIn = message.chatKind === "group" && link.allowed.some((one) => one.kind === "chat" && one.id === chatId);
-    if (message.chatKind === "group" && !message.addressed) return;
+    const key = conversationKey(platform, botId, chatId);
+    if (message.chatKind === "group" && !message.addressed) {
+      if (chatIn && text && deps.state.listens(key)) groupContext.add(key, { name: message.sender.name, text: defuse(text), at: now() });
+      return;
+    }
     if (!personIn && !chatIn) {
       const group = message.chatKind === "group";
       const told = deps.state.knock(
@@ -347,19 +386,28 @@ export function createMessengerBridge(deps: MessengerBridgeDeps) {
       return;
     }
 
-    const key = conversationKey(platform, botId, chatId);
     const command = /^\/(\w+)(?:@\w+)?\s*$/.exec(text)?.[1]?.toLowerCase();
     if (command === "new" || command === "reset") {
       deps.state.dropConversation(key);
       await say(platform, botId, chatId, "Started a new conversation.");
       return;
     }
+    if ((command === "listen" || command === "unlisten") && message.chatKind === "group") {
+      if (link.owner?.id !== message.sender.id) { await say(platform, botId, chatId, "Only the bot's owner can change that.", message.messageId); return; }
+      const on = command === "listen" && platform === "telegram";
+      deps.state.setListening(key, on);
+      if (!on) groupContext.drop(key);
+      await say(platform, botId, chatId, command === "unlisten" ? LISTEN_OFF : on ? LISTEN_ON : LISTEN_DISCORD, message.messageId);
+      return;
+    }
+    if (THANKS.test(text) && !message.files.length && await thanked(message, key)) return;
     if (command === "start" && !message.files.length) {
       await say(platform, botId, chatId, `Hi, this is ${botName}. Message me here any time. Send /new to start a fresh conversation.`);
       return;
     }
 
-    const body = [defuse(text), ...await files(message)].filter(Boolean).join("\n\n");
+    const said = [defuse(text), ...await files(message)].filter(Boolean).join("\n\n");
+    const body = said && message.chatKind === "group" && deps.state.listens(key) ? withGroupContext(groupContext.take(key, now()), said) : said;
     if (!body || !active()) return;
     let mapping = deps.state.conversation(key);
     if (!mapping || !deps.threadExists(botId, mapping.threadId)) {
@@ -387,6 +435,7 @@ export function createMessengerBridge(deps: MessengerBridgeDeps) {
       return;
     }
     if (!active()) { drop([p]); return; }
+    if (message.chatKind === "group") void deps.transport(platform)?.react?.(botId, chatId, message.messageId, "👀").catch(() => {});
     armSweep();
     evaluate(p.threadId);
   }
@@ -405,6 +454,10 @@ export function createMessengerBridge(deps: MessengerBridgeDeps) {
     choose(choice: InboundChoice): Promise<void> {
       return choose(choice).catch(() => log("A chat app button press could not be handled."));
     },
+    /** A 👍 from the owner on a yes-or-no question sent as buttons answers yes. */
+    react(reaction: InboundReaction): Promise<void> {
+      return reacted(reaction).catch(() => log("A chat app reaction could not be handled."));
+    },
     /** Replies still owed from before a restart. */
     resume(): void {
       const threads = new Set(deps.state.pending().map((p) => p.threadId));
@@ -417,6 +470,7 @@ export function createMessengerBridge(deps: MessengerBridgeDeps) {
       const gone = deps.state.pending().filter((p) => p.botId === botId && (!platform || p.platform === platform));
       drop(gone);
       deps.state.removeBot(botId, platform);
+      for (const one of platform ? [platform] : (["telegram", "discord"] as const)) groupContext.drop(`${one}:${botId}:`);
     },
     forgetThread(threadId: string): void {
       drop(deps.state.pending().filter((p) => p.threadId === threadId));

@@ -10,7 +10,6 @@ import type { json as sendJson } from "../harness/http.ts";
 import type { ServiceCredential } from "../included-services.ts";
 import { costLine, createResearchClient, RESEARCH_ID, RESEARCH_SEARCH_MAX, type ResearchClient } from "../research.ts";
 import {
-  createXClient,
   DEFAULT_POSTS,
   MAX_POSTS,
   normalizeHandle,
@@ -20,16 +19,21 @@ import {
   type XResearchClient,
   type XResearchErrorCode,
 } from "../x-research.ts";
+import { createXRouter } from "../x-providers/index.ts";
+import type { XRouter } from "../x-providers/router.ts";
 import { PASS } from "./table.ts";
 import { WebSearchCache, webSearchMany, WEB_SEARCH_NOT_CONFIGURED } from "../web-search-many.ts";
 
 export interface XResearchDeps {
-  /** The person's own treg key, else the plan's relay credential (researchCredential), read per request. */
+  /** The person's own treg key, else the plan's relay credential (researchCredential), read per request. X reads need
+   * none (they start with the free routes); the research tools do. */
   credential: () => ServiceCredential | null;
   /** The bot's research switch: on unless switched off. */
   botEnabled: (botId: string) => boolean;
-  /** Tests pass fakes; the server builds the real clients per call. */
-  client?: (credential: ServiceCredential) => XResearchClient;
+  /** x_search's routes (server/x-providers); the free ones and treg when unset. */
+  router?: XRouter;
+  /** Tests pass fakes; the server reads X through the router. */
+  client?: (credential: ServiceCredential | null, call: { botId: string; threadId?: string }) => XResearchClient;
   research?: (credential: ServiceCredential) => ResearchClient;
   /** This server is a Cloud home: a refused relay token is the Admin's to replace, not a sign-in to redo. */
   cloudHome?: boolean;
@@ -44,6 +48,8 @@ export interface XInternalContext {
   json: typeof sendJson;
   /** The capability's own bot, never a body field. */
   botId: string;
+  /** The capability's conversation, where a card asking the person would go. */
+  threadId?: string;
   /** index.ts's readInternalBody: re-checks the capability after the read. */
   readBody: () => Promise<unknown>;
 }
@@ -122,8 +128,9 @@ async function research(action: string, body: unknown, client: ResearchClient): 
 }
 
 export function createXResearchInternalRoutes(deps: XResearchDeps) {
-  const xClientFor = deps.client ?? ((credential: ServiceCredential) => createXClient(credential));
   const researchClientFor = deps.research ?? ((credential: ServiceCredential) => createResearchClient(credential));
+  const router = deps.client ? null : deps.router ?? createXRouter({ research: researchClientFor });
+  const xClientFor = deps.client ?? ((credential: ServiceCredential | null, call: { botId: string; threadId?: string }) => router!.client({ ...call, credential }));
   const searches = new WebSearchCache();
   return async (ctx: XInternalContext): Promise<typeof PASS | void> => {
     if (ctx.method !== "POST") return PASS;
@@ -132,17 +139,19 @@ export function createXResearchInternalRoutes(deps: XResearchDeps) {
     if (!prefix || !(prefix === X_PREFIX ? X_ACTIONS : RESEARCH_ACTIONS).has(action)) return PASS;
     const credential = deps.credential();
     if (!credential && prefix === RESEARCH_PREFIX && action === "web-search-many") return void ctx.json(ctx.res, 200, { message: WEB_SEARCH_NOT_CONFIGURED });
-    if (!credential) return void ctx.json(ctx.res, 403, { error: X_MESSAGES.noKey });
+    if (!credential && prefix === RESEARCH_PREFIX) return void ctx.json(ctx.res, 403, { error: X_MESSAGES.noKey });
     if (!deps.botEnabled(ctx.botId)) return void ctx.json(ctx.res, 403, { error: X_MESSAGES.botOff });
     const body = await ctx.readBody();
     try {
-      if (prefix === RESEARCH_PREFIX && action === "web-search-many") return void ctx.json(ctx.res, 200, await webSearchMany(body, researchClientFor(credential), deps.researchOff,
+      if (prefix === X_PREFIX) return void ctx.json(ctx.res, 200, await run(action, body, xClientFor(credential, { botId: ctx.botId, ...(ctx.threadId ? { threadId: ctx.threadId } : {}) })));
+      if (!credential) return void ctx.json(ctx.res, 403, { error: X_MESSAGES.noKey });
+      if (action === "web-search-many") return void ctx.json(ctx.res, 200, await webSearchMany(body, researchClientFor(credential), deps.researchOff,
         { store: searches, credential: createHash("sha256").update(JSON.stringify(credential)).digest("hex") }));
-      ctx.json(ctx.res, 200, prefix === X_PREFIX ? await run(action, body, xClientFor(credential)) : await research(action, body, researchClientFor(credential)));
+      ctx.json(ctx.res, 200, await research(action, body, researchClientFor(credential)));
     } catch (error) {
       if (!(error instanceof XResearchError)) throw error;
       if (error.code === "off" && prefix === RESEARCH_PREFIX) deps.researchOff?.();
-      const message = error.code === "bad_key" && deps.cloudHome && credential.included ? X_MESSAGES.homeBadKey : error.message;
+      const message = error.code === "bad_key" && deps.cloudHome && credential?.included ? X_MESSAGES.homeBadKey : error.message;
       ctx.json(ctx.res, statusFor(error.code), { error: message, code: error.code });
     }
   };

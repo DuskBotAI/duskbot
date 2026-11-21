@@ -93,7 +93,9 @@ it("a bridged turn on the chat-completions runtime carries on after use_tool nam
   expect(requests).toHaveLength(3);
   const searched = JSON.parse(requests[2]!.messages.at(-1)!.content as string) as { ok: boolean; result: string };
   expect(searched.ok).toBe(true);
-  expect((JSON.parse(searched.result) as { matches: Array<{ name: string }> }).matches[0]!.name).toBe("trigger_info");
+  const matches = (JSON.parse(searched.result) as { matches: Array<{ name: string }> }).matches.map((match) => match.name);
+  expect(matches.length).toBeGreaterThan(0);
+  expect(matches.filter((name) => handed.includes(`agents_${name}`)), "it finds only tools the list left out").toEqual([]);
   const tools = recorder.events.flatMap((event) => event.type === "item.completed" && event.itemType === "tool" ? [event.ok] : []);
   expect(tools).toEqual([false, true]);
   expect(recorder.events.some((event) => event.type === "item.completed" && event.itemType === "assistant_text" && event.text === "The tool for that is create_trigger.")).toBe(true);

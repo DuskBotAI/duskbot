@@ -6,6 +6,7 @@ import type { AppTrigger } from "../shared/app-triggers.ts";
 import { appWhenText } from "./app-trigger-requests.ts";
 import { canManage, resolveTeammate, type RosterMember } from "./peer-roster.ts";
 import { redactSecretsInText } from "./redact.ts";
+import type { JsonValue } from "./schema.ts";
 import type { Routine, RoutineRun } from "./routines.ts";
 import type { WebhookTrigger } from "./webhooks.ts";
 
@@ -182,8 +183,10 @@ const triggerRequestSchema = z.union([
   z.object({ ...source, action: z.literal("create"), kind: z.literal("app"), trigger: z.unknown() }).strict(),
   z.object({ ...source, action: z.literal("update"), triggerId: z.string().min(1).max(200), changes: z.record(z.string(), z.unknown()) }).strict(),
   z.object({ ...source, action: z.enum(["pause", "resume", "delete"]), triggerId: z.string().min(1).max(200) }).strict(),
-  z.object({ ...source, action: z.literal("run_now"), triggerId: z.string().min(1).max(200), test: z.literal(true).optional() }).strict(),
+  z.object({ ...source, action: z.literal("run_now"), triggerId: z.string().min(1).max(200), test: z.literal(true).optional(), payload: z.unknown().optional() }).strict(),
 ]);
+/** A sample body a bot tests its webhook with, as the sending app would post it. */
+const TEST_PAYLOAD_MAX = 32 * 1024;
 
 const WEBHOOK_FIELDS = new Set(["name", "instructions", "runOn", "eventTypes"]);
 const APP_FIELDS = new Set(["name", "instructions", "runOn", "filter", "config"]);
@@ -191,7 +194,7 @@ const APP_FIELDS = new Set(["name", "instructions", "runOn", "filter", "config"]
 export type ParsedTriggerRequest =
   | { ok: false; error: string }
   | { ok: true; kind: "schedule"; forBotId: unknown; proposal: { action: string; routine?: unknown; routineId?: string; changes?: unknown; test?: boolean } }
-  | { ok: true; kind: "webhook"; forBotId: unknown; operation: { action: string; webhook?: unknown; webhookId?: string; changes?: unknown } }
+  | { ok: true; kind: "webhook"; forBotId: unknown; operation: { action: string; webhook?: unknown; webhookId?: string; changes?: unknown }; payload?: JsonValue }
   | { ok: true; kind: "app"; forBotId: unknown; operation: { action: string; trigger?: unknown; triggerId?: string; changes?: unknown } };
 
 /** A create names its kind; a change finds it from the trigger id (routine, webhook and app-event ids never collide). */
@@ -226,6 +229,13 @@ export function parseTriggerRequest(body: unknown, kindOf: (id: string) => "sche
   }
   const changes = request.action === "update" ? request.changes : undefined;
   const kind = kindOf(request.triggerId);
+  const payload = request.action === "run_now" ? request.payload : undefined;
+  if (payload !== undefined) {
+    if (kind !== "webhook") return { ok: false, error: "payload is for run_now on a webhook trigger: a sample of what the sending app posts. A schedule or app event runs without one." };
+    if (request.action === "run_now" && request.test) return { ok: false, error: "A webhook test with payload runs the real steps; leave test out, and use the person's own address in the sample so nothing reaches a stranger." };
+    if (payload === null || typeof payload !== "object") return { ok: false, error: "payload must be a JSON object: the body the sending app posts." };
+    if (JSON.stringify(payload).length > TEST_PAYLOAD_MAX) return { ok: false, error: "payload is too long: send a sample of at most 32 KB." };
+  }
   if (kind === "app") {
     const misplaced = changes && Object.keys(changes).find((key) => !APP_FIELDS.has(key));
     if (misplaced) return { ok: false, error: `An app-event trigger has no ${misplaced} to change. Change name, instructions, run_on, filter or event_config; to watch another app, event or account, delete it and create a new one.` };
@@ -239,7 +249,7 @@ export function parseTriggerRequest(body: unknown, kindOf: (id: string) => "sche
   }
   const misplaced = changes && Object.keys(changes).find((key) => !WEBHOOK_FIELDS.has(key));
   if (misplaced) return { ok: false, error: `A webhook trigger has no ${misplaced}; it fires when its link is called. Change name, instructions, run_on or webhook_event_types.` };
-  return { ok: true, kind: "webhook", forBotId: request.forBotId, operation: { action: request.action, webhookId: request.triggerId, ...(changes ? { changes } : {}) } };
+  return { ok: true, kind: "webhook", forBotId: request.forBotId, operation: { action: request.action, webhookId: request.triggerId, ...(changes ? { changes } : {}) }, ...(payload !== undefined ? { payload: payload as JsonValue } : {}) };
 }
 
 /** An automation is part of a bot's setup: another bot named by for_bot_id needs the sender's authority, not just reach. */

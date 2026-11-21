@@ -133,8 +133,10 @@ export function createQuotaSwitch(deps: QuotaSwitchDeps): QuotaSwitch {
   const building = new Set<{ threadId: string; stale: boolean }>();
   /** A second press while the engine is read is the same answer, never another. */
   const answering = new Map<string, Promise<QuotaAnswer>>();
-  /** Messages already sent again after a provider failure: a second one on the backup is reported, not rerun. */
-  const rerun = new Set<string>();
+  /** Each message sent again after a provider failure, with every AI it failed on: it goes on only to an AI it has not
+   * failed on yet, and once none is left the failure is reported, not rerun. */
+  const rerun = new Map<string, Set<string>>();
+  const aiKey = (selection: ModelSelection) => `${selection.instanceId}\n${selection.model}`;
   /** Messages already sent once more on the same AI after it quit or failed unreadably. */
   const retried = new Set<string>();
 
@@ -284,14 +286,18 @@ export function createQuotaSwitch(deps: QuotaSwitchDeps): QuotaSwitch {
       const scope: TakeoverScope | undefined = signedOutStop(event.stopReason, cause) ? "signed-out"
         : flags?.limit ?? (event.stopReason !== "tool_error" && classifyError({ text: cause ?? "" }).reason === "quota" ? "engine"
         // Only a turn that showed and ran nothing: rerunning it elsewhere can repeat no words and no action.
-        : stop && !stop.acted && providerFailure(cause, event.stopReason) && !(request?.messageId && rerun.has(request.messageId)) ? "provider" : undefined);
+        : stop && !stop.acted && providerFailure(cause, event.stopReason) ? "provider" : undefined);
       if (!scope) return null;
       const thread = store.projectBotForTask(bot.id, threadId) ?? bot;
       const from = thread.modelSelection;
+      const failedOn = scope === "provider" && request?.messageId ? rerun.get(request.messageId) : undefined;
+      if (failedOn) failedOn.add(aiKey(from));
       if (scope === "engine") limited.add(from.instanceId);
       const providerUntil = scope === "provider" ? deps.takeover?.holdProvider?.(from) : undefined;
       // DUSK_QUOTA_SWITCH=0: nothing carries on by itself; the person still hears once that the bot waits.
-      const backups = enabled() ? deps.takeover?.backups(bot.id, from, scope, approvalModeFor(thread)) ?? [] : [];
+      const backups = (enabled() ? deps.takeover?.backups(bot.id, from, scope, approvalModeFor(thread)) ?? [] : [])
+        .filter((backup) => !failedOn?.has(aiKey(backup)));
+      if (failedOn && !backups.length) return null;
       const resetsAt = scope === "signed-out" ? undefined : scope === "provider" ? providerUntil : flags?.limitResetsAt ?? (RESETS.has(scope) ? limitResetFromWords(cause ?? "") : undefined);
       // A sign-out is told once, first and without a backup's name: what the person must do is sign in again.
       const told = scope === "signed-out" ? deps.takeover?.tell(thread, from, { scope }) : undefined;
@@ -315,9 +321,9 @@ export function createQuotaSwitch(deps: QuotaSwitchDeps): QuotaSwitch {
         if (failure) store.patchMessage(threadId, failure.id, { tool: { ...failure.tool!, resolvedAt: Date.now() } });
         let carried = false;
         try {
-          if (scope === "provider" && request.messageId) {
-            rerun.add(request.messageId);
-            if (rerun.size > 500) rerun.delete(rerun.values().next().value!);
+          if (scope === "provider" && request.messageId && !failedOn) {
+            rerun.set(request.messageId, new Set([aiKey(from)]));
+            if (rerun.size > 500) rerun.delete(rerun.keys().next().value!);
           }
           for (const selection of backups) {
             if (await continueOn(bot.id, threadId, selection, request, build, resetsAt, scope, stop?.acted === true)) {

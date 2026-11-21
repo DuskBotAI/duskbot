@@ -111,7 +111,7 @@ import { createAccountEnroll } from "./account-enroll.mjs"; import { cloudMoveLi
 import { createTrialNotices } from "./cloud-trial-notice.mjs";
 import { createDesktopPrefs, DESKTOP_PORTS, jsonFile, registerDesktopPrefs } from "./desktop-prefs.mjs";
 import { installMacPermissions } from "./mac-permissions.mjs";
-import { createDesktopIncludedX } from "./included-x.mjs"; import { createDesktopIncludedPages } from "./included-pages.mjs";
+import { createDesktopIncludedX } from "./included-x.mjs"; import { createDesktopIncludedPages } from "./included-pages.mjs"; import { createDesktopIncludedXIndex } from "./included-x-index.mjs";
 import { createLastSeenStore } from "./cloud-last-seen.mjs";
 import { createCloudFocus } from "./cloud-focus.mjs";
 import { cloudPageSenderAllowed, cloudPlanDisk, createCloudPowerGate, isCloudHomeEntry, myCloudOrigin, rememberedCloudHome, signInCloudSession, withCloudHome } from "./cloud-home.mjs"; import { installCloudMac } from "./cloud-mac-main.mjs"; import { servesMacJobs } from "./mac-control-tools.mjs";
@@ -418,7 +418,7 @@ let companyBackupClientStateRequest = null;
 let companyRestoreCommitting = false;
 let companyBackupConfigurationRevision = 0;
 const managedDesktopRelay = createManagedDesktopRelay();
-const includedX = createDesktopIncludedX({ account: () => cloudAccount, server: () => serverProc, log: slog }), includedPages = createDesktopIncludedPages({ account: () => cloudAccount, server: () => serverProc, log: slog });
+const includedX = createDesktopIncludedX({ account: () => cloudAccount, server: () => serverProc, log: slog }), includedPages = createDesktopIncludedPages({ account: () => cloudAccount, server: () => serverProc, log: slog }), includedXIndex = createDesktopIncludedXIndex({ account: () => cloudAccount, server: () => serverProc, log: slog });
 const cloudPower = createCloudPowerGate({ power: () => cloudAccount?.power() ?? null, wanted: () => Boolean(cloudSync?.running()) });
 const utilityServerExits = new WeakMap();
 const UTILITY_SERVER_STOP_TIMEOUT_MS = 6_500;
@@ -437,7 +437,7 @@ const serverSupervisor = createServerSupervisor({
     setLocalOrigin(confirmedRendererOrigin());
     slog(`server ready pid=${proc.pid} port=${SERVER_PORT}`);
     syncUsageSignals(); syncHookOrigin({ status: managedCompanionConnector?.getStatus(), wanted: companionDesiredThisLaunch, request: localServerRequest });
-    syncManagedComposioCredentials(); includedX.serverStarted(); includedPages.serverStarted(); railChanged(); ambientSurfaces.refresh();
+    syncManagedComposioCredentials(); includedX.serverStarted(); includedPages.serverStarted(); includedXIndex.serverStarted(); railChanged(); ambientSurfaces.refresh();
     reportOwnListeners(proc);
     orgLibrary?.runtimeReady();
     if (managedDesktop) void managedDesktop.refresh().catch(() => {});
@@ -963,7 +963,7 @@ function ensureCloudAccount() {
       cloudPower.changed(); try { void oneHome.kick(); void homeWindow.changed(); announceAddedCloud(state); railChanged(); accountEnroll.onState(state); accountGate.changed(state); void botsElsewhere.remember(); void vpsCloudMove?.kick(); void vpsCloudMove?.signedInNow?.(); serverEnroll?.onState(state); } catch {}
       // a server's install line that waited on the account: made at once now (vpsLink may not exist yet at launch)
       try { if (state?.account && state.status === "connected") void vpsLink?.accountReady?.(); } catch {}
-      void includedX.onState(state); void includedPages.onState(state); accounts.tell();
+      void includedX.onState(state); void includedPages.onState(state); void includedXIndex.onState(state); accounts.tell();
       refreshCloudMenus();
       announceCloudReady(state);
       if (mainWindow && !mainWindow.isDestroyed() && mainWindow.webContents.mainFrame.url.startsWith(`${rendererOrigin()}/`) &&

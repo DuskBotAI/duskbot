@@ -49,6 +49,8 @@ const BROWSER = new Set([
 ]);
 
 const PAGE = new Set([
+  // Reads a response the page already received; nothing reaches the page (x_search's own X sign-in route).
+  "Network.getResponseBody",
   "Page.enable",
   "Page.setLifecycleEventsEnabled",
   "Page.navigate",

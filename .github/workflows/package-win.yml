@@ -67,7 +67,7 @@ jobs:
           ls -lh release/*.exe release/*.yml 2>/dev/null || true
       # Three things silently produce an installer that builds fine and is
       # broken in the field, and none of them can be checked from the Mac the
-      # release is cut on — the artifact carries only the .exe. So assert them
+      # release is cut on — the artifact carries only the installers. So assert them
       # here, where the unpacked tree exists, and fail the build instead of
       # shipping it.
       - name: verify the packaged tree
@@ -129,5 +129,6 @@ jobs:
           name: windows-installer
           path: |
             release/*.exe
+            release/DuskBot-*-win-x64.zip
           if-no-files-found: error
           retention-days: 14

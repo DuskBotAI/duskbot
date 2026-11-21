@@ -118,8 +118,9 @@ async function meetTheLimit(api: (method: string, path: string, body?: unknown) 
 
 it("with no backup chosen, carries the request on with another AI the person has working", async () => {
   await withQuotaFixture({}, async ({ api, control, backupPrompts }) => {
-    await meetTheLimit(api, control, "CARRY_IT_ON_ANYWAY_3Q", undefined, "settled");
+    const { messages } = await meetTheLimit(api, control, "CARRY_IT_ON_ANYWAY_3Q", undefined, "settled");
     await expect.poll(() => backupPrompts().length, { timeout: 30_000 }).toBe(1);
+    expect((await messages()).filter((message) => message.role === "user")).toHaveLength(1);
   });
 }, 240_000);
 

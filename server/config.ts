@@ -7,7 +7,8 @@ import { isDeepStrictEqual } from "node:util";
 import { z } from "zod";
 import { normalizeImageGenerationUrl, type ImageGenerationConfig } from "../shared/image-generation.ts";
 import { botAvatarUrlSchema } from "../shared/bot-avatar.ts";
-import { parseAccountAvatarUrl, parseUserAvatarChoice, type SyncedAccountFace, type UserAvatarChoice } from "../shared/user-avatar.ts"; import { TALKING_STYLES, type TalkingStyle } from "../shared/talking-style.ts";
+import type { SyncedAccountFace } from "../shared/user-avatar.ts"; import { TALKING_STYLES, type TalkingStyle } from "../shared/talking-style.ts";
+import { accountFaceSchema } from "./account-face-schema.ts";
 import { writeFileAtomic } from "./atomic.ts"; import { setAsideUnreadable } from "./registry-file.ts";
 import { defaultBotThreads, MAX_CONCURRENT_BOT_THREADS } from "./bot-thread-limits.ts";
 import { anthropicKeyEnv } from "./anthropic-key-env.ts";
@@ -25,7 +26,7 @@ export { CLAUDE_API_INSTANCE, OPENAI_API_INSTANCE, OPENROUTER_API_INSTANCE, XAI_
 import { DEFAULT_WINDOW_MINUTES, MAX_WINDOW_MINUTES } from "./cache-keepwarm.ts";
 import { PROVIDER_ICON_PRESETS, providerIconError } from "../shared/provider-icon.ts";
 import { helperStoredShape, type HelperConfig } from "./side-jobs.ts";
-import { loopGuardConfigSchema, type LoopGuardConfig } from "./host/loop-guard.ts";
+import { loopGuardConfigSchema, type LoopGuardConfig } from "./host/loop-guard-config.ts";
 import { migrateLegacyFeatureFlags } from "./legacy-feature-flags.ts";
 import { settledFileCache, settledFileStamp } from "./settled-file.ts";
 import { isRemoteMcpServer, mcpServerServes, parseStoredMcpServer } from "./mcp-registry.ts";
@@ -303,18 +304,6 @@ const threadsPatchSchema = threadsConfigSchema.extend({
   eventLogMaxBytes: threadsConfigSchema.shape.eventLogMaxBytes.nullable(),
   eventLogRetentionDays: threadsConfigSchema.shape.eventLogRetentionDays.nullable(),
 });
-const accountAvatarUrlSchema = z.string().max(1024).refine(
-  (value) => parseAccountAvatarUrl(value) !== null,
-  "must be an https URL without credentials or port",
-);
-
-const accountFaceSchema = z.object({
-  id: z.string().trim().min(1).max(120),
-  email: optionalText,
-  avatarUrl: accountAvatarUrlSchema.optional(),
-  avatar: z.string().max(40).refine((value) => parseUserAvatarChoice(value) !== null, "invalid avatar choice").transform((value) => value as UserAvatarChoice).optional(),
-}).strict();
-
 const appConfigSchema = z.object({
   /** Set only by the verified domain endpoint, never by a config patch. */
   customDomain: z.string().optional(),

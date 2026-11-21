@@ -229,7 +229,7 @@ echo "pending=$(state_get update-pending) package=$(state_get package) failed=$(
 
   it("restarts a running server onto a newly installed build even when no unit changed, and only then", async () => {
     const s = await sh(`
-get_gate() { :; }; handoff_script() { :; }; server_unit() { return 1; }; helper_units() { return 1; }; ssh_guard() { return 1; }
+get_gate() { :; }; handoff_script() { :; }; server_unit() { return 1; }; helper_units() { return 1; }; ssh_guard() { return 1; }; get_updater() { return 1; }
 gate_up() { :; }; box_works() { :; }; wait_health() { return 0; }; systemctl() { :; }
 state_set package sha256:new; state_set running-package sha256:old
 do_service; echo "running=$(state_get running-package)"
@@ -245,7 +245,7 @@ do_service`);
 printf '{\n  "version": "1.1.0"\n}\n' > "$SVC_HOME/.local/lib/node_modules/duskbot/package.json"
 printf '#!/bin/sh\n' > "$SVC_HOME/.local/bin/duskbot"; chmod +x "$SVC_HOME/.local/bin/duskbot"
 state_set package sha256:${broken}
-get_gate() { :; }; handoff_script() { :; }; server_unit() { return 1; }; helper_units() { return 1; }; ssh_guard() { return 1; }
+get_gate() { :; }; handoff_script() { :; }; server_unit() { return 1; }; helper_units() { return 1; }; ssh_guard() { return 1; }; get_updater() { return 1; }
 gate_up() { :; }; box_works() { :; }; wait_health() { return 1; }; systemctl() { :; }; journalctl() { :; }; ss() { :; }
 do_service || echo "service failed, failed=$(state_get update-failed)"
 PKG_SHA=${good} PKG_VERSION=1.0.0 OFFLINE=0

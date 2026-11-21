@@ -93,7 +93,7 @@ describe("the Chief of Staff", () => {
     expect(resolveTeammate([...fleet, clive], self, "Clive")).toEqual({ id: "chief", byName: true });
     const prompt = peerRosterSystemPrompt([clive]);
     expect(prompt).toContain("[Chief of Staff]");
-    expect(prompt).toContain("send a self-contained request to a Chief of Staff with coordinate_bots");
+    expect(prompt).toContain("go to a Chief of Staff as a self-contained request through coordinate_bots");
     expect(peerRosterSystemPrompt([{ ...clive, chiefOfStaff: false }])).not.toContain("[Chief of Staff]");
   });
   it("oversees every bot: sidebar sections grant and withhold nothing", () => {
@@ -251,13 +251,13 @@ describe("peerRosterSystemPrompt", () => {
     expect(prompt).toContain("- Scout, Travel planner [id: elsewhere]");
     expect(prompt).not.toMatch(/department/i);
     expect(prompt).toContain("You can reach every other bot on this team");
-    expect(prompt).toContain("do it yourself with coordinate_bots; nobody has to set anything up first");
-    expect(prompt).toContain("you can reach every bot listed");
+    expect(prompt).toContain("use coordinate_bots yourself, without waiting to be told");
+    expect(prompt).toContain("lists the bots you can reach");
     expect(prompt).not.toMatch(/allowed peer|team membership|under Permissions/i);
-    expect(prompt).toContain("coordinate_bots with a teammate's bot id");
+    expect(prompt).toContain("coordinate_bots takes a teammate's bot id");
     expect(prompt).toContain("consult: true");
-    expect(prompt).toContain("without waiting for the person to name them or tell you to contact them");
-    expect(prompt).toContain("while honoring any approval the tool requires");
+    expect(prompt).toContain("without asking permission to consult them");
+    expect(prompt).toContain("honoring any approval the tool requires");
     expect(prompt).toContain('reply: "none"');
     expect(prompt).not.toMatch(/\b(delegate_bot|ask_bot|send_to_bot|check_delegation|wait_delegation)\b/);
     expect(prompt).toContain("peers, not staff");

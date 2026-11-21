@@ -21,6 +21,11 @@ export interface WorkflowCase {
   source?: string;
   /** after setup the server restarts on the same data, these emails arrive, and every automation runs once */
   restart?: { arrive: Mail[] };
+  /** after setup the eval posts this to the bot's webhook, as the person's form or store would, and waits for the run */
+  fire?: { body: unknown };
+  /** competitor pages the eval serves ({{PAGE:name}} in the ask or brief) and a fake Telegram ({{TG_TOKEN}}): after setup
+   * the owner pairs with the start code the bot gave, then one page changes and the eval waits for a Telegram message */
+  telegram?: { pages: Record<string, string>; change: { page: string; html: string } };
 }
 
 const day = (offset: number, hour = 9, min = 0) => {
@@ -210,6 +215,7 @@ export const CASES: WorkflowCase[] = [
     brief: "Shopify isn't connected here; it can call a link (webhook) on 'order created' if the bot gives you one. Thank-you from maya@loomware.co, short, warm. You'll paste the link into Shopify yourself.",
     expect: "A webhook automation (when=webhook) whose instructions check the total over $500, append to a new VIP sheet, and send the thank-you; gives the person the private webhook address and where to paste it in Shopify (Settings > Notifications > Webhooks, Order creation). A test fire (run_now) that shows it works on a sample order without emailing a real customer.",
     change: "make it orders over $300",
+    fire: { body: { id: 5521, name: "#1188", total_price: "642.00", currency: "USD", email: "sam.kerr@hey.com", customer: { first_name: "Sam", last_name: "Kerr" }, line_items: [{ title: "Loom Lite", quantity: 4, price: "129.00" }, { title: "Heddle pack", quantity: 14, price: "9.00" }] } },
   },
   {
     id: "accounting-team", dept: "finance", apps: ["gmail", "google_sheets", "stripe"], source: "x-research #4, #5, #6 (xAI's accounting team on Grok Bots)",
@@ -265,5 +271,35 @@ export const CASES: WorkflowCase[] = [
     ] },
     expect: "A weekday 8:30 India-time automation with a log keyed by message id. After the server restarts, the automation still exists unchanged and its next run handles only the two new emails: answers the shipping question, drafts (never sends) the refund, and does not reply again to any email the earlier runs handled; 'what's running' after the restart lists it with that run's result.",
     change: "what did you do with the emails that came in since the restart?",
+  },
+  {
+    id: "lead-capture", dept: "sales", apps: ["gmail", "google_sheets"], seed: {},
+    ask: "when someone fills in the contact form on my website, put them in a leads sheet, send them a quick personal hello from me straight away, and if they haven't replied in 2 days send one follow-up",
+    brief: "You are Maya, founder of Loomware (Loom Lite smart loom, $129). The form is a Tally form; it can call a link (webhook) on each new submission if the bot gives you one, and you paste it in yourself. It sends name, email, company and message. Emails from maya@loomware.co, short and warm, sign '- Maya'. Demos are booked at loomware.co/demo. No existing sheet: make one. Never email the same lead twice on day one. India time.",
+    expect: "A webhook automation whose instructions add the lead to a new leads sheet (name, email, company, message, status, dates), send a short personal hello from maya@loomware.co at once, and arrange one follow-up 2 days later only when the lead has not replied (a wait, a daily automation that reads the sheet and the inbox, or similar), never twice. It gives the person the private address and where to paste it in Tally. When the eval posts a sample lead to the webhook, the sheet gets that lead and the hello goes to that lead's address.",
+    change: "make the follow-up after 3 days instead, and cc me on the hello: maya@loomware.co",
+    // Tally's own FORM_RESPONSE shape
+    fire: { body: { eventId: "evt_7Qm2", eventType: "FORM_RESPONSE", createdAt: new Date().toISOString(), data: { responseId: "r_8JkL", submissionId: "r_8JkL", respondentId: "p_31x", formId: "wMzKq4", formName: "Contact Loomware", createdAt: new Date().toISOString(), fields: [
+      { key: "question_name", label: "Name", type: "INPUT_TEXT", value: "Priya Nair" },
+      { key: "question_email", label: "Email", type: "INPUT_EMAIL", value: "priya@brightloom.in" },
+      { key: "question_company", label: "Company", type: "INPUT_TEXT", value: "Brightloom Studio" },
+      { key: "question_message", label: "Message", type: "TEXTAREA", value: "Saw the Loom Lite on Instagram. Can it do twill? Thinking of 2 for my studio." },
+    ] } } },
+  },
+  {
+    id: "competitor-telegram", dept: "marketing", apps: [], seed: {},
+    ask: "watch my 3 competitors' pricing pages ({{PAGE:weavr}}, {{PAGE:loomio}}, {{PAGE:threadly}}) and ping me on Telegram the second any of them changes a price. here's my telegram bot token: {{TG_TOKEN}}",
+    brief: "You are Maya, founder of Loomware. You made the Telegram bot with BotFather; you'll open the link or send the code the bot gives you on your phone. Ping only on a real price change, with old and new price. Checking every few minutes is fine. India time.",
+    expect: "The Telegram bot connected from the pasted token (kept in the Vault, never repeated) with the pairing link or code given to the person, a first read of the three pages' current prices kept as the baseline, and a watch (an automation with a change check, or a background job) that checks every few minutes and, on a real price change, messages the person on Telegram with the old and new price, staying quiet otherwise. When the eval changes one page's price after pairing, the person gets that Telegram message by itself.",
+    change: "also add {{PAGE:knotworks}} to the list",
+    telegram: {
+      pages: {
+        weavr: "<html><body><h1>Weavr pricing</h1><div class=\"plan\"><h2>Starter</h2><p class=\"price\">$19/month</p></div><div class=\"plan\"><h2>Studio</h2><p class=\"price\">$49/month</p></div></body></html>",
+        loomio: "<html><body><h1>Loomio pricing</h1><div class=\"plan\"><h2>Hobby</h2><p class=\"price\">$12/month</p></div><div class=\"plan\"><h2>Pro</h2><p class=\"price\">$39/month</p></div></body></html>",
+        threadly: "<html><body><h1>Threadly pricing</h1><div class=\"plan\"><h2>Solo</h2><p class=\"price\">$15/month</p></div><div class=\"plan\"><h2>Team</h2><p class=\"price\">$59/month</p></div></body></html>",
+        knotworks: "<html><body><h1>Knotworks pricing</h1><div class=\"plan\"><h2>Basic</h2><p class=\"price\">$9/month</p></div><div class=\"plan\"><h2>Plus</h2><p class=\"price\">$29/month</p></div></body></html>",
+      },
+      change: { page: "loomio", html: "<html><body><h1>Loomio pricing</h1><div class=\"plan\"><h2>Hobby</h2><p class=\"price\">$12/month</p></div><div class=\"plan\"><h2>Pro</h2><p class=\"price\">$29/month</p></div></body></html>" },
+    },
   },
 ];

@@ -19,10 +19,28 @@ const NEEDS_INPUT = /^\s*needs input:\s*/i;
 
 export type RunReply = { quiet: true } | { quiet: false; text: string; question?: string };
 
-/** What a run's last reply says to the person. Its last line alone being NOTHING NEW keeps the run quiet. */
+// "Checked 14 emails." or "No new invoices." above the token narrates the check; any other line is a finding.
+const CHECK_NARRATION = /^(?:[-*>\d.)\s]*)(?:i\s+)?(?:checked|looked|scanned|reviewed|went through|searched|read|ran)\b|^(?:[-*>\s]*)(?:no|nothing|none|all quiet|still|same as|everything)\b/i;
+
+/** A reply ending on NOTHING NEW after a real finding: the finding without the token, or null when nothing above it is
+ * more than a note of what was checked (Hermes Agent: never combine [SILENT] with content). */
+export function findingBeforeSilence(lines: readonly string[]): string | null {
+  const above = lines.slice(0, -1).map((line) => line.trim()).filter((line) => line && !SILENT_LINE.test(line));
+  return above.some((line) => !CHECK_NARRATION.test(line)) ? lines.slice(0, -1).join("\n").trim() : null;
+}
+
+/** What a run's last reply says to the person. Its last line being NOTHING NEW keeps the run quiet, unless a finding
+ * stands above it. */
 export function readRunReply(text: string, attached = false): RunReply {
-  const lines = text.trim().split(/\r?\n/);
-  if (SILENT_LINE.test(lines.at(-1) ?? "") || (!text.trim() && !attached)) return { quiet: true };
+  let lines = text.trim().split(/\r?\n/);
+  if (!text.trim() && !attached) return { quiet: true };
+  if (SILENT_LINE.test(lines.at(-1) ?? "")) {
+    const finding = findingBeforeSilence(lines);
+    if (finding === null) return { quiet: true };
+    console.warn("automation: a reply ended on NOTHING NEW after a finding; the finding is delivered");
+    text = finding;
+    lines = finding.split(/\r?\n/);
+  }
   const question = needsInputQuestion(text);
   if (question === undefined) return { quiet: false, text: text.trim() };
   const at = lines.findLastIndex((line) => NEEDS_INPUT.test(line));
@@ -268,7 +286,11 @@ export function createAutomationReports(deps: AutomationReportDeps) {
     quietInItsChat(run: RoutineRun, turnId?: string): boolean {
       if (run.target !== "bot" || run.status !== "completed" || !run.threadId || run.deliver === "brief") return false;
       const said = turnId ? store.activePath(run.threadId).findLast((message) => message.role === "bot" && message.kind === "text" && message.turnId === turnId) : replyOf(run);
-      if (!read(said).quiet) return false;
+      const reply = read(said);
+      if (!reply.quiet) {
+        if (said?.text && SILENT_LINE.test(said.text.trim().split(/\r?\n/).at(-1) ?? "")) store.patchMessage(run.threadId, said.id, { text: reply.text });
+        return false;
+      }
       if (said) store.patchMessage(run.threadId, said.id, { quietRun: true });
       deps.routines()?.noteReport(run.id, { state: "quiet" });
       return true;

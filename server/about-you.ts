@@ -36,7 +36,7 @@ export function aboutYouPrompt(facts: AboutYouFacts): string {
   const memory = facts.memory;
   if (!memory.enabled) lines.push("Your own memory is turned off for you right now, so you do not carry notes between conversations.");
   else {
-    const where = memory.file ? `, kept in ${JSON.stringify(memory.file)}${memory.topicDir ? ` with topic notes in ${JSON.stringify(memory.topicDir)}` : ""}` : "";
+    const where = memory.file && !facts.memory.managedWrites ? `, kept in ${JSON.stringify(memory.file)}${memory.topicDir ? ` with topic notes in ${JSON.stringify(memory.topicDir)}` : ""}` : "";
     const how = facts.memory.managedWrites ? "read it where it is shown to you in these instructions and change it with memory_update" : "it is shown to you at the start of each conversation and you edit it with your file tools";
     lines.push(`You have your own persistent memory, separate from any engine memory feature${where}: ${how}.`);
   }

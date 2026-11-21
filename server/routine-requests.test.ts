@@ -15,6 +15,7 @@ import {
   type RoutineRequestStore,
   type RoutineToolDefinitionInput,
 } from "./routine-requests.ts";
+import { nextCronRuns } from "../shared/routine-schedule.ts";
 import { RoutineManager, type RoutineInput } from "./routines.ts";
 import type { JsonValue } from "./schema.ts";
 import { directApply, type DirectApplyCheck } from "./direct-apply.ts";
@@ -1925,6 +1926,13 @@ describe("consequenceLine", () => {
     );
     expect(consequenceLine({ type: "once", at: 0 })).toBe("Will run once; that run starts a fresh session.");
   });
+
+  it("says a daily, weekday or weekly cron at one time in plain words", () => {
+    expect(consequenceLine({ type: "cron", expression: "0 10 * * 1-5", timeZone: "Europe/London" })).toBe("Weekdays at 10:00, UK time; each run starts a fresh session.");
+    expect(consequenceLine({ type: "cron", expression: "0 9 * * MON", timeZone: "Asia/Kolkata" })).toMatch(/^Mondays at 09:00, .+; each run starts a fresh session\.$/);
+    expect(consequenceLine({ type: "cron", expression: "30 8 * * *", timeZone: "Europe/London" })).toBe("Every day at 08:30, UK time; each run starts a fresh session.");
+    expect(consequenceLine({ type: "cron", expression: "0 9 1 * *", timeZone: "Europe/London" })).toBe("Will run at matching calendar times, UK time; each run starts a fresh session.");
+  });
 });
 
 describe("a bot's own routine changes", () => {
@@ -2088,5 +2096,50 @@ describe("a bot's own routine changes", () => {
     const applied = await service.submit({ botId: "bot-a", threadId: "ask-thread", proposal: createProposal({ instructions: "Another." }) });
     expect(service.undo({ botId: "bot-b", threadId: "ask-thread", requestId: applied.requestId })).toMatchObject({ state: "invalid", status: 403 });
     expect(undo(service, "missing")).toEqual({ claimed: false });
+  });
+});
+
+describe("a time the person named", () => {
+  const weekdays = ["monday", "tuesday", "wednesday", "thursday", "friday"];
+  const chaser = (schedule: RoutineToolDefinitionInput["schedule"]): RoutineProposalInput => ({
+    action: "create", routine: { name: "Invoice chaser", instructions: "Chase the unpaid invoices from the sheet.", schedule },
+  });
+  const applied = async (proposal: RoutineProposalInput, start = Date.parse("2026-10-22T12:00:00Z")) => {
+    const { service, routines } = harness(start);
+    const card = await service.propose({ botId: "bot-a", threadId: "thread-a", proposal });
+    expect(service.resolve({ botId: "bot-a", threadId: "thread-a", requestId: card.requestId, behavior: "allow" }).state).toBe("applied");
+    return { card, routine: routines.listRoutines()[0]! };
+  };
+
+  it("keeps 10:00 London on weekdays to the minute in London, across the clocks going back", async () => {
+    const { routine } = await applied(chaser({ type: "weekly", time: "10:00", weekdays, timeZone: "Europe/London" }));
+    expect(routine.schedule).toEqual({ type: "cron", expression: "0 10 * * 1,2,3,4,5", timeZone: "Europe/London" });
+    if (routine.schedule.type !== "cron") throw new Error("Expected cron");
+    expect(nextCronRuns(routine.schedule, Date.parse("2026-10-22T12:00:00Z"), 3).map((at) => new Date(at).toISOString()))
+      .toEqual(["2026-10-23T09:00:00.000Z", "2026-10-26T10:00:00.000Z", "2026-10-27T10:00:00.000Z"]);
+    expect(routine.nextRunAt).toBe(Date.parse("2026-10-23T09:00:00Z"));
+  });
+
+  it("keeps a named time in the computer's zone, and still moves one the bot picked on the hour", async () => {
+    const named = await applied(chaser({ type: "weekly", time: "09:00", weekdays, exact: true }));
+    expect(named.routine.schedule).toEqual({ type: "daily", time: "09:00", weekdays: [1, 2, 3, 4, 5] });
+    const picked = await applied(chaser({ type: "weekly", time: "09:00", weekdays }));
+    expect(picked.routine.schedule).toMatchObject({ type: "daily", time: expect.stringMatching(/^09:0[2-7]$/) });
+    const cron = await applied(chaser({ type: "cron", expression: "0 9 * * 1-5", timeZone: "Europe/London", exact: true }));
+    expect(cron.routine.schedule).toEqual({ type: "cron", expression: "0 9 * * 1-5", timeZone: "Europe/London" });
+  });
+
+  it("refuses a zone that is not an IANA name", async () => {
+    const { service } = harness();
+    await expect(service.propose({ botId: "bot-a", threadId: "thread-a", proposal: chaser({ type: "weekly", time: "10:00", weekdays, timeZone: "BST" }) }))
+      .rejects.toBeInstanceOf(RoutineRequestError);
+  });
+
+  it("loads a routine saved without a zone as it was", () => {
+    const dir = mkdtempSync(join(tmpdir(), "dusk-routine-legacy-"));
+    tempDirs.push(dir);
+    const options = { file: join(dir, "routines.json"), now: () => Date.parse("2026-10-22T12:00:00Z"), botState: () => "busy" as const, goalState: () => "busy" as const, createTask: () => null, startTurn: async () => {} };
+    const saved = new RoutineManager(options).create({ botId: "bot-a", name: "Old brief", prompt: "Brief.", schedule: { type: "daily", time: "09:00", weekdays: [1, 2, 3, 4, 5] } });
+    expect(new RoutineManager(options).listRoutines()[0]).toMatchObject({ id: saved.id, schedule: { type: "daily", time: "09:00", weekdays: [1, 2, 3, 4, 5] }, nextRunAt: saved.nextRunAt });
   });
 });

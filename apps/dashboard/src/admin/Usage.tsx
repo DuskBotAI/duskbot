@@ -44,7 +44,7 @@ const CATEGORY: Record<string, { label: string; icon: ReactNode; wash: string }>
   image: { label: "images", icon: <Image {...I} />, wash: "bg-wash-pink" }, chat: { label: "just chatting", icon: <MessageSquare {...I} />, wash: "bg-wash-sky" },
   other: { label: "other", icon: <Sparkles {...I} />, wash: "bg-wash-lemon" },
 };
-const TOOL: Record<string, string> = { browser: "browser", computer: "computer use", terminal: "terminal", files: "files", web: "web search", memory: "memory", routine: "routine tools",
+const TOOL: Record<string, string> = { browser: "browser", computer: "computer use", terminal: "terminal", files: "files", web: "web search", x: "X search", memory: "memory", routine: "routine tools",
   page: "pages", widget: "widgets", bots: "other bots", phone: "phone control", image: "images", data: "data tools", app: "connected apps", mcp: "mcp tools", other: "other tools" };
 const SOURCE: Record<string, string> = { app: "in the app", remote: "phone or another device", routine: "routines", bot: "another bot", helper: "helper" };
 const PLACE: Record<string, string> = { desktop: "desktop", cloud: "cloud", server: "own server" };

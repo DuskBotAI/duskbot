@@ -80,7 +80,7 @@ describe("a cancelled turn", () => {
     const cause = `${CANCELLED} See the logs.`;
     render({ ...bot, messages: [ask, { id: "error", role: "bot", kind: "activity", at: T0 + 2, tool: { name: `error: ${cause}`, ok: false } }] });
     expect(host.textContent).toContain("Bot failed to respond");
-    expect(host.textContent).toContain(cause);
+    expect(host.textContent, "what the engine said stays in the logs").not.toContain("See the logs");
     expect(host.querySelector("[data-failed-reply] [data-chat-error][role=alert]"), "a real error keeps the danger card, above the composer").not.toBeNull();
     expect(host.textContent).not.toContain("stopped");
     expect(retry()).toBeTruthy();

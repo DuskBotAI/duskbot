@@ -4,6 +4,7 @@ import { availableTools } from "./drivers/agents-catalog.ts";
 import { soulSystemPrompt } from "./bot-folder.ts";
 import { BUILT_IN_BROWSER_SYSTEM_PROMPT } from "./browser-engine.ts";
 import {
+  SANDBOX_ESCALATION_PROMPT,
   longCommandsPrompt,
   buildSystemPrompt,
   CONVERSATIONAL_STYLE_PROMPT,
@@ -411,8 +412,8 @@ describe("longCommandsPrompt", () => {
     for (const kind of [null, "local", "vps"] as const) {
       const text = longCommandsPrompt(kind);
       expect(text).toContain("`timeout` in milliseconds, up to 600000");
-      expect(text).toContain("Never wait inside a command for CI, a deploy or any other job to finish (no sleep loops or repeated polls): check it once");
-      expect(text).toContain("tell the person what you made (with links), set wait_until or a one-time trigger to check back, and end your turn. When the person writes while you work, answer them first.");
+      expect(text).toContain("Never wait inside a command for CI, a deploy or another job: check once");
+      expect(text).toContain("say what you made (with links), set wait_until or a one-time trigger to check back, and end your turn. When the person writes while you work, answer them first.");
       expect(text).not.toContain("vm_exec");
     }
     for (const kind of ["vm-private", "vm-shared"] as const) {
@@ -545,4 +546,19 @@ describe("a shorter answer", () => {
   it("cuts words, never the facts the ask needs", () => {
     expect(talkingStylePrompt("warm")).toContain("never the facts the ask needs (every item, name and total it asked for)");
   });
+});
+
+it("an automation's report opens with the finding, and a scheduled run does its work instead of scheduling more", () => {
+  expect(AUTOMATION_REPLY_PROMPT).toContain("opening with the finding itself, never with the automation, the check or the run");
+  expect(AUTOMATION_REPLY_PROMPT).toContain("NOTHING NEW is the whole reply or nothing");
+  expect(ROUTINE_EXECUTION_PROMPT).toContain("never set up an automation because they mention a time or a repeat");
+});
+
+it("a sandboxed engine asks to run a blocked step outside its sandbox instead of working around it", () => {
+  expect(SANDBOX_ESCALATION_PROMPT).toContain("rerun that command asking for permission to run it outside the sandbox instead of working around it");
+});
+
+it("pauses only an automation whose steps need an app not connected yet, and keeps one another app calls by link on", () => {
+  expect(TRIGGER_PROMPT).toContain("an automation whose steps need it is made paused until it is connected");
+  expect(TRIGGER_PROMPT).toContain("one another app calls by link stays on: it does nothing until called");
 });

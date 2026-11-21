@@ -167,11 +167,11 @@ describe("the Connect Apps window", () => {
     });
     const groups = [...dialog().querySelectorAll('[role="listbox"] [role="group"]')].map((group) => group.getAttribute("aria-label"));
     expect(groups).toEqual(["Plugins", "Skills", "Categories"]);
-    expect(dialog().querySelector('[role="option"]')?.textContent).toContain("Linear");
+    expect(dialog().querySelector('[role="option"]')?.textContent).toContain("JoinBot");
     await act(async () => { input.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true })); });
     expect(input.getAttribute("aria-activedescendant")).toBe("ca-option-0");
     await act(async () => { input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })); });
-    expect(dialog().querySelector("[data-app-page]")?.getAttribute("data-app-page")).toBe("linear");
+    expect(dialog().querySelector("[data-app-page]")?.getAttribute("data-app-page")).toBe("joinbot");
     await act(async () => { button("Back")!.click(); });
     expect(dialog().querySelector("[data-app-page]")).toBeNull();
   });

@@ -17,7 +17,7 @@ import { decodeInjectId } from "../local-inject.ts";
 import { DeviceAuthController, type DeviceSignIn } from "../device-auth.ts";
 import { deletePromptSplitReceipt, promptHalves, readPromptSplitReceipt, splitSessionPrompt, writePromptSplitReceipt } from "../prompt-split.ts";
 import type { PromptSplitReceipt } from "../prompt-split.ts";
-import { describeSpawnFailure, execCli, killCliTree, readOnlyBotFolders, spawnCli, waitForExit } from "../../procs.ts";
+import { closedOrKilled, describeSpawnFailure, execCli, killCliTree, readOnlyBotFolders, spawnCli } from "../../procs.ts";
 import { runAcpOneShot } from "./background-text.ts";
 import { sanitizeAcpToolMessage } from "./tool-log.ts";
 import { stripLeakedSystemHarnessMessages } from "../../../shared/system-message-guard.ts";
@@ -1891,7 +1891,7 @@ export function createAcpDriver(support: AcpSupport): ProviderDriver<AcpConfig> 
                 void retireChild(threadId, child);
               }
             }
-            await Promise.allSettled(Array.from(children, async (child) => (await waitForExit(child, 5_000)) || killCliTree(child)));
+            await Promise.allSettled([...children].map((child) => closedOrKilled(child)));
           },
           onEvent: (listener) => {
             listeners.add(listener);

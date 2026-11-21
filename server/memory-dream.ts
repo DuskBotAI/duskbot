@@ -15,6 +15,7 @@ export const DREAM_MIN_CONFIDENCE = 0.7;
 export const MAX_LEARNED = 6;
 export const MAX_OUTDATED = 5;
 export const MAX_IDEAS = 3;
+export const MAX_MISSED = 3;
 const REPLY_CHARS = 400;
 const LINE_CHARS = 1_500;
 const TEXT_MAX = 300;
@@ -137,8 +138,12 @@ export function dreamPrompt(input: {
     "",
     `ideas: at most ${MAX_IDEAS} things ${input.botName} could set up so the Person stops asking by hand, such as an automation for a request they repeat on a schedule or a saved skill for steps they keep walking through. One sentence each, with "from" (at least two conversations). Only for a clear repeat.`,
     "",
+    `missed: at most ${MAX_MISSED} things the Person asked ${input.botName} for that it left half-done or never did, and that no later line shows done, dropped or no longer wanted. "text": what is still owed, in a few words; "from": the conversation; "evidence": the Person's ask, copied exactly.`,
+    "",
+    `declined: at most ${MAX_MISSED} offers ${input.botName} made that the Person plainly turned down ("no thanks", "don't"), so it stops offering them. "text": the offer in a few words; "from"; "evidence": the Person's refusal, copied exactly. A "not now" or no answer is not a refusal.`,
+    "",
     "Answer with one JSON object and nothing else. Empty lists are the normal answer when the conversations show no lasting pattern:",
-    '{"learned": [{"text": "...", "from": [1, 3], "evidence": "their exact words", "aboutUser": false, "topic": "optional", "topicAliases": ["..."], "confidence": 0..1}], "outdated": [{"line": 0, "now": "...", "from": [2]}], "ideas": [{"text": "...", "from": [1, 4]}]}',
+    '{"learned": [{"text": "...", "from": [1, 3], "evidence": "their exact words", "aboutUser": false, "topic": "optional", "topicAliases": ["..."], "confidence": 0..1}], "outdated": [{"line": 0, "now": "...", "from": [2]}], "ideas": [{"text": "...", "from": [1, 4]}], "missed": [{"text": "...", "from": [2], "evidence": "their exact words"}], "declined": [{"text": "...", "from": [3], "evidence": "their exact words"}]}',
   ].join("\n");
 }
 
@@ -163,10 +168,19 @@ export interface DreamIdea {
   from: number[];
 }
 
+/** Something one conversation shows, resting on the Person's own words there. */
+export interface DreamNoticed {
+  text: string;
+  from: number[];
+  evidence: string;
+}
+
 export interface DreamAnswer {
   learned: DreamLearned[];
   outdated: DreamOutdated[];
   ideas: DreamIdea[];
+  missed: DreamNoticed[];
+  declined: DreamNoticed[];
 }
 
 function sentence(raw: unknown): string {
@@ -228,5 +242,17 @@ export function parseDream(text: string, conversations: number, notebookLines: n
     const sources = cited(from, conversations, DREAM_MIN_CONVERSATIONS);
     if (body && sources) ideas.push({ text: body, from: sources });
   }
-  return { learned, outdated, ideas };
+  const noticed = (key: string): DreamNoticed[] => list(parsed, key).flatMap((item) => {
+    const { text: raw, from, evidence } = (item && typeof item === "object" ? item : {}) as Record<string, unknown>;
+    const body = sentence(raw), sources = cited(Array.isArray(from) ? from : [from], conversations, 1), quote = typeof evidence === "string" ? evidence.replace(/\s+/g, " ").trim().slice(0, TEXT_MAX) : "";
+    return body && sources && quote ? [{ text: body, from: sources, evidence: quote }] : [];
+  }).slice(0, MAX_MISSED);
+  const declined = noticed("declined");
+  const refused = declined.map((item) => foldForMatch(item.text));
+  return { learned, outdated, ideas: ideas.filter((idea) => !refused.some((offer) => foldForMatch(idea.text).includes(offer))), missed: noticed("missed"), declined };
+}
+
+/** Only what the Person's words in a cited conversation really show is kept. */
+export function dreamNoticedEvidenced(item: DreamNoticed, conversations: readonly DreamConversation[]): boolean {
+  return dreamEvidenced({ ...item, aboutUser: false }, conversations);
 }

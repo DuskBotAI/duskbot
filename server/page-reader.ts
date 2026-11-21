@@ -128,7 +128,7 @@ export function readableText(html: string, base: URL): ReadablePage {
   return { title, text };
 }
 
-export type PageRead = { ok: true; url: string; title: string; text: string; cut: boolean } | { ok: false; url: string; error: string };
+export type PageRead = { ok: true; url: string; title: string; text: string; cut: boolean } | { ok: false; url: string; error: string; refused?: boolean };
 
 export type ReadPageOptions = Pick<PageFetchOptions, "lookup" | "allow" | "timeoutMs" | "maxBytes" | "maxRedirects">;
 
@@ -143,7 +143,7 @@ function charsetOf(type: string): string {
 export async function readPage(raw: string, options: ReadPageOptions = {}): Promise<PageRead> {
   const maxBytes = options.maxBytes ?? READ_PAGE_MAX_BYTES;
   const page = await fetchPublicPage(raw, { timeoutMs: READ_PAGE_TIMEOUT_MS, ...options, maxBytes, userAgent: USER_AGENT });
-  if (!page.ok) return { ok: false, url: raw, error: page.error };
+  if (!page.ok) return { ok: false, url: raw, error: page.error, ...(page.refused ? { refused: true } : {}) };
   const type = String(page.headers["content-type"] ?? "").toLowerCase();
   const html = !type || /html/.test(type);
   if (!html && !TEXT_TYPES.test(type)) {

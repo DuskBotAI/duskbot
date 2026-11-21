@@ -169,6 +169,19 @@ function firstNotice(notices: RoutineOwnerNotice[], botId: string, cause: Routin
   return true;
 }
 
+const BUSY_WAIT = "Waiting to start: ";
+
+/** A thread's turn ended: each run queued behind it starts on the next pass instead of at its recheck. */
+export function wakeBusyWaits(runs: RoutineRun[], threadId: string, now: number): boolean {
+  let woke = false;
+  for (const run of runs) {
+    if (run.status !== "queued" || run.threadId !== threadId || !run.attention?.startsWith(BUSY_WAIT) || (run.retryAt ?? 0) <= now) continue;
+    run.retryAt = now;
+    woke = true;
+  }
+  return woke;
+}
+
 /** What a failed attempt becomes. A queued run is changed in place; a failing one is the caller's to fail with `error`. */
 export function recoverRun(run: RoutineRun, failure: string, facts: RoutineFailureFacts, now: number, notices: RoutineOwnerNotice[]): RoutineRecovery {
   const verdict: RoutineFailureClass = run.target === "bot" ? classifyRoutineFailure(failure, facts) : { kind: "final" };
@@ -179,7 +192,7 @@ export function recoverRun(run: RoutineRun, failure: string, facts: RoutineFailu
     if (now - run.deferredAt >= ROUTINE_BUSY_WAIT_MS && run.checkKey === undefined) return { queued: false, error: `Did not start: still busy after ${ROUTINE_BUSY_WAIT_MS / 60_000} minutes (${failure})` };
     run.status = "queued";
     run.retryAt = now + ROUTINE_BUSY_RECHECK_MS;
-    run.attention = `Waiting to start: ${failure}`.slice(0, 500);
+    run.attention = `${BUSY_WAIT}${failure}`.slice(0, 500);
     delete run.error;
     return { queued: true };
   }

@@ -1,0 +1,81 @@
+{
+  "label": "port-all",
+  "at": "2026-11-21T01:58:24.085Z",
+  "model": "gpt-6.2-sol",
+  "judge": "gpt-6.2-sol",
+  "results": [
+    {
+      "id": "routine-memory",
+      "feature": "Routine runs remember their last reports and keep notes",
+      "pass": true,
+      "why": "Each run gives one short octopus fact that does not repeat any earlier fact.",
+      "checks": [
+        [
+          "run 3's request carried two earlier reports",
+          true
+        ]
+      ],
+      "shown": "Run 1: An octopus can taste what it touches with its suckers.\nRun 2: A blanket octopus can tear tentacles from a Portuguese man-of-war and wield them for defense.\nRun 3: When an octopus swims, the heart that pumps blood to its body can stop beating while its other two hearts keep pumping blood to its gills."
+    },
+    {
+      "id": "routine-notes",
+      "feature": "Routine runs remember their last reports and keep notes",
+      "pass": true,
+      "why": "The runs cover chapters 1–2, 3–4, and 5–6 in order, each resuming where the previous run stopped.",
+      "checks": [
+        [
+          "a run saved notes with trigger",
+          true
+        ]
+      ],
+      "shown": "Run 1: 1. Habits: Make the habit small enough to repeat, and tie it to something you already do.\n2. Focus: Pick one task and remove distractions before you start.\n\nStopped after chapter 2. Next up: Sleep and Money.\nRun 2: 3. Sleep: Keep a consistent wake-up time, even on weekends, to anchor your sleep schedule.\n4. Money: Automate a savings amount you can afford so you don’t have to decide what to set aside every month.\n\nStopped after chapter 4. Next up: Friends and Rest.\nRun 3: 5. Friends: Make time for small, regular check-ins instead of waiting for the perfect moment to catch up.\n6. Rest: Put downtime on your calendar before you need it, rather than waiting until everything is done.\n\nAll six chapters are covered. I saved your stopping point, and no further runs are scheduled."
+    },
+    {
+      "id": "silent-finding",
+      "feature": "A routine's finding is never swallowed by a NOTHING NEW at its end",
+      "pass": false,
+      "why": "The output did not tell the person that invoice #3 (Lumen Labs) is overdue.",
+      "checks": [
+        [
+          "the run did not count as quiet",
+          false
+        ],
+        [
+          "the token was not shown",
+          true
+        ]
+      ],
+      "shown": "[digest] · tools: agents_find_tool ×1, agents_trigger_info ×1 (from tool previews)\n[digest] · tools: agents_find_tool ×1 (from tool previews)"
+    },
+    {
+      "id": "routine-no-self-spawn",
+      "feature": "A routine run does its work instead of setting itself up again",
+      "pass": true,
+      "why": "It delivers one motivational quote without claiming to set up, schedule, or create anything.",
+      "checks": [
+        [
+          "no second routine was made",
+          true
+        ]
+      ],
+      "shown": "“Small steps still move you forward.”"
+    },
+    {
+      "id": "commitments",
+      "feature": "An explicit promise is kept in the commitments list and reaches the automations; a vague wish is not",
+      "pass": false,
+      "why": "judge unavailable",
+      "checks": [
+        [
+          "commitments.md holds the Asha promise",
+          true
+        ],
+        [
+          "the vague wish is not in it",
+          true
+        ]
+      ],
+      "shown": ""
+    }
+  ]
+}

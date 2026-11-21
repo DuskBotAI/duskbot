@@ -26,4 +26,12 @@ describe("a failed reply's row", () => {
     expect(lines[0]).not.toContain("secret rules");
     expect(failedTurnCause(tool.name)).not.toContain("secret rules");
   });
+
+  it("never logs an email address or a key the provider's words carry", () => {
+    const lines: string[] = [];
+    failedTurnRow("You've hit your weekly limit · resets for ada.lovelace@example.test, key sk-ant-api03-abcdefghijklmnopqrstuvwx", {}, (line) => lines.push(line));
+    expect(lines[0]).not.toContain("ada.lovelace@example.test");
+    expect(lines[0]).not.toContain("abcdefghijklmnopqrstuvwx");
+    expect(lines[0]).toContain("[email]");
+  });
 });

@@ -125,7 +125,7 @@ async function storeProfile(certId, outPath, name = "dusk bot App Store", identi
 
 /** the version being prepared (the one App Review will see) and its en-US localization */
 async function editableVersion(appId) {
-  const res = await call("GET", `/v1/apps/${appId}/appStoreVersions?filter[appStoreState]=PREPARE_FOR_SUBMISSION,DEVELOPER_REJECTED,REJECTED,METADATA_REJECTED&include=appStoreVersionLocalizations&limit=5`);
+  const res = await call("GET", `/v1/apps/${appId}/appStoreVersions?filter[appStoreState]=PREPARE_FOR_SUBMISSION,DEVELOPER_REJECTED,REJECTED,METADATA_REJECTED,INVALID_BINARY&include=appStoreVersionLocalizations&limit=5`);
   const version = res.data[0];
   if (!version) throw new Error("no editable App Store version (one in Prepare for Submission)");
   const local = (res.included ?? []).find((one) => one.type === "appStoreVersionLocalizations" && one.attributes.locale === "en-US");
@@ -137,7 +137,7 @@ async function editableVersion(appId) {
 async function newVersion(versionString) {
   if (!/^\d+(\.\d+){1,2}$/.test(versionString ?? "")) throw new Error("usage: new-version <x.y>");
   const one = await app();
-  const open = (await call("GET", `/v1/apps/${one.id}/appStoreVersions?filter[appStoreState]=PREPARE_FOR_SUBMISSION,DEVELOPER_REJECTED,REJECTED,METADATA_REJECTED&limit=5`)).data;
+  const open = (await call("GET", `/v1/apps/${one.id}/appStoreVersions?filter[appStoreState]=PREPARE_FOR_SUBMISSION,DEVELOPER_REJECTED,REJECTED,METADATA_REJECTED,INVALID_BINARY&limit=5`)).data;
   if (open.length) { console.log(`version ${open[0].attributes.versionString} is already open (${open[0].attributes.appStoreState})`); return; }
   const { data } = await call("POST", "/v1/appStoreVersions", { data: { type: "appStoreVersions", attributes: { platform: "IOS", versionString }, relationships: { app: { data: { type: "apps", id: one.id } } } } });
   console.log(`opened version ${data.attributes.versionString} (${data.attributes.appStoreState})`);
@@ -248,11 +248,15 @@ async function submit(yes) {
   if (!yes) { console.log(`\nready: run again with --yes to attach build ${build.attributes.version} to ${version.attributes.versionString} and submit for review`); return; }
   await call("PATCH", `/v1/appStoreVersions/${version.id}/relationships/build`, { data: { type: "builds", id: build.id } });
   console.log(`attached build ${build.attributes.version} to ${version.attributes.versionString}`);
-  // an earlier try that stopped at the item leaves an empty draft submission open: use it rather than open another
-  const open = (await call("GET", `/v1/reviewSubmissions?filter[app]=${one.id}&filter[platform]=IOS&filter[state]=READY_FOR_REVIEW&limit=10`)).data;
+  // an earlier try that stopped at the item leaves an empty draft submission open, and a rejected one waits in
+  // UNRESOLVED_ISSUES with the version still in it: use it rather than open another
+  const open = (await call("GET", `/v1/reviewSubmissions?filter[app]=${one.id}&filter[platform]=IOS&filter[state]=UNRESOLVED_ISSUES,READY_FOR_REVIEW&limit=10`)).data;
   const sub = open[0] ?? (await call("POST", "/v1/reviewSubmissions", { data: { type: "reviewSubmissions", attributes: { platform: "IOS" }, relationships: { app: { data: { type: "apps", id: one.id } } } } })).data;
   for (const extra of open.slice(1)) await call("PATCH", `/v1/reviewSubmissions/${extra.id}`, { data: { type: "reviewSubmissions", id: extra.id, attributes: { canceled: true } } }).catch(() => {});
-  await call("POST", "/v1/reviewSubmissionItems", { data: { type: "reviewSubmissionItems", relationships: { reviewSubmission: { data: { type: "reviewSubmissions", id: sub.id } }, appStoreVersion: { data: { type: "appStoreVersions", id: version.id } } } } });
+  const items = (await call("GET", `/v1/reviewSubmissions/${sub.id}/items?include=appStoreVersion&limit=20`)).data;
+  if (!items.some((item) => item.relationships?.appStoreVersion?.data?.id === version.id)) {
+    await call("POST", "/v1/reviewSubmissionItems", { data: { type: "reviewSubmissionItems", relationships: { reviewSubmission: { data: { type: "reviewSubmissions", id: sub.id } }, appStoreVersion: { data: { type: "appStoreVersions", id: version.id } } } } });
+  }
   await call("PATCH", `/v1/reviewSubmissions/${sub.id}`, { data: { type: "reviewSubmissions", id: sub.id, attributes: { submitted: true } } });
   console.log(`submitted ${version.attributes.versionString} for review (submission ${sub.id})`);
 }

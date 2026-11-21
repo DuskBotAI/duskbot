@@ -11,8 +11,9 @@ describe("aboutYouPrompt", () => {
     const text = aboutYouPrompt(base);
     expect(text).toContain("you are Dusk, a dusk bot");
     expect(text).toContain("the person's Mac");
-    expect(text).toContain("/data/bots/b1/workspace/MEMORY.md");
     expect(text).toContain("memory_update");
+    expect(text, "the memory block names the file when memory_update writes it").not.toContain("/data/bots/b1/workspace/MEMORY.md");
+    expect(aboutYouPrompt({ ...base, memory: { ...base.memory, managedWrites: false } })).toContain("/data/bots/b1/workspace/MEMORY.md");
     expect(text).toContain("never from the underlying model vendor");
   });
   it("claims only what it has", () => {

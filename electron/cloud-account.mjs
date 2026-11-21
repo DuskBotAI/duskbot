@@ -1218,6 +1218,22 @@ export function createCloudAccountClient({ store, openBrowser, platform, deviceN
       }
       return { url: result.url, token: result.token };
     },
+    /** This sign-in's own keyless X index token, for any plan: `{ url, token }` for the local server
+     * (electron/included-x-index.mjs), or null when there is no sign-in or the account service does not offer the index
+     * (404). Never kept on disk. The index must be on the Cloud's own origin: the token goes nowhere else. */
+    async xIndexAccess() {
+      const current = grant;
+      if (!current) return null;
+      let result;
+      try { result = await request("services/x-index", { method: "POST", body: {}, token: current.token }); }
+      catch (error) { if (error?.status === 404) return null; throw error; }
+      let target = null;
+      try { target = typeof result?.url === "string" ? new URL(result.url) : null; } catch { target = null; }
+      if (result?.cloudContractVersion !== 1 || !target || target.origin !== origin || target.pathname !== "/api/cloud/x-index" || typeof result.token !== "string" || !/^dusk_xi_[A-Za-z0-9_-]{43}$/.test(result.token)) {
+        throw new Error("Invalid Cloud X index response.");
+      }
+      return { url: result.url, token: result.token };
+    },
     /** This sign-in's own pages token, for any plan: `{ url, token }` for the local server (electron/included-pages.mjs),
      * or null when there is no sign-in or the Admin does not offer pages yet (404). Never kept on disk. The token route
      * must be on the Cloud's own origin: the token goes nowhere else. */

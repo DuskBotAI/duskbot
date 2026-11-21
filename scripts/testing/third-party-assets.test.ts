@@ -41,7 +41,6 @@ const MARKERS: Array<[RegExp, string]> = [
 // files the mascot and look-and-feel rewrites are replacing; each entry goes once its file no longer matches
 const PENDING: Record<string, string> = {
   "src/lib/motion-presets.ts": "the look and feel rewrite",
-  "src/lib/user-bubble-tone.ts": "the look and feel rewrite",
 };
 
 const TEXT = /\.(ts|tsx|js|jsx|mjs|cjs|css|html|json|md|svg|yml|yaml|txt)$/;

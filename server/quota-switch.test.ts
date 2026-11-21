@@ -284,10 +284,15 @@ describe("quota switch", () => {
       expect(resend).toHaveBeenCalledTimes(1);
 
       resend.mockClear();
-      const third = store.appendMessage(bot.threadId, { role: "bot", kind: "activity", tool: failedTurnTool("codex exited with code 137 before it replied", { reason: "cli_exit" }) });
       await limited({ messageId }, "codex exited with code 137 before it replied");
-      expect(resend, "the backup failing it too is reported, not moved again").not.toHaveBeenCalled();
-      expect(store.messagesFor(bot.threadId).find((m) => m.id === third.id)!.tool!.resolvedAt).toBeUndefined();
+      expect(thread().modelSelection, "the backup failing it too moves on to an AI it has not failed on").toEqual(CURSOR);
+      expect(resend).toHaveBeenCalledTimes(1);
+
+      resend.mockClear();
+      const last = store.appendMessage(bot.threadId, { role: "bot", kind: "activity", tool: failedTurnTool("cursor exited with code 137 before it replied", { reason: "cli_exit" }) });
+      await limited({ messageId }, "cursor exited with code 137 before it replied");
+      expect(resend, "once every AI has failed it, the failure is reported, never sent back to one that failed").not.toHaveBeenCalled();
+      expect(store.messagesFor(bot.threadId).find((m) => m.id === last.id)!.tool!.resolvedAt).toBeUndefined();
     });
 
     it("sends the message once more on the same AI when it failed in words nobody could read, then moves it to the backup", async () => {

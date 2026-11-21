@@ -1,7 +1,7 @@
 {
   "default": {
-    "bytes": 31006,
-    "sha256": "fe45983cfce813b0832d6c8e7ab85645e292b446b49dd9163814a087d80fbe16",
+    "bytes": 34151,
+    "sha256": "2aed5b192f35c6fd6e362dbf6f545398c6123955e858002dbe8a74bc6234c320",
     "tools": [
       "set_status",
       "send_message",
@@ -9,6 +9,7 @@
       "list_room_targets",
       "coordinate_bots",
       "list_bots",
+      "create_document",
       "list_rooms",
       "select_computer",
       "attach_file",
@@ -20,14 +21,15 @@
       "fill_login",
       "message_person",
       "memory_update",
+      "trigger_info",
       "trigger",
       "find_tool",
       "use_tool"
     ]
   },
   "voice": {
-    "bytes": 31784,
-    "sha256": "b5f05ebb071b531f3ed248a9d5adb07b940fc228dc860a41aed06d5c01897021",
+    "bytes": 34929,
+    "sha256": "aeff692bf666e5e348f523f837025b5a991af6f4e4b762145c3dd550752a77a2",
     "tools": [
       "set_status",
       "send_message",
@@ -35,6 +37,7 @@
       "list_room_targets",
       "coordinate_bots",
       "list_bots",
+      "create_document",
       "list_rooms",
       "select_computer",
       "attach_file",
@@ -47,14 +50,15 @@
       "send_voice_note",
       "message_person",
       "memory_update",
+      "trigger_info",
       "trigger",
       "find_tool",
       "use_tool"
     ]
   },
   "skills": {
-    "bytes": 31033,
-    "sha256": "c09d60c1da1de34e93c4532f047d40b38bc53bdf93eb5c0a98a863d7396de356",
+    "bytes": 34178,
+    "sha256": "45c380b0ddc6c40a33df71e33e832cf286cc9f4abf1f97f59a7a302873cd6275",
     "tools": [
       "set_status",
       "send_message",
@@ -62,6 +66,7 @@
       "list_room_targets",
       "coordinate_bots",
       "list_bots",
+      "create_document",
       "list_rooms",
       "select_computer",
       "attach_file",
@@ -73,14 +78,15 @@
       "fill_login",
       "message_person",
       "memory_update",
+      "trigger_info",
       "trigger",
       "find_tool",
       "use_tool"
     ]
   },
   "skills+voice": {
-    "bytes": 31811,
-    "sha256": "621bfd19b1e5174032875c3d761d923d095f78763a5a3567da9c10ada68b5cd9",
+    "bytes": 34956,
+    "sha256": "c6ca1530b19231656dbceb64753e5b6795a9e0c63c3c03eaa85ce4b1e749f548",
     "tools": [
       "set_status",
       "send_message",
@@ -88,6 +94,7 @@
       "list_room_targets",
       "coordinate_bots",
       "list_bots",
+      "create_document",
       "list_rooms",
       "select_computer",
       "attach_file",
@@ -100,14 +107,15 @@
       "send_voice_note",
       "message_person",
       "memory_update",
+      "trigger_info",
       "trigger",
       "find_tool",
       "use_tool"
     ]
   },
   "non-chief": {
-    "bytes": 30920,
-    "sha256": "cb887c94add43e9003a5ef0933bf02e15287d2031e5a8b06a3178b4fd022af90",
+    "bytes": 34065,
+    "sha256": "19cc5a23422d02da346670d2ba8d27768432c920dd7b3f580b29e4340c9063ec",
     "tools": [
       "set_status",
       "send_message",
@@ -115,6 +123,7 @@
       "list_room_targets",
       "coordinate_bots",
       "list_bots",
+      "create_document",
       "list_rooms",
       "select_computer",
       "attach_file",
@@ -126,14 +135,15 @@
       "fill_login",
       "message_person",
       "memory_update",
+      "trigger_info",
       "trigger",
       "find_tool",
       "use_tool"
     ]
   },
   "voice+non-chief": {
-    "bytes": 31698,
-    "sha256": "c1cfaa6c4425ef6e74239ef254908da369f9c880af73b43b3a0ac02ed52bc69d",
+    "bytes": 34843,
+    "sha256": "5de9649275993d1310ce0aa300bbf244db7350bef509fe395f58043ef947cffc",
     "tools": [
       "set_status",
       "send_message",
@@ -141,6 +151,7 @@
       "list_room_targets",
       "coordinate_bots",
       "list_bots",
+      "create_document",
       "list_rooms",
       "select_computer",
       "attach_file",
@@ -153,14 +164,15 @@
       "send_voice_note",
       "message_person",
       "memory_update",
+      "trigger_info",
       "trigger",
       "find_tool",
       "use_tool"
     ]
   },
   "skills+non-chief": {
-    "bytes": 30947,
-    "sha256": "ecc8055be08ea044f7677e97c034fe8c20645e8fed5e3cf15aba30ec0e244414",
+    "bytes": 34092,
+    "sha256": "e05bef1edfcd7b94b19d1de6519fd2b2c41731b1d84d2d504e4ebed4ca3a5422",
     "tools": [
       "set_status",
       "send_message",
@@ -168,6 +180,7 @@
       "list_room_targets",
       "coordinate_bots",
       "list_bots",
+      "create_document",
       "list_rooms",
       "select_computer",
       "attach_file",
@@ -179,14 +192,15 @@
       "fill_login",
       "message_person",
       "memory_update",
+      "trigger_info",
       "trigger",
       "find_tool",
       "use_tool"
     ]
   },
   "skills+voice+non-chief": {
-    "bytes": 31725,
-    "sha256": "3b6a33d89cbec32de0107e9bccf807ddd2e49ff2e91a6864ab852050f769c800",
+    "bytes": 34870,
+    "sha256": "c62a00a58aabf4522d718eac73063b830432ebc8c6e8c4ba7bcc48718006335e",
     "tools": [
       "set_status",
       "send_message",
@@ -194,6 +208,7 @@
       "list_room_targets",
       "coordinate_bots",
       "list_bots",
+      "create_document",
       "list_rooms",
       "select_computer",
       "attach_file",
@@ -206,14 +221,15 @@
       "send_voice_note",
       "message_person",
       "memory_update",
+      "trigger_info",
       "trigger",
       "find_tool",
       "use_tool"
     ]
   },
   "skills+voice+cloud-home": {
-    "bytes": 31828,
-    "sha256": "85f878bae6a41313013e166ab75b93752d8ba8ef4cfb33859348d41c9614b49b",
+    "bytes": 34973,
+    "sha256": "db7ea983d5f41a91394ddece9bf02a50316e1869b13f793253b796ec757e4f83",
     "tools": [
       "set_status",
       "send_message",
@@ -221,6 +237,7 @@
       "list_room_targets",
       "coordinate_bots",
       "list_bots",
+      "create_document",
       "list_rooms",
       "select_computer",
       "attach_file",
@@ -233,14 +250,15 @@
       "send_voice_note",
       "message_person",
       "memory_update",
+      "trigger_info",
       "trigger",
       "find_tool",
       "use_tool"
     ]
   },
   "skills+voice+non-chief+cloud-home": {
-    "bytes": 31742,
-    "sha256": "e243f687ed388a1080f9da2ae5734132b7f1e5a95b2209143732234378798993",
+    "bytes": 34887,
+    "sha256": "c36fde658f092199454611bbf3b339e8bab54e7dd52ef43cbafe3dff7496b60a",
     "tools": [
       "set_status",
       "send_message",
@@ -248,6 +266,7 @@
       "list_room_targets",
       "coordinate_bots",
       "list_bots",
+      "create_document",
       "list_rooms",
       "select_computer",
       "attach_file",
@@ -260,14 +279,15 @@
       "send_voice_note",
       "message_person",
       "memory_update",
+      "trigger_info",
       "trigger",
       "find_tool",
       "use_tool"
     ]
   },
   "skills+voice+x": {
-    "bytes": 31889,
-    "sha256": "3e0dbd4e2b4eda7d7b41908b6861f761ec8b699e218588d34465a369e861f314",
+    "bytes": 35034,
+    "sha256": "f8d1912adbff4266d8eaf32c34dbbc439b724afe8d5e7133d182c2fc1990bac4",
     "tools": [
       "set_status",
       "send_message",
@@ -275,6 +295,7 @@
       "list_room_targets",
       "coordinate_bots",
       "list_bots",
+      "create_document",
       "list_rooms",
       "select_computer",
       "attach_file",
@@ -287,14 +308,15 @@
       "send_voice_note",
       "message_person",
       "memory_update",
+      "trigger_info",
       "trigger",
       "find_tool",
       "use_tool"
     ]
   },
   "skills+voice+x+team": {
-    "bytes": 32305,
-    "sha256": "f13936c2b1785dcd8b91f1f2184613fedbde55b5dcb7491be53035e9734fb4c6",
+    "bytes": 35450,
+    "sha256": "8d72a2f3fa044baca89d65532818bc6c14e36949cd074dcecd91bf1327115fb7",
     "tools": [
       "set_status",
       "send_message",
@@ -302,6 +324,7 @@
       "list_room_targets",
       "coordinate_bots",
       "list_bots",
+      "create_document",
       "list_rooms",
       "select_computer",
       "attach_file",
@@ -314,6 +337,7 @@
       "send_voice_note",
       "message_person",
       "memory_update",
+      "trigger_info",
       "trigger",
       "read_skill",
       "find_tool",
@@ -321,8 +345,8 @@
     ]
   },
   "skills+skill-reader": {
-    "bytes": 31449,
-    "sha256": "59c3d8cfaf464b727783acbe462a3e793baa43092830e9999e5a349641b02263",
+    "bytes": 34594,
+    "sha256": "6d899a0ea4928f06293189e5486636d100664d9db87ae25e03d9a96da4c85a5e",
     "tools": [
       "set_status",
       "send_message",
@@ -330,6 +354,7 @@
       "list_room_targets",
       "coordinate_bots",
       "list_bots",
+      "create_document",
       "list_rooms",
       "select_computer",
       "attach_file",
@@ -341,6 +366,7 @@
       "fill_login",
       "message_person",
       "memory_update",
+      "trigger_info",
       "trigger",
       "read_skill",
       "find_tool",
@@ -348,8 +374,8 @@
     ]
   },
   "default+legacy-switches": {
-    "bytes": 31006,
-    "sha256": "fe45983cfce813b0832d6c8e7ab85645e292b446b49dd9163814a087d80fbe16",
+    "bytes": 34151,
+    "sha256": "2aed5b192f35c6fd6e362dbf6f545398c6123955e858002dbe8a74bc6234c320",
     "tools": [
       "set_status",
       "send_message",
@@ -357,6 +383,7 @@
       "list_room_targets",
       "coordinate_bots",
       "list_bots",
+      "create_document",
       "list_rooms",
       "select_computer",
       "attach_file",
@@ -368,14 +395,15 @@
       "fill_login",
       "message_person",
       "memory_update",
+      "trigger_info",
       "trigger",
       "find_tool",
       "use_tool"
     ]
   },
   "default+dusk": {
-    "bytes": 31058,
-    "sha256": "1a0d015e2a1b980adec72813441d24cac37dec83b52f8b59cd605fb333a4cbfa",
+    "bytes": 34203,
+    "sha256": "8c2930208b3de83f6ce38111c35d231a05173cf5e1f25bb1c3147bad718bee4d",
     "tools": [
       "set_status",
       "send_message",
@@ -383,6 +411,7 @@
       "list_room_targets",
       "coordinate_bots",
       "list_bots",
+      "create_document",
       "list_rooms",
       "select_computer",
       "attach_file",
@@ -394,14 +423,15 @@
       "fill_login",
       "message_person",
       "memory_update",
+      "trigger_info",
       "trigger",
       "find_tool",
       "use_tool"
     ]
   },
   "skills+voice+dusk": {
-    "bytes": 31863,
-    "sha256": "e1e6efad2e61bf9092cc6d9d6422cb6c8c6f6323505114ddfa4379ede81beea5",
+    "bytes": 35008,
+    "sha256": "fcd0de09991f057f68633970e702bbae20bd872347e203e85558f615576f91d8",
     "tools": [
       "set_status",
       "send_message",
@@ -409,6 +439,7 @@
       "list_room_targets",
       "coordinate_bots",
       "list_bots",
+      "create_document",
       "list_rooms",
       "select_computer",
       "attach_file",
@@ -421,14 +452,15 @@
       "send_voice_note",
       "message_person",
       "memory_update",
+      "trigger_info",
       "trigger",
       "find_tool",
       "use_tool"
     ]
   },
   "default+no-computer-pick": {
-    "bytes": 29799,
-    "sha256": "707966502731f67626cc63134dfee485cd6d5dbdd198fbf10c790a27cb303d24",
+    "bytes": 32944,
+    "sha256": "2ff80ec4e9dd6bff9e6c0adfab9d908d714bc8288518fc45e08bdfec05378ef9",
     "tools": [
       "set_status",
       "send_message",
@@ -436,6 +468,7 @@
       "list_room_targets",
       "coordinate_bots",
       "list_bots",
+      "create_document",
       "list_rooms",
       "attach_file",
       "publish_page",
@@ -446,14 +479,15 @@
       "fill_login",
       "message_person",
       "memory_update",
+      "trigger_info",
       "trigger",
       "find_tool",
       "use_tool"
     ]
   },
   "default+room": {
-    "bytes": 29700,
-    "sha256": "0899b116415f12ec36861b73962fe710f9c49aca693681c51fe151028d90959d",
+    "bytes": 32845,
+    "sha256": "3046d234496f44e9c5224c54d69237775f78d4dd38a4d84ae429a0b85641f771",
     "tools": [
       "set_status",
       "send_message",
@@ -461,6 +495,7 @@
       "list_room_targets",
       "coordinate_bots",
       "list_bots",
+      "create_document",
       "list_rooms",
       "attach_file",
       "publish_page",
@@ -471,14 +506,15 @@
       "fill_login",
       "message_person",
       "memory_update",
+      "trigger_info",
       "trigger",
       "find_tool",
       "use_tool"
     ]
   },
   "non-chief+room": {
-    "bytes": 29614,
-    "sha256": "37279f3704f9532823c84c7e2045546ce81feaf6cc1060cf77aadeb03016bb38",
+    "bytes": 32759,
+    "sha256": "2cfa18938b4cd8af86d6187cb25b8674bb410779c61227e93cd5c3b1d84a98f3",
     "tools": [
       "set_status",
       "send_message",
@@ -486,6 +522,7 @@
       "list_room_targets",
       "coordinate_bots",
       "list_bots",
+      "create_document",
       "list_rooms",
       "attach_file",
       "publish_page",
@@ -496,6 +533,7 @@
       "fill_login",
       "message_person",
       "memory_update",
+      "trigger_info",
       "trigger",
       "find_tool",
       "use_tool"

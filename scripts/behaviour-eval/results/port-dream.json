@@ -1,0 +1,87 @@
+{
+  "at": "2026-11-21T01:49:19.492Z",
+  "model": "gpt-6.2-sol",
+  "runs": [
+    {
+      "missed": [
+        "Find a dentist near Indiranagar open on Saturdays"
+      ],
+      "declined": [
+        "Send a summary of every new contract each Monday"
+      ],
+      "checks": [
+        [
+          "the dentist search is missed",
+          true
+        ],
+        [
+          "the finished booking is not missed",
+          true
+        ],
+        [
+          "the Monday contract summary is declined",
+          true
+        ],
+        [
+          "\"not now\" is not a refusal",
+          true
+        ]
+      ],
+      "raw": "{\n  \"learned\": [],\n  \"outdated\": [],\n  \"ideas\": [],\n  \"missed\": [\n    {\n      \"text\": \"Find a dentist near Indiranagar open on Saturdays\",\n      \"from\": [1],\n      \"evidence\": \"Can you find me a dentist near Indiranagar that's open on Saturdays?\"\n    }\n  ],\n  \"declined\": [\n    {\n      \"text\": \"Send a summary of every new contract each Monday\",\n      \"from\": [2],\n      \"evidence\": \"No thanks, I'll ask when I need one.\"\n    }\n  ]\n}"
+    },
+    {
+      "missed": [
+        "Find a dentist near Indiranagar that's open on Saturdays"
+      ],
+      "declined": [
+        "Send summaries of new contracts every Monday"
+      ],
+      "checks": [
+        [
+          "the dentist search is missed",
+          true
+        ],
+        [
+          "the finished booking is not missed",
+          true
+        ],
+        [
+          "the Monday contract summary is declined",
+          true
+        ],
+        [
+          "\"not now\" is not a refusal",
+          true
+        ]
+      ],
+      "raw": "{\n  \"learned\": [\n    {\n      \"text\": \"The person generally prefers to ask for work as needed rather than set up proactive follow-ups.\",\n      \"from\": [2, 3],\n      \"evidence\": \"No thanks, I'll ask when I need one.\",\n      \"aboutUser\": true,\n      \"confidence\": 0.78\n    }\n  ],\n  \"outdated\": [],\n  \"ideas\": [],\n  \"missed\": [\n    {\n      \"text\": \"Find a dentist near Indiranagar that's open on Saturdays\",\n      \"from\": [1],\n      \"evidence\": \"Can you find me a dentist near Indiranagar that's open on Saturdays?\"\n    }\n  ],\n  \"declined\": [\n    {\n      \"text\": \"Send summaries of new contracts every Monday\",\n      \"from\": [2],\n      \"evidence\": \"No thanks, I'll ask when I need one.\"\n    }\n  ]\n}"
+    },
+    {
+      "missed": [
+        "Find a dentist near Indiranagar that's open on Saturdays"
+      ],
+      "declined": [
+        "Send a summary of every new contract each Monday"
+      ],
+      "checks": [
+        [
+          "the dentist search is missed",
+          true
+        ],
+        [
+          "the finished booking is not missed",
+          true
+        ],
+        [
+          "the Monday contract summary is declined",
+          true
+        ],
+        [
+          "\"not now\" is not a refusal",
+          true
+        ]
+      ],
+      "raw": "{\n  \"learned\": [],\n  \"outdated\": [],\n  \"ideas\": [],\n  \"missed\": [\n    {\n      \"text\": \"Find a dentist near Indiranagar that's open on Saturdays\",\n      \"from\": [1],\n      \"evidence\": \"Can you find me a dentist near Indiranagar that's open on Saturdays?\"\n    }\n  ],\n  \"declined\": [\n    {\n      \"text\": \"Send a summary of every new contract each Monday\",\n      \"from\": [2],\n      \"evidence\": \"No thanks, I'll ask when I need one.\"\n    }\n  ]\n}"
+    }
+  ]
+}

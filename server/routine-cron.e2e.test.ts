@@ -30,7 +30,7 @@ it("takes cron through the real routine tools, applying the bot's own routine at
     const proposal = async (tool: string, args: unknown, text: string, expectError = false) => {
       const previousTurns = providerEvidence().length;
       writeFileSync(planPath, JSON.stringify({ [bot.id]: {
-        expectSystemIncludes: ["A calendar rule (the last day of each month, the second Monday) is a cron schedule, never a daily AI date check."],
+        expectSystemIncludes: ["A calendar rule (the last day of each month, the second Monday) is a cron schedule here, never a daily AI date check;"],
         steps: [{ tool: "list_triggers", arguments: {} }, { tool, arguments: args, expectError }],
         reply: expectError ? "That invalid schedule was refused." : "The routine change is applied.",
       } }));

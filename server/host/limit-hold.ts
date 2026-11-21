@@ -90,7 +90,7 @@ export function refusedStartWaits(scope: string | undefined, turn: { person: boo
 export function resumeNote(held: Pick<HeldTurn, "engineName" | "request">, list: Checklist | null, cause: string = RESUME_CAUSE): string {
   const asked = held.request ? ` The person's request was: "${quoteInNote(held.request, REQUEST_QUOTE_MAX)}".` : "";
   const base = `${RESUME_OPENS}${held.engineName}${cause}${asked} ` +
-    "Read the conversation, pick up exactly where you left off and finish that request; do not redo anything already done. This adds no approval for anything else.]";
+    "Read the conversation, pick up exactly where you left off and finish that request; do not redo anything already done or tell them again what you already told them. This adds no approval for anything else.]";
   return list && counts(list).open > 0 ? `${base}\n${batchNote(list)}` : base;
 }
 

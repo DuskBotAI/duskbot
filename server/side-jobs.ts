@@ -40,7 +40,8 @@ export function helperSelection(cfg: HelperConfig, env: Record<string, string | 
 /** "frustration-summary": an abstract line about a chat that went badly, for usage-signals.ts; scrubbed before it leaves. */
 /** "side-reply": the quick reply to the person's message sent while a turn works (host/side-replies.ts), on the engine's
  * quick model; with neither an engine call nor a helper, OpenCode's free backup writes it. */
-export type SideJob = "compaction" | "memory" | "skill-review" | "setup-suggestions" | "representative" | "status-reply" | "room-routing" | "turn-beat" | "frustration-summary" | "side-reply" | "suggestions";
+/** "deliverable-check": one fresh look at a finished document, page or file against the person's ask (host/deliverable-check.ts). */
+export type SideJob = "compaction" | "memory" | "skill-review" | "setup-suggestions" | "representative" | "status-reply" | "room-routing" | "turn-beat" | "frustration-summary" | "side-reply" | "suggestions" | "deliverable-check";
 
 export type SideJobInstance = Pick<ProviderInstance, "instanceId" | "driverKind" | "enabled" | "generateText" | "generateMemoryText" | "models" | "quickModelsUsable"> & {
   adapter: { capabilities: Pick<ProviderAdapter["capabilities"], "agentsMcp"> };

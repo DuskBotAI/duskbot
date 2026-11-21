@@ -429,6 +429,7 @@ export interface CloudAccountClient {
   /** This sign-in's own X research relay access while its plan is paid; null without one. */
   xResearchAccess(): Promise<{ url: string; token: string } | null>;
   pagesAccess(): Promise<{ url: string; token: string } | null>;
+  xIndexAccess(): Promise<{ url: string; token: string } | null>;
   /** Another account takes over: nothing more is asked or written for this sign-in. */
   quiesce(): void;
   /** Reads the sign-in saved in `store` afresh, keeping nothing of the one before. */

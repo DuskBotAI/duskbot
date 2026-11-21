@@ -25,7 +25,7 @@ import {
 } from "./agents-bridge.ts";
 
 const flag = (on: boolean) => (on ? "1" : "0");
-const profile = (options: { chief?: boolean; skills?: boolean; voice?: boolean; cloudHome?: boolean; memory?: boolean; screenAccess?: boolean; skillReader?: boolean; botId?: string } = {}): CatalogProfile =>
+const profile = (options: { chief?: boolean; skills?: boolean; voice?: boolean; cloudHome?: boolean; memory?: boolean; screenAccess?: boolean; skillReader?: boolean; pageReader?: boolean; botId?: string } = {}): CatalogProfile =>
   catalogProfileFromEnv({
     DUSK_BOT_ID: options.botId ?? "bot-bridge",
     DUSK_CHIEF_OF_STAFF: flag(options.chief ?? false),
@@ -35,6 +35,7 @@ const profile = (options: { chief?: boolean; skills?: boolean; voice?: boolean; 
     DUSK_MEMORY_ENABLED: flag(options.memory ?? true),
     DUSK_SCREEN_ACCESS: flag(options.screenAccess ?? false),
     DUSK_SKILL_READER: flag(options.skillReader ?? false),
+    DUSK_PAGE_READER: flag(options.pageReader ?? false),
     // A person's own request, which may pick its computer.
     DUSK_COMPUTER_SELECTION: "1",
   });
@@ -50,6 +51,7 @@ function everyProfile(): Array<{ name: string; profile: CatalogProfile }> {
   all.push({ name: "watcher", profile: profile({ botId: WATCHER_OPTIONS_CARD_BOT_ID }) });
   all.push({ name: "screen access", profile: profile({ screenAccess: true }) });
   all.push({ name: "skill reader", profile: profile({ skillReader: true }) });
+  all.push({ name: "page reader", profile: profile({ pageReader: true }) });
   return all;
 }
 
@@ -79,6 +81,7 @@ describe("what a bridged turn is listed", () => {
       "list_room_targets",
       "coordinate_bots",
       "list_bots",
+      "create_document",
       "list_rooms",
       "select_computer",
       "attach_file",
@@ -90,6 +93,7 @@ describe("what a bridged turn is listed", () => {
       "fill_login",
       "message_person",
       "memory_update",
+      "trigger_info",
       "trigger",
       FIND_TOOL,
       USE_TOOL,
@@ -103,6 +107,7 @@ describe("what a bridged turn is listed", () => {
       "list_room_targets",
       "coordinate_bots",
       "list_bots",
+      "create_document",
       "list_rooms",
       "select_computer",
       "attach_file",
@@ -115,6 +120,7 @@ describe("what a bridged turn is listed", () => {
       "send_voice_note",
       "message_person",
       "memory_update",
+      "trigger_info",
       "trigger",
       FIND_TOOL,
       USE_TOOL,
@@ -124,12 +130,12 @@ describe("what a bridged turn is listed", () => {
   it("names every hot tool the catalog really has, so a renamed tool cannot fall out of the list unnoticed", () => {
     const everyName = new Set(everyProfile().flatMap(({ profile: turn }) => names(availableTools(turn))));
     for (const hot of BRIDGE_HOT_TOOL_NAMES) expect(everyName.has(hot), hot).toBe(true);
-    // 15 to 19 of them on any one turn, always fewer than the turn has
+    // 15 to 24 of them on any one turn, always fewer than the turn has
     for (const { name, profile: turn } of everyProfile()) {
       const tools = availableTools(turn);
       const hot = createToolBridge(tools as BridgeTool[]).listed.length - 2;
       expect(hot, name).toBeGreaterThanOrEqual(15);
-      expect(hot, name).toBeLessThanOrEqual(19);
+      expect(hot, name).toBeLessThanOrEqual(24);
       expect(hot, name).toBeLessThan(tools.length / 2);
     }
   });
@@ -260,10 +266,11 @@ describe("what a bridged turn is listed", () => {
 
 describe("find_tool", () => {
   it.each([
-    ["what routines do I have", "trigger_info"],
+    ["cancel a wait I set", "cancel_wait"],
+    ["search my earlier conversations", "session_search"],
+    ["read the whole message from an old conversation", "session_search"],
     ["change my name and title", "propose_profile"],
     ["switch this bot to a different model", "propose_model"],
-    ["search my earlier conversations", "session_search"],
     ["delete one of my routines for good", "delete_trigger"],
     ["run a shell command in the VM", "vm_exec"],
     ["add an MCP server", "mcp_server"],
@@ -273,7 +280,6 @@ describe("find_tool", () => {
     ["create a new specialist bot", "create_bot"],
     ["rename a room or change its members", "manage_room"],
     ["open a separate job for each pull request", "start_thread"],
-    ["read the whole message from an old conversation", "session_search"],
     ["retry the failed thread", "retry_thread"],
   ])("ranks the hidden tool first from how a person would ask: %s", async (query, expected) => {
     const matches = (await found(bridgeFor(FULL_CHIEF), query)).matches;
@@ -319,7 +325,6 @@ describe("find_tool", () => {
 
   it("reads a tool's other name, asked for exactly, as the tool it belongs to", async () => {
     const bridge = bridgeFor(FULL_CHIEF);
-    expect((await found(bridge, "list_trigger_events")).matches[0]!.name).toBe("trigger_info");
     expect((await found(bridge, "update_widget")).matches[0]!.name).toBe("show_widget");
   });
 

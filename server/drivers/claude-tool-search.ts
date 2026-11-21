@@ -20,7 +20,7 @@ import { homedir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 
 /** Appended to a Claude turn's system prompt when tool search is on and the agents server is mounted. */
-export const AGENTS_DEFERRED_NOTE = "Some of your dusk bot tools (mcp__agents__*, such as trigger for routines, show_widget, start_thread, skill_manage) are not loaded up front: find one through tool search by its name, then call it as usual.";
+export const AGENTS_DEFERRED_NOTE = "Some of your dusk bot tools (mcp__agents__*, such as trigger, show_widget, start_thread) are not loaded up front: find one through tool search by its name, then call it as usual.";
 
 /** Only a regular file this small is read: a FIFO would hold the server's one thread. */
 const FILE_MAX_BYTES = 1024 * 1024;

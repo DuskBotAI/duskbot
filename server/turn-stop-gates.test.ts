@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { bareAck, claimsDone, MAX_STOP_GATES, TurnGates, openChecklist, promisesFollowUp, ranTool, schedulesWork, settleAsks, stopGateFor, stopGateNote, type Ask, type StopGate, type TurnForAsks, type TurnSoFar } from "./turn-stop-gates.ts";
+import { bareAck, claimsDone, MAX_STOP_GATES, TurnGates, openChecklist, promisesFollowUp, ranTool, readBackWrite, schedulesWork, settleAsks, stopGateFor, stopGateNote, type Ask, type StopGate, type TurnForAsks, type TurnSoFar } from "./turn-stop-gates.ts";
 
 const turn = (over: Partial<TurnSoFar>): TurnSoFar => ({ reply: "", applied: new Set(), canSchedule: true, scheduled: false, effectful: 0, unconfirmed: null, ...over });
 
@@ -143,6 +143,16 @@ describe("honest status words", () => {
     blind.mount(["mcp__door__unlock"]);
     blind.ran("mcp__door__unlock", "{}", true, "unlocked");
     expect(blind.gate("Done.")).toBeNull();
+  });
+
+  it("takes dusk bot's own receipt for a profile or memory change as the record, bridged or not", () => {
+    const bridged = new TurnGates();
+    bridged.mount(["find_tool", "use_tool"]);
+    bridged.ran("use_tool", JSON.stringify({ name: "propose_profile", arguments: { soul: "Refunds up to 5,000 are automatic." } }), true, "Applied: the profile change.");
+    expect(bridged.gate("Updated the manual: refunds up to 5,000 are automatic now.")).toBeNull();
+    expect(readBackWrite("mcp__dusk-agents__propose_profile")).toBe(false);
+    expect(readBackWrite("mcp__dusk-agents__memory_update")).toBe(false);
+    expect(readBackWrite("mcp__sheets__update_row")).toBe(true);
   });
 });
 

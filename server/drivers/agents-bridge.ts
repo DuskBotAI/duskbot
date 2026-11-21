@@ -31,7 +31,9 @@ export interface BridgeAnswer {
 export type BridgeRoute = { name: string; arguments: Json } | { answer: BridgeAnswer };
 
 /** The tools that stay listed: ones most turns need, or must reach without a detour to stay inside the
- * rules. Every tool the host counts as outbound is listed as well (calledByItsOwnName). */
+ * rules. Every tool the host counts as outbound is listed as well (calledByItsOwnName). Each hidden tool costs a
+ * find_tool round (one more model request) the first time a turn uses it, so the ones routines, documents and page
+ * reads reach for on most work turns stay listed. */
 export const BRIDGE_HOT_TOOL_NAMES: ReadonlySet<string> = new Set([
   "set_status",
   "send_message",
@@ -53,6 +55,9 @@ export const BRIDGE_HOT_TOOL_NAMES: ReadonlySet<string> = new Set([
   "memory_update",
   "read_skill",
   "trigger",
+  "trigger_info",
+  "create_document",
+  "read_pages",
 ]);
 
 /** Matches per search; each carries its full input schema. */

@@ -1,0 +1,42 @@
+{
+  "label": "port-retry",
+  "at": "2026-11-21T02:05:56.818Z",
+  "model": "gpt-6.2-sol",
+  "judge": "gpt-6.2-sol",
+  "results": [
+    {
+      "id": "silent-finding",
+      "feature": "A routine's finding is never swallowed by a NOTHING NEW at its end",
+      "pass": false,
+      "why": "judge unavailable",
+      "checks": [
+        [
+          "the run did not count as quiet",
+          true
+        ],
+        [
+          "the token was not shown",
+          true
+        ]
+      ],
+      "shown": "Lumen Labs invoice #3 is 5 days overdue."
+    },
+    {
+      "id": "commitments",
+      "feature": "An explicit promise is kept in the commitments list and reaches the automations; a vague wish is not",
+      "pass": true,
+      "why": "The output lists sending Asha the Q4 deck by Friday, 27 November 2026, and does not list exercising more.",
+      "checks": [
+        [
+          "commitments.md holds the Asha promise",
+          true
+        ],
+        [
+          "the vague wish is not in it",
+          true
+        ]
+      ],
+      "shown": "Asha: Send her the Q4 deck by Friday, 27 November 2026."
+    }
+  ]
+}

@@ -61,7 +61,20 @@ export const X_MESSAGES = {
   accountNotFound: (handle: string) => `No X account named @${handle}.`,
   /** After the relay's sentence that the month's included calls are used up. */
   addOwnKey: "Add your own treg key to keep going.",
+  /** Every route failed: one plain sentence and the same ask on X, for the person to open. */
+  allDown: (openOnX: string) => `X search isn't answering right now. Open it on X: ${openOnX}`,
+  /** A search answered from a web search index: X posts it found, often days old. */
+  olderOnly: "Older posts only: without a live X route, this comes from a web search index and can be days behind. Do not use it to watch for new posts.",
+  /** A watch asked again within its pacing window: nothing was read, so its sinceId stays as it is. */
+  paced: "Checked less than 15 minutes ago, so nothing was read this time. Keep the same sinceId and check again later.",
 } as const;
+
+/** The same ask on X, for a person to open: a search (latest first), an account, or a post. */
+export function openOnX(ask: { query: string; sort?: "latest" | "top" } | { handle: string } | { id: string; handle?: string }): string {
+  if ("query" in ask) return `https://x.com/search?q=${encodeURIComponent(ask.query)}&f=${ask.sort === "top" ? "top" : "live"}`;
+  if ("id" in ask) return `https://x.com/${ask.handle ?? "i"}/status/${ask.id}`;
+  return `https://x.com/${ask.handle}`;
+}
 
 export class XResearchError extends Error {
   readonly code: XResearchErrorCode;
@@ -88,8 +101,10 @@ export interface XPost {
   isReply?: boolean;
   quoted?: XQuoted;
 }
-/** `newestId` and `more` come first so they survive any cut. */
-export interface XPostList { newestId?: string; more: boolean; posts: XPost[] }
+/** `newestId` and `more` come first so they survive any cut. `freshness` "days": found through a web search index, so
+ * possibly days old and never complete; such a list carries no `newestId`, so nothing builds a watch on it. `note`: a
+ * sentence for the bot about this answer. */
+export interface XPostList { newestId?: string; more: boolean; freshness?: "days"; note?: string; posts: XPost[] }
 export interface XPostWithReplies { post: XPost; replies?: XPost[]; moreReplies?: boolean }
 export interface XProfile {
   handle: string;
@@ -132,11 +147,11 @@ function xUrl(value: string): URL | null {
   }
 }
 
-function isRow(value: unknown): value is Row {
+export function isRow(value: unknown): value is Row {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function at(value: unknown, ...path: string[]): unknown {
+export function at(value: unknown, ...path: string[]): unknown {
   let current = value;
   for (const key of path) {
     if (!isRow(current)) return undefined;
@@ -145,14 +160,14 @@ function at(value: unknown, ...path: string[]): unknown {
   return current;
 }
 
-function firstText(...values: unknown[]): string | undefined {
+export function firstText(...values: unknown[]): string | undefined {
   for (const value of values) {
     if (typeof value === "string" && value.trim()) return value;
   }
   return undefined;
 }
 
-function firstCount(...values: unknown[]): number | undefined {
+export function firstCount(...values: unknown[]): number | undefined {
   for (const value of values) {
     const n = typeof value === "string" && /^\d+$/.test(value) ? Number(value) : value;
     if (typeof n === "number" && Number.isFinite(n)) return n;
@@ -204,7 +219,7 @@ function clip(value: string, limit: number): string {
 }
 
 /** Unix seconds (or milliseconds), or a date string, as ISO time. */
-function timeOf(value: unknown): string | undefined {
+export function timeOf(value: unknown): string | undefined {
   const n = firstCount(value);
   const when = n !== undefined ? new Date(n < 1e12 ? n * 1000 : n) : typeof value === "string" ? new Date(value) : undefined;
   return when && !Number.isNaN(when.getTime()) ? when.toISOString() : undefined;
@@ -222,9 +237,11 @@ function postUrl(id: string, handle: string | undefined, given: string | undefin
  * out never reaches the bot as a made-up zero. */
 export function toPost(raw: unknown, knownHandle?: string): XPost | null {
   if (!isRow(raw)) return null;
-  // X's own GraphQL rows keep most fields under `legacy`; a field on the row
-  // itself wins.
-  const row: Row = { ...(isRow(raw.legacy) ? raw.legacy : {}), ...raw };
+  // A post X hides behind a notice wraps the post itself.
+  if (raw.__typename === "TweetWithVisibilityResults" && isRow(raw.tweet)) return toPost(raw.tweet, knownHandle);
+  // X's own GraphQL rows keep most fields under `legacy` (or, on x.com's
+  // 2026 pages, `details` and `counts`); a field on the row itself wins.
+  const row: Row = { ...(isRow(raw.legacy) ? raw.legacy : {}), ...(isRow(raw.details) ? raw.details : {}), ...(isRow(raw.counts) ? raw.counts : {}), ...raw };
   const id = idOf(row.id_str, row.rest_id, row.id, row.tweet_id);
   if (!id) return null;
   const user = at(row, "core", "user_results", "result");
@@ -242,14 +259,14 @@ export function toPost(raw: unknown, knownHandle?: string): XPost | null {
     url: postUrl(id, handle, firstText(row.url)),
     author: handle ? `@${handle}` : "@unknown",
     authorName: firstText(row.authorName, at(row, "author", "name"), at(row, "user", "name"), at(user, "legacy", "name"), at(user, "core", "name")),
-    createdAt: timeOf(row.createdUtc ?? row.created_at ?? row.createdAt),
+    createdAt: timeOf(row.createdUtc ?? row.created_at ?? row.createdAt ?? row.created_at_ms),
     text: clip(firstText(at(row, "note_tweet", "note_tweet_results", "result", "text"), row.full_text, row.text) ?? "", TEXT_LIMIT),
     likes: firstCount(row.likeCount, row.likes, row.favorite_count, row.like_count),
     reposts: firstCount(row.retweetCount, row.repostCount, row.retweets, row.retweet_count),
-    replies: firstCount(row.replyCount, row.replies, row.reply_count),
+    replies: firstCount(row.replyCount, row.replies, row.reply_count, row.conversation_count),
     quotes: firstCount(row.quoteCount, row.quotes, row.quote_count),
     views: firstCount(row.viewCount, row.views, at(row, "views", "count"), row.view_count),
-    isReply: typeof row.isReply === "boolean" ? row.isReply : undefined,
+    isReply: typeof row.isReply === "boolean" ? row.isReply : idOf(row.in_reply_to_status_id_str) ? true : undefined,
     quoted: quoted ? { url: quoted.url, author: quoted.author, text: clip(quoted.text, QUOTE_LIMIT) } : undefined,
   };
 }
@@ -307,6 +324,38 @@ export function errorFor(status: number, body: unknown): XResearchError {
 }
 
 const unavailable = () => new XResearchError("unavailable", X_MESSAGES.unavailable);
+
+/** Posts read from one page, newest first or in the source's order, as one answer: only those newer than `sinceId`,
+ * at most `limit`, within the result budget; `more` once anything was cut. */
+export function postList(posts: readonly XPost[], options: { limit: number; sinceId?: string; more?: boolean; freshness?: "days"; note?: string }): XPostList {
+  const since = options.sinceId === undefined ? undefined : BigInt(options.sinceId);
+  const seen = new Set<string>();
+  const kept = posts.filter((post) => (since === undefined || BigInt(post.id) > since) && !seen.has(post.id) && seen.add(post.id));
+  let more = options.more ?? false;
+  if (kept.length > options.limit) {
+    kept.length = options.limit;
+    more = true;
+  }
+  const fit = fitting(kept, RESULT_BUDGET);
+  if (fit < kept.length) {
+    kept.length = fit;
+    more = true;
+  }
+  return {
+    ...(options.freshness ? {} : { newestId: newestOf(kept) }),
+    more,
+    ...(options.freshness ? { freshness: options.freshness } : {}),
+    ...(options.note ? { note: options.note } : {}),
+    posts: kept,
+  };
+}
+
+/** A post and the replies that fit beside it. */
+export function withReplies(post: XPost, replies: readonly XPost[] | undefined, more = false): XPostWithReplies {
+  if (!replies) return { post };
+  const fit = fitting([...replies], RESULT_BUDGET - JSON.stringify(post).length);
+  return { post, replies: replies.slice(0, fit), moreReplies: more || fit < replies.length };
+}
 
 /** What treg's own refusal says, from its JSON `detail` (a sentence, or `{error, message}`) or `message`. */
 function tregDetail(body: unknown): string | undefined {

@@ -11,7 +11,7 @@ import { looksLikeInstruction } from "./memory-trust.ts";
 import { UNVERIFIED_MAX_BYTES, UNVERIFIED_TOPIC } from "./memory-forget.ts";
 import { cosine, embedderReady, embedPassages } from "./memory-embed.ts";
 import { MERGE_ENTRIES, mergedLine, mergeLoser, mergePairs, mergePrompt, parseMerge, type MergeItem, type MergePair } from "./memory-merge.ts";
-import { DREAM_FIRST_LOOKBACK_MS, DREAM_MIN_CONVERSATIONS, dreamEvidenced, dreamPrompt, parseDream, type DreamConversation } from "./memory-dream.ts";
+import { DREAM_FIRST_LOOKBACK_MS, DREAM_MIN_CONVERSATIONS, dreamEvidenced, dreamNoticedEvidenced, dreamPrompt, parseDream, type DreamConversation } from "./memory-dream.ts";
 import { factIdentity, foldForMatch, isExpired, lineFactIdentity, notebookIdentities, parseMemoryEntries } from "./memory-entries.ts";
 import { applyNotebookChange, consolidatePrompt, namesFact, parseConsolidation, parseGeneral, planConsolidation, recordGeneralHistory, PROMPT_LINES, type NotebookChange, type NotebookLine } from "./general-memory.ts";
 import { mergeTopicText } from "./memory-topics.ts";
@@ -69,6 +69,8 @@ export interface UpkeepDeps {
   busy: (botId: string) => boolean;
   /** `replaces`: older facts the new ones change; they leave About me. */
   addToAboutMe: (from: { botId: string; botName: string }, texts: readonly string[], replaces?: readonly string[]) => number;
+  /** Asks the dream found left undone, into the person's commitments; how many were new. */
+  missed?: (botId: string, texts: readonly string[]) => number;
   /** The one general memory every bot reads (About me), where there is one person to keep it for: absent on a Team Cloud,
    * where each person's About me is their own. `promote`: whether lasting facts about the person may move into it from
    * a bot's own notes, which only holds where one person uses every bot. */
@@ -1054,11 +1056,13 @@ export function createMemoryUpkeep(deps: UpkeepDeps): MemoryUpkeep {
         ...(item.topic ? { topic: item.topic } : {}),
         ...(item.topicAliases ? { topicAliases: item.topicAliases } : {}),
       } : { text: item.text, kind: "preference", aboutUser: false, topic: item.topic ?? "habits.md", topicAliases: item.topicAliases ?? ["patterns", "routine", "usually"] });
+      for (const item of dreamt.declined) if (dreamNoticedEvidenced(item, conversations)) candidates.push({ text: `The person turned down this offer: ${item.text}`, kind: "preference", aboutUser: false, topic: "declined.md", topicAliases: ["offers", "turned down", "no thanks", "don't suggest"] });
       const { kept } = candidates.length ? fileCandidates(botId, candidates, { source, via: "dream" }) : { kept: [] };
       return { outdated, kept, stale };
     });
     const aboutUser = dreamt.learned.filter((item) => item.aboutUser && dreamEvidenced(item, conversations)).map((item) => item.text);
     const aboutMe = aboutUser.length ? deps.addToAboutMe({ botId, botName: bot.name }, aboutUser) : 0;
+    const missed = deps.missed?.(botId, dreamt.missed.filter((item) => dreamNoticedEvidenced(item, conversations)).map((item) => item.text)) ?? 0;
     const done: DreamReport = {
       at,
       conversations: conversations.length,
@@ -1069,7 +1073,7 @@ export function createMemoryUpkeep(deps: UpkeepDeps): MemoryUpkeep {
       ...(written.stale ? { note: "The notes changed during the dream, so outdated notes wait for the next one." } : {}),
     };
     record(botId, { lastDream: done, dreamedTo: at });
-    log(`memory upkeep: ${bot.name} (${botId}) dreamt over ${conversations.length} chats: ${done.learned.length} learned, ${done.outdated.length} updated, ${done.ideas.length} idea(s), ${aboutMe} for About me`);
+    log(`memory upkeep: ${bot.name} (${botId}) dreamt over ${conversations.length} chats: ${done.learned.length} learned, ${done.outdated.length} updated, ${done.ideas.length} idea(s), ${missed} missed ask(s), ${aboutMe} for About me`);
     return done;
   }
 

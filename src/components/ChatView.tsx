@@ -1140,14 +1140,8 @@ export function ChatView({ bot: profile }: { bot: Bot }) {
     const attached = splitTranscriptAttachments(cited);
     return cited !== lastTypedMessage.text || attached.images.length > 0 || attached.files.length > 0;
   }, [lastTypedMessage]);
-  const lastEditableMessageId =
-    lastTypedMessage && !lastTypedMessageHasAttachments && !bot.busy && !lastTypedMessage.id.startsWith("optimistic-")
-      ? lastTypedMessage.id
-      : null;
-  const onEditLast = useMemo(
-    () => (lastEditableMessageId ? () => setEditingId(lastEditableMessageId) : undefined),
-    [lastEditableMessageId],
-  );
+  const lastEditableMessageId = lastTypedMessage && !lastTypedMessageHasAttachments && !bot.busy && !lastTypedMessage.id.startsWith("optimistic-") ? lastTypedMessage.id : null;
+  const onEditLast = useMemo(() => (lastEditableMessageId ? () => setEditingId(lastEditableMessageId) : undefined), [lastEditableMessageId]);
 
   const lastMessage = lastNonReceipt(messages);
   // a first reply's wait is no phrase for the line: the line already says the bot is at work

@@ -151,6 +151,21 @@ describe("the Chief's watch, suggested", () => {
     expect(made.routines().listRoutines()).toEqual([]);
   });
 
+  it("moves a watch still worded as the server first made it to the current wording, and leaves an edited one alone", () => {
+    const s = setup();
+    const first = WATCH_INSTRUCTIONS.split("\n").slice(0, 3).join("\n");
+    const make = (prompt: string) => s.routines().create({ name: WATCH_NAME, prompt, botId: s.chief.id, enabled: true, timeoutMinutes: 15,
+      schedule: { type: "daily", time: "08:00", weekdays: [0, 1, 2, 3, 4, 5, 6] }, checks: ["calendar", "mail", "runs"], access: "read-and-draft", deliver: "brief" });
+    const old = make(first);
+    expect(watchAsMade(old)).toBe(true);
+    s.make().ensureWatch();
+    expect(s.routines().listRoutines().find((routine) => routine.id === old.id)?.prompt).toBe(WATCH_INSTRUCTIONS);
+    expect(WATCH_INSTRUCTIONS).toMatch(/Check my Sent mail before you call anything unanswered/);
+    const edited = make(`${first}\n- Also my gym classes.`);
+    s.make().ensureWatch();
+    expect(s.routines().listRoutines().find((routine) => routine.id === edited.id)?.prompt).toBe(`${first}\n- Also my gym classes.`);
+  });
+
   it("leaves a 15-minute watch the server made earlier as it is, and still counts it as made", () => {
     const s = setup();
     const earlier = s.routines().create({ name: WATCH_NAME, prompt: WATCH_INSTRUCTIONS, botId: s.chief.id, enabled: true, timeoutMinutes: 15,

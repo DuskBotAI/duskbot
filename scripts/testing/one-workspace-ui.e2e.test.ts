@@ -69,7 +69,7 @@ const PAIR_FORM = "Boolean(document.querySelector('form input') && /pairing code
       await until(() => screen(), (value) => value === "setup", 30_000, "the setup screen");
       const words = await page<string>("document.querySelector('main').innerText");
       expect(words).toContain("Setting up my cloud…");
-      expect(words).toContain("This takes about a minute. It opens by itself when it's ready.");
+      expect(words).toContain("This takes about 2 minutes. It opens by itself when it's ready.");
       expect(words).not.toMatch(/Server menu|choose it again|not reachable/);
       expect(await page<string[]>("[...document.querySelectorAll('main button')].map((button) => button.textContent)"), "nothing to press").toEqual([]);
       expect(await step()).toBe("Preparing storage");

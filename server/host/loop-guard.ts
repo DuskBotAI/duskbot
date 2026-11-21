@@ -2,33 +2,15 @@
 // failing the same way back to back: it steers one note at steerAt, and stops the turn at stopAt only when that is set,
 // because a wait that fails until ready (`curl -f …/health`) is the same failure repeated. A turn waiting on a person
 // or a computer is never acted on.
-import { z } from "zod";
-
 import { failedTurnRow } from "../failed-turn-row.ts";
 import { nameIsCommand } from "../../shared/tool-name.ts";
 import type { RuntimeEvent, SteerOutcome } from "../contracts.ts";
 import { quoteInNote } from "../peer-provenance.ts";
 import { RepeatDetector, callKey, toolItemKey } from "../repeat-detector.ts";
 import { RepeatStreak, failureDigest } from "../repeat-streak.ts";
+import { SAME_ANSWER_AT, SameAnswers, sameAnswerNote } from "../same-answers.ts";
 import { COMMAND_SUMMARY_MAX, previewIsPartial } from "../tool-summary.ts";
-
-const COUNT_MIN = 2;
-const COUNT_MAX = 1000;
-const count = z.number().int().min(COUNT_MIN).max(COUNT_MAX);
-const MAX_CORRECTIVE_ROUNDS = 5;
-
-/** The `loopGuard` section of config.json. */
-export const loopGuardConfigSchema = z.object({
-  /** Off unless true; DUSK_LOOP_GUARD=1 switches it on too. */
-  enabled: z.boolean().optional(),
-  /** Identical failures in a row before the note; 5 when unset. */
-  steerAt: count.optional(),
-  /** Identical failures in a row before the turn is stopped; unset never stops. DUSK_LOOP_GUARD_STOP_AT wins; null clears. */
-  stopAt: count.nullable().optional(),
-  /** For bots on API models: times a turn that answers after a failed tool call is sent back to re-run it; 0 when unset. */
-  correctiveRounds: z.number().int().min(0).max(MAX_CORRECTIVE_ROUNDS).optional(),
-}).strict();
-export type LoopGuardConfig = z.output<typeof loopGuardConfigSchema>;
+import { COUNT_MAX, COUNT_MIN, type LoopGuardConfig } from "./loop-guard-config.ts";
 
 export interface LoopGuardSettings {
   enabled: boolean;
@@ -140,6 +122,8 @@ function loopCause(call: string, streak: number): string {
 export function createLoopGuard(deps: LoopGuardDeps): LoopGuard {
   const repeats = new RepeatDetector({ thresholds: NOTICE_AT, maxKeysPerThread: MAX_CALLS_PER_TURN });
   const streaks = new RepeatStreak<CountedCall>({ maxPending: MAX_CALLS_PER_TURN });
+  const sameAnswers = new SameAnswers();
+  const toolOf = new Map<string, string>();
   const acted = new Map<string, { stopped: boolean; steered: Set<string> }>();
   const turnOf = new Map<string, string>();
   const log = (what: string, threadId: string, streak: number) =>
@@ -152,6 +136,8 @@ export function createLoopGuard(deps: LoopGuardDeps): LoopGuard {
 
   const settle = (threadId: string) => {
     repeats.settle(threadId);
+    sameAnswers.settle(threadId);
+    for (const key of toolOf.keys()) if (key.startsWith(`${threadId}\n`)) toolOf.delete(key);
     startOver(threadId);
     turnOf.delete(threadId);
   };
@@ -205,6 +191,7 @@ export function createLoopGuard(deps: LoopGuardDeps): LoopGuard {
     // A turn's end does not always reach this fold, so a turn's start is a fence too.
     if (event.type === "turn.started") {
       startOver(threadId);
+      sameAnswers.settle(threadId);
       if (event.turnId === undefined) turnOf.delete(threadId);
       else turnOf.set(threadId, event.turnId);
       return;
@@ -220,6 +207,16 @@ export function createLoopGuard(deps: LoopGuardDeps): LoopGuard {
     }
 
     if ((event.type !== "item.started" && event.type !== "item.completed") || event.itemType !== "tool") return;
+    if (event.type === "item.started" && shellCall(event) === undefined) {
+      sameAnswers.started(threadId, event.itemId, event.title, event.input);
+      if (event.itemId) toolOf.set(`${threadId}\n${event.itemId}`, (event.title ?? "a tool").trim());
+    } else if (event.type === "item.completed") {
+      const label = toolOf.get(`${threadId}\n${event.itemId}`);
+      toolOf.delete(`${threadId}\n${event.itemId}`);
+      if (sameAnswers.completed(threadId, event.itemId, event.output) && label && deps.live(threadId) && !deps.waiting(threadId) && deps.canSteer(threadId)) {
+        steer(threadId, sameAnswerNote(label), SAME_ANSWER_AT);
+      }
+    }
     const settings = deps.settings();
     // Nothing is tracked while off, so a streak never spans commands the guard did not see.
     if (!settings.enabled) return streaks.settle(threadId);

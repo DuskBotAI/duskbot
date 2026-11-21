@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 import {
-  USAGE_DIGEST_KEYS, USAGE_FRUSTRATION_KEYS, USAGE_SESSION_KEYS, SESSION_NOTE_MAX, SUMMARY_MAX, cleanUsageSession, USAGE_RUN_KEYS, USAGE_TURN_KEYS, categorize, cleanUsageDigest, cleanUsageFrustration, cleanUsageReport, cleanUsageTurn, failureReason, scrubSummary, toolSignals,
+  USAGE_DIGEST_KEYS, USAGE_FRUSTRATION_KEYS, USAGE_SESSION_KEYS, SESSION_NOTE_MAX, SUMMARY_MAX, cleanUsageSession, USAGE_RUN_KEYS, USAGE_TURN_KEYS, categorize, cleanUsageDigest, cleanUsageFrustration, cleanUsageReport, cleanUsageTurn, failedToolName, failureReason, scrubSummary, toolSignals,
   type UsageFrustration, type UsageSession,
 } from "../shared/usage-signals.ts";
 import { parseWorkspaceReport } from "../shared/dashboard-protocol.ts";
@@ -43,6 +43,12 @@ describe("categorize", () => {
     expect(toolSignals(["Bash", "mcp__composio__GMAIL_SEND_EMAIL", "mcp__composio__ACMECRM_LIST", "WebSearch", "mcp__browser__navigate"])).toEqual({
       tools: ["app", "browser", "terminal", "web"], apps: ["gmail", "other_app"],
     });
+  });
+
+  it("counts x_search apart from web search, so its own failures show", () => {
+    expect(toolSignals(["mcp__agents__x_search", "x_user_posts", "web_search"])).toEqual({ tools: ["web", "x"], apps: [] });
+    expect(failedToolName("mcp__agents__x_search")).toBe("x");
+    expect(categorize({ tools: ["x"], apps: [] })).toBe("research");
   });
 
   it("turns an error line into a code and never keeps the line", () => {

@@ -33,7 +33,9 @@ export function webhookAddress(webhooks: Pick<WebhookManager, "currentSecret">, 
     return { unavailable: "This automation's address was made before dusk bot kept addresses, and an app already sends to it, so it can't be shown again. Ask the person to use Copy address on the automation's card, or Replace address there for a new one." };
   }
   const credential = webhookCredential(baseUrl, current.webhook.endpointId, current.secret);
-  const local = LOOPBACK.test(credential.endpointUrl) ? " This address is on this computer, so only apps running on it can reach it." : "";
+  const local = LOOPBACK.test(credential.endpointUrl)
+    ? " This address is on this computer, so an app on the internet (a form, a store) can't reach it yet. In the desktop app, turning on Settings > Remote access gives it an internet address: ask for the address again after. Until then, still test the steps with trigger run_now and a sample payload, and tell the person this one step plainly."
+    : "";
   return {
     url: credential.url,
     endpoint: credential.endpointUrl,

@@ -24,6 +24,6 @@ describe("the agents server's settings", () => {
     expect(up).toEqual(expect.arrayContaining(["memory_update", "attach_file", "coordinate_bots"]));
     for (const name of up) expect(BRIDGE_HOT_TOOL_NAMES.has(name), name).toBe(true);
     expect(up, "a reminder needs no tool search").toContain("trigger");
-    expect(meta(deferred.find((tool) => tool.name === "trigger_info")!), "reading routines loads through tool search").toBe(false);
+    expect(meta(deferred.find((tool) => tool.name === "delete_trigger")!), "deleting a routine loads through tool search").toBe(false);
   });
 });

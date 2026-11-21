@@ -660,6 +660,60 @@ export class BrowserService {
     return outcome;
   }
 
+  /** Opens `url` in a tab behind the others, keeps the bodies of the responses `wanted` names (by their URL), waits until
+   * `enough` says it has what it came for or `timeoutMs` passes, and closes the tab. For the server's own reads of a
+   * signed-in page: no bot sees the tab or what it read. Runs in the browser's lane, so never during a bot's call. */
+  async readResponses(target: BrowserTarget, request: { url: string; wanted: (url: string) => string | null; enough: (names: ReadonlySet<string>) => boolean; timeoutMs: number }): Promise<{ url: string; responses: Array<{ name: string; status: number; body: string }> }> {
+    const profile = this.profile(target);
+    const outcome = await this.#lanes.run(profile.key, async () => {
+      const run = await this.running(profile);
+      const open = this.profiles().reduce((sum, other) => sum + other.tabs.list().length, 0);
+      if (profile.tabs.list().length >= PROFILE_TAB_LIMIT || open >= SERVER_TAB_LIMIT) throw new Error("The browser has the most tabs it keeps open.");
+      const deadline = Date.now() + request.timeoutMs;
+      const page = await run.browser.newPage("about:blank", { background: true, timeoutMs: request.timeoutMs });
+      const responses: Array<{ name: string; status: number; body: string }> = [];
+      const names = new Set<string>();
+      const pending = new Map<string, { name: string; status: number }>();
+      const reads: Array<Promise<void>> = [];
+      let wake = () => {};
+      const offs = [
+        page.session.on("Network.responseReceived", (params) => {
+          const response = params.response as { url?: unknown; status?: unknown } | undefined;
+          const name = typeof response?.url === "string" ? request.wanted(response.url) : null;
+          if (name && typeof params.requestId === "string") pending.set(params.requestId, { name, status: typeof response?.status === "number" ? response.status : 0 });
+        }),
+        page.session.on("Network.loadingFinished", (params) => {
+          const hit = typeof params.requestId === "string" ? pending.get(params.requestId) : undefined;
+          if (!hit) return;
+          pending.delete(params.requestId as string);
+          reads.push(page.session.send<{ body?: string; base64Encoded?: boolean }>("Network.getResponseBody", { requestId: params.requestId }).then((answer) => {
+            const body = typeof answer.body === "string" ? (answer.base64Encoded ? Buffer.from(answer.body, "base64").toString("utf8") : answer.body) : "";
+            responses.push({ name: hit.name, status: hit.status, body });
+            names.add(hit.name);
+            wake();
+          }, () => undefined));
+        }),
+      ];
+      try {
+        await page.navigate(request.url, { readiness: "domcontentloaded", timeoutMs: request.timeoutMs }).catch(() => undefined);
+        while (!request.enough(names) && Date.now() < deadline) {
+          await new Promise<void>((resolve) => {
+            const timer = setTimeout(resolve, Math.min(250, Math.max(0, deadline - Date.now())));
+            wake = () => { clearTimeout(timer); resolve(); };
+          });
+        }
+        await Promise.all(reads);
+        return { url: page.url(), responses };
+      } finally {
+        for (const off of offs) off();
+        await run.browser.closePage(page).catch(() => undefined);
+        profile.lastUsed = Date.now();
+      }
+    }, this.#options.laneWaitMs, "x_search");
+    if (outcome === null) throw new Error(LANE_BUSY);
+    return outcome;
+  }
+
   /** fill_login's reads and typing, on the tab in front. */
   loginDeps(target: BrowserTarget): Pick<FillLoginDeps, "engine" | "insertText" | "press" | "click"> {
     const profile = this.profile(target);

@@ -20,11 +20,11 @@ import {
 } from "../shared/routines.ts";
 import type { PartPair, RoutinePart } from "./package-parts.ts";
 import {
-  composeExecutionPrompt, continuityCarry, ROUTINE_DEFERRAL_NOTICE_MS, ROUTINE_DELETED, ROUTINE_SKIPPED_WHILE_WAITING, ROUTINE_SUPERSEDED,
+  composeExecutionPrompt, continuityCarry, routineMemory, ROUTINE_NOTES_MAX, ROUTINE_DEFERRAL_NOTICE_MS, ROUTINE_DELETED, ROUTINE_SKIPPED_WHILE_WAITING, ROUTINE_SUPERSEDED,
   routineFailure, routineHostWarning, skipNeedsNotice, supersededBy,
 } from "./routine-execution.ts";
 import {
-  dispatchRefusal, engineFacts, loadOwnerNotices, recoverRun, requeueOnce, weekRuns, type RoutineAlert, type RoutineFailureFacts, type RoutineOwnerNotice,
+  dispatchRefusal, engineFacts, loadOwnerNotices, recoverRun, requeueOnce, wakeBusyWaits, weekRuns, type RoutineAlert, type RoutineFailureFacts, type RoutineOwnerNotice,
 } from "./routine-recovery.ts";
 import { answeredInChat, matchesAsk, openAsk, settleAsk, stopDue, waitingFor, type RoutineRunAsk } from "./routine-waits.ts";
 import { failsLikeLastOutcome, outcomesNewestFirst } from "./routine-outcomes.ts";
@@ -60,7 +60,7 @@ export interface Routine extends RoutineQuietFields {
   durationMinutes: number;
   timeoutMinutes?: number;
   attachments?: RoutineContextAttachment[];
-  continuity?: boolean;
+  continuity?: boolean; notes?: string;
   overlap?: "skip" | "queue";
   runOnStartup?: boolean;
   checks?: RoutineCheck[];
@@ -405,6 +405,7 @@ export class RoutineManager {
   /** A Cloud home's sleep check (server/routine-due.ts). */
   hasActiveRuns(): boolean { return activeRunsOf(this.runs, this.now()); }
   nextDueAt(): number | null { return nextDueOf(this.routines, this.runs, this.now()); } /** The runs due in the next day, for a Cloud home's power report. */ upcoming() { return upcomingOf(this.routines, this.runs, this.now()); }
+  setNotes(routineId: string, notes: string): Routine | null { this.assertWritable(); const routine = this.routines.find((candidate) => candidate.id === routineId), text = notes.trim().slice(0, ROUTINE_NOTES_MAX); if (!routine) return null; this.commitMutation(() => { if (text) routine.notes = text; else delete routine.notes; }); return cloneRoutine(routine); }
 
   listRuns(from?: number, to?: number): RoutineRun[] {
     return this.runs
@@ -923,7 +924,7 @@ export class RoutineManager {
   }
 
   get isTicking(): boolean { return this.ticking; }
-  lookAgain(): void { this.timer?.poke(); }
+  lookAgain(): void { this.timer?.poke(); } threadFreed(threadId: string): void { if (wakeBusyWaits(this.runs, threadId, this.now())) { this.saveLater(); this.timer?.poke(); } }
   private tickInBackground(): void { this.tick().catch((error) => console.error("routines: a scheduler pass failed", error)); }
 
   start() {
@@ -1158,7 +1159,7 @@ export class RoutineManager {
             await this.options.startTurn(
               run.botId,
               task.threadId,
-              composeExecutionPrompt({ id: run.routineId, name: run.routineName, trigger: triggerSource, runOn: run.runOn ?? "maus", dryRun: run.dryRun }, prompt, run.attachments, continuityCarry(run, this.routines, this.runs), run.retried),
+              composeExecutionPrompt({ id: run.routineId, name: run.routineName, trigger: triggerSource, runOn: run.runOn ?? "maus", dryRun: run.dryRun }, prompt, run.attachments, continuityCarry(run, this.routines, this.runs), run.retried, routineMemory(run, this.routines, this.runs)),
               run.runOn ?? "maus",
               triggerSource,
               (message) => this.failThread(task.threadId, message, { cause: "refused" }),

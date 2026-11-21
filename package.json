@@ -1,7 +1,7 @@
 {
   "name": "duskbot",
   "private": true,
-  "version": "0.2.25",
+  "version": "0.2.26",
   "description": "A local-first chat app for running a team of AI agents.",
   "homepage": "https://dusk.bot",
   "repository": {

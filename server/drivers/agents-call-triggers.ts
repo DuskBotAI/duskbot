@@ -66,22 +66,24 @@ function normalizeScheduleInput(args: Json): NormalizedSchedule {
   const fields = type === "once"
     ? ["type", "at", "timeZone"]
     : type === "weekly" || type === "daily"
-      ? ["type", "time", "weekdays"]
+      ? ["type", "time", "weekdays", "timeZone", "exact"]
       : type === "interval"
         ? ["type", "every_minutes", "everyMinutes", "starts_at", "anchorAt", "weekdays", "every_day", "window_start", "window_end", "window", "all_day", "ends_at", "endsAt", "never_ends"]
         : type === "cron"
-          ? ["type", "expression", "timeZone"]
+          ? ["type", "expression", "timeZone", "exact"]
           : type === "limit_reset"
             ? ["type", "engine", "repeat"]
             : null;
   // Providers may send unused optional fields as null; any other unknown field refuses the call.
   const unsupported = fields && Object.keys(raw).find((key) => raw[key] != null && !fields.includes(key));
   if (unsupported) {
-    return { error: `Unsupported ${type} schedule field "${unsupported}". Weekly and daily times use the computer's timezone from trigger_info. ${SUPPORTED_SCHEDULES}` };
+    return { error: `Unsupported ${type} schedule field "${unsupported}". Weekly and daily times use the computer's timezone from trigger_info unless timeZone names another. ${SUPPORTED_SCHEDULES}` };
   }
+  if (raw.exact != null && typeof raw.exact !== "boolean") return { error: '"exact" must be true or false.' };
+  const exact = raw.exact === true ? { exact: true } : {};
   if (type === "cron") {
     try {
-      return { schedule: { ...normalizeCronSchedule({ type, expression: raw.expression, timeZone: raw.timeZone }) } };
+      return { schedule: { ...normalizeCronSchedule({ type, expression: raw.expression, timeZone: raw.timeZone }), ...exact } };
     } catch (error) {
       return { error: `${error instanceof Error ? error.message : "Invalid cron schedule"}. ${SUPPORTED_SCHEDULES}` };
     }
@@ -116,7 +118,9 @@ function normalizeScheduleInput(args: Json): NormalizedSchedule {
       if (!full) return { error: `Unsupported weekday "${String(day)}". Use full names: ${WEEKDAYS.join(", ")}.` };
       if (!normalized.includes(full)) normalized.push(full);
     }
-    return { schedule: { type: "weekly", time, weekdays: normalized } };
+    if (raw.timeZone == null) return { schedule: { type: "weekly", time, weekdays: normalized, ...exact } };
+    if (typeof raw.timeZone !== "string" || !raw.timeZone.trim()) return { error: '"timeZone" must be an IANA timezone such as Europe/London.' };
+    return { schedule: { type: "weekly", time, weekdays: normalized, timeZone: raw.timeZone.trim(), ...exact } };
   }
   if (type === "interval") {
     for (const flag of ["every_day", "all_day", "never_ends"]) {
@@ -339,7 +343,7 @@ function addressText(r: Json): string {
   if (typeof r.addressRefused === "string") return `\n\nIts address: ${r.addressRefused}`;
   if (!jsonRecord(r.address)) return "";
   if (typeof r.address.unavailable === "string") return `\n\nIts address: ${r.address.unavailable}`;
-  return `\n\nIts private address: ${JSON.stringify(r.address, null, 2)}`;
+  return `\n\nIts private address: ${JSON.stringify(r.address, null, 2)}\n\nIt is on now and waits for calls. Test it once before you say it works: trigger action=run_now with this trigger_id and payload, a sample shaped as that app posts it, with the person's own name and email, so its real steps run end to end (the row lands, the email reaches them).`;
 }
 
 /** What the bot should say about a schedule it just set: what it assumed, with the time zone and the next run in words. */
@@ -379,7 +383,7 @@ async function request(body: Json, context: ToolCallContext, done: string): Prom
 }
 
 /** Everything a trigger call may carry beyond the fields it sets. */
-const CALL_KEYS = new Set(["action", "trigger_id", "for_bot_id", "test"]);
+const CALL_KEYS = new Set(["action", "trigger_id", "for_bot_id", "test", "payload"]);
 const CREATE_ONLY = ["when", "app", "event", "account", "engine", "repeat"] as const;
 
 export async function callTriggerTool(name: string, args: Json, context: ToolCallContext): Promise<ToolCallResult> {
@@ -391,6 +395,11 @@ export async function callTriggerTool(name: string, args: Json, context: ToolCal
     return listTriggers(args, forBotId, context);
   }
   if (name === "trigger" && args.action === "email") return emailRoute(args, context);
+  if (name === "trigger" && args.action === "note") {
+    if (typeof args.note !== "string") return { text: "trigger action=note needs note: the whole notes for this automation's next run.", isError: true };
+    const { ok, body } = await context.client.apiResponse(REQUEST_ROUTE, { method: "POST", body: JSON.stringify({ action: "note", note: args.note }) });
+    return ok ? { text: String(body.text ?? "Saved.") } : { text: String(body.error ?? "The note was not saved."), isError: true };
+  }
   if (name === "trigger" && args.action === "create") {
     if (args.trigger_id !== undefined && args.trigger_id !== null) return { text: "trigger_id is for a trigger that exists; leave it out to create one.", isError: true };
     return createTrigger(args, forBotId, context);
@@ -407,14 +416,18 @@ export async function callTriggerTool(name: string, args: Json, context: ToolCal
   if (error) return { text: error, isError: true };
   if (args.test === true && action !== "run_now") return { text: "test applies only to action=run_now.", isError: true };
   const test = action === "run_now" && args.test === true;
-  const body: Json = { action, triggerId, ...(forBotId ? { forBotId } : {}), ...(test ? { test: true } : {}) };
+  if (args.payload !== undefined && action !== "run_now") return { text: "payload applies only to action=run_now on a webhook.", isError: true };
+  const payload = action === "run_now" && args.payload !== undefined ? { payload: args.payload } : {};
+  const body: Json = { action, triggerId, ...(forBotId ? { forBotId } : {}), ...(test ? { test: true } : {}), ...payload };
   if (action === "update") {
     if (!Object.keys(fields).length) return { text: "The update action needs at least one supported field to change.", isError: true };
     body.changes = fields;
   } else if (Object.keys(fields).length) {
     return { text: name === "delete_trigger" ? "delete_trigger takes only trigger_id and for_bot_id." : `The ${action} action changes no fields; send them with action=update.`, isError: true };
   }
-  const done = test ? `Started a test run of trigger ${triggerId}: it reads what it needs and puts what it would send in its report instead of sending; its report is posted in the chat when it finishes` : action === "run_now" ? `Started trigger ${triggerId} once now` : `Applied ${action} to trigger ${triggerId}`;
+  const done = test ? `Started a test run of trigger ${triggerId}: it reads what it needs and puts what it would send in its report instead of sending; its report is posted in the chat when it finishes`
+    : action === "run_now" && "payload" in payload ? `Sent your sample to trigger ${triggerId}: it runs its real steps on it now, as a call from the app would, and its report is posted in the chat when it finishes. Check what it really did (the row, the email) before telling the person it works`
+    : action === "run_now" ? `Started trigger ${triggerId} once now` : `Applied ${action} to trigger ${triggerId}`;
   return request(body, context, done);
 }
 

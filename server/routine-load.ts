@@ -9,6 +9,7 @@ import { ROUTINE_PARTS, type PartPair, type RoutinePart } from "./package-parts.
 import { loadAttachments, loadTimeoutMinutes } from "./routine-attachments.ts";
 import { isRoutineHoldCause } from "./routine-holds.ts";
 import { MAX_DATE_MS } from "./routine-intervals.ts";
+import { ROUTINE_NOTES_MAX } from "./routine-execution.ts";
 import { loadSchedule } from "./routine-schedules.ts";
 import { loadAsk } from "./routine-waits.ts";
 import type { Routine, RoutineGoalStatus, RoutinePackageStamp, RoutineRequestReceipt, RoutineRun, RoutineTarget } from "./routines.ts";
@@ -107,9 +108,10 @@ export function loadRoutine(routine: Routine, now: number): Routine | null {
     checkTrouble: typeof routine.checkTrouble === "string" && routine.checkTrouble ? routine.checkTrouble.slice(0, 300) : undefined,
     wakeAt: instant(routine.wakeAt),
     heldFor: isRoutineHoldCause(routine.heldFor) ? routine.heldFor : undefined,
+    notes: typeof routine.notes === "string" && routine.notes.trim() ? routine.notes.slice(0, ROUTINE_NOTES_MAX) : undefined,
   };
   delete loaded.failureStreak;
-  return withCheckFields(withoutUndefined(loaded, ["timeoutMinutes", "runOnStartup", "installedPackage", "checkedAt", "checkTrouble", "wakeAt", "heldFor"]));
+  return withCheckFields(withoutUndefined(loaded, ["timeoutMinutes", "runOnStartup", "installedPackage", "checkedAt", "checkTrouble", "wakeAt", "heldFor", "notes"]));
 }
 
 export function loadRun(run: RoutineRun): RoutineRun {

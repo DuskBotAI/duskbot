@@ -116,13 +116,15 @@ async function createAndUpdateRoutineThroughCopilotTools() {
     };
     await turn("Create a monthly report routine.", { action: "create", when: "schedule", name: "Copilot report",
       instructions: "Summarize synthetic fixture activity without external services.", schedule });
+    // a bot's routine on the hour is moved a few minutes off it
+    const placed = { ...schedule, expression: expect.stringMatching(/^[2-7] 9 1 \* \*$/) };
     const routine = (await api("GET", "/api/routines")).routines.find((routine: any) => routine.botId === bot.id);
-    expect(routine).toMatchObject({ name: "Copilot report", enabled: true, schedule });
+    expect(routine).toMatchObject({ name: "Copilot report", enabled: true, schedule: placed });
     await turn("Rename the report routine.", { action: "update", trigger_id: routine.id, name: "Updated Copilot report" });
     const saved = (await api("GET", "/api/routines")).routines.find((row: any) => row.id === routine.id);
-    expect(saved).toMatchObject({ name: "Updated Copilot report", schedule });
+    expect(saved).toMatchObject({ name: "Updated Copilot report", schedule: { ...placed, expression: routine.schedule.expression } });
     const persisted = JSON.parse(readFileSync(join(dataDir, "routines.json"), "utf8"));
-    expect(persisted.routines.find((row: any) => row.id === routine.id)).toMatchObject({ name: "Updated Copilot report", schedule });
+    expect(persisted.routines.find((row: any) => row.id === routine.id)).toMatchObject({ name: "Updated Copilot report", schedule: { ...placed, expression: routine.schedule.expression } });
     evidence.push({ saved });
   } finally {
     const evidencePath = `${logPath}.copilot-tools.json`;

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 
 import { api, useStore, type Action } from "@/state/store";
 import type { LocaleKey } from "@/locales";
@@ -29,8 +29,7 @@ import { AppFacts, AppPage, appFacts, type AppPageModel, type Way } from "./AppP
 import { OnePasswordBody } from "./OnePasswordBody";
 import { GmailPasswordNote, TokenCard } from "./TokenCard";
 import { useTokenApps } from "./use-token-apps";
-import { TOKEN_APPS, tokenApp, type TokenAppId } from "../../../shared/app-tokens";
-import { NATIVE_CONNECTORS } from "../../../shared/native-connectors";
+import { tokenApp, type TokenAppId } from "../../../shared/app-tokens";
 import type { OnePasswordStatus } from "../../../shared/logins";
 import { CategoryMenu } from "./CategoryMenu";
 import {
@@ -39,13 +38,13 @@ import {
 } from "./catalog";
 import { MCP_SERVERS_ID as MCP_PAGE, type ConnectAppsPage } from "./open";
 import { cachedConnectorCatalog, loadConnectorCatalog, useConnectors, type ConnectorPhase } from "./use-connectors";
-import { appLogo } from "./logos";
-import { composioLogo, loadComposioSnapshot, snapshotToolkit } from "./composio-snapshot";
+import { loadComposioSnapshot, snapshotToolkit } from "./composio-snapshot";
 import { prefetchRemoteApps, useRemoteApps } from "./use-remote-apps";
 import { idsOf, mergeEntries } from "./merge";
 import { WindowedRows } from "./WindowedRows";
-import type { DirectoryApp } from "../../../shared/connector-directory";
 import type { ToolkitCard } from "../ServiceIcon";
+import { CUSTOM_MCP, GMAIL, cardIcon, nativeEntries, remoteIcon } from "./native-entries";
+import { Group, Option, ResultGroup, ScrollThumb } from "./window-parts";
 import "./connect-apps.css";
 
 type NativeId = "x" | "email";
@@ -53,15 +52,12 @@ const NATIVE_IDS: readonly NativeId[] = ["email", "x"];
 const RECOMMENDED = "recommended";
 const ALL_APPS = "apps";
 const CONNECTED = "connected";
-/** Any MCP server by its URL, kept with the MCP servers Settings has. */
-const CUSTOM_MCP = "custom-mcp";
 // a section this long draws only the rows in view
 const WINDOW_FROM = 40;
 const SETTINGS = (section: "logins" | "skills"): Action => ({ type: "toggleAppSettings", open: true, section });
 // the longest the window waits for what it has not read yet before it draws its rows anyway
 const READY_WAIT_MS = 1_200;
 const OWN_KINDS: ReadonlySet<AppEntry["kind"]> = new Set(["native", "hosted", "logins", "token"]);
-const GMAIL = "gmail";
 const GMAIL_ADDRESS = /@(gmail|googlemail)\.com$/i;
 
 // what the last open learned, so the next one draws its first frame with it instead of filling in
@@ -83,51 +79,6 @@ export function stableOrder(entries: readonly AppEntry[], order: Map<string, num
 interface Section { key: string; title: string; note?: string; ids: string[]; viewAll?: ConnectAppsPage }
 /** One view's chips and sections, fixed when it is first drawn: later answers change a row's button, never its place. */
 interface Layout { view: number; categories: Category[]; sections: Section[] }
-
-function logoIcon(...names: string[]): AppEntry["icon"] {
-  const logo = appLogo(...names);
-  return logo ? { image: logo.src, padded: logo.padded, background: logo.background, scale: logo.scale } : {};
-}
-
-/** Grok's logo when it has one, then the catalog's own mark, then Composio's mark for the slug: never a favicon. */
-function cardIcon(card: ToolkitCard): AppEntry["icon"] {
-  const known = logoIcon(card.slug, card.label);
-  if (known.image) return known;
-  return { logo: card.logo ?? composioLogo(card.slug), padded: true };
-}
-
-/** Our bundled logo when we have one, else the vendor site's own icon through /api/site-icon. */
-function remoteIcon(app: DirectoryApp): AppEntry["icon"] {
-  const known = logoIcon(app.id, app.label);
-  return known.image ? known : { domain: app.domain };
-}
-
-
-const TOKEN_CATEGORY: Record<TokenAppId, string> = {
-  github: "developer code", notion: "documents notes", linear: "project management", airtable: "database", todoist: "task",
-  trello: "project management", clickup: "project management", hubspot: "crm", jira: "project management", shopify: "commerce",
-  stripe: "payments", cloudflare: "developer cloud", googledrive: "file storage", dropbox: "file storage",
-};
-
-function nativeEntries(): AppEntry[] {
-  return [
-    { id: "1password", kind: "logins", label: "1Password", description: t("connectApps.onePassword.description"), categories: ["credentials"], icon: logoIcon("1password"), website: "1password.com", keywords: "password vault logins" },
-    { id: "email", kind: "native", label: t("email.title"), description: t("email.description"), categories: ["communication"], icon: { glyph: "envelope", glyphPaint: "rgb(229 47 139)" }, keywords: "email mail imap smtp mailbox" },
-    { id: "x", kind: "native", label: t("apps.x.title"), description: t("apps.x.description"), categories: ["marketing"], icon: logoIcon("x"), website: "x.com", keywords: "x twitter posts", oneClick: true },
-    { id: GMAIL, kind: "native", label: "Gmail", description: t("tokenApps.gmail.description"), categories: ["communication"], icon: logoIcon("gmail"), website: "mail.google.com", keywords: "gmail google mail app password imap" },
-    ...TOKEN_APPS.map((app): AppEntry => ({
-      id: app.id, kind: "token", label: app.label, description: t(`tokenApps.description.${app.id}` as LocaleKey), categories: grokCategories([TOKEN_CATEGORY[app.id]]),
-      icon: logoIcon(app.id, app.label).image ? logoIcon(app.id, app.label) : { domain: app.domain }, website: app.domain, keywords: `${app.id} token api key`,
-      // a sign-in that comes back by itself is one click; a device code to type, or a token to paste, is not
-      ...(NATIVE_CONNECTORS.some((one) => one.id === app.id && one.flow !== "device") ? { oneClick: true } : {}),
-    })),
-    { id: CUSTOM_MCP, kind: "native", label: t("connectApps.customMcp"), description: t("connectApps.customMcp.description"), categories: ["code"], icon: { glyph: "plug" }, keywords: "custom mcp server url remote http headers oauth" },
-    ...HOSTED_MCP_APPS.map((app): AppEntry => ({
-      id: app.id, kind: "hosted", label: app.label, description: t(app.description), categories: ["finance"],
-      icon: "image" in app.icon ? { image: app.icon.image } : { glyph: "credit-card", glyphPaint: "rgb(48 49 54)" }, website: new URL(app.url).hostname.replace(/^mcp\./, ""), keywords: app.keywords, oneClick: true,
-    })),
-  ];
-}
 
 function decodeImage(src: string): Promise<void> {
   const image = new Image();
@@ -883,84 +834,3 @@ export function ConnectAppsWindow({ page: requested, nonce, onClose, onTemplates
     </div>
   );
 }
-
-function Group({ title, children }: { title: string; children: ReactNode }) {
-  return (
-    <section className="flex flex-col">
-      <h3 className="ca-group-title">{title}</h3>
-      {children}
-    </section>
-  );
-}
-
-function ResultGroup({ label, show, children }: { label: string; show: boolean; children: ReactNode }) {
-  if (!show) return null;
-  return (
-    <div role="group" aria-label={label}>
-      <div className="ca-results-label" aria-hidden="true">{label}</div>
-      {children}
-    </div>
-  );
-}
-
-function Option({ index, active, onHover, onPick, icon, label }: {
-  index: number;
-  active: number;
-  onHover: (index: number) => void;
-  onPick: () => void;
-  icon?: ReactNode;
-  label: string;
-}) {
-  return (
-    <button type="button" role="option" id={`ca-option-${index}`} tabIndex={-1} aria-selected={index === active} className="ca-option"
-      onMouseMove={() => { if (index !== active) onHover(index); }} onClick={onPick}>
-      {icon}
-      <span>{label}</span>
-      <Icon name="chevron-right" size={12} />
-    </button>
-  );
-}
-
-/** The thin thumb, in a component of its own: it moves on every scroll frame and the window around it never renders for it. */
-function ScrollThumb({ scroller, page }: { scroller: React.RefObject<HTMLDivElement | null>; page: string }) {
-  const thumb = useScrollThumb(scroller, page);
-  if (!thumb) return null;
-  return (
-    <div role="presentation" className="ca-scrollbar" data-scrolling={thumb.scrolling ? "" : undefined}>
-      <div style={{ top: thumb.top, height: thumb.height }} />
-    </div>
-  );
-}
-
-function useScrollThumb(scroller: React.RefObject<HTMLDivElement | null>, key: string) {
-  const [thumb, setThumb] = useState<{ top: number; height: number; scrolling: boolean } | null>(null);
-  useEffect(() => {
-    const element = scroller.current;
-    if (!element) return;
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const measure = (scrolling: boolean) => {
-      const { scrollHeight, clientHeight, scrollTop } = element;
-      if (scrollHeight <= clientHeight + 1) { setThumb(null); return; }
-      const track = clientHeight - 6;
-      const height = Math.max(20, (clientHeight / scrollHeight) * track);
-      setThumb({ top: (scrollTop / (scrollHeight - clientHeight)) * (track - height), height, scrolling });
-    };
-    const onScroll = () => {
-      measure(true);
-      clearTimeout(timer);
-      timer = setTimeout(() => measure(false), 800);
-    };
-    measure(false);
-    element.addEventListener("scroll", onScroll, { passive: true });
-    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(() => measure(false));
-    observer?.observe(element);
-    if (element.firstElementChild) observer?.observe(element.firstElementChild);
-    return () => {
-      clearTimeout(timer);
-      element.removeEventListener("scroll", onScroll);
-      observer?.disconnect();
-    };
-  }, [scroller, key]);
-  return thumb;
-}
-

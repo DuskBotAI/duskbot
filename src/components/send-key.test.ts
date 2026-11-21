@@ -161,12 +161,15 @@ describe("an input method in the composer's menus", () => {
   it("leaves the Enter that confirms 山田 to the input method, not the mention menu", () => {
     render(createElement(Composer, { group: room, members: [{ ...bot, name: "山田" }] }));
     type(textarea(), "@山田");
+    // a real input method opens a composition before its candidate keys arrive
+    flushSync(() => textarea().dispatchEvent(new CompositionEvent("compositionstart", { bubbles: true })));
     for (const init of ime) {
       for (const key of ["Enter", "tab", "ArrowDown"]) {
         expect(press(textarea(), { ...init, key }).defaultPrevented, JSON.stringify({ ...init, key })).toBe(false);
       }
       expect(textarea().value).toBe("@山田");
     }
+    flushSync(() => textarea().dispatchEvent(new CompositionEvent("compositionend", { bubbles: true })));
     expect(press(textarea()).defaultPrevented).toBe(true);
     expect(textarea().value).toBe("@山田 ");
     expect(sends()).toEqual([]);

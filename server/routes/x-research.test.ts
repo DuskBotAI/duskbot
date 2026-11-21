@@ -47,21 +47,28 @@ describe("X research internal routes", () => {
     expect((await callInternal(handler, { method: "GET" })).out).toBe(PASS);
   });
 
-  it("refuses without a Cloud plan's credential, and refuses a bot that is not switched on, before any spend", async () => {
+  it("reads X without any credential (the free routes), refuses research without one, and refuses a bot that is not switched on", async () => {
     const client = fakeClient();
-    const noToken = createXResearchInternalRoutes({ credential: () => null, botEnabled: () => true, client: () => client });
-    expect(await callInternal(noToken, { body: { query: "maus" } })).toMatchObject({ status: 403, body: { error: X_MESSAGES.noKey } });
-    const { handler } = enabled(client);
+    const clientFor = vi.fn((_credential: ServiceCredential | null, _call: { botId: string; threadId?: string }) => client);
+    const noToken = createXResearchInternalRoutes({ credential: () => null, botEnabled: () => true, client: clientFor });
+    const { sent, json, res } = sink();
+    await noToken({ method: "POST", path: "/api/internal/x/search", res, json, botId: "bot-1", threadId: "t-1", readBody: async () => ({ query: "maus" }) });
+    expect(sent.status).toBe(200);
+    expect(clientFor).toHaveBeenCalledWith(null, { botId: "bot-1", threadId: "t-1" });
+    expect(await callInternal(noToken, { path: "/api/internal/research/search", body: { job: "emails" } })).toMatchObject({ status: 403, body: { error: X_MESSAGES.noKey } });
+    const { handler, client: other } = enabled();
     expect(await callInternal(handler, { botId: "bot-2", body: { query: "maus" } })).toMatchObject({ status: 403, body: { error: X_MESSAGES.botOff } });
-    expect(client.search).not.toHaveBeenCalled();
+    expect(other.search).not.toHaveBeenCalled();
   });
 
-  it("reads the credential on every call, so a plan that lapsed (the desktop cleared it) stops the next one", async () => {
+  it("reads the credential on every call, so a plan that lapsed (the desktop cleared it) reaches X without it", async () => {
     let credential: ServiceCredential | null = included;
-    const { handler } = enabled(fakeClient(), () => credential);
-    expect((await callInternal(handler, { body: { query: "maus" } })).status).toBe(200);
+    const clientFor = vi.fn((_credential: ServiceCredential | null) => fakeClient());
+    const handler = createXResearchInternalRoutes({ credential: () => credential, botEnabled: () => true, client: clientFor });
+    await callInternal(handler, { body: { query: "maus" } });
     credential = null;
-    expect((await callInternal(handler, { body: { query: "maus" } })).status).toBe(403);
+    await callInternal(handler, { body: { query: "maus" } });
+    expect(clientFor.mock.calls.map((args) => args[0])).toEqual([included, null]);
   });
 
   it("validates input with a reason a retry can use", async () => {

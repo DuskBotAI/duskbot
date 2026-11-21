@@ -3821,7 +3821,7 @@ describe("routine continuity", () => {
 
   const everyHour = (anchorAt: number): RoutineSchedule => ({ type: "interval", everyMinutes: 60, anchorAt });
 
-  it("starts every run cold when continuity is off", async () => {
+  it("starts every run without the previous session when continuity is off, knowing only what it already reported", async () => {
     const h = harness();
     const anchorAt = new Date(2026, 7, 17, 9, 0, 0).getTime();
     const routine = h.manager.create({
@@ -3835,8 +3835,9 @@ describe("routine continuity", () => {
     const second = await runOnce(h, routine.id, anchorAt + 60 * 60_000, "Still nothing.");
 
     expect(first).toBe(routineTurn(routine.id, "Morning brief", "Write the brief"));
-    expect(second).toBe(routineTurn(routine.id, "Morning brief", "Write the brief"));
+    expect(second.startsWith(routineTurn(routine.id, "Morning brief", "Write the brief"))).toBe(true);
     expect(second).not.toContain("previous-run");
+    expect(second).toMatch(/<earlier-report finished="[^"]+">\nNothing shipped yesterday\.\n<\/earlier-report>/);
   });
 
   it("carries the previous report into the next run when continuity is on", async () => {
@@ -3985,7 +3986,9 @@ describe("routine continuity", () => {
 
     const second = await runOnce(h, routine.id, anchorAt + 60 * 60_000);
 
-    expect(second).toBe(routineTurn(routine.id, "Morning brief", "Write the brief"));
+    expect(second.startsWith(routineTurn(routine.id, "Morning brief", "Write the brief"))).toBe(true);
+    expect(second).not.toContain("previous-run");
+    expect(second).toContain("<earlier-report");
   });
 
   it("refuses continuity on a room goal, which does not run the bot prompt path", () => {

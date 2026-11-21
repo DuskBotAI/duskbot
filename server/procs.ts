@@ -324,6 +324,20 @@ export function killCliTree(child: ChildProcess, timeoutMs = 5_000): Promise<boo
   return run;
 }
 
+/** Waits up to graceMs for the child to close by itself, then stops its tree. */
+export function closedOrKilled(child: ChildProcess, graceMs = 5_000): Promise<boolean> {
+  if (child.exitCode !== null || child.signalCode !== null) return Promise.resolve(true);
+  return new Promise<boolean>((resolveStop) => {
+    const done = () => { clearTimeout(timer); resolveStop(true); };
+    child.once("close", done);
+    const timer = setTimeout(() => {
+      child.off("close", done);
+      void killCliTree(child).then(resolveStop, () => resolveStop(false));
+    }, graceMs);
+    timer.unref?.();
+  });
+}
+
 async function stopCliTree(child: ChildProcess, pid: number, timeoutMs: number): Promise<boolean> {
   const exited = () => child.exitCode !== null || child.signalCode !== null;
   if (process.platform !== "win32") {

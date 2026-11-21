@@ -308,11 +308,13 @@ export class CdpBrowser implements PageHost {
     });
   }
 
-  async newPage(url = "about:blank", { timeoutMs = 15_000 }: { timeoutMs?: number } = {}): Promise<CdpPage> {
-    const { targetId } = await this.connection.root.send<{ targetId: string }>("Target.createTarget", { url: "about:blank", ...(this.#holdsFront() ? { background: true } : {}) });
+  /** `background`: the tab opens behind the one in front and never becomes the active one. */
+  async newPage(url = "about:blank", { timeoutMs = 15_000, background = false }: { timeoutMs?: number; background?: boolean } = {}): Promise<CdpPage> {
+    const behind = background || this.#holdsFront();
+    const { targetId } = await this.connection.root.send<{ targetId: string }>("Target.createTarget", { url: "about:blank", ...(behind ? { background: true } : {}) });
     if (this.#options.ownTabsOnly) await this.connection.root.send("Target.attachToTarget", { targetId, flatten: true });
     const page = await this.waitForPage((candidate) => candidate.targetId === targetId, timeoutMs);
-    if (!this.#holdsFront()) this.#active = page;
+    if (!behind) this.#active = page;
     if (url !== "about:blank") await page.navigate(url, { timeoutMs });
     return page;
   }

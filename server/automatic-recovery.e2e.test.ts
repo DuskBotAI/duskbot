@@ -181,7 +181,8 @@ it("keeps a Set me up request a setup turn on the backup, and an edit of it too"
     await api("POST", `/api/bots/${bot.id}/setup-request`, { threadId });
     await control("send", "--bot", bot.id, "--task", threadId, "--text", "sort my inbox every morning");
     expect((await wait()).status).toBe("settled");
-    expect(calls().filter((call) => call.method === "initialize.error")).toHaveLength(1);
+    // the bot chose no backup, so the other connected AI (the same failing fixture) is tried before the recovery backup
+    expect(calls().filter((call) => call.method === "initialize.error")).toHaveLength(2);
     expect(backupPrompts()).toHaveLength(1);
     const pressed = backupReceipt();
     expect(pressed.systemPrompt).toContain("The user explicitly asked you to set yourself up");
@@ -194,7 +195,8 @@ it("keeps a Set me up request a setup turn on the backup, and an edit of it too"
     await api("PATCH", route, { modelSelection: primary });
     await api("POST", `/api/bots/${bot.id}/messages/${line.id}/edit`, { text: "sort my inbox and my calendar", threadId }, 202);
     expect((await wait()).status).toBe("settled");
-    expect(calls().filter((call) => call.method === "initialize.error")).toHaveLength(2);
+    // the other AI is held after its failure, so the edit fails once, on the primary
+    expect(calls().filter((call) => call.method === "initialize.error")).toHaveLength(3);
     expect(backupPrompts()).toHaveLength(2);
     const edited = backupReceipt();
     expect(edited.systemPrompt).toContain("The user explicitly asked you to set yourself up");

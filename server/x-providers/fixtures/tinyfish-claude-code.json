@@ -1,0 +1,83 @@
+{
+  "query": "claude code",
+  "results": [
+    {
+      "position": 1,
+      "site_name": "x.com",
+      "snippet": "Claude writes scripts that chain your tools together in sophisticated ways, and it can answer you while long commands are still running.",
+      "title": "Check out Code Mode, a new, experimental way for Claude ...",
+      "url": "https://x.com/ClaudeDevs/status/2122801681939234950"
+    },
+    {
+      "date": "Jul 13, 2026",
+      "position": 2,
+      "site_name": "x.com",
+      "snippet": "Claude Code is the best tool in my opinion, for founders who want to automate their business, even if you aren't a coder and don't plan on ...",
+      "title": "A Beginner's Guide to Claude Code for Non-Coders",
+      "url": "https://x.com/moritzkremb/article/2076729652467630501"
+    },
+    {
+      "date": "Jan 21, 2026",
+      "position": 3,
+      "site_name": "x.com",
+      "snippet": "This longform guide goes the techniques that separate productive sessions from wasteful ones.",
+      "title": "The Longform Guide to Everything Claude Code",
+      "url": "https://x.com/affaan/article/2014040193557471352"
+    },
+    {
+      "position": 4,
+      "site_name": "x.com",
+      "snippet": "Claude Code has an inbuilt way of creating mods, so you can just describe the mod you want, and Claude will make it for you. Start a claude ...",
+      "title": "Addy Osmani - Getting started with Claude Code Mods",
+      "url": "https://x.com/addyosmani/status/2115326629488824753"
+    },
+    {
+      "date": "Feb 3, 2026",
+      "position": 5,
+      "site_name": "x.com",
+      "snippet": "Claude Code is a coding agent. You give it instructions in plain English, and it writes code for you.",
+      "title": "Claude Code Guide for Designers - Felix Lee",
+      "url": "https://x.com/felixleezd/article/2018728056249254377"
+    },
+    {
+      "position": 6,
+      "site_name": "x.com",
+      "snippet": "reverse engineer binaries with Claude Code: I built Borer, a decompiler and reverse engineering engine written from scratch in Rust, open source (AGPL). 3D ...",
+      "title": "Everything Claude Code",
+      "url": "https://x.com/i/communities/2013070671887151421"
+    },
+    {
+      "date": "Mar 19, 2026",
+      "position": 7,
+      "site_name": "x.com",
+      "snippet": "1. Set up the cc alias. Hit Esc to stop Claude. stops Claude mid-action without losing context. Give Claude a way to check its own work server ...",
+      "title": "50 Claude Code Tips and Best Practices For Daily Use",
+      "url": "https://x.com/CodevolutionWeb/article/2034683638382506063"
+    },
+    {
+      "position": 8,
+      "site_name": "x.com",
+      "snippet": "Claude integration lets you track file changes in real-time as Claude edits. debuggers, and tools",
+      "title": "The Shorthand Guide to Everything Claude Code - cogsec",
+      "url": "https://x.com/affaan/status/2012378465664745795"
+    },
+    {
+      "date": "Jun 3, 2026",
+      "position": 9,
+      "site_name": "x.com",
+      "snippet": "I Spent 500 Hours in Claude. Here's the Tier List. I live in Claude to run my businesses and my YouTube channel. So I ranked every feature ...",
+      "title": "I Tested Every Claude Code Feature, These 12 Are the Best | Nate Herk ...",
+      "url": "https://x.com/nateherk/article/2062210719416742053"
+    },
+    {
+      "date": "Sep 25, 2026",
+      "position": 10,
+      "site_name": "x.com",
+      "snippet": "One of the best parts of our newest Claude models is how they respond to effort without breaking the prompt cache in Claude Code, ...",
+      "title": "Using Claude Code: Spending your effort",
+      "url": "https://x.com/trq212/article/2103576349499855160"
+    }
+  ],
+  "total_results": 10,
+  "page": 0
+}

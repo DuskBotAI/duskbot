@@ -35,7 +35,7 @@ export const MORE_TITLE: Record<MoreDetail, string> = { setup: "setup and sign-i
 
 const I = { size: 14, strokeWidth: 1.75 } as const;
 const words = (key: string) => key.replace(/_/g, " ");
-const TOOL_WORDS: Record<string, string> = { app: "connected apps", web: "web search", computer: "computer use", mcp: "mcp tools", other: "other tools" };
+const TOOL_WORDS: Record<string, string> = { app: "connected apps", web: "web search", x: "X search", computer: "computer use", mcp: "mcp tools", other: "other tools" };
 const TOOL_ERROR_WORDS: Record<string, string> = { not_found: "not found", schema_invalid: "bad arguments (model)", bot_wall: "bot wall", crashed: "crashed" };
 const toolWords = (kind: "tool" | "app", key: string) => kind === "tool" ? TOOL_WORDS[key] ?? words(key) : words(key);
 const ACCOUNT_STEP: Record<string, string> = { shown: "saw the sign-in", method: "picked a way", handoff: "went to the website", returned: "came back signed in",

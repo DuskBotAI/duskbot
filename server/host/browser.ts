@@ -39,6 +39,8 @@ import { LAUNCHER_SECCOMP_FD, type LauncherBox } from "../browser/chrome/wrapper
 import type { HostKind } from "../browser/chrome/flags.ts";
 import { browserEngineKind, type BrowserEngineKind } from "../browser/config.ts";
 import { ChromeEngine, chromeTarget, LiveRouter, profileKey, RuntimeRouter } from "../browser/engines.ts";
+import { readOnAgentBrowser, type ReadAnswer, type ResponseRead } from "../x-providers/cdp-read.ts";
+import type { XSessionTarget } from "../x-providers/session.ts";
 import { CHROME_BROWSER_SYSTEM_PROMPT } from "../browser/prompt.ts";
 import { refusedSignInNote } from "../browser/agent-browser-args.ts";
 import { passkeyAnnotation } from "../browser/passkey-notice.ts";
@@ -298,6 +300,31 @@ export function createBrowserHost(deps: BrowserHostDeps) {
     const target = profile && profile !== "guest" ? browserProfilePartitionTarget(cfg, profile) : null;
     return { session, spec: chromeEngine.spec(session, profileKey(botId + suffix, session, { guest: profile === "guest", partitionId: target ? target.partitionId + suffix : null })) };
   }
+  /** The kept browser profile x_search may read X through for this bot (server/x-providers/session.ts), on either engine:
+   * dusk bot's own Chrome, or agent-browser's Chrome reached over its DevTools socket. Never a temporary browser, the
+   * person's own Chrome or a bot's own box. */
+  const xAgentBrowsers = new Map<string, BrowserSitesTarget>();
+  async function xSessionTarget(botId: string, threadId?: string): Promise<XSessionTarget | null> {
+    const bot = store.bot(botId);
+    if (!bot || bot.browser === false || bot.computer === "off" || !builtInBrowserEnabled(cfg) || bot.browserProfile === "guest") return null;
+    if ((await boxChromeOf(botId)) !== null) return null;
+    if (onChrome(bot.browserProfile)) {
+      if (chromeEngine.summary().kind !== "engine") return null;
+      const { session, spec } = chromeSpec(botId, bot.browserProfile, browserAudience(threadId));
+      return chromeTarget(session, spec);
+    }
+    if (usesMyChrome(browserProfileIdOf(bot.browserProfile))) return null;
+    const sites = await signedInSitesTarget({ bot: botId }, browserAudience(threadId));
+    if (!("session" in sites) || !sites.env.AGENT_BROWSER_PROFILE) return null;
+    const key = `agent-browser:${sites.session}`;
+    xAgentBrowsers.set(key, sites);
+    return { key, session: sites.session };
+  }
+  /** Reads through whichever engine the target is on; a stopped agent-browser session is started first. */
+  async function xSessionRead(target: XSessionTarget, request: ResponseRead): Promise<ReadAnswer> {
+    const sites = xAgentBrowsers.get(target.key);
+    return sites ? readOnAgentBrowser(sites, request) : chromeEngine.service.readResponses(target, request);
+  }
   /** Chrome for the new engine, the installed agent-browser otherwise. */
   function browserReady(profile: string | undefined): boolean {
     return onChrome(profile) ? chromeEngine.summary().kind === "engine" : browserEngineStatus().kind === "ready";
@@ -537,7 +564,7 @@ export function createBrowserHost(deps: BrowserHostDeps) {
   return {
     browserRuntime, browserLive, usedBrowserSessions, browserSweep, temporaryBrowserSessions, browserIdleMs: idleMs,
     currentBrowserSession, forgetTemporaryBrowser, myChromeAvailable, usesMyChrome, browserSessionSpec, browserIntegration,
-    browserReady, hostBrowserUsable, currentBrowserSpec, browserRunning, loginInput, browserSystemPrompt, signedInSitesRefusal, closeBrowser, browserEngineSwitched,
+    browserReady, hostBrowserUsable, currentBrowserSpec, xSessionTarget, xSessionRead, browserRunning, loginInput, browserSystemPrompt, signedInSitesRefusal, closeBrowser, browserEngineSwitched,
     eraseDeletedBrowser, engineSummary, engineBrowsers, browserAudience, browserSessionsOf, signedInSitesTarget, uploadPaths,
     eraseAudienceBrowsers, flushBrowsers,
   };

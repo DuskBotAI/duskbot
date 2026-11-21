@@ -25,7 +25,20 @@ export const READ_PAGES_DEFINITION = {
 
 type Reader = (url: string) => Promise<PageRead>;
 
+/** A refusal is about this reader only: a page on the computer dusk bot runs on is still reachable from a job there. */
+const LOCAL_PAGE_ROUTE = "This reader opens only public pages, but a page on this computer is still yours to check: a background job (background_job) runs on this computer and can read it on a schedule, and so can your shell or browser when you have them. Only a page on another machine of theirs needs that machine under Works on.";
+
+function onThisComputer(raw: string): boolean {
+  try {
+    const host = new URL(raw).hostname.replace(/^\[|\]$/g, "").toLowerCase();
+    return host === "localhost" || host.endsWith(".localhost") || host === "::1" || /^127\.\d+\.\d+\.\d+$/.test(host);
+  } catch {
+    return false;
+  }
+}
+
 function pageText(page: PageRead, offset: number, budget: number): string {
+  if (!page.ok && page.refused && onThisComputer(page.url)) return `## ${page.url}\nFailed: ${LOCAL_PAGE_ROUTE}`;
   if (!page.ok) return `## ${page.url}\nFailed: ${page.error}`;
   const head = `## ${page.title ? `${page.title} (${page.url})` : page.url}`;
   if (!page.text) return `${head}\nThe page has no readable text. It may need a browser to run its scripts.`;

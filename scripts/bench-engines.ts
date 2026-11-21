@@ -5,7 +5,7 @@
 // servers up) -> first model request -> model's first byte -> engine's first text -> first text frame on /api/events
 // (the bubble the app draws) -> turn.completed. Costs a few cents per run; never part of a test suite.
 //   node --experimental-strip-types scripts/bench-engines.ts [--engines claude,codex,grokBuild,opencode,openai]
-//     [--runs 5] [--mode cold,warm,idle] [--set quick|work|remind|mixed] [--effort low] [--server built|ts] [--idle-ms N] [--json FILE]
+//     [--runs 5] [--mode cold,warm,idle] [--set quick|work|remind|mixed|setup] [--effort low] [--server built|ts] [--idle-ms N] [--json FILE]
 //     [--keep] [--trace] [--dump-dir DIR] [--engine-args claude:--debug] [--claude-as gpt-6.2-sol]
 import { execFileSync, spawn, type ChildProcess } from "node:child_process";
 import { copyFileSync, closeSync, existsSync, mkdirSync, mkdtempSync, openSync, readFileSync, rmSync, writeFileSync, appendFileSync } from "node:fs";
@@ -69,6 +69,18 @@ const REMIND = [
   "Remind me on Friday at 6pm to pay the electricity bill.",
   "Remind me next Monday at 10am to book a dentist appointment.",
   "Every Sunday at 7pm remind me to plan my week.",
+];
+
+// the stress eval's slowest first words: watches, routines, charts and changes that run several tools before replying
+const SETUP = [
+  "Tell me when the price of the Sony WH-1000XM5 on amazon.in drops below ₹20,000.",
+  "Every Monday at 9am give me a summary of the week's top AI news in 5 bullets.",
+  "Let me know when https://example.com changes.",
+  "Every morning at 7:30 send me a weather summary for Pune and Mumbai.",
+  "Find the current prices of Bitcoin, Ethereum and Solana and give me a short table.",
+  "Remind me at 7 to call grandma.",
+  "Look up the population of Tokyo, Delhi and Shanghai and tell me which grew fastest since 2010.",
+  "Make it 9:30 instead, and skip Fridays.",
 ];
 
 // alternating quick questions and short asks the router counts as work (no tools needed): quick, work, quick, ...
@@ -346,6 +358,8 @@ async function runTurn(fixture: Fixture, events: ReturnType<typeof listen>, engi
   if (main[0]) { marks.modelRequest = main[0].at; marks.modelFirstByte = main[0].firstByte; }
   if (turnCalls.length) marks.firstModelRequest = Math.min(...turnCalls.map((call) => call.at));
   if (opts.trace) console.error(`${engine}/${mode}: ${stamps.map((stamp) => `${stamp.event}@${stamp.at - t0}`).join(" | ")} || calls ${turnCalls.map((call) => `${call.model}:${call.bytes}b@${call.at - t0}->${call.firstByte - t0} cache=${call.cacheRead}/${call.input}`).join(", ")}`);
+  const visible = [marks.bubble, marks.message].filter((at): at is number => at !== undefined);
+  if (visible.length) marks.firstVisible = Math.min(...visible);
   const relative: Record<string, number> = {};
   for (const [key, value] of Object.entries(marks)) relative[key] = value - t0;
   return { engine, mode, marks: relative, ok, text: text.slice(0, 80), modelCalls: turnCalls.length, promptBytes: main[0]?.bytes ?? 0, cacheRead: main[0]?.cacheRead ?? 0, inputTokens: main[0]?.input ?? 0 };
@@ -359,7 +373,8 @@ async function waitIdle(fixture: Fixture, botId: string) {
   }
 }
 
-const HOPS = ["accepted", "spawned", "ready", "firstModelRequest", "modelRequest", "modelFirstByte", "engineText", "bubble", "message", "done"] as const;
+const HOPS = ["accepted", "spawned", "ready", "firstModelRequest", "modelRequest", "modelFirstByte", "engineText", "bubble", "message", "firstVisible", "done"] as const;
+const p90 = (values: number[]) => { const sorted = values.filter(Number.isFinite).sort((a, b) => a - b); return sorted.length ? sorted[Math.min(sorted.length - 1, Math.ceil(sorted.length * 0.9) - 1)]! : NaN; };
 
 const proxy = await startProxy();
 const specs = engineSpecs(proxy.url, "/nonexistent");
@@ -390,7 +405,7 @@ try {
           await sleep(Number(opts["idle-ms"] ?? 10_000) + 2_500);
           await sleep(1_500);
         }
-        const pool = opts.set === "work" ? WORK : opts.set === "remind" ? REMIND : opts.set === "mixed" ? MIXED : QUESTIONS;
+        const pool = opts.set === "work" ? WORK : opts.set === "remind" ? REMIND : opts.set === "mixed" ? MIXED : opts.set === "setup" ? SETUP : QUESTIONS;
         const question = opts.question ?? pool[q++ % pool.length]!;
         const sample = await runTurn(fixture, events, spec.id, bot, threadId, mode, question);
         sample.question = question;
@@ -413,6 +428,8 @@ try {
       if (!set.length) continue;
       const row: Record<string, number> = { n: set.length };
       for (const hop of HOPS) row[hop] = round(median(set.map((sample) => sample.marks[hop] ?? NaN)));
+      row.firstVisibleP90 = round(p90(set.map((sample) => sample.marks.firstVisible ?? NaN)));
+      row.doneP90 = round(p90(set.map((sample) => sample.marks.done ?? NaN)));
       row.promptKB = Math.round(median(set.map((sample) => sample.promptBytes)) / 1024);
       row.cacheRead = median(set.map((sample) => sample.cacheRead));
       row.input = median(set.map((sample) => sample.inputTokens));

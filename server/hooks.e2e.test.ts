@@ -186,7 +186,7 @@ posixOnly("engine hooks e2e: a shell call that hit its time limit", () => {
     expect(reply.text).toContain("mdfind -name");
     const preview = await h.api("GET", `/api/bots/${bot.id}/system-prompt`);
     const shell = preview.body.sections.find((s: { id: string }) => s.id === "shell");
-    expect(shell?.text).toContain("Long-running shell commands");
+    expect(shell?.text).toContain("Long commands: a shell call stops after a default limit");
     const seen = JSON.parse(readFileSync(dump, "utf8"));
     expect(seen.systemPrompt).toContain(shell.text.trim());
     expect(seen.env.BASH_MAX_TIMEOUT_MS).toBe("600000");

@@ -249,7 +249,7 @@ describe("the stall handler", () => {
       cancelDirectTurnDispatch() {}, revokeInternalCapabilitiesForThread() {}, repeats: { settle() {} },
       botForThread: () => ({ id: "eli" }), activeRoutineRunForThread: () => undefined,
       runningTurnInstance: () => ({ adapter: { interruptTurn: async () => {} } }),
-      failedTurnTool: (name: string) => ({ name, ok: false }), reportIncident() {},
+      failedTurnRow: (name: string) => ({ name, ok: false }), reportIncident() {}, openAsks: { failed() {} },
       settleDirectFollowup: (generation: string | undefined, outcome: { text: string }) => settled.push({ generation, text: outcome.text }),
       finalizeDelegationWatch: (_threadId: string, _ok: boolean, _reply: string, why: string) => delegations.push(why),
       setTimeout: () => ({ unref() {} }),

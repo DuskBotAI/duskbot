@@ -1,7 +1,7 @@
 // Discord bots (https://discord.com/developers/docs, API v10). Messages arrive only over the Gateway websocket, so a
 // bot answers while this process runs. The privileged Message Content intent is not asked for: Discord still sends
 // the content of direct messages and of messages that mention the bot, which is all the bot answers.
-import type { ChoiceAck, InboundChoice, InboundFile, InboundMessage, MessengerTransport, OutboundFile } from "./bridge.ts";
+import type { ChoiceAck, InboundChoice, InboundFile, InboundMessage, InboundReaction, MessengerTransport, OutboundFile } from "./bridge.ts";
 import { splitMessage } from "./text.ts";
 
 export class DiscordError extends Error {
@@ -16,10 +16,10 @@ export class DiscordError extends Error {
 }
 
 export const DISCORD_TOKEN = /^[A-Za-z0-9_-]{20,40}\.[A-Za-z0-9_-]{4,10}\.[A-Za-z0-9_-]{20,64}$/;
-const GUILDS = 1 << 0, GUILD_MESSAGES = 1 << 9, DIRECT_MESSAGES = 1 << 12;
-export const DISCORD_INTENTS = GUILDS | GUILD_MESSAGES | DIRECT_MESSAGES;
-/** View Channel, Send Messages, Attach Files, Read Message History. */
-const INVITE_PERMISSIONS = String((1 << 10) | (1 << 11) | (1 << 15) | (1 << 16));
+const GUILDS = 1 << 0, GUILD_MESSAGES = 1 << 9, GUILD_MESSAGE_REACTIONS = 1 << 10, DIRECT_MESSAGES = 1 << 12, DIRECT_MESSAGE_REACTIONS = 1 << 13;
+export const DISCORD_INTENTS = GUILDS | GUILD_MESSAGES | GUILD_MESSAGE_REACTIONS | DIRECT_MESSAGES | DIRECT_MESSAGE_REACTIONS;
+/** Add Reactions, View Channel, Send Messages, Attach Files, Read Message History. */
+const INVITE_PERMISSIONS = String((1 << 6) | (1 << 10) | (1 << 11) | (1 << 15) | (1 << 16));
 const UPLOAD_MAX = 10 * 1024 * 1024;
 
 /** A test Discord on loopback (DUSK_DISCORD_API_URL, its gateway on the same origin); anything else is discord.com. */
@@ -117,6 +117,13 @@ export function readDiscordMessage(data: Record<string, unknown>, context: { bot
   };
 }
 
+/** A MESSAGE_REACTION_ADD dispatch as the bridge reads it, or null (the bot's own reactions, custom emoji). */
+export function readDiscordReaction(data: Record<string, unknown>, context: { botId: string; account: { id: string } }): InboundReaction | null {
+  const emoji = str(record(data.emoji).name);
+  if (!emoji || str(record(data.emoji).id) || !str(data.user_id) || data.user_id === context.account.id || !str(data.channel_id) || !str(data.message_id)) return null;
+  return { platform: "discord", botId: context.botId, chatId: str(data.channel_id), senderId: str(data.user_id), messageId: str(data.message_id), emoji };
+}
+
 /** A button press (INTERACTION_CREATE of a message component) as the bridge reads it, or null. */
 export function readDiscordInteraction(data: Record<string, unknown>, context: { botId: string }): InboundChoice | null {
   const user = record(data.user), member = record(record(data.member).user);
@@ -155,6 +162,9 @@ export function createDiscordTransport(api: DiscordApi, token: (botId: string) =
     async typing(botId, chatId) {
       await api.call(need(botId), "POST", `/channels/${encodeURIComponent(chatId)}/typing`);
     },
+    async react(botId, chatId, messageId, emoji) {
+      await api.call(need(botId), "PUT", `/channels/${encodeURIComponent(chatId)}/messages/${encodeURIComponent(messageId)}/reactions/${encodeURIComponent(emoji)}/@me`);
+    },
     async sendChoices(botId, chatId, text, buttons) {
       const rows: Array<typeof buttons> = [];
       for (let index = 0; index < buttons.length; index += 5) rows.push(buttons.slice(index, index + 5));
@@ -181,6 +191,7 @@ export interface DiscordGatewayDeps {
   token(): string | null;
   onMessage(data: Record<string, unknown>): void;
   onInteraction?(data: Record<string, unknown>): void;
+  onReaction?(data: Record<string, unknown>): void;
   onState(state: "connecting" | "online" | "error", error?: string): void;
   WebSocket?: typeof WebSocket;
   log?: (line: string) => void;
@@ -260,6 +271,7 @@ export function createDiscordGateway(deps: DiscordGatewayDeps) {
         } else if (payload.t === "RESUMED") { failures = 0; deps.onState("online"); }
         else if (payload.t === "MESSAGE_CREATE") deps.onMessage(data);
         else if (payload.t === "INTERACTION_CREATE") deps.onInteraction?.(data);
+        else if (payload.t === "MESSAGE_REACTION_ADD") deps.onReaction?.(data);
       }
     });
     ws.addEventListener("close", (event) => {

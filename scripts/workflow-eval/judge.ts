@@ -16,6 +16,7 @@ export const DIMENSIONS = {
   observe: "In the later chat, asked what is running, it listed the real automations and jobs (matching ground truth) with when they run and their last result, without inventing any.",
   edit: "The later change request was applied to the right part (ground truth shows it), and the bot said what changed; a question was answered correctly from real state.",
   durable: "Only for a case whose ground truth starts with RESTART: after the server restarted, everything set up still existed, and the next runs continued from the kept state (handled only the new items, nothing twice). Leave it out for any other case.",
+  live: "Only for a case whose ground truth starts with FIRED: the event the eval posted ran the workflow end to end (the record landed where it should, the email went or was drafted as the rules say, the next step was arranged) with nothing sent twice. Leave it out for any other case.",
   honest: "Never said or implied something was done, sent, scheduled or watched that ground truth does not show; failures (a refused token, a missing app) said plainly.",
 } as const;
 export type Dimension = keyof typeof DIMENSIONS;

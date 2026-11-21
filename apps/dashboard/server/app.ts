@@ -31,6 +31,7 @@ import { BillingError } from "./billing/service.ts";
 import { createSlackEdgeHost } from "./slack-edge/index.ts";
 import { createManagedRoutes } from "./clouds/managed-routes.ts";
 import { pagesRoutesFromEnv } from "./pages/routes.ts";
+import { xIndexRoutesFromEnv } from "./x-index/routes.ts";
 import { clientIp, rateIp } from "./client-ip.ts";
 import { stateBackend } from "./persistence/backend.ts";
 import type { ErrorReporter } from "../../../electron/error-report.mjs";
@@ -368,6 +369,7 @@ export function createDashboardApp(options: DashboardAppOptions) {
     fromCookie: req => { try { return account(req); } catch (error) { if (error instanceof AuthError && error.code === "signed_out") return null; throw error; } },
     fromBearer: req => auth.appSession(req)?.account ?? null } });
   const pagesRoutes = pagesRoutesFromEnv({ dataDir: options.dataDir, publicUrl, clouds: billing.clouds, now, fetch: options.fetch });
+  const xIndexRoutes = xIndexRoutesFromEnv({ dataDir: options.dataDir, publicUrl, clouds: billing.clouds, now, fetch: options.fetch, fromBearer: req => auth.appSession(req)?.account ?? null });
   auth.beforeAccountDelete(async (owner, body) => {
     try { await billing.beforeAccountDelete(owner, body); } catch (error) { if (error instanceof BillingError && error.code === "billing_active") throw new AuthError(409, "billing_active", { blockers: error.blockers }); throw error; }
   });
@@ -670,6 +672,7 @@ export function createDashboardApp(options: DashboardAppOptions) {
     const method = req.method ?? "GET";
     const url = new URL(req.url ?? "/", publicUrl);
     if (await pagesRoutes.handle(req, res, url)) return;
+    if (await xIndexRoutes.handle(req, res, url)) return;
     const path = url.pathname;
     const elsewhere = hostRedirect(req, url);
     if (elsewhere) return moved(res, 301, elsewhere);

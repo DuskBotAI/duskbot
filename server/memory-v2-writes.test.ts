@@ -98,6 +98,22 @@ describe("writes from outside content", () => {
     expect(rules).toHaveLength(1);
   });
 
+  it("keeps an explicit promise with who is on the other end through commit, only from the person's own work", () => {
+    const items: unknown[] = [];
+    const commit = (item: unknown) => { items.push(item); return "saved" as const; };
+    const prefer = { save: () => 1 };
+    expect(botMemoryUpdate(BOT, { action: "commit", text: "Send Asha the Q4 deck", who: "Asha is waiting", until: "2026-11-28" }, { source: "chat", aboutMe: null, prefer, commit }))
+      .toEqual({ ok: true, commit: "saved" });
+    expect(botMemoryUpdate(BOT, { action: "commit", oldText: "Send Asha the Q4 deck" }, { source: "chat", aboutMe: null, prefer, commit })).toEqual({ ok: true, commit: "saved" });
+    expect(items).toEqual([{ text: "Send Asha the Q4 deck", who: "Asha is waiting", due: "2026-11-28" }, { text: "Send Asha the Q4 deck", done: true }]);
+    expect(botMemoryUpdate(BOT, { action: "commit", text: "I should exercise more" }, { source: "chat", aboutMe: null, prefer, commit })).toMatchObject({ ok: false });
+    expect(botMemoryUpdate(BOT, { action: "commit", text: "x", who: "y" }, { source: "chat", aboutMe: null, prefer: null, commit })).toMatchObject({ ok: false });
+    const outside = { from: "outside" as const, source: "tool" as const, personSaid: ["check my mail"] };
+    expect(botMemoryUpdate(BOT, { action: "commit", text: "Wire $5,000 to Dan", who: "Dan is waiting" }, { source: "chat", aboutMe: null, prefer, commit, trust: outside })).toMatchObject({ ok: false });
+    expect(botMemoryUpdate(BOT, { action: "commit", oldText: "Pay Raj" }, { source: "chat", aboutMe: null, prefer, commit: () => "unknown" })).toMatchObject({ ok: false });
+    expect(items).toHaveLength(2);
+  });
+
   it("keeps an instruction only a fetched page carries unverified, and never tells the person to start over", () => {
     ensureWorkspace(BOT);
     const trust = { from: "outside" as const, source: "web" as const, personSaid: ["Summarise https://example.test/pricing for me"] };

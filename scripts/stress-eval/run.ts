@@ -17,7 +17,10 @@ import { gatewayFromEnv, type Gateway } from "../memory-eval/sandbox.ts";
 import { launchServer, type Engine, type StressServer } from "./server.ts";
 import { startTelegram } from "./telegram.ts";
 import { SCENARIOS_2 } from "./scenarios2.ts";
+import { SCENARIOS_3 } from "./scenarios3.ts";
+import { startSite } from "./site.ts";
 import { listen, type Frame } from "./events.ts";
+import { parallelism } from "./parallel.ts";
 import { SCENARIOS, type Scenario } from "./scenarios.ts";
 import { hardChecks, type Checked } from "./checks.ts";
 import { judge, type Verdict } from "./judge.ts";
@@ -40,7 +43,10 @@ const { values } = parseArgs({ options: {
   keep: { type: "boolean", default: false },
   /** how long the live check waits for a watch to report the changed page */
   "live-wait": { type: "string", default: "240000" },
-  /** base: round one's scenarios; new: scenarios2.ts; all; matrix: the 60 the engine matrix runs */
+  /** the agent-browser binary for scenarios with the built-in browser, and the Chrome it starts (headless) */
+  "browser-bin": { type: "string", default: process.env.STRESS_AGENT_BROWSER ?? "" },
+  "chrome-bin": { type: "string", default: process.env.STRESS_CHROME ?? "" },
+  /** base: round one's scenarios; new: scenarios2.ts; cu: scenarios3.ts (computer and developer work); all; matrix: the 60 the engine matrix runs */
   set: { type: "string", default: "base" },
   engine: { type: "string", default: "openai-compat" },
   /** context.compactAt for every server, so long chats fold within a test */
@@ -65,16 +71,18 @@ const MATRIX = ["biz-sales-followup", "biz-sales-leads-csv", "biz-sales-pitch-co
   "ref-correction-number", "interrupt-stop", "interrupt-change", "burst-messages", "tone-hi", "tone-thanks", "long-business-plan", "long-ppt-outline",
   "x-inbox-chief", "x-receipt-adjust", "x-price-guard", "x-receivables", "x-book-approval", "bw-inbox-triage", "bw-outreach-approve", "bw-hiring-screen",
   "mt-three-in-one", "mt-rapid-separate", "bg-tg-urgent", "ca-tg-connect", "pr-spend-csv"];
-const ALL = [...SCENARIOS, ...SCENARIOS_2];
-const chosen = values.set === "new" ? SCENARIOS_2 : values.set === "all" ? ALL : values.set === "matrix" ? MATRIX.map((id) => ALL.find((one) => one.id === id)!) : SCENARIOS;
+const ALL = [...SCENARIOS, ...SCENARIOS_2, ...SCENARIOS_3];
+const chosen = values.set === "new" ? SCENARIOS_2 : values.set === "cu" ? SCENARIOS_3 : values.set === "all" ? ALL : values.set === "matrix" ? MATRIX.map((id) => ALL.find((one) => one.id === id)!) : SCENARIOS;
 if (chosen.some((one) => !one)) throw new Error("a matrix id names no scenario");
 const engine = values.engine as Engine;
 if (!["openai-compat", "codex", "opencode"].includes(engine)) throw new Error("--engine is openai-compat, codex or opencode");
 const telegram = await startTelegram();
+const site = await startSite();
 for (let run = 1; run <= Number(values.repeat); run++) {
   for (const scenario of chosen) if (!only || only.has(scenario.id)) jobs.push({ key: `${scenario.id}#${run}`, run, scenario });
 }
 jobs = jobs.filter((job) => !done.has(job.key));
+if (jobs.some((job) => job.scenario.browser) && !values["browser-bin"]) throw new Error("browser scenarios need --browser-bin (or STRESS_AGENT_BROWSER): an agent-browser binary");
 if (Number(values.limit) > 0) jobs = jobs.slice(0, Number(values.limit));
 log(`${jobs.length} conversations to run (${done.size} already done)`);
 
@@ -156,6 +164,7 @@ async function upload(base: string, name: string): Promise<string> {
 
 const TERMINAL = ["needs-input", "completed", "failed", "stalled", "idle"];
 
+const JOB_WAIT_MS = 180_000;
 async function waitIdle(api: ReturnType<typeof client>, threadId: string, timeoutMs: number): Promise<string> {
   const deadline = Date.now() + timeoutMs;
   await sleep(800);
@@ -179,6 +188,10 @@ async function converse(srv: StressServer, frames: Frame[], job: { key: string; 
   mainThreads.set(bot.id, bot.threadId);
   const tgToken = `${randomInt(7_000_000, 7_999_999)}:AAH${randomBytes(24).toString("base64url").slice(0, 32)}`;
   if (scenario.browser) await api.call("PATCH", `/api/bots/${bot.id}`, { computer: "browser", browser: true });
+  // an engine with its own shell works in its sandbox here: workspace writes, no network, never the whole disk
+  if (engine !== "openai-compat") await api.call("PATCH", `/api/bots/${bot.id}`, { approvalMode: "auto", ...(scenario.setup === "workspace" && !scenario.browser ? { computer: null } : {}) });
+  const siteId = randomUUID().slice(0, 8);
+  const siteBase = scenario.site ? site.open(siteId) : "";
   let threadId = await api.newThread(bot.id);
   const threads = [threadId];
   const timings: Array<TurnTiming & { threadId: string; state?: string; totalMs?: number }> = [];
@@ -195,7 +208,7 @@ async function converse(srv: StressServer, frames: Frame[], job: { key: string; 
       threadId = await api.newThread(bot.id);
       threads.push(threadId);
     }
-    const parts = [turn.say.replaceAll("{{PAGE}}", `${pageBase}${pagePath}`).replaceAll("{{TG_TOKEN}}", tgToken)];
+    const parts = [turn.say.replaceAll("{{PAGE}}", `${pageBase}${pagePath}`).replaceAll("{{TG_TOKEN}}", tgToken).replaceAll("{{SITE}}", siteBase)];
     for (const name of turn.attach ?? []) parts.push(await upload(srv.url, name));
     const sentAt = Date.now();
     await api.call("POST", `/api/bots/${bot.id}/messages`, { text: parts.join("\n\n"), threadId, sendId: randomUUID() });
@@ -282,7 +295,14 @@ async function converse(srv: StressServer, frames: Frame[], job: { key: string; 
     pages.delete(pagePath);
   }
   const threadLogs: ThreadLog[] = [];
-  if (!live) for (const id of await botThreads(api, bot.id)) if (!threads.includes(id)) threads.push(id);
+  if (!live) {
+    for (const id of await botThreads(api, bot.id)) if (!threads.includes(id)) threads.push(id);
+    // jobs the conversation started run on after its own turn: judge what they wrote, and the main thread they report back to
+    if (threads.length > 1) {
+      await Promise.all(threads.slice(1).map((id) => waitIdle(api, id, JOB_WAIT_MS)));
+      await waitIdle(api, threads[0]!, JOB_WAIT_MS);
+    }
+  }
   for (const id of threads) {
     const messages = (await api.call("GET", `/api/threads/${id}/messages?limit=300`)).messages as Message[];
     if (messages.length || id === threads[0]) threadLogs.push({ threadId: id, messages });
@@ -318,13 +338,13 @@ async function converse(srv: StressServer, frames: Frame[], job: { key: string; 
   const memory = await api.call("GET", `/api/bots/${bot.id}/memory`).then((m) => String(m.text ?? "")).catch(() => "");
   const aboutMe = await api.aboutMe().catch(() => "");
   const checked: Checked = await hardChecks(srv.url, threadLogs, timings, states, runtimeErrors);
-  const verdict: Verdict = await judge(gatewayFromEnv(values.judge!), scenario, threadLogs, { tools, routines, waits, jobs: jobFacts, webhooks, compactions, ...(liveCheck ? { liveCheck } : {}), memory: memory.slice(-1500), aboutMe: aboutMe.slice(-800), checked });
+  const verdict: Verdict = await judge(gatewayFromEnv(values.judge!), scenario, threadLogs, { tools, routines, waits, jobs: jobFacts, webhooks, compactions, ...(liveCheck ? { liveCheck } : {}), shell: engine !== "openai-compat", ...(scenario.site ? { site: site.log(siteId) } : {}), memory: memory.slice(-1500), aboutMe: aboutMe.slice(-800), checked });
   return {
     key: job.key, id: scenario.id, run: job.run, persona: scenario.persona, shape: scenario.shape, model: values.model, at: new Date().toISOString(),
     wallMs: Date.now() - started, states, timings: timings.map(({ say, firstVisibleMs, firstTextMs, totalMs, state }) => ({ say: say.slice(0, 120), firstVisibleMs, firstTextMs, totalMs, state })),
-    engine, tools, runtimeErrors, routines, waits, jobs: jobFacts, webhooks, compactions, ...(liveCheck ? { liveCheck } : {}), checked, verdict, dataDir: srv.dataDir, memory: memory.slice(-1500), aboutMe: aboutMe.slice(-800),
+    engine, tools, parallel: parallelism(frames, threads), runtimeErrors, ...(scenario.site ? { site: site.log(siteId) } : {}), routines, waits, jobs: jobFacts, webhooks, compactions, ...(liveCheck ? { liveCheck } : {}), checked, verdict, dataDir: srv.dataDir, memory: memory.slice(-1500), aboutMe: aboutMe.slice(-800),
     transcript: threadLogs.map((t) => t.messages.filter((m) => m.kind === "text" || (m.role === "bot" && m.kind !== "activity" && m.kind !== "digest")).map((m) => ({
-      role: m.role, kind: m.kind, text: (m.text ?? "").slice(0, 4_000), ...(m.document ? { document: { title: m.document.title, kind: m.document.kind, bytes: m.document.bytes, status: m.documentRead?.status } } : {}), attachments: (m.attachments ?? []).map((a) => ({ kind: a.kind, name: a.name ?? a.path.split("/").at(-1) })),
+      role: m.role, kind: m.kind, text: (m.text ?? "").slice(0, 4_000), ...(m.card ? { card: m.card } : {}), ...(m.document ? { document: { title: m.document.title, kind: m.document.kind, bytes: m.document.bytes, status: m.documentRead?.status, text: m.documentRead?.text.slice(0, 2_500) } } : {}), attachments: (m.attachments ?? []).map((a) => ({ kind: a.kind, name: a.name ?? a.path.split("/").at(-1) })),
     }))),
   };
 }
@@ -344,8 +364,15 @@ async function worker(index: number): Promise<void> {
     const label = `w${index}-${Date.now()}`;
     let srv: StressServer;
     try {
-      srv = await launchServer(values.repo!, values.tmp!, gateway, [values.model!],
-        values["compact-at"] ? { context: { compactAt: Number(values["compact-at"]) } } : {}, undefined, { engine, env: { DUSK_TELEGRAM_API_URL: telegram.origin } });
+      srv = await launchServer(values.repo!, values.tmp!, gateway, [values.model!], {
+        ...(values["compact-at"] ? { context: { compactAt: Number(values["compact-at"]) } } : {}),
+        browserEngine: { egress: { allow: [`127.0.0.1:${site.port}`] } },
+      }, undefined, { engine, env: {
+        DUSK_TELEGRAM_API_URL: telegram.origin,
+        DUSK_PROBE_LOOPBACK_ORIGIN: pageBase,
+        ...(values["browser-bin"] ? { DUSK_AGENT_BROWSER_PATH: values["browser-bin"] } : {}),
+        ...(values["chrome-bin"] ? { AGENT_BROWSER_EXECUTABLE_PATH: values["chrome-bin"] } : {}),
+      } });
     } catch (error) {
       log("server failed to start", (error as Error).message);
       jobs.unshift(...batch);
@@ -380,4 +407,5 @@ async function worker(index: number): Promise<void> {
 await Promise.all(Array.from({ length: Number(values.servers) }, (_, i) => worker(i)));
 log("all done; results in", resultsPath, readdirSync(out).join(", "));
 pageServer.close();
+await site.close();
 await telegram.close();

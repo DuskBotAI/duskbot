@@ -40,6 +40,16 @@ describe("web tools by engine", () => {
 describe("read_pages", () => {
   const page = (url: string, text: string, extra: Partial<PageRead> = {}): PageRead => ({ ok: true, url, title: "T", text, cut: false, ...extra } as PageRead);
 
+  it("answers a page on this computer with the route that reaches it, never a dead end", async () => {
+    const read = async (url: string): Promise<PageRead> => ({ ok: false, url, error: "127.0.0.1 points at this computer or a private network, which waits never check. Use a page on the public web.", refused: true });
+    const { text, isError } = await callReadPages({ urls: ["http://127.0.0.1:8080/order/1"] }, read);
+    expect(isError).toBe(true);
+    expect(text).toContain("a background job (background_job) runs on this computer and can read it");
+    expect(text).not.toContain("Use a page on the public web");
+    const other = await callReadPages({ urls: ["http://169.254.169.254/latest/meta-data/", "http://10.0.0.5/admin"] }, read);
+    expect(other.text, "a private network or cloud metadata address stays a plain refusal").not.toContain("background_job");
+  });
+
   it("reads pages concurrently, once each, and cuts a long one with the exact call that reads on", async () => {
     const read = vi.fn(async (url: string) => page(url, url.endsWith("long") ? "a".repeat(40_000) : "short text"));
     const { text, isError } = await callReadPages({ urls: ["https://x.org/long", "https://x.org/short", "https://x.org/short"] }, read);

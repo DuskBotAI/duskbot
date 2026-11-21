@@ -75,7 +75,7 @@ export async function startFakeTelegram(options: { token: string; bot?: { id: nu
         return ok({ message_id: nextMessage++, chat: { id: params.chat_id }, text: params.text });
       }
       case "sendPhoto": case "sendDocument": case "sendVoice": case "sendAudio": return ok({ message_id: nextMessage++ });
-      case "sendChatAction": case "answerCallbackQuery": case "editMessageText": case "editMessageReplyMarkup": return ok(true);
+      case "sendChatAction": case "setMessageReaction": case "answerCallbackQuery": case "editMessageText": case "editMessageReplyMarkup": return ok(true);
       default: return reply(400, { ok: false, error_code: 400, description: `Bad Request: method ${method} not faked` });
     }
   });

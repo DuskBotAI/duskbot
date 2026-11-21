@@ -13,7 +13,7 @@ async function fixture(t, options = {}) {
   const f = { now: 1_800_000_000_000, requests: [], browsers: [], states: [], saved: null, approved: false, revoked: false,
     sessionStatus: 200, invalidIdentity: false, invalidEntitlement: false, badUrl: false, failWrite: false, slowToken: null,
     entitlement: { plan: "free", status: "inactive", expiresAt: null, version: 0 }, timer: null, delay: null, cloud: undefined, expiresIn: 600,
-    disk: { status: 404, body: "<!doctype html>not here" }, x: { status: 404, body: { error: "unsupported" } }, pages: { status: 404, body: { error: "unsupported" } }, sessionPage: null, sessionError: null, tokenPage: null, publicConfig: { status: 404, body: { error: "not_found" } },
+    disk: { status: 404, body: "<!doctype html>not here" }, x: { status: 404, body: { error: "unsupported" } }, pages: { status: 404, body: { error: "unsupported" } }, xIndex: { status: 404, body: { error: "not_found" } }, sessionPage: null, sessionError: null, tokenPage: null, publicConfig: { status: 404, body: { error: "not_found" } },
     offer: undefined, checkout: { status: 404, body: "<!doctype html>not here" }, interest: { status: 200, body: { ok: true } },
     upgradePreview: { status: 404, body: { error: "not_found" } }, upgrade: { status: 404, body: { error: "not_found" } }, teams: undefined, teamPairing: { status: 404, body: { error: "not_found" } }, moved: { status: 404, body: { error: "not_found" } }, moveStatus: { status: 404, body: { error: "not_found" } },
     // An Admin before the app's Cancel and Keep: neither route, and the session's `clouds` absent.
@@ -41,6 +41,7 @@ async function fixture(t, options = {}) {
     if (req.url === "/api/cloud/desktop/services/x" && req.headers.authorization === `Bearer ${accessToken}`) return send(f.x.status, f.x.body);
     if (/^\/api\/cloud\/desktop\/teams\/[^/]+\/pairing$/.test(req.url) && req.method === "POST" && req.headers.authorization === `Bearer ${accessToken}`) return send(f.teamPairing.status, f.teamPairing.body);
     if (req.url === "/api/cloud/desktop/services/pages" && req.headers.authorization === `Bearer ${accessToken}`) return send(f.pages.status, f.pages.body);
+    if (req.url === "/api/cloud/desktop/services/x-index" && req.headers.authorization === `Bearer ${accessToken}`) return send(f.xIndex.status, f.xIndex.body);
     if (req.url === "/api/cloud/desktop/moved" && req.method === "POST" && req.headers.authorization === `Bearer ${accessToken}`) return send(f.moved.status, f.moved.body);
     if (req.url === "/api/cloud/desktop/move-status" && req.method === "POST" && req.headers.authorization === `Bearer ${accessToken}`) return send(f.moveStatus.status, f.moveStatus.body);
     if (req.url === "/api/cloud/desktop/feedback" && req.method === "POST" && req.headers.authorization === `Bearer ${accessToken}`) return send(f.feedback.status, f.feedback.body);
@@ -811,6 +812,20 @@ test("pages access: this sign-in's own pages token on any plan, null without the
   f.pages = { status: 200, body: { cloudContractVersion: 1, url: "https://elsewhere.example.test/api/cloud/pages/token", token } }; await assert.rejects(f.client.pagesAccess(), /Invalid/);
   f.pages = { status: 200, body: { cloudContractVersion: 1, url, token: `dusk_xd_${"a".repeat(43)}` } }; await assert.rejects(f.client.pagesAccess(), /Invalid/);
   f.pages = { status: 500, body: { error: "down" } }; await assert.rejects(f.client.pagesAccess());
+});
+
+test("X index access: this sign-in's own index token on any plan, null without the service, never a URL off the Cloud's origin or path", async t => {
+  const f = await fixture(t);
+  assert.equal(await f.client.xIndexAccess(), null);
+  await f.connect();
+  const token = `dusk_xi_${"a".repeat(43)}`, url = `${f.origin}/api/cloud/x-index`;
+  f.xIndex = { status: 200, body: { cloudContractVersion: 1, url, token } };
+  assert.deepEqual(await f.client.xIndexAccess(), { url, token });
+  assert.ok(f.requests.some(r => r.route === "/api/cloud/desktop/services/x-index" && r.method === "POST" && r.token === `Bearer ${accessToken}`));
+  f.xIndex = { status: 404, body: { error: "not_found" } }; assert.equal(await f.client.xIndexAccess(), null);
+  f.xIndex = { status: 200, body: { cloudContractVersion: 1, url: "https://elsewhere.example.test/api/cloud/x-index", token } }; await assert.rejects(f.client.xIndexAccess(), /Invalid/);
+  f.xIndex = { status: 200, body: { cloudContractVersion: 1, url: `${f.origin}/api/cloud/pages/token`, token } }; await assert.rejects(f.client.xIndexAccess(), /Invalid/);
+  f.xIndex = { status: 200, body: { cloudContractVersion: 1, url, token: `dusk_pd_${"a".repeat(43)}` } }; await assert.rejects(f.client.xIndexAccess(), /Invalid/);
 });
 
 test("My Cloud's line in the server menus says what is true now: the trial's end while it is ahead, always on while paid for, stopped when not, nothing when unknown", () => {

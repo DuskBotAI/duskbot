@@ -181,7 +181,7 @@ export function verificationServerEnvironment(parentEnv: NodeJS.ProcessEnv, data
   // One log line per browser call and preview frame.
   if (parentEnv.DUSK_BROWSER_TIMING === "1") childEnv.DUSK_BROWSER_TIMING = "1";
   // Warm summaries' minutes as seconds (server/warm-summary.ts), and the switch that turns them off.
-  for (const key of ["DUSK_WARM_SUMMARY_TIME_SCALE", "DUSK_WARM_SUMMARY", "DUSK_CODEX_WARM"]) if (parentEnv[key]) childEnv[key] = parentEnv[key];
+  for (const key of ["DUSK_WARM_SUMMARY_TIME_SCALE", "DUSK_WARM_SUMMARY", "DUSK_CODEX_WARM", "DUSK_QUOTA_SWITCH"]) if (parentEnv[key]) childEnv[key] = parentEnv[key];
   // The built-in voice's downloaded models, so a fixture with a throwaway home does not fetch them again.
   if (parentEnv.DUSK_VOICE_MODELS_DIR) childEnv.DUSK_VOICE_MODELS_DIR = parentEnv.DUSK_VOICE_MODELS_DIR;
   // A loopback fake only: the key never reaches a real provider.

@@ -28,6 +28,8 @@ const schema = z.object({
   offsets: z.record(z.string(), z.number()),
   knocks: z.array(knockSchema),
   offers: z.array(offerSchema).default([]),
+  /** Group conversation keys whose unaddressed lines the bot may read as context when it is next addressed (opt-in). */
+  listening: z.array(z.string()).default([]),
 });
 export type MessengerConversation = z.infer<typeof conversationSchema>;
 export type MessengerPending = z.infer<typeof pendingSchema>;
@@ -41,7 +43,7 @@ const MAX_OFFERS = 300;
 
 export class MessengerState {
   private readonly path: string;
-  private data: Data = { version: 1, conversations: {}, pending: [], offsets: {}, knocks: [], offers: [] };
+  private data: Data = { version: 1, conversations: {}, pending: [], offsets: {}, knocks: [], offers: [], listening: [] };
 
   constructor(dataDir: string) {
     mkdirSync(dataDir, { recursive: true });
@@ -72,6 +74,11 @@ export class MessengerState {
 
   isMessengerThread(threadId: string): boolean {
     return Object.values(this.data.conversations).some((one) => one.threadId === threadId);
+  }
+
+  /** The chat app a thread's conversation lives in, when it is one. */
+  platformOf(threadId: string): MessengerConversation["platform"] | null {
+    return Object.values(this.data.conversations).find((one) => one.threadId === threadId)?.platform ?? null;
   }
 
   pending(): MessengerPending[] {
@@ -135,6 +142,16 @@ export class MessengerState {
     this.save();
   }
 
+  listens(key: string): boolean {
+    return this.data.listening.includes(key);
+  }
+
+  setListening(key: string, on: boolean): void {
+    if (this.listens(key) === on) return;
+    this.data.listening = on ? [...this.data.listening, key].slice(-MAX_PENDING) : this.data.listening.filter((one) => one !== key);
+    this.save();
+  }
+
   forgetKnock(botId: string, platformName: z.infer<typeof platform>, id: string): void {
     this.data.knocks = this.data.knocks.filter((one) => !(one.botId === botId && one.platform === platformName && one.id === id));
     this.save();
@@ -153,6 +170,7 @@ export class MessengerState {
     this.data.pending = this.data.pending.filter((one) => !mine(one));
     this.data.knocks = this.data.knocks.filter((one) => !mine(one));
     this.data.offers = this.data.offers.filter((one) => !mine(one));
+    this.data.listening = this.data.listening.filter((key) => !(platformName ? key.startsWith(`${platformName}:${botId}:`) : key.split(":")[1] === botId));
     if (!platformName || platformName === "telegram") delete this.data.offsets[botId];
     this.save();
   }

@@ -37,6 +37,11 @@ export function ranTool(name: string, rawArgs?: string): string {
 
 export const schedulesWork = (tool: string): boolean => SCHEDULES.test(tool) && !/(?:^|_)(?:delete|cancel|list|remove)_/i.test(tool);
 
+// dusk bot's own change tools: their answer is the app's record of what applied or waits on a card, so there is
+// nothing for a later call to read back
+const SELF_CONFIRMING = /^(?:propose_(?:profile|model|skill|team|bot)\w*|memory_update|create_bot|skill_manage)$/;
+const selfConfirming = (tool: string) => SELF_CONFIRMING.test(tool.split("__").at(-1)!);
+
 const OPEN_ITEM = /^\s*(?:[-*+]|\d+[.)])\s+\[ \]\s+(.+)$/gm;
 const DONE_ITEM = /^\s*(?:[-*+]|\d+[.)])\s+\[[xX✓]\]\s+\S/gm;
 // an item that waits on someone else is not the bot's to do now
@@ -70,7 +75,7 @@ export function claimsDone(text: string): boolean {
 /** A change to something outside the chat whose result a later call could read back: an app or server tool, not a send
  * (a sent message is delivered), not a scheduling tool and not the engine's own file or shell tools. */
 export function readBackWrite(tool: string): boolean {
-  return /__|^[A-Z][A-Z0-9]*_[A-Z0-9_]+$/.test(tool) && !isOutboundTool(tool) && !schedulesWork(tool);
+  return /__|^[A-Z][A-Z0-9]*_[A-Z0-9_]+$/.test(tool) && !isOutboundTool(tool) && !schedulesWork(tool) && !selfConfirming(tool);
 }
 
 /** Where one of the person's asks in a conversation stands. Open is the only state the harness acts on. */
@@ -193,7 +198,7 @@ export class TurnGates {
     this.effectful += 1;
     const tool = ranTool(name, rawArgs);
     if (schedulesWork(tool)) { this.scheduled = true; return; }
-    const readable = this.lookupFor(tool);
+    const readable = !selfConfirming(tool) && this.lookupFor(tool);
     this.unconfirmed = bareAck(text) && readable ? title : null;
     this.unread = readable && !isOutboundTool(tool) ? title : null;
   }

@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto"; import { shapeNewRoutine } from "./routine-shape.ts"; import { duplicateOf, duplicateRefusal, guardAgainst, jitter } from "./routine-bot-guard.ts"; const withJitter = (changes: RoutineRequestChanges, current: Routine): RoutineRequestChanges => (changes.schedule ? { ...changes, schedule: jitter(changes.schedule, changes.name ?? current.name, changes.instructions ?? current.prompt) } : changes); import { cleanProbe } from "./routine-quiet.ts"; import { serverLine } from "./server-lines.ts";
+import { createHash } from "node:crypto"; import { shapeNewRoutine } from "./routine-shape.ts"; import { duplicateOf, duplicateRefusal, guardAgainst, jitter } from "./routine-bot-guard.ts"; const withJitter = (changes: RoutineRequestChanges, current: Routine): RoutineRequestChanges => (changes.schedule ? { ...changes, schedule: jitter(changes.schedule, changes.name ?? current.name, changes.instructions ?? current.prompt) } : changes); import { cleanProbe } from "./routine-quiet.ts"; import { serverLine } from "./server-lines.ts"; import { plainCronWhen } from "./routine-cron-words.ts";
 import { isDeepStrictEqual } from "node:util";
 
 import { cronScheduleLabel } from "../shared/cron-label.ts";
@@ -9,7 +9,7 @@ import { UNDO_STALE, type DirectApply, type DirectApplyCheck } from "./direct-ap
 import { redactSecretsInText } from "./redact.ts";
 import { parseJson, schemaIssue, type JsonObject, type JsonValue } from "./schema.ts";
 import {
-  ENGINE_ID, intervalWindowMinutes, jsonObjectSchema, MAX_DATE_MS, ROUTINE_ID, routineProposalSchema, routineRequestCardDataSchema, storedScheduleSchema,
+  cronRule, ENGINE_ID, intervalWindowMinutes, namedTime, jsonObjectSchema, MAX_DATE_MS, ROUTINE_ID, routineProposalSchema, routineRequestCardDataSchema, storedScheduleSchema,
   storedSnapshotSchema, storedUndoSchema, TIME, type ParsedRoutineProposal, type RoutineToolChangesInput, type RoutineToolDefinitionInput,
   type RoutineToolScheduleInput,
 } from "./routine-request-schemas.ts";
@@ -275,9 +275,9 @@ function rfc3339Instant(value: string, offsetMessage: string): number {
 }
 
 function normalizeSchedule(schedule: RoutineToolScheduleInput, now: number, ownEngine?: string): RoutineRequestSchedule {
-  if (schedule.type === "cron") {
+  if (schedule.type === "cron" || (schedule.type === "weekly" && schedule.timeZone !== undefined)) {
     try {
-      return normalizeCronSchedule(schedule, now);
+      return normalizeCronSchedule(cronRule(schedule), now);
     } catch (error) {
       throw new RoutineRequestError(error instanceof Error ? error.message : "Invalid cron schedule");
     }
@@ -418,7 +418,7 @@ function normalizedOperation(
   if (validated.action === "create") {
     const operation: Extract<RoutineRequestOperation, { action: "create" }> = {
       action: "create",
-      routine: guardAgainst(normalizeDefinition(validated.routine, now, ownEngine), manager.listRoutines().filter((one) => one.botId === (validated.forBot?.botId ?? botId)), now),
+      routine: guardAgainst(normalizeDefinition(validated.routine, now, ownEngine), manager.listRoutines().filter((one) => one.botId === (validated.forBot?.botId ?? botId)), now, namedTime(validated.routine.schedule)),
     };
     if (validated.forBot) operation.forBot = validated.forBot; const twin = duplicateOf(manager.listRoutines(), validated.forBot?.botId ?? botId, operation.routine); if (twin) throw new RoutineRequestError(duplicateRefusal(twin), 409);
     return operation;
@@ -433,7 +433,7 @@ function normalizedOperation(
       action: "update",
       routineId: id,
       expectedUpdatedAt: current.updatedAt,
-      changes: withJitter(normalizeChanges(validated.changes, now, ownEngine), current),
+      changes: namedTime(validated.changes.schedule) ? normalizeChanges(validated.changes, now, ownEngine) : withJitter(normalizeChanges(validated.changes, now, ownEngine), current),
       ...(validated.forBot ? { forBot: validated.forBot } : {}),
     };
   }
@@ -593,7 +593,7 @@ export function scheduleText(schedule: RoutineRequestSchedule, timeZone: string,
 
 export function consequenceLine(schedule: RoutineRequestSchedule, continuity = false): string {
   const session = continuity ? "each run starts a fresh session with the previous run's report" : "each run starts a fresh session";
-  if (schedule.type === "cron") return `Will run at matching calendar times, ${plainTimeZone(schedule.timeZone)}; ${session}.`;
+  if (schedule.type === "cron") return `${plainCronWhen(schedule) ?? `Will run at matching calendar times, ${plainTimeZone(schedule.timeZone)}`}; ${session}.`;
   if (schedule.type === "once") return "Will run once; that run starts a fresh session.";
   if (schedule.type === "limit_reset") {
     return schedule.repeat === "every_reset"

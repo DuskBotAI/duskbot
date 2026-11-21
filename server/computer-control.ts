@@ -184,3 +184,27 @@ export class ComputerControl {
     return snapshot;
   }
 }
+
+export function createControlSilenceSweeper(
+  control: Pick<ComputerControl, "hasTimedLease" | "releaseSilent">,
+  silenceMs: number,
+  onRelease: (key: string) => void,
+): () => void {
+  const sweepMs = Math.min(CONTROL_SILENCE_SWEEP_MS, Math.ceil(silenceMs / 5));
+  let timer: ReturnType<typeof setInterval> | null = null;
+  const sync = (): void => {
+    if (control.hasTimedLease()) {
+      if (timer) return;
+      timer = setInterval(() => {
+        for (const key of control.releaseSilent(silenceMs)) onRelease(key);
+        sync();
+      }, sweepMs);
+      timer.unref();
+      return;
+    }
+    if (!timer) return;
+    clearInterval(timer);
+    timer = null;
+  };
+  return sync;
+}

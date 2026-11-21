@@ -22,13 +22,15 @@ export const toolIntervalWindowSchema = z.object({
 }).strict();
 
 export const routineToolScheduleSchema = z.discriminatedUnion("type", [
-  z.object({ type: z.literal("cron"), expression: z.string().max(256), timeZone: z.string().max(128) }).strict(),
+  z.object({ type: z.literal("cron"), expression: z.string().max(256), timeZone: z.string().max(128), exact: z.boolean().optional() }).strict(),
   z.object({ type: z.literal("limit_reset"), engine: z.string().max(128).optional(), repeat: z.enum(["once", "every_reset"]).optional() }).strict(),
   z.object({ type: z.literal("once"), at: z.string().max(64) }).strict(),
   z.object({
     type: z.literal("weekly"),
     time: z.string().max(5),
     weekdays: z.array(z.string().max(9)).min(1).max(7),
+    timeZone: z.string().max(128).optional(),
+    exact: z.boolean().optional(),
   }).strict(),
   z.object({
     type: z.literal("interval"),
@@ -39,6 +41,26 @@ export const routineToolScheduleSchema = z.discriminatedUnion("type", [
     endsAt: z.string().max(64).nullable().optional(),
   }).strict(),
 ]);
+
+type ToolSchedule = z.infer<typeof routineToolScheduleSchema>;
+const CRON_DAY: Record<string, number> = { sunday: 0, monday: 1, tuesday: 2, wednesday: 3, thursday: 4, friday: 5, saturday: 6 };
+
+/** The cron rule a schedule runs by: a weekly time in a zone the person named stays a rule in that zone, so it follows its clock changes. */
+export function cronRule(schedule: Extract<ToolSchedule, { type: "cron" | "weekly" }>): { type: "cron"; expression: string; timeZone: unknown } {
+  if (schedule.type === "cron") return { type: "cron", expression: schedule.expression, timeZone: schedule.timeZone };
+  if (!TIME.test(schedule.time)) throw new Error("Weekly schedule time must use 24-hour HH:MM");
+  const days = [...new Set(schedule.weekdays.map((day) => {
+    const number = CRON_DAY[day.toLowerCase()];
+    if (number === undefined) throw new Error(`Unsupported weekday: ${day}`);
+    return number;
+  }))].sort();
+  const [hour, minute] = schedule.time.split(":").map(Number);
+  return { type: "cron", expression: `${minute} ${hour} * * ${days.length === 7 ? "*" : days.join(",")}`, timeZone: schedule.timeZone };
+}
+
+/** A time the person named stays to the minute; only one the bot picked moves off the hour. */
+export const namedTime = (schedule: ToolSchedule | undefined): boolean =>
+  schedule?.type === "cron" ? schedule.exact === true : schedule?.type === "weekly" && (schedule.exact === true || schedule.timeZone !== undefined);
 
 const probeSchema = z.object({
   kind: z.enum(["page", "feed", "price", "script"]),

@@ -31,6 +31,13 @@ data folder; results hold transcripts, so keep `--out` outside the repo.
   the bot to speak by itself. `--set matrix` is the 60 conversations the engine matrix runs, and `--engine codex`
   (the gateway as Codex's Company endpoint) or `--engine opencode --model opencode/big-pickle` (Zen's free models, no
   key, needs the network) swap the engine; those servers set `DUSK_ALLOW_REAL_ENGINES=1`.
+- **Computer and developer work** (`scenarios3.ts`, `--set cu`): the headless browser on a site the eval serves
+  (`site.ts`: a support form that rejects a badly written phone once, a three-page shop with a cart, a CSV report, a
+  JSON API) and, with `--engine codex`, writing, running and testing code in the bot's own folder (Works on Auto,
+  approval Auto, so Codex stays in its sandbox). The site's record of form posts, cart and downloads goes to the judge.
+  Browser scenarios need `--browser-bin` (or `STRESS_AGENT_BROWSER`) and may name Chrome with `--chrome-bin`
+  (`STRESS_CHROME`); each server gets a short socket folder under /tmp for agent-browser. `rejudge.ts <results.jsonl>
+  [--all]` grades stored conversations again with the current judge.
 - **Hard checks** (`checks.ts`): every file and document a bot shared opens, web links load, no tool names or step
   traces in chat, no error text or runtime errors, no turn without a reply, no stuck turn, first words within 20 s
   and turns within 120 s.

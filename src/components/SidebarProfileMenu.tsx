@@ -68,6 +68,7 @@ import {
   type PhonePairingAccess,
 } from "@/lib/phone-pairing";
 import { phoneAppEnabled } from "@/lib/feature-flags";
+import { friendlyError } from "@/lib/plain-error";
 
 /** The dusk cloud account signed in on this computer lends its name and photo where this place's profile has none: the same
  * person by address, or a profile with no address of its own. */
@@ -342,7 +343,7 @@ export function useServerUpdateItem(enabled: boolean): UpdateEntry | null {
 
   if (!enabled) return null;
   const fail = (cause: unknown) => {
-    setError(cause instanceof Error ? cause.message : String(cause));
+    setError(friendlyError(cause));
     setPhase("error");
   };
   const mutate = async (path: string, body: object) => {

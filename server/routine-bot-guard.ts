@@ -1,7 +1,8 @@
 // What a bot's new routine gets before the person sees its card: a time on the hour or half hour moves a few minutes
 // (no stampede of every bot at 9:00), work that reads as the person's job runs on weekdays, a watch for something that
 // happens once ends 30 days on at the latest, and a second routine with the same instructions or check is refused with
-// the one already there. The person's own words win: "every day", "sharp", "every time" keep what the bot asked for.
+// the one already there. The person's own words win: "every day", "sharp", "every time" keep what the bot asked for,
+// and a reminder or a time the person named keeps the time it was asked for.
 import { createHash } from "node:crypto";
 
 import type { RoutineRequestDefinition } from "../shared/routine-request.ts";
@@ -12,7 +13,7 @@ export const WATCH_MAX_DAYS = 30;
 const DAY_MS = 24 * 60 * 60_000;
 const WEEKDAYS = [1, 2, 3, 4, 5];
 
-const PINNED = /\b(?:sharp|exactly|on the dot|precisely|no later than|not a minute)\b/i;
+const PINNED = /\b(?:sharp|exactly|on the dot|precisely|no later than|not a minute|remind(?:s|ers?|ing)?)\b/i;
 const EVERY_DAY = /\b(?:every ?day|each day|daily|7 days|seven days|weekends?|saturdays?|sundays?|including weekends)\b/i;
 const WORK = /\b(?:work|job|office|inbox|e-?mails?|slack|stand-?ups?|meetings?|calendar|clients?|customers?|sales|leads?|pipeline|crm|deals?|jira|linear|github|pull requests?|prs?|deploys?|tickets?|support|team|invoices?|revenue|metrics|kpis?|analytics|competitors?|hiring|candidates?|recruit\w*|standup|sprint|okrs?|reports?)\b/i;
 const PERSONAL = /\b(?:family|kids?|gym|workout|run(?:ning)?|health|medication|pills?|meds|garden|plants?|groceries|grocery|personal|home|weather|sports?|scores?|game|match|birthday|pets?|dog|cat|bills?|rent|church|prayer|meditat\w*|journal\w*|sleep|diet|water)\b/i;
@@ -58,7 +59,7 @@ function weekdaysCron(expression: string): string {
 const allWeek = (weekdays: readonly number[] | undefined) => weekdays === undefined || weekdays.length === 7;
 const workOnly = (text: string) => WORK.test(text) && !PERSONAL.test(text) && !EVERY_DAY.test(text);
 
-/** A daily or cron time a bot asked for, moved off the hour or half hour unless the person pinned it. Applies to a
+/** A daily or cron time a bot asked for, moved off the hour or half hour unless the person pinned it or it is a reminder. Applies to a
  * bot's changes too, so a bot that "fixes" the moved minute gets it moved again. */
 export function jitter<T extends { type: string; time?: string; expression?: string }>(schedule: T, name: string, instructions: string): T {
   if (PINNED.test(`${name}\n${instructions}`)) return schedule;
@@ -69,17 +70,18 @@ export function jitter<T extends { type: string; time?: string; expression?: str
 }
 
 /** The definition a bot's create proposes, with the defaults above; anything the person pinned stays as asked. */
-export function guardBotDefinition(definition: RoutineRequestDefinition, now: number): RoutineRequestDefinition {
+export function guardBotDefinition(definition: RoutineRequestDefinition, now: number, namedTime = false): RoutineRequestDefinition {
   const text = words(definition);
   const urgent = timeCritical(text);
   const schedule = definition.schedule;
   const weekdaysOnly = workOnly(text);
+  const moved = <T extends { type: string; time?: string; expression?: string }>(one: T) => namedTime ? one : jitter(one, definition.name, definition.instructions);
   if (schedule.type === "daily") {
     const weekdays = weekdaysOnly && allWeek(schedule.weekdays) ? WEEKDAYS : schedule.weekdays;
-    return { ...definition, schedule: { ...jitter(schedule, definition.name, definition.instructions), weekdays: [...weekdays] } };
+    return { ...definition, schedule: { ...moved(schedule), weekdays: [...weekdays] } };
   }
   if (schedule.type === "cron") {
-    const jittered = jitter(schedule, definition.name, definition.instructions);
+    const jittered = moved(schedule);
     return { ...definition, schedule: weekdaysOnly ? { ...jittered, expression: weekdaysCron(jittered.expression) } : jittered };
   }
   if (schedule.type === "interval") {
@@ -99,10 +101,10 @@ const whenOf = (schedule: { type: string; time?: string; weekdays?: readonly num
 
 /** A bot's new routine with the defaults, except where the bot already has one with these instructions at the time it
  * asked for: then it stays as asked, so the same request is still found to be a repeat. */
-export function guardAgainst(definition: RoutineRequestDefinition, existing: ReadonlyArray<{ prompt: string; schedule: { type: string } }>, now: number): RoutineRequestDefinition {
+export function guardAgainst(definition: RoutineRequestDefinition, existing: ReadonlyArray<{ prompt: string; schedule: { type: string } }>, now: number, namedTime = false): RoutineRequestDefinition {
   const asked = whenOf(definition.schedule);
   const twin = existing.some((routine) => routine.prompt.trim() === definition.instructions.trim() && whenOf(routine.schedule) === asked);
-  return twin ? definition : guardBotDefinition(definition, now);
+  return twin ? definition : guardBotDefinition(definition, now, namedTime);
 }
 
 const sameProbe = (a: RoutineProbe | undefined, b: RoutineProbe | undefined) =>
@@ -121,6 +123,19 @@ export function duplicateRefusal(existing: ExistingRoutine): string {
   const state = existing.enabled ? "it is on" : "it is paused; resume it with that trigger_id";
   return `This bot already has a routine for that: "${existing.name}" (trigger_id ${existing.id}; ${state}). ` +
     "Change that one with action update instead of making another, and tell the person it is already set up.";
+}
+
+const significant = (text: string) => new Set(text.toLowerCase().split(/[^\p{L}\p{N}]+/u).filter((word) => word.length > 3));
+
+/** A run of a scheduled routine asking to create a routine that mostly repeats its own instructions: the run read its
+ * "every morning" as a request (Hermes Agent's cron RECURSION rule). The refusal it reads, or null. */
+export function selfSpawnRefusal(run: { routineName: string; triggerSource?: string } | null, runPrompt: string | undefined, definition: { instructions?: unknown } | undefined): string | null {
+  if (!run || run.triggerSource === "webhook" || !runPrompt || typeof definition?.instructions !== "string") return null;
+  const own = significant(runPrompt), asked = significant(definition.instructions);
+  if (!asked.size || !own.size) return null;
+  const shared = [...asked].filter((word) => own.has(word)).length;
+  if (shared / Math.min(asked.size, own.size) < 0.6) return null;
+  return `This is a run of the automation "${run.routineName}", which already repeats on its own schedule. Nothing was set up: do its work now and report the result.`;
 }
 
 export interface WatchFacts { prompt: string; name: string; createdAt: number; sourceThreadId?: string; schedule: { type: string } }

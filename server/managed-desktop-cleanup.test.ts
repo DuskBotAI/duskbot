@@ -334,7 +334,7 @@ function reloadFixture() {
     stopScreenPoller() {}, releaseLocalVmThread() {}, releaseTurnResources() {}, endForeignTurns() {}, vpsThreadEnded() {},
     watchdog: { settle() {} }, closeOpenApprovals() {}, directTurnBots: new Map(),
     finalizeDelegationWatch: (_threadId: string, _ok: boolean, _reply: string, why: string) => log.push(`delegation:${why}`),
-    routines: { failThread() {} }, failedTurnTool: (name: string) => ({ name, ok: false }),
+    routines: { failThread() {} }, failedTurnRow: (name: string) => ({ name, ok: false }),
     settleDirectFollowup: (generation: string, outcome: { text: string }) => settled.push({ generation, text: outcome.text }),
     retryDelegationsWaitingOn() {},
     drainQueuedSends() {},

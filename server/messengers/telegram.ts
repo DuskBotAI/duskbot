@@ -3,7 +3,7 @@
 // whose edge wakes a sleeping home and queues the update for it. Telegram allows one of the two at a time per token.
 import { timingSafeEqual } from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
-import type { InboundChoice, InboundFile, InboundMessage, MessengerTransport, OutboundFile } from "./bridge.ts";
+import type { InboundChoice, InboundFile, InboundMessage, InboundReaction, MessengerTransport, OutboundFile } from "./bridge.ts";
 import { markdownToTelegramHtml, splitMessage } from "./text.ts";
 
 export class TelegramError extends Error {
@@ -22,7 +22,8 @@ export const TELEGRAM_HOOK_PATH = /^\/hooks\/telegram\/([\w-]{1,128})$/;
 const TEXT_MAX = 4096;
 const UPLOAD_MAX = 50 * 1024 * 1024;
 const PHOTO_MAX = 10 * 1024 * 1024;
-export const TELEGRAM_UPDATES = ["message", "my_chat_member", "callback_query"];
+/** Telegram sends message_reaction only where the bot is an administrator, and never for a bot's own reactions. */
+export const TELEGRAM_UPDATES = ["message", "my_chat_member", "callback_query", "message_reaction"];
 
 /** A test or self-hosted Bot API server on loopback only (DUSK_TELEGRAM_API_URL); anything else is api.telegram.org. */
 export function telegramApiBase(env: NodeJS.ProcessEnv = process.env): string {
@@ -98,7 +99,14 @@ export interface TelegramChatAdded { chatId: string; title: string; by: { id: st
 export function readTelegramUpdate(
   update: Record<string, unknown>,
   context: { botId: string; account: TelegramAccount; file(fileId: string): Promise<{ bytes: Buffer; mime: string }> },
-): { message: InboundMessage } | { added: TelegramChatAdded } | { choice: InboundChoice } | null {
+): { message: InboundMessage } | { added: TelegramChatAdded } | { choice: InboundChoice } | { reaction: InboundReaction } | null {
+  const reacted = record(update.message_reaction);
+  if (Object.keys(reacted).length) {
+    const chat = record(reacted.chat), user = record(reacted.user), before = new Set((Array.isArray(reacted.old_reaction) ? reacted.old_reaction : []).map((one) => str(record(one).emoji)));
+    const emoji = (Array.isArray(reacted.new_reaction) ? reacted.new_reaction : []).map(record).find((one) => one.type === "emoji" && str(one.emoji) && !before.has(str(one.emoji)));
+    if (!emoji || !str(chat.id) || !str(user.id) || user.is_bot === true || !str(reacted.message_id)) return null;
+    return { reaction: { platform: "telegram", botId: context.botId, chatId: str(chat.id), senderId: str(user.id), messageId: str(reacted.message_id), emoji: str(emoji.emoji) } };
+  }
   const query = record(update.callback_query);
   if (Object.keys(query).length) {
     const sent = record(query.message), chat = record(sent.chat);
@@ -189,6 +197,9 @@ export function createTelegramTransport(api: TelegramApi, token: (botId: string)
     },
     async typing(botId, chatId) {
       await api.call(need(botId), "sendChatAction", { chat_id: chatId, action: "typing" });
+    },
+    async react(botId, chatId, messageId, emoji) {
+      await api.call(need(botId), "setMessageReaction", { chat_id: chatId, message_id: Number(messageId), reaction: [{ type: "emoji", emoji }] });
     },
     async sendChoices(botId, chatId, text, buttons) {
       const rows = buttons.length <= 2 ? [buttons] : buttons.map((button) => [button]);

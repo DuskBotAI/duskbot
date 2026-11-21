@@ -13,7 +13,7 @@ export const EMAIL_PROMPT = (addresses: readonly string[]) =>
 
 /** The system prompt part for a bot that could use a mailbox when none is connected yet. */
 export const EMAIL_TO_CONNECT_PROMPT =
-  " No mailbox is connected over IMAP here; Gmail and Outlook come through connected apps, so use those when you have them and never ask for them again here. For mail on another host, call request_credential with credential_id email and the address if you know it: one card asks the person for it, then end the turn. Never ask for the password in chat or write your own mail client.";
+  " No mailbox is connected over IMAP here; Gmail and Outlook come through connected apps, never asked for again here. For mail on another host, call request_credential with credential_id email (and the address if you know it): one card asks for it, then end the turn. Never ask for the password in chat or write your own mail client.";
 
 /** The failed-call text when no mailbox is connected. */
 export const EMAIL_NOT_CONNECTED_TEXT =

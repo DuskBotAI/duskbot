@@ -42,6 +42,10 @@ const NO_BROWSER_NOTE =
 const OFF_NOTE =
   " This bot's \"Works on\" setting is Off, so no computer or built-in browser is mounted this turn. Everything else works (automations, waits, memory, connected apps, teammates, files you make here): do the job with those. Only a step that needs a screen or a shell is out: do the rest, give the person that step's exact command or clicks, and say in one line that turning on Works on in this bot's settings lets you do it yourself.";
 
+/** Off for an engine that has its own shell in the bot's working folder: that shell stays, only places are off. */
+const OFF_NOTE_ENGINE_SHELL =
+  " This bot's \"Works on\" setting is Off, so no computer or built-in browser is mounted this turn. Your own shell and files in your working folder still work: write, run and test code there and show the real output, never say you cannot run code. Everything else works too (automations, waits, memory, connected apps, teammates, files you make here). Only a step that needs a screen, a website or the person's own files outside your folder is out: do the rest, give the person that step's exact command or clicks, and say in one line that turning on Works on in this bot's settings lets you do it yourself.";
+
 const NO_PERMISSION_TALK = " Never explain permissions or System Settings yourself, and never claim to have used this computer's screen.";
 
 /** A bot on this computer whose screen control the OS has not granted yet: it chats and works in its browser as usual.
@@ -77,15 +81,17 @@ export function resolveSurface(input: {
   pinnedSurface?: Surface | null;
   browserOn: boolean;
   botOpened?: boolean;
+  /** The engine has its own shell in the bot's working folder (supportsWorkspaceFiles), whatever Works on says. */
+  engineShell?: boolean;
 }): SurfacePlan {
   const plan = placeOf(input);
   return input.botOpened ? { ...plan, botOpened: true } : plan;
 }
 
-function placeOf(input: { destination: Destination; pinnedSurface?: Surface | null; browserOn: boolean; botOpened?: boolean }): SurfacePlan {
+function placeOf(input: { destination: Destination; pinnedSurface?: Surface | null; browserOn: boolean; botOpened?: boolean; engineShell?: boolean }): SurfacePlan {
   const { destination, browserOn } = input;
   if (destination === "off") {
-    return { computer: "off", browser: false, pinned: null, note: OFF_NOTE };
+    return { computer: "off", browser: false, pinned: null, note: input.engineShell ? OFF_NOTE_ENGINE_SHELL : OFF_NOTE };
   }
   const beside = input.botOpened === true && browserOn;
   const pin = input.pinnedSurface ?? null;
@@ -259,8 +265,8 @@ export function surfacePrompt(
   if (opts.pinned) {
     text += ` This conversation is pinned to ${surfaceLabel(opts.pinned)}; changing places requires ${opts.canSelect ? "select_computer or " : ""}the user's choice in ${PLACE_CONTROL}, not a different tool name.`;
   }
-  if (opts.canSelect) text += " For a screen task, use select_computer with no arguments when you need to inspect the actual available targets. Choose the requested place from its result; if the user left the place open, use a suitable available target or surface auto instead of asking them to operate the menu. Browser-only work can stay in Browser; when it needs desktop apps or capabilities the current Browser lacks, select an available Local VM without asking the user to switch it manually. Choose before taking actions, and do not repeat actions already completed if the task must continue elsewhere. dusk bot can start an existing configured computer and highlight the selected target. If the right tools are already mounted, use them directly. On a pending switch, end this turn: the original request resumes automatically with the new tools, and then you must carry out the task. Only ask for input for a genuine blocker, such as missing setup, required sign-in or an approval. Never silently replace an explicitly requested VM with the host desktop.";
-  if (opts.canSelect) text += " If no suitable computer is running but its provider is configured, select_computer can provision one for this computer task; reuse existing resources first. Do not provision merely for ordinary chat or inspection.";
+  if (opts.canSelect) text += " For a screen task, use select_computer with no arguments when you need the real available targets, and pick the requested place from its result; when the person left it open, use a suitable available target or surface auto instead of asking them to operate the menu. Browser-only work can stay in Browser; when it needs desktop apps or capabilities the current Browser lacks, select an available Local VM without asking the user to switch. Choose before acting, and after a move never repeat what is already done. dusk bot can start an existing configured computer and highlight the selected target; tools already mounted are used directly. On a pending switch, end this turn: the request resumes with the new tools, and then you must carry out the task. Ask only for a real blocker: missing setup, a sign-in or an approval. Never silently replace an explicitly requested VM with the host desktop.";
+  if (opts.canSelect) text += " If no suitable computer is running but its provider is configured, select_computer can provision one for this task; reuse existing resources first, and never provision for ordinary chat or inspection.";
   if (opts.canSelect && !computer && !mounted.browser) text += " No computer or browser tools are mounted yet; select_computer is the way to connect them before screen work, not a reason to claim you already performed it.";
   if (computer || mounted.browser) text += CONNECTED_APP_FIRST;
   if (mounted.browser) text += BROWSER_FIRST + (opts.browserInComputerTab === false || opts.cloudHome ? BROWSER_NOT_SHOWN : BROWSER_IN_COMPUTER_TAB);

@@ -23,12 +23,14 @@ describe("bot routine defaults", () => {
 
   it("keeps a time the person pinned or that is time-critical", () => {
     expect(guardBotDefinition(def({ instructions: "Remind me at 9 sharp to call the bank." }), NOW).schedule).toMatchObject({ time: "09:00" });
+    expect(guardBotDefinition(def({ name: "Duolingo", instructions: "Remind me to do my Duolingo lesson." }), NOW).schedule).toMatchObject({ time: "09:00" });
+    expect(jitter({ type: "cron", expression: "0 17 * * 5", timeZone: "UTC" }, "Expenses reminder", "Log this week's expenses.").expression).toBe("0 17 * * 5");
     expect(guardBotDefinition(def({ name: "Uptime", instructions: "Check the work site and tell me if the site is down.", schedule: { type: "interval", everyMinutes: 30 } }), NOW).schedule).not.toHaveProperty("weekdays");
     expect(guardBotDefinition(def({ name: "Digest", instructions: "Every morning, summarize urgent mail in my work inbox." }), NOW).schedule).toMatchObject({ weekdays: [1, 2, 3, 4, 5] });
   });
 
   it("moves a bot's own change of time again, and runs a work cron on weekdays", () => {
-    expect(jitter({ type: "cron", expression: "0 18 * * *", timeZone: "UTC" }, "Plants", "Remind me to water the plants.").expression).toMatch(/^[2-7] 18 \* \* \*$/);
+    expect(jitter({ type: "cron", expression: "0 18 * * *", timeZone: "UTC" }, "Plants", "Send me the garden weather.").expression).toMatch(/^[2-7] 18 \* \* \*$/);
     expect(guardBotDefinition(def({ name: "Digest", instructions: "Summarize my work inbox and Slack.", schedule: { type: "cron", expression: "0 9 * * *", timeZone: "UTC" } }), NOW).schedule)
       .toMatchObject({ expression: expect.stringMatching(/^[2-7] 9 \* \* 1-5$/) });
   });

@@ -16,12 +16,14 @@ const ENGINE_BY_DRIVER: Readonly<Record<string, UsageEngine>> = {
 export const engineFamily = (driverKind: unknown): UsageEngine => (typeof driverKind === "string" && ENGINE_BY_DRIVER[driverKind]) || "other";
 
 /** what a turn touched, by kind: the trace's tool icons, folded */
-export const USAGE_TOOLS = ["browser", "computer", "terminal", "files", "web", "memory", "routine", "page", "widget", "bots", "phone", "image", "data", "app", "mcp", "other"] as const;
+export const USAGE_TOOLS = ["browser", "computer", "terminal", "files", "web", "x", "memory", "routine", "page", "widget", "bots", "phone", "image", "data", "app", "mcp", "other"] as const;
 export type UsageTool = (typeof USAGE_TOOLS)[number];
 const TOOL_OF_ICON: Readonly<Record<string, UsageTool>> = {
   browser: "browser", computer: "computer", terminal: "terminal", files: "files", search: "web", web: "web", memory: "memory", routine: "routine", page: "page",
   widget: "widget", bots: "bots", phone: "phone", image: "image", data: "data", app: "app", mcp: "mcp", plan: "other", tool: "other",
 };
+/** x_search (and its older names) counts apart from web search, so its own failure rate shows */
+const X_TOOL = /^x_(?:search|user_posts|post|profile)$/;
 export const USAGE_APPS: readonly string[] = CURATED_CONNECTOR_SLUGS;
 const APP_SET = new Set<string>(USAGE_APPS);
 
@@ -44,7 +46,7 @@ export function categorize(input: { tools: readonly string[]; apps: readonly str
   if (tools.has("data")) return "data";
   if (tools.has("image")) return "image";
   if (tools.has("computer") || tools.has("phone")) return "computer";
-  if (tools.has("browser") || tools.has("web")) return "research";
+  if (tools.has("browser") || tools.has("web") || tools.has("x")) return "research";
   if (tools.has("files")) return "files";
   if (tools.has("app") || tools.has("mcp")) return "other";
   const meaningful = [...tools].filter(tool => tool !== "memory" && tool !== "other" && tool !== "widget");
@@ -56,6 +58,7 @@ export function toolSignals(names: readonly string[]): { tools: UsageTool[]; app
   const tools = new Set<UsageTool>(), apps = new Set<string>();
   for (const name of names) {
     if (typeof name !== "string") continue;
+    if (X_TOOL.test(name.replace(TOOL_NAMESPACE, "").toLowerCase())) { tools.add("x"); continue; }
     const look = traceToolLook(name);
     tools.add(TOOL_OF_ICON[look.icon] ?? "other");
     if (look.icon === "app") apps.add(look.app && APP_SET.has(look.app) ? look.app : "other_app");

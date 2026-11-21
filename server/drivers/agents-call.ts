@@ -739,12 +739,12 @@ export async function callTool(called: string, input: Json, context: ToolCallCon
     if (typeof args.for_bot_id === "string" && args.for_bot_id.trim() && args.action !== "append") {
       return { text: "for_bot_id works only with action=append: one new note for that bot. To change or forget its notes, ask the person to tell that bot in its own chat.", isError: true };
     }
-    const passageOnly = args.action === "remove" || args.action === "forget";
+    const passageOnly = args.action === "remove" || args.action === "forget" || (args.action === "commit" && typeof args.old_text === "string" && !args.text);
     const ids = Array.isArray(args.ids) ? args.ids.filter((id): id is string => typeof id === "string" && id.trim() !== "") : [];
-    if (!["append", "replace", "remove", "supersede", "forget", "prefer", "notify"].includes(String(args.action))
+    if (!["append", "replace", "remove", "supersede", "forget", "prefer", "notify", "commit"].includes(String(args.action))
       || (!passageOnly && (typeof args.text !== "string" || !args.text.trim()))
-      || (args.action !== "append" && args.action !== "prefer" && args.action !== "notify" && !(args.action === "forget" && ids.length) && (typeof args.old_text !== "string" || !args.old_text.trim()))) {
-      return { text: "Use memory_update action=append with text, replace or supersede with text and old_text, remove with old_text, forget with ids or old_text naming what to forget, prefer with text: one standing preference of the person, or notify with rule and text: what they want told unasked.", isError: true };
+      || (args.action !== "append" && args.action !== "prefer" && args.action !== "notify" && args.action !== "commit" && !(args.action === "forget" && ids.length) && (typeof args.old_text !== "string" || !args.old_text.trim()))) {
+      return { text: "Use memory_update action=append with text, replace or supersede with text and old_text, remove with old_text, forget with ids or old_text naming what to forget, prefer with text: one standing preference of the person, or notify with rule and text: what they want told unasked, or commit with text and who: an explicit promise or something they wait on.", isError: true };
     }
     const { body: r } = await apiResponse("/api/internal/memory", {
       method: "POST",
@@ -754,7 +754,7 @@ export async function callTool(called: string, input: Json, context: ToolCallCon
         action: args.action,
         text: args.text,
         oldText: args.old_text,
-        ...(ids.length ? { ids } : {}), ...(typeof args.rule === "string" ? { rule: args.rule } : {}),
+        ...(ids.length ? { ids } : {}), ...(typeof args.rule === "string" ? { rule: args.rule } : {}), ...(typeof args.who === "string" ? { who: args.who } : {}),
         ...(typeof args.until === "string" && args.until.trim() ? { until: args.until.trim() } : {}),
         ...(typeof args.for_bot_id === "string" && args.for_bot_id.trim() ? { forBotId: args.for_bot_id.trim() } : {}),
       }),
@@ -763,6 +763,7 @@ export async function callTool(called: string, input: Json, context: ToolCallCon
     if (args.action === "forget") return { text: forgetText(typeof args.old_text === "string" ? args.old_text : "those notes", r) };
     if (r.unverified === true) return { text: String(r.note ?? "Saved as an unverified note.") };
     if (args.action === "prefer") return { text: preferText(r) };
+    if (args.action === "commit") return { text: r.commit === "closed" ? "Closed in their commitments." : r.commit === "known" ? "Already in their commitments: nothing to save." : "Saved in their commitments, which the day watch and their automations read. Confirm it in one short line." };
     if (args.action === "notify") return { text: r.notify === "saved" ? "Saved in their What to tell me about, which suggestions, the day watch and every routine read. Confirm it in one short line." : "Already in their What to tell me about: nothing to save." };
     if (r.known === true) return { text: `Already remembered${r.forBot ? ` by @${String(r.forBot)}` : ""}, so nothing was added.${typeof r.entry === "string" && r.entry ? ` Entry: ${r.entry}` : ""}` };
     if (typeof r.forBot === "string") return { text: `Saved to @${r.forBot}'s notebook, marked as from you; it reads it from its next conversation on.${typeof r.entry === "string" && r.entry ? ` Entry: ${r.entry}` : ""}` };

@@ -134,6 +134,16 @@ describe("schedule triggers", () => {
     expect(JSON.stringify(calls[0]!.body)).toContain(JSON.stringify({ type: "once", at: "2099-11-07T13:34:00+00:00" }));
     expect(JSON.stringify(calls[0]!.body)).not.toContain("timeZone");
   });
+
+  it("passes a weekly time in the zone the person named, and whether they named it, for the harness to check", async () => {
+    const { calls, context: ctx } = context();
+    const result = await callTool("create_trigger", { when: "schedule", name: "Invoice chaser", instructions: "Chase unpaid invoices",
+      schedule: { type: "weekly", time: "10:00", weekdays: ["mon", "tue", "wed", "thu", "fri"], timeZone: " Europe/London ", exact: true } }, ctx);
+    expect(result.isError).toBeUndefined();
+    expect(JSON.stringify(calls[0]!.body)).toContain(JSON.stringify({ type: "weekly", time: "10:00", weekdays: ["monday", "tuesday", "wednesday", "thursday", "friday"], timeZone: "Europe/London", exact: true }));
+    const bad = await callTool("create_trigger", { when: "schedule", name: "x", instructions: "y", schedule: { type: "daily", time: "10:00", exact: "yes" } }, ctx);
+    expect(bad.isError).toBe(true);
+  });
 });
 
 

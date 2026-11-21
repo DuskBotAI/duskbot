@@ -136,6 +136,15 @@ describe("resolveSurface", () => {
     expect(surfacePrompt({ computer: null, browser: false }, { note: plan.note })).toBe(plan.note);
   });
 
+  it("Off on an engine with its own shell keeps that shell and says so", () => {
+    const plan = resolveSurface({ destination: "off", browserOn: true, engineShell: true });
+    expect(plan).toMatchObject({ computer: "off", browser: false, pinned: null });
+    expect(plan.note).toMatch(/"Works on" setting is Off/);
+    expect(plan.note).toContain("Your own shell and files in your working folder still work");
+    expect(plan.note).not.toContain("needs a screen or a shell is out");
+    expect(resolveSurface({ destination: "off", browserOn: true }).note).toContain("needs a screen or a shell is out");
+  });
+
   it("a Problems to look at turn that lost its computer is told why and that it has none", () => {
     const note = computerSkippedNote("The team's cloud computer is missing; explicitly create or retry it from the Team map.");
     expect(note).toMatch(/^ This turn answers a Team incidents report and your computer could not be prepared for it \(The team's cloud computer is missing; explicitly create or retry it from the Team map\), so no computer is mounted/);

@@ -837,3 +837,45 @@ describe("loop guard setting", () => {
     expect(loopGuardSettings(parseStoredConfig({}), {})).toEqual({ enabled: false, steerAt: 5 });
   });
 });
+
+describe("same call, same answer", () => {
+  const search = { title: "web_search_many", input: '{"queries":["acme pricing 2026"]}' };
+  const empty = { ok: true, output: '{"results":[]}' };
+
+  it("steers one note, guard on or off, the third time a call gets the same answer, and never stops the turn", async () => {
+    for (const enabled of [true, false]) {
+      const r = rig({ settings: { enabled } });
+      r.play(search, empty);
+      r.play(search, empty);
+      expect(r.steers).toEqual([]);
+      r.play(search, empty);
+      r.play(search, empty);
+      await settled();
+      expect(r.steers.map((one) => one.note)).toEqual(["[dusk bot: web_search_many got the same answer to the same call 3 times. Calling it again will not change that: change the query, use another source, or answer with what you have.]"]);
+      expect(r.interrupts).toEqual([]);
+    }
+  });
+
+  it("counts again after a different answer, a new turn or other arguments, and leaves waits and status checks alone", async () => {
+    const r = rig();
+    r.play(search, empty);
+    r.play(search, empty);
+    r.play(search, { ok: true, output: '{"results":[{"title":"Acme"}]}' });
+    r.play(search, empty);
+    r.began();
+    r.play(search, empty);
+    r.play({ ...search, input: '{"queries":["acme price"]}' }, empty);
+    for (let i = 0; i < 4; i++) r.play({ title: "assignment_status", input: '{"id":"a1"}' }, { ok: true, output: "running" });
+    for (let i = 0; i < 4; i++) r.play({ title: "mcp__dusk__wait_until", input: '{"label":"x"}' }, { ok: true, output: "ok" });
+    await settled();
+    expect(r.steers).toEqual([]);
+  });
+
+  it("stays quiet while the turn waits on the person", async () => {
+    const r = rig();
+    r.state.waiting = true;
+    for (let i = 0; i < 3; i++) r.play(search, empty);
+    await settled();
+    expect(r.steers).toEqual([]);
+  });
+});

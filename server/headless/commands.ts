@@ -1,5 +1,6 @@
 // `--json` prints a tool's result unchanged; plain output is a line per item.
 import { isOwnAppId } from "../../electron/legacy-names.mjs";
+import { type ConnectableInstance, instanceReady } from "../../shared/model-providers.ts";
 import { EXIT, flag, parseCount, parseDuration, requiredFlag, usageError } from "./args.ts";
 import { newSendId, readMessage, resolveTarget, type Target, type VerbContext, type VerbOutcome } from "./context.ts";
 import { oneLine, shortId } from "./output.ts";
@@ -17,25 +18,43 @@ const targetArgs = (target: Target): Rec => ({ [`${target.type}_id`]: target.id,
 
 const DAY = 24 * 3_600_000;
 
+const ready = (instance: Rec) => instanceReady(instance as ConnectableInstance);
+
+function engineProblem(instance: Rec, bots: number): string {
+  const name = instance.displayName && instance.displayName !== instance.instanceId ? `${instance.instanceId} (${instance.displayName})` : String(instance.instanceId);
+  const why = instance.snapshot?.state === "available"
+    ? "signed out: sign in again in Settings › Models"
+    : `${instance.snapshot?.reason ?? "unavailable"}${/not found|isn't installed/i.test(String(instance.snapshot?.reason ?? "")) ? ": reinstall it or fix its path in Settings › Models" : ""}`;
+  return `${name}, used by ${bots === 1 ? "1 bot" : `${bots} bots`}, cannot answer: ${why}`;
+}
+
 async function doctorOnce(ctx: VerbContext): Promise<VerbOutcome> {
   const client = await ctx.client();
   const [rawHealth, models] = await Promise.all([client.tool("get_system_health", {}), client.tool("list_available_models", {})]);
   const health = { ...rawHealth, endpoint: client.baseUrl };
   const instances: Rec[] = Array.isArray(models?.instances) ? models.instances : [];
-  const availableEngines = instances.filter((instance) => instance.snapshot?.state === "available").map((instance) => instance.instanceId);
+  const availableEngines = instances.filter(ready).map((instance) => instance.instanceId);
   const quietly = <T>(read: Promise<T>) => read.catch(() => null);
-  const [server, session, config] = await Promise.all([
+  const [server, session, config, fleet] = await Promise.all([
     quietly(client.json<Rec>("/.well-known/duskbot/environment")),
     quietly(client.json<Rec>("/api/auth/session")),
     quietly(client.json<Rec>("/api/config")),
+    quietly(client.json<Rec>("/api/bots?messages=0")),
   ]);
+  const botsOn = new Map<string, number>();
+  for (const bot of Array.isArray(fleet?.bots) ? fleet.bots : []) {
+    const id = bot?.modelSelection?.instanceId;
+    if (typeof id === "string") botsOn.set(id, (botsOn.get(id) ?? 0) + 1);
+  }
+  const brokenEngines = instances.filter((instance) => botsOn.has(instance.instanceId) && !ready(instance));
   const problems: string[] = [];
   const warnings: string[] = [];
   const isDusk = isOwnAppId(health.app);
   if (!isDusk) problems.push(`${client.baseUrl} answered, but it is not dusk bot`);
   const tooOld = Boolean(server) && server!.capabilities?.jobs !== true;
   if (tooOld) problems.push(`dusk bot ${server!.version ?? "(unknown version)"} is too old for the headless commands: it cannot report a conversation's job`);
-  if (isDusk && !availableEngines.length) problems.push("no engine is available: set one up with `duskbot engine set KIND --key-env VAR`");
+  if (isDusk) (availableEngines.length ? warnings : problems).push(...brokenEngines.map((instance) => engineProblem(instance, botsOn.get(instance.instanceId)!)));
+  if (isDusk && !availableEngines.length && !brokenEngines.length) problems.push("no engine is available: set one up with `duskbot engine set KIND --key-env VAR`");
   if (session?.kind === "session" && typeof session.expiresAt === "number" && session.expiresAt - Date.now() < 14 * DAY) {
     warnings.push(`this session expires in ${Math.max(0, Math.floor((session.expiresAt - Date.now()) / DAY))} days: get a new one with duskbot connect`);
   }

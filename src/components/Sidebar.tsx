@@ -595,7 +595,7 @@ export const BotListItem = memo(function BotListItem(props: BotRowProps) {
         )}
       </span>
       <div data-row-words className={cn("min-w-0 flex-1", iconOnly && "hidden", simpleRow && "flex flex-col gap-px")}>
-        <div className={cn("flex items-baseline justify-between gap-2", simpleRow && (unread || waiting ? "pr-7" : "group-has-[:focus-visible]:pr-7 touch:pr-7"))}>
+        <div className={cn("flex items-baseline justify-between gap-2", simpleRow && (unread || waiting ? "pr-7" : "group-has-[:focus-visible]:pr-7 touch:pr-7 max-md:pr-7"))}>
           <span className={cn("flex min-w-0 grow items-center gap-1.5 truncate text-ink", simpleRow ? "text-[14px] font-medium leading-5 tracking-[0.01em]" : "text-[15px] font-semibold leading-5")}>
             {!simpleRow && bot.pinned && <Pin size={12} className="shrink-0 text-ink-secondary" />}
             {simpleRow && !nameField ? <span className="truncate">{bot.name}</span> : <RenameTitle

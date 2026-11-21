@@ -211,7 +211,17 @@ describe("bot-first sidebar", () => {
     expect(simple).not.toMatch(/data-bot-actions="atlas"[^>]*class="[^"]*\bgroup-hover:/);
     expect(simple).toContain('class="flex items-baseline justify-between gap-2 pr-7"');
     const read = renderToStaticMarkup(createElement(BotListItem, rowProps("comfortable", { ...candidate, unread: false })));
-    expect(read).toContain('class="flex items-baseline justify-between gap-2 group-has-[:focus-visible]:pr-7 touch:pr-7"');
+    expect(read).toContain('class="flex items-baseline justify-between gap-2 group-has-[:focus-visible]:pr-7 touch:pr-7 max-md:pr-7"');
+  });
+
+  it("keeps room beside a read row's time for its actions wherever they show without a hover, a narrow window included", () => {
+    const read = renderToStaticMarkup(createElement(BotListItem, rowProps("comfortable", { ...bot, tasks: [], projects: [], unread: false })));
+    const button = /data-bot-actions="atlas"[^>]*class="([^"]*)"/.exec(read)?.[1] ?? "";
+    const header = /class="(flex items-baseline justify-between[^"]*)"/.exec(read)?.[1] ?? "";
+    for (const variant of ["group-has-[:focus-visible]", "touch", "max-md"]) {
+      if (button.split(" ").some((name) => name.startsWith(`${variant}:opacity-`))) expect(header.split(" ")).toContain(`${variant}:pr-7`);
+    }
+    expect(button).toContain("max-md:opacity-70");
   });
 
   it("marks an unread Simple group chat with the same top-right dot as a bot row, said once for a screen reader", () => {

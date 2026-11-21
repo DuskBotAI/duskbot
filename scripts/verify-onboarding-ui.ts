@@ -34,14 +34,6 @@ const textVisible = (text: string) => poll(async () => (await snapshot()).includ
 const evidence = resolve(".dusk-scratch/verify-evidence/onboarding");
 mkdirSync(evidence, { recursive: true });
 const screenshot = (name: string) => ui("screenshot", "--out", resolve(evidence, `${name}.png`));
-const openSettings = async () => {
-  await click("Onboarding fixture");
-  await click("Settings");
-  // Simple Settings keeps the replays with the version, on Updates; it reopens on the page it was left on.
-  await delay(400);
-  if (!(await snapshot()).includes("Replay welcome tour")) await click("Updates");
-  await textVisible("Replay welcome tour");
-};
 const holdConfigWrite = () => evaluate(`(() => {
   const original = window.fetch.bind(window);
   window.heldWrites = 0;
@@ -67,15 +59,14 @@ await evaluate("localStorage.clear(); sessionStorage.clear(); localStorage.setIt
 await textVisible("Meet dusk bot");
 await evaluate("document.documentElement.dataset.reducedMotion = 'true'; true");
 await screenshot("welcome");
-// Grok Bot's three screens, no form: the first asks nothing and shows no steps, Back or Skip.
+// The welcome asks nothing and shows no steps, Back or Skip; with an AI already connected the only other screen is the AI.
 assert.equal(await evaluate("document.querySelectorAll('[data-welcome] input').length"), 0, "no field on the first screen");
 for (const gone of ["Step 1", "Back", "Skip", "Your name"]) assert.equal((await snapshot()).includes(gone), false, gone);
-await click("Next");
-await textVisible("has its own computer and works just like you");
-await click("Next");
-await textVisible("Give each Bot a job");
-await screenshot("jobs");
-console.log("PASS the first run is three screens, with no Chief of Staff screen after them");
+await click("Get started");
+await textVisible("Connect an AI");
+await textVisible("Claude is connected.");
+await screenshot("ai");
+console.log("PASS the first run is the welcome and the AI step, with no job screen after them");
 
 // The completion write failing never keeps the person out of the chat.
 await evaluate(`(() => {
@@ -89,12 +80,12 @@ await evaluate(`(() => {
   };
   return true;
 })()`);
-await click("Next");
-await poll(() => evaluate("document.querySelectorAll('[data-welcome]').length"), 0, "the last Next lands in the chat");
+await click("Continue");
+await poll(() => evaluate("document.querySelectorAll('[data-welcome]').length"), 0, "the last Continue lands in the chat");
 // The welcome lands in the chat with the Chief (the server's first bot): its first messages, no AI asked.
 const first = await evaluate("fetch('/api/bots').then(r => r.json()).then(data => data.bots.find(bot => bot.chiefOfStaff && !bot.hidden))");
 assert.ok(first?.name, "the Chief");
-assert.equal(first.welcomed, true, "Dusk is introduced, so its old first-launch card never comes");
+await poll(() => evaluate(`fetch('/api/bots').then(r => r.json()).then(data => data.bots.find(bot => bot.id === ${JSON.stringify(first.id)}).welcomed)`), true, "Dusk is introduced, so its old first-launch card never comes");
 const composer = `Message ${first.name}`;
 await textVisible(composer);
 await textVisible(`Hey! I'm ${first.name}. I'm new here.`);
@@ -113,11 +104,14 @@ assert.notEqual(selected?.snapshot.authenticated, false, "starter uses a connect
 assert.equal(starter.modelSelection.model, selected.models.default);
 // The failed save left the server's record empty: a browser without this one's local mark shows the welcome again,
 // and this time it is saved.
-// Dusk has met the person by now, so the Chief step is not shown again: Next lands in the Chief's chat.
 await evaluate("localStorage.removeItem('dusk-email-gate'); setTimeout(() => location.reload(), 0); true");
 await textVisible("Meet dusk bot");
-await click("Next");
-await poll(() => evaluate("document.querySelectorAll('[data-welcome]').length"), 0, "Next lands in the chat");
+await click("Get started");
+await textVisible("Connect an AI");
+await holdConfigWrite();
+await click("Continue");
+await poll(() => evaluate("document.querySelectorAll('[data-welcome]').length"), 0, "a slow completion save cannot trap the welcome");
+await evaluate("window.releaseWrite(); true");
 await textVisible(composer);
 await poll(async () => Boolean((await config()).onboarding.completedAt), true, "welcome completion saved");
 assert.ok((await config()).onboarding.hintsSeen.includes("met-chief-v1"), "the first chat is marked to stay quiet");
@@ -129,22 +123,12 @@ await delay(1500);
 assert.equal(await evaluate("document.querySelectorAll('[data-welcome], [data-tour-card]').length"), 0, "no app tour after a reload");
 assert.equal((await config()).onboarding.hintsSeen.filter((id: string) => id.startsWith("tour.")).length, 0, "no tour step was shown");
 await screenshot("chat");
-console.log("PASS the first run lands in the chat with the Chief; the app tour never starts by itself, nor after a reload");
+console.log("PASS the first run lands in the chat with the Chief though its save is slow; the app tour never starts by itself, nor after a reload");
 
 await type(composer, "FIRST_MESSAGE_AFTER_ONBOARDING_7J");
 await ui("press", "--keys", "Enter");
 await poll(() => evaluate(`fetch('/api/threads/${first.threadId}/messages?limit=20').then(r => r.json()).then(data => data.messages.some(message => message.role === 'bot' && message.kind === 'text' && message.turnSucceeded === true))`), true, "first onboarding message completes");
 console.log("PASS connected default selected automatically; first message succeeds without a model pick");
-
-await openSettings();
-await click("Replay welcome tour");
-await textVisible("Meet dusk bot");
-await holdConfigWrite();
-await click("Next");
-await poll(() => evaluate("document.querySelectorAll('[data-welcome]').length"), 0, "slow completion cannot trap welcome");
-await evaluate("window.releaseWrite(); true");
-console.log("PASS welcome replay can close while persistence is pending");
-await poll(async () => Boolean((await config()).onboarding.completedAt), true, "welcome save completed");
 
 await screenshot("complete");
 console.log(JSON.stringify({ ok: true, evidence, config: (await config()).onboarding }));

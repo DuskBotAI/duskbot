@@ -3,6 +3,8 @@ import { BrowserPanel } from "../../src/components/BrowserPanel";
 import { StoreProvider, useStore } from "../../src/state/store";
 import { applySkin } from "../../src/lib/skins";
 import "../../src/styles.css";
+import "../../src/styles/overlays.css";
+import "../../src/styles/motion.css";
 
 function Fixture() {
   const { state } = useStore();

@@ -41,9 +41,12 @@ node --experimental-strip-types scripts/control-dusk.ts ui launch
 ```
 
 Use only its printed handle and preview URL. Add `?onboarding=1` to the
-`threads` preview URL to play a brand-new install. The older standalone
-onboarding browser script still names the retired welcome screens; it is not
-current acceptance evidence.
+`threads` preview URL to play a brand-new install. With that launch still up,
+`node --experimental-strip-types scripts/verify-onboarding-ui.ts <handle>`
+walks the browser's two screens (the welcome, then Connect an AI with the fake
+Claude already connected) into the Chief's chat, through a failed and a slow
+completion save, and sends the first message. The welcome can no longer be
+replayed from Settings, so the script does not try.
 
 Timed walk (Nov 10 2026, w16/onboarding): a fresh fixture with Dusk renamed
 back from the fixture name, the fake engine scripted to answer a price job in

@@ -26,7 +26,7 @@ import { dropSentTurn, followSendReceipt, noteSentTurn } from "./sent-turn";
 import { applySendReceipt } from "./send-receipt";
 import { foldSnapshotOntoStreamed, patchedGroups, roomAnswers, snapshotPatch } from "./room-frames";
 import { savedStateAction, type SavedOwner, type SavedSnapshot } from "./saved-state";
-import { heldTranscript, keepBotNavigation, keepGroupNavigation, navigatedSince, openElsewhere, visibleMessages } from "./snapshot-navigation";
+import { firstLivePage, heldTranscript, keepBotNavigation, keepGroupNavigation, navigatedSince, openElsewhere, visibleMessages } from "./snapshot-navigation";
 import { createTranscriptCache, indexedDbShelf, reconcileTranscript, type CachedTranscript } from "./transcript-cache";
 import { TranscriptShelfScope } from "./transcript-scope";
 export { shownTranscript, visibleMessages } from "./snapshot-navigation";
@@ -1225,7 +1225,7 @@ export function reducer(state: AppState, action: Action): AppState {
         // Old approvals must never be sent to the replacement thread while its transcript loads.
         messages: switchedThread ? [] : b.messages,
         hasMore: switchedThread ? undefined : b.hasMore,
-        transcriptStale: switchedThread ? undefined : b.transcriptStale,
+        transcriptStale: switchedThread ? undefined : b.transcriptStale, ...(switchedThread ? {} : firstLivePage(before, action.bot)),
       }));
       return reconcileModelVariantSessions(patched);
     }

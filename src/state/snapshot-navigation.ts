@@ -115,3 +115,11 @@ const NO_MESSAGES: Message[] = [];
 export function shownTranscript<T extends { messages: Message[]; transcriptLoaded?: boolean }>(owner: T): T {
   return owner.transcriptLoaded === false ? { ...owner, messages: NO_MESSAGES } : owner;
 }
+
+export function firstLivePage(
+  held: Pick<Bot, "threadId" | "messages" | "transcriptLoaded" | "activeLeafId">,
+  incoming: Pick<Bot, "threadId"> & Partial<Pick<Bot, "messages" | "hasMore" | "activeLeafId">>,
+): Partial<Pick<Bot, "messages" | "hasMore" | "activeLeafId">> {
+  if (incoming.threadId !== held.threadId || held.messages.length > 0 || held.transcriptLoaded === false || !incoming.messages?.length) return {};
+  return { messages: incoming.messages, hasMore: incoming.hasMore, activeLeafId: incoming.activeLeafId ?? held.activeLeafId };
+}

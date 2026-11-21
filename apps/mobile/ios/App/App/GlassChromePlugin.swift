@@ -82,13 +82,15 @@ public class GlassChromePlugin: CAPPlugin, CAPBridgedPlugin {
         guard #available(iOS 26.0, *) else { return }
         let text = call.getString("text") ?? ""
         let seq = call.getInt("seq") ?? 0
-        withChrome { $0.setText(text, seq: seq) }
+        let basedOnEdit = call.getInt("basedOnEdit")
+        withChrome { $0.setText(text, seq: seq, basedOnEdit: basedOnEdit) }
     }
 
     @objc func clearText(_ call: CAPPluginCall) {
         guard #available(iOS 26.0, *) else { return }
         let id = call.getInt("id") ?? 0
-        withChrome { $0.clearText(id: id) }
+        let basedOnEdit = call.getInt("basedOnEdit")
+        withChrome { $0.clearText(id: id, basedOnEdit: basedOnEdit) }
     }
 
     @objc func setAvatar(_ call: CAPPluginCall) {
@@ -450,6 +452,9 @@ final class ChatGlassChrome: NSObject, UITextViewDelegate {
     private var inCall = false
     private var returnSends = true
     private var textSeq = 0
+    private var nativeEdit = 0
+    private var totalNativeEdits = 0
+    private var settlingMarkedText = false
     private var reportedHeight: CGFloat = 0
     private var composerDomHeight: CGFloat = 0
     private var accent = UIColor.systemBlue
@@ -1374,6 +1379,7 @@ final class ChatGlassChrome: NSObject, UITextViewDelegate {
     /// The chat is gone (or the page reloaded): the next one's text comes with a fresh sequence, and the field starts empty.
     func resetText() {
         textSeq = 0
+        nativeEdit = 0
         reportedHeight = 0
         if !(text.text ?? "").isEmpty {
             text.text = ""
@@ -1382,11 +1388,16 @@ final class ChatGlassChrome: NSObject, UITextViewDelegate {
         }
     }
 
-    /// The page took a send out of the field: it empties whatever it holds and whatever sequence it last took, and a
-    /// guess dictation or the keyboard still had open is settled first, so it cannot land in the emptied field after.
-    func clearText(id: Int) {
+    func clearText(id: Int, basedOnEdit: Int?) {
+        if let basedOnEdit {
+            guard basedOnEdit == nativeEdit, id >= textSeq else { return }
+        }
         let had = (text.text ?? "").count
-        if text.markedTextRange != nil { text.unmarkText() }
+        if text.markedTextRange != nil {
+            settlingMarkedText = true
+            text.unmarkText()
+            settlingMarkedText = false
+        }
         textSeq = max(textSeq, id)
         if !(text.text ?? "").isEmpty {
             text.text = ""
@@ -1402,9 +1413,10 @@ final class ChatGlassChrome: NSObject, UITextViewDelegate {
         emit(["type": "cleared", "id": id])
     }
 
-    func setText(_ value: String, seq: Int) {
-        KeyboardTrace.log("setText", ["seq": CGFloat(seq), "length": CGFloat(value.count), "stale": seq > textSeq ? 0 : 1])
-        guard seq > textSeq else { return }
+    func setText(_ value: String, seq: Int, basedOnEdit: Int?) {
+        let current = seq > textSeq && (basedOnEdit == nil || basedOnEdit == nativeEdit)
+        KeyboardTrace.log("setText", ["seq": CGFloat(seq), "length": CGFloat(value.count), "stale": current ? 0 : 1])
+        guard current else { return }
         textSeq = seq
         if text.text != value {
             text.text = value
@@ -1516,9 +1528,12 @@ final class ChatGlassChrome: NSObject, UITextViewDelegate {
     }
 
     func textViewDidChange(_ textView: UITextView) {
+        guard !settlingMarkedText else { return }
+        totalNativeEdits += 1
+        nativeEdit = totalNativeEdits
         updatePlaceholder()
         layoutComposer()
-        emit(["type": "text", "text": textView.text ?? ""])
+        emit(["type": "text", "text": textView.text ?? "", "edit": nativeEdit])
     }
 
     /// UIKit asks this before the field takes focus, so the keyboard's first frame notification already knows it is ours

@@ -90,7 +90,7 @@ export function callHoldsComposer(chat: Element | null): boolean {
 export type GlassEvent =
   | { type: "tap"; target: "back" | "title" | "right" | "plus" | "jump" | "clearReply" | "search" | "newBot" }
   | { type: "button"; index: number; kind?: GlassButtonKind }
-  | { type: "text"; text: string }
+  | { type: "text"; text: string; edit?: number }
   | { type: "submit" }
   | { type: "focus"; focused: boolean }
   | { type: "height"; height: number }
@@ -113,10 +113,10 @@ export interface GlassBridge {
   /** the native side draws the composer's reply strip inside the capsule */
   reply?: boolean;
   update(state: GlassState): void;
-  setText(text: string, seq: number): void;
-  /** Empties the native field for a send the page took, whatever it holds or the sequence it last took, and answers with
-   * a `cleared` event (apps before 1.4 have none: their field follows `setText` alone). */
-  clearText?(id: number): void;
+  /** A draft write based on the last observed keyboard edit (zero before the first edit). */
+  setText(text: string, seq: number, basedOnEdit: number): void;
+  /** Clears the submitted edit and acknowledges it. Older native builds ignore the edit revision. */
+  clearText?(id: number, basedOnEdit: number): void;
   setAvatar(data: string | null): void;
   focus(): void;
   blur(): void;
@@ -567,31 +567,29 @@ export function nextTextSeq(): number {
   return textSeq;
 }
 
-/** A send the page took out of the native field: text the native side reports within this long that still begins with
- * what was sent is the field's own text from before the clear (a late keystroke, a committed autocorrection or dictation
- * guess), never new typing, and is not typed back into the emptied composer. */
+/** How long to recognize late dictation or autocorrection events from older native builds that omit edit revisions. */
 export const SENT_ECHO_MS = 1500;
 /** a tap on Send the page did not take (an upload still running, nothing to send) stops waiting for the field to empty */
 const SEND_TAKE_MS = 1000;
 
-/** Watches each native Send for the page taking it: once the page's field empties, the native one is cleared outright
- * (keyed to that send, not left to a text diff), and the old text the native side may still send is refused. */
+/** Tracks which native edit the page submitted and recognizes text echoes from unversioned keyboards. */
 export function sendClearing() {
-  let tapped: { text: string; at: number } | null = null;
-  let sent: { id: number; text: string; until: number } | null = null;
+  let tapped: { text: string; at: number; edit: number } | null = null;
+  let sent: { id: number; text: string; until: number; edit: number } | null = null;
   return {
-    tapped(text: string, now: number) { tapped = text.trim() ? { text, at: now } : null; },
+    tapped(text: string, now: number, edit: number) { tapped = text.trim() ? { text, at: now, edit } : null; },
     /** the send the page just took, once its field shows it emptied */
-    taken(value: string, now: number): { id: number; text: string } | null {
+    taken(value: string, now: number) {
       if (!tapped) return null;
       if (value.trim() !== "") {
         if (now - tapped.at > SEND_TAKE_MS) tapped = null;
         return null;
       }
-      sent = { id: nextTextSeq(), text: tapped.text, until: now + SENT_ECHO_MS };
+      sent = { id: nextTextSeq(), text: tapped.text, edit: tapped.edit, until: now + SENT_ECHO_MS };
       tapped = null;
       return sent;
     },
+    cleared(id: number) { if (sent && id >= sent.id) sent = null; },
     /** the native field's text from before a send's clear, arriving after the tap: `taken` once the native field has
      * been told to empty, else the page is still taking it and empties it then */
     echo(text: string, now: number): { taken: boolean } | null {
@@ -666,6 +664,7 @@ export function useNativeGlass(platform: MobilePlatform, rootRef: RefObject<HTML
     // null until the first frame: a chat opening hands the native field its own text (or none), whatever the last one left
     let fromNative: string | null = null;
     let toNative: string | null = null;
+    let nativeEdit = 0;
     let avatar: string | null | undefined;
     let avatarAt = 0;
     let avatarName: string | null = null;
@@ -705,6 +704,12 @@ export function useNativeGlass(platform: MobilePlatform, rootRef: RefObject<HTML
       else if (!on && html.dataset[name] !== undefined) delete html.dataset[name];
     };
 
+    const syncPageText = () => {
+      if (field?.isConnected && field.value !== fromNative && field.value !== toNative) {
+        toNative = field.value;
+        glass.setText(field.value, nextTextSeq(), nativeEdit);
+      }
+    };
     const tick = () => {
       frame = requestAnimationFrame(tick);
       if (document.hidden) return;
@@ -715,14 +720,11 @@ export function useNativeGlass(platform: MobilePlatform, rootRef: RefObject<HTML
         // a draft put back after a failed send differs from both, so it goes to the native field again
         fromNative = null;
         toNative = "";
-        glass.setText("", took.id);
-        glass.clearText?.(took.id);
+        glass.setText("", took.id, took.edit);
+        glass.clearText?.(took.id, took.edit);
       }
       // what the page itself put in its field (a draft, a cleared send, a picked mention) goes to the native field
-      if (field && field.value !== fromNative && field.value !== toNative) {
-        toNative = field.value;
-        glass.setText(field.value, nextTextSeq());
-      }
+      syncPageText();
       const now = performance.now();
       // a slide holds its target until the page says it stopped: its compositor may land a frame after this clock
       const pageMoving = root.querySelector(".mobile-page[data-moving]") !== null;
@@ -789,10 +791,7 @@ export function useNativeGlass(platform: MobilePlatform, rootRef: RefObject<HTML
         sentAt = now;
         glass.update(next);
       }
-      if (field && field.value !== fromNative && field.value !== toNative) {
-        toNative = field.value;
-        glass.setText(field.value, nextTextSeq());
-      }
+      syncPageText();
     };
 
     const click = (el: Element | null | undefined) => (el instanceof HTMLElement ? el : null)?.click();
@@ -809,18 +808,22 @@ export function useNativeGlass(platform: MobilePlatform, rootRef: RefObject<HTML
         case "button": {
           if (event.kind === "send" || event.kind === "micSend") {
             kbTrace("send tap", { kind: event.kind, keyboard: root.dataset.keyboard ?? "down" });
-            sends.tapped(liveField()?.value ?? "", performance.now());
+            sends.tapped(liveField()?.value ?? "", performance.now(), nativeEdit);
           }
           click((event.kind && elements.find((el) => buttonKind(el) === event.kind)) || elements[event.index]);
           break;
         }
         case "text": {
-          const echo = sends.echo(event.text, performance.now());
+          if (event.edit !== undefined) {
+            if (event.edit <= nativeEdit) break;
+            nativeEdit = event.edit;
+          }
+          const echo = event.edit === undefined && sends.echo(event.text, performance.now());
           if (echo) {
             kbTrace("stale text dropped", { taken: echo.taken ? 1 : 0, length: event.text.length });
             if (echo.taken) {
-              glass.setText("", nextTextSeq());
-              glass.clearText?.(nextTextSeq());
+              glass.setText("", nextTextSeq(), nativeEdit);
+              glass.clearText?.(nextTextSeq(), nativeEdit);
             }
             break;
           }
@@ -830,10 +833,13 @@ export function useNativeGlass(platform: MobilePlatform, rootRef: RefObject<HTML
           if (target) typeInto(target, event.text);
           break;
         }
-        case "cleared": kbTrace("native cleared", { id: event.id }); break;
+        case "cleared":
+          sends.cleared(event.id);
+          kbTrace("native cleared", { id: event.id });
+          break;
         case "submit": {
           const target = liveField();
-          sends.tapped(target?.value ?? "", performance.now());
+          sends.tapped(target?.value ?? "", performance.now(), nativeEdit);
           const sendButton = elements.find((el) => buttonKind(el) === "send" || buttonKind(el) === "micSend");
           if (sendButton) click(sendButton);
           else target?.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", code: "Enter", bubbles: true, cancelable: true }));

@@ -163,8 +163,8 @@ const DuskSpeech = registerPlugin<SpeechPlugin>("DuskSpeech");
 interface GlassPlugin {
   supported(): Promise<{ supported: boolean; acks?: boolean; jump?: boolean; reply?: boolean }>;
   update(state: GlassState): Promise<void>;
-  setText(options: { text: string; seq: number }): Promise<void>;
-  clearText(options: { id: number }): Promise<void>;
+  setText(options: { text: string; seq: number; basedOnEdit: number }): Promise<void>;
+  clearText(options: { id: number; basedOnEdit: number }): Promise<void>;
   setAvatar(options: { data: string | null }): Promise<void>;
   focus(): Promise<void>;
   blur(): Promise<void>;
@@ -269,8 +269,8 @@ export function glassBridge(plugin: GlassPlugin, acks = false, jump = false, rep
     jump,
     reply,
     update: (state) => quiet(plugin.update(state)),
-    setText: (text, seq) => quiet(plugin.setText({ text, seq })),
-    clearText: (id) => quiet(plugin.clearText({ id })),
+    setText: (text, seq, basedOnEdit) => quiet(plugin.setText({ text, seq, basedOnEdit })),
+    clearText: (id, basedOnEdit) => quiet(plugin.clearText({ id, basedOnEdit })),
     setAvatar: (data) => quiet(plugin.setAvatar({ data })),
     focus: () => quiet(plugin.focus()),
     blur: () => quiet(plugin.blur()),

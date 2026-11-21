@@ -193,8 +193,8 @@ function fakeGlass() {
   let listener: ((event: GlassEvent) => void) | null = null;
   const glass = {
     update: vi.fn<(state: GlassState) => void>(),
-    setText: vi.fn<(text: string, seq: number) => void>(),
-    clearText: vi.fn<(id: number) => void>(),
+    setText: vi.fn<(text: string, seq: number, basedOnEdit: number) => void>(),
+    clearText: vi.fn<(id: number, basedOnEdit: number) => void>(),
     setAvatar: vi.fn(),
     focus: vi.fn(),
     blur: vi.fn(),
@@ -457,12 +457,68 @@ describe("useNativeGlass", () => {
     expect(($("field") as HTMLTextAreaElement).value).toBe("");
     runFrame();
     const id = glass.clearText.mock.calls[0]![0];
-    expect(glass.setText).toHaveBeenLastCalledWith("", id);
+    expect(glass.setText).toHaveBeenLastCalledWith("", id, 0);
     send({ type: "text", text: LONG });
     expect(($("field") as HTMLTextAreaElement).value).toBe("");
     expect(glass.clearText.mock.calls.length).toBeGreaterThan(1);
     send({ type: "text", text: "next one" });
     expect(($("field") as HTMLTextAreaElement).value).toBe("next one");
+  });
+
+  it("ignores a late or duplicate keyboard edit and bases a page draft on the newest edit", () => {
+    const { glass, send, $ } = mount();
+    runFrame();
+    const field = $("field") as HTMLTextAreaElement;
+    send({ type: "text", text: "hel", edit: 3 });
+    send({ type: "text", text: "he", edit: 2 });
+    expect(field.value).toBe("hel");
+
+    typeInto(field, "hello");
+    runFrame();
+    send({ type: "text", text: "hel", edit: 3 });
+    expect(field.value).toBe("hello");
+    expect(glass.setText).toHaveBeenLastCalledWith("hello", expect.any(Number), 3);
+  });
+
+  it("bases both delayed clear commands on the edit that was sent", () => {
+    const { glass, send, $ } = mount();
+    pageSends($);
+    runFrame();
+    send({ type: "text", text: "OK", edit: 7 });
+    send({ type: "button", index: 0, kind: "send" });
+    send({ type: "text", text: "", edit: 8 });
+    runFrame();
+
+    expect(glass.clearText).toHaveBeenCalledWith(expect.any(Number), 7);
+    const [id] = glass.clearText.mock.calls[0]!;
+    expect(glass.setText).toHaveBeenLastCalledWith("", id, 7);
+  });
+
+  it("accepts an immediate same-prefix follow-up while the clear acknowledgement is in flight", () => {
+    const { glass, send, $ } = mount();
+    pageSends($);
+    runFrame();
+    send({ type: "text", text: "OK", edit: 1 });
+    send({ type: "button", index: 0, kind: "send" });
+    runFrame();
+    const [id] = glass.clearText.mock.calls[0]!;
+    send({ type: "text", text: "OK thanks", edit: 2 });
+    send({ type: "cleared", id });
+    send({ type: "text", text: "OK", edit: 1 });
+    expect(($("field") as HTMLTextAreaElement).value).toBe("OK thanks");
+    expect(glass.clearText).toHaveBeenCalledTimes(1);
+  });
+
+  it("accepts a same-prefix follow-up from an unversioned keyboard after its clear acknowledgement", () => {
+    const { glass, send, $ } = mount();
+    pageSends($);
+    runFrame();
+    send({ type: "text", text: "OK" });
+    send({ type: "button", index: 0, kind: "send" });
+    runFrame();
+    send({ type: "cleared", id: glass.clearText.mock.calls[0]![0] });
+    send({ type: "text", text: "OK thanks" });
+    expect(($("field") as HTMLTextAreaElement).value).toBe("OK thanks");
   });
 
   it("leaves the native field alone when the page does not take the send", () => {
@@ -486,7 +542,7 @@ describe("useNativeGlass", () => {
     expect(glass.clearText).toHaveBeenCalledTimes(1);
     typeInto($("field") as HTMLTextAreaElement, LONG);
     runFrame();
-    expect(glass.setText).toHaveBeenLastCalledWith(LONG, expect.any(Number));
+    expect(glass.setText).toHaveBeenLastCalledWith(LONG, expect.any(Number), 0);
   });
 
   it("types native text into the composer's current field after the page made it anew", () => {
@@ -503,7 +559,7 @@ describe("useNativeGlass", () => {
     const { glass, send, $ } = mount();
     runFrame();
     expect(glass.setText, "a chat opening hands the field its own text, empty here").toHaveBeenCalledTimes(1);
-    expect(glass.setText.mock.calls[0]![0]).toBe("");
+    expect(glass.setText).toHaveBeenCalledWith("", expect.any(Number), 0);
     send({ type: "text", text: "hel" });
     runFrame();
     expect(glass.setText).toHaveBeenCalledTimes(1);

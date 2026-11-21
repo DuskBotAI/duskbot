@@ -1,6 +1,7 @@
 // Answers the trace routes: the period's roots with totals, and one root's span tree, limited to the threads a viewer may see.
 import type { TraceDetail, TraceList, TraceRootSummary } from "../../shared/usage-trace.ts";
 import type { WireMessage } from "../../shared/wire.ts";
+import { routineStartOf } from "../../shared/routine-run.ts";
 import { ledgerRows } from "./ledger.ts";
 import { addTotals, emptyTotals, linkTurns, summarizeRoot, subtree, traceTurn, type LiveBot, type TurnNode } from "./build.ts";
 import type { TraceRecorder } from "./recorder.ts";
@@ -10,7 +11,7 @@ export interface TraceServiceDeps {
   dataDir: string;
   recorder: Pick<TraceRecorder, "liveTurns">;
   liveBot(threadId: string): LiveBot | null;
-  messages(threadId: string): readonly Pick<WireMessage, "id" | "role" | "kind" | "text" | "turnId" | "requestMessageId" | "at">[];
+  messages(threadId: string): readonly Pick<WireMessage, "id" | "role" | "kind" | "text" | "turnId" | "requestMessageId" | "at" | "routineStart">[];
   now?: () => number;
 }
 
@@ -34,7 +35,10 @@ export function createTraceService(deps: TraceServiceDeps) {
     const request = root.turnId ? messages.find((message) => message.turnId === root.turnId && message.requestMessageId)?.requestMessageId : undefined;
     const asked = request ? messages.find((message) => message.id === request)
       : messages.findLast((message) => message.role === "user" && message.kind === "text" && message.at <= root.startedAt + 1_000);
-    return asked?.text ? clip(asked.text) : "";
+    if (!asked) return "";
+    const routine = routineStartOf(asked);
+    if (routine) return routine.name;
+    return asked.text ? clip(asked.text) : "";
   }
 
   /** Visible roots, newest first, each limited to the turns in threads the viewer may see. */

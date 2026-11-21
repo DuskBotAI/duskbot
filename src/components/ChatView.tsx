@@ -76,7 +76,7 @@ import { enterFromComposer, growFromMascot, hasSendLaunch } from "./bubble-entra
 import { STATUS_MOUNT_MS, useReached } from "@/hooks/use-reached";
 import { lifeDraw } from "@/lib/reply-life";
 import { lastNonReceipt } from "@/lib/receipts";
-import { routineStartName } from "./RoutineStartLine"; import { SILENT_LINE } from "../../shared/routine-run.ts"; import { useTurnLive } from "@/state/turn-status"; import { useLiveReplyActive } from "@/state/live-reply"; import { useTurnNow } from "./NowCard"; import { useThreadRoutineRun } from "@/state/older-routine-runs";
+import { routineStartName } from "./RoutineStartLine"; import { SILENT_LINE } from "../../shared/routine-run.ts"; import { routineRetryFor } from "@/lib/routine-retry"; import { useTurnLive } from "@/state/turn-status"; import { useLiveReplyActive } from "@/state/live-reply"; import { useTurnNow } from "./NowCard"; import { useThreadRoutineRun } from "@/state/older-routine-runs";
 import { followSentTurn, sentTurn, useSentTurn } from "@/state/sent-turn";
 import { waitsForNetwork } from "@/state/network-wait";
 import { useOffline } from "@/mobile/network";
@@ -1229,11 +1229,19 @@ export function ChatView({ bot: profile }: { bot: Bot }) {
     return ids;
   }, [trailing, turnBusy, messages]);
   const clearLimitError = useCallback(() => dispatch({ type: "error", message: null }), [dispatch]);
+  const routineRetry = useMemo(() => routineRetryFor(lastUserMessage, state.routines), [lastUserMessage, state.routines]);
+  const routineRetryKnown = routineRetry && (routineRetry.state !== "gone" || state.routinesLoadState === "ready") ? routineRetry : null;
   const regenerate = useCallback(() => {
-    if (lastUserMessage?.text && !bot.busy && !lastUserMessage.id.startsWith("optimistic-")) {
+    if (bot.busy) return;
+    if (routineRetry) {
+      if (routineRetry.state === "ready") dispatch({ type: "runRoutine", routineId: routineRetry.routineId });
+      return;
+    }
+    if (lastUserMessage?.text && !lastUserMessage.id.startsWith("optimistic-")) {
       dispatch({ type: "editMessage", botId: bot.id, threadId: bot.threadId, messageId: lastUserMessage.id, text: lastUserMessage.text });
     }
-  }, [lastUserMessage, bot.busy, bot.id, bot.threadId, dispatch]);
+  }, [lastUserMessage, routineRetry, bot.busy, bot.id, bot.threadId, dispatch]);
+  const canRegenerate = Boolean(lastUserMessage) && (!routineRetry || routineRetry.state === "ready");
 
   const currentLink = profile.tasks?.find((task) => task.threadId === bot.threadId)?.link;
   const threadLink = useMemo(() => canWrite !== false
@@ -1410,7 +1418,7 @@ export function ChatView({ bot: profile }: { bot: Bot }) {
               editingId={editingId}
               lastBotTextId={lastBotTextId}
               emergingId={null}
-              canRetryLast={!bot.busy && Boolean(lastUserMessage)}
+              canRetryLast={!bot.busy && canRegenerate}
               engine={state.instances.find((i) => i.instanceId === bot.modelSelection.instanceId)}
               unreadDividerId={unreadDivider.messageId}
               unreadDividerFading={unreadDivider.fading}
@@ -1446,7 +1454,7 @@ export function ChatView({ bot: profile }: { bot: Bot }) {
               </div>
             </div>
           )}
-          <TranscriptCardSlot key={transcriptKey}><FailedReplyCard rows={rescuing ? null : trailing} botId={bot.id} threadId={bot.threadId} onRetry={lastUserMessage ? regenerate : undefined} /></TranscriptCardSlot>
+          <TranscriptCardSlot key={transcriptKey}><FailedReplyCard rows={rescuing ? null : trailing} botId={bot.id} threadId={bot.threadId} onRetry={canRegenerate ? regenerate : undefined} routine={routineRetryKnown ?? undefined} /></TranscriptCardSlot>
           <div className={statusSlot ? cn("turn-status-slot h-9 shrink-0", presenceUnderBubble && SIMPLE_STACKED) : "contents"}>
           {(presenceVisible || presenceShown) && <TurnPresence
             key={chatKey}

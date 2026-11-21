@@ -1,4 +1,5 @@
 import { UNTITLED_TASK, UNTITLED_THREAD, threadTitleFrom, titleFromMessage } from "./thread-title.ts";
+import { routineStartOf } from "../shared/routine-run.ts";
 import { chmodSync, existsSync, mkdirSync, rmSync, statSync, unlinkSync } from "node:fs";
 import { join } from "node:path"; import { isDeepStrictEqual } from "node:util";
 
@@ -2049,7 +2050,7 @@ export class Store {
   }
 
   private firstUserLine(threadId: string): string | null {
-    const first = this.messagesFor(threadId).find((m) => m.role === "user" && m.kind === "text" && m.text?.trim());
+    const first = this.messagesFor(threadId).find((m) => m.role === "user" && m.kind === "text" && m.text?.trim() && !routineStartOf(m));
     return first?.text ? titleFromMessage(first.text) : null;
   }
 

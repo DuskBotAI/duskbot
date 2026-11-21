@@ -32,7 +32,7 @@ import { botAvatarUrlFromStoredPath } from "../shared/bot-avatar.ts";
 import { BOT_PROFILE_LIMITS } from "../shared/bot-profile.ts";
 import { ERROR_DUMP_REFUSAL, sendsErrorDump, withoutEchoedPrompt } from "../shared/failed-turn.ts"; import { failedTurnRow } from "./failed-turn-row.ts";
 import { plainComputerFailure } from "../shared/computer-unreachable.ts";
-import { routinePromptName } from "../shared/routine-run.ts";
+import { routinePromptName, routineStartMark, routineStartOf } from "../shared/routine-run.ts";
 import { assistantTranscript, errorTranscript } from "../shared/client-cancel.ts"; import { PersonStops, stoppedTurnRow } from "./person-stops.ts"; import { LiveTurns } from "./live-turns.ts"; import { askedElsewhereAt, personClock, previousPersonMessageAt } from "./turn-gap.ts";
 import { phonePairingLink } from "../shared/pairing-link.ts"; import { personTagNames, withoutPersonTags } from "../shared/person-mention.ts";
 import { canWorkOnCloud, type CloudEngine } from "../shared/cloud-computer.ts";
@@ -8710,7 +8710,7 @@ async function beginTurn(
   else { clearInternalTurn(threadId); doneNotice.personTurnStarted(threadId); }
   if (answer.quiet) quietTurnThreads.add(threadId);
   else quietTurnThreads.delete(threadId);
-  if (resolvedImages.text.trim() && !opts?.cardContinuation && !opts?.replyTo?.reactedWith && opts?.automationSource === undefined) {
+  if (resolvedImages.text.trim() && !opts?.cardContinuation && !opts?.replyTo?.reactedWith && opts?.automationSource === undefined && routinePromptName(resolvedImages.text) === null) {
     const titled = store.titleTaskFromFirstMessage(bot.id, resolvedImages.text, threadId);
     const snippet = titled?.title;
     if (titled && snippet && !titled.openedBy?.botId && llmThreadTitlesEnabled(cfg) && instance.generateText) {
@@ -8743,7 +8743,7 @@ async function beginTurn(
   }
 
   let userMessage = opts?.userMessage;
-  if (opts?.editedMessageId) {
+  if (opts?.editedMessageId) { if (routineStartOf(store.messagesFor(threadId).find((message) => message.id === opts.editedMessageId) ?? { role: "" })) throw Object.assign(new Error("a routine run's prompt is not a message to send again: run the routine again instead"), { status: 409, code: "routine_line" });
     const edited = store.branchMessage(threadId, opts.editedMessageId, text, opts.sendId, opts.sender, opts.dataContext);
     if (!edited) throw Object.assign(new Error("only a user text message can be edited"), { status: 400 });
     store.patchTask(bot.id, threadId, { rewound: true });
@@ -8764,7 +8764,7 @@ async function beginTurn(
           sender: opts?.sender,
           ...spokenLineFields(opts?.via, opts?.callId),
           ...(opts?.relayed ? { relayed: true } : {}),
-          ...(opts?.automationSource !== undefined ? { routineStart: { name: activeRoutineRunForThread(threadId)?.routineName ?? routinePromptName(text) ?? "" } } : {}),
+          ...(opts?.automationSource !== undefined ? { routineStart: routineStartMark(activeRoutineRunForThread(threadId), text) } : {}),
         });
   }
   const personLine = !opts?.coordination && !opts?.cardContinuation && !opts?.automationSource && !opts?.compactOnly

@@ -26,6 +26,7 @@ import { useDesktopCapabilities } from "./DesktopCapabilities";
 import { useLimitResetContinue } from "./EngineUsage";
 import { bugReportFixedText } from "./BugReportNote";
 import { openBotSettings } from "./bot-panel/panel-link";
+import type { RoutineRetry } from "@/lib/routine-retry";
 
 // a card someone closed stays closed for this run of the app; a newer failure is a new card
 const dismissed = new Set<string>();
@@ -63,7 +64,7 @@ type CardAction = { label: string; onClick: () => void };
 
 /** grok's failed-reply card: one card just above the composer for every reply the newest turn lost, gone once anything
  * newer lands or it is closed. In a group it names who couldn't reply and says the reason a person can fix. */
-export function FailedReplyCard({ rows, group = false, botId: ownBotId, threadId, onRetry }: {
+export function FailedReplyCard({ rows, group = false, botId: ownBotId, threadId, onRetry, routine }: {
   rows: TrailingRows | null;
   group?: boolean;
   /** a direct chat's bot, whose rows carry no sender */
@@ -71,6 +72,8 @@ export function FailedReplyCard({ rows, group = false, botId: ownBotId, threadId
   threadId?: string;
   /** retries the last turn, when it can be retried */
   onRetry?: () => void;
+  /** the failed turn was a routine's run: trying again runs that routine again, never resends its prompt */
+  routine?: RoutineRetry;
 }) {
   const { state, dispatch } = useStore();
   const { capabilities } = useDesktopCapabilities();
@@ -219,6 +222,7 @@ export function FailedReplyCard({ rows, group = false, botId: ownBotId, threadId
     if (first) actions.push(first);
     if (after) actions.push(after);
   }
+  if (routine?.state === "paused") actions.unshift({ label: t("routines.inline.open"), onClick: () => dispatch({ type: "openRoutine", routineId: routine.routineId, botId: leadBotId }) });
   if (actions.length === 0 && !update && lead.kind !== "place" && leadBotId) actions.push({ label: t("chat.rescue.switchAi"), onClick: () => openBotSettings(dispatch, "model", { botId: leadBotId }) });
   // a sign-out notice beside a failure for another reason: still one card, its Sign in a pill on it
   const signInTile = lead.engine && aiTileOf(lead.engine);
@@ -246,6 +250,7 @@ export function FailedReplyCard({ rows, group = false, botId: ownBotId, threadId
           </p>
         )}
         {did && <p dir="auto" className="text-ink-secondary">{t("failedReply.restartedDid", { done: did })}</p>}
+        {routine && routine.state !== "event" && <p dir="auto" className="text-ink-secondary" data-routine-retry={routine.state}>{t(`failedReply.routine.${routine.state}`, { name: routine.name })}</p>}
         {update}
       </ChatErrorCard>
       {connecting && <ConnectAiDialog tested={null} start={typeof connecting === "string" ? connecting : undefined} onClose={() => setConnecting(false)} />}

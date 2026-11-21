@@ -27,7 +27,7 @@ export const KEEP_PHRASES: readonly string[] = [
   "Cloudflare Workers AI", "OpenCode Zen, Go", "OpenCode Zen and Go", "DeepSeek Harness", "Grok Imagine", "Muse Wonder", "Wispr Flow",
   "Cua Driver", "VS Code", "Node.js", "Wi-Fi", "Gmail, Calendar or Drive", "Outlook, Calendar or OneDrive", "Google Drive",
   "1Password", "AirPods Pro", "Google Calendar", "Google Sheets", "Google Docs", "Google Meet", "Microsoft Teams", "X Developer",
-  "Settings › Phone", "Settings › Voice", "Settings › Transfer", "Scan a QR code", "New code",
+  "Settings › Phone", "Settings › Voice", "Settings › Transfer", "Scan a QR code", "New code", "Chime A",
 ];
 
 /** whole strings left alone: the remote desktop's key caps, drawn as keys, and the viewer's line that starts with noVNC's own name */

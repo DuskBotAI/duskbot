@@ -6,11 +6,11 @@ import { activeLocale, t } from "@/lib/i18n";
 import type { LocaleKey } from "@/locales";
 import { api, type Action, type Bot, type ConfigStatus } from "@/state/store";
 import {
-  aboutMeWithNotes, isNotesPrompt, NOTES_MAX_CHARS, looksLikeNotes, notesMemoryFile, notesMemoryText, notesThreadsFile, notesThreadsText, NOTES_PROMPT, parseNotes, type AssistantNotes,
+  aboutMeWithNotes, isNotesPrompt, NOTES_MAX_CHARS, looksLikeNotes, notesMemoryFile, notesMemoryPages, notesThreadsFile, notesThreadsText, NOTES_PROMPT, parseNotes, type AssistantNotes,
 } from "../../shared/assistant-notes";
 import { notesNoteFacts, postImportNote } from "./import-note";
 import { arrivalFailed, noteArrival, setNotesWork, type NotesVia } from "./notes-arrival";
-import { distillChunks, distillLines } from "../../shared/memory-distill";
+import { distillChunks, distillLines, noiseReason, NOTE_MAX_CHARS } from "../../shared/memory-distill";
 import { GrokImportError } from "../../shared/grok-import";
 import { copyText } from "./copy-text";
 import type { SaveFacts } from "./grok-move";
@@ -139,7 +139,6 @@ export function scheduleNotesReminder(show: () => void, now = Date.now()): () =>
 /** One move's facts for About me, across all its bots, and what pasted notes may add at once. */
 export const ABOUT_ME_MOVE_CAP = 40;
 export const NOTES_ABOUT_CAP = 80;
-export const NOTES_MEMORY_CAP = 200;
 
 // a learned line is compared by its fact, not its date and source
 const aboutLines = (text: string) => text.split("\n").map((line) => line.replace(/^\s*-\s*\d{4}-\d{2}-\d{2} · learned by [^·\n]* · /, "").replace(/^\s*(?:[-*]|\d+[.)])\s+/, "").trim()).filter(Boolean);
@@ -215,10 +214,26 @@ async function mergeTopic(botId: string, path: string, build: (before: string) =
   return true;
 }
 
-async function saveMemories(notes: AssistantNotes, botId: string | null): Promise<number> {
+/** Every memory word for word in the memories topic, over its pages, merged with what earlier pages hold: answers how
+ * many weren't there yet. */
+async function saveMemories(notes: Pick<AssistantNotes, "from" | "memories">, botId: string | null): Promise<number> {
   if (!botId || !notes.memories.length) return 0;
-  return await mergeTopic(botId, notesMemoryFile(notes), (before) => notesMemoryText(notes, before)) ? notes.memories.length : 0;
+  const file = `/api/bots/${encodeURIComponent(botId)}/memory/file`;
+  const before: string[] = [];
+  for (let page = 1; ; page += 1) {
+    const text = await api<{ text?: string }>(`${file}?path=${encodeURIComponent(notesMemoryFile(notes, page))}`).then((doc) => doc.text ?? "", () => "");
+    if (!text.trim()) break;
+    before.push(text);
+  }
+  const { pages, added } = notesMemoryPages(notes, before);
+  for (const [index, text] of pages.entries()) {
+    if (text !== before[index]) await api(file, { method: "PUT", body: JSON.stringify({ path: notesMemoryFile(notes, index + 1), text }) });
+  }
+  return added;
 }
+
+/** What an import never keeps: secrets, and lines with nothing in them. */
+const unkept = (line: string) => ["secret", "empty", "placeholder"].includes(noiseReason(line) ?? "");
 
 /** The person's own routines (not one of the bots'), as real routines of the first bot: paused, as any routine that
  * moves in is, until they switch it on. One already there with the same name and words is not made again. Those with no
@@ -282,9 +297,8 @@ async function joinMovedBots(notes: AssistantNotes, bots: readonly Bot[], movedN
       const plan = grokMovePlan(bot, { from: notes.from });
       const here = bots.find((one) => one.installedPackage?.id === plan.packageId);
       if (!here) continue;
-      const memories = { from: notes.from, memories: [...bot.memories] };
       const files = Object.entries(bot.memoryFiles ?? {});
-      let changed = await mergeTopic(here.id, notesMemoryFile(notes), (before) => notesMemoryText(memories, before));
+      let changed = await saveMemories({ from: notes.from, memories: bot.memories.filter((line) => !unkept(line)) }, here.id) > 0;
       for (const [path, text] of files) changed = await mergeTopic(here.id, path, (before) => (before.trim() ? null : text)) || changed;
       if (changed) joined += 1;
     } catch {}
@@ -309,10 +323,9 @@ export async function importNotes(text: string, context: NotesContext, options: 
 }
 
 async function bringNotesIn(parsed: AssistantNotes, context: NotesContext, options: { via?: NotesVia }, step: (label: string) => void, worker: string | null): Promise<NotesOutcome> {
-  // the rules pass: noise and near-repeats out; another AI's own notes are already chosen, so the caps are wider
+  // About me: the rules pass, noise and near-repeats out. Memories: each one word for word, only secrets left out
   const seen = aboutLines(context.aboutMe);
-  const memories = distillLines(parsed.memories, { cap: NOTES_MEMORY_CAP, seen: [...seen] });
-  const notes = { ...parsed, aboutMe: distillLines(parsed.aboutMe, { cap: NOTES_ABOUT_CAP, seen }).keep, memories: memories.keep };
+  const notes = { ...parsed, aboutMe: distillLines(parsed.aboutMe, { cap: NOTES_ABOUT_CAP, seen }).keep, memories: parsed.memories.filter((line) => !unkept(line)) };
   const outcome: NotesOutcome = { from: notes.from.name, facts: 0, memories: 0, threads: 0, bots: 0, botNames: [], joined: 0, routines: 0, failed: [], lost: [], partial: notes.partial };
   let aboutMe = context.aboutMe;
   step(t("composer.notes.row.memory"));
@@ -322,8 +335,9 @@ async function bringNotesIn(parsed: AssistantNotes, context: NotesContext, optio
     aboutMe = saved.text;
   } catch { outcome.lost!.push("about"); }
   try { outcome.memories = await saveMemories(notes, context.firstBotId); } catch { outcome.lost!.push("memory"); }
-  // passages and the overflow: the first bot's engine condenses them, now or once it has one
-  const later = distillChunks(memories.later.length ? [`What ${notes.from.name} remembered:\n${memories.later.map((line) => `- ${line}`).join("\n")}`] : []);
+  // a tidy-up of what is already saved: the first bot's engine condenses the passages into short notes, now or once it has one
+  const passages = notes.memories.filter((line) => line.length > NOTE_MAX_CHARS);
+  const later = distillChunks(passages.length ? [`What ${notes.from.name} remembered:\n${passages.map((line) => `- ${line}`).join("\n")}`] : []);
   if (later.length && context.firstBotId) {
     await api(`/api/bots/${encodeURIComponent(context.firstBotId)}/memory/import-distill`, { method: "POST", body: JSON.stringify({ from: notes.from.name, chunks: later.slice(0, 10) }) }).catch(() => {});
   }

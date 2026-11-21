@@ -1,8 +1,8 @@
-// The second pass of an import's memory (shared/memory-distill.ts has the first): passages and what was over the
-// caps go through the bot's own memory capture step, the one that files what a chat taught it, so its engine keeps
-// only short dated notes of what lasts (facts about the person go to About me as capture files them). With no engine
-// that can make the call yet, the material waits here and goes through once one is connected; nothing is lost and
-// nothing is kept raw.
+// A tidy-up after an import's memory is saved (shared/memory-distill.ts has the rules pass): passages go through the
+// bot's own memory capture step, the one that files what a chat taught it, so its engine adds short dated notes of what
+// lasts (facts about the person go to About me as capture files them). What was imported is already in memory word for
+// word, so this pass is optional: with no engine that can make the call yet, the material waits here and goes through
+// once one is connected.
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { z } from "zod";

@@ -136,6 +136,32 @@ describe("bringing notes in", () => {
     expect(note).toMatchObject({ from: ["Claude"], facts: 2, threads: 1 });
   });
 
+  it("keeps every memory of a big export word for word, with no engine, and says how many", async () => {
+    const memories = Array.from({ length: 136 }, (_, i) => i % 8
+      ? `Memory ${i} (2026-03-${String(1 + (i % 28)).padStart(2, "0")}): ${`the lantern workshop in hall ${i} keeps its own spare glass and opens at ${8 + (i % 4)} on weekdays; `.repeat(2 + (i % 9))}`.trim()
+      : `Memory ${i}: prefers tea over coffee in meeting ${i}.`);
+    const file = ["---", `format: ${NOTES_FORMAT}`, "version: 3", "from: Lantern Notes", "exported: 2026-11-18", "---", "", "# Memories",
+      ...memories.map((line) => `- ${line}`), "", "END OF DUSK BOT NOTES", ""].join("\n");
+    const topics = new Map<string, string>();
+    f.api.mockImplementation(async (path: string, init?: { method?: string; body?: string }) => {
+      const read = /^\/api\/bots\/(\w+)\/memory\/file\?path=(.+)$/.exec(path);
+      if (read) return { text: topics.get(decodeURIComponent(read[2]!)) ?? "" };
+      if (path.endsWith("/memory/file") && init?.method === "PUT") topics.set(JSON.parse(init.body!).path, JSON.parse(init.body!).text);
+      if (path.endsWith("/memory/import-distill")) throw new Error("no engine");
+      return { ok: true };
+    });
+    const outcome = await importNotes(file, { bots: [], aboutMe: "", team: false, firstBotId: "dusk", dispatch: vi.fn() });
+    const saved = [...topics.entries()].filter(([path]) => path.startsWith("memory/notes-from-lantern-notes"));
+    expect(saved.length, "split over more than one topic").toBeGreaterThan(1);
+    const all = saved.map(([, text]) => text).join("\n");
+    for (const memory of memories) expect(all).toContain(`- ${memory}\n`);
+    expect(outcome.memories).toBe(136);
+    expect(notesOutcomeLine(outcome)).toBe("Brought in from Lantern Notes: 136 memories.");
+    const before = f.api.mock.calls.filter(([, init]) => init?.method === "PUT").length;
+    expect((await importNotes(file, { bots: [], aboutMe: "", team: false, firstBotId: "dusk", dispatch: vi.fn() })).memories, "the same file again adds nothing").toBe(0);
+    expect(f.api.mock.calls.filter(([, init]) => init?.method === "PUT").length).toBe(before);
+  });
+
   it("makes the person's own routines real, paused routines and their skills switched-off skills of the first bot, once", async () => {
     const routines: Array<Record<string, unknown>> = [];
     const skills: Array<{ name: string }> = [];

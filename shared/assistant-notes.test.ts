@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  aboutMeWithNotes, closeCutOff, isNotesPrompt, looksLikeNotes, notesMemoryText, notesThreadsText, NOTES_END, NOTES_FORMAT, NOTES_PROMPT, parseNotes,
+  aboutMeWithNotes, closeCutOff, isNotesPrompt, looksLikeNotes, notesMemoryFile, notesMemoryPages, NOTES_TOPIC_MAX_BYTES, notesThreadsText, NOTES_END, NOTES_FORMAT, NOTES_PROMPT, parseNotes,
 } from "./assistant-notes.ts";
 import { GrokImportError } from "./grok-import.ts";
 
@@ -159,10 +159,27 @@ describe("where notes land", () => {
   });
 
   it("keeps memories in one topic per app, merged with an earlier paste", () => {
-    const first = notesMemoryText(notes)!;
-    expect(first).toContain("# Notes from ChatGPT");
-    const again = notesMemoryText({ from: notes.from, memories: ["Prefers Notion for notes.", "New one."] }, first)!;
-    expect(again.match(/^- /gm)).toHaveLength(3);
+    const first = notesMemoryPages(notes);
+    expect(first.pages).toHaveLength(1);
+    expect(first.pages[0]).toContain("# Notes from ChatGPT");
+    expect(first.added).toBe(2);
+    const again = notesMemoryPages({ from: notes.from, memories: ["Prefers Notion for notes.", "New one."] }, first.pages);
+    expect(again.pages[0]!.match(/^- /gm)).toHaveLength(3);
+    expect(again.added).toBe(1);
+  });
+
+  it("keeps every memory word for word over as many pages as it takes, each under the topic limit", () => {
+    const memories = Array.from({ length: 140 }, (_, i) => `Memory ${i}: ${`the plan for allotment ${i} is to rotate beans and kale `.repeat(1 + (i % 30))}`.trim());
+    const huge = `A very long one: ${"x".repeat(NOTES_TOPIC_MAX_BYTES * 2)}`;
+    const { pages, added } = notesMemoryPages({ from: notes.from, memories: [...memories, huge] });
+    expect(pages.length).toBeGreaterThan(1);
+    for (const page of pages) expect(new TextEncoder().encode(page).length).toBeLessThanOrEqual(NOTES_TOPIC_MAX_BYTES);
+    const all = pages.join("\n");
+    for (const memory of memories) expect(all).toContain(`- ${memory}\n`);
+    expect(all.match(/x/g)!.length, "a memory longer than a page is split, not cut").toBe(NOTES_TOPIC_MAX_BYTES * 2);
+    expect(added).toBeGreaterThanOrEqual(memories.length + 1);
+    expect(notesMemoryPages({ from: notes.from, memories }, pages).added, "nothing new the second time").toBe(0);
+    expect([1, 2].map((page) => notesMemoryFile(notes, page))).toEqual(["memory/notes-from-chatgpt.md", "memory/notes-from-chatgpt-2.md"]);
   });
 });
 

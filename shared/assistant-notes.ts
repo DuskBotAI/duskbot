@@ -334,17 +334,50 @@ function dropBotsOwn(notes: AssistantNotes): void {
   if (notes.instructions && bots.some((bot) => flat(bot.instructions).includes(flat(notes.instructions)))) notes.instructions = "";
 }
 
-/** The first bot's memory topic for what the assistant remembered: projects and ongoing work, by the app it came from. */
-export function notesMemoryFile(notes: Pick<AssistantNotes, "from">): string {
-  return `memory/notes-from-${notes.from.key}.md`;
+/** One page of the memories topic at most, below the size at which memory upkeep compacts a topic
+ * (TOPIC_MAX_BYTES in server/memory-upkeep.ts). */
+export const NOTES_TOPIC_MAX_BYTES = 48 * 1024;
+
+/** The first bot's memory topic for what the assistant remembered, by the app it came from; page 2 on when one page
+ * can't hold them all. */
+export function notesMemoryFile(notes: Pick<AssistantNotes, "from">, page = 1): string {
+  return `memory/notes-from-${notes.from.key}${page > 1 ? `-${page}` : ""}.md`;
 }
 
-/** The memory topic's text, merged with what an earlier paste from the same app left there, each line once. */
-export function notesMemoryText(notes: Pick<AssistantNotes, "from" | "memories">, before = ""): string | null {
-  const earlier = before.split("\n").filter((line) => line.startsWith("- ")).map((line) => line.slice(2).trim());
-  const all = union([...earlier, ...notes.memories.map((line) => line.replace(/\s*\n\s*/g, " "))]);
-  if (!all.length) return null;
-  return `# Notes from ${notes.from.name}\n\nWhat ${notes.from.name} remembered, brought over when you moved.\n\n${all.map((line) => `- ${line}`).join("\n")}\n`;
+const bytes = (value: string) => new TextEncoder().encode(value).length;
+
+/** A memory too long for a page on its own, in pieces that each fit; at most 4 bytes a character. */
+function fitting(line: string, room: number): string[] {
+  if (bytes(line) <= room) return [line];
+  const step = Math.floor(room / 4);
+  const pieces: string[] = [];
+  for (let at = 0; at < line.length; at += step) pieces.push(line.slice(at, at + step));
+  return pieces;
+}
+
+/** The memories topic, every memory word for word, merged with the pages an earlier paste from the same app left, each
+ * line once, over as many pages as it takes. `added`: the memories that weren't there yet. */
+export function notesMemoryPages(notes: Pick<AssistantNotes, "from" | "memories">, before: readonly string[] = []): { pages: string[]; added: number } {
+  const earlier = union(before.flatMap((page) => page.split("\n").filter((line) => line.startsWith("- ")).map((line) => line.slice(2).trim())));
+  const all = union([...earlier, ...notes.memories.map((line) => line.replace(/\s*\n\s*/g, " ").trim()).filter(Boolean)]);
+  if (!all.length) return { pages: [], added: 0 };
+  const head = (page: number) => page === 1
+    ? `# Notes from ${notes.from.name}\n\nWhat ${notes.from.name} remembered, brought over word for word when you moved.\n\n`
+    : `# Notes from ${notes.from.name} (${page})\n\nMore of what ${notes.from.name} remembered.\n\n`;
+  const pages: string[] = [];
+  let current = head(1);
+  let lines = 0;
+  for (const line of all.flatMap((one) => fitting(one, NOTES_TOPIC_MAX_BYTES - bytes(head(99)) - 3)).map((one) => `- ${one}\n`)) {
+    if (lines && bytes(current) + bytes(line) > NOTES_TOPIC_MAX_BYTES) {
+      pages.push(current);
+      current = head(pages.length + 1);
+      lines = 0;
+    }
+    current += line;
+    lines += 1;
+  }
+  pages.push(current);
+  return { pages, added: all.length - earlier.length };
 }
 
 /** The first bot's topic for what is still open, things done on a schedule and connected apps. */

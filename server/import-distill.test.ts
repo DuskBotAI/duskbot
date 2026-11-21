@@ -5,7 +5,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { createImportDistill, distillTurn, importDistillFile, MAX_WAITING_CHUNKS } from "./import-distill.ts";
 import type { CaptureBatch } from "./memory-capture.ts";
-import { NO_TEXT_ENGINE } from "./memory-upkeep.ts";
+import { NO_TEXT_ENGINE, TOPIC_MAX_BYTES } from "./memory-upkeep.ts";
+import { NOTES_TOPIC_MAX_BYTES } from "../shared/assistant-notes.ts";
 
 const dirs: string[] = [];
 afterEach(() => {
@@ -22,6 +23,10 @@ function setup(options: { engine?: boolean; bots?: string[]; note?: string } = {
 }
 
 describe("an import's memory, condensed by the bot's own engine", () => {
+  it("reads memories an import saved word for word in pages that upkeep never compacts", () => {
+    expect(NOTES_TOPIC_MAX_BYTES).toBeLessThan(TOPIC_MAX_BYTES);
+  });
+
   it("goes through the capture step chunk by chunk, as the person's own words, and is gone once filed", async () => {
     const { distill, capture } = setup();
     distill.queue("ana", "OpenClaw", ["Daily notes, one", "Daily notes, two"]);

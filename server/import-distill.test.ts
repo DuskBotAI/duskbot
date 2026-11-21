@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -41,6 +41,28 @@ describe("an import's memory, condensed by the bot's own engine", () => {
     await distill.run();
     expect(capture).toHaveBeenCalledOnce();
     expect(distill.waiting("ana")).toBe(0);
+  });
+
+  it("never sends the engine a chunk it already went through for that bot, when the same notes come in again", async () => {
+    const { distill, capture } = setup();
+    distill.queue("ana", "Grok Bot", ["Passage one", "Passage two"]);
+    await distill.run();
+    expect(distill.queue("ana", "Grok Bot", ["Passage one", "Passage two"]), "nothing new waits").toBe(0);
+    distill.queue("ana", "Grok Bot", ["Passage two", "Passage three"]);
+    await distill.run();
+    expect(capture.mock.calls.map(([batch]) => batch.turns[0]!.person)).toEqual(["Passage one", "Passage two", "Passage three"].map((chunk) => distillTurn("Grok Bot", chunk)));
+    const other = setup({ bots: ["ben"] });
+    other.distill.queue("ben", "Grok Bot", ["Passage one"]);
+    await other.distill.run();
+    expect(other.capture, "another bot's are its own").toHaveBeenCalledOnce();
+  });
+
+  it("reads what an earlier version left waiting", async () => {
+    const { distill, capture } = setup();
+    writeFileSync(importDistillFile(dirs.at(-1)!), JSON.stringify({ ana: { from: "Claude", chunks: ["Left from before"], queuedAt: 5 } }));
+    expect(distill.waiting("ana")).toBe(1);
+    await distill.run();
+    expect(capture).toHaveBeenCalledOnce();
   });
 
   it("keeps a chunk the engine turned out unable to read, drops a deleted bot's, and holds at most the cap", async () => {

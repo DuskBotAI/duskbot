@@ -245,7 +245,20 @@ describe("the v1 live client", () => {
     source.fail({ retryable: false, message: "Too many browser views are open." });
     expect(FixtureEventSource.instances).toHaveLength(1);
     expect(handlers.onMessage).toHaveBeenCalledWith({ type: "notice", message: "Too many browser views are open." });
-    expect(handlers.onGone).toHaveBeenCalledOnce();
+    expect(handlers.onGone).toHaveBeenCalledWith("Too many browser views are open.");
+  });
+
+  it("gives up with the server's last reason, never one from a view that opened since", () => {
+    vi.useFakeTimers();
+    const { handlers, source } = open();
+    source.fail({ retryable: true, message: "The browser could not start." });
+    vi.advanceTimersByTime(1_000);
+    FixtureEventSource.instances.at(-1)!.emit("ready", { viewerId: "v2" });
+    for (const delay of [0, 2_000, 4_000, 8_000, 15_000]) {
+      vi.advanceTimersByTime(delay);
+      FixtureEventSource.instances.at(-1)!.fail();
+    }
+    expect(handlers.onGone).toHaveBeenCalledWith(undefined);
   });
 });
 

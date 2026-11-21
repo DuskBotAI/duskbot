@@ -183,7 +183,7 @@ export function StreamSurface(props: {
   readonly onFirstFrame?: () => void;
   /** The view was refused before it opened (the route is missing, or the session is not allowed). */
   readonly onUnauthorized?: () => void;
-  readonly onGone?: () => void;
+  readonly onGone?: (reason?: string) => void;
   readonly onClose?: (code: number, reason: string) => void;
   /** Shift+Escape: the person leaves the page for the app's own controls. */
   readonly onLeave?: () => void;
@@ -430,7 +430,7 @@ export function StreamSurface(props: {
         },
         onHostSetup: setHostSetup,
         onUnauthorized: () => propsRef.current.onUnauthorized?.(),
-        onGone: () => propsRef.current.onGone?.(),
+        onGone: (reason) => propsRef.current.onGone?.(reason),
         onClose: (code, reason) => propsRef.current.onClose?.(code, reason),
       },
     );

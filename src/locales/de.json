@@ -3574,6 +3574,7 @@
   "browser.panel.heldElsewhere": "Ein anderes Fenster oder Gerät steuert diesen Browser. Gib dort die Steuerung zurück, um ihn hier zu nutzen.",
   "browser.panel.reconnecting": "Verbindung wird wiederhergestellt…",
   "browser.panel.disconnected": "Browser getrennt",
+  "browser.panel.offline": "Getrennt",
   "browser.panel.opening": "Live-Browser wird geöffnet…",
   "browser.panel.connectionInterrupted": "Verbindung unterbrochen. Browseransicht wird neu verbunden…",
   "browser.noEngine": "Der Browser ist hier nicht verfügbar.",

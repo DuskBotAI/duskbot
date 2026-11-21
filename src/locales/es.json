@@ -3559,6 +3559,7 @@
   "browser.panel.heldElsewhere": "Otra ventana u otro dispositivo controla este navegador. Devuelve el control allí para usarlo aquí.",
   "browser.panel.reconnecting": "Reconectando…",
   "browser.panel.disconnected": "Navegador desconectado",
+  "browser.panel.offline": "Desconectado",
   "browser.panel.opening": "Abriendo el navegador en directo…",
   "browser.panel.connectionInterrupted": "Conexión interrumpida. Reconectando la vista del navegador…",
   "browser.noEngine": "El navegador no está disponible aquí.",

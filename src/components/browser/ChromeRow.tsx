@@ -24,10 +24,11 @@ export interface BrowserNav {
 
 const button = "rounded-md p-1.5 text-ink-secondary hover:bg-inset hover:text-ink disabled:cursor-not-allowed disabled:opacity-40";
 
-export type PillState = "connecting" | "watching" | "bot" | "yours" | "held" | "elsewhere" | "taking" | "waiting";
+export type PillState = "disconnected" | "connecting" | "watching" | "bot" | "yours" | "held" | "elsewhere" | "taking" | "waiting";
 
 /** What the pill says: who has the browser now, from this viewer's side. */
-export function controlPill(connected: boolean, control: PreviewStreamControl | null, takeStatus: BrowserTakeStatus): PillState {
+export function controlPill(connected: boolean, control: PreviewStreamControl | null, takeStatus: BrowserTakeStatus, disconnected = false): PillState {
+  if (disconnected) return "disconnected";
   if (!connected || !control) return "connecting";
   if (takeStatus === "pending") return "taking";
   if (takeStatus === "slow") return "waiting";
@@ -39,6 +40,7 @@ export function controlPill(connected: boolean, control: PreviewStreamControl | 
 }
 
 const PILL_TEXT: Record<PillState, (bot: string) => string> = {
+  disconnected: () => t("browser.panel.offline"),
   connecting: () => t("browser.panel.connecting"),
   watching: () => t("computer.watching"),
   bot: (bot) => t("browser.control.bot", { name: bot }),
@@ -54,6 +56,8 @@ export const ChromeRow = forwardRef<HTMLInputElement, {
   tabs: BrowserTab[];
   nav: BrowserNav;
   connected: boolean;
+  /** The view gave up connecting; only Reconnect brings it back. */
+  disconnected?: boolean;
   control: PreviewStreamControl | null;
   takeStatus: BrowserTakeStatus;
   /** What holding the browser means for the bot, while this view has control. */
@@ -76,7 +80,7 @@ export const ChromeRow = forwardRef<HTMLInputElement, {
   const { botName, tabs, nav, connected, control, takeStatus, commandsReady } = props;
   const [draft, setDraft] = useState("");
   const [editing, setEditing] = useState(false);
-  const pill = controlPill(connected, control, takeStatus);
+  const pill = controlPill(connected, control, takeStatus, props.disconnected);
   const yours = pill === "yours";
   // Whenever the person holds the browser, from this view or another, the pill hands it back.
   const handsBack = yours || pill === "held";
@@ -97,15 +101,17 @@ export const ChromeRow = forwardRef<HTMLInputElement, {
         <button
           type="button"
           aria-pressed={handsBack}
-          aria-label={`${PILL_TEXT[pill](botName)}. ${t(handsBack ? "browser.control.handBack" : "browser.control.take")}`}
+          aria-label={pill === "disconnected" ? PILL_TEXT[pill](botName) : `${PILL_TEXT[pill](botName)}. ${t(handsBack ? "browser.control.handBack" : "browser.control.take")}`}
           aria-description={yours ? props.hint : undefined}
-          title={yours && props.hint ? props.hint : t(handsBack ? "browser.control.handBack" : "browser.control.take")}
-          disabled={!connected || pill === "elsewhere" || pill === "connecting" || pill === "taking" || pill === "waiting"}
+          title={pill === "disconnected" ? t("browser.panel.disconnected") : yours && props.hint ? props.hint : t(handsBack ? "browser.control.handBack" : "browser.control.take")}
+          disabled={!connected || pill === "disconnected" || pill === "elsewhere" || pill === "connecting" || pill === "taking" || pill === "waiting"}
           onClick={handsBack ? props.onHandBack : props.onTake}
           className={`flex max-w-56 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border px-2.5 py-1 text-[11px] disabled:cursor-default ${handsBack ? "border-accent-border bg-accent/15 text-accent-text" : "border-transparent text-ink-secondary hover:bg-inset hover:text-ink"}`}
           data-pill={pill}
         >
-          {pill === "taking" || pill === "waiting" || pill === "connecting" ? <Loader2 size={12} className="shrink-0 animate-spin" aria-hidden="true" /> : <Hand size={12} className="shrink-0" aria-hidden="true" />}
+          {pill === "taking" || pill === "waiting" || pill === "connecting" ? <Loader2 size={12} className="shrink-0 animate-spin" aria-hidden="true" />
+            : pill === "disconnected" ? <Globe size={12} className="shrink-0" aria-hidden="true" />
+            : <Hand size={12} className="shrink-0" aria-hidden="true" />}
           <span className="truncate">{PILL_TEXT[pill](botName)}</span>
           {pill === "bot" || pill === "watching" ? <span className="shrink-0 text-ink">· {t("browser.control.take")}</span> : handsBack ? <span className="shrink-0">· {t("browser.control.handBack")}</span> : null}
         </button>
@@ -146,7 +152,7 @@ export const ChromeRow = forwardRef<HTMLInputElement, {
             setDraft(shown);
             event.currentTarget.blur();
           }}
-          placeholder={connected ? t("browser.panel.searchAddress") : t("browser.panel.connecting")}
+          placeholder={connected ? t("browser.panel.searchAddress") : t(props.disconnected ? "browser.panel.offline" : "browser.panel.connecting")}
           spellCheck={false}
           className="mx-1 min-w-0 flex-1 rounded-lg bg-transparent px-2 py-1.5 text-center text-[12px] outline-none placeholder:text-ink-secondary focus:bg-inset focus:text-left"
         />

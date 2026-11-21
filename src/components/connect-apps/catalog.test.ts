@@ -67,6 +67,14 @@ describe("search", () => {
     expect(searchApps(entries, "   ")).toEqual([]);
   });
 
+  it("finds an app by a whole word of what it does, never by letters scattered through it", () => {
+    expect(matchRank("Store and autofill passwords with your vault", "whop", false)).toBeNull();
+    expect(matchRank("Store and autofill passwords with your vault", "vault", false)).toBe(1);
+    const entries = [app("whop", ["finance"]), app("_1password", ["credentials"], "composio", "Store passwords with your vault, which helps on the go")];
+    expect(searchApps(entries, "whop").map((entry) => entry.id)).toEqual(["whop"]);
+    expect(searchApps(entries, "vault").map((entry) => entry.id)).toEqual(["_1password"]);
+  });
+
   it("lists at most eight apps", () => {
     const many = Array.from({ length: 12 }, (_, index) => app(`app${index}`, ["code"]));
     expect(searchApps(many, "app")).toHaveLength(8);

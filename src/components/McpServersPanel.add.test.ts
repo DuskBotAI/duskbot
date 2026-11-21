@@ -547,6 +547,37 @@ describe("A saved server's switch", () => {
     expect(host.textContent).toContain("Connected: 1 tool");
   });
 
+  it("holds only the server whose test hangs: the others stay usable and visibly on, and Cancel ends the wait", async () => {
+    await click("Add server");
+    await type("textarea[aria-label='Server link or setup command']", "https://mcp.notes.example/mcp");
+    await click("Add");
+    let signal: AbortSignal | undefined;
+    const previous = fixture.api.getMockImplementation()!;
+    fixture.api.mockImplementation(async (path: string, init?: RequestInit) => {
+      if (init?.method === "POST" && path === "/api/mcp/servers/slow/test") {
+        signal = init.signal ?? undefined;
+        return new Promise((_resolve, reject) => signal?.addEventListener("abort", () => reject(new DOMException("aborted", "AbortError"))));
+      }
+      return previous(path, init);
+    });
+    await click("Add server");
+    await type("textarea[aria-label='Server link or setup command']", "https://mcp.slow.example/mcp");
+    await click("Add");
+    const notesSwitch = host.querySelector<HTMLButtonElement>('[role="switch"][aria-label="Turn notes off"]')!;
+    expect(notesSwitch.disabled, "a healthy server's switch is not greyed out").toBe(false);
+    expect(notesSwitch.getAttribute("aria-checked")).toBe("true");
+    expect(host.querySelector<HTMLButtonElement>('button[aria-label="Edit notes"]')!.disabled).toBe(false);
+    expect(button("Add server")!.disabled, "another server can still be added").toBe(false);
+    expect(host.querySelector<HTMLButtonElement>('button[aria-label="Edit slow"]')!.disabled, "the server under test is held").toBe(true);
+    expect(host.querySelector("[data-mcp-testing]")?.textContent?.trim()).toBe("Off until it passes a test: testing it now.");
+    await click("Cancel");
+    expect(signal?.aborted, "the test request is stopped").toBe(true);
+    expect(host.querySelector("[data-mcp-testing]")).toBeNull();
+    expect(host.querySelector<HTMLButtonElement>('button[aria-label="Edit slow"]')!.disabled).toBe(false);
+    expect(host.querySelector('[role="switch"][aria-label="Turn slow on"]')?.getAttribute("aria-checked")).toBe("false");
+    expect(calls("PATCH", "/api/mcp/servers/slow"), "a cancelled test never switches it on").toEqual([]);
+  });
+
   it("keeps a server a passing test just switched on, on, when a click lands right after", async () => {
     const now = vi.spyOn(Date, "now");
     try {

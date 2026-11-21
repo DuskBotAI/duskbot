@@ -81,7 +81,7 @@ const FRAGMENT_KEYS = new RegExp(`^(${[
   "chat\\.event\\.(and|andMore|for|peerReplied)", "approval\\.voice\\.action\\w+", "helperIntro\\.followup\\.(botsNone|botOne|bots|routinesNone|routineOne|routines|more)",
   "call\\.live\\.device\\.\\w+", "vm\\.confirm\\.orphanVps", "vm\\.idle\\.minutes", "mcp\\.state\\.(on|off)", "sidebar\\.preview\\.aBot",
   "vpsLink\\.yourServer", "mobile\\.connection\\.your(Cloud|Computer)", "mobile\\.entry\\.legalAnd", "remote\\.client\\.fallbackName", "remote\\.time\\.justNow", "app\\.sentFrom", "botAccess\\.(theAdmins|folder\\.home)",
-  "browser\\.panel\\.tab", "cloudBuy\\.team\\.unnamed", "bring\\.topic\\w+", "cloudTrial\\.yourPlan",
+  "palette\\.also\\.[\\w-]+", "browser\\.panel\\.tab", "cloudBuy\\.team\\.unnamed", "bring\\.topic\\w+", "cloudTrial\\.yourPlan",
   "room\\.(hint|responder)\\.leadFallback", "call\\.questionOptions", "inbox\\.recommendedInline", "activity\\.(approvalIn|to)", "files\\.countMore", "voice\\.provider",
   "botMove\\.memory", "teamShare\\.skip\\.\\w+", "inbox\\.(in|via)", "model\\.variant\\.(unverified|unavailable)", "vpsLink\\.device\\.\\w+",
   "automations\\.(time|source|skip)\\.\\w+", "automations\\.app\\.(from|about|labeled|mentioning|in)", "cloudSetup\\.ready\\.(today|tomorrow)",

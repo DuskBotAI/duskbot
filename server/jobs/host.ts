@@ -165,15 +165,27 @@ export function createJobsHost(deps: JobsHostDeps) {
     deps.notify(buildNotification("done", bot, threadId, text, { avatarUrl: bot.avatarUrl }));
     return true;
   };
+  let tellTimer: ReturnType<typeof setInterval> | null = null;
+  const stopTellTimer = () => {
+    if (!tellTimer) return;
+    clearInterval(tellTimer);
+    tellTimer = null;
+  };
   const flushTells = () => {
     for (const pending of pendingTells.splice(0)) {
       if (post(pending.job, pending.text)) continue;
       if (now() < pending.until) pendingTells.push(pending);
     }
+    if (pendingTells.length === 0) stopTellTimer();
   };
-  const tell = (job: JobRecord, text: string) => { if (!post(job, text)) pendingTells.push({ job, text, until: now() + 30 * 60_000 }); };
-  const tellTimer = setInterval(flushTells, 5_000);
-  tellTimer.unref?.();
+  const tell = (job: JobRecord, text: string) => {
+    if (post(job, text)) return;
+    pendingTells.push({ job, text, until: now() + 30 * 60_000 });
+    if (!tellTimer) {
+      tellTimer = setInterval(flushTells, 5_000);
+      tellTimer.unref?.();
+    }
+  };
 
   const deliver = (job: JobRecord, note: JobNote) => {
     if (note.tell) {
@@ -363,7 +375,7 @@ export function createJobsHost(deps: JobsHostDeps) {
     /** A Cloud stays awake while a job should be running. */
     busy: () => supervisor.running() > 0,
     removeForBot: (botId: string) => supervisor.removeForBot(botId),
-    stop: () => { clearInterval(tellTimer); supervisor.shutdown(); },
+    stop: () => { stopTellTimer(); supervisor.shutdown(); },
   };
 }
 

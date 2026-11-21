@@ -178,12 +178,77 @@ const DuskGlass = registerPlugin<GlassPlugin>("DuskGlass");
 
 /** A file the app wrote to its tmp folder for the page (ios/App/App/PickerPlugin.swift). */
 interface NativeFile { path: string; name: string; type: string }
-/** The composer's photo library and Files pickers, each opened straight (ios/App/App/PickerPlugin.swift). */
+interface PickerLabels {
+  allPhotos: string;
+  addPhotoOne: string;
+  addPhotosCount: string;
+  addItemOne: string;
+  addItemsCount: string;
+  back: string;
+  takePhoto: string;
+  moreOptions: string;
+  switchCamera: string;
+  flash: string;
+  flashAuto: string;
+  flashOn: string;
+  flashOff: string;
+  photoLibrary: string;
+  cameraOffTitle: string;
+  cameraOffBody: string;
+  cameraUnavailable: string;
+  photosOffTitle: string;
+  photosOffBody: string;
+  openSettings: string;
+}
+interface PickerSourceFrame {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  radius?: number;
+}
+/** The composer's photo library, camera and Files pickers (ios/App/App/PickerPlugin.swift). */
 const DuskPicker = registerPlugin<{
-  photos(options: { multiple: boolean }): Promise<{ files: NativeFile[] }>;
+  photos(options: { multiple: boolean; labels?: PickerLabels; source?: PickerSourceFrame }): Promise<{ files: NativeFile[] }>;
   files(options: { multiple: boolean }): Promise<{ files: NativeFile[] }>;
-  camera(): Promise<{ files: NativeFile[] }>;
+  camera(options?: { labels?: PickerLabels; source?: PickerSourceFrame }): Promise<{ files: NativeFile[] }>;
 }>("DuskPicker");
+
+function composerSourceFrame(): PickerSourceFrame | undefined {
+  if (typeof document === "undefined") return undefined;
+  const el = document.querySelector<HTMLElement>('[data-mobile-chat] [data-tour="composer"]')
+    ?? document.querySelector<HTMLElement>('[data-tour="composer"]');
+  if (!el) return undefined;
+  const rect = el.getBoundingClientRect();
+  if (rect.width < 40 || rect.height < 24) return undefined;
+  const radius = parseFloat(getComputedStyle(el).borderTopLeftRadius) || Math.min(24, rect.height / 2);
+  return { x: rect.left, y: rect.top, w: rect.width, h: rect.height, radius };
+}
+
+function pickerLabels(): PickerLabels {
+  return {
+    allPhotos: t("composer.attach.allPhotos"),
+    addPhotoOne: t("composer.attach.addPhotoOne"),
+    addPhotosCount: t("composer.attach.addPhotosCount"),
+    addItemOne: t("composer.attach.addItemOne"),
+    addItemsCount: t("composer.attach.addItemsCount"),
+    back: t("mobile.chat.back"),
+    takePhoto: t("composer.attach.camera"),
+    moreOptions: t("composer.attach.moreOptions"),
+    switchCamera: t("composer.attach.switchCamera"),
+    flash: t("composer.attach.flash"),
+    flashAuto: t("composer.attach.flashAuto"),
+    flashOn: t("composer.attach.flashOn"),
+    flashOff: t("composer.attach.flashOff"),
+    photoLibrary: t("composer.attach.photos"),
+    cameraOffTitle: t("mobile.onboarding.deniedTitle"),
+    cameraOffBody: t("composer.attach.cameraOffBody"),
+    cameraUnavailable: t("composer.attach.cameraUnavailable"),
+    photosOffTitle: t("composer.attach.photosOffTitle"),
+    photosOffBody: t("composer.attach.photosOffBody"),
+    openSettings: t("mobile.onboarding.openSettings"),
+  };
+}
 
 export async function nativeFiles(list: readonly NativeFile[], read: typeof fetch = fetch): Promise<File[]> {
   const files = await Promise.all(list.map(async (one) => {
@@ -355,8 +420,15 @@ export function createNativeStreamFetch(plugin: StreamPlugin, webFetch?: typeof 
   };
   return async (input, init) => {
     const request = new Request(input, init);
-    const parsed = new URL(request.url);
-    const sameOrigin = typeof window !== "undefined" && Boolean(window.location?.origin) && parsed.origin === window.location.origin;
+    let parsed = new URL(request.url);
+    const pageOrigin = typeof window !== "undefined" ? window.location?.origin : "";
+    // Capacitor 8's iOS scheme handler forwards the WebView's Origin header on /_capacitor_http_interceptor_;
+    // when running against a dev server (http://...), unwrap and send via native DuskStream without Origin.
+    if (pageOrigin.startsWith("http://") && parsed.pathname === "/_capacitor_http_interceptor_") {
+      const target = parsed.searchParams.get("u");
+      if (target && /^https?:\/\//i.test(target)) parsed = new URL(target);
+    }
+    const sameOrigin = Boolean(pageOrigin) && parsed.origin === pageOrigin;
     if (webFetch && ((parsed.protocol !== "http:" && parsed.protocol !== "https:") || sameOrigin)) {
       return webFetch(input, init);
     }
@@ -417,7 +489,7 @@ export function createNativeStreamFetch(plugin: StreamPlugin, webFetch?: typeof 
     try {
       const openPromise = plugin.open({
         id,
-        url: request.url,
+        url: parsed.toString(),
         method: request.method,
         headers,
         connectTimeout: isStream ? 10_000 : 8_000,
@@ -774,15 +846,15 @@ export async function nativePlatform(): Promise<MobilePlatform> {
   const kind = Capacitor.getPlatform() as "ios" | "android";
   if (kind === "android") {
     overlayReady ??= StatusBar.setOverlaysWebView({ overlay: true }).catch(() => {});
-    if (!streamInstalled && Capacitor.isPluginAvailable("DuskStream")) {
-      streamInstalled = true;
-      const win = window as Window & { CapacitorWebFetch?: typeof fetch };
-      const origWebFetch = (win.CapacitorWebFetch ?? window.fetch).bind(window);
-      win.CapacitorWebFetch = createNativeStreamFetch(DuskStream, origWebFetch);
-    }
   } else {
     // WKWebView draws a form bar (previous, next, Done) over the keyboard; a chat has one field and its own send
     void Keyboard.setAccessoryBarVisible({ isVisible: false }).catch(() => {});
+  }
+  if (!streamInstalled && Capacitor.isPluginAvailable("DuskStream")) {
+    streamInstalled = true;
+    const win = window as Window & { CapacitorWebFetch?: typeof fetch };
+    const origWebFetch = (win.CapacitorWebFetch ?? window.fetch).bind(window);
+    win.CapacitorWebFetch = createNativeStreamFetch(DuskStream, origWebFetch);
   }
   // a plugin that never answers must not hold the first paint: each startup read gets two seconds
   const bounded = <T,>(work: Promise<T>, label: string): Promise<T | undefined> => new Promise((resolve) => {
@@ -855,9 +927,9 @@ export async function nativePlatform(): Promise<MobilePlatform> {
   }
   if (kind === "ios" && Capacitor.isPluginAvailable("DuskPicker")) {
     setNativeAttach({
-      photos: async () => nativeFiles((await DuskPicker.photos({ multiple: true })).files),
+      photos: async () => nativeFiles((await DuskPicker.photos({ multiple: true, labels: pickerLabels(), source: composerSourceFrame() })).files),
       files: async () => nativeFiles((await DuskPicker.files({ multiple: true })).files),
-      camera: async () => nativeFiles((await DuskPicker.camera()).files),
+      camera: async () => nativeFiles((await DuskPicker.camera({ labels: pickerLabels(), source: composerSourceFrame() })).files),
     });
   }
   registerPhoneVoice({

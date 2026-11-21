@@ -45,7 +45,8 @@ import { useSidebarPhoneStatus } from "./SidebarPhoneButton";
 import { api, useStore, type Action, type ConfigStatus } from "@/state/store";
 import { localDesktopPage } from "./onboarding/WelcomeGate";
 import { serverCheckPhase, serverUpdateRow, type ServerUpdateCheck, type ServerUpdatePhase } from "@/lib/server-update";
-import type { AccountFace } from "../../electron/cloud-account.mjs";
+import { parseAccountAvatarUrl, parseUserAvatarChoice, type SyncedAccountFace } from "../../shared/user-avatar";
+import type { AccountFace, AccountsView } from "../../electron/cloud-account.mjs";
 import { cloudPlanLabel, trialRunning } from "@/lib/cloud-plan";
 import { cloudColor } from "@/lib/cloud-look";
 import { cn } from "@/lib/cn";
@@ -121,14 +122,78 @@ function useAccountName(enabled: boolean, profile: AccountNamedProfile | undefin
   }, [enabled, wanted, profile?.name, profile?.accountName]);
 }
 
+/** What this workspace should store in `profile.accountFace` for the desktop's signed-in account:
+ * a new face when changed, `null` to clear on sign-out, or `undefined` when nothing needs saving. */
+export function syncedAccountFace(
+  profile: { email?: string; accountFace?: SyncedAccountFace | null } | undefined,
+  account: { id: string; email: string; avatarUrl?: string; avatar?: string } | null,
+): SyncedAccountFace | null | undefined {
+  const current = profile?.accountFace ?? null;
+  if (!account) return current ? null : undefined;
+  const own = profile?.email?.trim().toLowerCase();
+  if (own && own !== account.email.trim().toLowerCase()) return undefined;
+  const avatarUrl = parseAccountAvatarUrl(account.avatarUrl);
+  const avatar = parseUserAvatarChoice(account.avatar);
+  const next: SyncedAccountFace = {
+    id: account.id,
+    email: account.email,
+    ...(avatarUrl ? { avatarUrl } : {}),
+    ...(avatar ? { avatar } : {}),
+  };
+  if (
+    current &&
+    current.id === next.id &&
+    (current.email ?? "") === (next.email ?? "") &&
+    (current.avatarUrl ?? "") === (next.avatarUrl ?? "") &&
+    (current.avatar ?? "") === (next.avatar ?? "")
+  ) return undefined;
+  return next;
+}
+
+function useAccountFace(
+  enabled: boolean,
+  profile: { email?: string; accountFace?: SyncedAccountFace | null } | undefined,
+  view: AccountsView | null,
+  dispatch: (action: Action) => void,
+) {
+  const asked = useRef<string | null>(null);
+  const next = enabled && view !== null ? syncedAccountFace(profile, view.active) : undefined;
+  const serialized = next === undefined ? null : JSON.stringify(next);
+  useEffect(() => {
+    if (!enabled || view === null || next === undefined || serialized === null || asked.current === serialized) return;
+    let active = true;
+    void api<ConfigStatus>("/api/config", { method: "PUT", body: JSON.stringify({ profile: { accountFace: next } }) })
+      .then((config) => {
+        asked.current = serialized;
+        if (active && config) dispatch({ type: "configStatus", config });
+      })
+      .catch(() => {});
+    return () => { active = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [enabled, serialized]);
+}
+
 /** What `UserFace` draws for a person: an id to seed the drawn head, and the photo and choice that may stand in for it. */
 export type PersonFace = { id: string; avatarUrl?: string; avatar?: string };
 
-/** The person's face: the dusk cloud account's, where it lends one (withAccountFace); else this place's photo, or a head drawn
- * from their address or name. Nobody to draw for a profile with neither. */
-export function personFace(profile: { name?: string; email?: string; avatarUrl?: string } | undefined, account: { id?: string; email: string; avatarUrl?: string; avatar?: string } | null): PersonFace | null {
+/** The person's face: the dusk cloud account's, where it lends one (withAccountFace); else this place's synced account
+ * face or photo, or a head drawn from their address or name. Nobody to draw for a profile with neither. */
+export function personFace(
+  profile: { name?: string; email?: string; avatarUrl?: string; accountFace?: SyncedAccountFace | null } | undefined,
+  account: { id?: string; email: string; avatarUrl?: string; avatar?: string } | null,
+): PersonFace | null {
   const lent = withAccountFace(profile, account);
   if (lent?.face) return lent.face;
+  if (!account && profile?.accountFace) {
+    const synced = profile.accountFace;
+    const fromSynced = withAccountFace(profile, {
+      id: synced.id,
+      email: synced.email ?? profile.email ?? "",
+      ...(synced.avatarUrl ? { avatarUrl: synced.avatarUrl } : {}),
+      ...(synced.avatar ? { avatar: synced.avatar } : {}),
+    });
+    if (fromSynced?.face) return fromSynced.face;
+  }
   const seed = profile?.email?.trim().toLowerCase() || profile?.name?.trim();
   return seed ? { id: seed, ...(profile?.avatarUrl ? { avatarUrl: profile.avatarUrl, avatar: "photo" } : {}) } : null;
 }
@@ -668,8 +733,9 @@ export function SidebarProfileMenu({ iconOnly = false, rail = false, circle = fa
 
   const accounts = useAccounts();
   const sessionProfile = profileForSession(state.config?.profile, session);
-  useAccountName(localDesktopPage() && window.duskDesktop?.remoteClient?.active !== true && !state.config?.cloudHome && !state.config?.team,
-    state.config?.profile, accounts.view?.active ?? null, dispatch);
+  const syncOwnAccount = localDesktopPage() && window.duskDesktop?.remoteClient?.active !== true && !state.config?.cloudHome && !state.config?.team;
+  useAccountName(syncOwnAccount, state.config?.profile, accounts.view?.active ?? null, dispatch);
+  useAccountFace(syncOwnAccount, state.config?.profile, accounts.view, dispatch);
   const place = placeAccount(sessionProfile, { face: accounts.face ?? null, owner: state.config?.team ? null : account?.owner ?? null });
   const ownProfile = place?.profile ?? sessionProfile;
   const signedIn = accounts.view?.active ?? place?.account ?? null;

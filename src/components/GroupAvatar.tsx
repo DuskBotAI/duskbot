@@ -8,6 +8,7 @@ import { BotAvatar } from "./Avatar";
 import { personFace, profileInitials, type PersonFace } from "./SidebarProfileMenu";
 import { useActiveAccount } from "./AccountMenu";
 import { UserFace } from "./UserAvatar";
+import { useMobileAccount } from "@/mobile/account/AccountGate";
 
 /** The person in a group chat: their face (photo or drawn head), else their initials. */
 export type GroupYou = { initials: string; avatarUrl?: string; face?: PersonFace };
@@ -115,9 +116,9 @@ export function useGroupYou(): GroupYou | null {
     });
     return () => { active = false; };
   }, []);
-  const account = useActiveAccount();
+  const account = useActiveAccount() ?? useMobileAccount()?.account ?? null;
   const profile = profileForSession(state.config?.profile, session);
-  const nameless = !profile?.name?.trim() && !profile?.email?.trim();
+  const nameless = !profile?.name?.trim() && !profile?.email?.trim() && !account?.name?.trim() && !account?.email?.trim();
   useEffect(() => {
     const bridge = window.duskDesktop?.desktopProfile;
     if (!nameless || knownComputer !== undefined || !bridge) return;
@@ -131,6 +132,7 @@ export function useGroupYou(): GroupYou | null {
     return () => { active = false; };
   }, [nameless]);
   const face = personFace(profile, account);
-  if (!nameless || face) return { initials: profileInitials(profile), ...(profile?.avatarUrl ? { avatarUrl: profile.avatarUrl } : {}), ...(face ? { face } : {}) };
+  const effectiveProfile = account ? { ...profile, name: profile?.name?.trim() || account.name, email: profile?.email?.trim() || account.email } : profile;
+  if (!nameless || face) return { initials: profileInitials(effectiveProfile), ...(profile?.avatarUrl ? { avatarUrl: profile.avatarUrl } : {}), ...(face ? { face } : {}) };
   return computer ? { initials: computer[0]!.toUpperCase() } : null;
 }

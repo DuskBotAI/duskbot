@@ -1,8 +1,8 @@
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { SKINS, SKIN_IDS, DEFAULT_SKIN_CHOICE, PRIOR_INSTALL_SKIN, THEME_SKINS, resolveSkin } from "./skins";
+import { SKINS, SKIN_IDS, SKIN_SCHEME, DEFAULT_SKIN_CHOICE, PRIOR_INSTALL_SKIN, THEME_SKINS, resolveSkin } from "./skins";
 
 const css = readFileSync(
   join(dirname(fileURLToPath(import.meta.url)), "../styles.css"),
@@ -49,10 +49,21 @@ describe("skins", () => {
   it("selects a code-only light or dark palette in every nearest skin", () => {
     for (const id of SKIN_IDS) {
       const body = css.match(new RegExp(`\\[data-skin="${id}"\\]\\s*\\{([^}]*)\\}`))?.[1] ?? "";
-      const scheme = ["atelier", "lagoon", "linen", "daylight", "grok", "meadow", "pop"].includes(id) ? "light" : "dark";
-      expect(body).toContain(`--code-color-scheme: ${scheme};`);
+      expect(body).toContain(`--code-color-scheme: ${SKIN_SCHEME[id]};`);
     }
     expect(css).toMatch(/\.chat-md \.shiki\s*\{\s*color-scheme:\s*var\(--code-color-scheme\);\s*\}/);
+  });
+
+  it("keys a rule for every dark skin off the root's data-scheme, never off a list of them", () => {
+    const dark = SKIN_IDS.filter((id) => SKIN_SCHEME[id] === "dark");
+    const src = join(dirname(fileURLToPath(import.meta.url)), "..");
+    const listed = (readdirSync(src, { recursive: true }) as string[])
+      .filter((file) => file.endsWith(".css"))
+      .flatMap((file) => [...readFileSync(join(src, file), "utf8").matchAll(/([^{}]+)\{([^{}]*)\}/g)]
+        .filter(([, selector]) => dark.every((id) => selector.includes(`[data-skin="${id}"]`)))
+        .map(([, , body]) => `${file}: ${body.trim().split("\n")[0]}`));
+    // the menu's tokens sit on the skin's own element, wherever in the page it is, which the root's scheme cannot say
+    expect(listed).toEqual(["styles.css: --radius-menu: 12px;"]);
   });
 
   it("adds Meadow without moving or replacing the original eight", () => {

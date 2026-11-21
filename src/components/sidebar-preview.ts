@@ -8,14 +8,13 @@ import { t } from "@/lib/i18n";
 import { sidebarConnectorPreview, sidebarGoalRunPreview } from "@/lib/sidebar-layout";
 import { withoutCitationMarkers } from "@/lib/citations";
 import { plainPreviewText } from "@/lib/plain-preview";
+import { isAutoApprovalChip } from "../../shared/auto-approval";
 import { isClientCancellation, isStoppedTurnName } from "../../shared/client-cancel";
 import { roomWorkingPreview } from "@/lib/room-threads";
 import { openPersonWait } from "../../shared/person-wait";
 
-const AUTO_APPROVAL_CHIP = /^approved \S+ \((?:full access|saved command|always allowed|its own files|reads only|web search)\)(?::|$)/;
-
 function isAutoApprovalReceipt(message: { kind: string; tool?: { name?: string } }): boolean {
-  return message.kind === "activity" && typeof message.tool?.name === "string" && AUTO_APPROVAL_CHIP.test(message.tool.name);
+  return message.kind === "activity" && isAutoApprovalChip(message.tool?.name);
 }
 
 /** The newest message a preview can show. A receipt, auto-approval audit chip, or screen frame says nothing about the conversation on its own. */

@@ -40,7 +40,7 @@
 :root {
   --link-pill-wash: 14%;
 }
-:root:is([data-skin="grok-dark"], [data-skin="midnight"], [data-skin="dusk"], [data-skin="foundry"], [data-skin="graphite"], [data-skin="halloween"]) {
+:root[data-scheme="dark"] {
   --link-pill-wash: 22%;
 }
 .link-pill {

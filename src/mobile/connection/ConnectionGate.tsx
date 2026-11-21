@@ -86,6 +86,7 @@ export function ConnectionGate({ children, forcePair }: { children: ReactNode; f
   const sequence = useRef(0);
   const uninstall = useRef<(() => void) | null>(null);
   const route = useRef<PhoneTransport | null>(null);
+  const cancelAttempt = useRef<(() => void) | null>(null);
   const refused = useRef(new Set<string>());
   const [attempt, setAttempt] = useState(0);
   const retry = useCallback(() => setAttempt((n) => n + 1), []);
@@ -96,6 +97,8 @@ export function ConnectionGate({ children, forcePair }: { children: ReactNode; f
     // a retry keeps the unreachable screen up while it tries
     setState((s) => s.kind === "offline" ? { ...s, trying: true } : { kind: "loading" });
     let stopWaiting: (() => void) | undefined;
+    const stop = () => { stopped = true; stopWaiting?.(); controller.abort(); };
+    cancelAttempt.current = stop;
     const decide = async () => {
       if (forcePair) { setState({ kind: "pair" }); return; }
       let active: Awaited<ReturnType<typeof store.active>>;
@@ -145,7 +148,7 @@ export function ConnectionGate({ children, forcePair }: { children: ReactNode; f
       } else setState({ kind: "pair" });
     };
     void decide().catch(() => { if (!stopped) setState({ kind: "pair" }); });
-    return () => { stopped = true; stopWaiting?.(); controller.abort(); uninstall.current?.(); uninstall.current = null; route.current = null; };
+    return () => { if (cancelAttempt.current === stop) cancelAttempt.current = null; stop(); uninstall.current?.(); uninstall.current = null; route.current = null; };
   }, [forcePair, platform, store, attempt, retry]);
 
   // a place with more than one route: when it goes quiet, the others are tried in the background and a working one
@@ -239,7 +242,8 @@ export function ConnectionGate({ children, forcePair }: { children: ReactNode; f
         return true;
       }
       const payload = parseMobilePairingLink(url);
-      const carried = payload ? pairSignIn(url) : null;
+      const carried = payload ? (pairSignIn(url) ?? payload.signIn ?? null) : null;
+      if (carried?.service && followSignInService(url, carried.service, accountRef.current)) return true;
       if (payload) setIncoming({ payload, ...(carried ? { signIn: carried } : {}), sequence: ++sequence.current });
       return Boolean(payload);
     };
@@ -247,7 +251,10 @@ export function ConnectionGate({ children, forcePair }: { children: ReactNode; f
       const detail: unknown = (event as CustomEvent).detail;
       if (typeof detail !== "string") return;
       const parsed = parseTypedPairing(detail);
-      if (parsed && !("kind" in parsed)) setIncoming({ payload: parsed, sequence: ++sequence.current });
+      if (parsed && !("kind" in parsed)) {
+        const carried = pairSignIn(detail) ?? parsed.signIn ?? null;
+        setIncoming({ payload: parsed, ...(carried ? { signIn: carried } : {}), sequence: ++sequence.current });
+      }
     };
     const stop = platform.onAppUrl?.(receive);
     const held = takeHeldSignIn();
@@ -273,6 +280,8 @@ export function ConnectionGate({ children, forcePair }: { children: ReactNode; f
       retry();
       return;
     }
+    cancelAttempt.current?.();
+    cancelAttempt.current = null;
     uninstall.current?.();
     uninstall.current = installTransport(transport, retry);
     route.current = transport;
@@ -304,7 +313,8 @@ export function ConnectionGate({ children, forcePair }: { children: ReactNode; f
   if (state.kind === "loading" && !incoming && !forcePair) return <div className="dusk-mobile flex size-full items-center justify-center bg-app"><MascotLoader naps={false} /></div>;
   if (state.kind === "offline" && !forcePair) {
     if (!incoming && adding === 0) return <>{success}<Unreachable record={state.record} others={state.others} attempts={state.attempts} trying={state.trying} gone={state.gone === true} refused={state.refused === true} onRetry={retry} onSwitch={switchTo} onRemove={() => removeGone(state.record.id, state.others[0]?.id)}
-      onLinkAgain={() => { setAddingStep("welcome"); setAdding((n) => n + 1); }} /></>;
+      onLinkAgain={() => { setAddingStep("welcome"); setAdding((n) => n + 1); }}
+      onAddPlace={() => { setAddingStep(account?.account ? "signin" : "welcome"); setAdding((n) => n + 1); }} /></>;
     return <>{success}<Onboarding key={incoming ? `in-${incoming.sequence}` : `add-${adding}`} initial={incoming?.payload} initialSignIn={incoming?.signIn} startAtLink startAt={incoming ? undefined : addingStep} email={addingStep === "addAccount" ? undefined : signInEmail?.email} signInCode={incoming ? undefined : signInEmail?.code} signInCloud={incoming ? undefined : signInEmail?.cloud} onOpen={openKept} onLinked={linked} onKept={keep} onCancel={() => { cancel(); setAdding(0); }} /></>;
   }
   if (onboarding) {

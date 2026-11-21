@@ -39,6 +39,24 @@ export const SKINS: readonly Skin[] = [
   { id: "halloween", name: "Halloween", tagline: "Plum after dark, lit in pumpkin orange. Bats optional." },
 ];
 
+/** Whether a skin is dark or light. The page's root says it as `data-scheme`, which the rules that differ between
+ * the two key off, so no stylesheet names the dark skins one by one. */
+export const SKIN_SCHEME: Record<SkinId, "light" | "dark"> = {
+  midnight: "dark",
+  atelier: "light",
+  foundry: "dark",
+  lagoon: "light",
+  graphite: "dark",
+  linen: "light",
+  dusk: "dark",
+  daylight: "light",
+  meadow: "light",
+  pop: "light",
+  grok: "light",
+  "grok-dark": "dark",
+  halloween: "dark",
+};
+
 /** "system" follows the OS between the light and dark skins below; anything else pins one skin. */
 export type SkinChoice = SkinId | "system";
 export const THEME_SKINS = { light: "grok", dark: "grok-dark" } as const satisfies Record<"light" | "dark", SkinId>;
@@ -111,9 +129,15 @@ export function subscribeSkin(listener: () => void): () => void {
   };
 }
 
-function paintSkin(id: SkinId): void {
-  document.documentElement.dataset.skin = id;
+function wear(id: SkinId): void {
+  const root = document.documentElement;
+  root.dataset.skin = id;
+  root.dataset.scheme = SKIN_SCHEME[id];
   for (const listener of listeners) listener();
+}
+
+function paintSkin(id: SkinId): void {
+  wear(id);
   // On Windows the caption buttons sit in a native overlay the main process paints, out of CSS's reach.
   try {
     void window.duskDesktop?.applySkin?.(id)?.catch(() => undefined);
@@ -139,9 +163,7 @@ function followSystem(follow: boolean): void {
 /** Wears a skin another page chose, without keeping it as this page's own choice or telling the app (the window's rail
  * wearing the skin of the page beside it). */
 export function wearSkin(value: unknown): void {
-  if (!isSkinId(value)) return;
-  document.documentElement.dataset.skin = value;
-  for (const listener of listeners) listener();
+  if (isSkinId(value)) wear(value);
 }
 
 export function applySkinChoice(choice: SkinChoice): void {

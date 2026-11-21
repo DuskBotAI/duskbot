@@ -110,6 +110,21 @@ describe("native hold", () => {
     place(el, 0, 0, 60, 40);
     expect(cornerRadii(el)).toEqual([20, 20, 20, 20]);
   });
+
+  it("forwards the touch point and ignores duplicate open events", () => {
+    const fake = fakeBridge();
+    const hold = createNativeHold(fake.bridge, "message");
+    const el = document.createElement("div");
+    document.body.append(el);
+    place(el, 16, 100, 240, 400);
+    const onOpen = vi.fn();
+    hold.press(el, () => ({ content: { items: [{ key: "copy", title: "Copy" }] }, select: () => {} }), { prefetchMs: 80, point: { x: 84.4, y: 210.6 }, onOpen });
+    expect(fake.arms[0]).toMatchObject({ id: "message:1", point: { x: 84, y: 211 } });
+    fake.send({ type: "open", id: "message:1" });
+    fake.send({ type: "open", id: "message:1" });
+    expect(onOpen).toHaveBeenCalledTimes(1);
+    expect(el.style.visibility).toBe("hidden");
+  });
 });
 
 describe("a message's native menu", () => {

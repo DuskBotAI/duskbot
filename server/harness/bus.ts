@@ -61,6 +61,7 @@ export class EventBus {
   private kickScheduled = false;
   private readonly drainWaiters: Array<() => void> = [];
   private readonly queuedLogWarnings = new Map<string, RuntimeEvent>();
+  private readonly bytesSinceCap = new Map<string, number>();
   // A status-line report is live only: delivered to listeners, never queued for the log.
   private readonly status: TurnStatus;
   private readonly progress = new ProgressGate((event) => {
@@ -260,10 +261,21 @@ export class EventBus {
     const lines = items.map((item) => item.line);
     if (warning) lines.unshift(JSON.stringify(warning));
     const file = join(EVENTS_DIR, `${threadId}.ndjson`);
+    const payload = lines.join("\n") + "\n";
     try {
-      await this.appendLog(file, lines.join("\n") + "\n", { mode: 0o600 });
+      await this.appendLog(file, payload, { mode: 0o600 });
       if (warning) this.pendingLogWarnings.delete(threadId);
-      capThreadLog(file, currentThreadLogCap());
+      const cap = currentThreadLogCap();
+      if (typeof cap === "number" && Number.isFinite(cap) && cap > 0) {
+        const added = (this.bytesSinceCap.get(threadId) ?? 0) + Buffer.byteLength(payload);
+        const checkEvery = Math.min(64 * 1024, Math.floor(cap / 4));
+        if (cap <= 64 * 1024 || added >= checkEvery) {
+          this.bytesSinceCap.set(threadId, 0);
+          capThreadLog(file, cap);
+        } else {
+          this.bytesSinceCap.set(threadId, added);
+        }
+      }
     } catch (error) {
       this.noteDiskFailure(events[0], error);
     } finally {

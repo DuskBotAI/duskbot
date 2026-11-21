@@ -19,14 +19,19 @@ export interface VoiceProcess {
   stop(): void;
 }
 
+const DEFAULT_VOICE_IDLE_MS = 3 * 60_000;
+
 /** ONNX Runtime 1.31.1 has taken down the whole harness on Windows and Linux while loading the voice's models, so it
  * runs in a child of its own; a crash there ends only the voice. */
-export function createVoiceProcess({ modelDir, entry = resolveProxy("local-voice/voice-worker"), version = process.env.DUSK_APP_VERSION || "dev", log = () => {} }: {
+export function createVoiceProcess({ modelDir, entry = resolveProxy("local-voice/voice-worker"), version = process.env.DUSK_APP_VERSION || "dev", idleMs, log = () => {} }: {
   modelDir: string;
   entry?: string;
   version?: string;
+  idleMs?: number;
   log?: (line: string) => void;
 }): VoiceProcess {
+  const configuredIdle = Number(process.env.DUSK_VOICE_IDLE_MS);
+  const idleTimeoutMs = idleMs ?? (Number.isFinite(configuredIdle) && configuredIdle >= 1_000 ? configuredIdle : DEFAULT_VOICE_IDLE_MS);
   const marker = path.join(modelDir, "runtime-crashed.json");
   let crashed = (() => {
     try {
@@ -37,8 +42,33 @@ export function createVoiceProcess({ modelDir, entry = resolveProxy("local-voice
   })();
   type Pending = Map<number, { resolve: (value: unknown) => void; reject: (error: Error) => void }>;
   let child: { proc: ChildProcess; pending: Pending } | null = null;
+  let idleTimer: ReturnType<typeof setTimeout> | null = null;
   const stopped = new WeakSet<ChildProcess>();
   let nextId = 1;
+
+  const clearIdle = () => {
+    if (!idleTimer) return;
+    clearTimeout(idleTimer);
+    idleTimer = null;
+  };
+
+  const stopChild = () => {
+    clearIdle();
+    if (!child) return;
+    stopped.add(child.proc);
+    child.proc.kill();
+    child = null;
+  };
+
+  const armIdle = () => {
+    clearIdle();
+    if (!child || child.pending.size > 0 || !Number.isFinite(idleTimeoutMs) || idleTimeoutMs <= 0) return;
+    idleTimer = setTimeout(() => {
+      idleTimer = null;
+      if (child && child.pending.size === 0) stopChild();
+    }, idleTimeoutMs);
+    idleTimer.unref?.();
+  };
 
   const start = () => {
     const pending: Pending = new Map();
@@ -59,13 +89,16 @@ export function createVoiceProcess({ modelDir, entry = resolveProxy("local-voice
       pending.delete(reply.id);
       if (reply.ok) waiter.resolve(reply.value);
       else waiter.reject(new Error(reply.error));
+      if (child?.proc === proc && pending.size === 0) armIdle();
     });
     proc.once("error", (error) => {
       if (child?.proc === proc) child = null;
+      clearIdle();
       failAll(error);
     });
     proc.once("exit", (code, signal) => {
       if (child?.proc === proc) child = null;
+      clearIdle();
       if (stopped.has(proc)) return failAll(new Error("the built-in voice was stopped"));
       crashed = true;
       log(`built-in voice process crashed (code=${code} signal=${signal}); calls use this computer's own voice until the app updates`);
@@ -83,12 +116,16 @@ export function createVoiceProcess({ modelDir, entry = resolveProxy("local-voice
 
   const request = <T>(message: VoiceRequest): Promise<T> => {
     if (crashed) return Promise.reject(new Error("the built-in voice cannot run on this computer"));
+    clearIdle();
     const { proc, pending } = (child ??= start());
     const id = nextId++;
     return new Promise<T>((resolve, reject) => {
       pending.set(id, { resolve: resolve as (value: unknown) => void, reject });
       proc.send({ ...message, id }, (error) => {
-        if (error && pending.delete(id)) reject(error);
+        if (error && pending.delete(id)) {
+          if (pending.size === 0) armIdle();
+          reject(error);
+        }
       });
     });
   };
@@ -98,11 +135,6 @@ export function createVoiceProcess({ modelDir, entry = resolveProxy("local-voice
     warm: (halves) => request({ op: "warm", halves }),
     speak: (text, voice, speed) => request({ op: "speak", text, voice, speed }),
     transcribe: (samples) => request({ op: "transcribe", samples }),
-    stop() {
-      if (!child) return;
-      stopped.add(child.proc);
-      child.proc.kill();
-      child = null;
-    },
+    stop: stopChild,
   };
 }

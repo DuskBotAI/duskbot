@@ -7,7 +7,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { DATA_DIR } from "../config.ts";
 import { killCliTree, spawnCli } from "../procs.ts";
-import { AntigravityAcpClient, AntigravityAuthController, logoutAntigravity, validateAntigravityRuntime } from "./antigravity-acp.ts";
+import { AntigravityAcpClient, logoutAntigravity, validateAntigravityRuntime } from "./antigravity-acp.ts";
+import { AntigravityAuthController } from "./antigravity-auth.ts";
 import type { AntigravityRuntime } from "./antigravity-runtime.ts";
 import { VERIFICATION_TEMP_KEY, antigravityTempDir, folderBytes } from "./antigravity-temp.ts";
 

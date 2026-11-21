@@ -18,7 +18,7 @@ export type SessionState =
   | { kind: "unauthenticated"; error: string }
   | { kind: "unreachable"; error: string };
 
-type SessionProfile = { name?: string; email?: string; avatarUrl?: string };
+type SessionProfile = { name?: string; email?: string; avatarUrl?: string; accountFace?: import("../../shared/user-avatar").SyncedAccountFace };
 
 /** The sidebar's "you". The configured profile is the owner's: an admin (the owner on a My Cloud) keeps it, and a Team
  * Cloud already sends each person their own. Anyone else sees their own email, never the owner's name or picture. */

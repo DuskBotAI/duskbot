@@ -106,7 +106,7 @@ export function UsageMeterRow({ engine }: { engine: string | undefined }) {
     <div data-panel-row="usage" className="flex flex-col gap-1.5 rounded-lg px-2 py-1.5">
       <div className="flex min-w-0 items-center gap-2">
         <div className="min-w-0 flex-1">
-          <div className="text-[13px] leading-[18px] tracking-[0.015em] text-ink">{t("nativeUsage.rowTitle")}</div>
+          <div data-usage-title="" className="text-[13px] leading-[18px] tracking-[0.015em] text-ink">{t("nativeUsage.rowTitle")}</div>
           <div className="truncate text-[13px] leading-[18px] tracking-[0.015em] text-ink-secondary">{hint}</div>
         </div>
         <span className={cn("shrink-0 text-[13px] leading-[18px] tabular-nums", lead.tone === "out" ? "text-danger" : "text-ink-secondary")}>

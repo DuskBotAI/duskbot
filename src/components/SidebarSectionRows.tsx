@@ -1,32 +1,48 @@
-import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import type { ReactNode } from "react";
+import { memo, useEffect, useRef, useState, type ReactNode } from "react";
 
-import { DURATION, REDUCED } from "@/lib/motion-presets";
+import { cn } from "@/lib/cn";
+import { DURATION } from "@/lib/motion-presets";
 
-/** grok folds a section on its --ease-sharp */
-const EASE_SHARP = [0.165, 0.84, 0.44, 1] as const;
+const COLLAPSE_MS = Math.round(DURATION.base * 1000);
 
 /** A section's rows, folding shut and open under its header; while shutting it keeps the rows it last had.
  * `animate` off leaves them unwrapped. */
-export function SectionRows({ open, animate, children }: { open: boolean; animate: boolean; children: ReactNode }) {
-  const reduce = useReducedMotion();
+export const SectionRows = memo(function SectionRows({ open, animate, children }: { open: boolean; animate: boolean; children: ReactNode }) {
+  const [rendered, setRendered] = useState(open);
+  const [expanded, setExpanded] = useState(open);
+  const lastChildren = useRef<ReactNode>(open ? children : null);
+  if (open) lastChildren.current = children;
+
+  useEffect(() => {
+    if (!animate) {
+      setRendered(open);
+      setExpanded(open);
+      return;
+    }
+    if (open) {
+      setRendered(true);
+      const frame = requestAnimationFrame(() => setExpanded(true));
+      return () => cancelAnimationFrame(frame);
+    }
+    setExpanded(false);
+    const timer = setTimeout(() => setRendered(false), COLLAPSE_MS);
+    return () => clearTimeout(timer);
+  }, [open, animate]);
+
   if (!animate) return open ? <>{children}</> : null;
-  const tween = { duration: DURATION.base, ease: EASE_SHARP };
+  if (!rendered) return null;
+
   return (
-    <AnimatePresence initial={false}>
-      {open && (
-        <motion.div
-          key="rows"
-          data-sidebar-section-rows=""
-          className="flex flex-col gap-1"
-          initial={{ height: 0, opacity: 0, overflow: "hidden" }}
-          animate={{ height: "auto", opacity: 1, transitionEnd: { overflow: "visible" } }}
-          exit={{ height: 0, opacity: 0, overflow: "hidden" }}
-          transition={{ height: reduce ? { duration: 0 } : tween, opacity: reduce ? REDUCED : tween }}
-        >
-          {children}
-        </motion.div>
+    <div
+      data-sidebar-section-rows=""
+      className={cn(
+        "grid transition-[grid-template-rows,opacity] duration-200 ease-[cubic-bezier(0.165,0.84,0.44,1)] motion-reduce:transition-none",
+        expanded ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0",
       )}
-    </AnimatePresence>
+    >
+      <div className={cn("flex min-h-0 flex-col gap-1", expanded ? "overflow-visible" : "overflow-hidden")}>
+        {open ? children : lastChildren.current}
+      </div>
+    </div>
   );
-}
+});

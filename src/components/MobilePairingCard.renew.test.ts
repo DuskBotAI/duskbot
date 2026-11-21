@@ -465,6 +465,10 @@ describe("the Mac app's own account", () => {
     expect(bridge.phoneSignIn).toHaveBeenCalledOnce();
     expect(host.querySelector("[data-phone-qr]")?.getAttribute("data-phone-qr")).toBe("https://dusk.bot/m/pair#m=offer1&c=ABCDEFGH0001&a=WXYZQRST&ae=owner%40example.test&as=preview");
     expect(host.querySelector("[data-phone-account-as]")?.textContent).toBe("Logs in as owner@example.test");
+    const pairCall = api.mock.calls.find(([path]) => path === "/api/mobile/pairing");
+    expect(JSON.parse(String((pairCall?.[1] as { body?: string } | undefined)?.body ?? "{}"))).toMatchObject({
+      signIn: { code: "WXYZQRST", email: "owner@example.test", service: "preview" },
+    });
   });
 
   it("an account service that makes no phone codes yet still shows a QR that pairs", async () => {

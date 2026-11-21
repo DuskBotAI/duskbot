@@ -257,7 +257,7 @@ export interface AppSessionIdentity {
   cloudContractVersion: 1;
   expiresAt: number;
   device: { id: string };
-  account: { id: string; email: string };
+  account: { id: string; email: string; name?: string; avatarUrl?: string; avatar?: string };
   /** the website's handoff page, `${publicUrl}${pageBase}/handoff`, so the app can open it at once (WebHandoffRequest.token) */
   handoffUrl?: string;
   /** "open": this account was just made through the app's browser sign-in and the website is taking it through its first

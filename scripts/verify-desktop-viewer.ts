@@ -355,13 +355,13 @@ process.on('SIGTERM',()=>{fs.appendFileSync(log,'close ');process.exit(0)});
   await command("wait", "--fn", "document.getAnimations().every(a => a.playState !== 'running')");
   await command("screenshot", phoneScreenshot);
   assert.equal(await evaluate("(() => { const r = document.querySelector('section').getBoundingClientRect(); return r.left >= 0 && r.right <= innerWidth && r.top >= 0 && r.bottom <= innerHeight; })()"), true);
-  await evaluate("document.documentElement.dataset.skin = 'daylight'");
+  await evaluate("Object.assign(document.documentElement.dataset, { skin: 'daylight', scheme: 'light' })");
   await command("wait", "--fn", "getComputedStyle(document.getElementById('retry')).color === 'rgb(87, 87, 87)'");
   assert.equal(await evaluate(matchingBackgrounds), true);
   const lightScreenshot = join(evidenceDir, `viewer-${process.pid}-light.png`);
   await command("screenshot", lightScreenshot);
   // Match the shared skin rules for both enabled and disabled accent buttons.
-  await evaluate("document.documentElement.dataset.skin = 'foundry'");
+  await evaluate("Object.assign(document.documentElement.dataset, { skin: 'foundry', scheme: 'dark' })");
   await command("wait", "--fn", "getComputedStyle(document.getElementById('send')).color === 'rgb(176, 166, 150)'");
   await command("fill", "#text", "Foundry preview");
   await command("wait", "--fn", "getComputedStyle(document.getElementById('send')).color === 'rgb(28, 21, 12)'");

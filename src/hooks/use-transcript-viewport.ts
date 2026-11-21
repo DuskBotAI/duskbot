@@ -287,18 +287,25 @@ export function useTranscriptViewport<T extends { id: string; role?: string }>({
     const el = scrollRef.current;
     return !el || el.scrollHeight - el.scrollTop - el.clientHeight < BOTTOM_FOLLOW_THRESHOLD;
   };
+  const jumpSeqRef = useRef(0);
   const jumpToLatest = () => {
+    const seq = ++jumpSeqRef.current;
     setBottomFollow(true);
     setTranscriptWindow({ key: transcriptKey, start: tailStart, end: null });
     requestAnimationFrame(() => {
       const el = scrollRef.current;
-      if (!el) return;
+      if (!el) {
+        if (jumpSeqRef.current === seq) jumpSeqRef.current = 0;
+        return;
+      }
       const smooth = !reducedMotion();
       // from far up the list cuts to one screen above the end and eases the rest, so it never scrolls through everything
       // in between
       const end = el.scrollHeight - el.clientHeight;
       if (smooth && end - el.scrollTop > el.clientHeight) el.scrollTop = end - el.clientHeight;
+      previousScrollTop.current = el.scrollTop;
       el.scrollTo({ top: el.scrollHeight, behavior: smooth ? "smooth" : "auto" });
+      if (jumpSeqRef.current === seq) jumpSeqRef.current = 0;
     });
   };
 
@@ -363,7 +370,7 @@ export function useTranscriptViewport<T extends { id: string; role?: string }>({
       });
       previousScrollTop.current = scrollTop;
       // a jump up by more than a screen with no finger or wheel on the list: iOS's tap on the status bar, VoiceOver
-      if (followRef.current && scrollTop < previousTop && el.scrollHeight - scrollTop - el.clientHeight > el.clientHeight) setBottomFollow(false);
+      if (jumpSeqRef.current === 0 && followRef.current && scrollTop < previousTop && el.scrollHeight - scrollTop - el.clientHeight > el.clientHeight) setBottomFollow(false);
       if (resume) {
         setBottomFollow(true);
       } else if (!followRef.current && scrollTop <= AUTO_EXPAND_TOP_THRESHOLD) {

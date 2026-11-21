@@ -31,6 +31,11 @@ export function installAmbient({ ipcMain, BrowserWindow, page, origin, file, ope
   const save = next => { prefs = next; try { file.write(next); } catch (error) { log(`ambient prefs not saved: ${error?.message ?? error}`); } };
   const address = surface => { const base = origin(); return base ? `${base}${PAGE}?surface=${surface}` : null; };
   const appPage = () => { const contents = page(); return contents && !contents.isDestroyed() ? contents : null; };
+  const sendToApp = (channel, payload) => {
+    const contents = appPage();
+    if (!contents) return;
+    try { contents.send(channel, payload); } catch {}
+  };
   const pageOrigin = () => { try { return new URL(appPage()?.getURL() ?? "").origin; } catch { return null; } };
 
   const views = { island: null, dock: null };
@@ -45,7 +50,7 @@ export function installAmbient({ ipcMain, BrowserWindow, page, origin, file, ope
       const act = parseAct(payload);
       if (!act) return;
       if (act.kind === "new-bot") reveal();
-      appPage()?.send("ambient:act", act);
+      sendToApp("ambient:act", act);
       return;
     }
     if (channel === "ambient:viewing") {
@@ -54,7 +59,7 @@ export function installAmbient({ ipcMain, BrowserWindow, page, origin, file, ope
       const limit = Number.isFinite(payload?.limit) ? Math.max(1, Math.min(120, Math.floor(payload.limit))) : 40;
       // each surface's own: the island closing its chat never takes the dock's card's away, and the other way round
       views[surface] = botId ? { botId, limit } : null;
-      appPage()?.send("ambient:viewing", views[surface] ?? views[surface === "dock" ? "island" : "dock"] ?? null);
+      sendToApp("ambient:viewing", views[surface] ?? views[surface === "dock" ? "island" : "dock"] ?? null);
       return;
     }
     if (channel === "ambient:seen") {
@@ -116,12 +121,13 @@ export function installAmbient({ ipcMain, BrowserWindow, page, origin, file, ope
     // the app's page summarises its bots only while a surface shows them; meanwhile it must keep up even behind other
     // windows: Electron's background throttling would slow its timers, and (since it also makes the page read as
     // hidden) its live stream would not reconnect, so a reply could wait until the app is shown again
-    appPage()?.send("ambient:wanted", wanted());
+    sendToApp("ambient:wanted", wanted());
     const throttle = !wanted();
-    if (appPage() && throttled !== throttle) {
+    const contents = appPage();
+    if (contents && throttled !== throttle) {
       throttled = throttle;
       note("page-throttling", String(throttle));
-      appPage().setBackgroundThrottling?.(throttle);
+      contents.setBackgroundThrottling?.(throttle);
     }
     followPointer();
   }

@@ -46,6 +46,7 @@ export class SavedSecretsUnavailable extends Error {
 export interface SavedSecretsKey {
   get(): string | null;
   peek(): string | null;
+  onReady?(listener: () => void): () => void;
 }
 
 /** A headless server's key: `<config>/duskbot/saved-secrets-<data folder hash>.key`, outside the data folder,
@@ -71,6 +72,10 @@ export function fileSavedSecretsKey(dataDir: string, file = defaultKeyFile(dataD
       if (misplaced) return null;
       cached = readKeyFile(file) ?? legacy.map(readKeyFile).find(Boolean) ?? null;
       return cached;
+    },
+    onReady(listener) {
+      if (!misplaced) listener();
+      return () => {};
     },
   };
 }
@@ -144,15 +149,27 @@ function writeKey(file: string, key: string): void {
 export function desktopSavedSecretsKey(fallback: () => SavedSecretsKey): SavedSecretsKey & { receive(message: unknown): boolean } {
   let key: string | null = null;
   let use: SavedSecretsKey | null = null;
+  const listeners = new Set<() => void>();
   return {
     get: () => key ?? use?.get() ?? null,
     peek: () => key ?? use?.peek() ?? null,
+    onReady(listener) {
+      if (key || use) {
+        listener();
+        return () => {};
+      }
+      listeners.add(listener);
+      return () => { listeners.delete(listener); };
+    },
     receive(raw) {
       const message = (raw as { data?: unknown } | null)?.data ?? raw;
       if (!message || typeof message !== "object" || (message as { type?: unknown }).type !== SAVED_SECRETS_KEY_MESSAGE) return false;
       const sent = (message as { key?: unknown }).key;
       if (typeof sent === "string" && HEX_KEY.test(sent)) key = sent;
       else use = fallback();
+      const pending = [...listeners];
+      listeners.clear();
+      for (const listener of pending) listener();
       return true;
     },
   };

@@ -4,10 +4,9 @@ import { Check, ChevronRight, Copy, type GlyphIcon } from "../icons";
 import { cn } from "@/lib/cn";
 import { useCopyFeedback } from "@/lib/copy-text";
 import { t } from "@/lib/i18n";
-import { flushSystemControls, wakeSystemControls } from "@/lib/system-control";
-import { BAR_RANK, frames, sheetStep, sheetsUp, useChrome, useNativeBar, useSheetPushDepth } from "@/mobile/chrome";
+import { BAR_RANK, useChrome, useNativeBar, useSheetPushDepth } from "@/mobile/chrome";
+import { useNativeTrail } from "@/mobile/native-push";
 import type { MobileChrome } from "@/mobile/platform";
-import { createPushToken, registerNativePop } from "@/mobile/SheetPush";
 import { Icon } from "./Icon";
 import { DialogPane, GrokDialog, mdPrimaryCls, mdSecondaryCls, rowButtonCls } from "./ui/GrokDialog";
 import { SelectPill, type SelectPillOption } from "./ui/SelectPill";
@@ -492,93 +491,20 @@ function NativeOwnSheetPane({ chrome, title, footer, children, ...rest }: {
 }) {
   const pushDepth = useSheetPushDepth();
   const [committed, setCommitted] = useState<SubPage[]>([]);
-  const entriesRef = useRef<Array<{ page: SubPage; token: string; unreg: () => void }>>([]);
-  const mountedRef = useRef(true);
   const scrollerRef = useRef<HTMLDivElement>(null);
   const titleId = useId();
+  const trail = useNativeTrail<SubPage>(chrome, (_removed, remaining) => setCommitted(remaining));
 
   const open = useCallback((id: string, pageTitle: string) => {
-    sheetStep(async () => {
-      if (!mountedRef.current) return;
-      const ok = await chrome.beginPush!();
-      if (!mountedRef.current) {
-        if (ok) await chrome.cancelPush?.();
-        return;
-      }
-      const nextPage: SubPage = { id, title: pageTitle };
-      if (!ok) {
-        setCommitted((current) => [...current, nextPage]);
-        scrollerRef.current?.scrollTo({ top: 0 });
-        await frames(1);
-        await flushSystemControls();
-        return;
-      }
-      const token = createPushToken();
-      const entry = { page: nextPage, token, unreg: () => {} };
-      entry.unreg = registerNativePop(chrome, token, () => {
-        const at = entriesRef.current.findIndex((item) => item.token === token);
-        if (at < 0) return;
-        for (const removed of entriesRef.current.splice(at)) removed.unreg();
-        setCommitted(entriesRef.current.map((item) => item.page));
-      });
-      entriesRef.current.push(entry);
-      setCommitted(entriesRef.current.map((item) => item.page));
+    trail.push(() => ({ id, title: pageTitle }), (page, pushedTrail) => {
+      setCommitted(pushedTrail ?? ((current) => [...current, page]));
       scrollerRef.current?.scrollTo({ top: 0 });
-      await frames(1);
-      await flushSystemControls();
-      await frames(2);
-      if (!mountedRef.current) {
-        const at = entriesRef.current.findIndex((item) => item.token === token);
-        if (at >= 0) {
-          for (const removed of entriesRef.current.splice(at)) removed.unreg();
-        }
-        await chrome.cancelPush?.();
-        return;
-      }
-      const okCommit = await chrome.commitPush!(token);
-      if (!okCommit) {
-        const at = entriesRef.current.findIndex((item) => item.token === token);
-        if (at >= 0) {
-          for (const removed of entriesRef.current.splice(at)) removed.unreg();
-          if (mountedRef.current) setCommitted(entriesRef.current.map((item) => item.page));
-        }
-      }
     });
-  }, [chrome]);
+  }, [trail]);
 
   const back = useCallback(() => {
-    const top = entriesRef.current.at(-1);
-    if (!top) {
-      setCommitted((current) => current.slice(0, -1));
-      return;
-    }
-    entriesRef.current.pop();
-    top.unreg();
-    sheetStep(async () => {
-      const popped = await chrome.popPage!(top.token);
-      if (mountedRef.current) setCommitted(entriesRef.current.map((item) => item.page));
-      await frames(1);
-      await flushSystemControls();
-      await frames(1);
-      if (popped) await chrome.finishPop?.();
-    });
-  }, [chrome]);
-
-  useEffect(() => {
-    mountedRef.current = true;
-    return () => {
-      mountedRef.current = false;
-      const remaining = entriesRef.current.splice(0);
-      for (const entry of remaining) entry.unreg();
-      const oldest = remaining[0];
-      if (oldest && sheetsUp.system) {
-        sheetStep(async () => {
-          await chrome.popPage?.(oldest.token, { animated: false });
-          wakeSystemControls();
-        });
-      }
-    };
-  }, [chrome]);
+    if (!trail.back()) setCommitted((current) => current.slice(0, -1));
+  }, [trail]);
 
   const top = committed.at(-1);
   const rank = BAR_RANK.sheetPushed + (pushDepth + committed.length) * 0.01;

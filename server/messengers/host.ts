@@ -434,9 +434,25 @@ export function createMessengerHost(deps: MessengerHostDeps) {
 
   let stopWatching: (() => void) | null = null;
   let readyTimer: ReturnType<typeof setTimeout> | null = null;
+  let stopReadyWait: (() => void) | null = null;
   function begin(): void {
-    if (!secrets.ready()) { readyTimer = setTimeout(begin, 2_000); readyTimer.unref(); return; }
+    if (!secrets.ready()) {
+      if (deps.key.onReady) {
+        if (!stopReadyWait) {
+          stopReadyWait = deps.key.onReady(() => {
+            stopReadyWait = null;
+            if (stopWatching && secrets.ready()) begin();
+          });
+        }
+        return;
+      }
+      readyTimer = setTimeout(begin, 2_000);
+      readyTimer.unref();
+      return;
+    }
     readyTimer = null;
+    stopReadyWait?.();
+    stopReadyWait = null;
     for (const one of secrets.links()) if (deps.bot(one.botId)) void start(one.botId, one.platform, false).catch(() => {});
     bridge.resume();
   }
@@ -468,6 +484,8 @@ export function createMessengerHost(deps: MessengerHostDeps) {
     },
     async stop(): Promise<void> {
       if (readyTimer) clearTimeout(readyTimer);
+      stopReadyWait?.();
+      stopReadyWait = null;
       stopWatching?.();
       stopWatching = null;
       await Promise.all([...runners.values()].map((runner) => runner.stop()));

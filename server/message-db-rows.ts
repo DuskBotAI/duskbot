@@ -1,4 +1,5 @@
 import type { DatabaseSync, StatementSync } from "node:sqlite";
+import { AUTO_APPROVAL_REASONS } from "../shared/auto-approval.ts";
 import { personWait } from "../shared/person-wait.ts";
 import type { Message } from "./store.ts";
 
@@ -14,6 +15,7 @@ export interface ThreadTailRows extends ThreadRows {
 export const rowToMessage = (row: { json: string }): Message => JSON.parse(row.json) as Message;
 
 const previews = new WeakMap<DatabaseSync, StatementSync>();
+const AUTO_APPROVAL_CHIP_SQL = AUTO_APPROVAL_REASONS.map((reason) => `json_extract(m.json, '$.tool.name') LIKE 'approved % (${reason})%'`).join(" OR ");
 const PREVIEW_SQL = `WITH RECURSIVE
   recent AS MATERIALIZED (
     SELECT rowid AS ord, id, role, kind FROM messages WHERE thread_id = ? ORDER BY rowid DESC LIMIT ?
@@ -40,14 +42,7 @@ const PREVIEW_SQL = `WITH RECURSIVE
     SELECT 'newest' AS pick, ord, pos FROM (
       SELECT b.ord, b.pos FROM branch b JOIN messages m ON m.rowid = b.ord
       WHERE b.kind NOT IN ('screen', 'digest', 'compaction', 'call')
-        AND NOT (b.kind = 'activity' AND (
-          json_extract(m.json, '$.tool.name') LIKE 'approved % (full access)%'
-          OR json_extract(m.json, '$.tool.name') LIKE 'approved % (saved command)%'
-          OR json_extract(m.json, '$.tool.name') LIKE 'approved % (always allowed)%'
-          OR json_extract(m.json, '$.tool.name') LIKE 'approved % (its own files)%'
-          OR json_extract(m.json, '$.tool.name') LIKE 'approved % (reads only)%'
-          OR json_extract(m.json, '$.tool.name') LIKE 'approved % (web search)%'
-        ))
+        AND NOT (b.kind = 'activity' AND (${AUTO_APPROVAL_CHIP_SQL}))
       ORDER BY b.pos DESC LIMIT 1
     )
     UNION ALL SELECT 'person', ord, pos FROM (

@@ -80,7 +80,7 @@ export function ReactAction({ threadId, message }: { threadId: string; message: 
   const id = useId();
   const close = (refocus: boolean) => {
     setOpen(false);
-    if (refocus) buttonRef.current?.focus();
+    if (refocus) buttonRef.current?.focus({ preventScroll: true });
   };
   usePopoverDismiss(open, rootRef, () => close(rootRef.current?.contains(document.activeElement) ?? false));
 
@@ -90,7 +90,7 @@ export function ReactAction({ threadId, message }: { threadId: string; message: 
     const button = buttonRef.current?.getBoundingClientRect();
     if (box && button) setEnd(button.left + box.width > window.innerWidth - 8 && button.right - box.width >= 8);
     const choices = [...(rowRef.current?.querySelectorAll<HTMLButtonElement>("button") ?? [])];
-    (choices.find((choice) => choice.getAttribute("aria-pressed") === "true") ?? choices[0])?.focus();
+    (choices.find((choice) => choice.getAttribute("aria-pressed") === "true") ?? choices[0])?.focus({ preventScroll: true });
   }, [open]);
 
   const onKey = (event: KeyboardEvent<HTMLDivElement>) => {

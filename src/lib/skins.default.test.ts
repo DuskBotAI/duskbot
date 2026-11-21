@@ -52,6 +52,20 @@ describe("default skin", () => {
     expect(document.documentElement.dataset.skin).toBe("grok");
   });
 
+  it("says dark or light on the page's root with every skin it wears", async () => {
+    await boot();
+    expect(document.documentElement.dataset.scheme).toBe("light");
+    setOsDark(true);
+    expect(document.documentElement.dataset.scheme).toBe("dark");
+    const skins = await import("./skins");
+    skins.applySkin("linen");
+    expect(document.documentElement.dataset.scheme).toBe("light");
+    skins.wearSkin("foundry");
+    expect(document.documentElement.dataset).toMatchObject({ skin: "foundry", scheme: "dark" });
+    skins.wearSkin("no-such-skin");
+    expect(document.documentElement.dataset).toMatchObject({ skin: "foundry", scheme: "dark" });
+  });
+
   it("stops following the computer once someone picks a skin", async () => {
     await boot();
     const skins = await import("./skins");

@@ -254,27 +254,29 @@ async function driverGate() {
 /** While CuaDriver waits for a grant, notices the moment it is given (its socket opens, or it asks for something else)
  * and starts again, so nobody has to restart anything. */
 function watchDriverGate(missing) {
-  clearInterval(gateWatch);
+  clearTimeout(gateWatch);
   const generation = lifecycleGeneration;
   const until = Date.now() + GATE_WATCH_MS;
-  let busy = false;
-  const stop = () => { clearInterval(gateWatch); gateWatch = null; };
-  gateWatch = setInterval(async () => {
-    if (busy) return;
-    if (generation !== lifecycleGeneration || Date.now() > until) return stop();
-    busy = true;
+  let delay = GATE_POLL_MS;
+  const poll = async () => {
+    gateWatch = null;
+    if (generation !== lifecycleGeneration || Date.now() > until) return;
     try {
       const ready = await socketAlive(STANDALONE_SOCKET);
       const now = ready ? null : await driverGate();
       if (generation !== lifecycleGeneration) return;
       if (ready || now?.join() !== missing.join()) {
-        stop();
         void startCua().catch((error) => console.error("[cua] Computer helper restart after a grant failed:", error));
+        return;
       }
-    } finally {
-      busy = false;
+    } catch {
     }
-  }, GATE_POLL_MS);
+    if (generation !== lifecycleGeneration || Date.now() > until) return;
+    delay = Math.min(30_000, Math.round(delay * 1.6));
+    gateWatch = setTimeout(poll, delay);
+    gateWatch.unref?.();
+  };
+  gateWatch = setTimeout(poll, delay);
   gateWatch.unref?.();
 }
 
@@ -330,7 +332,7 @@ export async function startCua({ attempt = 0, ask = false } = {}) {
   if (process.platform === "linux") return ensureLinuxRuntime().initialize();
   clearTimeout(retryTimer);
   retryTimer = null;
-  clearInterval(gateWatch);
+  clearTimeout(gateWatch);
   gateWatch = null;
   lifecycleGeneration++;
   startupAbort?.abort();
@@ -424,7 +426,7 @@ export async function cuaPermissionsStatus() {
 export async function stopCua() {
   clearTimeout(retryTimer);
   retryTimer = null;
-  clearInterval(gateWatch);
+  clearTimeout(gateWatch);
   gateWatch = null;
   lifecycleGeneration++;
   startupAbort?.abort();

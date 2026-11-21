@@ -593,6 +593,25 @@ describe("transcript viewport", () => {
     expect(scroller.calls.at(-1)).toEqual({ top: 120 * ROW, behavior: "smooth" });
   });
 
+  it("keeps following when an upward momentum scroll arrives before jumpToLatest's frame runs", () => {
+    const view = mount({ messages: rows(300) });
+    view.act(() => {
+      scroller.scrollTop = 2000;
+      view.current.scrollHandlers.onTouchStart({ touches: [{ clientY: 100 }] } as never);
+      view.current.scrollHandlers.onTouchMove({ touches: [{ clientY: 200 }] } as never);
+      view.current.scrollHandlers.onScroll();
+    });
+    expect(view.current.following).toBe(false);
+
+    view.act(() => {
+      view.current.jumpToLatest();
+      scroller.scrollTop = 1600;
+      view.current.scrollHandlers.onScroll();
+    });
+    expect(view.current.following).toBe(true);
+    expect(scroller.calls.at(-1)).toEqual({ top: 120 * ROW, behavior: "smooth" });
+  });
+
   it("jumps without the smooth animation when motion is reduced", () => {
     const view = mount({ messages: rows(300) });
     view.act(() => view.current.showEarlier());

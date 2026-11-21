@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { HighlighterCore } from "shiki/core";
 import { Check, X } from "../icons";
+import type { ShikiWorkerReply, ShikiWorkerRequest } from "./shiki-worker";
 
 import { GROK_LIGHT_THEME } from "./code-theme-grok";
 import { Icon } from "./Icon";
@@ -146,7 +147,7 @@ function loadGrammar(highlighter: HighlighterCore, file: GrammarFile): Promise<v
   return next;
 }
 
-async function highlightFence(code: string, lang: string): Promise<string> {
+async function highlightFenceInThread(code: string, lang: string): Promise<string> {
   const highlighter = await getHighlighter();
   const requested = lang.trim().toLowerCase();
   const plain = PLAIN_LANGS.has(requested);
@@ -158,6 +159,79 @@ async function highlightFence(code: string, lang: string): Promise<string> {
     themes: { light: LIGHT_THEME, dark: DARK_THEME },
     defaultColor: "light-dark()",
   });
+}
+
+type WorkerPending = { resolve: (html: string) => void; reject: (error: Error) => void };
+let shikiWorker: Worker | null = null;
+let shikiWorkerFailed = false;
+let shikiWorkerIdle: ReturnType<typeof setTimeout> | null = null;
+let shikiRequestId = 1;
+const shikiPending = new Map<number, WorkerPending>();
+const SHIKI_WORKER_IDLE_MS = 60_000;
+
+function stopShikiWorker(): void {
+  if (shikiWorkerIdle) {
+    clearTimeout(shikiWorkerIdle);
+    shikiWorkerIdle = null;
+  }
+  if (!shikiWorker) return;
+  shikiWorker.terminate();
+  shikiWorker = null;
+}
+
+function armShikiWorkerIdle(): void {
+  if (shikiWorkerIdle) clearTimeout(shikiWorkerIdle);
+  if (!shikiWorker || shikiPending.size > 0) return;
+  shikiWorkerIdle = setTimeout(() => {
+    shikiWorkerIdle = null;
+    if (shikiPending.size === 0) stopShikiWorker();
+  }, SHIKI_WORKER_IDLE_MS);
+}
+
+function getShikiWorker(): Worker | null {
+  if (shikiWorkerFailed || typeof Worker === "undefined") return null;
+  if (shikiWorker) return shikiWorker;
+  try {
+    const worker = new Worker(new URL("./shiki-worker.ts", import.meta.url), { type: "module" });
+    worker.onmessage = (event: MessageEvent<ShikiWorkerReply>) => {
+      const reply = event.data;
+      const waiter = shikiPending.get(reply.id);
+      if (!waiter) return;
+      shikiPending.delete(reply.id);
+      if (reply.ok) waiter.resolve(reply.html);
+      else waiter.reject(new Error(reply.error));
+      if (shikiPending.size === 0) armShikiWorkerIdle();
+    };
+    worker.onerror = () => {
+      shikiWorkerFailed = true;
+      stopShikiWorker();
+      for (const waiter of shikiPending.values()) waiter.reject(new Error("shiki worker failed"));
+      shikiPending.clear();
+    };
+    shikiWorker = worker;
+    return worker;
+  } catch {
+    shikiWorkerFailed = true;
+    return null;
+  }
+}
+
+function highlightFence(code: string, lang: string): Promise<string> {
+  const requested = lang.trim().toLowerCase();
+  const plain = PLAIN_LANGS.has(requested);
+  const file = plain ? undefined : grammarFile(requested);
+  if (!plain && !file) return Promise.reject(new Error(`no bundled grammar for ${requested}`));
+  const worker = getShikiWorker();
+  if (!worker) return highlightFenceInThread(code, lang);
+  if (shikiWorkerIdle) {
+    clearTimeout(shikiWorkerIdle);
+    shikiWorkerIdle = null;
+  }
+  const id = shikiRequestId++;
+  return new Promise<string>((resolve, reject) => {
+    shikiPending.set(id, { resolve, reject });
+    worker.postMessage({ id, code, lang } satisfies ShikiWorkerRequest);
+  }).catch(() => highlightFenceInThread(code, lang));
 }
 const highlightKey = (lang: string, code: string) => `${lang}:${codeHash(code)}`;
 // Shiki tokenizes on the renderer's main thread: 100 KB of TypeScript took 1.1 s, 1 MB took 12 s.

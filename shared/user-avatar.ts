@@ -12,6 +12,24 @@ export function parseUserAvatarChoice(value: unknown): UserAvatarChoice | null {
   return typeof value === "string" && CHOICE.test(value) ? value as UserAvatarChoice : null;
 }
 
+/** The signed-in dusk account's face mirrored on a workspace's profile so paired phones show the same avatar. */
+export interface SyncedAccountFace {
+  id: string;
+  email?: string;
+  avatarUrl?: string;
+  avatar?: UserAvatarChoice;
+}
+
+export function parseAccountAvatarUrl(value: unknown): string | null {
+  if (typeof value !== "string" || value.length > 1024) return null;
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" && !url.username && !url.password && !url.port ? url.href : null;
+  } catch {
+    return null;
+  }
+}
+
 /** What to draw for an account: its photo, or a drawing from a seed. */
 export type UserAvatarFace = { kind: "photo"; url: string } | { kind: "drawn"; seed: string };
 

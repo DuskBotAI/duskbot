@@ -113,6 +113,7 @@ function preloadApp(): Plugin {
 
 export default defineConfig({
   plugins: [react(), tailwindcss(), windowPages(), preloadApp(), thirdPartyNotices()],
+  worker: { format: "es" },
   build: {
     rollupOptions: { input: { index: page("./index.html"), ...Object.fromEntries(PAGES.map((name) => [name, page(`./${WINDOWS}/${name}.html`)])) } },
   },

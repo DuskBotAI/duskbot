@@ -20,6 +20,7 @@ export interface NativeMenuArm {
   rect: GlassFrame;
   /** corner radii in css order: top left, top right, bottom right, bottom left */
   radii: number[];
+  point?: { x: number; y: number };
   content?: NativeMenuContent;
 }
 
@@ -49,7 +50,11 @@ export interface HeldMenu {
 
 export interface NativeHold {
   /** a finger came down on `el`: arm it, and read its menu after `prefetchMs` of holding still (0 reads it at once) */
-  press(el: HTMLElement, describe: () => HeldMenu | null | Promise<HeldMenu | null>, options?: { prefetchMs?: number; onOpen?: (el: HTMLElement) => void }): void;
+  press(
+    el: HTMLElement,
+    describe: () => HeldMenu | null | Promise<HeldMenu | null>,
+    options?: { prefetchMs?: number; point?: { x: number; y: number }; onOpen?: (el: HTMLElement) => void },
+  ): void;
   /** the finger moved off or a second one came down */
   cancel(): void;
   dispose(): void;
@@ -90,6 +95,7 @@ export function createNativeHold(bridge: MenuBridge, prefix: string): NativeHold
         void load(press).then((menu) => bridge.resolve(event.id, menu?.content ?? { items: [] }));
         break;
       case "open":
+        if (press.opened) break;
         press.opened = true;
         clearTimeout(press.timer);
         // the system lifts a snapshot; the page's own copy would show through the blur under it
@@ -119,7 +125,12 @@ export function createNativeHold(bridge: MenuBridge, prefix: string): NativeHold
         if (presses.size <= KEEP) break;
         if (key !== id && !presses.get(key)?.opened) presses.delete(key);
       }
-      const base: NativeMenuArm = { id, rect: frameOf(el), radii: cornerRadii(el) };
+      const base: NativeMenuArm = {
+        id,
+        rect: frameOf(el),
+        radii: cornerRadii(el),
+        ...(options.point ? { point: { x: Math.round(options.point.x), y: Math.round(options.point.y) } } : {}),
+      };
       bridge.arm(base);
       const send = () => {
         void load(press).then((menu) => {

@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type HTMLAttributes, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
+import { createContext, memo, useContext, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type HTMLAttributes, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 
 import { cn } from "@/lib/cn";
 
@@ -72,13 +72,13 @@ export function thumbBox({ scrollTop, scrollHeight, clientHeight }: Pick<HTMLEle
 /** Grok's overlay scrollbar: a 5px thumb of 8% ink, 2px off the edge, that fades in while the pointer is over the list
  * (12% under the pointer itself) and out 150ms after it leaves. Dragging it scrolls the list. A touch screen has no
  * pointer to show it for, and gets none. */
-export function OverlayScrollbar(props: { scroller: HTMLElement | null; style?: CSSProperties }) {
+export const OverlayScrollbar = memo(function OverlayScrollbar(props: { scroller: HTMLElement | null; style?: CSSProperties }) {
   return canHover() ? <PointerScrollbar {...props} /> : null;
-}
+});
 
 const canHover = () => typeof matchMedia !== "function" || matchMedia("(any-hover: hover)").matches;
 
-function PointerScrollbar({ scroller, style }: { scroller: HTMLElement | null; style?: CSSProperties }) {
+const PointerScrollbar = memo(function PointerScrollbar({ scroller, style }: { scroller: HTMLElement | null; style?: CSSProperties }) {
   const track = useRef<HTMLDivElement>(null);
   // the thumb's place follows the scroll straight in its style; only its size and presence re-render
   const box = useRef<ThumbBox>(null);
@@ -160,9 +160,10 @@ function PointerScrollbar({ scroller, style }: { scroller: HTMLElement | null; s
       )}
     </div>
   );
-}
+});
 
 const FADE_BAND = "pointer-events-none absolute inset-x-0 z-10 h-6 bg-[var(--scroll-fade-surface,var(--color-panel))] opacity-0 transition-opacity duration-150 ease-out";
+const GLASS_SCROLLBAR_STYLE: CSSProperties = { top: "var(--glass-top, 0px)", bottom: "var(--glass-bottom, 0px)" };
 
 /** `fade` stacks the bars above and below the scroller instead of floating them over it as glass, and marks
  * the list's edges with a band of the surface colour that shows only while more of the list lies past that edge. */
@@ -204,7 +205,7 @@ export function GlassScrollFrame({ className, children, fade = false, ...rest }:
     <FadeFrame.Provider value={fade}>
       <div ref={ref} data-glass-frame="" className={cn("relative min-h-0", fade && "flex flex-col", className)} {...rest}>
         {children}
-        {!fade && <OverlayScrollbar scroller={scroller} style={{ top: "var(--glass-top, 0px)", bottom: "var(--glass-bottom, 0px)" }} />}
+        {!fade && <OverlayScrollbar scroller={scroller} style={GLASS_SCROLLBAR_STYLE} />}
       </div>
     </FadeFrame.Provider>
   );

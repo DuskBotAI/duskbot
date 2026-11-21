@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { appLinkFromUniversal, pairSignIn, MOBILE_LINK_VERSION, mobileLinkUrl, mobileOpenLink, parseMobileOpenLink, parseMobilePairingLink, parseSignInLink, universalPairLink, universalSignInLink, type MobileLinkPayload } from "./mobile-link.ts";
+import { appLinkFromUniversal, cleanPairSignIn, pairSignIn, MOBILE_LINK_VERSION, mobileLinkUrl, mobileOpenLink, parseMobileOpenLink, parseMobilePairingLink, parseSignInLink, universalPairLink, universalSignInLink, type MobileLinkPayload } from "./mobile-link.ts";
 import { phonePairingLink } from "./pairing-link.ts";
 
 const token = `omb_pair_${"a".repeat(43)}`;
@@ -87,6 +87,11 @@ describe("mobile pairing link adapter", () => {
     expect(parseMobilePairingLink(appLinkFromUniversal(real)!), "apps that predate it still pair").toEqual(parseMobilePairingLink(mobileLinkUrl(payload)));
     expect(parseMobilePairingLink(mobileLinkUrl(payload))).not.toBeNull();
     expect(pairSignIn(universalPairLink("duskbot://pair?m=abc", null))).toBeNull();
+    const carried = cleanPairSignIn({ code: "wxyz-qrst", email: " o@b.test ", serviceOrigin: "https://preview.dusk.bot" });
+    expect(carried).toEqual({ code: "WXYZQRST", email: "o@b.test", service: "preview" });
+    const withSignIn = mobileLinkUrl({ ...payload, signIn: carried! });
+    expect(parseMobilePairingLink(withSignIn)?.signIn).toEqual(carried);
+    expect(pairSignIn(withSignIn)).toEqual(carried);
   });
 
   it("a dusk cloud's qr names the cloud it was drawn on, and only a dusk cloud's own address", () => {

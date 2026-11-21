@@ -1,19 +1,21 @@
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type ComponentType, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { createPortal } from "react-dom";
 import { motion, useReducedMotion } from "motion/react";
-import { Bell, CalendarClock, Check, FileText, Globe, KeyRound, LayoutDashboard, LifeBuoy, Lock, LogOut, Mail, Mic, MonitorX, MoreHorizontal, Palette, Pencil, Plug, Plus, ShieldCheck, Trash2, UserPlus, UserRound, Hand, Server, X, ZoomIn } from "../../icons";
+import { Bell, CalendarClock, Check, FileText, Globe, KeyRound, LayoutDashboard, LifeBuoy, Lock, LogOut, Mail, Mic, MonitorX, MoreHorizontal, Palette, Pencil, Plug, Plus, RefreshCw, ShieldCheck, Trash2, UserPlus, UserRound, Hand, Server, X, ZoomIn } from "../../icons";
 import { accountDashboardUrl } from "@/lib/account-dashboard";
 import { cn } from "@/lib/cn";
 import { useMenuMotion } from "@/components/MenuMotion";
+import { photoSource } from "@/components/AvatarPicker";
 import { useGroupYou } from "@/components/GroupAvatar";
-import { UserFace } from "@/components/UserAvatar";
+import { UserAvatarArt, UserFace } from "@/components/UserAvatar";
+import { newAvatarSeed, parseAccountAvatarUrl, parseUserAvatarChoice, plainAvatarChoice, type SyncedAccountFace, type UserAvatarChoice } from "../../../shared/user-avatar";
 import { trackUpsell, watchUpsell } from "@/lib/cloud-upsell";
 import { activeLocale, t } from "@/lib/i18n";
 import { effectiveLanguage, setLanguageChoice, useLanguageChoice, usePageLanguage } from "@/lib/language-preference";
 import { applySkinChoice, readSkinChoice, subscribeSkin, THEME_SKINS } from "@/lib/skins";
 import { systemMenu } from "@/lib/system-menu";
 import { localeChoices } from "@/locales";
-import { useStore } from "@/state/store";
+import { api, useStore, type ConfigStatus } from "@/state/store";
 import { useConnections } from "../connection/connections";
 import { placeActions, usePlaces, type Place, type PlacesState, type PlaceStatus } from "../connection/places";
 import { haptic, setHapticsEnabled, useHapticsEnabled } from "../haptics";
@@ -71,10 +73,10 @@ export function readableWorkspace(label: string | null | undefined): string | nu
 }
 
 /** The header's two lines: the person's name, then the account's email, the dusk cloud, or the computer they're linked to. */
-export function settingsIdentity(input: { name?: string | null; identity: PhoneIdentity }): { title: string; subtitle: string } {
+export function settingsIdentity(input: { name?: string | null; accountName?: string | null; identity: PhoneIdentity }): { title: string; subtitle: string } {
   const { identity } = input;
   const email = identity.kind === "account" ? identity.email.trim() : "";
-  const title = input.name?.trim() || email.split("@")[0] || t("mobile.settings.you");
+  const title = input.accountName?.trim() || input.name?.trim() || email.split("@")[0] || t("mobile.settings.you");
   const subtitle = email
     || (identity.kind === "cloud" ? readableWorkspace(identity.name) ?? t("mobile.settings.cloudLinked") : "")
     || (identity.kind === "computer" ? t("mobile.settings.connectedTo", { name: readableWorkspace(identity.name) ?? t("mobile.connection.yourComputer") }) : "")
@@ -114,7 +116,7 @@ export function PaymentLine({ payment, onUpdate }: { payment: { name: string; fi
 }
 
 type SettingsPage =
-  | "language" | "textSize" | "voice" | "notifications" | "routines" | "connectors" | "vault" | "delete" | "signOut" | "removeComputer"
+  | "avatar" | "language" | "textSize" | "voice" | "notifications" | "routines" | "connectors" | "vault" | "delete" | "signOut" | "removeComputer"
   | { kind: "renamePlace"; place: Place }
   | { kind: "removePlace"; place: Place };
 
@@ -137,7 +139,7 @@ export function shownComputer(connections: readonly MobileConnectionRecord[], ac
   const shown = connections.find((connection) => connection.id === activeId);
   return shown && placeKind(shown) === "computer" ? shown : null;
 }
-const SETTINGS_PAGES: readonly string[] = ["language", "textSize", "voice", "notifications", "routines", "connectors", "vault"];
+const SETTINGS_PAGES: readonly string[] = ["avatar", "language", "textSize", "voice", "notifications", "routines", "connectors", "vault"];
 
 /** Settings is a stack inside one sheet, as iOS Settings: the grouped list, and each page pushed over it with the
  * system's slide and edge swipe back. Notifications, routines, apps and the vault are the same pages the rest of the
@@ -168,7 +170,8 @@ export const SettingsSheet: ComponentType<SheetPageProps<"settings">> = ({ sheet
   const pageProps = { open: true, onClose: pop, onOpenSheet, onOpenChat };
   const removeTarget = shownPage && typeof shownPage === "object" && shownPage.kind === "removePlace" ? shownPage.place : null;
   const removeCopy = removeTarget ? removePlaceCopy(removeTarget) : null;
-  const shown = shownPage === "notifications" ? <NotificationsSheet sheet={{ kind: "notifications" }} {...pageProps} />
+  const shown = shownPage === "avatar" && account?.account ? <AvatarPage account={account.account} onSave={account.setAvatar} onDone={pop} />
+    : shownPage === "notifications" ? <NotificationsSheet sheet={{ kind: "notifications" }} {...pageProps} />
     : shownPage === "routines" ? <RoutinesSheet sheet={{ kind: "routines" }} {...pageProps} />
     : shownPage === "connectors" ? <ConnectorsSheet sheet={{ kind: "connectors" }} {...pageProps} />
     : shownPage === "vault" ? <VaultSheet sheet={{ kind: "vault" }} {...pageProps} />
@@ -246,7 +249,7 @@ function SettingsList({ onClose, push, placesState }: { onClose: () => void; pus
   const who = phoneIdentity({ account: account?.account, connections, activeId });
   const email = who.kind === "account" ? who.email : undefined;
   const face = account?.account ?? you?.face ?? null;
-  const identity = settingsIdentity({ name: state.config?.profile?.name, identity: who });
+  const identity = settingsIdentity({ name: state.config?.profile?.name, accountName: account?.account?.name, identity: who });
   const rows = accountRows({ native: platform.native, identity: who, offered: account?.offered });
   const consent = useAiConsent();
   const unread = state.notifications.filter((entry) => !entry.read).length;
@@ -297,9 +300,26 @@ function SettingsList({ onClose, push, placesState }: { onClose: () => void; pus
     <div className="pb-6">
       <SettingsSection card>
         <div className="flex w-full items-center gap-4 px-4 py-3.5">
-          <span className="flex size-14 shrink-0 items-center justify-center overflow-hidden rounded-full bg-ink/[0.07] text-[20px] font-semibold text-ink">
-            {face ? <UserFace account={face} size={56} className="size-full" /> : you?.initials ?? <UserRound aria-hidden size={24} />}
-          </span>
+          {account?.account ? (
+            <button
+              type="button"
+              data-settings-avatar=""
+              aria-label={t("accounts.avatar.change")}
+              onClick={() => { haptic("pick"); push("avatar"); }}
+              className="mobile-press relative flex size-14 shrink-0 items-center justify-center rounded-full bg-ink/[0.07] text-[20px] font-semibold text-ink"
+            >
+              <span className="flex size-full items-center justify-center overflow-hidden rounded-full">
+                {face ? <UserFace account={face} size={56} className="size-full" /> : you?.initials ?? <UserRound aria-hidden size={24} />}
+              </span>
+              <span aria-hidden className="absolute -bottom-0.5 -end-0.5 flex size-5 items-center justify-center rounded-full bg-menu text-ink-secondary shadow-sm ring-2 ring-surface">
+                <Pencil size={11} />
+              </span>
+            </button>
+          ) : (
+            <span className="flex size-14 shrink-0 items-center justify-center overflow-hidden rounded-full bg-ink/[0.07] text-[20px] font-semibold text-ink">
+              {face ? <UserFace account={face} size={56} className="size-full" /> : you?.initials ?? <UserRound aria-hidden size={24} />}
+            </span>
+          )}
           <span className="min-w-0 flex-1">
             <span className="block truncate text-[19px] font-semibold leading-6 tracking-[-0.01em] text-ink">{identity.title}</span>
             <span data-settings-identity className="block truncate text-[14px] text-ink-secondary">{identity.subtitle}</span>
@@ -308,7 +328,7 @@ function SettingsList({ onClose, push, placesState }: { onClose: () => void; pus
         {rows.dashboard && <SettingsRow icon={<LayoutDashboard />} label={t("mobile.settings.accountDashboard")} onClick={() => void accountDashboardUrl().then((url) => platform.openExternal(url))} />}
         {rows.signIn && <SettingsRow icon={<UserRound />} label={t("mobile.entry.signIn")} detail={t("mobile.settings.signInDetail")} onClick={() => { onClose(); window.dispatchEvent(new Event("dusk:sign-in")); }} />}
         {otherAccounts.map((other) => (
-          <SettingsRow key={other.id} icon={<UserFace account={other} size={24} className="size-6 rounded-full" />} label={other.email} detail={t("mobile.settings.otherAccount")} onClick={() => void useAccount(other.id)} />
+          <SettingsRow key={other.id} icon={<UserFace account={other} size={24} className="size-6 rounded-full" />} label={other.name?.trim() || other.email} detail={other.name?.trim() ? other.email : t("mobile.settings.otherAccount")} onClick={() => void useAccount(other.id)} />
         ))}
         {account?.account && account.offered && <SettingsRow icon={<UserPlus />} label={t("mobile.settings.addAccount")} onClick={() => { haptic("pick"); onClose(); window.dispatchEvent(new Event("dusk:add-account")); }} />}
       </SettingsSection>
@@ -413,6 +433,91 @@ function TextSizePage() {
           </button>
         ))}
       </SettingsSection>
+    </Sheet>
+  );
+}
+
+const AVATAR_SUGGESTIONS = 5;
+
+function AvatarPage({ account, onSave, onDone }: {
+  account: { id: string; email: string; avatarUrl?: string; avatar?: string };
+  onSave: (choice: UserAvatarChoice | null) => Promise<"saved" | "signed-out" | "failed">;
+  onDone: () => void;
+}) {
+  const { state, dispatch } = useStore();
+  const saved = parseUserAvatarChoice(account.avatar);
+  const hasPhoto = Boolean(account.avatarUrl);
+  const start = plainAvatarChoice(saved, hasPhoto);
+  const [choice, setChoice] = useState<UserAvatarChoice | null>(start);
+  const [suggested] = useState(() => Array.from({ length: AVATAR_SUGGESTIONS }, () => newAvatarSeed()));
+  const [rolled, setRolled] = useState<string | null>(saved?.startsWith("g:") && !suggested.includes(saved.slice(2)) ? saved.slice(2) : null);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState(false);
+  const source = photoSource(account.avatarUrl);
+  const previewAccount = { id: account.id, ...(account.avatarUrl ? { avatarUrl: account.avatarUrl } : {}), ...(choice ? { avatar: choice } : {}) };
+  const swatches: { key: string; choice: UserAvatarChoice | null; seed: string; label: string }[] = [
+    { key: "default", choice: hasPhoto ? "drawn" : null, seed: account.id, label: t("accounts.avatar.default") },
+    ...(rolled ? [{ key: `g:${rolled}`, choice: `g:${rolled}` as const, seed: rolled, label: t("accounts.avatar.rolled") }] : []),
+    ...suggested.slice(0, rolled ? AVATAR_SUGGESTIONS - 1 : AVATAR_SUGGESTIONS).map((seed, index) => ({ key: `g:${seed}`, choice: `g:${seed}` as const, seed, label: t("accounts.avatar.suggestion", { n: index + 1 }) })),
+  ];
+  const pick = (next: UserAvatarChoice | null) => { haptic("pick"); setChoice(next); setError(false); };
+  const shuffle = () => { const seed = newAvatarSeed(); setRolled(seed); pick(`g:${seed}`); };
+  const save = async () => {
+    if (saving) return;
+    setSaving(true);
+    setError(false);
+    haptic("tap");
+    const outcome = await onSave(choice).catch(() => "failed" as const);
+    if (outcome !== "saved") { haptic("error"); setError(true); setSaving(false); return; }
+    if (!state.config?.team && state.config?.profile?.accountFace?.id === account.id) {
+      const avatarUrl = parseAccountAvatarUrl(account.avatarUrl);
+      const nextFace: SyncedAccountFace = { id: account.id, email: account.email, ...(avatarUrl ? { avatarUrl } : {}), ...(choice ? { avatar: choice } : {}) };
+      void api<ConfigStatus>("/api/config", { method: "PUT", body: JSON.stringify({ profile: { accountFace: nextFace } }) })
+        .then((config) => { if (config) dispatch({ type: "configStatus", config }); })
+        .catch(() => {});
+    }
+    haptic("success");
+    onDone();
+  };
+  return (
+    <Sheet open onClose={saving ? () => {} : onDone} title={t("accounts.avatar.title")}>
+      <div className="flex flex-col gap-5 px-4 pb-6 pt-3">
+        <div className="flex flex-col items-center gap-3 py-2">
+          <span className="flex size-24 items-center justify-center overflow-hidden rounded-full inset-ring inset-ring-ink/[0.08]">
+            <UserFace account={previewAccount} size={96} className="size-full" />
+          </span>
+          <button type="button" data-avatar-shuffle="" disabled={saving} onClick={shuffle} className="mobile-press flex min-h-10 items-center gap-1.5 rounded-full bg-ink/[0.07] px-4 text-[15px] font-medium text-ink disabled:opacity-40">
+            <RefreshCw size={15} aria-hidden />
+            {t("accounts.avatar.shuffle")}
+          </button>
+        </div>
+        <div role="group" aria-label={t("accounts.avatar.suggestions")} className="grid grid-cols-6 gap-2 rounded-[16px] bg-menu p-3">
+          {swatches.map((swatch) => {
+            const on = choice === swatch.choice;
+            return (
+              <button key={swatch.key} type="button" aria-label={swatch.label} aria-pressed={on} data-avatar-swatch={swatch.key} disabled={saving}
+                onClick={() => pick(swatch.choice)}
+                className={cn("mobile-press flex aspect-square items-center justify-center rounded-full disabled:opacity-40", on && "bg-ink/[0.08] inset-ring-2 inset-ring-ink/35")}>
+                <UserAvatarArt seed={swatch.seed} size={36} />
+              </button>
+            );
+          })}
+        </div>
+        {account.avatarUrl && (
+          <button type="button" data-avatar-photo="" aria-pressed={choice === null} disabled={saving}
+            onClick={() => pick(null)}
+            className={cn("mobile-row flex min-h-[52px] w-full items-center gap-3 rounded-[16px] bg-menu px-4 py-2 text-left text-[16px] font-medium text-ink disabled:opacity-40", choice === null && "inset-ring-2 inset-ring-ink/25")}>
+            <img src={account.avatarUrl} alt="" className="size-8 shrink-0 rounded-full object-cover" />
+            <span className="min-w-0 flex-1 truncate">{t(source === "google" ? "accounts.avatar.photoGoogle" : source === "x" ? "accounts.avatar.photoX" : "accounts.avatar.photo")}</span>
+            {choice === null && <Check aria-hidden size={20} />}
+          </button>
+        )}
+        {error && <p role="alert" data-avatar-error="" className="px-1 text-[14px] leading-5 text-danger">{t("accounts.avatar.failed")}</p>}
+        <button type="button" data-avatar-save="" disabled={saving || choice === start} onClick={() => void save()}
+          className="mobile-press flex h-[50px] w-full items-center justify-center rounded-full bg-ink text-[16px] font-semibold text-app disabled:opacity-40">
+          {t(saving ? "accounts.avatar.saving" : "accounts.avatar.save")}
+        </button>
+      </div>
     </Sheet>
   );
 }

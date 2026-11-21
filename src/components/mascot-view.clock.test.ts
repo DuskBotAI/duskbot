@@ -72,19 +72,20 @@ const framesOver = (ms: number) => {
 };
 
 describe("marks on the shared loop", () => {
-  it("draws every busy mascot from one animation frame, about 60 times a second", () => {
+  it("draws every busy mascot from one animation frame, capped around 30 times a second", () => {
     render(Array.from({ length: 12 }, (_, i) => ({ state: "working" as const, size: [24, 28, 36, 64][i % 4] })));
     run(100);
     const frames = framesOver(1000);
-    expect(frames).toBeGreaterThanOrEqual(55);
-    expect(frames).toBeLessThanOrEqual(70);
+    expect(frames).toBeGreaterThanOrEqual(20);
+    expect(frames).toBeLessThanOrEqual(36);
   });
 
   it("paints a static mascot once, in its state's face, and then asks for nothing", () => {
     render([{ state: "sleeping", animated: false, size: 24 }]);
     run(100);
     expect(markOf().getAttribute("data-state")).toBe("sleeping");
-    expect(host.querySelector("[data-dusk-mark] canvas")).not.toBeNull();
+    expect(host.querySelector("[data-dusk-mark] svg")).not.toBeNull();
+    expect(host.querySelector("[data-dusk-mark] canvas")).toBeNull();
     expect(framesOver(2000)).toBe(0);
   });
 
@@ -94,7 +95,7 @@ describe("marks on the shared loop", () => {
     run(1000);
     expect(framesOver(2000)).toBe(0);
     act(() => ref.current!.blink());
-    expect(framesOver(500)).toBeGreaterThan(5);
+    expect(framesOver(500)).toBeGreaterThanOrEqual(4);
     expect(framesOver(2000)).toBe(0);
   });
 

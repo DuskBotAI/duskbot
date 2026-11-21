@@ -90,7 +90,7 @@
   --chat-rule: 12%;
   --chat-ts: 56%;
 }
-:root:is([data-skin="grok-dark"], [data-skin="midnight"], [data-skin="dusk"], [data-skin="foundry"], [data-skin="graphite"], [data-skin="halloween"]) {
+:root[data-scheme="dark"] {
   --chat-wash: 4%;
   --chat-gloss: 0.03;
   --chat-gloss-own: 0.01;
@@ -446,27 +446,21 @@
   animation: dusk-fade-in 180ms var(--dusk-ease-out) backwards;
 }
 .status-shimmer {
-  --status-shimmer-ink: var(--color-ink);
-  --status-shimmer-dim: color-mix(in srgb, var(--status-shimmer-ink) 40%, transparent);
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: transparent;
-  background-image: linear-gradient(90deg, var(--status-shimmer-dim) 0%, var(--status-shimmer-dim) 25%, var(--status-shimmer-ink) 60%, var(--status-shimmer-dim) 75%, var(--status-shimmer-dim) 100%);
-  background-size: 200% 100%;
-  -webkit-background-clip: text;
-  background-clip: text;
-  animation: status-shimmer 3.4s var(--dusk-ease-heavy) infinite;
+  color: var(--color-ink-secondary);
+  animation: status-shimmer 2.2s ease-in-out infinite;
 }
 @keyframes status-shimmer {
-  from { background-position: 200% 0; }
-  to { background-position: -200% 0; }
+  0%, 100% { opacity: 0.48; }
+  50% { opacity: 1; }
 }
 @media (prefers-reduced-motion: reduce) {
   .turn-status-in, .turn-status-in .turn-status-mark, .turn-status-in .turn-label-slot, .turn-label-in { animation-name: chat-row-fade; }
   .turn-status-out { animation-name: dusk-fade-out; }
-  .status-shimmer { animation: none; background-image: none; color: var(--color-ink-secondary); }
+  .status-shimmer { animation: none; opacity: 1; }
 }
 
 /* grok's 16px pane inset for the composer and the rows riding above it */
@@ -487,12 +481,11 @@
 /* a reply's words fade in a step apart as they are revealed (src/lib/text-reveal.ts): opacity and a soft focus pull
    only, so no line ever reflows */
 .md-rv {
-  animation: md-rv-in 340ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: md-rv-in 240ms cubic-bezier(0.22, 1, 0.36, 1) both;
   animation-delay: calc(var(--rv, 0) * var(--rv-step, 0ms));
 }
 @keyframes md-rv-in {
-  from { opacity: 0; filter: blur(3px); }
-  60% { filter: blur(0); }
+  from { opacity: 0; }
 }
 @media (prefers-reduced-motion: reduce) {
   .md-rv { animation: md-rv-fade 160ms ease-out both; animation-delay: 0ms; }

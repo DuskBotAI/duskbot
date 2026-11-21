@@ -42,9 +42,23 @@ export function sessionIdlePolicy(
   return { idleMs: Math.max(minimumMs, configured), minimumMs };
 }
 
-/** On a small box with less than half of it free, a second idle engine would leave no room for a turn's own engine. */
-export function idleEnginesAllowed(box: Pick<BoxMemory, "bytes">, availableBytes: number): number {
-  return box.bytes <= SMALL_BOX_BYTES && availableBytes < box.bytes / 2 ? 1 : Infinity;
+const GB = 1024 ** 3;
+const DESKTOP_MIN_IDLE_ENGINES = 2;
+const DESKTOP_MAX_IDLE_ENGINES = 4;
+
+/** How many idle engines may stay warm simultaneously; capped on desktop too so idle Claude/Codex trees do not grow unbounded. */
+export function idleEnginesAllowed(
+  box: Pick<BoxMemory, "bytes">,
+  availableBytes: number,
+  env: Record<string, string | undefined> = process.env,
+): number {
+  const override = env.DUSK_MAX_IDLE_ENGINES?.trim();
+  if (override === "Infinity") return Infinity;
+  const parsed = Number(override);
+  if (override && Number.isInteger(parsed) && parsed >= 1) return parsed;
+  if (box.bytes <= SMALL_BOX_BYTES) return availableBytes < box.bytes / 2 ? 1 : Infinity;
+  const cap = Math.max(DESKTOP_MIN_IDLE_ENGINES, Math.min(DESKTOP_MAX_IDLE_ENGINES, Math.floor(box.bytes / (4 * GB))));
+  return availableBytes < box.bytes / 4 ? Math.min(DESKTOP_MIN_IDLE_ENGINES, cap) : cap;
 }
 
 export interface WarmEngine {
@@ -58,12 +72,11 @@ const warmEngines = new Map<string, WarmEngine>();
 
 /** An engine went idle: when the box allows fewer idle engines than are up, the ones idle longest close now. */
 export function keepWarm(key: string, engine: WarmEngine, box: Pick<BoxMemory, "bytes"> = boxMemory(),
-  available: () => number = availableMemory): void {
-  if (box.bytes > SMALL_BOX_BYTES) return;
+  available: () => number = availableMemory, env: Record<string, string | undefined> = process.env): void {
   warmEngines.delete(key);
   warmEngines.set(key, engine);
   for (const [other, warm] of warmEngines) if (other !== key && !warm.idle()) warmEngines.delete(other);
-  const extra = warmEngines.size - idleEnginesAllowed(box, available());
+  const extra = warmEngines.size - idleEnginesAllowed(box, available(), env);
   if (extra <= 0) return;
   for (const [other, warm] of [...warmEngines].slice(0, extra)) {
     warmEngines.delete(other);

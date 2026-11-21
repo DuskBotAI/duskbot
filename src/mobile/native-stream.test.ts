@@ -113,6 +113,25 @@ describe("createNativeStreamFetch", () => {
     expect(fake.open).not.toHaveBeenCalled();
   });
 
+  it("unwraps CapacitorHttp interceptor URLs through DuskStream when running on an http dev server", async () => {
+    vi.stubGlobal("window", { location: { origin: "http://127.0.0.1:5320" } });
+    const fake = fakeStreamPlugin();
+    fake.open.mockResolvedValueOnce({ status: 200, headers: { "content-type": "application/json" }, body: btoa("{\"ok\":true}") });
+    const webFetch = vi.fn(async () => new Response("local-ok", { status: 200 }));
+    const nativeFetch = createNativeStreamFetch(fake.plugin, webFetch);
+
+    const response = await nativeFetch("capacitor://localhost/_capacitor_http_interceptor_?u=http%3A%2F%2Fmac.tailnet%3A8813%2Fapi%2Fstate", {
+      headers: { Authorization: "Bearer tok" },
+    });
+
+    expect(fake.open).toHaveBeenCalledWith(expect.objectContaining({
+      url: "http://mac.tailnet:8813/api/state",
+      headers: expect.objectContaining({ authorization: "Bearer tok" }),
+    }));
+    expect(webFetch).not.toHaveBeenCalled();
+    expect(await response.json()).toEqual({ ok: true });
+  });
+
   it("preserves AbortError when aborted while opening and closes the native call", async () => {
     const fake = fakeStreamPlugin();
     fake.open.mockReturnValue(new Promise(() => {}));

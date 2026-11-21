@@ -44,7 +44,18 @@ function Icon({ node }: { node: Node | null }) {
 export async function readMessageActions(row: HTMLElement): Promise<{ actions: ContextAction[]; reactions: ContextReaction[] }> {
   const bar = row.querySelector<HTMLElement>("[data-testid='message-actions']");
   if (!bar) return { actions: [], reactions: [] };
-  const hide = <R,>(run: () => Promise<R>) => async () => { bar.style.visibility = "hidden"; try { return await run(); } finally { bar.style.visibility = ""; } };
+  const hide = <R,>(run: () => Promise<R>) => async () => {
+    const active = document.activeElement;
+    bar.style.visibility = "hidden";
+    try {
+      return await run();
+    } finally {
+      if (document.activeElement instanceof HTMLElement && bar.contains(document.activeElement) && document.activeElement !== active) {
+        document.activeElement.blur();
+      }
+      bar.style.visibility = "";
+    }
+  };
   const buttons = [...bar.querySelectorAll<HTMLButtonElement>(":scope > button, :scope > div > button")];
   const react = buttons.find((button) => button.getAttribute("aria-label") === t("chat.react"));
   const more = buttons.find((button) => button.getAttribute("aria-label") === t("chat.messageActions"));
@@ -170,8 +181,9 @@ export async function nativeMessageMenu(row: HTMLElement, link?: string | null):
   };
 }
 
-/** Reading a message's menu opens its own small menus out of sight, so it waits until the finger has held still a beat. */
-const NATIVE_PREFETCH_MS = 280;
+/** Reading a message's menu opens its own small menus out of sight, so it waits until the finger has held still a beat,
+ * short enough to finish before UIKit asks for the menu configuration. */
+const NATIVE_PREFETCH_MS = 80;
 
 /** The held message under a touch, or null when the touch belongs to something else in it (a button, a field). */
 export function heldBubble(target: EventTarget | null): { bubble: HTMLElement; row: HTMLElement } | null {
@@ -195,11 +207,12 @@ function useNativeMessageHold(rootRef: RefObject<HTMLElement | null>, hold: Nati
       start = null;
       if (event.touches.length !== 1) { hold.cancel(); return; }
       const held = heldBubble(event.target);
-      if (!held) return;
+      if (!held) { hold.cancel(); return; }
       start = { x: event.touches[0].clientX, y: event.touches[0].clientY };
       const link = inAppLink(event.target);
       hold.press(held.bubble, () => nativeMessageMenu(held.row, link), {
         prefetchMs: NATIVE_PREFETCH_MS,
+        point: start,
         // the bar's own long press would also bring up its pill
         onOpen: () => held.row.dispatchEvent(new PointerEvent("pointercancel", { bubbles: true, pointerType: "touch" })),
       });
@@ -209,12 +222,20 @@ function useNativeMessageHold(rootRef: RefObject<HTMLElement | null>, hold: Nati
       const touch = event.touches[0];
       if (Math.hypot(touch.clientX - start.x, touch.clientY - start.y) > MOVE_CANCEL) { start = null; hold.cancel(); }
     };
+    const onTouchEnd = () => {
+      start = null;
+      hold.cancel();
+    };
     root.addEventListener("touchstart", onTouchStart, { passive: true });
     root.addEventListener("touchmove", onTouchMove, { passive: true });
+    root.addEventListener("touchend", onTouchEnd, { passive: true });
+    root.addEventListener("touchcancel", onTouchEnd, { passive: true });
     return () => {
       delete html.dataset.nativeMenu;
       root.removeEventListener("touchstart", onTouchStart);
       root.removeEventListener("touchmove", onTouchMove);
+      root.removeEventListener("touchend", onTouchEnd);
+      root.removeEventListener("touchcancel", onTouchEnd);
     };
   }, [rootRef, hold]);
 }

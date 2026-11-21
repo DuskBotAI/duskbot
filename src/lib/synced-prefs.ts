@@ -11,7 +11,7 @@ import { SYNCED_UI_PREFS } from "../../shared/synced-prefs";
 const ROUTE = "/api/settings-sync/ui";
 /** What this page and its server last agreed on, per preference: its value and when it changed. */
 const AGREED = "dusk-prefs-synced";
-const LOOK_MS = 3_000;
+const LOOK_MS = 60_000;
 
 type Agreed = Record<string, { value: string | null; at: number }>;
 type Prefs = Record<string, { value: string | null; at: number }>;
@@ -105,6 +105,12 @@ export function startSyncedPrefs(): void {
   if (started || typeof window === "undefined") return;
   started = true;
   void pullSyncedPrefs().then(() => pushSyncedPrefs());
-  setInterval(() => void pushSyncedPrefs(), LOOK_MS);
-  document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") void pullSyncedPrefs(); });
+  setInterval(() => { if (!document.hidden) void pushSyncedPrefs(); }, LOOK_MS);
+  window.addEventListener("storage", () => void pushSyncedPrefs());
+  window.addEventListener("blur", () => void pushSyncedPrefs());
+  window.addEventListener("pagehide", () => void pushSyncedPrefs());
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") void pullSyncedPrefs().then(() => pushSyncedPrefs());
+    else void pushSyncedPrefs();
+  });
 }

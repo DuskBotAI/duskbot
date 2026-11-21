@@ -3,10 +3,11 @@ import { createPortal } from "react-dom";
 import { motion, useMotionValue, useReducedMotion, type MotionValue } from "motion/react";
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
-import { flushSystemControls, wakeSystemControls } from "@/lib/system-control";
-import { BAR_RANK, frames, PushDepthContext, sheetStep, sheetsUp, useChrome, useNativeBar, useSheetPushDepth } from "./chrome";
+import { wakeSystemControls } from "@/lib/system-control";
+import { BAR_RANK, PushDepthContext, sheetStep, useChrome, useNativeBar, useSheetPushDepth } from "./chrome";
 import { canScroll, ownsDrag, useDrag } from "./gesture";
 import { dur, ease, prefersReducedMotion, projectRelease, settleTo, sheetNav, springPath } from "./motion";
+import { dropNativePage, popNativePage, pushNativePage, type PushedPage } from "./native-push";
 import type { MobileChrome } from "./platform";
 import { BackGlyph, RoundButton } from "./RoundButton";
 import { closesOnBack, type SheetAction } from "./Sheet";
@@ -21,39 +22,6 @@ const PushSettledContext = createContext(true);
 
 export function useSheetPushSettled(): boolean {
   return useContext(PushSettledContext);
-}
-
-let nextTokenId = 0;
-export function createPushToken(): string {
-  nextTokenId += 1;
-  return `push-${nextTokenId}`;
-}
-
-const popHandlers = new Map<string, () => void>();
-const watchedChromes = new WeakSet<MobileChrome>();
-
-export function registerNativePop(chrome: MobileChrome, token: string, onPop: () => void): () => void {
-  if (!watchedChromes.has(chrome) && chrome.onPagePopped) {
-    watchedChromes.add(chrome);
-    chrome.onPagePopped((tokens) => {
-      let handled = false;
-      for (const id of tokens) {
-        const handler = popHandlers.get(id);
-        if (handler) {
-          popHandlers.delete(id);
-          handled = true;
-          handler();
-        }
-      }
-      if (!handled) return;
-      void frames(1)
-        .then(() => flushSystemControls())
-        .then(() => frames(1))
-        .then(() => chrome.finishPop?.());
-    });
-  }
-  popHandlers.set(token, onPop);
-  return () => { popHandlers.delete(token); };
 }
 
 type Run = { stop: () => number };
@@ -160,8 +128,7 @@ function NativeSheetPush({
   const [shown, setShown] = useState(false);
   const [settled, setSettled] = useState(false);
   const [scrolled, setScrolled] = useState(false);
-  const tokenRef = useRef<string | null>(null);
-  const unregRef = useRef<(() => void) | null>(null);
+  const pushedRef = useRef<PushedPage | null>(null);
   const settleTimerRef = useRef<number | null>(null);
   const closeRef = useRef(onClose);
   closeRef.current = onClose;
@@ -182,98 +149,61 @@ function NativeSheetPush({
       if (active instanceof HTMLElement && (active.tagName === "INPUT" || active.tagName === "TEXTAREA" || active.isContentEditable)) {
         active.blur();
       }
-      const token = tokenRef.current;
-      if (!token) {
+      const pushed = pushedRef.current;
+      if (!pushed) {
         setShown(false);
         wakeSystemControls();
         return;
       }
-      unregRef.current?.();
-      unregRef.current = null;
-      tokenRef.current = null;
-      sheetStep(async () => {
-        const popped = await chrome.popPage!(token);
-        setShown(false);
-        await frames(1);
-        await flushSystemControls();
-        await frames(1);
-        if (popped) await chrome.finishPop?.();
-      });
+      pushed.forget();
+      pushedRef.current = null;
+      sheetStep(() => popNativePage(chrome, pushed.token, () => setShown(false)));
       return;
     }
 
     let live = true;
     setSettled(false);
     sheetStep(async () => {
-      if (!live || tokenRef.current) return;
-      const ok = await chrome.beginPush!();
-      if (!live) {
-        if (ok) await chrome.cancelPush?.();
-        return;
-      }
-      if (!ok) {
-        setShown(true);
-        await frames(1);
-        await flushSystemControls();
-        if (live) setSettled(true);
-        return;
-      }
-      const token = createPushToken();
-      tokenRef.current = token;
-      unregRef.current = registerNativePop(chrome, token, () => {
-        clearSettleTimer();
-        tokenRef.current = null;
-        unregRef.current = null;
-        setSettled(false);
-        setShown(false);
-        closeRef.current();
+      if (pushedRef.current) return;
+      const outcome = await pushNativePage(chrome, {
+        live: () => live,
+        show: (pushed) => {
+          pushedRef.current = pushed;
+          setShown(true);
+        },
+        withdraw: (pushed, why) => {
+          if (why === "uncommitted" && pushedRef.current !== pushed) return;
+          pushedRef.current = null;
+          setShown(false);
+          if (why === "uncommitted") wakeSystemControls();
+        },
+        popped: () => {
+          clearSettleTimer();
+          pushedRef.current = null;
+          setSettled(false);
+          setShown(false);
+          closeRef.current();
+        },
       });
-      setShown(true);
-      await frames(1);
-      await flushSystemControls();
-      await frames(2);
-      if (!live) {
-        unregRef.current?.();
-        unregRef.current = null;
-        tokenRef.current = null;
-        setShown(false);
-        await chrome.cancelPush?.();
+      if (!live || outcome === "withdrawn") return;
+      if (outcome === "shown" || prefersReducedMotion()) {
+        setSettled(true);
         return;
       }
-      const committed = await chrome.commitPush!(token);
-      if (!committed && tokenRef.current === token) {
-        unregRef.current?.();
-        unregRef.current = null;
-        tokenRef.current = null;
-        setShown(false);
-        wakeSystemControls();
-        return;
-      }
-      if (live) {
-        if (prefersReducedMotion()) {
-          setSettled(true);
-        } else {
-          settleTimerRef.current = window.setTimeout(() => {
-            settleTimerRef.current = null;
-            if (live) setSettled(true);
-          }, NATIVE_PUSH_SETTLE_MS);
-        }
-      }
+      settleTimerRef.current = window.setTimeout(() => {
+        settleTimerRef.current = null;
+        if (live) setSettled(true);
+      }, NATIVE_PUSH_SETTLE_MS);
     });
     return () => { live = false; clearSettleTimer(); };
   }, [open, chrome]);
 
   useEffect(() => () => {
-    const token = tokenRef.current;
-    unregRef.current?.();
-    unregRef.current = null;
-    tokenRef.current = null;
-    if (token && sheetsUp.system) {
-      sheetStep(async () => {
-        await chrome.popPage?.(token, { animated: false });
-        wakeSystemControls();
-      });
-    }
+    const pushed = pushedRef.current;
+    pushedRef.current = null;
+    if (!pushed) return;
+    pushed.forget();
+    dropNativePage(chrome, pushed.token);
   }, [chrome]);
 
   useEffect(() => { setScrolled(false); }, [open, shown, title]);
@@ -373,9 +303,10 @@ function WebSheetPush({
   closeRef.current = onClose;
   const backRef = useRef(onBack ?? onClose);
   backRef.current = onBack ?? onClose;
-  const prefersReduced = useReducedMotion();
-  const isReduced = () => Boolean(prefersReduced) || prefersReducedMotion()
-    || (typeof document !== "undefined" && document.documentElement.dataset.reducedMotion === "true");
+  const prefersReduced = useRef(false);
+  prefersReduced.current = Boolean(useReducedMotion());
+  const isReduced = useCallback(() => prefersReduced.current || prefersReducedMotion()
+    || (typeof document !== "undefined" && document.documentElement.dataset.reducedMotion === "true"), []);
 
   if (open && !mounted) setMounted(true);
 
@@ -439,8 +370,7 @@ function WebSheetPush({
     if (!baseRef.current) baseRef.current = underlyingSheet(page);
     if (baseRef.current) baseRef.current.style.willChange = "transform";
     runRef.current = slidePushLayers({ page, base: baseRef.current, dim: dimRef.current }, x, width, from, target, speed, finish);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [x, pageOpacity, clearBase, syncBaseFor]);
+  }, [x, pageOpacity, clearBase, syncBaseFor, isReduced]);
 
   useLayoutEffect(() => {
     if (!mounted) return;
@@ -510,8 +440,7 @@ function WebSheetPush({
       setMounted(false);
       wakeSystemControls();
     });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, mounted]);
+  }, [open, mounted, go, x, pageOpacity, clearBase, isReduced]);
 
   useEffect(() => () => {
     runRef.current?.stop();

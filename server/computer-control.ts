@@ -115,6 +115,13 @@ export class ComputerControl {
     return entry?.heldSinceMs != null && entry.controlLeaseId === controlLeaseId;
   }
 
+  hasTimedLease(): boolean {
+    for (const entry of this.entries.values()) {
+      if (entry.heldSinceMs !== null && entry.heardAtMs !== null) return true;
+    }
+    return false;
+  }
+
   /** An open plea stays: handing back is not answering the card that asked. */
   release(botId: string): ControlSnapshot {
     const entry = this.entries.get(botId);

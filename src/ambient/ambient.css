@@ -47,7 +47,8 @@
 .amb-stage[data-empty] { visibility: hidden; pointer-events: none; }
 
 /* island */
-.amb-island { position: absolute; background: var(--amb-notch); overflow: hidden; contain: layout paint; will-change: clip-path; }
+.amb-island { position: absolute; background: var(--amb-notch); overflow: hidden; contain: layout paint; }
+.amb-island[data-open] { will-change: clip-path; }
 .amb-ear { position: absolute; top: 0; left: 0; pointer-events: none; }
 .amb-ear-left { background: radial-gradient(circle farthest-side at 0 100%, transparent 96%, var(--amb-notch) 100%); }
 .amb-ear-right { background: radial-gradient(circle farthest-side at 100% 100%, transparent 96%, var(--amb-notch) 100%); }
@@ -148,10 +149,9 @@
 .amb-row-line[data-kind="recent"] { color: var(--amb-ink-3); }
 .amb-row[data-status="idle"] .amb-row-name { color: var(--amb-ink-2); font-weight: 475; }
 /* a working bot's line shimmers while someone looks at it */
-@keyframes amb-shimmer { from { background-position: 100% 0; } to { background-position: -100% 0; } }
+@keyframes amb-shimmer { 0%, 100% { opacity: 0.52; } 50% { opacity: 1; } }
 :is(.amb-card:not([inert]), .amb-island[data-open]) :is(.amb-row-line[data-kind="busy"], .amb-chat-note[data-kind="busy"]) .amb-row-words {
-  background: linear-gradient(90deg, var(--amb-ink-3) 0%, var(--amb-ink-3) 35%, var(--amb-ink) 50%, var(--amb-ink-3) 65%, var(--amb-ink-3) 100%) 0 0 / 200% 100%;
-  -webkit-background-clip: text; background-clip: text; color: transparent; animation: amb-shimmer 2.4s linear infinite;
+  color: var(--amb-ink-2); animation: amb-shimmer 2.2s ease-in-out infinite;
 }
 /* one width whatever a row offers, so the times line up */
 .amb-row-actions { display: flex; align-items: center; justify-content: flex-end; gap: 2px; min-width: 28px; }
@@ -210,11 +210,13 @@
 .amb-empty-hint { margin: 0 0 8px; font-size: 12px; color: var(--amb-ink-2); }
 
 /* dock: a slim column; the clip draws its rounded body, the slide brings it in from the edge */
-.amb-dock { position: absolute; top: 0; left: 0; will-change: transform; }
+.amb-dock { position: absolute; top: 0; left: 0; }
+.amb-dock:not([data-hidden]) { will-change: transform; }
 .amb-dock .amb-ear { left: auto; right: 0; box-sizing: content-box; border-right: var(--amb-over, 0px) solid var(--amb-panel); background-repeat: no-repeat; }
 .amb-ear-top { background: radial-gradient(circle farthest-side at 0 0, transparent 96%, var(--amb-panel) 100%); }
 .amb-ear-bottom { background: radial-gradient(circle farthest-side at 0 100%, transparent 96%, var(--amb-panel) 100%); }
-.amb-dock-body { position: absolute; inset: 0; background: var(--amb-panel); will-change: clip-path; }
+.amb-dock-body { position: absolute; inset: 0; background: var(--amb-panel); }
+.amb-dock:not([data-hidden]) .amb-dock-body { will-change: clip-path; }
 .amb-dock-column { position: absolute; top: 0; box-sizing: border-box; display: flex; flex-direction: column; padding-inline-end: var(--amb-over, 0px); }
 .amb-dock-list { position: relative; list-style: none; margin: 0; padding: 0; overflow-x: hidden; overflow-y: auto; scrollbar-width: none; overscroll-behavior: contain; }
 .amb-dock-cell { position: relative; display: grid; place-items: center; }
@@ -256,8 +258,9 @@
 /* the one status card beside the column: it glides from bot to bot, its words crossfade */
 .amb-card {
   position: absolute; box-sizing: border-box; overflow: hidden; border-radius: 18px; background: #141414;
-  box-shadow: 0 14px 36px rgb(0 0 0 / 0.38); will-change: transform;
+  box-shadow: 0 14px 36px rgb(0 0 0 / 0.38);
 }
+.amb-card:not([inert]) { will-change: transform; }
 .amb-card[inert] { pointer-events: none; }
 .amb-card-inner { position: relative; padding: 2px 0 0; }
 .amb-row[data-side="card"] { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "main actions" "tray tray"; }

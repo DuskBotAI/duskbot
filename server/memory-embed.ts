@@ -1,13 +1,14 @@
 // Local sentence embeddings for memory recall: BAAI bge-small-en-v1.5 (MIT), int8-quantized ONNX export by Xenova,
-// run with onnxruntime-web's WebAssembly build (MIT). Nothing is sent anywhere to embed: the model and runtime are
-// downloaded once into the data folder, checked against pinned SHA-256 digests, and run in this process.
-// Until they are present, or if anything fails, recall works from words alone.
+// run with onnxruntime-web's WebAssembly build (MIT) in a short-lived worker process so idle RAM returns to the OS.
+import { fork, type ChildProcess } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, statfsSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 
 import { DATA_DIR } from "./config.ts";
+import type { EmbedWorkerReply, EmbedWorkerRequest } from "./memory-embed.worker.ts";
+import { AGENTS_NODE_FLAG, resolveProxy } from "./proxy-paths.ts";
 
 export const EMBED_MODEL = "bge-small-en-v1.5-q8";
 export const EMBED_DIMS = 384;
@@ -22,9 +23,9 @@ const FILES = [
 ] as const;
 /** bge v1.5 retrieves best when the question, not the stored passage, carries this instruction. */
 const QUERY_PREFIX = "Represent this sentence for searching relevant passages: ";
-const MAX_TOKENS = 128;
 const MIN_FREE_BYTES = 1024 ** 3;
 const RETRY_AFTER_MS = 6 * 60 * 60_000;
+const DEFAULT_IDLE_MS = 60_000;
 
 /** `DUSK_MEMORY_EMBED=0` turns local embeddings off; under a test runner they are off unless set to 1. */
 export function embeddingsWanted(env: NodeJS.ProcessEnv = process.env): boolean {
@@ -37,27 +38,26 @@ export function modelDir(env: NodeJS.ProcessEnv = process.env): string {
   return env.DUSK_MODEL_DIR?.trim() || join(DATA_DIR, "models", EMBED_MODEL);
 }
 
-type Ort = {
-  env: { wasm: { numThreads: number; wasmPaths: string } };
-  InferenceSession: { create(model: Uint8Array): Promise<Session> };
-  Tensor: new (type: "int64", data: BigInt64Array, dims: number[]) => unknown;
-};
-type Session = { inputNames: string[]; outputNames: string[]; run(feeds: Record<string, unknown>): Promise<Record<string, { data: Float32Array; dims: number[] }>> };
+type PendingMap = Map<number, { resolve: (value: Float32Array[]) => void; reject: (error: Error) => void }>;
 
-interface Loaded {
-  ort: Ort;
-  session: Session;
-  vocab: Map<string, number>;
-}
-
-let loaded: Loaded | null = null;
-let loading: Promise<Loaded | null> | null = null;
+let readyDir: string | null = null;
+let loading: Promise<string | null> | null = null;
 let failedAt = 0;
 let chain: Promise<unknown> = Promise.resolve();
 let log: (line: string) => void = (line) => console.warn(line);
 
+let worker: { proc: ChildProcess; pending: PendingMap } | null = null;
+let idleTimer: ReturnType<typeof setTimeout> | null = null;
+const stopped = new WeakSet<ChildProcess>();
+let nextRequestId = 1;
+
 export function setEmbedLog(fn: (line: string) => void): void {
   log = fn;
+}
+
+function workerIdleMs(): number {
+  const configured = Number(process.env.DUSK_EMBED_IDLE_MS);
+  return Number.isFinite(configured) && configured >= 1_000 ? configured : DEFAULT_IDLE_MS;
 }
 
 function sha256(path: string): string {
@@ -98,24 +98,105 @@ export function wasmPrefix(dir: string): string {
   return url.endsWith("/") ? url : `${url}/`;
 }
 
-async function load(dir: string): Promise<Loaded> {
+function verifyFiles(dir: string): void {
   for (const file of FILES) {
     if (sha256(join(dir, file.name)) !== file.sha256) {
       rmSync(join(dir, file.name), { force: true });
       throw new Error(`${file.name} changed on disk; it will be downloaded again`);
     }
   }
-  const ort = (await import(pathToFileURL(join(dir, "ort.wasm.min.mjs")).href)) as Ort;
-  ort.env.wasm.numThreads = 1;
-  ort.env.wasm.wasmPaths = wasmPrefix(dir);
-  const session = await ort.InferenceSession.create(readFileSync(join(dir, "model_quantized.onnx")));
-  const tokenizer = JSON.parse(readFileSync(join(dir, "tokenizer.json"), "utf8")) as { model: { vocab: Record<string, number> } };
-  return { ort, session, vocab: new Map(Object.entries(tokenizer.model.vocab)) };
 }
 
-/** Starts the one-time download and load in the background; recall never waits for it. */
+function clearIdleTimer(): void {
+  if (!idleTimer) return;
+  clearTimeout(idleTimer);
+  idleTimer = null;
+}
+
+function armIdleTimer(): void {
+  clearIdleTimer();
+  if (!worker || worker.pending.size > 0) return;
+  idleTimer = setTimeout(() => {
+    idleTimer = null;
+    if (worker && worker.pending.size === 0) stopEmbedder();
+  }, workerIdleMs());
+  idleTimer.unref?.();
+}
+
+export function stopEmbedder(): void {
+  clearIdleTimer();
+  if (!worker) return;
+  const active = worker;
+  worker = null;
+  stopped.add(active.proc);
+  for (const waiter of active.pending.values()) waiter.reject(new Error("embedding worker stopped"));
+  active.pending.clear();
+  active.proc.kill();
+}
+
+function startWorker(): { proc: ChildProcess; pending: PendingMap } {
+  const pending: PendingMap = new Map();
+  const failAll = (error: Error) => {
+    for (const waiter of pending.values()) waiter.reject(error);
+    pending.clear();
+  };
+  const proc = fork(resolveProxy("memory-embed.worker"), [], {
+    execPath: process.execPath,
+    execArgv: [],
+    env: { ...process.env, ...AGENTS_NODE_FLAG },
+    serialization: "advanced",
+    stdio: ["ignore", "inherit", "inherit", "ipc"],
+  });
+  proc.on("message", (reply: EmbedWorkerReply) => {
+    const waiter = pending.get(reply.id);
+    if (!waiter) return;
+    pending.delete(reply.id);
+    if (reply.ok) waiter.resolve(reply.value);
+    else waiter.reject(new Error(reply.error));
+    if (worker?.proc === proc && pending.size === 0) {
+      proc.channel?.unref();
+      armIdleTimer();
+    }
+  });
+  proc.once("error", (error) => {
+    if (worker?.proc === proc) worker = null;
+    clearIdleTimer();
+    failAll(error);
+  });
+  proc.once("exit", (code, signal) => {
+    if (worker?.proc === proc) worker = null;
+    clearIdleTimer();
+    if (stopped.has(proc)) return failAll(new Error("embedding worker stopped"));
+    failAll(new Error(`embedding worker exited (code=${code} signal=${signal})`));
+  });
+  proc.unref();
+  proc.channel?.unref();
+  return { proc, pending };
+}
+
+function runWorker(dir: string, texts: readonly string[]): Promise<Float32Array[]> {
+  clearIdleTimer();
+  const active = (worker ??= startWorker());
+  const id = nextRequestId++;
+  active.proc.channel?.ref();
+  return new Promise<Float32Array[]>((resolve, reject) => {
+    active.pending.set(id, { resolve, reject });
+    const message: EmbedWorkerRequest = { id, op: "embed", dir, texts };
+    active.proc.send(message, (error) => {
+      if (error && active.pending.delete(id)) {
+        if (active.pending.size === 0) {
+          active.proc.channel?.unref();
+          armIdleTimer();
+        }
+        reject(error);
+      }
+    });
+  });
+}
+
+/** Starts the one-time download and verification in the background; recall never waits for it. */
 export function warmEmbedder(): void {
-  if (!embeddingsWanted() || loaded || loading || (failedAt && Date.now() - failedAt < RETRY_AFTER_MS)) return;
+  if (!embeddingsWanted() || readyDir || loading || (failedAt && Date.now() - failedAt < RETRY_AFTER_MS)) return;
   const dir = modelDir();
   loading = (async () => {
     try {
@@ -123,8 +204,9 @@ export function warmEmbedder(): void {
         log(`memory: downloading the local embedding model (about 50 MB) into ${dir}`);
         await download(dir);
       }
-      loaded = await load(dir);
-      return loaded;
+      verifyFiles(dir);
+      readyDir = dir;
+      return readyDir;
     } catch (error) {
       failedAt = Date.now();
       log(`memory: local embeddings unavailable, recall uses words only: ${(error as Error).message}`);
@@ -136,92 +218,20 @@ export function warmEmbedder(): void {
 }
 
 export function embedderReady(): boolean {
-  return loaded !== null;
+  return readyDir !== null;
 }
 
 /** Waits for a warm-up already started; true when the model is ready. */
 export async function embedderSettled(): Promise<boolean> {
   if (loading) await loading;
-  return loaded !== null;
-}
-
-function words(text: string): string[] {
-  const folded = text.normalize("NFD").replace(/\p{Mn}/gu, "").toLowerCase().replace(/\p{Cc}/gu, " ");
-  return folded
-    .replace(/([㐀-䶿一-鿿豈-﫿])/g, " $1 ")
-    .split(/\s+/)
-    .flatMap((word) => word.split(/([\p{P}\p{S}])/u))
-    .filter(Boolean);
-}
-
-/** BERT WordPiece, uncased, as bge-small's tokenizer.json describes it. */
-function encode(vocab: Map<string, number>, text: string): number[] {
-  const unk = vocab.get("[UNK]")!;
-  const ids: number[] = [];
-  for (const word of words(text)) {
-    if (word.length > 100) {
-      ids.push(unk);
-      continue;
-    }
-    const pieces: number[] = [];
-    let start = 0;
-    while (start < word.length) {
-      let end = word.length;
-      let piece: number | undefined;
-      while (start < end) {
-        piece = vocab.get(`${start > 0 ? "##" : ""}${word.slice(start, end)}`);
-        if (piece !== undefined) break;
-        end -= 1;
-      }
-      if (piece === undefined) {
-        pieces.length = 0;
-        pieces.push(unk);
-        break;
-      }
-      pieces.push(piece);
-      start = end;
-    }
-    ids.push(...pieces);
-    if (ids.length >= MAX_TOKENS - 2) break;
-  }
-  return [vocab.get("[CLS]")!, ...ids.slice(0, MAX_TOKENS - 2), vocab.get("[SEP]")!];
-}
-
-async function run(model: Loaded, texts: readonly string[]): Promise<Float32Array[]> {
-  const encoded = texts.map((text) => encode(model.vocab, text));
-  const width = Math.max(...encoded.map((ids) => ids.length));
-  const size = texts.length * width;
-  const ids = new BigInt64Array(size);
-  const mask = new BigInt64Array(size);
-  encoded.forEach((row, i) => row.forEach((id, j) => {
-    ids[i * width + j] = BigInt(id);
-    mask[i * width + j] = 1n;
-  }));
-  const feeds: Record<string, unknown> = {
-    input_ids: new model.ort.Tensor("int64", ids, [texts.length, width]),
-    attention_mask: new model.ort.Tensor("int64", mask, [texts.length, width]),
-  };
-  if (model.session.inputNames.includes("token_type_ids")) feeds.token_type_ids = new model.ort.Tensor("int64", new BigInt64Array(size), [texts.length, width]);
-  const out = await model.session.run(feeds);
-  const hidden = out[model.session.outputNames[0]!]!;
-  const dims = hidden.dims[2]!;
-  // bge pools with the [CLS] vector, then normalizes it
-  return texts.map((_, i) => {
-    const offset = i * width * dims;
-    const vector = Float32Array.from(hidden.data.subarray(offset, offset + dims));
-    let norm = 0;
-    for (const x of vector) norm += x * x;
-    norm = Math.sqrt(norm) || 1;
-    for (let k = 0; k < vector.length; k++) vector[k]! /= norm;
-    return vector;
-  });
+  return readyDir !== null;
 }
 
 /** Vectors for stored passages, or null when embeddings are not ready. One model call at a time. */
 export function embedPassages(texts: readonly string[]): Promise<Float32Array[] | null> {
-  const model = loaded;
-  if (!model || !texts.length) return Promise.resolve(model ? [] : null);
-  const next = chain.then(() => run(model, texts)).catch((error: unknown) => {
+  const dir = readyDir;
+  if (!dir || !texts.length) return Promise.resolve(dir ? [] : null);
+  const next = chain.then(() => runWorker(dir, texts)).catch((error: unknown) => {
     log(`memory: embedding failed: ${(error as Error).message}`);
     return null;
   });

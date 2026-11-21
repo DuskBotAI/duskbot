@@ -394,6 +394,16 @@ export function factVectors(owners: readonly string[], statuses: readonly FactSt
 const EMBED_BATCH = 16;
 let embedding: Promise<number> | null = null;
 
+export function hasPendingFactsToEmbed(): boolean {
+  try {
+    return db()
+      .prepare("SELECT 1 FROM memory_facts WHERE (embedding IS NULL OR embed_model != ?) AND status != 'suppressed' LIMIT 1")
+      .get(EMBED_MODEL) !== undefined;
+  } catch {
+    return false;
+  }
+}
+
 /** Embeds rows that have no vector yet, a batch at a time, never on a turn's path. Returns how many it embedded. */
 export function embedPendingFacts(owners?: readonly string[], max = 400): Promise<number> {
   if (!embedderReady()) return Promise.resolve(0);

@@ -26,11 +26,20 @@ public class NativeMenuPlugin: CAPPlugin, CAPBridgedPlugin, UIContextMenuInterac
     private final class Held {
         let id: String
         var rect: CGRect
+        var previewRect: CGRect
+        var point: CGPoint?
         var radii: [CGFloat]
         let at = Date()
         var image: UIImage?
         var content: Content?
-        init(id: String, rect: CGRect, radii: [CGFloat]) { self.id = id; self.rect = rect; self.radii = radii }
+        var opened = false
+        init(id: String, rect: CGRect, previewRect: CGRect, point: CGPoint?, radii: [CGFloat]) {
+            self.id = id
+            self.rect = rect
+            self.previewRect = previewRect
+            self.point = point
+            self.radii = radii
+        }
     }
 
     private var armed: Held?
@@ -45,17 +54,34 @@ public class NativeMenuPlugin: CAPPlugin, CAPBridgedPlugin, UIContextMenuInterac
     @objc func arm(_ call: CAPPluginCall) {
         guard let id = call.getString("id"), let rect = Self.rect(call.getObject("rect")) else { return }
         let radii = (call.getArray("radii") as? [NSNumber])?.map { CGFloat($0.doubleValue) } ?? [18, 18, 18, 18]
+        let point = Self.point(call.getObject("point"))
         let content = Self.content(call.getObject("content"))
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
             self.install()
+            if let active = self.active, active.id == id {
+                if let content {
+                    active.content = content
+                    if let done = self.pending.removeValue(forKey: id) {
+                        done(self.elements(content, id: id))
+                    }
+                }
+                return
+            }
+            let previewRect = self.bridge?.webView.map { Self.previewRect(for: rect, point: point, in: $0) } ?? rect
             if let held = self.armed, held.id == id {
                 if let content { held.content = content }
-                if held.rect != rect { held.rect = rect; held.image = nil; self.snapshot(held) }
+                if held.rect != rect || held.previewRect != previewRect {
+                    held.rect = rect
+                    held.previewRect = previewRect
+                    held.point = point
+                    held.image = nil
+                    self.snapshot(held)
+                }
                 held.radii = radii
                 return
             }
-            let held = Held(id: id, rect: rect, radii: radii)
+            let held = Held(id: id, rect: rect, previewRect: previewRect, point: point, radii: radii)
             held.content = content
             self.armed = held
             self.snapshot(held)
@@ -89,7 +115,7 @@ public class NativeMenuPlugin: CAPPlugin, CAPBridgedPlugin, UIContextMenuInterac
     private func snapshot(_ held: Held) {
         guard let web = bridge?.webView else { return }
         let config = WKSnapshotConfiguration()
-        config.rect = held.rect
+        config.rect = held.previewRect
         config.afterScreenUpdates = false
         web.takeSnapshot(with: config) { [weak held] image, _ in held?.image = image }
     }
@@ -116,7 +142,12 @@ public class NativeMenuPlugin: CAPPlugin, CAPBridgedPlugin, UIContextMenuInterac
 
     public func contextMenuInteraction(_ interaction: UIContextMenuInteraction, configuration: UIContextMenuConfiguration,
                                        highlightPreviewForItemWithIdentifier identifier: any NSCopying) -> UITargetedPreview? {
-        preview(in: interaction)
+        let targeted = preview(in: interaction)
+        if let held = active, !held.opened {
+            held.opened = true
+            emit(["type": "open", "id": held.id])
+        }
+        return targeted
     }
 
     public func contextMenuInteraction(_ interaction: UIContextMenuInteraction, configuration: UIContextMenuConfiguration,
@@ -126,15 +157,34 @@ public class NativeMenuPlugin: CAPPlugin, CAPBridgedPlugin, UIContextMenuInterac
 
     public func contextMenuInteraction(_ interaction: UIContextMenuInteraction, willDisplayMenuFor configuration: UIContextMenuConfiguration,
                                        animator: (any UIContextMenuInteractionAnimating)?) {
-        guard let id = active?.id else { return }
-        emit(["type": "open", "id": id])
+        guard let held = active, !held.opened else { return }
+        held.opened = true
+        emit(["type": "open", "id": held.id])
     }
 
     public func contextMenuInteraction(_ interaction: UIContextMenuInteraction, willEndFor configuration: UIContextMenuConfiguration,
                                        animator: (any UIContextMenuInteractionAnimating)?) {
-        guard let id = active?.id else { return }
+        guard let held = active else { return }
+        let id = held.id
+        let host = interaction.view
+        let web = bridge?.webView
+        let animated = animator != nil
         let finish = { [weak self] in
             guard let self else { return }
+            if animated, let image = held.image, let host, let web, host.window != nil {
+                let frame = web.convert(held.previewRect, to: host)
+                let cover = UIImageView(image: image)
+                cover.contentMode = .scaleAspectFill
+                cover.clipsToBounds = true
+                cover.isUserInteractionEnabled = false
+                cover.frame = frame
+                let mask = CAShapeLayer()
+                mask.path = Self.roundedPath(cover.bounds, radii: held.radii).cgPath
+                cover.layer.mask = mask
+                host.addSubview(cover)
+                // bridge the 1-2 frames between UIKit removing the dismissal preview and WebKit revealing the DOM node
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.06) { cover.removeFromSuperview() }
+            }
             if self.active?.id == id { self.active = nil }
             self.pending.removeValue(forKey: id)?([])
             self.emit(["type": "close", "id": id])
@@ -145,11 +195,14 @@ public class NativeMenuPlugin: CAPPlugin, CAPBridgedPlugin, UIContextMenuInterac
     /// the item's snapshot where it sits on screen, cut to its own corners. Previews must be in a window (crbug 1351669).
     private func preview(in interaction: UIContextMenuInteraction) -> UITargetedPreview? {
         guard let held = active, let web = bridge?.webView, let host = interaction.view, host.window != nil else { return nil }
-        let frame = web.convert(held.rect, to: host)
+        let frame = web.convert(held.previewRect, to: host)
         let shot: UIView
         if let image = held.image {
-            shot = UIImageView(image: image)
-        } else if let view = web.resizableSnapshotView(from: held.rect, afterScreenUpdates: false, withCapInsets: .zero) {
+            let view = UIImageView(image: image)
+            view.contentMode = .scaleAspectFill
+            view.clipsToBounds = true
+            shot = view
+        } else if let view = web.resizableSnapshotView(from: held.previewRect, afterScreenUpdates: false, withCapInsets: .zero) {
             shot = view
         } else {
             return nil
@@ -206,6 +259,24 @@ public class NativeMenuPlugin: CAPPlugin, CAPBridgedPlugin, UIContextMenuInterac
         guard let value, let x = (value["x"] as? NSNumber)?.doubleValue, let y = (value["y"] as? NSNumber)?.doubleValue,
               let w = (value["w"] as? NSNumber)?.doubleValue, let h = (value["h"] as? NSNumber)?.doubleValue, w > 0, h > 0 else { return nil }
         return CGRect(x: x, y: y, width: w, height: h)
+    }
+
+    private static func point(_ value: JSObject?) -> CGPoint? {
+        guard let value, let x = (value["x"] as? NSNumber)?.doubleValue, let y = (value["y"] as? NSNumber)?.doubleValue else { return nil }
+        return CGPoint(x: x, y: y)
+    }
+
+    private static func previewRect(for rect: CGRect, point: CGPoint?, in web: WKWebView) -> CGRect {
+        let insets = web.safeAreaInsets
+        let visible = web.bounds.inset(by: UIEdgeInsets(top: insets.top, left: 0, bottom: insets.bottom, right: 0))
+        let clipped = rect.intersection(visible)
+        let base = clipped.isNull || clipped.width < 1 || clipped.height < 1 ? rect.intersection(web.bounds) : clipped
+        guard !base.isNull, base.width >= 1, base.height >= 1 else { return rect }
+        let maxHeight = max(140, min(320, visible.height - 420))
+        guard base.height > maxHeight else { return base }
+        let anchorY = point?.y ?? base.midY
+        let top = min(max(base.minY, anchorY - maxHeight / 2), base.maxY - maxHeight)
+        return CGRect(x: base.minX, y: top, width: base.width, height: maxHeight)
     }
 
     private static func content(_ value: JSObject?) -> Content? {

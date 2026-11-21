@@ -187,6 +187,26 @@ export interface MermaidDiagramProps {
 }
 
 const MERMAID_FONT = '"Inter", -apple-system, BlinkMacSystemFont, "SF UI Text", "Segoe UI", system-ui, sans-serif';
+const skinListeners = new Set<() => void>();
+let skinObserver: MutationObserver | null = null;
+
+function subscribeSkinChange(listener: () => void): () => void {
+  if (typeof MutationObserver === "undefined" || typeof document === "undefined") return () => {};
+  skinListeners.add(listener);
+  if (!skinObserver) {
+    skinObserver = new MutationObserver(() => {
+      for (const notify of skinListeners) notify();
+    });
+    skinObserver.observe(document.documentElement, { subtree: true, attributeFilter: ["data-skin"] });
+  }
+  return () => {
+    skinListeners.delete(listener);
+    if (skinListeners.size === 0 && skinObserver) {
+      skinObserver.disconnect();
+      skinObserver = null;
+    }
+  };
+}
 
 /** Security: the only HTML injected is the SVG mermaid.render() returns under securityLevel "strict". */
 export function MermaidDiagram({ code }: MermaidDiagramProps) {
@@ -204,12 +224,7 @@ export function MermaidDiagram({ code }: MermaidDiagramProps) {
   const expand = svg && !error ? { label: t("mermaid.expandAria"), onClick: () => setExpanded(true) } : undefined;
   const viewer = expanded && svg && <MermaidViewer svg={svg} onClose={() => setExpanded(false)} />;
 
-  useEffect(() => {
-    if (typeof MutationObserver === "undefined" || typeof document === "undefined") return;
-    const observer = new MutationObserver(() => setSkinEpoch((epoch) => epoch + 1));
-    observer.observe(document.documentElement, { subtree: true, attributeFilter: ["data-skin"] });
-    return () => observer.disconnect();
-  }, []);
+  useEffect(() => subscribeSkinChange(() => setSkinEpoch((epoch) => epoch + 1)), []);
 
   useEffect(() => {
     const scheme = mermaidScheme(frame.current);
@@ -427,6 +442,7 @@ function escapeLiteralDollars(text: string): string {
 }
 
 export function normalizeMathDelimiters(text: string, imageOffsets?: Map<number, number>): string {
+  if (!imageOffsets && !text.includes("$") && !text.includes("\\[") && !text.includes("\\(")) return text;
   const protectedCode: Array<{ value: string; sourceOffset: number }> = [];
   const protect = (value: string, sourceOffset: number): string => {
     const token = `\u0000DUSK_CODE_${protectedCode.length}\u0000`;

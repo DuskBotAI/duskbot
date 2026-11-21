@@ -16,6 +16,7 @@ const target = `http://127.0.0.1:${process.env.DUSK_PORT || 8799}`;
 export default defineConfig({
   root,
   plugins: [react(), tailwindcss(), licenseFiles(repoRoot)],
+  worker: { format: "es" },
   resolve: { alias: { "@": fileURLToPath(new URL("../../src", import.meta.url)) } },
   define: { __APP_VERSION__: JSON.stringify(version), __DUSK_ERROR_DSN__: JSON.stringify(process.env.DUSK_ERROR_DSN ?? "") },
   server: {

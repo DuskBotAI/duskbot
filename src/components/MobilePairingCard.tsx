@@ -2,7 +2,7 @@ import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNod
 import { Apple, ChevronLeft } from "../icons";
 import { QRCodeSVG } from "qrcode.react";
 
-import { universalPairLink, universalSignInLink, type MobileDevice, type MobilePairingRequest, type MobilePairingResponse } from "../../shared/mobile-link";
+import { cleanPairSignIn, universalPairLink, universalSignInLink, type MobileDevice, type MobilePairingRequest, type MobilePairingResponse } from "../../shared/mobile-link";
 import type { CloudPhoneSignIn, CloudPlanBridge } from "../../electron/cloud-account.mjs";
 import { companionBridge } from "@/lib/companion-bridge";
 import { desktopShowsOtherServer } from "@/lib/other-server";
@@ -381,6 +381,8 @@ export function MobilePairingCard({ remote, cloudHome = false, email, direct, ch
       // a service that makes no phone codes yet (or a failed one) still pairs; the phone then logs in on its own
       if (grant?.outcome === "code") { signIn = { code: grant.code, email: grant.email, serviceOrigin: grant.service ?? null, expiresAt: grant.expiresAt }; setAccountEmail(grant.email); }
     }
+    const carried = signIn ? cleanPairSignIn(signIn) : null;
+    if (carried) request.signIn = carried;
     const body = await api<MobilePairingResponse>("/api/mobile/pairing", { method: "POST", body: JSON.stringify(request) });
     return { qr: universalPairLink(body.link, body.code, signIn), code: body.code, expiresAt: signIn ? Math.min(body.expiresAt, signIn.expiresAt) : body.expiresAt, ...(signIn ? { email: signIn.email } : {}) };
   }

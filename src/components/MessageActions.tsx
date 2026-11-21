@@ -136,13 +136,13 @@ export function MessageActions({
   usePopoverDismiss(tapped && !menuOpen, rowRef, () => setTapped(false));
   usePopoverDismiss(menuOpen, rootRef, () => {
     setMenuOpen(false);
-    if (rootRef.current?.contains(document.activeElement)) moreRef.current?.focus();
+    if (rootRef.current?.contains(document.activeElement)) moreRef.current?.focus({ preventScroll: true });
   });
 
   useLayoutEffect(() => {
     if (!menuOpen) return;
     place();
-    menuRef.current?.querySelector<HTMLButtonElement>("[role=menuitem]:not(:disabled)")?.focus();
+    menuRef.current?.querySelector<HTMLButtonElement>("[role=menuitem]:not(:disabled)")?.focus({ preventScroll: true });
     // the window can shrink while the menu is open: it measures again so it never runs past an edge
     window.addEventListener("resize", place);
     return () => window.removeEventListener("resize", place);

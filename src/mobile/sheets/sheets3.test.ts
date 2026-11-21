@@ -61,6 +61,7 @@ describe("settings header", () => {
 
   it("prefers the account email, then the dusk cloud, then the computer it is connected to, then a plain phrase", () => {
     expect(settingsIdentity({ name: "Sam", identity: { kind: "account", email: "sam@example.com", session: false } })).toEqual({ title: "Sam", subtitle: "sam@example.com" });
+    expect(settingsIdentity({ name: "Local Mac", accountName: "Sam Account", identity: { kind: "account", email: "sam@example.com", session: true } })).toEqual({ title: "Sam Account", subtitle: "sam@example.com" });
     expect(settingsIdentity({ identity: { kind: "account", email: "sam@example.com", session: true } }).title).toBe("sam");
     expect(settingsIdentity({ identity: { kind: "cloud", name: "my cloud" } }).subtitle).toBe("my cloud");
     expect(settingsIdentity({ identity: { kind: "computer", name: "Studio Mac" } }).subtitle).toBe("Connected to Studio Mac");

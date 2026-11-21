@@ -2,6 +2,14 @@ import Capacitor
 import UIKit
 import WebKit
 
+struct ComposerMorphOrigin {
+    let rect: CGRect
+    let restingRect: CGRect
+    let cornerRadius: CGFloat
+    let userInterfaceStyle: UIUserInterfaceStyle
+    let snapshot: UIView?
+}
+
 /// The chat's header and composer in the system's Liquid Glass (iOS 26+), drawn over the web view so the glass bends the
 /// transcript scrolling under it. A web view cannot draw this material itself. The page keeps its own header and
 /// composer in place, invisible, and this plugin hands every tap and keystroke back to them. Older iOS answers
@@ -33,6 +41,7 @@ public class GlassChromePlugin: CAPPlugin, CAPBridgedPlugin {
             // a page that asks has just loaded, maybe in place of one the system reclaimed with a chat open: the chrome
             // outlives the page, so nothing that page showed (header, composer, Home's bar, focus, text) stays up
             withChrome { chrome in
+                chrome.setComposerSuppressed(false)
                 chrome.blur()
                 chrome.dropStrandedLift("reload")
                 chrome.stopSlide()
@@ -129,6 +138,21 @@ public class GlassChromePlugin: CAPPlugin, CAPBridgedPlugin {
         withChrome { chrome in
             if points.isEmpty { chrome.stopSlide() } else { chrome.slide(points, duration: duration, elapsed: ChatGlassChrome.sinceEpoch(ms: startedAt)) }
         }
+    }
+
+    func composerMorphOrigin(in coordinateSpace: UICoordinateSpace) -> ComposerMorphOrigin? {
+        guard #available(iOS 26.0, *), let chrome = chrome as? ChatGlassChrome else { return nil }
+        return chrome.morphOrigin(in: coordinateSpace)
+    }
+
+    func currentComposerRect(in coordinateSpace: UICoordinateSpace) -> CGRect? {
+        guard #available(iOS 26.0, *), let chrome = chrome as? ChatGlassChrome else { return nil }
+        return chrome.currentComposerRect(in: coordinateSpace)
+    }
+
+    func setComposerSuppressed(_ suppressed: Bool) {
+        guard #available(iOS 26.0, *), let chrome = chrome as? ChatGlassChrome else { return }
+        chrome.setComposerSuppressed(suppressed)
     }
 }
 
@@ -415,6 +439,7 @@ final class ChatGlassChrome: NSObject, UITextViewDelegate {
     private var headerShown = false
     private var headerPopping = false
     private var composerShown = false
+    private var composerSuppressed = false
     private var jumpShown = false
     private var jumpHandoff = false
     /// the page draws its own chrome in the same place (a sheet over the chat), or did until now: the two swap at once,
@@ -479,7 +504,7 @@ final class ChatGlassChrome: NSObject, UITextViewDelegate {
         round(right, symbol: Self.headerSymbols["right"]!, label: "Computer") { [weak self] in self?.emit(["type": "tap", "target": "right"]) }
         pill.configuration?.cornerStyle = .capsule
         pill.configuration?.imagePadding = 8
-        pill.configuration?.contentInsets = NSDirectionalEdgeInsets(top: 0, leading: 7, bottom: 0, trailing: 16)
+        pill.configuration?.contentInsets = NSDirectionalEdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16)
         pill.configuration?.titleLineBreakMode = .byTruncatingTail
         // the bot's sheet rises as the finger lands, not when it lifts
         pill.addAction(UIAction { [weak self] _ in self?.emit(["type": "tap", "target": "title"]) }, for: .touchDown)
@@ -546,8 +571,13 @@ final class ChatGlassChrome: NSObject, UITextViewDelegate {
         jumpMotion.translatesAutoresizingMaskIntoConstraints = false
         jump.addSubview(jumpMotion)
         round(jumpButton, symbol: Self.headerSymbols["jump"]!, label: "Jump to latest") { [weak self] in
+            if let page = self?.page { self?.stopScrolling(page) }
             self?.emit(["type": "tap", "target": "jump"])
         }
+        // Tapping a native sibling above WKWebView does not reach its child scroll view, so an upward fling keeps decelerating unless halted here.
+        jumpButton.addAction(UIAction { [weak self] _ in
+            if let page = self?.page { self?.stopScrolling(page) }
+        }, for: .touchDown)
         jumpButton.translatesAutoresizingMaskIntoConstraints = false
         jumpMotion.addSubview(jumpButton)
 
@@ -670,6 +700,18 @@ final class ChatGlassChrome: NSObject, UITextViewDelegate {
     }
 
     private var page: PageWebView? { host?.subviews.lazy.compactMap { $0 as? PageWebView }.first }
+
+    private func stopScrolling(_ view: UIView) {
+        if let scroller = view as? UIScrollView, !scroller.isDragging {
+            let minY = -scroller.adjustedContentInset.top
+            let maxY = max(minY, scroller.contentSize.height - scroller.bounds.height + scroller.adjustedContentInset.bottom)
+            let y = min(max(scroller.contentOffset.y, minY), maxY)
+            if scroller.isDecelerating || scroller.contentOffset.y != y {
+                scroller.setContentOffset(CGPoint(x: scroller.contentOffset.x, y: y), animated: false)
+            }
+        }
+        for child in view.subviews { stopScrolling(child) }
+    }
 
     private func setLift(_ value: CGFloat) {
         lift = value
@@ -827,7 +869,7 @@ final class ChatGlassChrome: NSObject, UITextViewDelegate {
 
     /// tells the page whether the composer it asked for is on screen, so it hides its own only then
     private func ackComposer() {
-        let shown = host != nil && composerShown && composer.superview === host && !composer.isHidden
+        let shown = host != nil && composerShown && composer.superview === host && (!composer.isHidden || composerSuppressed)
         KeyboardTrace.log("composer ack", ["shown": shown ? 1 : 0, "host": host == nil ? 0 : 1])
         var event: [String: Any] = ["type": "composer", "shown": shown]
         if shown {
@@ -891,6 +933,7 @@ final class ChatGlassChrome: NSObject, UITextViewDelegate {
             pill.configuration?.attributedTitle = title
             pill.configuration?.baseForegroundColor = .label
             pill.configuration?.image = avatar
+            pill.configuration?.contentInsets = NSDirectionalEdgeInsets(top: 0, leading: avatar == nil ? 16 : 7, bottom: 0, trailing: 16)
             pill.layoutIfNeeded()
         }
         layoutPill()
@@ -1170,6 +1213,12 @@ final class ChatGlassChrome: NSObject, UITextViewDelegate {
     }
 
     private func show(_ view: UIView, _ visible: Bool, _ shown: inout Bool) {
+        if view === composer && composerSuppressed {
+            shown = visible
+            composer.isHidden = true
+            composer.alpha = 0
+            return
+        }
         guard visible != shown else {
             if visible { reassert(view) }
             return
@@ -1193,7 +1242,7 @@ final class ChatGlassChrome: NSObject, UITextViewDelegate {
 
     /// The page says this view shows: whatever hid it since (an animation cut short, a view put over it) is undone.
     private func reassert(_ view: UIView) {
-        guard let host, !(view === header && headerPopping) else { return }
+        guard let host, !(view === header && headerPopping), !(view === composer && composerSuppressed) else { return }
         let lost = view.superview !== host || view.isHidden || (view.alpha < 1 && view.layer.animationKeys()?.isEmpty != false)
         guard lost else { return }
         KeyboardTrace.log("reassert", ["hidden": view.isHidden ? 1 : 0, "alpha": view.alpha, "attached": view.superview === host ? 1 : 0])
@@ -1404,6 +1453,54 @@ final class ChatGlassChrome: NSObject, UITextViewDelegate {
 
     func blur() {
         if text.isFirstResponder { text.resignFirstResponder() }
+    }
+
+    func morphOrigin(in coordinateSpace: UICoordinateSpace) -> ComposerMorphOrigin? {
+        guard composerShown, let host, host.window != nil, !composer.isHidden,
+              composer.bounds.width > 1, composer.bounds.height > 1 else { return nil }
+        let currentRect = composer.convert(composer.bounds, to: coordinateSpace)
+        let restingRect: CGRect
+        if keyboardOverlap > host.safeAreaInsets.bottom {
+            let widthValue = restingFrame.width > 0 ? restingFrame.width : composer.bounds.width
+            let xValue = restingFrame.width > 0 ? restingFrame.minX : composer.frame.minX
+            let heightValue = composer.bounds.height
+            let yValue = host.bounds.height - host.safeAreaInsets.bottom - gap - heightValue
+            restingRect = host.convert(CGRect(x: xValue, y: yValue, width: widthValue, height: heightValue), to: coordinateSpace)
+        } else {
+            restingRect = currentRect
+        }
+        let radius = min(Self.capsuleHeight / 2, currentRect.height / 2)
+        let style = composer.overrideUserInterfaceStyle != .unspecified
+            ? composer.overrideUserInterfaceStyle
+            : host.traitCollection.userInterfaceStyle
+        let snapshot = composer.snapshotView(afterScreenUpdates: false)
+        return ComposerMorphOrigin(
+            rect: currentRect,
+            restingRect: restingRect,
+            cornerRadius: radius,
+            userInterfaceStyle: style,
+            snapshot: snapshot
+        )
+    }
+
+    func currentComposerRect(in coordinateSpace: UICoordinateSpace) -> CGRect? {
+        guard composerShown, let host, host.window != nil,
+              composer.bounds.width > 1, composer.bounds.height > 1 else { return nil }
+        return composer.convert(composer.bounds, to: coordinateSpace)
+    }
+
+    func setComposerSuppressed(_ suppressed: Bool) {
+        guard composerSuppressed != suppressed else { return }
+        composerSuppressed = suppressed
+        stopFades(composer)
+        if suppressed {
+            composer.isHidden = true
+            composer.alpha = 0
+        } else {
+            composer.isHidden = !composerShown
+            composer.alpha = composerShown ? 1 : 0
+            if composerShown { keepOnTop() }
+        }
     }
 
     private func updatePlaceholder() {

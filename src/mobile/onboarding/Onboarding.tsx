@@ -182,18 +182,25 @@ export function Onboarding({ initial = null, initialSignIn, reason = null, start
         if (scanned?.kind === "store") throw new PairError("store-qr");
         if (scanned?.kind === "signin" && followSignInService(text, scanned.service, account)) return;
         if (scanned?.kind === "signin") { await fromQr(scanned, from); return; }
-        if (scanned?.kind === "pair") carriedSignIn.current = pairSignIn(text) ?? undefined;
+        if (scanned?.kind === "pair") {
+          const carriedFromScan = pairSignIn(text) ?? scanned.payload.signIn ?? null;
+          if (carriedFromScan?.service && followSignInService(text, carriedFromScan.service, account)) return;
+          carriedSignIn.current = carriedFromScan ?? undefined;
+        }
         if (scanned?.kind === "account") { await codeSignIn(scanned.code, null, from); return; }
         if (scanned?.kind === "pair") payload = scanned.payload;
         else if (scanned?.kind === "code") typedCode = scanned.code;
         else throw new PairError("invalid");
       }
-      const carried = carriedSignIn.current;
+      let carried = carriedSignIn.current ?? payload?.signIn;
       carriedSignIn.current = undefined;
       // the code's lookup, the sign-in the QR carries and the pairing share one deadline; its end stops their requests
       const work = new AbortController();
       const result = await linkDeadline((async () => {
-        if (!payload && typedCode) payload = await resolveTypedCode(typedCode);
+        if (!payload && typedCode) {
+          payload = await resolveTypedCode(typedCode);
+          carried ??= payload.signIn;
+        }
         if (!payload) throw new PairError("invalid");
         if (carried && !(await signInWithPairing(carried, payload))) return null;
         return redeemPairing(payload, platform, work.signal);

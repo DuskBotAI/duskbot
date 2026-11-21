@@ -1,5 +1,6 @@
 import { DatabaseSync } from "node:sqlite";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { AUTO_APPROVAL_REASONS, autoApprovalChip, isAutoApprovalChip } from "../shared/auto-approval.ts";
 import { threadPreviewRows } from "./message-db-rows.ts";
 import type { Message } from "./store.ts";
 
@@ -29,6 +30,24 @@ describe("bounded sidebar database rows", () => {
     const parse = vi.spyOn(JSON, "parse");
     expect(preview().map((message) => message.id)).toEqual(["person", "reply"]);
     expect(parse).toHaveBeenCalledTimes(3);
+  });
+
+  it("skips a trailing auto-approval chip of every reason, the same chips the sidebar skips", () => {
+    for (const reason of AUTO_APPROVAL_REASONS) {
+      const chip = `${autoApprovalChip("Bash", reason)}: ls -la`;
+      expect(isAutoApprovalChip(chip), reason).toBe(true);
+      const preview = fixture([
+        { id: "person", role: "user", text: "List the files" }, { id: "reply", text: "Here they are." },
+        { id: "chip", kind: "activity", tool: { name: chip, ok: true } },
+      ]);
+      expect(preview().map((message) => message.id), reason).toEqual(["person", "reply"]);
+    }
+    const step = fixture([
+      { id: "person", role: "user", text: "List the files" }, { id: "reply", text: "Here they are." },
+      { id: "step", kind: "activity", tool: { name: "Read", ok: true } },
+    ]);
+    expect(step().map((message) => message.id)).toContain("step");
+    expect(isAutoApprovalChip("Read")).toBe(false);
   });
 
   it("keeps the newest open question, bot quote and user barrier in at most four rows", () => {

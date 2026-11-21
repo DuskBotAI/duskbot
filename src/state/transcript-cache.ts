@@ -138,6 +138,7 @@ export function createTranscriptCache(shelf: TranscriptShelf | null, { delayMs =
   // conversations this device has followed since the server last confirmed them: what is here is what the server has
   const fresh = new Set<string>();
   const saved = new Map<string, CachedTranscript>();
+  const sized = new WeakMap<CachedTranscript, CachedTranscript & { bytes: number }>();
   const dirty = new Set<string>();
   let timer: ReturnType<typeof setTimeout> | undefined;
   let writing: Promise<void> = Promise.resolve();
@@ -160,9 +161,13 @@ export function createTranscriptCache(shelf: TranscriptShelf | null, { delayMs =
     let used = 0;
     for (const entry of [...memory.values()].sort((a, b) => b.savedAt - a.savedAt)) {
       if (candidates.length >= CACHED_THREADS) break;
-      const stored = saved.get(entry.threadId) === entry && "bytes" in entry
-        ? entry as CachedTranscript & { bytes: number }
-        : cacheEntry(entry.threadId, entry.messages, entry.hasMore, entry.activeLeafId, entry.savedAt);
+      let stored = sized.get(entry);
+      if (!stored) {
+        stored = "bytes" in entry && typeof (entry as { bytes?: unknown }).bytes === "number"
+          ? entry as CachedTranscript & { bytes: number }
+          : cacheEntry(entry.threadId, entry.messages, entry.hasMore, entry.activeLeafId, entry.savedAt);
+        sized.set(entry, stored);
+      }
       if (used + stored.bytes > CACHED_BYTES) continue;
       candidates.push(stored);
       used += stored.bytes;

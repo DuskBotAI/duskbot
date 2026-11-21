@@ -231,3 +231,80 @@ it("keeps a pairing the computer accepted when the first connect fails, and drop
   expect(pairedButUnreachable(new TypeError("Load failed"))).toBe(true);
   expect(pairedButUnreachable(new PairError("refused"))).toBe(false);
 });
+
+it("the unreachable screen with no other saved places still lets the person open another place or remove it", async () => {
+  prefs.set("dusk.mobile.connections.v1", JSON.stringify([record("mac", "Studio Mac")]));
+  fetcher.mockRejectedValue(new TypeError("offline"));
+  await mount(); await settle();
+  expect(host.querySelector("h1")?.textContent).toBe("Can't reach Studio Mac");
+  expect(host.querySelector("[data-testid=mobile-unreachable-add]")).not.toBeNull();
+  expect(host.querySelector("[data-testid=mobile-unreachable-remove]")).not.toBeNull();
+
+  await act(async () => { host.querySelector<HTMLButtonElement>("[data-testid=mobile-unreachable-add]")!.click(); });
+  await settle();
+  expect(host.querySelector("h1")?.textContent).toBe("Link another computer");
+  await act(async () => { host.querySelector<HTMLButtonElement>("button[aria-label='Close']")!.click(); });
+  await settle();
+  expect(host.querySelector("h1")?.textContent).toBe("Can't reach Studio Mac");
+
+  await act(async () => { host.querySelector<HTMLButtonElement>("[data-testid=mobile-unreachable-remove]")!.click(); });
+  await settle();
+  expect(JSON.parse(prefs.get("dusk.mobile.connections.v1")!)).toEqual([]);
+  expect(host.querySelector("h1")?.textContent).toBe("Your bots, on your phone");
+});
+
+it("switching or opening another place works while a retry is still in flight", async () => {
+  fetcher.mockRejectedValueOnce(new TypeError("offline"));
+  await mount(); await settle();
+  expect(host.querySelector("h1")?.textContent).toBe("Can't reach Studio Mac");
+
+  let aborted = false;
+  fetcher.mockImplementation(async (input, init) => {
+    if (String(input).startsWith("https://vps.")) return new Response("{}");
+    return new Promise<Response>((_, reject) => {
+      init?.signal?.addEventListener("abort", () => { aborted = true; reject(new DOMException("aborted", "AbortError")); }, { once: true });
+    });
+  });
+  await click("Try again");
+  expect(host.textContent).toContain("Trying again...");
+  expect(host.querySelector<HTMLButtonElement>("[data-testid=mobile-unreachable-add]")?.disabled).toBe(false);
+  const boxButton = [...host.querySelectorAll("button")].find((button) => button.textContent?.includes("Box"))!;
+  expect(boxButton.disabled).toBe(false);
+
+  await act(async () => { boxButton.click(); });
+  await settle();
+  expect(aborted).toBe(true);
+  expect(prefs.get("dusk.mobile.active.v1")).toBe("vps");
+  expect(host.textContent).toBe("home");
+});
+
+it("when signed in, opening another place from the unreachable screen shows the account's places", async () => {
+  vi.stubEnv("VITE_DUSK_ALLOW_SIGNED_OUT", ""); vi.stubEnv("VITE_DUSK_ACCOUNT_ORIGIN", "");
+  const kept = { origin: "https://dusk.bot", token: `omc_${"a".repeat(43)}`, expiresAt: Date.now() + 86_400_000, deviceId: "phone", account: { id: "alice", email: "alice@example.com" } };
+  const secrets = new Map([["token.mac", "mac-token"], ["dusk.account", JSON.stringify(kept)]]);
+  prefs = new Map([["dusk.mobile.connections.v1", JSON.stringify([record("mac", "Studio Mac")])], ["dusk.mobile.active.v1", "mac"], ["dusk.mobile.installed", "1"]]);
+  platform = { ...platform, native: true, kind: "android",
+    prefs: { get: async (key) => prefs.get(key) ?? null, set: async (key, value) => { prefs.set(key, value); }, remove: async (key) => { prefs.delete(key); } },
+    secrets: { get: async (key) => secrets.get(key) ?? null, set: async (key, value) => { secrets.set(key, value); }, remove: async (key) => { secrets.delete(key); } },
+    onAppUrl: () => () => {}, onResume: () => () => {} };
+  fetcher.mockImplementation(async (input) => {
+    const url = String(input);
+    if (url.startsWith("https://mac.example.test")) throw new TypeError("offline");
+    if (url.endsWith("/api/cloud/desktop/session")) {
+      return new Response(JSON.stringify({ clouds: [{ id: "c1", role: "owner", teamId: null, status: "ready", asleep: false, origin: "https://c1.dusk.bot", name: "Alice Cloud" }], teams: [], computers: [] }));
+    }
+    if (url.endsWith("/v1/app/session")) return new Response(JSON.stringify({ account: kept.account }));
+    return new Response("{}", { status: 404 });
+  });
+  await act(async () => {
+    root = createRoot(host);
+    root.render(createElement(PlatformContext, { value: platform }, createElement(AccountGate, null, createElement(ConnectionGate, null, createElement("p", null, "home")))));
+  });
+  await settle(); await settle();
+  expect(host.querySelector("h1")?.textContent).toBe("Can't reach Studio Mac");
+  await act(async () => { host.querySelector<HTMLButtonElement>("[data-testid=mobile-unreachable-add]")!.click(); });
+  await settle(); await settle();
+  expect(host.querySelector("[data-testid=mobile-cloud-picker]")).not.toBeNull();
+  expect(host.textContent).toContain("Alice Cloud");
+  vi.unstubAllEnvs();
+});

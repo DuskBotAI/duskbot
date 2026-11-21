@@ -38,7 +38,15 @@ public class PulldownMenuPlugin: CAPPlugin, CAPBridgedPlugin {
                 call.resolve()
                 return
             }
-            var picked: String?
+            var resolved = false
+            let resolveOnce: ([String: Any]?) -> Void = { payload in
+                guard !resolved else { return }
+                resolved = true
+                if let payload { call.resolve(payload) } else { call.resolve() }
+            }
+            if items.contains(where: { ($0["key"] as? String) == "attach:photos" }) {
+                MediaPickerLibraryCache.shared.warmIfAuthorized()
+            }
             var groups: [[UIMenuElement]] = [[]]
             for item in items {
                 guard let key = item["key"] as? String, let label = item["label"] as? String else { continue }
@@ -46,7 +54,9 @@ public class PulldownMenuPlugin: CAPPlugin, CAPBridgedPlugin {
                 var attributes: UIMenuElement.Attributes = []
                 if item["danger"] as? Bool == true { attributes.insert(.destructive) }
                 if item["disabled"] as? Bool == true { attributes.insert(.disabled) }
-                let action = UIAction(title: label, image: (item["symbol"] as? String).flatMap { UIImage(systemName: $0) }, attributes: attributes, state: item["checked"] as? Bool == true ? .on : .off) { _ in picked = key }
+                let action = UIAction(title: label, image: (item["symbol"] as? String).flatMap { UIImage(systemName: $0) }, attributes: attributes, state: item["checked"] as? Bool == true ? .on : .off) { _ in
+                    resolveOnce(["key": key])
+                }
                 if let detail = item["detail"] as? String { action.subtitle = detail }
                 groups[groups.count - 1].append(action)
             }
@@ -63,7 +73,7 @@ public class PulldownMenuPlugin: CAPPlugin, CAPBridgedPlugin {
             anchor.menu = UIMenu(children: children)
             anchor.closed = { [weak anchor] in
                 anchor?.removeFromSuperview()
-                if let picked = picked { call.resolve(["key": picked]) } else { call.resolve() }
+                resolveOnce(nil)
             }
             host.addSubview(anchor)
             anchor.performPrimaryAction()

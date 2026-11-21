@@ -124,7 +124,7 @@ export interface ConfigStatus {
     customKeyConfigured?: boolean;
   };
   /** who's using the app, collected in onboarding, shown in the sidebar */
-  profile?: { name: string; email: string; aboutMe?: string; avatarUrl?: string; accountName?: string };
+  profile?: { name: string; email: string; aboutMe?: string; avatarUrl?: string; accountName?: string; accountFace?: import("../../shared/user-avatar").SyncedAccountFace };
   /** UI language override; "" (or absent) follows the system language. */
   language?: string;
   /** What a paired phone calls this computer; "" uses the default. */

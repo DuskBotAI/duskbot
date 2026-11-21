@@ -88,7 +88,7 @@ export interface BarItem {
   role?: "close";
   badge?: number;
   disabled?: boolean;
-  picture?: { key: string; x?: number; y?: number; width?: number; height?: number };
+  picture?: { key: string; data?: string; url?: string; x?: number; y?: number; width?: number; height?: number };
 }
 
 export interface BarConfig { title?: string; status?: string; leading: BarItem[]; trailing: BarItem[] }

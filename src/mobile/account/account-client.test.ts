@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { appleNonce, createMobileAccount, isAccountAuthUrl, mobileFace, parseComputerPair, parsePairGrant } from "./account-client";
+import { appleNonce, createMobileAccount, isAccountAuthUrl, mobileFace, mobileProfile, parseComputerPair, parsePairGrant } from "./account-client";
 import { webPlatform, type MobilePlatform } from "../platform";
 
 const origin = "https://accounts.example";
@@ -385,6 +385,45 @@ describe("mobileFace", () => {
     expect(mobileFace({ avatarUrl: "http://example.test/a.png", avatar: "<b>" })).toEqual({});
     expect(mobileFace({ avatarUrl: "https://u:p@example.test/a.png", avatar: "drawn" })).toEqual({ avatar: "drawn" });
     expect(mobileFace(null)).toEqual({});
+  });
+
+  it("mobileProfile keeps the account's name alongside its photo and avatar choice, and restore persists profile updates", async () => {
+    expect(mobileProfile({ name: "  Emi Rivera  ", avatarUrl: "https://lh3.googleusercontent.com/a/x", avatar: "photo" }))
+      .toEqual({ name: "Emi Rivera", avatarUrl: "https://lh3.googleusercontent.com/a/x", avatar: "photo" });
+    expect(mobileProfile({ name: "   " })).toEqual({});
+    const signedIn = { ...grant(), account: { id: "person", email: "person@example.com", name: "Emi Rivera", avatarUrl: "https://lh3.googleusercontent.com/a/x", avatar: "photo" } };
+    fetcher.mockResolvedValueOnce(response(signedIn));
+    expect(await client.phoneCode("ABCD-EFGH")).toEqual({ outcome: "signed-in" });
+    expect(client.account()).toEqual(signedIn.account);
+    expect(JSON.parse(secrets.get("dusk.account")!).account).toEqual(signedIn.account);
+
+    const updated = { ...signedIn, account: { id: "person", email: "person@example.com", name: "Emi", avatarUrl: "https://lh3.googleusercontent.com/a/new", avatar: "g:seed1" } };
+    fetcher.mockResolvedValueOnce(response(updated));
+    expect(await client.restore()).toEqual(updated.account);
+    expect(JSON.parse(secrets.get("dusk.account")!).account).toEqual(updated.account);
+  });
+
+  it("setAvatar updates the account avatar on the service and persists it in secrets", async () => {
+    const signedIn = { ...grant(), account: { id: "person", email: "person@example.com", name: "Emi", avatarUrl: "https://lh3.googleusercontent.com/a/emi" } };
+    fetcher.mockResolvedValueOnce(response(signedIn));
+    await client.phoneCode("ABCD-EFGH");
+
+    fetcher.mockResolvedValueOnce(response({ avatar: "g:seed99" }));
+    expect(await client.setAvatar("g:seed99")).toBe("saved");
+    expect(client.account()?.avatar).toBe("g:seed99");
+    expect(JSON.parse(secrets.get("dusk.account")!).account.avatar).toBe("g:seed99");
+    const [url, init] = fetcher.mock.calls[1]!;
+    expect(url).toBe(`${origin}/v1/app/avatar`);
+    expect(JSON.parse(String(init?.body))).toEqual({ avatar: "g:seed99" });
+
+    fetcher.mockResolvedValueOnce(response({ avatar: null }));
+    expect(await client.setAvatar(null)).toBe("saved");
+    expect(client.account()?.avatar).toBeUndefined();
+    expect(JSON.parse(secrets.get("dusk.account")!).account.avatar).toBeUndefined();
+
+    fetcher.mockResolvedValueOnce(response({ code: "invalid_token" }, 401));
+    expect(await client.setAvatar("drawn")).toBe("signed-out");
+    expect(client.account()).toBeNull();
   });
 });
 

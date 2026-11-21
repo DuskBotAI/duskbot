@@ -483,6 +483,14 @@ const support = (run: typeof execCli): AcpSupport => ({
   ],
   credentialEnv: ["CURSOR_API_KEY", "CURSOR_AUTH_TOKEN"],
 
+  // cursor-agent 2026.06.04 probes the macOS login keychain (`cursor-keychain-probe`) on every
+  // launch when SSH env vars are set, popping a modal "Keychain Not Found" dialog under an
+  // isolated HOME. NO_OPEN_BROWSER keeps browser launch off once SSH detection is disabled.
+  transformEnv: (env) => {
+    env.CURSOR_AGENT_CLI_ASSUME_SSH = "0";
+    env.NO_OPEN_BROWSER = "1";
+  },
+
   resolveModels: (environment, config) => fetchCursorModels(config.cli || "cursor-agent", environment, run),
 
   // A key in the env already authenticates the session, and Cursor's cursor_login handler would then

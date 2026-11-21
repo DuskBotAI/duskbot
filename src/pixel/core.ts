@@ -324,7 +324,7 @@ export class PixelCore {
   pe: { hop: number; side: number; tm: number };
   air = false;
   T: number;
-  private sT: number; private nap: number; private y = 0; private vy = 0; private v0 = 0; private crouch = 0; private hopH = 0;
+  private sT: number; private y = 0; private vy = 0; private v0 = 0; private crouch = 0; private hopH = 0;
   private sq = new Spring(320, 0.55); private lean = new Spring(200, 0.6); private gxs = new Spring(500, 1); private gys = new Spring(500, 1);
   private xo = new Spring(500, 0.35); private yw = new Spring(90, 0.8); private gs: Spring[];
   private bk: number; private bt: Record<string, number> = {}; private P = {} as Pose; private rx: Reaction | null = null;
@@ -354,7 +354,7 @@ export class PixelCore {
     this.pe = { hop: (p.hop || 1) * (0.85 + rnd() * 0.35), side: rnd() < 0.5 ? -1 : 1, tm: 0.88 + rnd() * 0.24 };
     this.gs = def.groups.map(() => new Spring(260, 0.45));
     this.bk = 1 + rnd() * 7;
-    this.T = rnd() * 10; this.nap = this.T + 6 + rnd() * 14;
+    this.T = rnd() * 10;
     this.calm = !!o.calm; this.life = o.life !== false; this.after = o.after ?? "idle";
     this.sT = this.T;
     const st = o.state;
@@ -398,11 +398,10 @@ export class PixelCore {
     return this.react(n, { dir, social: true });
   }
   blink() { if (!reduce && !this.calm) { this.bk = this.T; this.once = true; } }
-  /** seconds until a settled bot next moves on its own: a blink or a settle */
+  /** seconds until a settled bot next moves on its own: a blink */
   dueIn() {
     if (!this.life || reduce) return Infinity;
-    const nap = this.state == "idle" && !this.calm && !reduce ? this.nap - this.T : Infinity;
-    return Math.max(0, Math.min(this.bk - 0.1 - this.T, nap));
+    return Math.max(0, this.bk - 0.1 - this.T);
   }
   hop(h = 1) {
     if (reduce || this.calm || this.air || this.crouch > 0) return;
@@ -424,7 +423,6 @@ export class PixelCore {
     const moves = !reduce && !this.calm;
     Object.assign(P, { sq: 0, lean: 0, gx: 0, gy: 0, dx: 0, yaw: 0, snap: null, lift: 0, eyes: "open", eyesR: null, blink: this.life && !reduce ? 1 : 0, look: 1, m: moves });
     STATES[this.state].pose?.(this, T - this.sT, P);
-    if (this.state == "idle" && P.m && this.life && T > this.nap) { this.nap = T + 10 + rnd() * 10; this.kick(1.3); }
     const r = this.rx;
     if (r) { r.t += dt; if (r.t >= r.d) this.rx = null; else r.pose?.(this, r.t, P, r); }
     // gaze: eyes shift a pixel toward a direction, a manual target, a neighbour, or a nearby pointer. the body stays put
@@ -557,7 +555,14 @@ export class PixelCore {
     const mk = qsx + "," + qsy + "," + ql + "," + qa.join(",");
     const cache = (def.cache[G] ||= new Map());
     let m = cache.get(mk);
-    if (!m) { if (cache.size > 600) cache.clear(); m = this.raster(qsx, qsy, ql, qa); cache.set(mk, m); }
+    if (!m) {
+      if (cache.size >= 120) {
+        const oldest = cache.keys().next().value;
+        if (oldest !== undefined) cache.delete(oldest);
+      }
+      m = this.raster(qsx, qsy, ql, qa);
+      cache.set(mk, m);
+    }
     const ox = R(this.xo.x / k), oy = R((this.y + hov) / k);
     // eye geometry in output pixels, kept symmetric
     const F = (x: number, y: number) => [this.ax + ((x - N / 2) * qsx - ql * (y - N)) / k + ox, this.ay + ((y - N) * qsy) / k + oy] as const;

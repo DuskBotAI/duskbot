@@ -11,8 +11,8 @@ import type {
   SendTurnInput,
 } from "../contracts.ts";
 import { createAcpDriver, type AcpConfig, type AcpSupport } from "./acp/core.ts";
+import { AntigravityAuthController } from "./antigravity-auth.ts";
 import {
-  AntigravityAuthController,
   antigravityAcpArgs,
   antigravityProfileAuthenticated,
   logoutAntigravity,

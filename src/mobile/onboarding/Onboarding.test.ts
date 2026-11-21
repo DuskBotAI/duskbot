@@ -739,4 +739,41 @@ describe("a desktop's QR that signs the phone in asks which place opens", () => 
     expect(onLinked).toHaveBeenCalledWith(expect.objectContaining({ id: "linked" }), "session", "Studio Mac");
     expect(host.querySelector("[data-place-choice]")).toBeNull();
   });
+
+  it("typing a computer's 12-character code from a signed-in desktop also signs the phone in and fetches its name and avatar", async () => {
+    const profile = { id: owner.id, email: owner.email, name: "Emi Rivera", avatarUrl: "https://lh3.googleusercontent.com/a/emi", avatar: "photo" };
+    const linkPayload: MobileLinkPayload = {
+      v: MOBILE_LINK_VERSION,
+      workspace: { name: "Studio Mac", environmentId: "env-mac", kind: "mac" },
+      grant: { id: "grant-typed", secret: "s3cret", expiresAt: Date.now() + 5 * 60_000 },
+      via: [{ kind: "https", url: "https://mac.example.org" }],
+      signIn: { code: "WXYZQRST", email: owner.email },
+    };
+    const { sealed } = sealLookup("ABCDEFGHJKLM", linkPayload);
+    fetcher.mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.includes("/v1/lookups/")) return response({ sealed });
+      if (url.endsWith("/api/cloud/app/sign-in/phone")) {
+        return response({ cloudContractVersion: 1, accessToken: token, expiresAt: Date.now() + 60_000, device: { id: "phone" }, account: profile });
+      }
+      if (url.endsWith("/api/cloud/desktop/session")) return response({ clouds: [], teams: [], account: profile });
+      if (url.endsWith("/v1/app/computers")) return response({ v: 1, computers: [] });
+      return response({ v: 1, providers: [], signupOpen: true });
+    });
+    vi.mocked(redeemPairing).mockResolvedValueOnce({
+      record: { id: "linked-typed", environmentId: "env-mac", label: "Studio Mac", transport: "https", origin: "https://mac.example.org", sessionRef: "t", capabilities: { chat: true, uploads: true, computerView: true, computerControl: true, routines: true, settingsWrite: true, notifications: true, openOnDesktop: false }, addedAt: 1, lastUsedAt: 1 },
+      token: "session",
+    });
+    const onLinked = vi.fn();
+    await mount(onboarding({ onLinked }));
+    await press("[data-entry=code]");
+    const field = host.querySelector<HTMLInputElement>("input[autocomplete=one-time-code]")!;
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(field, "ABCD-EFGH-JKLM");
+      field.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await settle(() => onLinked.mock.calls.length > 0);
+    expect(onLinked).toHaveBeenCalledWith(expect.objectContaining({ id: "linked-typed" }), "session", "Studio Mac");
+    expect(JSON.parse(secrets.get("dusk.account")!).account).toEqual(profile);
+  });
 });

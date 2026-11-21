@@ -4,6 +4,7 @@
 // at every level (own-file-reads.ts). A bot's question always reaches a human.
 
 import { supportsApprovalMode, type ApprovalMode } from "../shared/approval-mode.ts";
+import { autoApprovalChip } from "../shared/auto-approval.ts";
 import { type FailedTurnTool } from "../shared/failed-turn.ts";
 import { failedTurnRow } from "./failed-turn-row.ts";
 import { isOutboundTool } from "../shared/outbound.ts";
@@ -112,15 +113,15 @@ export function autoVerdict(
     return { approve: null, source: "no-grant" };
   }
   // Full's promise is literal, sandbox widening included; entering Full is consent-gated by the bot PATCH endpoint.
-  if (mode === "full") return { approve: `approved ${tool} (full access)`, source: "full-access" };
+  if (mode === "full") return { approve: autoApprovalChip(tool, "full access"), source: "full-access" };
   if (context?.requiresExplicitApproval) return { approve: null, source: "explicit-approval-block" };
   if (isOutboundTool(tool)) return { approve: null, source: "outbound-guard" };
-  if (context?.commandAllowed) return { approve: `approved ${tool} (saved command)`, source: "command-allowlist" };
-  if (context?.toolAllowed) return { approve: `approved ${tool} (always allowed)`, source: "tool-allowlist" };
-  if (context?.ownFilesRead) return { approve: `approved ${tool} (its own files)`, source: "own-files" };
-  if (context?.readOnly && mode !== "custom") return { approve: `approved ${tool} (reads only)`, source: "read-only" };
+  if (context?.commandAllowed) return { approve: autoApprovalChip(tool, "saved command"), source: "command-allowlist" };
+  if (context?.toolAllowed) return { approve: autoApprovalChip(tool, "always allowed"), source: "tool-allowlist" };
+  if (context?.ownFilesRead) return { approve: autoApprovalChip(tool, "its own files"), source: "own-files" };
+  if (context?.readOnly && mode !== "custom") return { approve: autoApprovalChip(tool, "reads only"), source: "read-only" };
   if (mode === "auto" && WEB_SEARCH.has(bareToolName(tool))) {
-    return { approve: `approved ${tool} (web search)`, source: "web-search" };
+    return { approve: autoApprovalChip(tool, "web search"), source: "web-search" };
   }
   if (mode === "auto" || mode === "custom") return { approve: null, source: "native-approval" };
   return { approve: null, source: "no-grant" };

@@ -3,7 +3,7 @@ import { createElement, useRef } from "react";
 import { flushSync } from "react-dom";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { applyGlassGlyphs, buttonKind, composerButtons, covered, cssColor, cssHex, darkGround, frameOf, jumpCovered, REASSERT_MS, restingFrame, transcriptRoom, typeInto, useNativeGlass, type GlassBridge, type GlassEvent, type GlassState } from "./native-glass";
+import { applyGlassGlyphs, buttonKind, composerButtons, covered, cssColor, cssHex, darkGround, frameOf, jumpCovered, rasterAvatar, REASSERT_MS, restingFrame, transcriptRoom, typeInto, useNativeGlass, type GlassBridge, type GlassEvent, type GlassState } from "./native-glass";
 import type { SlidePath } from "./NavStack";
 import type { MobilePlatform } from "./platform";
 
@@ -766,5 +766,102 @@ describe("the transcript's room under its last row", () => {
     expect(transcriptRoom(chat)).toBe(0);
     expect(transcriptRoom(null)).toBe(0);
     chat.remove();
+  });
+});
+
+describe("rasterAvatar", () => {
+  it("rasterises static SVG mascot avatars into a PNG data URL", () => {
+    const fills: Array<{ style: string; path: string }> = [];
+    class FakePath2D {
+      constructor(public d: string) {}
+    }
+    vi.stubGlobal("Path2D", FakePath2D);
+    const ctx = {
+      imageSmoothingEnabled: true,
+      fillStyle: "",
+      save: vi.fn(),
+      restore: vi.fn(),
+      translate: vi.fn(),
+      scale: vi.fn(),
+      fill: vi.fn((path: FakePath2D) => { fills.push({ style: String(ctx.fillStyle), path: path.d }); }),
+    };
+    const origCreate = document.createElement.bind(document);
+    vi.spyOn(document, "createElement").mockImplementation((tag: string) => {
+      const el = origCreate(tag);
+      if (tag === "canvas") {
+        (el as unknown as { getContext: () => typeof ctx }).getContext = () => ctx;
+        (el as unknown as { toDataURL: () => string }).toDataURL = () => "data:image/png;base64,AAA";
+      }
+      return el;
+    });
+
+    const host = document.createElement("span");
+    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    svg.setAttribute("viewBox", "0 0 16 16");
+    const body = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    body.setAttribute("d", "M2 2h12v12H2z");
+    body.setAttribute("fill", "#e8598d");
+    const eyes = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    eyes.setAttribute("d", "M5 6h2v2H5z");
+    eyes.setAttribute("fill", "#ffffff");
+    svg.append(body, eyes);
+    host.append(svg);
+    place(host, 100, 50, 24, 24);
+    place(svg, 103, 53, 18, 18);
+
+    expect(rasterAvatar(host)).toBe("data:image/png;base64,AAA");
+    expect(fills).toEqual([
+      { style: "#e8598d", path: "M2 2h12v12H2z" },
+      { style: "#ffffff", path: "M5 6h2v2H5z" },
+    ]);
+  });
+
+  it("rasterises SVG rect avatars (UserAvatarArt) with negative viewBox padding", () => {
+    const rects: Array<{ style: string; x: number; y: number; w: number; h: number }> = [];
+    const ctx = {
+      imageSmoothingEnabled: true,
+      fillStyle: "",
+      save: vi.fn(),
+      restore: vi.fn(),
+      translate: vi.fn(),
+      scale: vi.fn(),
+      fillRect: vi.fn((x: number, y: number, w: number, h: number) => { rects.push({ style: String(ctx.fillStyle), x, y, w, h }); }),
+    };
+    const origCreate = document.createElement.bind(document);
+    vi.spyOn(document, "createElement").mockImplementation((tag: string) => {
+      const el = origCreate(tag);
+      if (tag === "canvas") {
+        (el as unknown as { getContext: () => typeof ctx }).getContext = () => ctx;
+        (el as unknown as { toDataURL: () => string }).toDataURL = () => "data:image/png;base64,BBB";
+      }
+      return el;
+    });
+
+    const host = document.createElement("div");
+    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    svg.setAttribute("viewBox", "-2 -2 16 16");
+    const bg = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+    bg.setAttribute("x", "-2");
+    bg.setAttribute("y", "-2");
+    bg.setAttribute("width", "16");
+    bg.setAttribute("height", "16");
+    bg.setAttribute("fill", "#273b09");
+    const face = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+    face.setAttribute("x", "3");
+    face.setAttribute("y", "4");
+    face.setAttribute("width", "6");
+    face.setAttribute("height", "1");
+    face.setAttribute("fill", "#b48ef7");
+    svg.append(bg, face);
+    host.append(svg);
+    place(host, 0, 0, 32, 32);
+    place(svg, 0, 0, 32, 32);
+
+    expect(rasterAvatar(host)).toBe("data:image/png;base64,BBB");
+    expect(ctx.translate).toHaveBeenCalledWith(2, 2);
+    expect(rects).toEqual([
+      { style: "#273b09", x: -2, y: -2, w: 16, h: 16 },
+      { style: "#b48ef7", x: 3, y: 4, w: 6, h: 1 },
+    ]);
   });
 });

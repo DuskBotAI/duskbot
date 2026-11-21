@@ -351,6 +351,7 @@ async function installOnce(options: AntigravityInstallOptions): Promise<Antigrav
     }
   } catch (error) {
     if (error instanceof Error && error.message.includes("Antigravity needs")) throw error;
+    // statfs is unavailable on a few filesystems.
   }
 
   // Another process may be installing into this versions folder; the in-memory map cannot protect its staging dir.
@@ -456,6 +457,7 @@ async function installOnce(options: AntigravityInstallOptions): Promise<Antigrav
     failed = true;
     throw error;
   } finally {
+    // Cleanup must never replace the real error; only this attempt's directory is touched.
     try {
       await removeReleaseDirectory(staging);
     } catch (cleanupError) {

@@ -18,7 +18,7 @@ import { useAmbientAwayValue } from "./away";
 import type { AmbientAct, AmbientViewing } from "./types";
 
 /** Summaries go out at most this often: a streaming reply changes a bot's status line many times a second. */
-export const PUBLISH_MS = 160;
+export const PUBLISH_MS = 250;
 
 type Dispatch = ReturnType<typeof useStore>["dispatch"];
 
@@ -97,8 +97,7 @@ export function AmbientPublisher() {
     schedule();
   }, [wanted, away, state.hydrated, state.bots, state.instances, state.selectedId, schedule]);
   useEffect(() => (wanted ? onAnyTurnLive(schedule) : undefined), [wanted, schedule]);
-  // a reply as it streams, word by word, not only once it has landed
-  useEffect(() => (wanted ? onAnyLiveReply(schedule) : undefined), [wanted, schedule]);
+  useEffect(() => (wanted ? onAnyLiveReply(() => { if (viewing.current) schedule(); }) : undefined), [wanted, schedule]);
   const asked = useRef("");
   useEffect(() => bridge?.onViewing?.((next) => {
     viewing.current = next && typeof next.botId === "string" ? { botId: next.botId, limit: Math.max(1, Math.min(VIEWED_MAX, Math.floor(next.limit) || 0)) } : null;

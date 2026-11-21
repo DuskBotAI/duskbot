@@ -84,7 +84,7 @@ import { RoomTurnDeadline, RoomTurnStallRegistry, effectiveRoomTurnTimeoutMinute
 import { roomTurnEnd, type RoomClaimEnd } from "./room-turn-end.ts";
 import { applyHoldDirective, classifyHoldDirective, heldMemberLine, rememberHeldMessage, stopWordPlacement } from "./room-holds.ts";
 import { createPersonStop } from "./host/person-stop.ts"; import { createTurnOrder } from "./host/turn-order.ts"; import { createQueuedNotes, createWaitWords } from "./host/wait-words.ts"; import { settleParkedFiles, type ParkedTurnAttachment } from "./host/turn-attachments.ts"; import type { DirectSendInput, DirectSendReceipt } from "./direct-send.ts";
-import { finishedWithoutSummaryLine, isPassText, ROOM_SUMMARY_REASK, roomTurnNarrationIds, roomTurnReply } from "./room-reply.ts"; import { isDirectPassText, PassStreamGate } from "./silent-reply.ts"; import { answeredAboveNote, cleanBotVoice, mentionCueNote, roomTalkRules, roomTurnVoiceNote } from "./group-voice.ts"; import { asksFor, MentionChain } from "./room-mention-chain.ts"; import { teammatesNote, workInProgressNote, type InHand } from "./room-team-context.ts"; import { createRoomEarlier, ROOM_EARLIER_LABEL } from "./host/room-earlier.ts"; import { replyBubbles } from "./reply-bubbles.ts";
+import { finishedWithoutSummaryLine, isPassText, ROOM_SUMMARY_REASK, roomTurnNarrationIds, roomTurnReply } from "./room-reply.ts"; import { createStreamedReply } from "./host/streamed-reply.ts"; import { answeredAboveNote, cleanBotVoice, mentionCueNote, roomTalkRules, roomTurnVoiceNote } from "./group-voice.ts"; import { asksFor, MentionChain } from "./room-mention-chain.ts"; import { teammatesNote, workInProgressNote, type InHand } from "./room-team-context.ts"; import { createRoomEarlier, ROOM_EARLIER_LABEL } from "./host/room-earlier.ts"; import { replyBubbles } from "./reply-bubbles.ts";
 import { pickComputer } from "./computer-selection.ts";
 import { keyHint, keyStatus, nestedKeyStatus, withoutKeyHints } from "./key-hint.ts";
 import { chartRenderer, compileChart, dataEngine, validateVegaLite } from "./data/deps.ts";
@@ -125,10 +125,10 @@ import { connectorCardDescription, connectorCardText } from "./connector-card-te
 import { BOT_LIMIT_CODE } from "../shared/bot-limit.ts"; import { createBotLimit } from "./host/starter-bot-limit.ts"; import { chiefOfStaffSystemPrompt } from "./chief-of-staff.ts"; import { chiefLevel, readTeamRolesWith } from "./chief-level.ts"; import { defaultBotRefusal, ensureDefaultBot, renameLegacyDefaultBots } from "./default-bot.ts";
 import { buildRecall, recallRooms, recallThreadIds, withRecalled } from "./recall.ts";
 import { heldMemory, takeMemoryDelta } from "./memory-snapshot.ts";
-import { aboutOwner, embedPendingFacts } from "./memory-facts.ts";
+import { aboutOwner, embedPendingFacts, hasPendingFactsToEmbed } from "./memory-facts.ts";
 import { migrateMemory } from "./memory-migrate.ts";
 import { personsOwnWords, readOutsideContent } from "./memory-trust.ts";
-import { embedderSettled, warmEmbedder } from "./memory-embed.ts";
+import { embedderSettled, stopEmbedder, warmEmbedder } from "./memory-embed.ts";
 import { generalForPrompt, listGeneralHistory } from "./general-memory.ts";
 import { computerFailuresToResolve, RESOLVE_SCAN } from "./computer-failure-resolution.ts";
 import { chatMessageCount, habitReminder } from "./habit-reminder.ts"; import { HANDOFF_BRIEF_RULE } from "./handoff-brief.ts"; import { hostTimeZone, personTimeZone, takesTurnClock, withTurnClock } from "./turn-clock.ts";
@@ -937,7 +937,7 @@ const CLOUD_OWNER_KEY = CLOUD_PERSONAL ? `p_${createHash("sha256").update(`cloud
 let cloudEarlierOwners: Pick<CloudOwnership, "adopted" | "proven"> = { adopted: new Set(), proven: new Set() };
 /** Until it is settled, a Cloud home counts as shared. */
 let cloudHome: ReturnType<typeof settleCloudHome> | null = null; const teamHost = createCloudTeamHost({ team: CLOUD_TEAM, dataDir: DATA_DIR, store: { groupByThread: (threadId) => store.groupByThread(threadId), get bots() { return store.bots; } }, engineHomes, starters: threadStarters, markers: new Set([CLOUD_NOBODY_KEY, CLOUD_OUTSIDE_KEY]), language: appLanguage,
-  serverProfile: { read: () => cfg.profile, clear: () => { adminActorScope.exit(() => saveConfig({ profile: { name: "", email: "", aboutMe: "", avatarUrl: "", accountName: "" } })); Object.assign(cfg, loadConfig()); } } });
+  serverProfile: { read: () => cfg.profile, clear: () => { adminActorScope.exit(() => saveConfig({ profile: { name: "", email: "", aboutMe: "", avatarUrl: "", accountName: "", accountFace: null } })); Object.assign(cfg, loadConfig()); } } });
 const teamOwners = createTeamOwners({ team: CLOUD_TEAM, dataDir: DATA_DIR, sessions, store: () => store, audienceOf: (threadId) => teamHost.audienceOf(threadId) }); const duskOwnChat = createDuskOwnChat({ bots: () => store.bots, starters: threadStarters, personKey: (email) => personKey({ id: "", email }), moveNotes: (from, to) => moveMemoryLayer(from, to, appLanguage()) });
 const personRooms = createPersonRooms({ reads: CLOUD_TEAM ? createRoomReads(DATA_DIR) : null, store: () => store, newestMessageId: (threadId) => readCursor(threadId).lastReadMessageId, publicGroupState, broadcast });
 
@@ -2530,12 +2530,26 @@ const computerControl = new ComputerControl((key, snapshot) => {
   }
   broadcast({ kind: "computer-control", botId, held: snapshot.held, helpReason: snapshot.helpReason, ...(snapshot.help ? { help: snapshot.help } : {}) });
   }
+  syncControlSilenceTimer();
 });
 const controlLeaseIdSchema = z.string().min(16).max(120).regex(/^[A-Za-z0-9_-]+$/);
 const controlSilenceMs = Math.max(500, Number(process.env.DUSK_CONTROL_SILENCE_MS) || CONTROL_SILENCE_MS);
-setInterval(() => {
-  for (const key of computerControl.releaseSilent(controlSilenceMs)) trail("takeover.silent", { key, silenceMs: controlSilenceMs });
-}, Math.min(CONTROL_SILENCE_SWEEP_MS, Math.ceil(controlSilenceMs / 5))).unref();
+const controlSilenceSweepMs = Math.min(CONTROL_SILENCE_SWEEP_MS, Math.ceil(controlSilenceMs / 5));
+let controlSilenceTimer: ReturnType<typeof setInterval> | null = null;
+function syncControlSilenceTimer(): void {
+  if (computerControl.hasTimedLease()) {
+    if (controlSilenceTimer) return;
+    controlSilenceTimer = setInterval(() => {
+      for (const key of computerControl.releaseSilent(controlSilenceMs)) trail("takeover.silent", { key, silenceMs: controlSilenceMs });
+      syncControlSilenceTimer();
+    }, controlSilenceSweepMs);
+    controlSilenceTimer.unref();
+    return;
+  }
+  if (!controlSilenceTimer) return;
+  clearInterval(controlSilenceTimer);
+  controlSilenceTimer = null;
+}
 function controlIntegration(
   botId: string,
   threadId: string,
@@ -3011,7 +3025,7 @@ const actingPeople = createActingPeople({ store, direct: (threadId) => directReq
 const { stopThreadForPerson, stopOnTypedCommand, restartForPerson } = createPersonStop({
   store, routines: () => routines, handoffs: () => handoffs, interruptDirectThread, clearUnattended,
   dropAsks: (threadId) => openAsks.dropped(threadId), stopWorkers: async (_botId, threadId) => { await turnWorkers.stop(threadId); },
-  stopGoal: (threadId) => oneOnOneGoals.stop(threadId), cancelHeld: (threadId) => limitHold.cancel(threadId), markStopped: (threadId, said) => { personStops.stop(threadId, liveTurns.running(threadId), directTurnDispatchClaims.has(threadId)); if (said !== undefined) replySaidAtStop.set(threadId, said); }, working: (botId, threadId) => threadBusy(botId, threadId) || coordinator.activeDirect(threadId) || Boolean(limitHold.held(threadId)), asking: (threadId) => coordinator.awaitingAnswer(threadId) || Boolean(openPersonCard(threadId)), language: threadLanguage,
+  stopGoal: (threadId) => oneOnOneGoals.stop(threadId), cancelHeld: (threadId) => limitHold.cancel(threadId), markStopped: (threadId, said) => { personStops.stop(threadId, liveTurns.running(threadId), directTurnDispatchClaims.has(threadId)); if (said !== undefined) streamedReplies.saidAtStop(threadId, said); }, working: (botId, threadId) => threadBusy(botId, threadId) || coordinator.activeDirect(threadId) || Boolean(limitHold.held(threadId)), asking: (threadId) => coordinator.awaitingAnswer(threadId) || Boolean(openPersonCard(threadId)), language: threadLanguage,
 }); const teamMessages = createTeamMessages({ place: CLOUD_TEAM ? null : createPlaceInbox({ dataDir: DATA_DIR, store, openCards: openCardRows, waiting: () => personWaits.waiting(), send: (notification) => { broadcast({ kind: "notify", notification: logNotification(notification) }); }, sees: (auth, threadId) => visibleTo(viewerFor(auth)).thread(threadId), mayAnswer: (auth, threadId, requestId) => cardAnswerRefusal(auth, threadId, requestId, "allow") === null, viewer: (auth) => placeInboxViewer(auth, { personal: CLOUD_PERSONAL, owner: cloudOwnerSession, personOf: personKey }), guestOf: (threadId) => { if (!CLOUD_PERSONAL || !cloudGuestDriven(threadId)) return null; const person = [...cloudThreadStarters(threadId), threadPersonKey(threadId)].find((one) => one && one !== CLOUD_OUTSIDE_KEY && !cloudOwnerPerson(one)); return person ?? null; }, guestName: (threadId) => guestNameIn(store.messagesFor(threadId)), handedBy: (threadId) => { const from = delegatorOf(threadId); return from && from.threadId !== threadId ? from.botId ?? store.botByThread(from.threadId)?.id ?? null : null; } }), team: CLOUD_TEAM, dataDir: DATA_DIR, store, confined: (threadId) => cloudGuestDriven(threadId), people: teamOwners.people, personName: teamHost.personName, audienceOf: teamHost.audienceOf, starters: threadStarters, notify, sees: (person) => visibleTo(person.role === "member" ? { kind: "member", email: person.email } : { kind: "all", email: person.email }), inbox: { askedPerson: teamOwners.routing.askedPerson, changed: (threadId) => { const bot = store.botByThread(threadId); if (bot) broadcast({ kind: "bot", bot: wireBot(bot) }); }, ensureOwnBot: (email) => { ensureDefaultBot(store, { dataDir: DATA_DIR, person: email, team: CLOUD_TEAM?.name ?? null }); }, handedFrom: (threadId) => { const from = delegatorOf(threadId); return from && from.threadId !== threadId ? from.threadId : null; }, continueTurn: relayedTurn({ store, startTurn, state: (botId, threadId) => ({ atCapacity: botAtThreadCapacity(botId, threadId), threadBusy: threadBusy(botId, threadId), groupTurn: roomTurnHolds(activeGroupTurnForBot(botId), threadId, false), parksBehindCoordination: parksBehindCoordination(botId, threadId) }) }), representative: { generate: async (botId, prompt) => (await sideJobs.text("representative", botId)?.generateText(prompt, { timeoutMs: 60_000 })) ?? null, busy: createPersonCalendar({ access: (person) => teamConnections.personApps().includes("googlecalendar") ? teamConnections.people.appsAccess(person) : null, connected: async (access) => (await composio.connectedServices(cfg, access)).googlecalendar?.connected === true, relay: (payload, session, signal, access) => composio.relayMcp(cfg, payload as never, session, undefined, signal, access) }).busy } } });
 const noAiNotice = createNoAiNotice({ team: CLOUD_TEAM, dataDir: DATA_DIR, people: () => teamOwners.people?.list() ?? [], personName: teamHost.personName, inbox: () => teamMessages.inbox, language: personLanguages.forLine, threadLanguage: conversationLanguage });
 const botNameClash = createBotNameClash({ store, people: () => teamMessages.people(), profileName: () => cfg.profile?.name });
@@ -5230,24 +5244,10 @@ function requestBehavior(value: unknown): "allow" | "deny" | "answer" | null {
 
 const lastReply = new Map<string, string>(); /** Turns whose reply tagged the person before the tag was rewritten. */ const personTaggedTurns = new Map<string, string>();
 const stoppedTurns = new Map<string, string | undefined>(), personStops = new PersonStops();
-// A person's Stop keeps the words already streamed and nothing after: each thread's reply text since its last finished
-// item, and that text frozen at the first frame after the Stop (landed as the turn's last bubble, then cleared).
-const streamedReply = new Map<string, string>(), replyAtStop = new Map<string, string>();
-const passStreamGate = new PassStreamGate(), silentPassTurns = new Set<string>();
-/** The streaming reply's words the person's app showed when they pressed Stop: what is kept ends there. */
-const replySaidAtStop = new Map<string, string>();
-const flatWords = (text: string) => text.replace(/\s+/g, " ").trim();
-const keptAtStop = (threadId: string, turnId: string | undefined, streamed: string) => {
-  const said = replySaidAtStop.get(threadId);
-  if (said === undefined) return streamed;
-  // the item they watched is still streaming: keep exactly what they saw
-  if (flatWords(streamed).startsWith(flatWords(said))) return said;
-  // it finished on its way to the Stop: its bubble ends where they stopped seeing it, and nothing after is kept
-  const bubble = store.messagesFor(threadId).findLast((message) => message.role === "bot" && message.kind === "text" && message.turnId === turnId);
-  const landed = flatWords(bubble?.text ?? "");
-  if (bubble && landed !== flatWords(said) && landed.startsWith(flatWords(said))) store.patchMessage(threadId, bubble.id, { text: said });
-  return "";
-};
+const streamedReplies = createStreamedReply({
+  store,
+  directPassAllowed: (threadId) => Boolean(store.botByThread(threadId)) && !activeRoutineRunForThread(threadId) && !isInternalTurn(threadId) && !botApiThread(threadId) && !coordinator.assignerOf(threadId),
+});
 // The turn each thread runs, from its start to its end, and nothing once the thread is idle: what Stop and the rescue check.
 const liveTurns = new LiveTurns((threadId) => { const owner = store.botByThread(threadId); return owner ? threadBusy(owner.id, threadId) : groupSpeakers.has(threadId); });
 const settlingTurns = new Set<string>();
@@ -7169,35 +7169,12 @@ bus.subscribe((event: RuntimeEvent) => {
   const privateImageEvent = event.type === "item.completed" && event.itemType === "assistant_image";
   // words the engine still had in flight when the person pressed Stop: what streamed before it stays, the rest never lands
   const replyText = (event.type === "content.delta" && event.streamKind === "assistant_text") || (event.type === "item.completed" && event.itemType === "assistant_text");
-  if (event.type === "turn.started") { streamedReply.delete(event.threadId); replyAtStop.delete(event.threadId); replySaidAtStop.delete(event.threadId); passStreamGate.reset(event.threadId); silentPassTurns.delete(event.threadId); }
+  if (event.type === "turn.started") streamedReplies.turnStarted(event.threadId);
   const afterPersonStop = replyText && personStops.stopped(event.threadId, event.turnId);
-  const directPassAllowed = (threadId: string) =>
-    Boolean(store.botByThread(threadId)) && !activeRoutineRunForThread(threadId) && !isInternalTurn(threadId) && !botApiThread(threadId) && !coordinator.assignerOf(threadId);
-  let broadcastedDelta: string | null | undefined;
-  let suppressedPassItem = false;
-  if (afterPersonStop && !replyAtStop.has(event.threadId)) {
-    passStreamGate.reset(event.threadId);
-    replyAtStop.set(event.threadId, keptAtStop(event.threadId, event.turnId, streamedReply.get(event.threadId) ?? ""));
-  } else if (replyText && !afterPersonStop) {
-    if (event.type === "content.delta") {
-      broadcastedDelta = passStreamGate.delta(event.threadId, event.delta);
-      if (broadcastedDelta !== null) streamedReply.set(event.threadId, (streamedReply.get(event.threadId) ?? "") + broadcastedDelta);
-    } else {
-      passStreamGate.reset(event.threadId);
-      streamedReply.delete(event.threadId);
-      const spoken = assistantTranscript(event.text);
-      if (spoken.kind !== "stopped") {
-        const targetGroup = store.botByThread(event.threadId) ? undefined : store.groupByThread(event.threadId);
-        suppressedPassItem = targetGroup ? Boolean(spoken.text.trim()) && isPassText(spoken.text) : directPassAllowed(event.threadId) && isDirectPassText(spoken.text);
-      }
-    }
-  }
-  if (!privateImageEvent && !afterPersonStop && broadcastedDelta !== null && !suppressedPassItem) {
+  const shownEvent = streamedReplies.shown(event, afterPersonStop);
+  if (!privateImageEvent && shownEvent) {
     // Exact executable input is internal; the bus's persistence redactor does not scrub the live event.
-    const publicEvent = event.type === "request.opened" ? { ...event, command: undefined, commandLine: undefined, reads: undefined }
-      : broadcastedDelta !== undefined && event.type === "content.delta" ? { ...event, delta: broadcastedDelta }
-      : event;
-    broadcast({ kind: "runtime", event: publicEvent });
+    broadcast({ kind: "runtime", event: shownEvent.type === "request.opened" ? { ...shownEvent, command: undefined, commandLine: undefined, reads: undefined } : shownEvent });
   }
   const routineRun = privateImageEvent ? null : (routines?.handleRuntimeEvent(event) ?? null);
   limitClock.noteRuntimeEvent(runningTurnEngines.get(event.threadId)?.instanceId, event);
@@ -7233,15 +7210,12 @@ bus.subscribe((event: RuntimeEvent) => {
       return;
     }
     if (group && isPassText(spoken.text) && spoken.text.trim()) return;
-    if (bot && directPassAllowed(event.threadId) && isDirectPassText(spoken.text)) {
-      silentPassTurns.add(event.threadId);
-      return;
-    }
+    if (bot && streamedReplies.passes(event.threadId, spoken.text)) return;
     const voiced = cleanBotVoice(spoken.text, (speaker ?? bot)?.name); if (voiced.taggedLine && turnId && group && !personTaggedTurns.has(`${event.threadId}:${turnId}`)) personTaggedTurns.set(`${event.threadId}:${turnId}`, voiced.taggedLine);
     // while a human-check card waits, it is the only ask: lines that only say it again never reach the chat
     const shown = pendingCheckCard(store.activePath(event.threadId), speaker?.botId ?? bot?.id) ? withoutCheckAsk(voiced.text) : voiced.text;
     if (!shown.trim()) return;
-    silentPassTurns.delete(event.threadId);
+    streamedReplies.spoke(event.threadId);
     for (const bubble of replyBubbles(shown)) pushMessage({ role: "bot", kind: "text", text: bubble, turnId });
     lastReply.set(event.threadId, shown);
   };
@@ -7281,8 +7255,7 @@ bus.subscribe((event: RuntimeEvent) => {
         if (!afterPersonStop) pushAssistantText(event.text, event.turnId);
         else {
           // the half answer that streamed before the Stop settles as a finished bubble, once
-          const kept = replyAtStop.get(event.threadId) ?? "";
-          replyAtStop.set(event.threadId, "");
+          const kept = streamedReplies.takeKept(event.threadId);
           if (kept.trim()) pushAssistantText(kept, event.turnId);
         }
       } else if (event.itemType === "assistant_image") {
@@ -7576,10 +7549,10 @@ bus.subscribe((event: RuntimeEvent) => {
       introTurns.delete(event.threadId);
       // a Stop the engine ended without a last item: the half answer it had streamed still settles as a bubble
       if (personStops.stopped(event.threadId, completedTurnId)) {
-        const kept = replyAtStop.get(event.threadId) ?? keptAtStop(event.threadId, completedTurnId, streamedReply.get(event.threadId) ?? "");
+        const kept = streamedReplies.keptAtTurnEnd(event.threadId, completedTurnId);
         if (kept.trim()) pushAssistantText(kept, completedTurnId);
       }
-      streamedReply.delete(event.threadId); replyAtStop.delete(event.threadId); replySaidAtStop.delete(event.threadId); passStreamGate.reset(event.threadId);
+      streamedReplies.replyEnded(event.threadId);
       askCards.settleWaitingOnPersonChips(event.threadId);
       const internal = isInternalTurn(event.threadId);
       clearInternalTurn(event.threadId);
@@ -7597,12 +7570,7 @@ bus.subscribe((event: RuntimeEvent) => {
           .map((message) => message.text ?? "").join("\n"));
       }
       const reply = lastReply.get(event.threadId) ?? "";
-      const turnStart = turnStartedAt.get(event.threadId);
-      const hasTurnOutput = Boolean(reply) || store.activePath(event.threadId).some((message) =>
-        message.role === "bot" &&
-        ((completedTurnId && message.turnId === completedTurnId) || (turnStart !== undefined && message.at >= turnStart)) &&
-        (message.kind === "text" || message.kind === "widget" || message.kind === "app" || message.kind === "options" || message.kind === "screen"));
-      const passedQuietly = silentPassTurns.delete(event.threadId) && event.ok && !stopped && !hasTurnOutput;
+      const passedQuietly = streamedReplies.passedQuietly(event.threadId, { turnId: completedTurnId, startedAt: turnStartedAt.get(event.threadId), reply }) && event.ok && !stopped;
       if (!internal) turnActivityToPhones(event.threadId, event.ok && !stopped && !passedQuietly ? { type: "done" } : { type: "stopped" }, { reply });
       if (personStops.stopped(event.threadId, completedTurnId)) pushStoppedTurn(completedTurnId);
       personStops.turnEnded(event.threadId, completedTurnId);
@@ -12975,7 +12943,7 @@ function configStatus() {
     imageGen: avatarImageStatus(cfg), savedKeys: nestedKeyStatus(cfg),
     live: liveSettingsFor(cfg),
     profile: CLOUD_TEAM ? NOBODY_PROFILE : { name: cfg.profile?.name ?? "", email: cfg.profile?.email ?? "", aboutMe: cfg.profile?.aboutMe ?? "", ...(cfg.profile?.avatarUrl ? { avatarUrl: cfg.profile.avatarUrl } : {}),
-      ...(cfg.profile?.accountName ? { accountName: cfg.profile.accountName } : {}) },
+      ...(cfg.profile?.accountName ? { accountName: cfg.profile.accountName } : {}), ...(cfg.profile?.accountFace ? { accountFace: cfg.profile.accountFace } : {}) },
     managedPolicy: managedPolicy.summary(),
     ...(CLOUD_HOME ? { cloudHome: true } : {}), ...(CLOUD_TEAM ? { team: { id: CLOUD_TEAM.id, name: CLOUD_TEAM.name, ...(CLOUD_HOME ? { cloudPage: `${CLOUD_HOME.adminOrigin}/cloud` } : {}) } } : {}),
     language: appLanguage() ?? "", computerName: cfg.computerName ?? "", talkingStyle: talkingStyleOf(cfg.talkingStyle),
@@ -16725,7 +16693,9 @@ const useThisServerComputers = (): void => {
   }
 };
 useThisServerComputers();
-setInterval(useThisServerComputers, 15_000).unref();
+if (process.platform === "linux" || process.env.DUSK_VPS_DOCKER === "local") {
+  setInterval(useThisServerComputers, 15_000).unref();
+}
 // Before any row below settles: an interrupted dispatch's words come back with a review notice, never to a model a second time.
 followupAtBoot("");
 for (const row of chatFollowups()) {
@@ -16804,7 +16774,7 @@ server.listen(PORT, "127.0.0.1", async () => {
   } catch (error) {
     console.warn(`memory: could not build the fact store now; recall builds it as it goes: ${(error as Error).message}`);
   }
-  if (store.bots.some((bot) => bot.memoryEnabled !== false)) {
+  if (store.bots.some((bot) => bot.memoryEnabled !== false) && hasPendingFactsToEmbed()) {
     warmEmbedder();
     void embedderSettled().then(async (ready) => {
       while (ready && (await embedPendingFacts(undefined, 400)) > 0);
@@ -16887,6 +16857,7 @@ const gracefulShutdown = createGracefulShutdown({
       await browserRuntime.closeAll();
     },
     () => liveCalls.shutdown(),
+    () => stopEmbedder(),
     () => flushDeferredSaves(),
     () => flushAllProfileHistory(),
     () => flushAllMemoryJournals(),

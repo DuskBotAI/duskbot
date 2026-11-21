@@ -1,5 +1,5 @@
 import { configure as configureAnalytics } from "@/lib/product-analytics";
-import { parseUserAvatarChoice } from "../../../shared/user-avatar";
+import { parseAccountAvatarUrl, parseUserAvatarChoice, type UserAvatarChoice } from "../../../shared/user-avatar";
 import { cleanCode, cleanEmail, parseSignInStart, SIGN_IN_TRIES, startFailure, verifyFailure } from "../../../electron/cloud-signin.mjs";
 import { ACCOUNT_ROUTES, APP_AUTH_REDIRECT, cleanPhoneSignInCode, OAUTH_PROVIDERS, type OAuthErrorCode, type OAuthProvider } from "../../../shared/account-api";
 import type { CloudSignInStart } from "../../../electron/cloud-account.mjs";
@@ -7,16 +7,22 @@ import type { SignInVerify } from "@/components/account-gate/bridge";
 import type { MobilePlatform } from "../platform";
 import { cleanIce, type IceServer } from "../transport/direct-rtc";
 
-/** `avatarUrl` (https) and `avatar` (shared/user-avatar.ts): the face the account service names, both optional. */
-export type MobileAccount = { id: string; email: string; avatarUrl?: string; avatar?: string };
+/** `name`, `avatarUrl` (https) and `avatar` (shared/user-avatar.ts): the profile the account service names, all optional. */
+export type MobileAccount = { id: string; email: string; name?: string; avatarUrl?: string; avatar?: string };
 /** The account's photo and avatar choice from a grant or session read, only in the shapes the service sends. */
 export function mobileFace(account: unknown): Pick<MobileAccount, "avatarUrl" | "avatar"> {
   if (!account || typeof account !== "object") return {};
   const { avatarUrl, avatar } = account as Record<string, unknown>;
-  let photo: string | null = null;
-  if (typeof avatarUrl === "string" && avatarUrl.length <= 1024) { try { const url = new URL(avatarUrl); if (url.protocol === "https:" && !url.username && !url.password) photo = url.href; } catch { /* not an address */ } }
+  const photo = parseAccountAvatarUrl(avatarUrl);
   const choice = parseUserAvatarChoice(avatar);
   return { ...(photo ? { avatarUrl: photo } : {}), ...(choice ? { avatar: choice } : {}) };
+}
+/** The account's name and face from a grant or session read, only in the shapes the service sends. */
+export function mobileProfile(account: unknown): Pick<MobileAccount, "name" | "avatarUrl" | "avatar"> {
+  if (!account || typeof account !== "object") return {};
+  const rawName = (account as Record<string, unknown>).name;
+  const name = typeof rawName === "string" && rawName.trim() ? rawName.trim().slice(0, 120) : null;
+  return { ...(name ? { name } : {}), ...mobileFace(account) };
 }
 /** `payment`: its renewal failed; it keeps running until `fixBy` */
 export type MobileCloud = { id: string; name: string; status: string; origin: string | null; primary: boolean; asleep: boolean; payment?: { fixBy: number; trial?: true } };
@@ -234,7 +240,10 @@ export function createMobileAccount({ platform, origin, fetch: requestFetch = gl
       try {
         const session = await request(ACCOUNT_ROUTES.appSession, "GET", undefined, one.token);
         const renewed = object(session) && expiry(session.expiresAt) && session.expiresAt > one.expiresAt ? session.expiresAt : one.expiresAt;
-        return { ...one, expiresAt: renewed, account: { id: one.account.id, email: one.account.email, ...mobileFace(object(session) ? session.account : null) } };
+        const account = object(session) && object(session.account)
+          ? { id: one.account.id, email: one.account.email, ...mobileProfile(session.account) }
+          : one.account;
+        return { ...one, expiresAt: renewed, account };
       } catch (error) {
         return error instanceof AccountRequestError && error.status === 401 && error.code === "invalid_token" ? null : one;
       }
@@ -255,7 +264,7 @@ export function createMobileAccount({ platform, origin, fetch: requestFetch = gl
   const adopt = async (value: unknown, stamp: number): Promise<boolean> => {
     if (stamp !== generation || !object(value) || value.cloudContractVersion !== 1 || typeof value.accessToken !== "string" || !TOKEN.test(value.accessToken)
       || !expiry(value.expiresAt) || value.expiresAt <= Date.now() || !object(value.device) || typeof value.device.id !== "string" || !value.device.id || !identity(value.account)) return false;
-    const next = { origin, token: value.accessToken, expiresAt: value.expiresAt, account: { id: value.account.id, email: value.account.email, ...mobileFace(value.account) }, deviceId: value.device.id };
+    const next = { origin, token: value.accessToken, expiresAt: value.expiresAt, account: { id: value.account.id, email: value.account.email, ...mobileProfile(value.account) }, deviceId: value.device.id };
     await take(next);
     if (stamp !== generation) { await platform.secrets.remove(SECRET); grant = null; analytics(); return false; }
     attempt = null;
@@ -307,11 +316,14 @@ export function createMobileAccount({ platform, origin, fetch: requestFetch = gl
       try {
         const session = await request(ACCOUNT_ROUTES.appSession, "GET", undefined, saved.token);
         if (stamp !== generation) return null;
-        // the face may have changed on another device, and the service slides the session's end on every check
-        const { avatarUrl: _photo, avatar: _choice, ...rest } = saved.account;
+        // the name and face may have changed on another device, and the service slides the session's end on every check
         const renewed = object(session) && expiry(session.expiresAt) && session.expiresAt > saved.expiresAt ? session.expiresAt : saved.expiresAt;
-        grant = { ...saved, expiresAt: renewed, account: { ...rest, ...mobileFace(object(session) ? session.account : null) } };
-        if (renewed !== saved.expiresAt) await platform.secrets.set(SECRET, JSON.stringify(grant));
+        const refreshed = object(session) && object(session.account)
+          ? { id: saved.account.id, email: saved.account.email, ...mobileProfile(session.account) }
+          : saved.account;
+        const profileChanged = refreshed.name !== saved.account.name || refreshed.avatarUrl !== saved.account.avatarUrl || refreshed.avatar !== saved.account.avatar;
+        grant = { ...saved, expiresAt: renewed, account: refreshed };
+        if (renewed !== saved.expiresAt || profileChanged) await platform.secrets.set(SECRET, JSON.stringify(grant));
       } catch (error) {
         if (stamp !== generation) return null;
         // only the service saying the session is gone signs the phone out; an outage, a rate limit or a captive
@@ -544,6 +556,28 @@ export function createMobileAccount({ platform, origin, fetch: requestFetch = gl
         iceCache = { grant: signedIn, until: Math.min(value.expiresAt - 10 * 60_000, Date.now() + 60 * 60_000), servers };
         return servers;
       } catch { return []; }
+    },
+    async setAvatar(choice: UserAvatarChoice | null): Promise<"saved" | "signed-out" | "failed"> {
+      const signedIn = grant;
+      if (!signedIn) return "signed-out";
+      if (choice !== null && !parseUserAvatarChoice(choice)) return "failed";
+      try {
+        const result = await request(ACCOUNT_ROUTES.appAvatar, "POST", { avatar: choice }, signedIn.token);
+        if (grant !== signedIn || !object(result) || (choice === null ? result.avatar != null : result.avatar !== choice)) return "failed";
+        const { avatar: _old, ...rest } = signedIn.account;
+        const nextAccount: MobileAccount = { ...rest, ...(choice ? { avatar: choice } : {}) };
+        grant = { ...signedIn, account: nextAccount };
+        await platform.secrets.set(SECRET, JSON.stringify(grant));
+        return "saved";
+      } catch (error) {
+        if (error instanceof AccountRequestError && error.status === 401 && error.code === "invalid_token") {
+          grant = null;
+          await platform.secrets.remove(SECRET);
+          await promote();
+          return "signed-out";
+        }
+        return "failed";
+      }
     },
     async enrollGrant(): Promise<{ enrollToken: string; dashboardUrl: string } | null> {
       if (!grant) return null;

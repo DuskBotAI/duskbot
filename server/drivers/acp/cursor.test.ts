@@ -306,6 +306,8 @@ describe("CursorAgentDriver", () => {
       const seen = JSON.parse(readFileSync(dump, "utf8"));
       expect(seen.argv).toEqual(["--force", "--model", "gpt-5.3-codex", "acp"]);
       expect(seen.env.CURSOR_API_KEY).toBe("cursor-should-keep");
+      expect(seen.env.CURSOR_AGENT_CLI_ASSUME_SSH).toBe("0");
+      expect(seen.env.NO_OPEN_BROWSER).toBe("1");
       expect(seen.env.XAI_API_KEY).toBeUndefined();
 
       const applied = JSON.parse(readFileSync(`${dump}.config.json`, "utf8"));

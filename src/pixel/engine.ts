@@ -38,42 +38,71 @@ export interface PixelBot {
 interface Host { core: PixelCore; el: HTMLElement; vis: boolean; paused: boolean; animated: boolean; follow: boolean; paint(): void; centre(): { x: number; y: number }; timers: Set<ReturnType<typeof setTimeout>> }
 
 const hosts = new Set<Host>();
-let slept = false, raf = 0, timer: ReturnType<typeof setTimeout> | undefined, last = 0, epoch = 1, io: IntersectionObserver | null = null, listening = false;
+let followCount = 0;
+let slept = false, raf = 0, timer: ReturnType<typeof setTimeout> | undefined, throttleTimer: ReturnType<typeof setTimeout> | undefined, last = 0, epoch = 1, io: IntersectionObserver | null = null, listening = false, blurred = false;
 const ptr = { x: -1e5, y: -1e5, t: -1e9 };
+const MIN_FRAME_MS = 32;
+const BLURRED_FRAME_MS = 64;
+
+function isUnfocused(): boolean {
+  if (typeof document === "undefined") return false;
+  if (document.hidden) return true;
+  return blurred || (typeof document.hasFocus === "function" && !document.hasFocus());
+}
+
+function scheduleNext(minMs: number, elapsedMs: number) {
+  const wait = Math.max(0, minMs - elapsedMs);
+  if (wait <= 2) {
+    raf = requestAnimationFrame(frame);
+    return;
+  }
+  throttleTimer = setTimeout(() => {
+    throttleTimer = undefined;
+    if (!raf && hosts.size && !(typeof document !== "undefined" && document.hidden)) {
+      raf = requestAnimationFrame(frame);
+    }
+  }, wait);
+}
 
 function frame(now: number) {
   raf = 0;
   const gap = last ? (now - last) / 1000 : 1 / 60, dt = Math.min(0.25, gap);
+  const unfocused = isUnfocused();
   last = now;
   let any = false, busy = false, due = Infinity;
   for (const h of hosts) {
     if (!h.vis || h.paused || !h.animated) continue;
     any = true;
-    // a settled bot slept through the gap: its clock catches up without physics
     if (slept) h.core.T += gap - dt;
     if (h.core.tick(dt)) busy = true;
-    else due = Math.min(due, h.core.dueIn());
+    else if (!unfocused) due = Math.min(due, h.core.dueIn());
     h.paint();
   }
   slept = false;
   if (!any) { last = 0; return; }
-  if (busy) { raf = requestAnimationFrame(frame); return; }
-  // everything still: sleep until the next blink or settle, or until the pointer, a state or a reaction wakes it
+  if (busy) {
+    scheduleNext(unfocused ? BLURRED_FRAME_MS : MIN_FRAME_MS, performance.now() - now);
+    return;
+  }
   if (due < Infinity) timer = setTimeout(() => { timer = undefined; slept = true; wake(); }, Math.max(16, due * 1000));
   else last = 0;
 }
 function wake() {
   if (timer) { clearTimeout(timer); timer = undefined; slept = true; }
+  if (throttleTimer) { clearTimeout(throttleTimer); throttleTimer = undefined; }
   if (!raf && hosts.size && !(typeof document != "undefined" && document.hidden)) raf = requestAnimationFrame(frame);
 }
 function listen() {
   if (listening || typeof window == "undefined") return;
   listening = true;
-  const mv = (e: PointerEvent) => { ptr.x = e.clientX; ptr.y = e.clientY; ptr.t = performance.now(); if ([...hosts].some((h) => h.follow)) wake(); };
+  const mv = (e: PointerEvent) => { ptr.x = e.clientX; ptr.y = e.clientY; ptr.t = performance.now(); if (followCount > 0) wake(); };
   addEventListener("pointermove", mv, { passive: true });
   addEventListener("pointerdown", mv, { passive: true });
   addEventListener("scroll", () => epoch++, { passive: true, capture: true });
   addEventListener("resize", () => epoch++, { passive: true });
+  // On macOS, a window behind another app stays document.hidden === false; blur/focus detects unfocused windows.
+  addEventListener("blur", () => { blurred = true; }, { passive: true });
+  addEventListener("focus", () => { blurred = false; last = 0; wake(); }, { passive: true });
   document.addEventListener("visibilitychange", () => { last = 0; wake(); });
   const mq = typeof matchMedia == "function" ? matchMedia("(prefers-reduced-motion: reduce)") : null;
   if (mq) { setReduced(mq.matches); mq.addEventListener("change", () => { setReduced(mq.matches); for (const h of hosts) { h.core.tick(0); h.paint(); } wake(); }); }
@@ -156,6 +185,7 @@ export function createPixel(el: HTMLElement, o: PixelOptions): PixelBot {
   };
   core.on("social", () => notify(host));
   hosts.add(host);
+  if (host.follow) followCount++;
   io?.observe(el);
   host.paint();
   const redraw = () => { if (!animated) { core.tick(0); host.paint(); } else wake(); };
@@ -176,7 +206,8 @@ export function createPixel(el: HTMLElement, o: PixelOptions): PixelBot {
     pause() { host.paused = true; },
     resume() { host.paused = false; wake(); },
     destroy() {
-      hosts.delete(host); io?.unobserve(el);
+      if (hosts.delete(host) && host.follow) followCount--;
+      io?.unobserve(el);
       host.timers.forEach(clearTimeout);
       cv.remove();
     },

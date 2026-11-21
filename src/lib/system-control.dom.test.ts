@@ -4,6 +4,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { flushSystemControls, installSystemControls, useSystemControl, type ControlPlace, type SystemControl, type SystemControls } from "./system-control";
 import { SlidingPills } from "@/components/ui/SlidingPills";
+import { phoneControlCover } from "@/mobile/control-cover";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -44,7 +45,7 @@ beforeEach(() => {
       return () => { changeListeners.delete(listener); };
     },
   };
-  installSystemControls(bridge);
+  installSystemControls(bridge, phoneControlCover);
   vi.stubGlobal("innerWidth", 390);
   vi.stubGlobal("innerHeight", 844);
   vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
@@ -62,7 +63,7 @@ beforeEach(() => {
 
 afterEach(() => {
   act(() => root.unmount());
-  installSystemControls(null);
+  installSystemControls(null, phoneControlCover);
   host.remove();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
@@ -232,7 +233,7 @@ describe("system-control occlusion detection", () => {
       place: () => new Promise<boolean>((resolve) => { resolvePlace = resolve; }),
       remove: () => {},
       onChange: () => () => {},
-    });
+    }, phoneControlCover);
     hitTarget = () => host.querySelector("[data-segmented-room]");
     act(() => root.render(createElement(SegmentedHarness, { overlay: "none" })));
     const flushed = flushSystemControls(500).then(() => { settled = true; });

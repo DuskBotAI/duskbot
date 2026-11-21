@@ -17,9 +17,7 @@ import {
   ANTIGRAVITY_AUTH_PREFIX,
   ANTIGRAVITY_CODE_REDIRECT_URI,
   AntigravityAcpClient,
-  AntigravityAuthController,
   antigravityAcpArgs,
-  antigravityLoginResponse,
   antigravityProfileAuthenticated,
   antigravityProfileDirectory,
   authorizationUrlFromLine,
@@ -28,9 +26,9 @@ import {
   parseAntigravityAuthorizationUrl,
   prepareAntigravityProfile,
   probeAntigravityModels,
-  validateAntigravityCallbackUrl,
   validateAntigravityRuntime,
 } from "./antigravity-acp.ts";
+import { AntigravityAuthController, antigravityLoginResponse } from "./antigravity-auth.ts";
 import {
   ANTIGRAVITY_RELEASE_VERSION,
   antigravityCliTarget,
@@ -899,17 +897,6 @@ describe("Antigravity OAuth validation", () => {
     expect(antigravityLoginResponse(parsed, "https://evil.example/oauth-callback?code=secret&state=state-123")).toBeUndefined();
     expect(antigravityLoginResponse(parsed, "code\nwith-newline")).toBeUndefined();
     expect(antigravityLoginResponse(parsed, "   ")).toBeUndefined();
-  });
-
-  it("ties a pasted remote callback to the active state and loopback port", () => {
-    expect(validateAntigravityCallbackUrl(
-      { redirectUri, state },
-      `${redirectUri}?code=secret&state=${state}&iss=${encodeURIComponent("https://accounts.google.com")}`,
-    ).searchParams.get("code")).toBe("secret");
-    expect(() => validateAntigravityCallbackUrl(
-      { redirectUri, state },
-      `${redirectUri}?code=secret&state=wrong`,
-    )).toThrow(/does not belong/u);
   });
 });
 

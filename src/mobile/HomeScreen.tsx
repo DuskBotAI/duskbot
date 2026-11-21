@@ -1,4 +1,4 @@
-import { memo, useCallback, useMemo, useRef, useState, type ReactNode } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { motion, useTransform, type MotionValue } from "motion/react";
 import { BellDot, Check, ChevronDown, MonitorSmartphone, Pin, PinOff, Plus, RotateCcw, Search, Star, UserRound } from "../icons";
 import { api, retryLoad, useStore, type Bot, type Group } from "@/state/store";
@@ -22,9 +22,10 @@ import { useNativeHold, type HeldMenu } from "./native-menu";
 import { PullToRefresh } from "./PullToRefresh";
 import { revealOnce, useListFlip } from "./list-motion";
 import { refreshSnapshot } from "./refresh";
-import { usePlatform } from "./platform";
+import { usePlatform, type BarItem } from "./platform";
+import { rasterAvatar } from "./native-glass";
 import { ConnectionPill, ConnectionProblemCard, connectionNoticeLabel, useLiveConnection } from "./connection/ConnectionProblem";
-import { BAR_RANK, useNativeBar } from "./chrome";
+import { BAR_RANK, useNativeBar, usePictureTaken } from "./chrome";
 import { listTime } from "./time";
 import { EmptyState } from "./Illustration";
 import { useOffline } from "./network";
@@ -74,6 +75,40 @@ export function HomeScreen({ onOpenChat, onOpenSheet }: { onOpenChat: (id: strin
   const phone = useMobileAccount()?.account ?? null;
   // the phone's own account first: its photo, else its drawn head; the desktop's profile otherwise
   const face = phone ?? you?.face ?? null;
+  const faceKey = face ? `you:${face.id}:${face.avatar ?? ""}:${face.avatarUrl ?? ""}` : null;
+  const faceTaken = usePictureTaken(faceKey ?? "");
+  const faceRef = useRef<HTMLDivElement>(null);
+  const [facePicture, setFacePicture] = useState<BarItem["picture"] | null>(null);
+  useEffect(() => {
+    if (!platform.chrome || !faceKey || faceTaken) { setFacePicture(null); return; }
+    let cancelled = false;
+    let frame = 0;
+    const measure = () => {
+      if (cancelled) return;
+      const host = faceRef.current;
+      if (!host) return;
+      const data = rasterAvatar(host);
+      if (data) { setFacePicture({ key: faceKey, data }); return; }
+      const loaded = host.querySelector("img");
+      if (loaded && loaded.complete && loaded.naturalWidth > 0) {
+        const src = loaded.currentSrc || loaded.src;
+        if (/^https:\/\//i.test(src)) setFacePicture({ key: faceKey, url: src });
+      }
+    };
+    const schedule = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(measure);
+    };
+    const img = faceRef.current?.querySelector("img");
+    if (img && !img.complete) {
+      img.addEventListener("load", schedule, { once: true });
+      img.addEventListener("error", schedule, { once: true });
+      return () => { cancelled = true; cancelAnimationFrame(frame); img.removeEventListener("load", schedule); img.removeEventListener("error", schedule); };
+    }
+    schedule();
+    return () => { cancelled = true; cancelAnimationFrame(frame); };
+  }, [platform.chrome, faceKey, faceTaken]);
+  const youPicture = faceKey ? (faceTaken ? { key: faceKey } : facePicture?.key === faceKey ? facePicture : undefined) : undefined;
   const scrollRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const [scrolled, setScrolled] = useState(false);
@@ -152,7 +187,7 @@ export function HomeScreen({ onOpenChat, onOpenSheet }: { onOpenChat: (id: strin
 
   const systemBar = useNativeBar(BAR_RANK.home, platform.chrome ? {
     status: live.notice ? connectionNoticeLabel(live.notice, live.trying) : undefined,
-    leading: [{ id: "you", label: t("mobile.home.you"), ...(you?.initials && !face ? { title: you.initials } : { symbol: "person" }) }],
+    leading: [{ id: "you", label: t("mobile.home.you"), ...(youPicture ? { picture: youPicture, symbol: "person" } : you?.initials && !face ? { title: you.initials } : { symbol: "person" }) }],
     trailing: [{ id: "search", symbol: "magnifyingglass", label: t("mobile.home.search") }, { id: "new", symbol: "plus", label: t("mobile.home.newBot") }],
   } : null, {
     you: () => onOpenSheet({ kind: "settings" }),
@@ -250,6 +285,11 @@ export function HomeScreen({ onOpenChat, onOpenSheet }: { onOpenChat: (id: strin
         </div>
       )}
       <div aria-hidden className={cn("mobile-edge pointer-events-none absolute inset-x-0 top-0 z-[5] bg-gradient-to-b", systemBar ? "h-[calc(var(--m-safe-top)+16px)]" : "h-[calc(var(--m-safe-top)+72px)]", "from-app from-60% to-transparent transition-opacity duration-150", scrolled ? "opacity-100" : "opacity-0")} />
+      {systemBar && face && faceKey && !faceTaken && (
+        <div ref={faceRef} aria-hidden className="pointer-events-none fixed left-0 top-0 z-[-1] size-8 overflow-hidden rounded-full">
+          <UserFace account={face} size={32} className="size-full" />
+        </div>
+      )}
       {!systemBar && <header data-home-bar="" className="pointer-events-none absolute inset-x-0 top-0 z-10 flex items-center gap-2 px-4" style={{ paddingTop: BAR_TOP }}>
         <RoundButton floating label={t("mobile.home.you")} onClick={() => onOpenSheet({ kind: "settings" })} className="pointer-events-auto overflow-visible">
           {face

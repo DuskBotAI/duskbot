@@ -44,10 +44,15 @@ export function createAmbientWindow({ BrowserWindow, surface, url, level, platfo
   // giving the key back on macOS (Electron's blur) orders the panel out and back in, which would cut its closing
   // animation short: it waits until the page says the surface has finished closing, or SETTLE_WAIT_MS at most
   let settleWait = null;
+  function setThrottled(on) {
+    if (!live()) return;
+    win.webContents.setBackgroundThrottling?.(on);
+  }
   function giveKeyBack() {
     clearTimeout(settleWait); settleWait = null;
     if (interactive || !live()) return;
     if (settling) { settling = false; note("settled"); }
+    setThrottled(true);
     if (held) { const next = held; held = null; setBounds(next); }
     if (!keyed || typing) return;
     keyed = false;
@@ -73,6 +78,7 @@ export function createAmbientWindow({ BrowserWindow, surface, url, level, platfo
     if (on) {
       clearTimeout(settleWait); settleWait = null;
       settling = true;
+      setThrottled(false);
       call("setIgnoreMouseEvents", "false", () => win.setIgnoreMouseEvents(false));
       takeKey();
     } else {
@@ -128,8 +134,8 @@ export function createAmbientWindow({ BrowserWindow, surface, url, level, platfo
         sandbox: true,
         nodeIntegration: false,
         spellcheck: false,
-        // its closing and opening play in full even while macOS reorders the panel
-        backgroundThrottling: false,
+        // Electron throttles settled overlays; passThrough(true) unthrottles during interaction and closing animations.
+        backgroundThrottling: true,
         preload: PRELOAD,
         additionalArguments: [`--dusk-ambient=${surface}`, ...(trace ? ["--dusk-ambient-trace=1"] : [])],
       },

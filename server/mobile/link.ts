@@ -17,6 +17,7 @@ import {
   MOBILE_LINK_VERSION,
   MOBILE_PLATFORMS,
   PUSH_SERVICES,
+  cleanPairSignIn,
   mobileLinkUrl,
   mobileTransports,
   type MobileDevice,
@@ -344,6 +345,7 @@ export function createMobileLink(deps: MobileLinkDeps) {
     if (!scopes.includes("client")) scopes.push("client");
     const label = typeof body.label === "string" && body.label.trim() ? body.label.trim().slice(0, 60) : "Phone";
     const companion = Array.isArray(body.companion) ? body.companion.slice(0, 16).map((one) => ({ ...(one as object), kind: "companion", net: (one as { kind?: unknown })?.kind })) : [];
+    const signIn = cleanPairSignIn(body.signIn);
 
     const opened = deps.sessions.openPairing({ scopes, label, ttlMs: MOBILE_GRANT_TTL_MS });
     const relay = agentLive();
@@ -365,8 +367,9 @@ export function createMobileLink(deps: MobileLinkDeps) {
       return { status: 409, body: { error: "A phone cannot reach this workspace yet: turn on phone access or give it a public address first.", code: "unreachable" } };
     }
     const payload: MobileLinkPayload = { v: MOBILE_LINK_VERSION, workspace: workspace(), grant: { id: opened.id, secret: opened.credential, expiresAt: opened.expiresAt, issuedAt: now() }, via };
+    const lookupPayload: MobileLinkPayload = signIn ? { ...payload, signIn } : payload;
     const lookupBase = relay?.base ?? deps.lookupRelay;
-    const typed = lookupBase && await postLookup(lookupBase, opened.code, payload, opened.expiresAt - now(), deps.fetch) ? formatPairingCode(opened.code) : null;
+    const typed = lookupBase && await postLookup(lookupBase, opened.code, lookupPayload, opened.expiresAt - now(), deps.fetch) ? formatPairingCode(opened.code) : null;
     const answer: MobilePairingResponse = { payload, link: mobileLinkUrl(payload), code: typed, expiresAt: opened.expiresAt };
     return { status: 200, body: answer };
   }

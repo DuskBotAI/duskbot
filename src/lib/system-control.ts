@@ -44,12 +44,41 @@ export interface SystemControls {
 /** The room a control leaves for the device's switch: the system's size (63 by 28 from iOS 26), drawn as nothing. */
 export const SYSTEM_SWITCH_ROOM = { width: 63, height: 28, visibility: "hidden" } as const;
 
-let installed: SystemControls | null = null;
-
-/** The phone app installs its platform's controls here, so shared controls use them without knowing the phone layer. */
-export function installSystemControls(next: SystemControls | null): void {
-  installed = next;
+/** What the page knows of its own layers and the device cannot see: whether something of the page's lies over a room. */
+export interface ControlCover {
+  /** The left edge, in viewport css px, of a page sliding in over `el`: -Infinity when a layer covers it whole, null
+   * when nothing slides over it. */
+  coveringLeft(el: HTMLElement): number | null;
+  /** What is drawn at a point inside the room `el` (`hit`, from `elementFromPoint`) is the room's own. */
+  ownHit(el: HTMLElement, hit: Element | null): boolean;
+  /** What is drawn in the middle of the scrolling area is the area itself, not a layer over it. */
+  areaUncovered(area: HTMLElement, hit: Element | null): boolean;
+  /** A page is sliding now, so rooms move with every frame. */
+  sliding(): boolean;
 }
+
+interface Device { controls: SystemControls; cover: ControlCover }
+
+let installed: Device | null = null;
+
+/** The phone app installs its platform's controls and its own layers here, so shared controls use them without
+ * knowing the phone layer. */
+export function installSystemControls(controls: SystemControls | null, cover: ControlCover): void {
+  installed = controls ? { controls, cover } : null;
+}
+
+/** A room that moved, or whose ancestors' opacity changed, by more than this between two reads is in a transition. */
+const MOVED_PX = 0.25;
+const FADED_STEP = 0.005;
+/** Under this combined opacity a room is still fading in or out. */
+const OPAQUE = 0.995;
+/** Frames a room holds still before it stops being read every frame. */
+const STEADY_FRAMES = 4;
+const REST_READ_MS = 250;
+/** The device learns of a scrolling area a moment after the page draws it: only an area it still cannot follow after
+ * this many misses, counted at most once per MISS_SPACING_MS, is given up on. */
+const MISSES_BEFORE_REFUSAL = 6;
+const MISS_SPACING_MS = 200;
 
 function scrollingArea(el: HTMLElement): HTMLElement | null {
   for (let node = el.parentElement; node; node = node.parentElement) {
@@ -157,62 +186,6 @@ export async function triggerSystemControl(el: HTMLElement | null): Promise<bool
   return run ? run() : false;
 }
 
-const OVERLAY_SEL = [
-  '[role="dialog"]',
-  '[role="alertdialog"]',
-  '[role="menu"]',
-  '[role="listbox"]',
-  '[aria-modal="true"]',
-  '[data-panel-scrim]',
-  '[data-modal-scrim]',
-  '[data-phone-modal-layer]',
-  '[data-phone-pushed-page]',
-  '[data-phone-bot-page]',
-  '.popover-surface',
-  '.menu-surface',
-  '.dusk-mobile-overlay',
-  '.ui-toast',
-].join(", ");
-
-const ACTIVE_SLIDE_SEL = [
-  "[data-phone-pushed-page][data-leaving]",
-  "[data-phone-pushed-page][data-moving]",
-  ".mobile-page[data-leaving]",
-  ".mobile-page[data-moving]",
-].join(", ");
-
-const ROW_SEL = "[data-panel-row], [data-panel-routine], [data-select-row], [data-simple-app], [data-settings-row], .mobile-row, [role='switch'], [role='group'], label";
-
-function coveredByForeignLayer(el: HTMLElement, hit: Element | null): boolean {
-  if (!hit) return false;
-  const overlay = hit.closest(OVERLAY_SEL);
-  if (overlay && !overlay.contains(el)) return true;
-  const page = hit.closest(".mobile-page");
-  if (page && !page.contains(el)) return true;
-  return false;
-}
-
-function ownHit(el: HTMLElement, hit: Element | null): boolean {
-  if (el.closest(".mobile-nav > [inert]")) {
-    return !coveredByForeignLayer(el, hit);
-  }
-  if (!hit) return false;
-  const overlay = hit.closest(OVERLAY_SEL);
-  if (overlay && !overlay.contains(el)) return false;
-  if (el.contains(hit) || hit.contains(el)) return true;
-  const row = el.parentElement?.closest(ROW_SEL);
-  return Boolean(row && row.contains(hit));
-}
-
-function areaUncovered(area: HTMLElement, hit: Element | null): boolean {
-  if (area.closest(".mobile-nav > [inert]")) {
-    return !coveredByForeignLayer(area, hit);
-  }
-  if (!hit || !area.contains(hit)) return false;
-  const overlay = hit.closest(OVERLAY_SEL);
-  return !overlay || overlay.contains(area);
-}
-
 function ancestorOpacity(el: HTMLElement): number {
   let opacity = 1;
   for (let node = el.parentElement; node && node !== document.documentElement; node = node.parentElement) {
@@ -221,34 +194,6 @@ function ancestorOpacity(el: HTMLElement): number {
     if (opacity <= 0.001) return 0;
   }
   return Math.max(0, Math.min(1, opacity));
-}
-
-function coveringLeft(el: HTMLElement): number | null {
-  const modal = document.querySelector("[data-phone-modal-layer]:not([data-leaving])");
-  if (modal && !modal.contains(el)) return -Infinity;
-  const inModal = Boolean(el.closest("[data-phone-modal-layer]"));
-  let left = Infinity;
-  if (!inModal) {
-    const ownPushed = el.closest<HTMLElement>("[data-phone-pushed-page], [data-phone-bot-page]");
-    const ownZ = ownPushed ? Number.parseInt(getComputedStyle(ownPushed).zIndex, 10) || 0 : -Infinity;
-    for (const pushed of document.querySelectorAll<HTMLElement>("[data-phone-pushed-page]:not([data-preparing]), [data-phone-bot-page]:not([data-preparing])")) {
-      if (pushed === ownPushed || pushed.contains(el)) continue;
-      if (ownPushed) {
-        const z = Number.parseInt(getComputedStyle(pushed).zIndex, 10) || 0;
-        if (z < ownZ) continue;
-        if (z === ownZ && (ownPushed.compareDocumentPosition(pushed) & Node.DOCUMENT_POSITION_PRECEDING) !== 0) continue;
-      }
-      left = Math.min(left, pushed.getBoundingClientRect().left);
-    }
-  }
-  const nav = el.closest(".mobile-nav");
-  if (nav) {
-    for (const page of nav.querySelectorAll<HTMLElement>(":scope > .mobile-page")) {
-      if (page.contains(el)) continue;
-      left = Math.min(left, page.getBoundingClientRect().left);
-    }
-  }
-  return Number.isFinite(left) ? left : null;
 }
 
 function probeHidden(
@@ -260,6 +205,7 @@ function probeHidden(
   maskRight: number | undefined,
   area: HTMLElement | null,
   lastHidden: boolean,
+  cover: ControlCover,
 ): boolean {
   if (typeof document.elementFromPoint !== "function") return lastHidden;
   const rightBound = maskRight !== undefined ? Math.min(clip.right, maskRight) : clip.right;
@@ -278,28 +224,28 @@ function probeHidden(
       [midX, visBottom],
     ];
     for (const [x, y] of points) {
-      if (!ownHit(el, document.elementFromPoint(x, y))) return true;
+      if (!cover.ownHit(el, document.elementFromPoint(x, y))) return true;
     }
     return false;
   }
   if (visibleBottom - visibleTop > 16 && rightBound - clip.left > 16) {
     const hit = document.elementFromPoint((clip.left + rightBound) / 2, (visibleTop + visibleBottom) / 2);
-    return area ? !areaUncovered(area, hit) : !ownHit(el, hit);
+    return area ? !cover.areaUncovered(area, hit) : !cover.ownHit(el, hit);
   }
   return lastHidden;
 }
 
-function placeOf(el: HTMLElement, lastHidden: boolean): ControlPlace {
+function placeOf(el: HTMLElement, lastHidden: boolean, cover: ControlCover): ControlPlace {
   const rect = el.getBoundingClientRect();
   const area = scrollingArea(el);
   const clip = area?.getBoundingClientRect() ?? new DOMRect(0, 0, window.innerWidth, window.innerHeight);
   const inset = Math.max(0, safeTop() - clip.top);
   const visibleTop = Math.max(0, clip.top + inset);
   const visibleBottom = Math.min(window.innerHeight, clip.bottom);
-  const coverLeft = coveringLeft(el);
+  const coverLeft = cover.coveringLeft(el);
   const fullyCovered = coverLeft !== null && coverLeft <= Math.max(clip.left, rect.left) + 1;
   const maskRight = !fullyCovered && coverLeft !== null && coverLeft < clip.right - 0.5 ? Math.round(coverLeft * 10) / 10 : undefined;
-  const hidden = fullyCovered || probeHidden(el, rect, clip, visibleTop, visibleBottom, maskRight, area, lastHidden);
+  const hidden = fullyCovered || probeHidden(el, rect, clip, visibleTop, visibleBottom, maskRight, area, lastHidden, cover);
   const alpha = Math.round(ancestorOpacity(el) * 1000) / 1000;
   return {
     room: { x: rect.left - clip.left + (area?.scrollLeft ?? 0), y: rect.top - clip.top + (area?.scrollTop ?? 0), width: rect.width, height: rect.height },
@@ -314,131 +260,154 @@ function placeOf(el: HTMLElement, lastHidden: boolean): ControlPlace {
   };
 }
 
+interface RoomFollower {
+  /** Reads the room's place now. */
+  poke(): void;
+  /** Reads it now and with every frame until it holds still. */
+  wake(): void;
+  /** As `wake`, resolving once the device has drawn what was last sent. */
+  flush(): Promise<void>;
+  stop(): void;
+}
+
+/** Keeps the device's control `id` over `room`: sends the control and the room's place whenever either changes, with
+ * every frame while the room moves or fades and a few times a second at rest. `onRefused` once the device cannot
+ * follow the page's scrolling there. */
+function followRoom(
+  { controls, cover }: Device,
+  id: string,
+  room: RefObject<HTMLElement | null>,
+  asked: () => SystemControl | null,
+  onRefused: () => void,
+): RoomFollower {
+  let sent = "";
+  let hidden = false;
+  let stopped = false;
+  let frame = 0;
+  let steady = 0;
+  let syncing = false;
+  let inFlight: Promise<unknown> = Promise.resolve();
+  let lastPos: { x: number; y: number; clipX: number; maskRight?: number; alpha: number } | null = null;
+  let misses = 0;
+  let lastMissAt = 0;
+  const schedule = () => {
+    if (stopped || frame || syncing) return;
+    frame = window.requestAnimationFrame(() => {
+      frame = 0;
+      sync(true);
+    });
+  };
+  const sync = (fromFrame = false) => {
+    const el = room.current;
+    if (stopped || syncing) return;
+    syncing = true;
+    let needNext = false;
+    try {
+      // the room left the page while its owner stays (a sheet's content closed): the control goes with it
+      if (!el) { if (sent) { sent = ""; controls.remove(id); } return; }
+      if (controls.trigger) triggers.set(el, () => controls.trigger!(id));
+      const prevHidden = hidden;
+      const place = placeOf(el, hidden, cover);
+      hidden = place.hidden;
+      const moved = lastPos !== null && (
+        Math.abs(place.room.x - lastPos.x) > MOVED_PX
+        || Math.abs(place.room.y - lastPos.y) > MOVED_PX
+        || Math.abs(place.clip.x - lastPos.clipX) > MOVED_PX
+        || place.maskRight !== lastPos.maskRight
+        || Math.abs(place.alpha - lastPos.alpha) > FADED_STEP
+      );
+      lastPos = { x: place.room.x, y: place.room.y, clipX: place.clip.x, maskRight: place.maskRight, alpha: place.alpha };
+      const settling = place.alpha < OPAQUE || place.maskRight !== undefined;
+      if (cover.sliding() || settling || moved || place.hidden !== prevHidden) {
+        steady = 0;
+        needNext = true;
+      } else if (fromFrame) {
+        steady += 1;
+        if (steady < STEADY_FRAMES) needNext = true;
+      }
+      const control = asked();
+      if (!control) return;
+      const shown = control.kind === "switch" && control.tint ? { ...control, tint: hexColour(control.tint, el) } : control;
+      const next = JSON.stringify([shown, place]);
+      if (next === sent) return;
+      sent = next;
+      inFlight = controls.place(id, shown, place).then((tracked) => {
+        if (stopped) return;
+        if (tracked) { misses = 0; lastMissAt = 0; return; }
+        sent = "";
+        if (settling || place.hidden) return;
+        const now = performance.now();
+        if (now - lastMissAt < MISS_SPACING_MS) return;
+        misses += 1;
+        lastMissAt = now;
+        if (misses >= MISSES_BEFORE_REFUSAL) onRefused();
+      }, () => {});
+    } finally {
+      syncing = false;
+    }
+    if (needNext) schedule();
+  };
+  const wake = () => {
+    steady = 0;
+    sync(true);
+    schedule();
+  };
+  return {
+    poke: () => sync(false),
+    wake,
+    flush: () => {
+      wake();
+      return inFlight.then(() => {}, () => {});
+    },
+    stop: () => {
+      stopped = true;
+      if (room.current) triggers.delete(room.current);
+      if (frame) window.cancelAnimationFrame(frame);
+      controls.remove(id);
+    },
+  };
+}
+
 /** Draws the system's own control in the room `ref` leaves for it, and hears its changes. False where the device has
  * none, or cannot keep it in step with the page there: the caller draws its own control then. The room's place is read
  * again a few times a second, since nothing tells a page that something above the room grew. */
 export function useSystemControl(ref: RefObject<HTMLElement | null>, control: SystemControl | null, onChange: (value: number | boolean | string) => void): boolean {
-  const controls = control ? installed : null;
+  const device = control ? installed : null;
   const id = useId();
   const [refused, setRefused] = useState(false);
   const latest = useRef({ control, onChange });
   latest.current = { control, onChange };
-  const syncRef = useRef<(() => void) | null>(null);
-  const active = Boolean(controls) && !refused;
+  const pokeRef = useRef<(() => void) | null>(null);
+  const active = Boolean(device) && !refused;
   const signature = active && control ? JSON.stringify(control) : "";
   useEffect(() => {
-    if (!controls || refused) return;
-    let sent = "";
-    let hidden = false;
-    let stopped = false;
-    let frame = 0;
-    let steady = 0;
-    let syncing = false;
-    let inFlight: Promise<unknown> = Promise.resolve();
-    let lastPos: { x: number; y: number; clipX: number; maskRight?: number; alpha: number } | null = null;
-    // the device learns of a scrolling area a moment after the page draws it: only an area it still cannot follow after
-    // sustained retries (never a burst of microtask/frame checks during a transition) is given up on
-    let misses = 0;
-    let lastMissAt = 0;
-    const schedule = () => {
-      if (stopped || frame || syncing) return;
-      frame = window.requestAnimationFrame(() => {
-        frame = 0;
-        sync(true);
-      });
-    };
-    const sync = (fromFrame = false) => {
-      const el = ref.current;
-      if (stopped || syncing) return;
-      syncing = true;
-      let needNext = false;
-      try {
-        // the room left the page while its owner stays (a sheet's content closed): the control goes with it
-        if (!el) { if (sent) { sent = ""; controls.remove(id); } return; }
-        if (controls.trigger) triggers.set(el, () => controls.trigger!(id));
-        const prevHidden = hidden;
-        const place = placeOf(el, hidden);
-        hidden = place.hidden;
-        const moved = lastPos !== null && (
-          Math.abs(place.room.x - lastPos.x) > 0.25
-          || Math.abs(place.room.y - lastPos.y) > 0.25
-          || Math.abs(place.clip.x - lastPos.clipX) > 0.25
-          || place.maskRight !== lastPos.maskRight
-          || Math.abs(place.alpha - lastPos.alpha) > 0.005
-        );
-        lastPos = { x: place.room.x, y: place.room.y, clipX: place.clip.x, maskRight: place.maskRight, alpha: place.alpha };
-        const activeSlide = document.querySelector(ACTIVE_SLIDE_SEL) !== null;
-        if (activeSlide || place.alpha < 0.995 || moved || place.maskRight !== undefined || place.hidden !== prevHidden) {
-          steady = 0;
-          needNext = true;
-        } else if (fromFrame) {
-          steady += 1;
-          if (steady < 4) needNext = true;
-        }
-        const asked = latest.current.control;
-        if (!asked) return;
-        const shown = asked.kind === "switch" && asked.tint ? { ...asked, tint: hexColour(asked.tint, el) } : asked;
-        const next = JSON.stringify([shown, place]);
-        if (next === sent) return;
-        sent = next;
-        const placing = controls.place(id, shown, place).then((tracked) => {
-          if (stopped) return;
-          if (tracked) { misses = 0; lastMissAt = 0; return; }
-          if (place.alpha < 0.99 || place.maskRight !== undefined || place.hidden) { sent = ""; return; }
-          const now = performance.now();
-          if (now - lastMissAt >= 200) {
-            misses += 1;
-            lastMissAt = now;
-          }
-          sent = "";
-          if (misses >= 6) setRefused(true);
-        }, () => {});
-        inFlight = placing;
-      } finally {
-        syncing = false;
-      }
-      if (needNext) schedule();
-    };
-    const wake = () => {
-      steady = 0;
-      sync(true);
-      schedule();
-    };
-    const flush = (): Promise<void> => {
-      steady = 0;
-      sync(true);
-      schedule();
-      return inFlight.then(() => {}, () => {});
-    };
-    const poke = () => sync(false);
-    syncRef.current = poke;
-    waiters.add(wake);
-    pokers.add(poke);
-    flushers.add(flush);
+    if (!device || refused) return;
+    const follower = followRoom(device, id, ref, () => latest.current.control, () => setRefused(true));
+    pokeRef.current = follower.poke;
+    waiters.add(follower.wake);
+    pokers.add(follower.poke);
+    flushers.add(follower.flush);
     syncDomObserver();
-    sync(false);
-    const timer = window.setInterval(() => sync(false), 250);
-    const stopChanges = controls.onChange((changed, value) => {
+    follower.poke();
+    const timer = window.setInterval(follower.poke, REST_READ_MS);
+    const stopChanges = device.controls.onChange((changed, value) => {
       if (changed !== id) return;
       latest.current.onChange(value);
       if (latest.current.control?.kind === "segmented") wakeSystemControls();
     });
     return () => {
-      stopped = true;
-      syncRef.current = null;
-      waiters.delete(wake);
-      pokers.delete(poke);
-      flushers.delete(flush);
+      pokeRef.current = null;
+      waiters.delete(follower.wake);
+      pokers.delete(follower.poke);
+      flushers.delete(follower.flush);
       syncDomObserver();
-      if (ref.current) triggers.delete(ref.current);
-      if (frame) window.cancelAnimationFrame(frame);
       window.clearInterval(timer);
       stopChanges();
-      controls.remove(id);
+      follower.stop();
     };
-  }, [controls, refused, id, ref]);
+  }, [device, refused, id, ref]);
   useEffect(() => {
-    if (signature) syncRef.current?.();
+    if (signature) pokeRef.current?.();
   }, [signature]);
   return active;
 }

@@ -17,7 +17,7 @@ import { decodeInjectId } from "../local-inject.ts";
 import { DeviceAuthController, type DeviceSignIn } from "../device-auth.ts";
 import { deletePromptSplitReceipt, promptHalves, readPromptSplitReceipt, splitSessionPrompt, writePromptSplitReceipt } from "../prompt-split.ts";
 import type { PromptSplitReceipt } from "../prompt-split.ts";
-import { describeSpawnFailure, execCli, killCliTree, readOnlyBotFolders, spawnCli } from "../../procs.ts";
+import { describeSpawnFailure, execCli, killCliTree, readOnlyBotFolders, spawnCli, waitForExit } from "../../procs.ts";
 import { runAcpOneShot } from "./background-text.ts";
 import { sanitizeAcpToolMessage } from "./tool-log.ts";
 import { stripLeakedSystemHarnessMessages } from "../../../shared/system-message-guard.ts";
@@ -1883,28 +1883,15 @@ export function createAcpDriver(support: AcpSupport): ProviderDriver<AcpConfig> 
           enginePid: (threadId) => (active.has(threadId) ? sessions.get(threadId)?.child.pid : undefined),
           stopAll: async () => {
             for (const { stop } of active.values()) stop();
-            const children = new Set<ReturnType<typeof spawnCli>>();
-            for (const session of sessions.values()) children.add(session.child);
+            const children = new Set(Array.from(sessions.values(), (session) => session.child));
             for (const threadId of Array.from(sessions.keys())) closeSession(threadId, "stopAll");
-            for (const [threadId, set] of retiring) {
-              for (const child of set) {
+            for (const [threadId, retired] of retiring) {
+              for (const child of retired) {
                 children.add(child);
                 void retireChild(threadId, child);
               }
             }
-            await Promise.allSettled([...children].map((child) => (
-              child.exitCode !== null || child.signalCode !== null
-                ? Promise.resolve(true)
-                : new Promise<boolean>((resolveStop) => {
-                    const done = () => { clearTimeout(timer); resolveStop(true); };
-                    child.once("close", done);
-                    const timer = setTimeout(() => {
-                      child.off("close", done);
-                      void killCliTree(child).then(resolveStop, () => resolveStop(false));
-                    }, 5_000);
-                    timer.unref?.();
-                  })
-            )));
+            await Promise.allSettled(Array.from(children, async (child) => (await waitForExit(child, 5_000)) || killCliTree(child)));
           },
           onEvent: (listener) => {
             listeners.add(listener);

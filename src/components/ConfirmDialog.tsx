@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
+import { memo, useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 import { createPortal } from "react-dom";
 import { createRoot } from "react-dom/client";
 import { AnimatePresence, useIsPresent, type HTMLMotionProps } from "motion/react";
@@ -40,7 +40,14 @@ export interface ConfirmDialogProps {
  * Cancel. While pending, focus parks on the dialog. Portalled to <body>: the sidebar's translate below md would become
  * the containing block.
  */
-export function ConfirmDialog(props: ConfirmDialogProps) {
+export const ConfirmDialog = memo(function ConfirmDialog(props: ConfirmDialogProps) {
+  const [mounted, setMounted] = useState(props.open);
+  if (props.open && !mounted) setMounted(true);
+  if (!mounted) return null;
+  return <ConfirmDialogInner {...props} />;
+}, (prev, next) => !prev.open && !next.open);
+
+function ConfirmDialogInner(props: ConfirmDialogProps) {
   const { open, onCancel, returnFocusRef } = props;
   const dialogRef = useRef<HTMLDivElement>(null);
   const confirmRef = useRef<HTMLButtonElement>(null);

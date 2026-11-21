@@ -161,9 +161,24 @@ export function createSlackHost(deps: SlackHostDeps) {
 
   let started = false;
   let readyTimer: ReturnType<typeof setTimeout> | null = null;
+  let stopReadyWait: (() => void) | null = null;
   function begin(): void {
-    if (!store.ready()) { readyTimer = setTimeout(begin, 2_000).unref(); return; }
+    if (!store.ready()) {
+      if (deps.key.onReady) {
+        if (!stopReadyWait) {
+          stopReadyWait = deps.key.onReady(() => {
+            stopReadyWait = null;
+            if (started && store.ready()) begin();
+          });
+        }
+        return;
+      }
+      readyTimer = setTimeout(begin, 2_000).unref();
+      return;
+    }
     readyTimer = null;
+    stopReadyWait?.();
+    stopReadyWait = null;
     tokens.start();
     for (const one of store.bots()) if (one.botToken && one.appToken) sockets.ensure(one.botId);
     handover.start();
@@ -187,7 +202,10 @@ export function createSlackHost(deps: SlackHostDeps) {
       begin();
     },
     stop(): void {
+      started = false;
       if (readyTimer) clearTimeout(readyTimer);
+      stopReadyWait?.();
+      stopReadyWait = null;
       for (const timer of updates.values()) clearTimeout(timer);
       updates.clear();
       stopWatching();

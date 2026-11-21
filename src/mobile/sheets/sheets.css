@@ -46,7 +46,7 @@
 
 /* in a light skin the computer tab's 6%-ink fills (the browser's frame, its closed note) are the page's own grey: they
    take the white segment fill the Details tab's rows sit on. Dark skins already lift them off the page */
-:root:not([data-skin="grok-dark"], [data-skin="midnight"], [data-skin="dusk"], [data-skin="foundry"], [data-skin="graphite"], [data-skin="halloween"])
+:root:not([data-scheme="dark"])
   .dusk-mobile .mobile-panel-sheet [data-panel-tabpanel="computer"] [class*="bg-[color-mix(in_srgb,var(--color-composer),var(--color-ink)_6%)]"] {
   background-color: var(--color-menu);
 }
@@ -56,9 +56,7 @@
   border-radius: 18px;
   background-color: color-mix(in srgb, #000 7%, var(--color-app));
 }
-:root:is([data-skin="grok-dark"], [data-skin="midnight"], [data-skin="dusk"], [data-skin="foundry"], [data-skin="graphite"], [data-skin="halloween"])
-  .dusk-mobile .mobile-panel-sheet [data-panel-tabpanel="computer"] [data-panel-screen],
-.dusk-mobile[data-scheme="dark"] .mobile-panel-sheet [data-panel-tabpanel="computer"] [data-panel-screen] {
+:root[data-scheme="dark"] .dusk-mobile .mobile-panel-sheet [data-panel-tabpanel="computer"] [data-panel-screen] {
   background-color: color-mix(in srgb, #000 38%, var(--color-app));
 }
 /* every sheet is iOS Settings' grouped page: a grey page, and each group a stack of white rows 2px apart inside 16px
@@ -70,15 +68,7 @@ html[data-mobile-app] { --m-sheet-page: color-mix(in srgb, var(--color-ink) 5%, 
 
 /* in dark, an app's logo sits on a light plate: most marks (GitHub's, Notion's) are drawn for a light ground */
 html[data-mobile-glass] .dusk-mobile [data-service-tile-bare] { background-color: var(--m-ios-card); }
-:is(
-  html[data-skin="grok-dark"],
-  html[data-skin="midnight"],
-  html[data-skin="dusk"],
-  html[data-skin="foundry"],
-  html[data-skin="graphite"],
-  html[data-skin="halloween"]
-) .dusk-mobile :is([data-app-face], [data-service-tile-bare]),
-.dusk-mobile[data-scheme="dark"] :is([data-app-face], [data-service-tile-bare]) {
+html[data-scheme="dark"] .dusk-mobile :is([data-app-face], [data-service-tile-bare]) {
   background-color: #ececee;
   color: #3a3a3e;
 }
@@ -117,7 +107,7 @@ html[data-native-chrome] .dusk-mobile .mobile-panel-sheet [data-panel-tabs] { po
   padding-block: 12px;
   gap: 8px;
 }
-.dusk-mobile .mobile-panel-sheet [data-panel-row="usage"] > div:first-child > div:first-child > div:first-child {
+.dusk-mobile .mobile-panel-sheet [data-panel-row="usage"] [data-usage-title] {
   font-size: 16px;
   line-height: 22px;
   font-weight: 500;
@@ -273,13 +263,7 @@ html[data-mobile-glass] {
   --m-status-online: #34c759;
   --m-status-online-ring: rgb(52 199 89 / .18);
 }
-html[data-mobile-glass][data-skin="grok-dark"],
-html[data-mobile-glass][data-skin="midnight"],
-html[data-mobile-glass][data-skin="dusk"],
-html[data-mobile-glass][data-skin="foundry"],
-html[data-mobile-glass][data-skin="graphite"],
-html[data-mobile-glass][data-skin="halloween"],
-html[data-mobile-glass] .dusk-mobile[data-scheme="dark"] {
+html[data-mobile-glass][data-scheme="dark"] {
   --m-sheet-page: #1c1c1e;
   --m-ios-card: #2c2c2e;
   --m-ios-separator: rgb(84 84 88 / .45);
@@ -372,7 +356,7 @@ html[data-mobile-glass] .dusk-mobile .mobile-panel-sheet [data-row-title],
 html[data-mobile-glass] .dusk-mobile [data-phone-bot-page] [data-row-title],
 html[data-mobile-glass] .dusk-mobile [data-settings-look="simple"] [data-row-title],
 html[data-mobile-glass] .dusk-mobile [data-settings-look="simple"] [data-setting-title],
-html[data-mobile-glass] .dusk-mobile .mobile-panel-sheet [data-panel-row="usage"] > div:first-child > div:first-child > div:first-child,
+html[data-mobile-glass] .dusk-mobile .mobile-panel-sheet [data-panel-row="usage"] [data-usage-title],
 html[data-mobile-glass] .dusk-mobile .mobile-panel-sheet [data-phone-thinking-row] > span:first-child,
 html[data-mobile-glass] .dusk-mobile .mobile-panel-sheet [data-panel-card-surface] [data-tour="model"] > span:first-child,
 html[data-mobile-glass] .dusk-mobile .mobile-panel-sheet [data-panel-card-surface] .mobile-row > span:first-child > span:first-child {

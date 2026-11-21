@@ -55,6 +55,16 @@ export interface BodyFit { scale: number; x: number; y: number }
 const FIT_TARGET = 0.716;
 const FIT_MAX_EXTENT = 0.96;
 const fits = new Map<string, BodyFit>();
+const staticPaths = new Map<string, { G: number; body: string; eyes: string }>();
+
+function cachedStillPaths(body: string, state: PixelState): { G: number; body: string; eyes: string } {
+  const key = `${body}:${state}`;
+  const known = staticPaths.get(key);
+  if (known) return known;
+  const computed = stillSvgPaths(body, { scale: 1, state });
+  staticPaths.set(key, computed);
+  return computed;
+}
 
 export function bodyFit(body: string): BodyFit {
   const known = fits.get(body);
@@ -98,21 +108,23 @@ export const DuskMark = forwardRef<DuskMarkHandle, DuskMarkProps>(function DuskM
   const bot = useRef<PixelBot | null>(null);
   const [held, setHeld] = useState<PixelState | null>(null);
   const shown: PixelState = held ?? (expression !== undefined ? expressionState(expression) : emphasized && pixelState(state) === "idle" ? "surprised" : pixelState(state));
+  const staticSvg = !animated && !gaze;
   const latest = useRef({ colour, eyes, shown, life, gaze });
   latest.current = { colour, eyes, shown, life, gaze };
   const watching = useRef(false);
   const applyLook = () => bot.current?.look(watching.current ? COMPOSER_GAZE : latest.current.gaze);
 
   useClientLayoutEffect(() => {
+    if (staticSvg || !el.current) return;
     const p = latest.current;
-    const made = createPixel(el.current!, {
+    const made = createPixel(el.current, {
       body: shape, size: box.drawn, colour: p.colour, eyes: p.eyes, state: p.shown, animated, life: p.life,
       follow: animated && p.life && size >= ATTENTION.minPx,
     });
     bot.current = made;
     applyLook();
     return () => { made.destroy(); bot.current = null; };
-  }, [shape, size, box.drawn, animated]);
+  }, [shape, size, box.drawn, animated, staticSvg]);
 
   useEffect(() => { bot.current?.setState(shown); }, [shown]);
   useEffect(() => { bot.current?.setColour(colour); }, [colour]);
@@ -151,6 +163,8 @@ export const DuskMark = forwardRef<DuskMarkHandle, DuskMarkProps>(function DuskM
     },
   }), []);
 
+  const still = staticSvg ? cachedStillPaths(shape, shown) : null;
+
   return (
     <span
       data-dusk-mark=""
@@ -166,7 +180,22 @@ export const DuskMark = forwardRef<DuskMarkHandle, DuskMarkProps>(function DuskM
       style={{ display: "inline-block", position: "relative", width: size, height: size, flexShrink: 0, ...style }}
       onDoubleClick={animated ? (event) => bot.current?.poke(event.clientX) : undefined}
     >
-      <span ref={el} style={{ position: "absolute", left: box.left, top: box.top, width: box.drawn, height: box.drawn }} />
+      {still ? (
+        <svg
+          aria-hidden="true"
+          width={box.drawn}
+          height={box.drawn}
+          viewBox={`0 0 ${still.G} ${still.G}`}
+          overflow="visible"
+          shapeRendering="crispEdges"
+          style={{ position: "absolute", left: box.left, top: box.top, pointerEvents: "none" }}
+        >
+          <path d={still.body} fill={colour} />
+          <path d={still.eyes} fill={eyes || "#fff"} />
+        </svg>
+      ) : (
+        <span ref={el} style={{ position: "absolute", left: box.left, top: box.top, width: box.drawn, height: box.drawn }} />
+      )}
     </span>
   );
 });

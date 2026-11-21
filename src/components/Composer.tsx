@@ -4,7 +4,7 @@ import { cueMascot } from "./mascot-events";
 import { NoRecognizerNote, useComposerDictation } from "@/lib/use-composer-dictation";
 import { CARD_ACTION, ChatErrorCard } from "./ChatErrorBanner";
 import { OpenVoiceSettings } from "./OpenVoiceSettings";
-import { isValidElement, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type SetStateAction } from "react";
+import { isValidElement, memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type SetStateAction } from "react";
 import { Mic } from "../icons";
 import { useStore, visibleMessages, currentTaskBot, type Bot, type Group, type InstanceInfo, type Message } from "@/state/store";
 import { cn } from "@/lib/cn";
@@ -132,7 +132,7 @@ function SlotGlyphGhost({ glyph, ink }: { glyph: SlotGlyph; ink: string }) {
   );
 }
 
-export function Composer({
+export const Composer = memo(function Composer({
   bot: profile,
   group,
   members,
@@ -1213,4 +1213,4 @@ export function Composer({
       </div>
     </div>
   );
-}
+});

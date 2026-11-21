@@ -4,6 +4,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { installSystemControls, useSystemControl } from "@/lib/system-control";
 import { PlatformContext, webPlatform, type BarConfig, type MobileChrome } from "./platform";
+import { phoneControlCover } from "./control-cover";
 import { SheetPush } from "./SheetPush";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -51,7 +52,7 @@ beforeEach(() => {
 
 afterEach(() => {
   act(() => root.unmount());
-  installSystemControls(null);
+  installSystemControls(null, phoneControlCover);
   host.remove();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
@@ -232,7 +233,7 @@ describe("NativeSheetPush", () => {
       place: () => new Promise<boolean>((resolve) => { pendingPlaces.push(() => resolve(true)); }),
       remove: () => {},
       onChange: () => () => {},
-    });
+    }, phoneControlCover);
     vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue(new DOMRect(16, 120, 358, 36));
     Object.defineProperty(document, "elementFromPoint", {
       configurable: true,

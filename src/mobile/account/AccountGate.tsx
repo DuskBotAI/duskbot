@@ -5,6 +5,7 @@ import { problemLine } from "@/components/cloud-buy/SignInScreen";
 import { t } from "@/lib/i18n";
 import type { CloudSignInStart } from "../../../electron/cloud-account.mjs";
 import type { OAuthProvider } from "../../../shared/account-api";
+import type { UserAvatarChoice } from "../../../shared/user-avatar";
 import { SecretsLocked, usePlatform, waitForFront, type MobilePlatform } from "../platform";
 import { createMobileAccount, isAccountAuthUrl, keptSignInOrigin, type AppleProblem, type AccountPlaces, type AuthResult, type CloudPairResult, type ComputerActionResult, type ComputerPairResult, type MobileAccount, type MobileComputer, type MobileCloud, type MobileTeamCloud, type PhoneCodeResult } from "./account-client";
 import { setTurnSource } from "../transport/direct-rtc";
@@ -29,6 +30,7 @@ type AccountContextValue = { account: MobileAccount | null; origin: string;
   signOutEverywhere(): Promise<void>;
   /** deletes the account from the app; false when it could not be done (nothing changed) */
   deleteAccount(): Promise<boolean>; enrollGrant(): Promise<{ enrollToken: string; dashboardUrl: string } | null>;
+  setAvatar(choice: UserAvatarChoice | null): Promise<"saved" | "signed-out" | "failed">;
   clouds(): Promise<MobileCloud[] | null>; pairCloud(cloud: MobileCloud, accountId?: string): Promise<CloudPairResult>; wakeCloud(accountId?: string): Promise<boolean>;
   /** `accountId`: another account signed in on the phone; the one in use without it */
   places(accountId?: string): Promise<AccountPlaces | null>; pairTeamCloud(cloud: MobileTeamCloud, accountId?: string): Promise<CloudPairResult>;
@@ -199,6 +201,11 @@ export function AccountGate({ children }: { children: ReactNode }) {
         return true;
       },
       enrollGrant: () => client.enrollGrant(),
+      setAvatar: async (choice) => {
+        const outcome = await client.setAvatar(choice);
+        if (outcome === "saved" || outcome === "signed-out") setAccount(client.account());
+        return outcome;
+      },
       clouds: () => client.clouds(), pairCloud: (cloud, id) => client.pairCloud(cloud, id), wakeCloud: id => client.wakeCloud(id),
       places: id => client.places(id), pairTeamCloud: (cloud, id) => client.pairTeamCloud(cloud, id), pairComputer: (computer, id) => client.pairComputer(computer, id),
       renameComputer: (computer, name, id) => client.renameComputer(computer, name, id), removeComputer: (computer, id) => client.removeComputer(computer, id),

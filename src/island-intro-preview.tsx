@@ -4,6 +4,7 @@ import { StrictMode, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { IslandIntro } from "@/components/onboarding/IslandIntro";
 import { setLocale } from "@/lib/i18n";
+import { wearSkin } from "@/lib/skins";
 import type { AmbientAppBridge, AmbientPrefs } from "@/ambient/types";
 import "./font-faces.css";
 import "./styles.css";
@@ -48,7 +49,7 @@ function Preview() {
   );
 }
 
-document.documentElement.dataset.skin = params.get("skin") ?? "daylight";
+wearSkin(params.get("skin") ?? "daylight");
 document.documentElement.dataset.reducedMotion = params.get("reduced") === "1" ? "true" : "false";
 setLocale(params.get("lang") ?? "en");
 createRoot(document.getElementById("root")!).render(<StrictMode><Preview /></StrictMode>);

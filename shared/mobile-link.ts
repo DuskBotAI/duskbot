@@ -49,6 +49,8 @@ export interface MobileLinkPayload {
    * it made the grant, so a phone can time the grant's lifetime on its own clock whatever either clock says. */
   grant: { id: string; secret: string; expiresAt: number; issuedAt?: number };
   via: MobileTransport[];
+  /** Optional desktop account sign-in carried inside a typed-code lookup or v2 link so pairing also logs the phone in. */
+  signIn?: PairSignIn;
 }
 
 /** POST /api/mobile/pairing, owner or admin only. `companion`: the Mac's sidecar addresses the desktop adds. */
@@ -56,6 +58,8 @@ export interface MobilePairingRequest {
   scopes?: ("admin" | "client")[];
   label?: string;
   companion?: CompanionEndpoint[];
+  /** Optional desktop account sign-in to seal into the typed-code lookup alongside the pairing payload. */
+  signIn?: PairSignIn;
 }
 
 export interface MobilePairingResponse {
@@ -205,11 +209,13 @@ export function parseMobilePayload(value: unknown): MobileLinkPayload | null {
   if (typeof grant.id !== "string" || typeof grant.secret !== "string" || !Number.isSafeInteger(grant.expiresAt)) return null;
   const via = mobileTransports(one.via);
   if (!via.length) return null;
+  const signIn = cleanPairSignIn(one.signIn);
   return {
     v: MOBILE_LINK_VERSION,
     workspace: { name: workspace.name.slice(0, 80), environmentId: typeof workspace.environmentId === "string" ? workspace.environmentId : null, kind: workspace.kind },
     grant: { id: grant.id, secret: grant.secret, expiresAt: grant.expiresAt, ...(Number.isSafeInteger(grant.issuedAt) && grant.issuedAt! <= grant.expiresAt ? { issuedAt: grant.issuedAt } : {}) },
     via,
+    ...(signIn ? { signIn } : {}),
   };
 }
 
@@ -247,6 +253,8 @@ export interface MobilePairingPayload {
   via?: MobileTransport[];
   grantId?: string;
   workspaceKind?: MobileLinkPayload["workspace"]["kind"];
+  /** Optional desktop account sign-in carried inside a typed-code lookup or v2 payload. */
+  signIn?: PairSignIn;
 }
 
 /** What the phone may do on this connection, from the server's answer, never guessed from the transport. */
@@ -319,6 +327,7 @@ export function pairingFromPayload(payload: MobileLinkPayload): MobilePairingPay
     via: payload.via,
     grantId: payload.grant.id,
     workspaceKind: payload.workspace.kind,
+    ...(payload.signIn ? { signIn: payload.signIn } : {}),
   };
 }
 
@@ -389,17 +398,28 @@ export function universalPairLink(deepLink: string, code: string | null, signIn?
   return `https://${UNIVERSAL_LINK_HOSTS[0]}/m/pair#${fields.join("&")}`;
 }
 
+/** Validates and normalizes a desktop account sign-in carried alongside a pairing offer, or returns null. */
+export function cleanPairSignIn(value: unknown): PairSignIn | null {
+  if (!value || typeof value !== "object") return null;
+  const input = value as Record<string, unknown>;
+  const code = typeof input.code === "string" ? input.code.replace(/[^a-z]/gi, "").toUpperCase() : "";
+  const email = typeof input.email === "string" ? input.email.trim() : "";
+  const service = input.service === "production" || input.service === "preview"
+    ? input.service
+    : typeof input.serviceOrigin === "string" ? SIGN_IN_SERVICES[input.serviceOrigin] : undefined;
+  if (!/^[A-Z]{8}$/.test(code) || email.length > 254 || !/^[^\s@]+@[^\s@]+$/.test(email)) return null;
+  return { code, email, ...(service ? { service } : {}) };
+}
+
 /** The account sign-in a pairing QR or link carries, or null for one without it. */
 export function pairSignIn(link: string): PairSignIn | null {
   const app = appLinkFromUniversal(link) ?? link.trim();
   let url: URL;
   try { url = new URL(app); } catch { return null; }
   if (url.protocol !== "duskbot:" || (url.hostname || url.pathname.replace(/^\/+/, "")) !== "pair") return null;
-  const code = (url.searchParams.get("a") ?? "").toUpperCase();
-  const email = (url.searchParams.get("ae") ?? "").trim();
-  const service = url.searchParams.get("as");
-  if (!/^[A-Z]{8}$/.test(code) || email.length > 254 || !/^[^\s@]+@[^\s@]+$/.test(email)) return null;
-  return { code, email, ...(service === "production" || service === "preview" ? { service } : {}) };
+  const fromQuery = cleanPairSignIn({ code: url.searchParams.get("a"), email: url.searchParams.get("ae"), service: url.searchParams.get("as") });
+  if (fromQuery) return fromQuery;
+  return parseMobileLink(app)?.signIn ?? null;
 }
 
 /** A dusk cloud's QR: `https://dusk.bot/m/signin#c=CODE&email=...`. `c`, a desktop's phone sign-in code

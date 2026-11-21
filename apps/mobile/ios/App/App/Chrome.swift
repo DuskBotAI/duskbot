@@ -50,18 +50,37 @@ final class RootViewController: UIViewController, UINavigationControllerDelegate
     var onPagePopped: (([String]) -> Void)?
 
     private(set) var pushedTokens: [String] = []
-    private(set) var isPreparingPush = false
-    private(set) var isFinishingPop = false
-    var pendingPushBar: ChromeBarSpec?
 
-    private var pendingPushSnapshot: UIView?
-    private var pendingPushPrevBar: ChromeBarSpec?
-    private var sheetPushCover: UIView?
-    private var sheetPopCover: UIView?
-    private var popFinishTimer: Timer?
-    private var programmaticPopCompletion: ((Bool) -> Void)?
-    private var programmaticPopToken: String?
+    /// A push the page asked for and has not committed: a picture of the page it leaves and that page's bar, the bar
+    /// the next page asks for meanwhile, and the picture over the sheet that the next page draws itself under.
+    private struct PreparingPush {
+        let snapshot: UIView
+        let previousBar: ChromeBarSpec?
+        var nextBar: ChromeBarSpec?
+        let cover: UIView?
+    }
+
+    /// A pop the page asked for, until the system has shown the page under it.
+    private struct ProgrammaticPop {
+        let token: String
+        let done: (Bool) -> Void
+    }
+
+    /// A pop that has landed: a picture of the sheet stays over it until the page says it has drawn itself there, or
+    /// the timer stops waiting for it.
+    private struct FinishingPop {
+        let cover: UIView?
+        let timer: Timer
+    }
+
+    private static let finishingPopWait: TimeInterval = 0.45
+
+    private var preparingPush: PreparingPush?
+    private var programmaticPop: ProgrammaticPop?
+    private var finishingPop: FinishingPop?
     private var isSwappingPushStack = false
+
+    var isFinishingPop: Bool { finishingPop != nil }
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -211,37 +230,37 @@ final class RootViewController: UIViewController, UINavigationControllerDelegate
         finishSheetPop(animated: false)
         cancelSheetPush()
         guard let pageSnap = app.view.snapshotView(afterScreenUpdates: false) else { done(false); return }
-        if let coverSnap = navigation.view.snapshotView(afterScreenUpdates: false) {
-            coverSnap.frame = navigation.view.bounds
-            coverSnap.autoresizingMask = [.flexibleWidth, .flexibleHeight]
-            navigation.view.addSubview(coverSnap)
-            sheetPushCover = coverSnap
+        let cover = navigation.view.snapshotView(afterScreenUpdates: false)
+        if let cover = cover {
+            cover.frame = navigation.view.bounds
+            cover.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+            navigation.view.addSubview(cover)
         }
-        pendingPushSnapshot = pageSnap
-        pendingPushPrevBar = currentBarSpec
-        pendingPushBar = nil
-        isPreparingPush = true
+        preparingPush = PreparingPush(snapshot: pageSnap, previousBar: currentBarSpec, nextBar: nil, cover: cover)
         done(true)
     }
 
+    /// While a push is being prepared, the bar the page sets is the next page's: kept for the commit. False otherwise.
+    func holdBarForPush(_ spec: ChromeBarSpec) -> Bool {
+        guard preparingPush != nil else { return false }
+        preparingPush?.nextBar = spec
+        return true
+    }
+
     func commitSheetPush(token: String) -> Bool {
-        guard isPreparingPush,
+        guard let push = preparingPush,
               let navigation = sheetNavigation,
-              !navigation.isBeingDismissed,
-              let pageSnap = pendingPushSnapshot else {
+              !navigation.isBeingDismissed else {
             cancelSheetPush()
             return false
         }
-        let prevBar = pendingPushPrevBar
-        let nextBar = pendingPushBar ?? currentBarSpec
-        isPreparingPush = false
-        pendingPushSnapshot = nil
-        pendingPushPrevBar = nil
-        pendingPushBar = nil
+        preparingPush = nil
+        let prevBar = push.previousBar
+        let nextBar = push.nextBar ?? currentBarSpec
 
         let prior = navigation.viewControllers.filter { $0 !== app }
         let snapVC = SnapshotViewController(
-            snapshot: pageSnap,
+            snapshot: push.snapshot,
             barSpec: prevBar,
             childToken: token,
             ground: app.view.backgroundColor
@@ -266,19 +285,16 @@ final class RootViewController: UIViewController, UINavigationControllerDelegate
         CATransaction.flush()
         isSwappingPushStack = false
 
-        removePushCover()
+        push.cover?.removeFromSuperview()
         navigation.pushViewController(app, animated: true)
         return true
     }
 
     func cancelSheetPush() {
-        let pendingBar = pendingPushBar
-        isPreparingPush = false
-        pendingPushSnapshot = nil
-        pendingPushPrevBar = nil
-        pendingPushBar = nil
-        removePushCover()
-        if let bar = pendingBar, let navigation = sheetNavigation {
+        guard let push = preparingPush else { return }
+        preparingPush = nil
+        push.cover?.removeFromSuperview()
+        if let bar = push.nextBar, let navigation = sheetNavigation {
             currentBarSpec = bar
             applyBarItem?(bar, app.navigationItem, !pushedTokens.isEmpty, false)
             navigation.setNavigationBarHidden(bar.hidden, animated: false)
@@ -316,18 +332,16 @@ final class RootViewController: UIViewController, UINavigationControllerDelegate
             return
         }
         finishSheetPop(animated: false)
-        programmaticPopCompletion?(false)
-        programmaticPopToken = token
-        programmaticPopCompletion = done
+        programmaticPop?.done(false)
+        programmaticPop = ProgrammaticPop(token: token, done: done)
         navigation.popToViewController(target, animated: true)
     }
 
     func finishSheetPop(animated: Bool) {
-        popFinishTimer?.invalidate()
-        popFinishTimer = nil
-        isFinishingPop = false
-        guard let picture = sheetPopCover else { return }
-        sheetPopCover = nil
+        guard let finishing = finishingPop else { return }
+        finishingPop = nil
+        finishing.timer.invalidate()
+        guard let picture = finishing.cover else { return }
         picture.isUserInteractionEnabled = false
         if animated {
             UIView.animate(withDuration: 0.06, delay: 0, options: [.curveEaseOut, .allowUserInteraction], animations: {
@@ -343,11 +357,7 @@ final class RootViewController: UIViewController, UINavigationControllerDelegate
     func resetPushStack() {
         cancelSheetPush()
         finishSheetPop(animated: false)
-        if let completion = programmaticPopCompletion {
-            programmaticPopCompletion = nil
-            programmaticPopToken = nil
-            completion(false)
-        }
+        failProgrammaticPop()
         guard !pushedTokens.isEmpty else { return }
         pushedTokens.removeAll()
         guard let navigation = sheetNavigation else { return }
@@ -356,14 +366,10 @@ final class RootViewController: UIViewController, UINavigationControllerDelegate
         isSwappingPushStack = false
     }
 
-    private func removePushCover() {
-        sheetPushCover?.removeFromSuperview()
-        sheetPushCover = nil
-    }
-
-    private func removePopCover() {
-        sheetPopCover?.removeFromSuperview()
-        sheetPopCover = nil
+    private func failProgrammaticPop() {
+        guard let pop = programmaticPop else { return }
+        programmaticPop = nil
+        pop.done(false)
     }
 
     func navigationController(_ navigationController: UINavigationController, didShow viewController: UIViewController, animated: Bool) {
@@ -380,14 +386,17 @@ final class RootViewController: UIViewController, UINavigationControllerDelegate
             : [landed.childToken]
         pushedTokens = Array(pushedTokens.prefix(remainingCount))
 
-        removePopCover()
-        if let coverSnap = navigationController.view.snapshotView(afterScreenUpdates: false) {
-            coverSnap.frame = navigationController.view.bounds
-            coverSnap.autoresizingMask = [.flexibleWidth, .flexibleHeight]
-            navigationController.view.addSubview(coverSnap)
-            sheetPopCover = coverSnap
+        finishingPop?.timer.invalidate()
+        finishingPop?.cover?.removeFromSuperview()
+        let cover = navigationController.view.snapshotView(afterScreenUpdates: false)
+        if let cover = cover {
+            cover.frame = navigationController.view.bounds
+            cover.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+            navigationController.view.addSubview(cover)
         }
-        isFinishingPop = true
+        finishingPop = FinishingPop(cover: cover, timer: Timer.scheduledTimer(withTimeInterval: Self.finishingPopWait, repeats: false) { [weak self] _ in
+            self?.finishSheetPop(animated: true)
+        })
 
         if let bar = landed.barSpec {
             currentBarSpec = bar
@@ -399,18 +408,11 @@ final class RootViewController: UIViewController, UINavigationControllerDelegate
         navigationController.setViewControllers(priorSnaps + [app], animated: false)
         isSwappingPushStack = false
 
-        popFinishTimer?.invalidate()
-        popFinishTimer = Timer.scheduledTimer(withTimeInterval: 0.45, repeats: false) { [weak self] _ in
-            self?.finishSheetPop(animated: true)
-        }
-
-        if let completion = programmaticPopCompletion {
-            let targetToken = programmaticPopToken
-            programmaticPopCompletion = nil
-            programmaticPopToken = nil
-            let extra = poppedTokens.filter { $0 != targetToken }
+        if let pop = programmaticPop {
+            programmaticPop = nil
+            let extra = poppedTokens.filter { $0 != pop.token }
             if !extra.isEmpty { onPagePopped?(extra) }
-            completion(true)
+            pop.done(true)
         } else {
             onPagePopped?(poppedTokens)
         }
@@ -422,11 +424,7 @@ final class RootViewController: UIViewController, UINavigationControllerDelegate
         guard let navigation = sheetNavigation else { return }
         cancelSheetPush()
         finishSheetPop(animated: false)
-        if let completion = programmaticPopCompletion {
-            programmaticPopCompletion = nil
-            programmaticPopToken = nil
-            completion(false)
-        }
+        failProgrammaticPop()
         pushedTokens.removeAll()
         sheetNavigation = nil
         sheetHeight = 0
@@ -473,6 +471,7 @@ public class ChromePlugin: CAPPlugin, CAPBridgedPlugin, UIAdaptivePresentationCo
     ]
 
     private var pictures: [String: UIImage] = [:]
+    private var pendingPictures: Set<String> = []
     /// Found from the scene, not from the web view: between a sheet's dismissal and its return under the bar the web view is in no window.
     private var root: RootViewController? {
         for scene in UIApplication.shared.connectedScenes {
@@ -538,8 +537,7 @@ public class ChromePlugin: CAPPlugin, CAPBridgedPlugin, UIAdaptivePresentationCo
         DispatchQueue.main.async {
             guard let app = self.bridge?.viewController else { call.resolve(); return }
             let root = self.root
-            if let root = root, root.isPreparingPush {
-                root.pendingPushBar = spec
+            if let root = root, root.holdBarForPush(spec) {
                 call.resolve()
                 return
             }
@@ -618,6 +616,15 @@ public class ChromePlugin: CAPPlugin, CAPBridgedPlugin, UIAdaptivePresentationCo
             button.widthAnchor.constraint(lessThanOrEqualToConstant: 220).isActive = true
             if let picture = picture { self.fill(button, with: picture) }
             item = UIBarButtonItem(customView: button)
+        } else if let picture = picture {
+            var look = UIButton.Configuration.plain()
+            look.image = symbol
+            look.contentInsets = .zero
+            let button = UIButton(configuration: look, primaryAction: press)
+            button.widthAnchor.constraint(equalToConstant: 32).isActive = true
+            button.heightAnchor.constraint(equalToConstant: 32).isActive = true
+            self.fill(button, with: picture, side: 32)
+            item = UIBarButtonItem(customView: button)
         } else if let title = title {
             item = UIBarButtonItem(title: title, primaryAction: press)
         } else {
@@ -629,19 +636,53 @@ public class ChromePlugin: CAPPlugin, CAPBridgedPlugin, UIAdaptivePresentationCo
         return item
     }
 
-    /// A button's picture is a part of the page (a bot's face is drawn there, by the page's own rules): the page shows it
-    /// once at the given frame, and its snapshot is kept under the picture's key.
-    private func fill(_ button: UIButton, with picture: [String: Any]) {
+    private static func image(fromDataURL raw: String) -> UIImage? {
+        guard raw.hasPrefix("data:image/"), let comma = raw.firstIndex(of: ",") else { return nil }
+        let base64 = String(raw[raw.index(after: comma)...])
+        guard let bytes = Data(base64Encoded: base64) else { return nil }
+        return UIImage(data: bytes)
+    }
+
+    private func fill(_ button: UIButton, with picture: [String: Any], side: CGFloat = 30) {
         guard let key = picture["key"] as? String else { return }
-        let side: CGFloat = 30
         let place = { (image: UIImage) in
             let round = UIGraphicsImageRenderer(size: CGSize(width: side, height: side)).image { _ in
                 UIBezierPath(ovalIn: CGRect(x: 0, y: 0, width: side, height: side)).addClip()
-                image.draw(in: CGRect(x: 0, y: 0, width: side, height: side))
+                let src = image.size
+                if src.width > 0 && src.height > 0 {
+                    let scale = max(side / src.width, side / src.height)
+                    let drawSize = CGSize(width: src.width * scale, height: src.height * scale)
+                    let origin = CGPoint(x: (side - drawSize.width) / 2, y: (side - drawSize.height) / 2)
+                    image.draw(in: CGRect(origin: origin, size: drawSize))
+                } else {
+                    image.draw(in: CGRect(x: 0, y: 0, width: side, height: side))
+                }
             }
             button.configuration?.image = round.withRenderingMode(.alwaysOriginal)
         }
         if let known = pictures[key] { place(known); return }
+        if let dataURL = picture["data"] as? String, let image = Self.image(fromDataURL: dataURL) {
+            pictures[key] = image
+            place(image)
+            notifyListeners("pictureTaken", data: ["key": key])
+            return
+        }
+        if let rawURL = picture["url"] as? String, let url = URL(string: rawURL), url.scheme?.lowercased() == "https" {
+            guard !pendingPictures.contains(key) else { return }
+            pendingPictures.insert(key)
+            URLSession.shared.dataTask(with: url) { [weak self, weak button] data, _, _ in
+                let image = data.flatMap(UIImage.init(data:))
+                DispatchQueue.main.async {
+                    guard let self = self else { return }
+                    self.pendingPictures.remove(key)
+                    guard let image = image else { return }
+                    self.pictures[key] = image
+                    if button != nil { place(image) }
+                    self.notifyListeners("pictureTaken", data: ["key": key])
+                }
+            }.resume()
+            return
+        }
         guard let x = picture["x"] as? Double, let y = picture["y"] as? Double, let width = picture["width"] as? Double, let height = picture["height"] as? Double,
               width > 0, height > 0, let webView = webView else { return }
         let shot = WKSnapshotConfiguration()

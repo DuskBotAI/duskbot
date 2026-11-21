@@ -360,7 +360,47 @@ export function sameState(a: GlassState | null, b: GlassState | null): boolean {
   return JSON.stringify(a) === JSON.stringify(b);
 }
 
-/** The chat's avatar as a png, from the canvases and images the page drew it with. */
+function drawSvgPart(ctx: CanvasRenderingContext2D, svg: SVGSVGElement, box: DOMRect, scale: number): boolean {
+  const r = svg.getBoundingClientRect();
+  if (!r.width || !r.height) return false;
+  const vb = svg.getAttribute("viewBox")?.trim().split(/[\s,]+/).map(Number);
+  const [minX, minY, vbW, vbH] = vb && vb.length === 4 && vb.every(Number.isFinite) && vb[2]! > 0 && vb[3]! > 0
+    ? vb as [number, number, number, number]
+    : [0, 0, r.width, r.height];
+  const shapes = svg.querySelectorAll("path, rect");
+  if (!shapes.length) return false;
+  ctx.save();
+  ctx.translate((r.left - box.left) * scale, (r.top - box.top) * scale);
+  ctx.scale((r.width * scale) / vbW, (r.height * scale) / vbH);
+  ctx.translate(-minX, -minY);
+  let drew = false;
+  for (const shape of shapes) {
+    const raw = shape.getAttribute("fill") ?? "";
+    const computed = !raw || raw === "currentColor" || raw.includes("var(") ? getComputedStyle(shape).fill : raw;
+    const fill = computed || raw;
+    if (!fill || fill === "none") continue;
+    ctx.fillStyle = fill;
+    if (shape.tagName.toLowerCase() === "rect") {
+      const x = Number(shape.getAttribute("x") ?? 0);
+      const y = Number(shape.getAttribute("y") ?? 0);
+      const w = Number(shape.getAttribute("width") ?? 0);
+      const h = Number(shape.getAttribute("height") ?? 0);
+      if (Number.isFinite(x) && Number.isFinite(y) && w > 0 && h > 0) {
+        ctx.fillRect(x, y, w, h);
+        drew = true;
+      }
+      continue;
+    }
+    const d = shape.getAttribute("d");
+    if (!d || typeof Path2D !== "function") continue;
+    ctx.fill(new Path2D(d));
+    drew = true;
+  }
+  ctx.restore();
+  return drew;
+}
+
+/** The chat's avatar as a png, from the canvases, images and static SVGs the page drew it with. */
 export function rasterAvatar(host: Element | null): string | null {
   if (!host) return null;
   const box = host.getBoundingClientRect();
@@ -373,7 +413,14 @@ export function rasterAvatar(host: Element | null): string | null {
   if (!ctx) return null;
   ctx.imageSmoothingEnabled = false;
   let drawn = 0;
-  for (const part of host.querySelectorAll<HTMLCanvasElement | HTMLImageElement>("canvas, img")) {
+  for (const part of host.querySelectorAll<HTMLCanvasElement | HTMLImageElement | SVGSVGElement>("canvas, img, svg")) {
+    if (part instanceof SVGSVGElement || part.tagName.toLowerCase() === "svg") {
+      try {
+        if (drawSvgPart(ctx, part as SVGSVGElement, box, scale)) drawn += 1;
+      } catch { /* an SVG not ready yet */ }
+      continue;
+    }
+    if (part instanceof HTMLImageElement && (!part.complete || !part.naturalWidth || !part.naturalHeight)) continue;
     const r = part.getBoundingClientRect();
     if (!r.width || !r.height) continue;
     try {

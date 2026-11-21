@@ -21,6 +21,9 @@ process.env.DUSK_COMPANION_DIR = join(home, ".duskbot-companion");
 
 // OpenCode Zen's live model list is a network read; fakes never make one.
 process.env.DUSK_ZEN_LIVE_MODELS = "0";
+// cursor-agent 2026.06.04 probes the macOS login keychain (`cursor-keychain-probe`) on startup when SSH env vars are set,
+// popping a "Keychain Not Found" dialog under the throwaway HOME above.
+process.env.CURSOR_AGENT_CLI_ASSUME_SSH = "0";
 
 // Product code follows navigator.language; pin it so English assertions do not depend on the host locale.
 Object.defineProperty(globalThis.navigator, "language", { value: "en", configurable: true });

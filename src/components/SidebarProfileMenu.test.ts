@@ -529,13 +529,33 @@ describe("grok's profile menu", () => {
 });
 
 describe("personFace", () => {
-  it("draws the dusk cloud account's face, else this place's photo, else a head from the address or name; nothing for nobody", async () => {
-    const { personFace } = await import("./SidebarProfileMenu");
+  it("draws the dusk cloud account's face, else this place's synced accountFace or photo, else a head from the address or name; nothing for nobody", async () => {
+    const { personFace, syncedAccountFace } = await import("./SidebarProfileMenu");
     const account = { id: "acc_1", email: "ada@example.test", avatar: "g:abc123" };
     expect(personFace({ email: "ada@example.test" }, account)).toEqual({ id: "acc_1", avatar: "g:abc123" });
     expect(personFace({ email: "Bob@Example.test" }, account)).toEqual({ id: "bob@example.test" });
     expect(personFace({ name: "Bob", avatarUrl: "/bob.png" }, null)).toEqual({ id: "Bob", avatarUrl: "/bob.png", avatar: "photo" });
+    expect(personFace({ name: "Ada", accountFace: { id: "acc_1", email: "ada@example.test", avatarUrl: "https://lh3.googleusercontent.com/a/ada" } }, null)).toEqual({
+      id: "acc_1",
+      avatarUrl: "https://lh3.googleusercontent.com/a/ada",
+    });
+    expect(personFace({ email: "bob@example.test", accountFace: { id: "acc_1", email: "ada@example.test", avatarUrl: "https://lh3.googleusercontent.com/a/ada" } }, null)).toEqual({
+      id: "bob@example.test",
+    });
     expect(personFace({}, null)).toBeNull();
+
+    const synced = syncedAccountFace(undefined, { id: "acc_1", email: "ada@example.test", avatarUrl: "https://lh3.googleusercontent.com/a/ada" });
+    expect(synced).toEqual({ id: "acc_1", email: "ada@example.test", avatarUrl: "https://lh3.googleusercontent.com/a/ada" });
+    expect(syncedAccountFace({ accountFace: synced! }, { id: "acc_1", email: "ada@example.test", avatarUrl: "https://lh3.googleusercontent.com/a/ada" })).toBeUndefined();
+    expect(syncedAccountFace({ accountFace: synced! }, { id: "acc_1", email: "ada@example.test", avatarUrl: "https://lh3.googleusercontent.com/a/ada", avatar: "g:seed42" })).toEqual({
+      id: "acc_1",
+      email: "ada@example.test",
+      avatarUrl: "https://lh3.googleusercontent.com/a/ada",
+      avatar: "g:seed42",
+    });
+    expect(syncedAccountFace({ accountFace: synced! }, null)).toBeNull();
+    expect(syncedAccountFace(undefined, null)).toBeUndefined();
+    expect(syncedAccountFace({ email: "bob@example.test" }, { id: "acc_1", email: "ada@example.test", avatarUrl: "https://lh3.googleusercontent.com/a/ada" })).toBeUndefined();
   });
 });
 

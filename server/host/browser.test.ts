@@ -287,7 +287,7 @@ describe("how long an unused browser stays open", () => {
     expect(cloud.host.browserIdleMs()).toBe(3 * 60_000);
     cloud.cfg.browserEngine = { idleTimeoutMinutes: 20 };
     expect(cloud.host.browserIdleMs()).toBe(20 * 60_000);
-    expect(setup(undefined).host.browserIdleMs()).toBe(40 * 60_000);
+    expect(setup(undefined).host.browserIdleMs()).toBe(10 * 60_000);
   });
 });
 

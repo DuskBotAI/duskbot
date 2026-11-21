@@ -235,6 +235,8 @@ const dumpEnv = Object.fromEntries(
     "FACTORY_API_KEY",
     "UNSLOTH_STUDIO_AUTH_TOKEN",
     "CURSOR_API_KEY",
+    "CURSOR_AGENT_CLI_ASSUME_SSH",
+    "NO_OPEN_BROWSER",
     "CLINE_API_KEY",
     "CLINE_PROVIDER",
     "CLINE_MODEL",

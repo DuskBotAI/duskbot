@@ -751,6 +751,25 @@ describe("a config.json saved with a byte order mark", () => {
     }
   });
 
+  it("persists, validates, and clears the synced accountFace on profile", () => {
+    const path = join(DATA_DIR, "config.json");
+    mkdirSync(DATA_DIR, { recursive: true });
+    writeFileSync(path, JSON.stringify({ profile: { name: "Ada" } }));
+    try {
+      const face = { id: "acc_1", email: "ada@example.com", avatarUrl: "https://lh3.googleusercontent.com/a/ada", avatar: "photo" as const };
+      saveConfig(parseConfigPatch({ profile: { accountFace: face } }));
+      expect(loadConfig().profile?.accountFace).toEqual(face);
+      expect(() => parseConfigPatch({ profile: { accountFace: { id: "acc_1", avatarUrl: "http://insecure.test/a.png" } } })).toThrow();
+      expect(() => parseConfigPatch({ profile: { accountFace: { id: "acc_1", avatarUrl: "https://user:pass@example.test/a.png" } } })).toThrow();
+      expect(() => parseConfigPatch({ profile: { accountFace: { id: "acc_1", avatar: "invalid" } } })).toThrow();
+      saveConfig(parseConfigPatch({ profile: { accountFace: null } }));
+      expect(loadConfig().profile?.accountFace).toBeUndefined();
+      expect(JSON.parse(readFileSync(path, "utf8")).profile).toEqual({ name: "Ada" });
+    } finally {
+      rmSync(path, { force: true });
+    }
+  });
+
   it("keeps a default model the person picked marked as theirs until the app replaces it", () => {
     const path = join(DATA_DIR, "config.json");
     mkdirSync(DATA_DIR, { recursive: true });

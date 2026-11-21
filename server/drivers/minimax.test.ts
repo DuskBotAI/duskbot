@@ -195,3 +195,10 @@ it("minimax preserves an explicit tools-off connection and rejects ambiguous fla
   expect(MinimaxDriver.decodeConfig({ tools: true })).toMatchObject({ tools: true });
   expect(() => MinimaxDriver.decodeConfig({ tools: "false" })).toThrow("tools must be a boolean");
 });
+
+it("minimax sends the key only over https or to a loopback address", () => {
+  expect(() => decodeMinimaxConfig({ url: "http://api.example.test" })).toThrow("HTTPS");
+  expect(() => decodeMinimaxConfig({ url: "api.example.test" })).toThrow("HTTPS");
+  expect(decodeMinimaxConfig({ url: "http://127.0.0.1:9999" })).toMatchObject({ url: "http://127.0.0.1:9999/v1" });
+  expect(decodeMinimaxConfig({})).toMatchObject({ url: "https://api.minimax.io/v1" });
+});

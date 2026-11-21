@@ -30,6 +30,20 @@ export function isLoopback(hostname: string): boolean {
   return host === "localhost" || host === "127.0.0.1" || host === "::1" || host.startsWith("127.");
 }
 
+/** Keys ride the authorization header, so a configured provider endpoint must use HTTPS, except a loopback test endpoint. */
+export function requireHttpsOrLoopback(rawUrl: string, label: string): URL {
+  let url: URL;
+  try {
+    url = new URL(rawUrl);
+  } catch {
+    throw new Error(`${label} requires HTTPS, except for a local test endpoint.`);
+  }
+  if (url.protocol !== "https:" && !(url.protocol === "http:" && isLoopback(url.hostname))) {
+    throw new Error(`${label} requires HTTPS, except for a local test endpoint.`);
+  }
+  return url;
+}
+
 export function providerBaseUrl(provider: ProviderKeyKind, base?: string | null): string {
   return (base?.trim() || DEFAULT_URLS[provider]).replace(/\/+$/, "");
 }

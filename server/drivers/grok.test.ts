@@ -243,3 +243,10 @@ it("offers the chat models xAI lists for the key, in its order, with our known d
   expect(grokModelsFrom({ data: [{ id: "grok-5" }] })?.default).toBe("grok-5");
   expect(grokModelsFrom({})).toBeNull();
 });
+
+it("grok sends the key only over https or to a loopback address", () => {
+  expect(() => GrokDriver.decodeConfig({ url: "http://api.example.test/v1" })).toThrow("HTTPS");
+  expect(() => GrokDriver.decodeConfig({ url: "api.example.test/v1" })).toThrow("HTTPS");
+  expect(GrokDriver.decodeConfig({ url: "http://127.0.0.1:8080/v1" })).toMatchObject({ url: "http://127.0.0.1:8080/v1" });
+  expect(GrokDriver.decodeConfig({})).toMatchObject({ url: "https://api.x.ai/v1" });
+});

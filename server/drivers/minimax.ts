@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { z } from "zod";
 
 import type { ModelCatalog, ProviderDriver } from "../contracts.ts";
+import { requireHttpsOrLoopback } from "../provider-key-check.ts";
 import { createOpenAIChatRuntime } from "./openai-chat.ts";
 
 const DRIVER_KIND = "minimax";
@@ -42,7 +43,9 @@ const driverConfigSchema = z.object({ url: z.string().optional() });
 
 function normalizedApiUrl(value: string): string {
   const root = value.trim().replace(/\/+$/, "");
-  return root.endsWith("/v1") ? root : `${root}/v1`;
+  const api = root.endsWith("/v1") ? root : `${root}/v1`;
+  requireHttpsOrLoopback(api, "MiniMax");
+  return api;
 }
 
 export function loadLocalMiniMaxConfig(home = homedir()): LocalMiniMaxConfig {

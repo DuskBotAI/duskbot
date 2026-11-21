@@ -1261,3 +1261,20 @@ describe("how long a turn waits for a reply", () => {
   });
 });
 
+describe("where the provider url may point", () => {
+  it("sends the key only over https or to a loopback address", () => {
+    expect(OpenAICompatDriver.decodeConfig({ url: "https://api.example.test/v1" })).toMatchObject({ url: "https://api.example.test/v1" });
+    expect(OpenAICompatDriver.decodeConfig({ url: "http://127.0.0.1:11434/v1" })).toMatchObject({ url: "http://127.0.0.1:11434/v1" });
+    expect(OpenAICompatDriver.decodeConfig({ url: "http://localhost:8080/v1" })).toMatchObject({ url: "http://localhost:8080/v1" });
+    expect(() => OpenAICompatDriver.decodeConfig({ url: "http://api.example.test/v1" })).toThrow("HTTPS");
+    expect(() => OpenAICompatDriver.decodeConfig({ url: "api.example.test/v1" })).toThrow("HTTPS");
+  });
+
+  it("applies the same rule to OPENAI_COMPAT_URL", () => {
+    process.env.OPENAI_COMPAT_URL = "http://api.example.test/v1";
+    expect(() => OpenAICompatDriver.decodeConfig({})).toThrow("HTTPS");
+    process.env.OPENAI_COMPAT_URL = "https://api.example.test/v1";
+    expect(OpenAICompatDriver.decodeConfig({})).toMatchObject({ url: "https://api.example.test/v1" });
+  });
+});
+

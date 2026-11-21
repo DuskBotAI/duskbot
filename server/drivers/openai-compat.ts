@@ -1,7 +1,7 @@
 // Transcript-replay driver for OpenRouter, Groq, Together, llama.cpp, and
 // other endpoints that speak the OpenAI chat-completions contract.
 import type { ModelCatalog, ProviderDriver } from "../contracts.ts";
-import { isLoopback } from "../provider-key-check.ts";
+import { isLoopback, requireHttpsOrLoopback } from "../provider-key-check.ts";
 import { lmStudioV1Catalog } from "./local-inject.ts";
 import { isContextName, isOllama, serveWithWindow } from "./ollama-context.ts";
 import { createOpenAIChatRuntime } from "./openai-chat.ts";
@@ -162,13 +162,15 @@ function decodeConfig(raw: unknown): OpenAICompatConfig {
   if (config.replyWaitMinutes !== undefined && !isReplyWait(config.replyWaitMinutes)) throw new Error(`replyWaitMinutes must be a whole number from 1 to ${MAX_REPLY_WAIT_MINUTES}`);
   const envUrl = ownKey ? undefined : process.env.OPENAI_COMPAT_URL;
   const effortLevels = decodeEffortLevels(config.effortLevels);
+  const url = (typeof config.url === "string" && config.url ? config.url : envUrl || "https://openrouter.ai/api/v1")
+    .replace(/\/+$/, "");
+  requireHttpsOrLoopback(url, "The OpenAI-compatible endpoint");
   return {
     ...(effortLevels ? { effortLevels } : {}),
     ...(config.tools !== undefined ? { tools: config.tools as boolean } : {}),
     ...(config.managedModels ? { managedModels: config.managedModels as string[] } : {}),
     ...(isReplyWait(config.replyWaitMinutes) ? { replyWaitMinutes: config.replyWaitMinutes } : {}),
-    url: (typeof config.url === "string" && config.url ? config.url : envUrl || "https://openrouter.ai/api/v1")
-      .replace(/\/+$/, ""),
+    url,
     apiKeyEnv: typeof config.apiKeyEnv === "string" && config.apiKeyEnv
       ? config.apiKeyEnv
       : DEFAULT_KEY_ENV,

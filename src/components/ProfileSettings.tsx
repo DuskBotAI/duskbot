@@ -1,12 +1,13 @@
 import { cn } from "@/lib/cn";
 import { textFieldCls } from "./ui/GrokDialog";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { api, useStore, type ConfigStatus } from "@/state/store";
 import { t } from "@/lib/i18n";
 import { saveTeamProfile } from "@/lib/own-profile";
 import { IMAGE_MAX_BYTES, imageAttachmentFromFile, isImageFile } from "@/lib/composer-attachments";
 import type { LocaleKey } from "@/locales";
 import { botAvatarUrlFromStoredPath } from "../../shared/bot-avatar";
+import { isProfileEmail, PROFILE_EMAIL_MAX, PROFILE_NAME_MAX } from "../../shared/person-profile";
 import { AboutMeSettings } from "./AboutMeSettings";
 import { profileInitials, type PersonFace } from "./SidebarProfileMenu";
 import { UserFace } from "./UserAvatar";
@@ -160,10 +161,13 @@ export function ProfileFields({ face }: { face?: PersonFace | null }) {
   const { state, dispatch } = useStore();
   const [name, setName] = useState(state.config?.profile?.name ?? "");
   const [email, setEmail] = useState(state.config?.profile?.email ?? "");
+  const [emailInvalid, setEmailInvalid] = useState(false);
+  const emailErrorId = useId();
+  useEffect(() => setName(state.config?.profile?.name ?? ""), [state.config?.profile?.name]);
   useEffect(() => {
-    setName(state.config?.profile?.name ?? "");
     setEmail(state.config?.profile?.email ?? "");
-  }, [state.config?.profile?.name, state.config?.profile?.email]);
+    setEmailInvalid(false);
+  }, [state.config?.profile?.email]);
 
   const team = Boolean(state.config?.team);
   const save = () => {
@@ -173,10 +177,12 @@ export function ProfileFields({ face }: { face?: PersonFace | null }) {
         .catch(() => {});
       return;
     }
+    const emailOk = isProfileEmail(email);
+    setEmailInvalid(!emailOk);
     void fetch("/api/config", {
       method: "PUT",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ profile: { name: name.trim(), email: email.trim().toLowerCase() } }),
+      body: JSON.stringify({ profile: { name: name.trim(), ...(emailOk ? { email: email.trim().toLowerCase() } : {}) } }),
     })
       .then((r) => { if (!r.ok) throw new Error("Profile save failed"); return r.json(); })
       .then((config: ConfigStatus) => {
@@ -193,20 +199,27 @@ export function ProfileFields({ face }: { face?: PersonFace | null }) {
       <div className={row}><span className={label}>{t("settings.w6.profile.photo")}</span><ProfilePhoto face={face} /></div>
       <div className={row}>
         <span className={label}>{t("settings.profile.name")}</span>
-        <input aria-label={t("settings.profile.name")} value={name} onChange={(e) => setName(e.target.value)} onBlur={save} placeholder={t("settings.profile.name")} className={inputClass} />
+        <input aria-label={t("settings.profile.name")} maxLength={PROFILE_NAME_MAX} value={name} onChange={(e) => setName(e.target.value)} onBlur={save} placeholder={t("settings.profile.name")} className={inputClass} />
       </div>
       <div className={row}>
         <span className={label}>{t("phone.signIn.email")}</span>
         <input
-          type="email"
+          type="text"
+          inputMode="email"
+          autoComplete="email"
+          spellCheck={false}
+          maxLength={PROFILE_EMAIL_MAX}
           aria-label={t("phone.signIn.email")}
+          aria-invalid={emailInvalid || undefined}
+          aria-describedby={emailInvalid ? emailErrorId : undefined}
           value={email}
-          onChange={(e) => setEmail(e.target.value)}
+          onChange={(e) => { setEmail(e.target.value); if (emailInvalid && isProfileEmail(e.target.value)) setEmailInvalid(false); }}
           onBlur={team ? undefined : save}
           readOnly={team}
           placeholder="you@example.com"
           className={inputClass}
         />
+        {emailInvalid && <p id={emailErrorId} role="alert" className="m-0 w-full text-end text-[12px] leading-4 text-danger">{t("settings.profile.emailInvalid")}</p>}
       </div>
       <div className="px-3.5 py-2.5"><AboutMeSettings /></div>
     </div>

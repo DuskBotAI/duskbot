@@ -1637,6 +1637,7 @@
   "settings.profile.subtitle": "Se muestra en la barra lateral. Se guarda mientras escribes.",
   "settings.profile.sharedSubtitle": "Tus datos y el contexto compartido. Se guarda mientras escribes.",
   "settings.profile.name": "Tu nombre",
+  "settings.profile.emailInvalid": "Usa una dirección de correo como tu@example.com. No se ha guardado.",
   "settings.profile.avatar.choose": "Elegir foto",
   "settings.profile.avatar.uploading": "Subiendo…",
   "settings.profile.avatar.remove": "Quitar foto",

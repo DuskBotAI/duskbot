@@ -1652,6 +1652,7 @@
   "settings.profile.subtitle": "Wird in der Seitenleiste gezeigt. Wird beim Tippen gespeichert.",
   "settings.profile.sharedSubtitle": "Deine Angaben und gemeinsamer Kontext. Wird laufend gespeichert.",
   "settings.profile.name": "Dein Name",
+  "settings.profile.emailInvalid": "Gib eine E-Mail-Adresse wie du@example.com ein. Sie wurde nicht gespeichert.",
   "settings.profile.avatar.choose": "Foto auswählen",
   "settings.profile.avatar.uploading": "Wird hochgeladen…",
   "settings.profile.avatar.remove": "Foto entfernen",

@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { isDeepStrictEqual } from "node:util";
 import { z } from "zod";
 import { normalizeImageGenerationUrl, type ImageGenerationConfig } from "../shared/image-generation.ts";
-import { botAvatarUrlSchema } from "../shared/bot-avatar.ts"; import { TALKING_STYLES, type TalkingStyle } from "../shared/talking-style.ts";
+import { botAvatarUrlSchema } from "../shared/bot-avatar.ts"; import { isProfileEmail, PROFILE_EMAIL_MAX, PROFILE_NAME_MAX } from "../shared/person-profile.ts"; import { TALKING_STYLES, type TalkingStyle } from "../shared/talking-style.ts";
 import { writeFileAtomic } from "./atomic.ts"; import { setAsideUnreadable } from "./registry-file.ts";
 import { defaultBotThreads, MAX_CONCURRENT_BOT_THREADS } from "./bot-thread-limits.ts";
 import { anthropicKeyEnv } from "./anthropic-key-env.ts";
@@ -424,8 +424,12 @@ const storedAppConfigSchema = appConfigSchema.extend(helperStoredShape).extend({
       .optional(),
   }).optional(),
 });
+const profilePatchSchema = appConfigSchema.shape.profile.unwrap().extend({
+  name: z.string().trim().max(PROFILE_NAME_MAX, `Use a name of at most ${PROFILE_NAME_MAX} characters`).optional(),
+  email: z.string().trim().max(PROFILE_EMAIL_MAX).refine(isProfileEmail, "Use an email address like you@example.com").optional(),
+});
 const appConfigPatchSchema = appConfigSchema.omit({ instances: true, mcpServers: true, cliStartup: true, customDomain: true })
-  .extend({ threads: threadsPatchSchema.optional(), newBots: newBotsPatchSchema.optional() });
+  .extend({ threads: threadsPatchSchema.optional(), newBots: newBotsPatchSchema.optional(), profile: profilePatchSchema.optional() });
 const jsonObjectSchema = z.record(z.string(), z.json());
 
 export interface AppConfig extends HelperConfig {

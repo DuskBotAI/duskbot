@@ -37,6 +37,7 @@ import { NotificationSettings } from "./NotificationSettings";
 import { RoutinesSheet } from "./RoutinesSheet";
 import { ConnectorsSheet } from "./ConnectorsSheet";
 import { VaultSheet } from "./VaultSheet";
+import { MobileSignIn } from "../account/MobileSignIn";
 import { DeleteAccountPage } from "./DeleteAccountPage";
 import { ConfirmPage } from "./ConfirmPage";
 import { placeKind } from "../connection/connection-notice";
@@ -154,6 +155,8 @@ export const SettingsSheet: ComponentType<SheetPageProps<"settings">> = ({ sheet
   const identity = phoneIdentity({ account: account?.account, connections, activeId });
   const signsOut = identity.kind === "account" || identity.kind === "cloud";
   const [page, setPage] = useState<SettingsPage | null>(SETTINGS_PAGES.includes(sheet.page ?? "") ? sheet.page as SettingsPage : null);
+  const [deletingAccount, setDeletingAccount] = useState(account?.account ?? null);
+  const [removedLocally, setRemovedLocally] = useState(false);
   const wasOpen = useRef(open);
   useEffect(() => {
     if (open && !wasOpen.current) setPage(SETTINGS_PAGES.includes(sheet.page ?? "") ? sheet.page as SettingsPage : null);
@@ -163,25 +166,32 @@ export const SettingsSheet: ComponentType<SheetPageProps<"settings">> = ({ sheet
   const lastPage = useRef<SettingsPage | null>(null);
   if (page) lastPage.current = page;
   const shownPage = nativePush ? (page ?? lastPage.current) : page;
-  const pop = useCallback(() => setPage(null), []);
+  const pop = useCallback(() => { if (removedLocally) window.location.reload(); else setPage(null); }, [removedLocally]);
+  useEffect(() => {
+    if (page === "delete" && account?.account && account.account.id !== deletingAccount?.id) pop();
+  }, [page, account?.account, deletingAccount, pop]);
   const stack = useMemo(() => ({ back: pop }), [pop]);
   const pageProps = { open: true, onClose: pop, onOpenSheet, onOpenChat };
   const removeTarget = shownPage && typeof shownPage === "object" && shownPage.kind === "removePlace" ? shownPage.place : null;
   const removeCopy = removeTarget ? removePlaceCopy(removeTarget) : null;
-  const shown = shownPage === "notifications" ? <NotificationsSheet sheet={{ kind: "notifications" }} {...pageProps} />
+  const shown = removedLocally ? <Sheet open onClose={pop} title={t("mobile.settings.removeComputer")}>
+    <p role="status" className="px-4 py-3 text-ink">{t("mobile.settings.removedLocally")}</p>
+    <button type="button" className="mobile-press min-h-11 px-4" onClick={pop}>{t("common.done")}</button>
+  </Sheet> : shownPage === "notifications" ? <NotificationsSheet sheet={{ kind: "notifications" }} {...pageProps} />
     : shownPage === "routines" ? <RoutinesSheet sheet={{ kind: "routines" }} {...pageProps} />
     : shownPage === "connectors" ? <ConnectorsSheet sheet={{ kind: "connectors" }} {...pageProps} />
     : shownPage === "vault" ? <VaultSheet sheet={{ kind: "vault" }} {...pageProps} />
     : shownPage === "language" ? <LanguagePage />
     : shownPage === "textSize" ? <TextSizePage />
-    : shownPage === "delete" && account?.account ? <DeleteAccountPage email={account.account.email} onDelete={account.deleteAccount} onCancel={pop} onDone={() => window.location.reload()} />
+    : shownPage === "delete" && deletingAccount && !account?.account ? <Sheet open onClose={pop} title={t("cloudAccount.signInAgain")}><MobileSignIn initialEmail={deletingAccount.email} /></Sheet>
+    : shownPage === "delete" && account?.account && account.account.id === deletingAccount?.id ? <DeleteAccountPage email={account.account.email} onDelete={account.deleteAccount} onCancel={pop} onDone={() => window.location.reload()} />
     : shownPage === "signOut" && account && signsOut ? <ConfirmPage title={t("accountGate.signOut")}
       heading={account.accounts.length > 1 && account.account ? t("mobile.settings.signOutAccountTitle", { email: account.account.email }) : t("mobile.settings.signOutTitle")}
       body={t(account.accounts.length > 1 ? "mobile.settings.signOutAccountBody" : keepsComputers ? "mobile.settings.signOutKeepsComputers" : "mobile.settings.signOutBody")}
       action={t("accountGate.signOut")} onConfirm={account.signOutOfPhone} onCancel={pop} />
     : shownPage === "removeComputer" && computer ? <ConfirmPage title={t("mobile.settings.removeComputer")} heading={t("mobile.settings.removeComputerTitle", { name: computerName })}
       body={t("mobile.settings.removeComputerBody", { name: computerName })} action={t("mobile.settings.removeComputerAction")}
-      onConfirm={async () => { await removePlace(platform, computer.id); window.location.reload(); }} onCancel={pop} />
+      onConfirm={async () => { const result = await removePlace(platform, computer.id); if (result.revoked) window.location.reload(); else setRemovedLocally(true); }} onCancel={pop} />
     : shownPage && typeof shownPage === "object" && shownPage.kind === "renamePlace" ? <RenamePlacePage key={shownPage.place.key} place={shownPage.place}
       onSave={async (name) => { const ok = await placesState.rename(shownPage.place, name); if (ok) pop(); return ok; }} onCancel={pop} />
     : removeTarget && removeCopy ? <ConfirmPage key={removeTarget.key} title={t("mobile.settings.removePlace")} heading={removeCopy.heading}
@@ -196,7 +206,7 @@ export const SettingsSheet: ComponentType<SheetPageProps<"settings">> = ({ sheet
     : shownPage === "voice" ? <Sheet open onClose={pop} title={t("settings.voice.title")}><div data-settings-look="simple" className={`flex flex-col gap-6 px-4 pt-2 ${SIMPLE_BUTTONS}`}><VoiceInputSettings /></div></Sheet>
     : null;
   const pageKey = typeof page === "string" ? page : page ? `${page.kind}:${page.place.key}` : null;
-  const base = <StackPage open title={t("mobile.settings.title")} onClose={onClose}><SettingsList onClose={onClose} push={setPage} placesState={placesState} /></StackPage>;
+  const base = <StackPage open title={t("mobile.settings.title")} onClose={onClose}><SettingsList onClose={onClose} push={(next) => { if (next === "delete") setDeletingAccount(account?.account ?? null); setPage(next); }} placesState={placesState} /></StackPage>;
   if (nativePush) {
     return (
       <Sheet open={open} onClose={onClose} full flush label={t("mobile.settings.title")} bodyClassName="overflow-hidden pt-0! pb-0">

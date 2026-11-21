@@ -1,7 +1,7 @@
 import { turnActivityStart } from "../../../shared/phone-activity";
 import type { MobileConnectionRecord } from "../../../shared/mobile-link";
 import type { MobilePlatform } from "../platform";
-import { createConnectionStore } from "../connection/connections";
+import { openPairedRelay, createConnectionStore } from "../connection/connections";
 import { placeKind } from "../connection/connection-notice";
 import { rememberOpenChat } from "../open-chat-restore";
 
@@ -20,25 +20,43 @@ function httpOrigins(record: MobileConnectionRecord): string[] {
 
 /** asks the place to forget this phone (its session and push token with it); a place that can't be reached keeps the
  * device until its owner removes it there */
-async function revokeDevice(platform: MobilePlatform, record: MobileConnectionRecord, request: typeof fetch): Promise<void> {
+async function revokeDevice(platform: MobilePlatform, record: MobileConnectionRecord, request: typeof fetch): Promise<boolean> {
   const token = await platform.secrets.get(record.sessionRef).catch(() => null);
-  if (!token || !record.deviceId) return;
+  if (!token || !record.deviceId) return false;
+  const path = `/api/mobile/devices/${encodeURIComponent(record.deviceId)}`;
+  const headers = { Authorization: `Bearer ${token}` };
+  const confirmed = async (response: Response) => {
+    if (response.status === 404) return (await response.json().catch(() => null))?.error === "no such phone";
+    await response.body?.cancel().catch(() => {});
+    return response.ok;
+  };
   for (const origin of httpOrigins(record)) {
-    if (!origin.startsWith("https:")) continue;
+    const companion = record.via?.some(route => route.kind === "companion" && route.url === origin) || (record.transport === "companion" && record.origin === origin);
+    if (!origin.startsWith("https:") && !(platform.native && companion && origin.startsWith("http:"))) continue;
     try {
-      const response = await request(`${origin}/api/mobile/devices/${encodeURIComponent(record.deviceId)}`, {
-        method: "DELETE", headers: { Authorization: `Bearer ${token}` }, credentials: "omit", redirect: "error", signal: AbortSignal.timeout(REVOKE_MS),
-      });
-      await response.body?.cancel().catch(() => {});
-      if (response.ok || response.status === 401 || response.status === 404) return;
-    } catch { /* the next route, or keep it */ }
+      if (await confirmed(await request(origin + path, {
+        method: "DELETE", headers, credentials: "omit", redirect: "error", signal: AbortSignal.timeout(REVOKE_MS),
+      }))) return true;
+    } catch {}
   }
+  if (record.relay) {
+    const signal = AbortSignal.timeout(REVOKE_MS);
+    try {
+      const channel = await openPairedRelay(record, platform, signal);
+      if (channel) {
+        try { return await confirmed(await channel.request("DELETE", path, headers, null, signal)); }
+        finally { channel.close(); }
+      }
+    } catch {}
+  }
+  return false;
 }
 
-async function forgetPlace(platform: MobilePlatform, store: Store, record: MobileConnectionRecord, request: typeof fetch): Promise<void> {
-  await revokeDevice(platform, record, request);
+async function forgetPlace(platform: MobilePlatform, store: Store, record: MobileConnectionRecord, request: typeof fetch): Promise<boolean> {
+  const revoked = await revokeDevice(platform, record, request);
   await store.remove(record.id);
   await platform.prefs.remove(`dusk.account.enrolled.${record.id}`).catch(() => {});
+  return revoked;
 }
 
 async function endLiveActivities(platform: MobilePlatform): Promise<void> {
@@ -92,11 +110,11 @@ export async function forgetCloudPlaces(platform: MobilePlatform, request: typeo
 }
 
 /** "Remove this computer": the phone's pairing with one computer ends, there and here. */
-export async function removePlace(platform: MobilePlatform, id: string, request: typeof fetch = globalThis.fetch): Promise<Landing> {
+export async function removePlace(platform: MobilePlatform, id: string, request: typeof fetch = globalThis.fetch): Promise<{ landing: Landing; revoked: boolean }> {
   const store = createConnectionStore(platform);
   const wasActive = (await store.active())?.record.id === id;
   const record = (await store.list()).find((entry) => entry.id === id);
-  if (record) await forgetPlace(platform, store, record, request);
+  const revoked = record ? await forgetPlace(platform, store, record, request) : false;
   if (wasActive) rememberOpenChat(null);
-  return landAfterRemoval(store);
+  return { revoked, landing: await landAfterRemoval(store) };
 }

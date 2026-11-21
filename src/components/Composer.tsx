@@ -28,7 +28,7 @@ import {
   rememberFailedComposerSend,
   restoredSendId,
   restoredRequestText,
-  useComposerDraft,
+  useDraftPrefix, useComposerDraft,
   useComposerChannelMode,
   useDraftAttachmentPending,
   useFailedComposerSends,
@@ -187,12 +187,13 @@ export function Composer({
     ? (members?.find((b) => b.id === groupBusyBotId)?.name ??
       (groupWorking ? t("composer.busy.team") : t("composer.busy.aBot")))
     : (bot?.name ?? t("composer.busy.theBot"));
-  const draftId = group
+  const prefix = useDraftPrefix();
+  const draftId = prefix + (group
     ? `group:${group.id}:${group.threadId}`
-    : `bot:${bot?.id ?? ""}:${bot?.threadId ?? ""}`;
+    : `bot:${bot?.id ?? ""}:${bot?.threadId ?? ""}`);
   const [text, setText, attachments, setAttachments] = useComposerDraft(
     draftId,
-    !group && bot ? `bot:${bot.id}` : undefined,
+    !group && bot ? `${prefix}bot:${bot.id}` : undefined,
   );
   const attachmentPending = useDraftAttachmentPending(draftId);
   const unsentUpload = attachments.some(attachmentUnsent);

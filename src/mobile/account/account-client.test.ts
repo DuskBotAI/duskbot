@@ -313,6 +313,8 @@ describe("delete account", () => {
     expect(client.account()).toEqual(grant().account); expect(secrets.has("dusk.account")).toBe(true);
     fetcher.mockRejectedValueOnce(new TypeError("offline"));
     expect(await client.deleteAccount()).toBe("failed");
+    fetcher.mockResolvedValueOnce(response({}));
+    expect(await client.deleteAccount()).toBe("failed");
     fetcher.mockResolvedValueOnce(response({ error: "invalid_token" }, 401));
     expect(await client.deleteAccount()).toBe("signed-out");
     expect(client.account()).toBeNull(); expect(secrets.has("dusk.account")).toBe(false);

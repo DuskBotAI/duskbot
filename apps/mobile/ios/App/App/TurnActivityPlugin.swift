@@ -65,10 +65,12 @@ public class TurnActivityPlugin: CAPPlugin, CAPBridgedPlugin {
         guard inserted else { return }
         addTask(Task { [weak self] in
             for await token in activity.pushTokenUpdates {
-                self?.notifyListeners("token", data: [
+                var event: JSObject = [
                     "id": activity.id, "threadId": activity.attributes.threadId, "token": Self.hex(token),
                     "startedAt": activity.content.state.startedAt,
-                ], retainUntilConsumed: true)
+                ]
+                event["deviceId"] = activity.attributes.deviceId
+                self?.notifyListeners("token", data: event, retainUntilConsumed: true)
             }
         })
     }

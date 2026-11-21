@@ -7,12 +7,12 @@ vi.stubGlobal("localStorage", { getItem: (key: string) => saved.get(key) ?? null
 afterEach(() => saved.clear());
 
 describe("system text size", () => {
-  it("is the system body size over its default, kept inside what the layout holds", () => {
+  it("is the system body size over its default, including accessibility sizes", () => {
     expect(textScaleFor(17)).toBe(1);
     expect(textScaleFor(19)).toBe(1.12);
     expect(textScaleFor(14)).toBe(0.9);
-    expect(textScaleFor(28)).toBe(1.35);
-    expect(textScaleFor(53)).toBe(1.35);
+    expect(textScaleFor(28)).toBe(1.65);
+    expect(textScaleFor(53)).toBe(3.12);
     expect(textScaleFor(Number.NaN)).toBe(1);
     expect(textScaleFor(0)).toBe(1);
   });

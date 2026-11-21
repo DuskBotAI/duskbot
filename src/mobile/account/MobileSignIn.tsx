@@ -21,7 +21,7 @@ const digits = (value: string) => value.replace(/\D/g, "").slice(0, CODE_LENGTH)
 
 /** The phone's own dusk account sign-in, in the app's look: the providers the service has on, then an emailed code in one
  * field (the system offers it from Messages or Mail), with every problem said next to the field it is about. */
-export function MobileSignIn({ onSignedIn, initialEmail = "" }: { onSignedIn: () => void; initialEmail?: string }) {
+export function MobileSignIn({ onSignedIn, initialEmail = "" }: { onSignedIn?: () => void; initialEmail?: string }) {
   const account = useMobileAccount();
   const platform = usePlatform();
   const id = useId();
@@ -45,7 +45,7 @@ export function MobileSignIn({ onSignedIn, initialEmail = "" }: { onSignedIn: ()
   const signInsAtOpen = useRef(account?.signIns ?? 0);
   const signIns = account?.signIns ?? 0;
   const signedInHere = Boolean(account?.account) && signIns !== signInsAtOpen.current;
-  useEffect(() => { if (signedInHere) onSignedIn(); }, [signedInHere, signIns, onSignedIn]);
+  useEffect(() => { if (signedInHere) onSignedIn?.(); }, [signedInHere, signIns, onSignedIn]);
   useEffect(() => {
     if (!sent) return;
     field.current?.focus();

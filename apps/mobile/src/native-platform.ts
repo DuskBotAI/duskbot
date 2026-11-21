@@ -35,7 +35,7 @@ import type { MenuBridge, NativeMenuArm, NativeMenuContent, NativeMenuEvent } fr
 import { createVoiceEvents, type VoiceBridge, type VoiceEnd } from "@/lib/voice-input/bridge";
 import { registerPhoneVoice } from "@/lib/voice-input/device";
 import { attachToComposer, setNativeAttach } from "@/lib/native-attach";
-import { appLinkFromUniversal, type MobileOpenTarget } from "../../../shared/mobile-link";
+import { appLinkFromUniversal } from "../../../shared/mobile-link";
 import { t } from "@/lib/i18n";
 
 /** The app's own scanner on ios (ios/App/App/QrScannerPlugin.swift): the ML Kit plugin ships for CocoaPods only, and this
@@ -163,8 +163,8 @@ const DuskSpeech = registerPlugin<SpeechPlugin>("DuskSpeech");
 interface GlassPlugin {
   supported(): Promise<{ supported: boolean; acks?: boolean; jump?: boolean; reply?: boolean }>;
   update(state: GlassState): Promise<void>;
-  setText(options: { text: string; seq: number }): Promise<void>;
-  clearText(options: { id: number }): Promise<void>;
+  setText(options: { text: string; seq: number; basedOnEdit: number }): Promise<void>;
+  clearText(options: { id: number; basedOnEdit: number }): Promise<void>;
   setAvatar(options: { data: string | null }): Promise<void>;
   focus(): Promise<void>;
   blur(): Promise<void>;
@@ -204,8 +204,8 @@ export function glassBridge(plugin: GlassPlugin, acks = false, jump = false, rep
     jump,
     reply,
     update: (state) => quiet(plugin.update(state)),
-    setText: (text, seq) => quiet(plugin.setText({ text, seq })),
-    clearText: (id) => quiet(plugin.clearText({ id })),
+    setText: (text, seq, basedOnEdit) => quiet(plugin.setText({ text, seq, basedOnEdit })),
+    clearText: (id, basedOnEdit) => quiet(plugin.clearText({ id, basedOnEdit })),
     setAvatar: (data) => quiet(plugin.setAvatar({ data })),
     focus: () => quiet(plugin.focus()),
     blur: () => quiet(plugin.blur()),
@@ -254,13 +254,14 @@ interface TurnActivityPlugin {
   end(options: { id: string; state: TurnActivityState; now?: boolean }): Promise<void>;
   list(): Promise<{ activities: Array<{ id: string; botId: string; threadId: string; startedAt: number }> }>;
   lineKey(): Promise<{ key?: string }>;
-  addListener(event: "token", listener: (event: { id: string; threadId: string; token: string; startedAt: number }) => void): Promise<PluginListenerHandle>;
+  addListener(event: "token", listener: (event: { id: string; threadId: string; deviceId?: string; token: string; startedAt: number }) => void): Promise<PluginListenerHandle>;
   addListener(event: "startToken", listener: (event: { token: string }) => void): Promise<PluginListenerHandle>;
   addListener(event: "action", listener: (event: NativeAction) => void): Promise<PluginListenerHandle>;
 }
 const DuskTurnActivity = registerPlugin<TurnActivityPlugin>("DuskTurnActivity");
 
 interface NotificationsPlugin {
+  environment(): Promise<{ value?: "sandbox" | "production" }>;
   setViewing(options: { threadId: string | null }): Promise<void>;
   delivered(): Promise<{ notifications: DeliveredNotification[] }>;
   remove(options: { ids: string[] }): Promise<void>;
@@ -488,9 +489,6 @@ function turnActivityBridge(): TurnActivityBridge {
     lineKey: async () => (await DuskTurnActivity.lineKey()).key ?? null,
   };
 }
-
-/** a push the bot host sent, as opposed to one from an older link that put its ids at the top level */
-const fromBotHost = (data: Record<string, unknown>) => ["dusk", "omb"].some((key) => data[key] && typeof data[key] === "object");
 
 export function orientationBridge(plugin: OrientationPlugin): OrientationBridge {
   return {
@@ -757,19 +755,6 @@ async function ensureBarcodeModule(): Promise<boolean> {
   });
 }
 
-function notificationTarget(data: Record<string, unknown>): MobileOpenTarget {
-  const target: MobileOpenTarget = {};
-  const fields = { env: "environmentId", bot: "botId", group: "groupId", thread: "threadId", message: "messageId" } as const;
-  for (const [field, key] of Object.entries(fields)) {
-    if (typeof data[field] === "string") target[key] = data[field];
-  }
-  switch (data.view) {
-    case "chat": case "computer": case "profile": case "routines": case "settings": case "notifications":
-      target.view = data.view;
-  }
-  return target;
-}
-
 export async function nativePlatform(): Promise<MobilePlatform> {
   const kind = Capacitor.getPlatform() as "ios" | "android";
   if (kind === "android") {
@@ -789,7 +774,7 @@ export async function nativePlatform(): Promise<MobilePlatform> {
     const timer = setTimeout(() => { console.warn(`startup: ${label} did not answer`); resolve(undefined); }, 2000);
     work.then(resolve, () => resolve(undefined)).finally(() => clearTimeout(timer));
   });
-  const [info, launch, chrome, , , glass, menu, pushSetup] = await Promise.all([
+  const [info, launch, chrome, , , glass, menu, pushSetup, apns] = await Promise.all([
     bounded(App.getInfo(), "app info"),
     bounded(App.getLaunchUrl(), "launch url"),
     bounded(kind === "ios" && Capacitor.isPluginAvailable("DuskChrome") ? DuskChrome.reset().then(() => DuskChrome.info()) : Promise.resolve(undefined), "chrome"),
@@ -798,6 +783,7 @@ export async function nativePlatform(): Promise<MobilePlatform> {
     kind === "ios" && Capacitor.isPluginAvailable("DuskGlass") ? bounded(DuskGlass.clear().then(() => DuskGlass.supported(), () => DuskGlass.supported()), "glass") : undefined,
     kind === "ios" && Capacitor.isPluginAvailable("DuskMenu") ? bounded(DuskMenu.supported(), "menu") : undefined,
     kind === "android" && Capacitor.isPluginAvailable("DuskPushSetup") ? bounded(DuskPushSetup.configured(), "push setup") : undefined,
+    kind === "ios" ? bounded(DuskNotifications.environment(), "APNs environment") : undefined,
   ]);
   const pushOn = kind === "ios" || Boolean(pushSetup?.configured);
   let pendingLaunchUrl = launch?.url;
@@ -870,6 +856,7 @@ export async function nativePlatform(): Promise<MobilePlatform> {
   return {
     kind,
     native: true,
+    apnsEnvironment: apns?.value,
     appVersion: info?.version || __APP_VERSION__,
     deviceName: () => kind === "ios" ? "iPhone" : "Android phone",
     glass: glass?.supported ? glassBridge(DuskGlass, glass.acks === true, glass.jump === true, glass.reply === true) : undefined,
@@ -1073,16 +1060,10 @@ export async function nativePlatform(): Promise<MobilePlatform> {
         if (gone.length) await PushNotifications.removeDeliveredNotifications({ notifications: gone });
       } catch {}
     },
-    onNotificationOpen(listener) {
-      return unsubscribe([PushNotifications.addListener("pushNotificationActionPerformed", ({ actionId, notification }) => {
-        const data = notification.data ?? {};
-        if (actionId === "tap" && !fromBotHost(data)) listener(notificationTarget(data));
-      })]);
-    },
     onPhoneAction(listener) {
       const handles = [PushNotifications.addListener("pushNotificationActionPerformed", ({ actionId, inputValue, notification }) => {
         const data = notification.data ?? {};
-        if (actionId !== "tap" || fromBotHost(data)) listener({ actionId, ...(inputValue ? { inputValue } : {}), data });
+        listener({ actionId, ...(inputValue ? { inputValue } : {}), data });
       })];
       if (kind === "ios" && Capacitor.isPluginAvailable("DuskTurnActivity")) handles.push(DuskTurnActivity.addListener("action", listener));
       return unsubscribe(handles);

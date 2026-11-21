@@ -37,6 +37,21 @@ describe("outbox", () => {
     expect(await prefs.get("k")).toBeNull();
   });
 
+  it("keeps older and newly typed messages after a delayed cold read and a second restart", async () => {
+    const { prefs } = memoryPrefs();
+    const saved = ["old", "delivered"].map((id) => ({ ...send(id), tries: 0 }));
+    const initial = Promise.withResolvers<string>();
+    const box = createOutbox({ ...prefs, get: () => initial.promise }, "k", () => 2000);
+    box.hold(send("new"));
+    box.release("delivered");
+    initial.resolve(JSON.stringify(saved));
+    await box.ready;
+    await settle();
+    const restarted = createOutbox(prefs, "k", () => 2000);
+    await restarted.ready;
+    expect(restarted.pending().map((one) => one.sendId)).toEqual(["old", "new"]);
+  });
+
   it("stops at a send that is lost again and picks up on the next flush", async () => {
     const { prefs } = memoryPrefs();
     const outbox = createOutbox(prefs, "k", () => 2_000);

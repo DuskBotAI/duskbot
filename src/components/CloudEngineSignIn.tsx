@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Check } from "../icons";
 import { MausAvatar } from "@/components/Avatar";
+import { useDraftPrefix } from "@/lib/drafts";
 import { startCloudSetup } from "@/components/CloudIntent";
 import { engineReady } from "@/components/EngineLibrary";
 import { EngineCheckLine, useEngineLiveCheck } from "@/components/EngineLiveCheck";
@@ -38,6 +39,7 @@ export function CloudConnectAi({ className }: { className?: string }) {
 }
 
 export function CloudEngineSignIn() {
+  const prefix = useDraftPrefix();
   const { state, dispatch } = useStore();
   const [motion, setMotion] = useState<{ kind: MausMotion; key: number }>({ kind: "none", key: 0 });
   // One frame late: a motion issued in the avatar's mounting commit is lost.
@@ -55,11 +57,10 @@ export function CloudEngineSignIn() {
     setHanding(true);
     setMotion({ kind: "success", key: 2 });
     const timer = setTimeout(() => {
-      if (!startCloudSetup(pending, latest.current, dispatch)) setPendingIntent(null);
+      if (!startCloudSetup(pending, latest.current, dispatch, prefix)) setPendingIntent(null);
     }, 1200);
     return () => clearTimeout(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pending, ready]);
+  }, [pending, ready, dispatch, prefix]);
   const face: MausState = handing ? "proud" : "curious";
 
   return (

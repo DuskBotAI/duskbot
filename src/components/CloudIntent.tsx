@@ -9,7 +9,7 @@ import { productName } from "@/lib/brand";
 import { CLOUD_INTENT_ASKED, CLOUD_INTENT_GIVEN } from "@/lib/cloud-setup";
 import { dismissCloudIntent, markIntentSent, reopenCloudIntent, setPendingIntent, setupMessage, useCloudIntent } from "@/lib/cloud-intent";
 import { cn } from "@/lib/cn";
-import { restoreComposerDraft } from "@/lib/drafts";
+import { restoreComposerDraft, useDraftPrefix } from "@/lib/drafts";
 import { t } from "@/lib/i18n";
 import { sendKeyLabel, sendsMessage, useSendKey } from "@/lib/send-key";
 import type { MausMotion, MausState } from "@/lib/mascot";
@@ -33,7 +33,7 @@ export function rememberIntent(record: OnboardingStatus | undefined, ids: string
     .then((config) => dispatch({ type: "configStatus", config })).catch(() => {});
 }
 
-export function startCloudSetup(job: string, state: Pick<AppState, "bots" | "selectedId">, dispatch: (action: Action) => void): boolean {
+export function startCloudSetup(job: string, state: Pick<AppState, "bots" | "selectedId">, dispatch: (action: Action) => void, prefix: string): boolean {
   const bot = state.bots.find((candidate) => candidate.id === state.selectedId && !candidate.hidden) ?? state.bots.find((candidate) => !candidate.hidden);
   if (!bot) return false;
   const text = setupMessage(job);
@@ -46,7 +46,7 @@ export function startCloudSetup(job: string, state: Pick<AppState, "bots" | "sel
     dispatch({ type: "select", id: bot.id });
     dispatch({
       type: "send", botId: bot.id, text, sendId: randomUuid(), threadId: bot.threadId,
-      onError: () => restoreComposerDraft(`bot:${bot.id}:${bot.threadId}`, { text, attachments: [] }),
+      onError: () => restoreComposerDraft(`${prefix}bot:${bot.id}:${bot.threadId}`, { text, attachments: [] }),
     });
   });
   const tidy = () => { delete root.dataset.cloudIntentMorph; };
@@ -58,6 +58,7 @@ export function startCloudSetup(job: string, state: Pick<AppState, "bots" | "sel
 
 export function CloudIntent() {
   const { state, dispatch } = useStore();
+  const prefix = useDraftPrefix();
   const intent = useCloudIntent();
   const [job, setJob] = useState(intent.pending ?? "");
   const [idea, setIdea] = useState<string | null>(null);
@@ -90,7 +91,7 @@ export function CloudIntent() {
     if (!text) return;
     track("cloud_intent_submitted", { idea, edited: idea ? text !== t(IDEAS.find((candidate) => candidate.id === idea)!.text) : true });
     rememberIntent(record, [CLOUD_INTENT_ASKED, CLOUD_INTENT_GIVEN], dispatch);
-    if (ready && startCloudSetup(text, state, dispatch)) return;
+    if (ready && startCloudSetup(text, state, dispatch, prefix)) return;
     withViewTransition(() => { setPendingIntent(text); reopenCloudIntent(false); });
   };
   const skip = () => {

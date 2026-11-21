@@ -6,7 +6,7 @@ import { UserPlus } from "../icons";
 import { botOwner } from "../../shared/bot-owner";
 import { openAsksOf } from "@/lib/bot-unread";
 import { cn } from "@/lib/cn";
-import { leadComposerDraft } from "@/lib/drafts";
+import { leadComposerDraft, useDraftPrefix } from "@/lib/drafts";
 import { t } from "@/lib/i18n";
 import { openBot, openThread, useStore, type AppState, type Bot } from "@/state/store";
 import { openInbox } from "@/state/inbox";
@@ -37,6 +37,7 @@ export function teamPeoplePage(team: { id: string; cloudPage?: string } | null |
 const focusComposer = () => requestAnimationFrame(() => document.querySelector<HTMLTextAreaElement>('[data-tour="composer"] textarea')?.focus());
 
 export function SidebarPeople({ compact }: { compact: boolean }) {
+  const prefix = useDraftPrefix();
   const team = useTeamPeople();
   const { state, dispatch } = useStore();
   if (!team) return null;
@@ -55,9 +56,9 @@ export function SidebarPeople({ compact }: { compact: boolean }) {
     }
     const tag = `@${person.name} `;
     const draft = openComposer(state);
-    if (draft) leadComposerDraft(draft, tag);
+    if (draft) leadComposerDraft(prefix + draft, tag);
     else if (inbox && inboxThread) {
-      leadComposerDraft(`bot:${inbox.id}:${inboxThread}`, tag);
+      leadComposerDraft(`${prefix}bot:${inbox.id}:${inboxThread}`, tag);
       openThread(dispatch, { botId: inbox.id, threadId: inboxThread }, state);
     } else if (inbox) openBot(dispatch, inbox);
     focusComposer();

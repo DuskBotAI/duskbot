@@ -26,7 +26,7 @@ function bridge(): TurnActivityBridge & { ended: string[] } {
 
 async function mount(turnActivity: TurnActivityBridge) {
   const prefs = new Map<string, string>();
-  const platform = { turnActivity, prefs: { get: async (key: string) => prefs.get(key) ?? null, set: async (key: string, value: string) => { prefs.set(key, value); }, remove: async () => {} } } as unknown as MobilePlatform;
+  const platform = { turnActivity, apnsEnvironment: "sandbox", prefs: { get: async (key: string) => prefs.get(key) ?? null, set: async (key: string, value: string) => { prefs.set(key, value); }, remove: async () => {} } } as unknown as MobilePlatform;
   await installLiveActivitySetting(platform);
   let start: (bot: Bot) => void = () => {};
   const state = { ...initialState, bots: [bot] } as AppState;

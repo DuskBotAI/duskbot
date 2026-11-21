@@ -193,7 +193,8 @@ export function AccountGate({ children }: { children: ReactNode }) {
       deleteAccount: async () => {
         const signedOut = await leaving();
         const outcome = await client.deleteAccount();
-        if (outcome === "failed") return false;
+        if (outcome === "signed-out") { setAccount(client.account()); return false; }
+        if (outcome !== "deleted") return false;
         await signOutPhone({ platform, signOutAccount: async () => {}, signedOut });
         setAccount(client.account()); setProblem(undefined);
         return true;

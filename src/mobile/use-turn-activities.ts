@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useContext, useEffect, useRef } from "react";
 
 import type { AppState, Bot } from "@/state/store";
 import { onAnyTurnLive, turnLive } from "@/state/turn-status";
 import { duskBody } from "../../shared/body-migration";
 import { turnActivityEnded, turnActivityStart, type TurnActivityRegistration, type TurnActivityState } from "../../shared/phone-activity";
-import { liveActivityEnabled, subscribeLiveActivity } from "./live-activity-setting";
+import { ActivePlace } from "./connection/active";
+import { liveActivityEnabled, subscribeLiveActivity, useLiveActivitySettingReady } from "./live-activity-setting";
 import type { MobilePlatform } from "./platform";
 import { localTurnActivity, sameTurnActivity, turnUnderway } from "./turn-activity";
 
@@ -12,8 +13,6 @@ import { localTurnActivity, sameTurnActivity, turnUnderway } from "./turn-activi
 const NEVER_STARTED_MS = 90_000;
 
 interface Tracked { id: string; botId: string; threadId: string; state: TurnActivityState; underway: boolean; createdAt: number }
-
-const environment = import.meta.env.DEV ? "sandbox" : "production";
 
 async function put(path: string, body: object, method: "PUT" | "DELETE" = "PUT"): Promise<void> {
   try {
@@ -26,7 +25,10 @@ async function put(path: string, body: object, method: "PUT" | "DELETE" = "PUT")
  * app's own state while it is open, and handed to the bot host's pushes (by its token) once it is not. Returns the
  * function that starts one. */
 export function useTurnActivities(platform: MobilePlatform, state: AppState): (bot: Bot) => void {
+  const place = useContext(ActivePlace);
+  const settingReady = useLiveActivitySettingReady();
   const bridge = platform.turnActivity;
+  const environment = platform.apnsEnvironment;
   const tracked = useRef(new Map<string, Tracked>());
   const latest = useRef(state);
   latest.current = state;
@@ -54,13 +56,16 @@ export function useTurnActivities(platform: MobilePlatform, state: AppState): (b
   useEffect(() => (bridge ? onAnyTurnLive(refresh) : undefined), [bridge, refresh]);
 
   useEffect(() => {
-    if (!bridge) return;
+    if (!bridge || !environment || !settingReady) return;
+    let mounted = true;
     let startToken: string | null = null;
     const stops = [
-      bridge.onToken(({ id, threadId, token, startedAt }) => {
+      bridge.onToken(({ id, threadId, deviceId, token, startedAt }) => {
+        if (!deviceId || deviceId !== place?.deviceId) return;
         if (!liveActivityEnabled()) { void bridge.end(id, turnActivityStart(startedAt), true).catch(() => {}); return; }
         void (async () => {
           const key = await bridge.lineKey().catch(() => null);
+          if (!mounted || !liveActivityEnabled()) return;
           const body: TurnActivityRegistration & { startedAt: number } = { threadId, token, environment, startedAt, ...(key ? { key } : {}) };
           await put("/api/mobile/activity", body);
         })();
@@ -90,15 +95,15 @@ export function useTurnActivities(platform: MobilePlatform, state: AppState): (b
         void bridge.list().then((all) => { for (const one of all) void bridge.end(one.id, turnActivityStart(one.startedAt), true).catch(() => {}); }).catch(() => {});
       }),
     ];
-    return () => { for (const stop of stops) stop(); };
-  }, [bridge]);
+    return () => { mounted = false; for (const stop of stops) stop(); };
+  }, [bridge, environment, place?.deviceId, settingReady]);
 
   return useCallback((bot: Bot) => {
     if (!bridge || !liveActivityEnabled() || Array.from(tracked.current.values()).some((one) => one.threadId === bot.threadId)) return;
     const startedAt = Math.floor(Date.now() / 1000);
     const initial = turnActivityStart(startedAt);
-    void bridge.start({ botId: bot.id, botName: bot.name, threadId: bot.threadId, color: bot.color, body: duskBody(bot.mascotBody) }, initial).then((id) => {
+    void bridge.start({ deviceId: place?.deviceId, environmentId: place?.environmentId, botId: bot.id, botName: bot.name, threadId: bot.threadId, color: bot.color, body: duskBody(bot.mascotBody) }, initial).then((id) => {
       if (id) tracked.current.set(id, { id, botId: bot.id, threadId: bot.threadId, state: initial, underway: false, createdAt: Date.now() });
     }).catch(() => {});
-  }, [bridge]);
+  }, [bridge, place]);
 }

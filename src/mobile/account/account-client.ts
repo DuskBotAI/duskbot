@@ -444,7 +444,8 @@ export function createMobileAccount({ platform, origin, fetch: requestFetch = gl
       if (!signedIn) return "signed-out";
       let outcome: "deleted" | "signed-out" = "deleted";
       try {
-        await request(ACCOUNT_ROUTES.appDeleteAccount, "POST", { email: signedIn.account.email }, signedIn.token);
+        const answer = await request(ACCOUNT_ROUTES.appDeleteAccount, "POST", { email: signedIn.account.email }, signedIn.token);
+        if (!object(answer) || answer.ok !== true) return "failed";
       } catch (error) {
         // this sign-in is already gone (deleted or signed out elsewhere): the phone forgets it the same way
         if (!(error instanceof AccountRequestError) || error.status !== 401) return "failed";

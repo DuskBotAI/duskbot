@@ -141,7 +141,7 @@ export interface TurnActivityBridge {
   /** the ones running, the ones a push started among them */
   list(): Promise<Array<{ id: string; botId: string; threadId: string; startedAt: number }>>;
   /** each activity's push token, as the system issues or renews it */
-  onToken(listener: (token: { id: string; threadId: string; token: string; startedAt: number }) => void): () => void;
+  onToken(listener: (token: { id: string; threadId: string; deviceId?: string; token: string; startedAt: number }) => void): () => void;
   /** the push-to-start token (iOS 17.2 and later) */
   onStartToken(listener: (token: string) => void): () => void;
   /** the X25519 public key (base64url) the done line is sealed to, or null when the phone shows no previews */
@@ -239,6 +239,7 @@ export interface MobilePlatform {
   appleSignIn?(nonceHash: string): Promise<AppleCredential | null>;
   /** Push registration; resolves the device token or null when refused or unsupported. Without `prompt` it never shows
    * the system's question: a phone not yet asked resolves null. */
+  apnsEnvironment?: "sandbox" | "production";
   registerPush?(options?: { prompt?: boolean }): Promise<{ token: string; platform: "apns" | "fcm" } | null>;
   /** Whether the system lets this app show notifications: `prompt` until the person has been asked. */
   pushPermission?(): Promise<"granted" | "denied" | "prompt">;

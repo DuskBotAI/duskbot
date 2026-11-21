@@ -24,6 +24,18 @@ function valid(value: unknown): value is Entry {
     && typeof one!.at === "number" && typeof one!.tries === "number";
 }
 
+function savedEntries(raw: string): Entry[] {
+  const value: unknown = JSON.parse(raw);
+  if (!Array.isArray(value)) throw new Error("Invalid outbox");
+  return value.filter(valid);
+}
+
+export function mergeOutboxes(source: string, destination: string): string {
+  const merged = new Map<string, Entry>();
+  for (const entry of [...savedEntries(source), ...savedEntries(destination)]) merged.set(entry.sendId, entry);
+  return JSON.stringify([...merged.values()].sort((a, b) => a.at - b.at));
+}
+
 export function replayAction(send: OutboxSend): Action {
   const extra = { ...(send.replyToId ? { replyToId: send.replyToId } : {}), ...(send.mode ? { mode: send.mode } : {}), ...(send.mentions?.length ? { mentions: send.mentions } : {}) };
   return send.kind === "bot"
@@ -35,24 +47,26 @@ export function replayAction(send: OutboxSend): Action {
 export function createOutbox(prefs: OutboxPrefs, key: string, now: () => number = Date.now) {
   let entries: Entry[] = [];
   const inFlight = new Set<string>();
-  let writing = Promise.resolve();
+  const releasedBeforeLoad = new Set<string>();
+  let hydrated = false;
   let flushing = false;
   let send: ((action: Action) => void) | null = null;
 
   const fresh = (entry: Entry) => now() - entry.at < OUTBOX_MAX_AGE_MS;
-  function persist() {
-    const text = JSON.stringify(entries);
-    writing = writing.then(() => (entries.length ? prefs.set(key, text) : prefs.remove(key))).catch(() => {});
-  }
   const loaded = (async () => {
     try {
-      const saved: unknown = JSON.parse(await prefs.get(key) ?? "[]");
-      const known = new Set(entries.map((entry) => entry.sendId));
-      // sends held before the saved list was read stay, after the older ones
-      const older = Array.isArray(saved) ? saved.filter(valid).filter((entry) => fresh(entry) && !known.has(entry.sendId)) : [];
-      entries = [...older, ...entries];
-    } catch {}
+      const saved = savedEntries(await prefs.get(key) ?? "[]");
+      const known = new Set([...releasedBeforeLoad, ...entries.map((entry) => entry.sendId)]);
+      entries = [...saved.filter((entry) => fresh(entry) && !known.has(entry.sendId)), ...entries];
+    } catch {} finally {
+      hydrated = true;
+      releasedBeforeLoad.clear();
+    }
   })();
+  let writing = loaded;
+  function persist() {
+    writing = writing.then(() => entries.length ? prefs.set(key, JSON.stringify(entries)) : prefs.remove(key)).catch(() => {});
+  }
 
   /** one at a time, oldest first, so a conversation gets its messages in the order they were written */
   function next() {
@@ -74,10 +88,11 @@ export function createOutbox(prefs: OutboxPrefs, key: string, now: () => number 
       persist();
     },
     release(sendId) {
+      if (!hydrated) releasedBeforeLoad.add(sendId);
       inFlight.delete(sendId);
       const before = entries.length;
       entries = entries.filter((entry) => entry.sendId !== sendId);
-      if (entries.length !== before) persist();
+      if (!hydrated || entries.length !== before) persist();
       if (flushing) next();
     },
     keep(sendId) {

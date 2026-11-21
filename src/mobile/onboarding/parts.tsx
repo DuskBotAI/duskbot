@@ -7,11 +7,11 @@ import { BAR_RANK, useNativeBar } from "../chrome";
 import { usePlatform } from "../platform";
 
 /** one filled action per screen; disabled reads as disabled in both looks */
-export const PRIMARY = "mobile-press flex h-[52px] w-full items-center justify-center gap-2 rounded-full bg-ink text-[17px] font-semibold text-app disabled:bg-ink/[0.08] disabled:text-ink-tertiary";
+export const PRIMARY = "mobile-press flex min-h-[52px] w-full items-center justify-center gap-2 rounded-full bg-ink text-[17px] font-semibold text-app disabled:bg-ink/[0.08] disabled:text-ink-tertiary";
 /** an equal-weight choice next to others: tonal, never outranking the primary */
-export const TONAL = "mobile-press flex h-[52px] w-full items-center justify-center gap-2.5 rounded-full bg-ink/[0.05] text-[17px] font-semibold text-ink disabled:opacity-50";
+export const TONAL = "mobile-press flex min-h-[52px] w-full items-center justify-center gap-2.5 rounded-full bg-ink/[0.05] text-[17px] font-semibold text-ink disabled:opacity-50";
 /** a quiet way out or around */
-export const QUIET = "mobile-press flex h-11 w-full items-center justify-center rounded-full text-[15px] font-semibold text-ink-secondary disabled:opacity-50";
+export const QUIET = "mobile-press flex min-h-11 w-full items-center justify-center rounded-full text-[15px] font-semibold text-ink-secondary disabled:opacity-50";
 export const FIELD = "h-[52px] w-full min-w-0 rounded-[16px] bg-ink/[0.05] px-4 text-[17px] text-ink placeholder:text-ink-tertiary focus:bg-ink/[0.08] disabled:opacity-60 aria-[invalid=true]:bg-danger/[0.08]";
 export const HEADLINE = "text-[26px] font-semibold leading-[1.15] tracking-tight text-ink";
 export const LINE = "mx-auto mt-2.5 max-w-[310px] text-[16px] leading-[1.5] text-ink-secondary";
@@ -33,7 +33,7 @@ export function Screen({ top, art, children, actions, align = "center" }: { top?
   return (
     <>
       <div className="mobile-screen-top flex h-[calc(var(--m-safe-top)+60px)] shrink-0 items-end px-4 pb-2">{top}</div>
-      <div className={`flex min-h-0 flex-1 flex-col items-center overflow-y-auto px-7 text-center ${align === "center" ? "justify-center" : "pt-4"} ${actions ? "" : "pb-[calc(max(var(--m-kb,0px),var(--m-safe-bottom))+16px)]"}`}>
+      <div className={`flex min-h-0 flex-1 flex-col items-center overflow-y-auto px-7 text-center ${align === "center" ? "justify-center-safe" : "pt-4"} ${actions ? "" : "pb-[calc(max(var(--m-kb,0px),var(--m-safe-bottom))+16px)]"}`}>
         {art && <div className="mb-7 flex justify-center">{art}</div>}
         {children}
       </div>

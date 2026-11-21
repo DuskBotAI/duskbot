@@ -18,7 +18,8 @@ import { SignInOffer } from "../account/SignInOffer";
 import { Success } from "../onboarding/Success";
 import { connectToWorkspace, createConnectionStore, PlaceGoneError } from "./connections";
 import { LINK_DEADLINE_MS, linkDeadline, PairError, parseTypedPairing, relaySecrets, type TypedPairing } from "./pair";
-import { ActiveConnection } from "./active";
+import { PhoneActionDelivery, usePhoneActionInbox } from "../use-phone-actions";
+import { ActiveConnection, ActivePlace } from "./active";
 import { TranscriptShelfScope } from "@/state/transcript-scope";
 import { forgetTranscriptShelf } from "@/state/transcript-cache";
 import { reportPresence } from "./presence";
@@ -32,7 +33,7 @@ import { workspaceAnsweredAt } from "./reachability";
 import { sameRoute, watchRoute } from "./route-watch";
 import { learnRoutes } from "./learn-routes";
 
-type GateState = { kind: "loading" } | { kind: "pair"; reason?: "revoked" } | { kind: "ready"; id: string }
+type GateState = { kind: "loading" } | { kind: "pair"; reason?: "revoked" } | { kind: "ready"; id: string; record?: MobileConnectionRecord }
   | { kind: "offline"; record: MobileConnectionRecord; others: MobileConnectionRecord[]; attempts: number; trying: boolean; gone?: true; refused?: true };
 
 /** A first connect that failed after the computer accepted the pairing: only a refused token undoes it. */
@@ -90,6 +91,8 @@ export function ConnectionGate({ children, forcePair }: { children: ReactNode; f
   const [attempt, setAttempt] = useState(0);
   const retry = useCallback(() => setAttempt((n) => n + 1), []);
 
+  const delivery = usePhoneActionInbox(platform, store, state.kind === "ready" ? state.id : state.kind === "offline" ? state.record.id : null, retry);
+
   useEffect(() => {
     let stopped = false;
     const controller = new AbortController();
@@ -113,7 +116,7 @@ export function ConnectionGate({ children, forcePair }: { children: ReactNode; f
           uninstall.current = installTransport(transport, retry);
           route.current = transport;
           if (transport.asleep) markCloudAsleep();
-          setState({ kind: "ready", id: active.record.id });
+          setState({ kind: "ready", id: active.record.id, record: active.record });
           void store.touch(active.record.id).catch(() => {});
           void learnRoutes(active.record, transport, store.setRoutes, fetch, () => relaySecrets(platform, active.record.id));
         } catch (error) {
@@ -258,34 +261,36 @@ export function ConnectionGate({ children, forcePair }: { children: ReactNode; f
 
   /** Linked: the app mounts on the new installation straight away, under the success moment, so Home is loaded by the
    * time the moment hands over. No reload. */
-  const linked = useCallback(async (record: MobileConnectionRecord, token: string, name: string) => {
-    await store.save(record, token);
-    let transport: Awaited<ReturnType<typeof connectToWorkspace>>;
+  const linked = useCallback(async (record: MobileConnectionRecord, token: string, name: string, signal: AbortSignal) => {
+    signal.throwIfAborted();
+    let transport: Awaited<ReturnType<typeof connectToWorkspace>> | undefined;
     try {
-      transport = await linkDeadline(connectToWorkspace(record, token, platform, AbortSignal.timeout(LINK_DEADLINE_MS)));
+      transport = await linkDeadline(connectToWorkspace(record, token, platform, AbortSignal.any([signal, AbortSignal.timeout(LINK_DEADLINE_MS)])), LINK_DEADLINE_MS, signal);
     } catch (error) {
-      if (!pairedButUnreachable(error)) { await store.remove(record.id); throw error; }
-      // the pairing took: the computer already lists this phone, so the phone keeps the link and says it can't reach it
-      // yet (with Try again) instead of a pairing error over a pairing that worked
-      setIncoming(null);
-      setAdding(0);
-      setEntered(true);
-      retry();
-      return;
+      signal.throwIfAborted();
+      if (!pairedButUnreachable(error)) throw error;
     }
-    uninstall.current?.();
-    uninstall.current = installTransport(transport, retry);
-    route.current = transport;
-    if (transport.asleep) markCloudAsleep();
-    void learnRoutes(record, transport, store.setRoutes, fetch, () => relaySecrets(platform, record.id));
-    resetSessionEnded();
-    // the system's own notifications question, over the screen, right as the link is made
-    if (platform.native) void registerPushForConnection(platform, { prompt: true });
-    setIncoming(null);
-    setAdding(0);
-    setEntered(true);
-    setCelebrate({ name, sequence: ++sequence.current });
-    setState({ kind: "ready", id: record.id });
+    let activated = false;
+    try {
+      await store.save(record, token, { signal, onActive: () => {
+        setIncoming(null);
+        setAdding(0);
+        setEntered(true);
+        if (!transport) { retry(); return; }
+        uninstall.current?.();
+        uninstall.current = installTransport(transport, retry);
+        route.current = transport;
+        activated = true;
+        if (transport.asleep) markCloudAsleep();
+        void learnRoutes(record, transport, store.setRoutes, fetch, () => relaySecrets(platform, record.id));
+        if (platform.native) void registerPushForConnection(platform, { prompt: true });
+        resetSessionEnded();
+        setCelebrate({ name, sequence: ++sequence.current });
+        setState({ kind: "ready", id: record.id, record });
+      } });
+    } finally {
+      if (!activated && transport?.kind === "relay") transport.channel.close();
+    }
   }, [store, platform, retry]);
   const keep = useCallback((record: MobileConnectionRecord, token: string) => store.save(record, token, { open: false }), [store]);
   const cancel = () => { ++sequence.current; setIncoming(null); };
@@ -313,7 +318,15 @@ export function ConnectionGate({ children, forcePair }: { children: ReactNode; f
   }
   return (
     <>
-      <ActiveConnection value={state.id}><TranscriptShelfScope value={state.id === "same-origin" ? null : state.id}><Fragment key={state.id}>{children}</Fragment></TranscriptShelfScope></ActiveConnection>
+      <PhoneActionDelivery value={delivery}>
+        <ActivePlace value={state.record}>
+          <ActiveConnection value={state.id}>
+            <TranscriptShelfScope value={state.id === "same-origin" ? null : state.id}>
+              <Fragment key={state.id}>{children}</Fragment>
+            </TranscriptShelfScope>
+          </ActiveConnection>
+        </ActivePlace>
+      </PhoneActionDelivery>
       <PhoneUpdateLine connection={state.kind === "ready" ? state.id : null} />
       {(incoming || adding > 0) && (
         <div className="fixed inset-0 z-50">

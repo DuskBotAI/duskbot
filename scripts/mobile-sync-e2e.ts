@@ -145,15 +145,15 @@ async function exercise(label: string, harness: string, phone: ReturnType<typeof
   // the fixture has no desktop, so the harness's own viewer gate answers: proof the upgrade reached it with the phone's session
   check(label, "websocket upgrade reaches the harness viewer gate", /^(101|4\d\d)/.test(ws) && ws !== "401", ws);
 
-  const removed = await owner(harness, "DELETE", `/api/mobile/devices/${deviceId}`);
-  check(label, "owner revokes the phone", removed.status === 200, `${removed.status}`);
+  const removed = label === "mac" ? await phone.json("DELETE", `/api/mobile/devices/${deviceId}`) : await owner(harness, "DELETE", `/api/mobile/devices/${deviceId}`);
+  check(label, label === "mac" ? "phone revokes its own pairing" : "owner revokes the phone", removed.status === 200, `${removed.status}`);
   await afterRevoke();
   const ended = await waitFor(() => stream.ended(), 5000);
   check(label, "its open event stream ends", Boolean(ended));
   const refused = await phone.json("GET", "/api/bots?messages=0").catch((error: Error) => ({ status: 0, body: error.message }));
   check(label, "revoked phone is refused", refused.status === 401 || refused.status === 502 || refused.status === 404, `${refused.status} ${JSON.stringify(refused.body).slice(0, 100)}`);
   const again = await phone.json("GET", "/api/bots?messages=0").catch((error: Error) => ({ status: 0, body: error.message }));
-  check(label, "and stays refused", again.status === 401 || again.status === 502 || again.status === 404, `${again.status}`);
+  check(label, "and stays refused", again.status === 401 || again.status === 502 || again.status === 404 || (label === "mac" && refused.status === 401 && again.status === 503 && again.body?.code === "not_here"), `${again.status} ${JSON.stringify(again.body).slice(0, 100)}`);
   stream.close();
 }
 

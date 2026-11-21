@@ -10,6 +10,13 @@ describe("phone actions", () => {
     expect(phoneActionFrom({ actionId: "dusk.deny", data: { omb: dusk.dusk } })).toMatchObject({ kind: "decide", behavior: "deny" });
   });
 
+  it("opens the thread from flat Android extras and preserves a legacy tap's message", () => {
+    const data = { environmentId: "env", deviceId: "phone", botId: "bot", threadId: "thread" };
+    expect(phoneActionFrom({ actionId: "tap", data: { id: "notification", ...data } })).toEqual({ kind: "open", target: data });
+    expect(phoneActionFrom({ actionId: "tap", data: { env: "env", bot: "bot", thread: "thread", message: "m", view: "chat" } })?.target)
+      .toEqual({ environmentId: "env", botId: "bot", threadId: "thread", messageId: "m", view: "chat" });
+  });
+
   it("takes a Live Activity's ids at the top level", () => {
     expect(phoneActionFrom({ actionId: "dusk.approve", data: { botId: "b1", threadId: "t1", requestId: "r2" } })).toMatchObject({ kind: "decide", requestId: "r2" });
   });

@@ -36,12 +36,12 @@ const optionalId = (value) => value === undefined || (typeof value === "string" 
 /** the message a workspace asks to push, or null; the bot's name is cut to what a lock screen shows */
 export function pushMessage(value) {
   if (!value || typeof value !== "object") return null;
-  const { id, kind, botId, threadId, groupId, requestId } = value;
+  const { id, kind, botId, threadId, groupId, requestId, environmentId, deviceId } = value;
   if (![id, botId, threadId].every((one) => typeof one === "string" && ID.test(one)) || typeof kind !== "string" || !KIND.test(kind)) return null;
-  if (!optionalId(groupId) || !optionalId(requestId)) return null;
+  if (![groupId, requestId, environmentId, deviceId].every(optionalId)) return null;
   const botName = cleanName(value.botName);
   if (!botName) return null;
-  return { id, kind, botId, botName, threadId, ...(groupId !== undefined ? { groupId } : {}), ...(requestId !== undefined ? { requestId } : {}) };
+  return { id, kind, botId, botName, threadId, ...(environmentId ? { environmentId } : {}), ...(deviceId ? { deviceId } : {}), ...(groupId !== undefined ? { groupId } : {}), ...(requestId !== undefined ? { requestId } : {}) };
 }
 
 const REPLY_KINDS = new Set(["done", "mention", "brief", "wait", "delegation-settled"]);
@@ -81,11 +81,11 @@ export function activityMessage(value) {
   }
   if (value.event === "start") {
     const a = value.attributes;
-    if (!a || typeof a !== "object" || ![a.botId, a.threadId].every((one) => typeof one === "string" && ID.test(one)) || !optionalId(a.groupId)) return null;
+    if (!a || typeof a !== "object" || ![a.botId, a.threadId].every((one) => typeof one === "string" && ID.test(one)) || ![a.groupId, a.environmentId, a.deviceId].every(optionalId)) return null;
     if (typeof a.color !== "string" || !COLOR.test(a.color) || typeof a.body !== "string" || !BODY.test(a.body)) return null;
     const botName = cleanName(a.botName);
     if (!botName) return null;
-    out.attributes = { botId: a.botId, botName, threadId: a.threadId, ...(a.groupId !== undefined ? { groupId: a.groupId } : {}), color: a.color, body: a.body };
+    out.attributes = { ...(a.environmentId ? { environmentId: a.environmentId } : {}), ...(a.deviceId ? { deviceId: a.deviceId } : {}), botId: a.botId, botName, threadId: a.threadId, ...(a.groupId !== undefined ? { groupId: a.groupId } : {}), color: a.color, body: a.body };
   }
   return out;
 }

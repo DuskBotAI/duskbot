@@ -26,10 +26,10 @@ export function registerPushForConnection(platform: MobilePlatform, { prompt = f
     const active = await createConnectionStore(platform).active();
     if (!active?.record.deviceId || !active.record.capabilities.notifications) return;
     const registration = await platform.registerPush({ prompt });
-    if (!registration) return;
+    if (!registration || (registration.platform === "apns" && !platform.apnsEnvironment)) return;
     const body: MobilePushRegistration = {
       service: registration.platform, token: registration.token,
-      ...(registration.platform === "apns" ? { environment: import.meta.env.DEV ? "sandbox" : "production" } : {}),
+      ...(registration.platform === "apns" ? { environment: platform.apnsEnvironment } : {}),
     };
     const value = JSON.stringify(body);
     const key = `dusk.mobile.push.${active.record.id}`;

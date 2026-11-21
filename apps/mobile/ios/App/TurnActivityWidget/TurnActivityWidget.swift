@@ -110,9 +110,11 @@ private func chatURL(_ attributes: DuskTurnAttributes) -> URL? {
     var parts = URLComponents()
     parts.scheme = "duskbot"
     parts.host = "open"
-    parts.queryItems = [URLQueryItem(name: "bot", value: attributes.botId)]
-        + (attributes.groupId.map { [URLQueryItem(name: "group", value: $0)] } ?? [])
-        + [URLQueryItem(name: "thread", value: attributes.threadId)]
+    var items = [URLQueryItem(name: "bot", value: attributes.botId), URLQueryItem(name: "thread", value: attributes.threadId)]
+    if let env = attributes.environmentId { items.append(URLQueryItem(name: "env", value: env)) }
+    if let device = attributes.deviceId { items.append(URLQueryItem(name: "device", value: device)) }
+    if let group = attributes.groupId { items.append(URLQueryItem(name: "group", value: group)) }
+    parts.queryItems = items
     return parts.url
 }
 
@@ -123,7 +125,7 @@ struct AskButton: View {
 
     var body: some View {
         if ask.kind == "approve" {
-            Button(intent: ApproveAskIntent(requestId: ask.requestId, threadId: attributes.threadId, botId: attributes.botId, groupId: attributes.groupId)) {
+            Button(intent: ApproveAskIntent(requestId: ask.requestId, threadId: attributes.threadId, botId: attributes.botId, groupId: attributes.groupId, environmentId: attributes.environmentId, deviceId: attributes.deviceId)) {
                 label("Approve", symbol: "checkmark")
             }
             .buttonStyle(.plain)
@@ -146,7 +148,7 @@ struct CloseButton: View {
     let attributes: DuskTurnAttributes
 
     var body: some View {
-        Button(intent: CloseTurnActivityIntent(threadId: attributes.threadId)) {
+        Button(intent: CloseTurnActivityIntent(threadId: attributes.threadId, deviceId: attributes.deviceId)) {
             Image(systemName: "xmark")
                 .font(.system(size: 11, weight: .bold))
                 .foregroundStyle(Palette.secondary)

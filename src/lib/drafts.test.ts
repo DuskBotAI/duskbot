@@ -10,6 +10,7 @@ vi.mock("react", async (original) => ({
 }));
 
 import {
+  draftPrefix, copyWorkspaceDrafts, forgetWorkspaceDrafts,
   appendComposerDraft,
   appendDraftAttachments,
   changeDraftAttachmentPending,
@@ -74,6 +75,31 @@ function renderedChannelMode(id: string): string {
   }
   return renderToStaticMarkup(createElement(Mode));
 }
+
+it("keeps a workspace's words and attachments through re-pairing and isolates identical chat IDs", () => {
+  const store = memoryStorage();
+  Object.defineProperty(globalThis, "localStorage", { configurable: true, value: store });
+  const key = (place: string) => draftPrefix(place) + "bot:same:thread";
+  const attachments = [{ kind: "paste" as const, id: "p1", text: "private paste", size: 13, lines: 1 },
+    { kind: "file" as const, id: "f1", path: "/attachment/note", name: "note", size: 4 }];
+  setDraft(store, key("old"), "original");
+  setDraftAttachments(store, key("old"), attachments);
+  setDraft(store, key("other"), "other");
+  expect(getDraft(store, key("replacement"))).toBe("");
+  copyWorkspaceDrafts("old", "replacement");
+  forgetWorkspaceDrafts("old");
+  expect(getDraft(store, key("replacement"))).toBe("original");
+  expect(getDraftAttachments(store, key("replacement"))).toEqual(attachments);
+  forgetWorkspaceDrafts("replacement");
+  setDraft(store, key("old"), "late");
+  leavePage();
+  const restarted = copyStorage(store);
+  expect(getDraft(restarted, key("other"))).toBe("other");
+  for (const place of ["old", "replacement"]) {
+    expect(getDraft(restarted, key(place))).toBe("");
+    expect(getDraftAttachments(restarted, key(place))).toEqual([]);
+  }
+});
 
 describe("channel draft delivery mode", () => {
   it("keeps the exact request paired with a failed send until the person edits", () => {

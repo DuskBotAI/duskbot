@@ -29,9 +29,21 @@ function idsOf(data: Record<string, unknown>): Record<string, unknown> {
 export function phoneActionFrom(action: NativeAction): PhoneAction | null {
   const ids = idsOf(action.data);
   const threadId = id(ids.threadId);
-  if (!threadId) return null;
+  if (!threadId) {
+    if (action.actionId !== "tap") return null;
+    const target: MobileOpenTarget = {};
+    for (const [field, key] of Object.entries({ env: "environmentId", bot: "botId", group: "groupId", thread: "threadId", message: "messageId" } as const)) {
+      const value = id(ids[field]);
+      if (value) target[key] = value;
+    }
+    switch (ids.view) {
+      case "chat": case "computer": case "profile": case "routines": case "settings": case "notifications": target.view = ids.view;
+    }
+    return { kind: "open", target };
+  }
   const botId = id(ids.botId), groupId = id(ids.groupId), requestId = id(ids.requestId);
-  const target: MobileOpenTarget = { threadId, ...(botId ? { botId } : {}), ...(groupId ? { groupId } : {}) };
+  const environmentId = id(ids.environmentId), deviceId = id(ids.deviceId), messageId = id(ids.messageId);
+  const target: MobileOpenTarget = { threadId, ...(environmentId ? { environmentId } : {}), ...(deviceId ? { deviceId } : {}), ...(messageId ? { messageId } : {}), ...(botId ? { botId } : {}), ...(groupId ? { groupId } : {}) };
   if (!botId && !groupId) return null;
   if ((action.actionId === PHONE_ACTION.approve || action.actionId === PHONE_ACTION.deny) && requestId) {
     return { kind: "decide", target, requestId, behavior: action.actionId === PHONE_ACTION.approve ? "allow" : "deny" };

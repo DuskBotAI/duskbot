@@ -86,6 +86,7 @@ export { ArchivedBotRow, ArchivedBotsPanel, archivedDeleteAllCopy, botConfirmCop
 import { roomDeleteCopy } from "./room-delete-copy"; export { roomDeleteCopy };
 import { friendlyError } from "@/lib/plain-error";
 import { useActivityReorder, useRailMorph } from "./sidebar-motion";
+import { openRowRevealer } from "@/lib/sidebar-reveal";
 
 /** The centre of macOS's traffic lights (14px tall) with the window's frame off, where the window puts them at 16,16. */
 export const MAC_TRAFFIC_LIGHT_CENTER_Y = 23;
@@ -742,6 +743,12 @@ export function Sidebar({ open, onClose, collapseToIcons = false }: {
   const importReturnRef = useRef<HTMLButtonElement>(null);
   const sidebarRef = useRef<HTMLElement>(null);
   const drawer = usePhoneDrawer({ phone, open, onClose, ref: sidebarRef });
+  const openRowId = state.activeView === "chat" ? state.selectedId : null;
+  const rowCount = state.bots.length + state.groups.length;
+  const [revealOpenRow] = useState(openRowRevealer);
+  useEffect(() => {
+    revealOpenRow(sidebarRef.current, openRowId);
+  }, [revealOpenRow, openRowId, rowCount]);
   // a plain aside on a wide screen; only the phone's drawer is a motion element, which follows a drag
   // SAFETY: off a phone no motion prop is passed (drawer.props is null), so the plain aside sees only DOM props
   const Aside = (phone ? motion.aside : "aside") as typeof motion.aside;
@@ -1139,7 +1146,7 @@ export function Sidebar({ open, onClose, collapseToIcons = false }: {
       {!collapseToIcons && !phone && <SidebarResizeHandle sizing={sizing} sidebarRef={sidebarRef} avatars={density === "icons"} avatarsWidth={railWidth}
         onAvatars={(avatars) => morph(() => setSidebarDensity(avatars ? "icons" : "comfortable"))} style={windowNoDragStyle} />}
 
-      <GlassScroller className={rail ? "[scrollbar-gutter:stable_both-edges]" : simpleDesk ? "px-3" : "px-2"}>
+      <GlassScroller className={cn("scroll-pt-6", rail ? "scroll-pb-6 [scrollbar-gutter:stable_both-edges]" : simpleDesk ? "scroll-pb-12 px-3" : "scroll-pb-6 px-2")}>
         <div className={cn("flex flex-col", simpleDesk ? "gap-2.5 pb-6 pt-1" : "gap-1 pb-2 pt-2")} onKeyDown={walkRows}
           onFocus={simpleDesk ? (event) => { const id = event.target instanceof HTMLElement ? event.target.dataset.sidebarBotRow : undefined; if (id) setRowStop(id); } : undefined}>
           {matchingBots.length === 0 && visibleGroups.length === 0 && q && q.length < MIN_QUERY && (

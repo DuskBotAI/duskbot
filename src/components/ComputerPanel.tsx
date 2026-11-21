@@ -25,7 +25,7 @@ import { useCaptionChrome } from "@/components/DesktopCapabilities";
 import { usePageVisible } from "@/lib/page-visible";
 import { listenLiveFrames } from "@/lib/live-events";
 import { CloudScreenPreview } from "./CloudScreenPreview";
-import { isRemoteScreenshotContention } from "@/lib/remote-desktop";
+import { isRemoteScreenshotContention, isRemoteScreenshotUnconfigured } from "@/lib/remote-desktop";
 import { useDesktopCapabilities } from "./DesktopCapabilities";
 import { BotRoutines } from "./routines/BotRoutines";
 import { BrowserPanel } from "./BrowserPanel";
@@ -255,6 +255,7 @@ export function ComputerPanel({
   const [containerState, setContainerState] = useState<string | null>(null);
   const [polledFrame, setPolledFrame] = useState<{ png: string; mime: string } | null>(null);
   const [previewError, setPreviewError] = useState<Error | string | null>(null);
+  const previewUnconfigured = previewError instanceof ApiError && isRemoteScreenshotUnconfigured(previewError);
   const [previewRefreshing, setPreviewRefreshing] = useState(false);
   const [previewRetry, setPreviewRetry] = useState(0);
   const [vmFrame, setVmFrame] = useState<string | null>(null);
@@ -1415,6 +1416,9 @@ export function ComputerPanel({
               src={frameSrc}
               name={bot.name}
               error={panelErrorText(previewError)}
+              fix={previewUnconfigured && placeSeat.role === "admin"
+                ? { label: t(vpsStatus?.configured ? "computer.openVpsSettings" : "vpsLink.add"), onClick: openConnectionSettings }
+                : undefined}
               refreshing={previewRefreshing}
               retry={previewRetry}
               starting={phase === "starting"}
@@ -1562,7 +1566,7 @@ export function ComputerPanel({
           </div>
         )}
 
-        {(cloudPreviewReady || phase === "vm") && (
+        {(cloudPreviewReady || phase === "vm") && !previewUnconfigured && (
           <div className="mt-3 flex gap-2" data-testid="computer-actions">
             {!control.held && !bannerTakesControl && (
               <button

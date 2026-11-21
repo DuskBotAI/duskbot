@@ -82,6 +82,8 @@ jobs:
           [ -f "$res/server/desktop-entry.mjs" ] || { echo "::error::missing $res/server/desktop-entry.mjs"; fail=1; }
           # missing → the server has nothing to serve → black window
           [ -f "$res/ui/index.html" ] || { echo "::error::missing $res/ui/index.html"; fail=1; }
+          # the store build's asset gate runs on the desktop bundle too
+          node apps/mobile/scripts/release-gate.mjs "$res/ui" || fail=1
           [ -f "$res/cloudflared/cloudflared.exe" ] || {
             echo "::error::missing $res/cloudflared/cloudflared.exe"; fail=1; }
           [ -f "$res/licenses/cloudflared-LICENSE.txt" ] || {

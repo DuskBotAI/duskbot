@@ -48,6 +48,8 @@ jobs:
         run: pnpm package:linux:offline
       - name: Verify package contents and metadata
         run: node scripts/verify-linux-package.mjs
+      - name: Run the store asset gate over the packaged UI
+        run: node apps/mobile/scripts/release-gate.mjs release/linux-unpacked/resources/ui
       - name: Match a normal Ubuntu package parent on the ephemeral runner
         run: |
           test ! -L /opt

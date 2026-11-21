@@ -292,9 +292,28 @@ async function joinMovedBots(notes: AssistantNotes, bots: readonly Bot[], movedN
   return joined;
 }
 
+const importing = new Map<string, Promise<NotesOutcome>>();
+
+/** FNV-1a over the text, with its length: the same notes pasted, dropped and found in Downloads at once share a key. */
+function notesKey(text: string): string {
+  let hash = 0x811c9dc5;
+  for (let at = 0; at < text.length; at += 1) hash = Math.imul(hash ^ text.charCodeAt(at), 0x01000193);
+  return `${text.length}:${(hash >>> 0).toString(16)}`;
+}
+
 /** Everything in the notes, each part on its own: About me, the first bot's memory, then a bot for each of the other
- * AI's own assistants. A part that fails leaves the others in; the waiting stops once anything came in. */
-export async function importNotes(text: string, context: NotesContext, options: { via?: NotesVia } = {}): Promise<NotesOutcome> {
+ * AI's own assistants. A part that fails leaves the others in; the waiting stops once anything came in. The same notes
+ * again while they are still coming in join that import rather than start another. */
+export function importNotes(text: string, context: NotesContext, options: { via?: NotesVia } = {}): Promise<NotesOutcome> {
+  const key = notesKey(text);
+  const running = importing.get(key);
+  if (running) return running;
+  const next = importOnce(text, context, options).finally(() => importing.delete(key));
+  importing.set(key, next);
+  return next;
+}
+
+async function importOnce(text: string, context: NotesContext, options: { via?: NotesVia }): Promise<NotesOutcome> {
   const parsed = parseNotes(text);
   // read: the first bot says it got them in its chat, and its working row shows each step until the summary
   const worker = context.chatBotId || context.firstBotId;

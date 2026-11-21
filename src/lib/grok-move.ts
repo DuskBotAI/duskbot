@@ -109,7 +109,12 @@ export async function runGrokMove(preview: GrokPreview, dispatch: (action: Actio
   for (const plan of preview.plans) {
     onBot?.(plan);
     try {
-      const bot = (await addTemplate(plan.document, dispatch)).first;
+      const added = await addTemplate(plan.document, dispatch);
+      if (added.alreadyAdded) {
+        report.moved.push(plan.name);
+        continue;
+      }
+      const bot = added.first;
       if (!bot) throw new Error("no bot");
       const skillsOff: string[] = [];
       for (const skill of plan.skills) {

@@ -136,6 +136,23 @@ describe("bringing notes in", () => {
     expect(note).toMatchObject({ from: ["Claude"], facts: 2, threads: 1 });
   });
 
+  it("takes the same notes pasted twice at once as one import", async () => {
+    f.api.mockImplementation(async (path: string, init?: { method?: string; body?: string }) => {
+      if (path === "/api/config") return { profile: JSON.parse(init!.body!).profile };
+      if (path.includes("/memory/file?")) return { text: "" };
+      if (path === "/api/mcp/servers") return { servers: [] };
+      return { ok: true };
+    });
+    f.runBotMove.mockImplementation(async () => [{ report: { bots: [{ id: "r", name: "Recipe helper", routines: 0 }], failed: [] } }]);
+    const context = { bots: [], aboutMe: "", team: false, firstBotId: "dusk", dispatch: vi.fn() };
+    const [first, second] = await Promise.all([importNotes(notes(), context), importNotes(notes(), context, { via: "drop" })]);
+    expect(second).toBe(first);
+    expect(f.runBotMove).toHaveBeenCalledOnce();
+    expect(f.api.mock.calls.filter(([path, init]) => path === "/api/bots/dusk/import-note" && JSON.parse(init.body).start)).toHaveLength(1);
+    await importNotes(notes(), context);
+    expect(f.runBotMove, "once it is done, the same notes may come in again").toHaveBeenCalledTimes(2);
+  });
+
   it("makes the person's own routines real, paused routines and their skills switched-off skills of the first bot, once", async () => {
     const routines: Array<Record<string, unknown>> = [];
     const skills: Array<{ name: string }> = [];

@@ -353,7 +353,7 @@ async function bringNotesIn(parsed: AssistantNotes, context: NotesContext, optio
   }
   const came = outcome.facts || outcome.memories || outcome.threads || outcome.bots || outcome.joined || outcome.routines || outcome.skills;
   if (came || !(outcome.failed.length || outcome.lost!.length)) stopWaiting();
-  if (came && worker) await postImportNote(worker, { ...notesNoteFacts(outcome), ...(options.via === "downloads" ? { via: "downloads" as const } : {}) });
+  if (worker) await postImportNote(worker, { ...notesNoteFacts(outcome), ...(options.via === "downloads" ? { via: "downloads" as const } : {}), ...(came ? {} : { nothingNew: true }) });
   return outcome;
 }
 

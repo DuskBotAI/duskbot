@@ -6,6 +6,7 @@ vi.mock("./bot-move", () => ({ runBotMove: f.runBotMove }));
 vi.mock("./copy-text", () => ({ copyText: f.copy }));
 vi.mock("./own-profile", () => ({ saveTeamProfile: vi.fn() }));
 import { setLocale } from "@/lib/i18n";
+import type { Action } from "@/state/store";
 import { NOTES_FORMAT } from "../../shared/assistant-notes";
 import { GrokImportError } from "../../shared/grok-import";
 import {
@@ -133,7 +134,31 @@ describe("bringing notes in", () => {
     const said = f.api.mock.calls.filter(([path]) => path === "/api/bots/dusk/import-note").map(([, init]) => JSON.parse(init.body));
     expect(said[0], "first it says it got them").toEqual({ from: ["Claude"], start: true });
     const note = said.at(-1);
-    expect(note).toMatchObject({ from: ["Claude"], facts: 2, threads: 1 });
+    expect(note).toMatchObject({ from: ["Claude"], facts: 2, threads: 1, joined: 1 });
+  });
+
+  it("answers its own \"setting up\" note when nothing in the notes was new, and says when they were cut off", async () => {
+    const topics = new Map<string, string>();
+    f.api.mockImplementation(async (path: string, init?: { method?: string; body?: string }) => {
+      if (path === "/api/config") return { profile: JSON.parse(init!.body!).profile };
+      const read = /^\/api\/bots\/(\w+)\/memory\/file\?path=(.+)$/.exec(path);
+      if (read) return { text: topics.get(decodeURIComponent(read[2]!)) ?? "" };
+      if (path.endsWith("/memory/file") && init?.method === "PUT") topics.set(JSON.parse(init.body!).path, JSON.parse(init.body!).text);
+      return { ok: true };
+    });
+    const said = () => f.api.mock.calls.filter(([path]) => path === "/api/bots/dusk/import-note").map(([, init]) => JSON.parse(init.body));
+    let about = "";
+    const context = () => ({ bots: [], aboutMe: about, team: false, firstBotId: "dusk", dispatch: (action: Action) => { if (action.type === "profileSaved") about = action.profile.aboutMe ?? about; } });
+    const text = notes({ bots: [] });
+    await importNotes(text, context());
+    f.api.mockClear();
+    const again = await importNotes(text, context());
+    expect(notesOutcomeLine(again)).toBe("Nothing new from Claude. It was all here already.");
+    expect(said()).toEqual([{ from: ["Claude"], start: true }, expect.objectContaining({ from: ["Claude"], nothingNew: true, failed: false })]);
+    f.api.mockClear();
+    const cut = `\`\`\`json\n{"format":"${NOTES_FORMAT}","version":1,"from":"Gemini","memories":["Bakes on Sundays.","Grows tomatoes."],"about_me":["Name is Sa`;
+    expect((await importNotes(cut, context())).partial).toBe(true);
+    expect(said().at(-1)).toMatchObject({ from: ["Gemini"], memories: 2, partial: true });
   });
 
   it("makes the person's own routines real, paused routines and their skills switched-off skills of the first bot, once", async () => {

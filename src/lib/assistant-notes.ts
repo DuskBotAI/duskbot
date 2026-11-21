@@ -6,7 +6,7 @@ import { activeLocale, t } from "@/lib/i18n";
 import type { LocaleKey } from "@/locales";
 import { api, type Action, type Bot, type ConfigStatus } from "@/state/store";
 import {
-  aboutMeWithNotes, isNotesPrompt, NOTES_MAX_CHARS, looksLikeNotes, notesMemoryFile, notesMemoryText, notesThreadsFile, notesThreadsText, NOTES_PROMPT, parseNotes, type AssistantNotes,
+  aboutMeWithNotes, isNotesPrompt, notesAboutFile, notesAboutText, NOTES_MAX_CHARS, looksLikeNotes, notesMemoryFile, notesMemoryText, notesThreadsFile, notesThreadsText, NOTES_PROMPT, parseNotes, type AssistantNotes,
 } from "../../shared/assistant-notes";
 import { notesNoteFacts, postImportNote } from "./import-note";
 import { arrivalFailed, noteArrival, setNotesWork, type NotesVia } from "./notes-arrival";
@@ -159,6 +159,8 @@ export interface NotesContext {
 /** `failed`: bots that couldn't be made; `lost`: parts that couldn't be saved. */
 export interface NotesOutcome {
   from: string; facts: number; memories: number; bots: number; failed: string[]; lost?: Array<"about" | "memory">; partial: boolean;
+  /** Facts about the person too long for About me, or past its share for one move, kept in the first bot's memory. */
+  aboutInMemory?: number;
   /** Open threads and recurring tasks kept in the first bot's memory. */
   threads?: number;
   botNames?: string[];
@@ -213,6 +215,19 @@ async function mergeTopic(botId: string, path: string, build: (before: string) =
   if (!text || text === before) return false;
   await api(file, { method: "PUT", body: JSON.stringify({ path, text }) });
   return true;
+}
+
+/** What About me can't take, word for word in a topic of the first bot's memory: answers how many weren't there yet. */
+async function saveLongFacts(notes: AssistantNotes, facts: readonly string[], botId: string | null): Promise<number> {
+  if (!botId || !facts.length) return 0;
+  const count = (text: string | null) => (text ?? "").split("\n").filter((line) => line.startsWith("- ")).length;
+  let added = 0;
+  await mergeTopic(botId, notesAboutFile(notes), (before) => {
+    const text = notesAboutText(notes, facts, before);
+    added = count(text) - count(before);
+    return text;
+  });
+  return added;
 }
 
 async function saveMemories(notes: AssistantNotes, botId: string | null): Promise<number> {
@@ -312,7 +327,8 @@ async function bringNotesIn(parsed: AssistantNotes, context: NotesContext, optio
   // the rules pass: noise and near-repeats out; another AI's own notes are already chosen, so the caps are wider
   const seen = aboutLines(context.aboutMe);
   const memories = distillLines(parsed.memories, { cap: NOTES_MEMORY_CAP, seen: [...seen] });
-  const notes = { ...parsed, aboutMe: distillLines(parsed.aboutMe, { cap: NOTES_ABOUT_CAP, seen }).keep, memories: memories.keep };
+  const about = distillLines(parsed.aboutMe, { cap: NOTES_ABOUT_CAP, seen });
+  const notes = { ...parsed, aboutMe: about.keep, memories: memories.keep };
   const outcome: NotesOutcome = { from: notes.from.name, facts: 0, memories: 0, threads: 0, bots: 0, botNames: [], joined: 0, routines: 0, failed: [], lost: [], partial: notes.partial };
   let aboutMe = context.aboutMe;
   step(t("composer.notes.row.memory"));
@@ -321,6 +337,7 @@ async function bringNotesIn(parsed: AssistantNotes, context: NotesContext, optio
     outcome.facts = saved.added;
     aboutMe = saved.text;
   } catch { outcome.lost!.push("about"); }
+  try { outcome.aboutInMemory = await saveLongFacts(notes, about.later, context.firstBotId); } catch { outcome.lost!.push("about"); }
   try { outcome.memories = await saveMemories(notes, context.firstBotId); } catch { outcome.lost!.push("memory"); }
   // passages and the overflow: the first bot's engine condenses them, now or once it has one
   const later = distillChunks(memories.later.length ? [`What ${notes.from.name} remembered:\n${memories.later.map((line) => `- ${line}`).join("\n")}`] : []);
@@ -351,7 +368,7 @@ async function bringNotesIn(parsed: AssistantNotes, context: NotesContext, optio
     outcome.failed.push(...reports.flatMap((one) => one.report.failed));
     outcome.joined = await joinMovedBots(notes, context.bots, preview.moved);
   }
-  const came = outcome.facts || outcome.memories || outcome.threads || outcome.bots || outcome.joined || outcome.routines || outcome.skills;
+  const came = outcome.facts || outcome.aboutInMemory || outcome.memories || outcome.threads || outcome.bots || outcome.joined || outcome.routines || outcome.skills;
   if (came || !(outcome.failed.length || outcome.lost!.length)) stopWaiting();
   if (came && worker) await postImportNote(worker, { ...notesNoteFacts(outcome), ...(options.via === "downloads" ? { via: "downloads" as const } : {}) });
   return outcome;
@@ -364,6 +381,7 @@ const count = (n: number, one: LocaleKey, many: LocaleKey) => (n === 1 ? t(one) 
 export function notesOutcomeLine(outcome: NotesOutcome): string {
   const parts = [
     ...(outcome.facts ? [count(outcome.facts, "composer.notes.factsOne", "composer.notes.facts")] : []),
+    ...(outcome.aboutInMemory ? [count(outcome.aboutInMemory, "composer.notes.aboutInMemoryOne", "composer.notes.aboutInMemory")] : []),
     ...(outcome.memories ? [count(outcome.memories, "composer.notes.memoriesOne", "composer.notes.memories")] : []),
     ...(outcome.threads ? [count(outcome.threads, "composer.notes.threadsOne", "composer.notes.threads")] : []),
     ...(outcome.bots ? [count(outcome.bots, "composer.notes.botsOne", "composer.notes.bots")] : []),

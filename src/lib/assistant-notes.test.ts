@@ -136,6 +136,29 @@ describe("bringing notes in", () => {
     expect(note).toMatchObject({ from: ["Claude"], facts: 2, threads: 1 });
   });
 
+  it("keeps About me's long facts, and those past its share, word for word in the first bot's memory, and says so", async () => {
+    const syllables = ["ka", "lo", "mi", "ren", "tu", "vash", "or", "bel", "quin", "sa", "dro", "pel", "nix", "gru", "fen", "hol", "zar", "wim", "ju", "po"];
+    const word = (n: number) => `${syllables[n % 20]}${syllables[Math.floor(n / 20) % 20]}${syllables[Math.floor(n / 400) % 20]}`;
+    const words = (from: number, count: number) => Array.from({ length: count }, (_, k) => word(from * 37 + k * 11)).join(" ");
+    const short = Array.from({ length: 82 }, (_, i) => `Fact ${i}: ${words(i, 6)}.`);
+    const long = Array.from({ length: 10 }, (_, i) => `Long fact ${i}: ${words(500 + i * 13, 70)}.`);
+    const topics = new Map<string, string>();
+    f.api.mockImplementation(async (path: string, init?: { method?: string; body?: string }) => {
+      if (path === "/api/config") return { profile: JSON.parse(init!.body!).profile };
+      const read = /^\/api\/bots\/(\w+)\/memory\/file\?path=(.+)$/.exec(path);
+      if (read) return { text: topics.get(decodeURIComponent(read[2]!)) ?? "" };
+      if (path.endsWith("/memory/file") && init?.method === "PUT") topics.set(JSON.parse(init.body!).path, JSON.parse(init.body!).text);
+      return { ok: true };
+    });
+    const outcome = await importNotes(notes({ about_me: [...long, ...short], instructions: "", bots: [] }), { bots: [], aboutMe: "", team: false, firstBotId: "dusk", dispatch: vi.fn() });
+    const kept = topics.get("memory/about-you-from-claude.md")!;
+    for (const fact of [...long, ...short.slice(-2)]) expect(kept).toContain(`- ${fact}\n`);
+    expect(outcome).toMatchObject({ facts: 80, aboutInMemory: 12 });
+    expect(notesOutcomeLine(outcome)).toBe("Brought in from Claude: 80 things about you, 12 more things about you, kept in memory, and 1 memory.");
+    const note = JSON.parse(f.api.mock.calls.findLast(([path]) => path === "/api/bots/dusk/import-note")![1].body);
+    expect(note).toMatchObject({ facts: 80, aboutInMemory: 12 });
+  });
+
   it("makes the person's own routines real, paused routines and their skills switched-off skills of the first bot, once", async () => {
     const routines: Array<Record<string, unknown>> = [];
     const skills: Array<{ name: string }> = [];

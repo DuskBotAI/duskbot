@@ -8028,6 +8028,8 @@
   "server.importNote.more": "{count} weitere",
   "server.importNote.factsOne": "1 Sache über dich, jetzt in „Über mich“",
   "server.importNote.facts": "{count} Dinge über dich, jetzt in „Über mich“",
+  "server.importNote.aboutInMemoryOne": "1 weitere Sache über dich, die nicht in „Über mich“ gepasst hat, im Gedächtnis gespeichert",
+  "server.importNote.aboutInMemory": "{count} weitere Dinge über dich, die nicht in „Über mich“ gepasst haben, im Gedächtnis gespeichert",
   "server.importNote.memoriesOne": "1 Erinnerung, im Gedächtnis gespeichert",
   "server.importNote.memories": "{count} Erinnerungen, im Gedächtnis gespeichert",
   "server.importNote.threadsOne": "1 offener Punkt oder wiederkehrende Aufgabe, in meinen Notizen",

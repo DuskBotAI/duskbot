@@ -25,6 +25,7 @@ export function importNoteText(input: ImportNoteFacts, language?: string): strin
     lines.push(facts.bots.length === 1 ? say("server.importNote.botOne", { names }) : say("server.importNote.bots", { count: facts.bots.length, names }));
   }
   if (facts.facts) lines.push(counted(facts.facts, "server.importNote.factsOne", "server.importNote.facts"));
+  if (facts.aboutInMemory) lines.push(counted(facts.aboutInMemory, "server.importNote.aboutInMemoryOne", "server.importNote.aboutInMemory"));
   if (facts.memories) lines.push(counted(facts.memories, "server.importNote.memoriesOne", "server.importNote.memories"));
   if (facts.threads) lines.push(counted(facts.threads, "server.importNote.threadsOne", "server.importNote.threads"));
   if (facts.instructions.length) lines.push(say("server.importNote.instructions", { apps: and(facts.instructions) }));

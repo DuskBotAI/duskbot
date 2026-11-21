@@ -89,6 +89,7 @@ import { voiceShortcut, voiceShortcutLabel } from "@/lib/voice-input/shortcut";
 import { openSettings } from "@/lib/open-settings";
 import { NotesWaitingLine, useNotesIntake } from "./NotesWaiting"; import { looksLikeNotes, notesInFiles } from "@/lib/assistant-notes";
 import { escapeCancelsReply } from "@/lib/replies";
+import { useKeyGate } from "./ComposerKeyWarning";
 import { useStopPress } from "@/lib/stop-turn";
 import { useThreadRefs } from "./ThreadRefs";
 import {
@@ -679,6 +680,8 @@ export function Composer({
     const next = editFailedComposerSend(draftId, failed); restoreMentionPicks(draftId, failed.mentions); setCaret(next.length);
     requestAnimationFrame(() => { inputRef.current?.focus(); inputRef.current?.setSelectionRange(next.length, next.length); });
   };
+  const keyGate = useKeyGate({ text, reset: `${threadId}\n${effectiveText}`, messages: group ? undefined : bot?.messages, botName: bot?.name ?? group?.name ?? "",
+    keep: (rest) => { editText(rest); setCaret(rest.length); }, focus: () => requestAnimationFrame(() => inputRef.current?.focus()) });
   const send = (followUp: FollowUp | undefined = followUpFor(false)) => {
     if (locked || attachmentPending || unsentUpload) return;
     if (
@@ -696,6 +699,7 @@ export function Composer({
     if (!composed) return;
     stopDictation();
     const body = restoredRequestText(draftId) ?? withSelectionQuote(quote, composed);
+    if (keyGate.holds(body, followUp)) return;
     const sentDraft: ComposerDraftSnapshot = {
       draftId,
       revision: draftRevision(draftId),
@@ -931,6 +935,7 @@ export function Composer({
         )}
       </AnimatePresence>
       <div className="pointer-events-auto relative w-full">
+        {keyGate.warning(send)}
         <ComposerFailedSends sends={failedSends} onRetry={retryFailedSend} onEdit={editFailedSend} onDismiss={(failed) => forgetFailedComposerSend(draftId, failed.id)} />
         <SlashCommandMenu listRef={commandListRef} motion={commandMotion} commands={commandCandidates} highlight={highlight}
           onPick={pickCommand} onHighlight={setHighlight} />

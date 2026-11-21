@@ -48,6 +48,17 @@ const PRIVATE_KEY_BLOCK = /-----BEGIN [A-Z ]*PRIVATE KEY-----/;
 export function holdsCredential(text: string): boolean {
   return PRIVATE_KEY_BLOCK.test(text) || KEY_PREFIX_TESTS.some((re) => re.test(text));
 }
+/** The first span of `text` that `holdsCredential` matches: the key itself, or a whole private key block. */
+export function firstCredential(text: string): string | null {
+  const block = /-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----/.exec(text)?.[0] ?? PRIVATE_KEY_BLOCK.exec(text)?.[0];
+  if (block) return block;
+  let first: RegExpExecArray | null = null;
+  for (const re of KEY_PREFIX_TESTS) {
+    const found = re.exec(text);
+    if (found && (!first || found.index < first.index)) first = found;
+  }
+  return first?.[0] ?? null;
+}
 const BEARER = /(\bBearer\s+)([A-Za-z0-9._~+/=-]{12,})/g;
 /** `Authorization: Basic dXNlcjpwYXNz`: the base64 is `user:password` in the clear. Only after an
  * Authorization header, so prose like "Basic configuration" stays. */

@@ -5548,6 +5548,8 @@
   "computer.simple.useFullScreen": "Usa «Pantalla completa» para manejarlo.",
   "computer.handBack": "Devolver el control",
   "computer.takeControlTitle": "Pausar las manos del bot y manejar este equipo tú mismo",
+  "computer.liveDown": "La vista en vivo no se conecta, así que por ahora solo puedes mirar.",
+  "computer.retryLive": "Reintentar la vista en vivo",
   "computer.sleepTitle": "Poner el escritorio en reposo",
   "computer.worksOn": "Trabaja en",
   "computer.dest.cloudDesc": "Un escritorio en la nube",

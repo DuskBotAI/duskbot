@@ -5675,6 +5675,8 @@
   "computer.simple.useFullScreen": "Use “full screen” to drive.",
   "computer.handBack": "Hand control back",
   "computer.takeControlTitle": "Pause the bot's hands and drive this computer yourself",
+  "computer.liveDown": "The live view isn't connecting, so you can only watch for now.",
+  "computer.retryLive": "Retry live view",
   "computer.sleepTitle": "Put the desktop to sleep",
   "computer.worksOn": "Works on",
   "computer.dest.cloudDesc": "A desktop in the cloud",

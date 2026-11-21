@@ -5563,6 +5563,8 @@
   "computer.simple.useFullScreen": "Nutze „Vollbild“, um zu steuern.",
   "computer.handBack": "Steuerung zurückgeben",
   "computer.takeControlTitle": "Die Hände des Bots pausieren und diesen Computer selbst steuern",
+  "computer.liveDown": "Die Live-Ansicht verbindet sich nicht, deshalb kannst du im Moment nur zusehen.",
+  "computer.retryLive": "Live-Ansicht erneut versuchen",
   "computer.sleepTitle": "Den Desktop schlafen legen",
   "computer.worksOn": "Arbeitet auf",
   "computer.dest.cloudDesc": "Ein Desktop in der Cloud",

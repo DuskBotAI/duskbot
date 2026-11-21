@@ -2,14 +2,23 @@ import { useEffect, useState } from "react";
 import { Loader2, Maximize2, Monitor } from "../icons";
 
 import { t } from "@/lib/i18n";
+import type { ButtonHTMLAttributes, ReactNode } from "react";
 
-export function CloudScreenPreview({ src, name, error, starting, opening, disabled, refreshing = false, retry = 0, onOpen, onRetry }: {
+/** The picture's frame: a button that opens the live desktop, or a plain box while it can't be opened. */
+function PictureFrame({ open, children }: { open: ButtonHTMLAttributes<HTMLButtonElement> | null; children: ReactNode }) {
+  const box = "absolute inset-0 flex h-full w-full items-center justify-center";
+  return open ? <button type="button" {...open} className={`group ${box} disabled:cursor-wait`}>{children}</button> : <div className={box}>{children}</div>;
+}
+
+export function CloudScreenPreview({ src, name, error, starting, opening, disabled, canOpen = true, refreshing = false, retry = 0, onOpen, onRetry }: {
   src: string | null;
   name: string;
   error: string | null;
   starting: boolean;
   opening: boolean;
   disabled: boolean;
+  /** False while the live desktop can't open: the picture is shown without its Open action. */
+  canOpen?: boolean;
   refreshing?: boolean;
   retry?: number;
   onOpen: () => void;
@@ -24,14 +33,12 @@ export function CloudScreenPreview({ src, name, error, starting, opening, disabl
   return (
     <div className="relative h-full w-full" aria-busy={!problem && (!visible || opening || refreshing)}>
       {src && (
-        <button
-          type="button"
-          onClick={onOpen}
-          disabled={disabled || starting || opening || !visible}
-          className="group absolute inset-0 flex h-full w-full items-center justify-center disabled:cursor-wait"
-          aria-label={t("computer.openLiveDesktopAria", { name })}
-          title={t("computer.openLiveDesktop")}
-        >
+        <PictureFrame open={canOpen ? {
+          onClick: onOpen,
+          disabled: disabled || starting || opening || !visible,
+          "aria-label": t("computer.openLiveDesktopAria", { name }),
+          title: t("computer.openLiveDesktop"),
+        } : null}>
           <img
             key={retry}
             src={src}
@@ -40,13 +47,13 @@ export function CloudScreenPreview({ src, name, error, starting, opening, disabl
             onError={() => setFailed(src)}
             className={`h-full w-full object-contain transition group-hover:brightness-75 ${visible ? "" : "invisible"}`}
           />
-          {visible && (
+          {visible && canOpen && (
             <span className="absolute right-2 top-2 flex items-center gap-1 rounded-md bg-black/70 px-2 py-1 text-[11px] font-medium text-white">
               {opening ? <Loader2 size={12} className="animate-spin" /> : <Maximize2 size={12} />}
               {opening ? t("computer.preview.connecting") : t("computer.open")}
             </span>
           )}
-        </button>
+        </PictureFrame>
       )}
       {!visible && !problem && (
         <div role="status" className="absolute inset-0 flex flex-col items-center justify-center gap-2 px-6 text-center text-[12px] text-ink-secondary">

@@ -32,6 +32,15 @@ describe("cloud screen connection feedback", () => {
     expect(html).not.toContain('>Open</span>');
   });
 
+  it("shows the picture without an Open action while the live desktop can't open", () => {
+    const html = renderToStaticMarkup(createElement(CloudScreenPreview, {
+      ...defaults, src: "data:image/png;base64,AAAA", canOpen: false,
+    }));
+    expect(html).toContain('alt="Test bot');
+    expect(html).not.toContain("<button");
+    expect(html).not.toContain("live desktop");
+  });
+
   it("distinguishes starting the computer from waiting for a frame", () => {
     const html = renderToStaticMarkup(createElement(CloudScreenPreview, { ...defaults, starting: true }));
     expect(html).toContain("Starting your bot&#x27;s desktop…");

@@ -37,6 +37,9 @@ export async function startFakeDiscord(options: { token: string; bot?: { id: str
     if (path === "/gateway/bot") return reply(200, { url: `ws://127.0.0.1:${(server.address() as AddressInfo).port}/gateway` });
     if (/^\/channels\/\d+\/typing$/.test(path)) return reply(204);
     if (/^\/channels\/\d+\/messages$/.test(path)) return reply(200, { id: String(nextId++), ...body });
+    if (req.method === "PATCH" && /^\/channels\/\d+\/messages\/\d+$/.test(path)) return reply(200, { id: path.split("/").pop(), ...body });
+    if (/^\/interactions\/\d+\/[\w-]+\/callback$/.test(path)) return reply(204);
+    if (/^\/webhooks\/\d+\/[\w-]+$/.test(path)) return reply(200, { id: String(nextId++), ...body });
     const channel = /^\/channels\/(\d+)$/.exec(path);
     if (channel) return reply(200, { id: channel[1], name: "general" });
     return reply(404, { message: "Unknown", code: 0 });
@@ -70,6 +73,13 @@ export async function startFakeDiscord(options: { token: string; bot?: { id: str
         attachments: (input.attachments ?? []).map((one, index) => ({ id: `${id}${index}`, url: `${origin}/cdn/${one.filename}`, ...one })),
       };
       for (const socket of sockets) socket.send(JSON.stringify({ op: 0, s: ++seq, t: "MESSAGE_CREATE", d }));
+      return d;
+    },
+    /** A press on a button of the bot's message `messageId`, as an INTERACTION_CREATE in a DM. */
+    press(input: { user: { id: string; username: string }; channelId: string; messageId: string; customId: string }) {
+      const d = { id: String(nextId++), application_id: bot.id, type: 3, token: `tok-${nextId}`, channel_id: input.channelId, user: input.user,
+        message: { id: input.messageId }, data: { component_type: 2, custom_id: input.customId } };
+      for (const socket of sockets) socket.send(JSON.stringify({ op: 0, s: ++seq, t: "INTERACTION_CREATE", d }));
       return d;
     },
     posted: () => calls.filter((call) => call.method === "POST" && call.path.endsWith("/messages")),

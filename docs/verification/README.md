@@ -293,6 +293,8 @@ reports into the bot's chat as one captioned bot message, that quiet runs write
 nothing, that a run's question is answered in that chat, and the concurrency
 rule with the person's own turn, in the real renderer and end to end.
 
+The [Compose update fixture](../../scripts/testing/compose-update-smoke.py) uses an empty Linux Docker daemon with a local registry, the real server bundle and Caddy. In a disposable Linux Docker host with Python 3, curl and Compose v2.24.4+, run `pnpm build:server` and then `python3 scripts/testing/compose-update-smoke.py` from the checkout. It publishes fixture images only to the temporary registry, checks owner access, pins and a mismatched tag, then verifies manual replacement and an automatic upgrade after a fake-engine turn finishes. Its release feed and timer are local fixtures.
+
 The [server settings recipe](server-settings.md) checks browser provider sign-in
 with an offline CLI and custom-domain validation without touching live accounts.
 

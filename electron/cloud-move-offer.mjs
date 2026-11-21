@@ -1,7 +1,8 @@
 // The offer to move this computer's bots to the person's new My Cloud (one-home.mjs does the move). The first move waits
 // for the person's yes: once a Cloud is ready and this computer has bots or chats the move would carry, a sheet asks once;
 // closed, a slim line at the top of the window asks; closed too, Settings → Computer keeps the action. A computer with
-// nothing to carry moves by itself, as before.
+// nothing to carry moves by itself, until the person chooses This computer or brings bots back from a move (`stays`):
+// from then on nothing moves without their yes, for any Cloud.
 //
 // Everything here is read from state, never from an event: a Cloud that became ready while the app was closed is asked
 // about at the next launch the same way. What the person chose is kept per Cloud (userData/cloud-move-offer.json), so a
@@ -37,13 +38,14 @@ export function movable(summary) {
 
 /** The saved choices, read back for `key` only: another Cloud's are none. */
 export function parseOffer(value, key) {
-  if (!record(value) || value.v !== 1 || value.key !== key) return { v: 1, key };
+  const stays = record(value) && value.v === 1 && moment(value.stays) ? { stays: value.stays } : {};
+  if (!record(value) || value.v !== 1 || value.key !== key) return { v: 1, key, ...stays };
   const accepted = record(value.accepted) && moment(value.accepted.at) && OFFER_SOURCES.includes(value.accepted.from) ? { at: value.accepted.at, from: value.accepted.from } : undefined;
   const reported = record(value.reported) && moment(value.reported.move)
     ? { move: value.reported.move, started: value.reported.started === true, done: value.reported.done === true,
       failed: Array.isArray(value.reported.failed) ? value.reported.failed.filter((code) => typeof code === "string" && WORD.test(code)).slice(0, 20) : [] }
     : undefined;
-  return { v: 1, key, ...(accepted ? { accepted } : {}), ...(moment(value.prompt) ? { prompt: value.prompt } : {}), ...(moment(value.banner) ? { banner: value.banner } : {}),
+  return { v: 1, key, ...stays, ...(accepted ? { accepted } : {}), ...(moment(value.prompt) ? { prompt: value.prompt } : {}), ...(moment(value.banner) ? { banner: value.banner } : {}),
     ...(reported ? { reported } : {}) };
 }
 
@@ -58,9 +60,10 @@ export function offerStage({ cloud, journal, keep = false, own = false, local, s
   const moving = parseJournal(journal);
   // A move under way or done says so on its own line; one that came home may be offered again.
   if (moving && moving.phase !== "back") return "none";
-  if (!local?.something || !local.talked) return "none";
+  if (!local?.something || (!local.talked && !saved?.stays)) return "none";
   if (keep) return "settings";
   if (saved?.accepted) return "none";
+  if (saved?.stays) return "settings";
   if (!saved?.prompt) return "prompt";
   if (!saved?.banner) return "banner";
   return "settings";
@@ -104,13 +107,25 @@ export function createCloudMoveOffer({ store, cloud, journal, keep, own = () => 
     try { onChange(); } catch {}
   };
 
-  /** No bot here the person talked with, by this computer's own summary: the move needs no yes. */
-  const empty = () => local !== null && !local.talked;
+  /** The person chose This computer, or brought bots back from a move: kept for every Cloud. */
+  const stays = () => { try { return Boolean(parseOffer(store.read(), "").stays); } catch { return false; } };
+  const stay = () => {
+    if (stays()) return;
+    let kept = null;
+    try { kept = store.read(); } catch {}
+    save({ ...(record(kept) && kept.v === 1 ? kept : { v: 1, key: "" }), stays: now() });
+    publish();
+  };
+  const cameBack = () => keeps() || parseJournal(journal())?.phase === "back";
+  /** No bot here the person talked with, by this computer's own summary, and This computer was never chosen: the move
+   * needs no yes. */
+  const empty = () => local !== null && !local.talked && !stays() && !cameBack();
 
   /** Reads this computer's summary again when the offer could show and the last look is old (or `force`). */
   async function refresh({ force = false } = {}) {
     const mine = current(), moving = parseJournal(journal());
     if (!mine || !mine.ready || mine.ended || (moving && moving.phase !== "back")) { publish(); return; }
+    if (cameBack()) stay();
     if (!force && now() - lookedAt < LOOK_MS) return;
     if (looking) return looking;
     looking = (async () => {
@@ -127,8 +142,11 @@ export function createCloudMoveOffer({ store, cloud, journal, keep, own = () => 
   return {
     state,
     refresh,
-    /** The first move may start: the person said yes to this Cloud, or this computer has nothing to carry. */
+    /** The first move may start: the person said yes to this Cloud, or this computer has nothing to carry and was never
+     * chosen to stay. */
     consent: () => empty() || accepted(),
+    /** The person chose This computer: no move starts by itself again. */
+    stay,
     /** The person said yes to this Cloud, and does not keep this computer's bots here since. */
     accepted,
     /** The person's yes, from `from`: kept for this Cloud, a choice to keep the bots here is let go of, and the move starts. */
@@ -154,6 +172,7 @@ export function createCloudMoveOffer({ store, cloud, journal, keep, own = () => 
     },
     /** The move changed: what it did, said once each as product events. */
     observe() {
+      if (cameBack()) stay();
       const mine = current(), moving = parseJournal(journal());
       if (!mine || !moving || moving.cloud?.name || !moment(moving.startedAt)) { publish(); return; }
       const before = saved(mine), from = before.accepted?.from ?? "auto";

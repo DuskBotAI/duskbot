@@ -85,6 +85,8 @@ export interface SideRepliesDeps<R extends SideRequest> {
   redirect(request: R, prompt: string): Promise<void>;
   /** The quick reply, a bot message of its own outside any turn. */
   post(threadId: string, text: string): void;
+  /** The message is a separate new ask of its own, for the chat's open-item ledger. */
+  asked?(request: R): void;
   /** The message's path without a quick reply. */
   fallback(request: R): Promise<void>;
   timeoutMs?: number;
@@ -247,6 +249,7 @@ export function createSideReplies<R extends SideRequest>(deps: SideRepliesDeps<R
         return outcome;
       }
       case "task": {
+        deps.asked?.(request);
         const outcome = await addTask(request, decision.reply);
         deps.post(threadId, decision.reply);
         return outcome;

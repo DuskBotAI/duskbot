@@ -55,8 +55,9 @@ export function foldedNoticeIds(rows: TrailingRows | null): ReadonlySet<string> 
 }
 
 const noticeText = (m: Message) => (m.bugReport && bugReportFixedText(m.bugReport)) ?? statusActivity(m)?.text ?? "";
-const FOLDER_GONE = /This bot's folder .* was moved or deleted\./;
 const openEngines = { type: "toggleAppSettings", open: true, section: "engines" } as const;
+const openKeys = { type: "toggleAppSettings", open: true, section: "connections" } as const;
+const openPlan = { type: "toggleAppSettings", open: true, section: "cloudAccount" } as const;
 
 type CardAction = { label: string; onClick: () => void };
 
@@ -161,7 +162,7 @@ export function FailedReplyCard({ rows, group = false, botId: ownBotId, threadId
   const onServer = aiRunsOnServer(state.config, capabilities);
   const engineName = lead.engine?.displayName ?? t("failedReply.yourAi");
   const cause = failedTurnCause(tool.name) ?? "";
-  let detail: string | null = failedReplyDetail(lead.kind, engineName, onServer, cause);
+  let detail: string | null = failedReplyDetail(lead.kind, engineName, onServer);
   let did: string | null = null;
   const actions: CardAction[] = [];
   const retry = onRetry;
@@ -204,6 +205,9 @@ export function FailedReplyCard({ rows, group = false, botId: ownBotId, threadId
         const tile = (canOfferSignIn(lead.kind, lead.engine) || signInNotice) && lead.engine && aiTileOf(lead.engine);
         return { label: t("chat.notice.signIn"), onClick: () => tile ? setConnecting(tile) : dispatch(openEngines) };
       }
+      if (action === "update_key") return { label: t("failedReply.updateKey"), onClick: () => dispatch(openKeys) };
+      if (action === "open_plan") return { label: t("failedReply.seePlan"), onClick: () => dispatch(openPlan) };
+      if (action === "open_folder") return leadBotId ? { label: t("botPanel.page.folder"), onClick: () => openBotSettings(dispatch, "access", { botId: leadBotId, page: "folder" }) } : null;
       if (action === "set_up_engine") return { label: t("failedReply.setUp", { engine: engineName }), onClick: () => dispatch(openEngines) };
       if (action === "new_chat") return !group && leadBotId ? { label: t("failedReply.newChat"), onClick: () => { close(); dispatch({ type: "newTask", botId: leadBotId }); } } : null;
       if (action === "switch_ai") return leadBotId ? { label: t("chat.rescue.switchAi"), onClick: () => openBotSettings(dispatch, "model", { botId: leadBotId }) } : null;
@@ -215,22 +219,32 @@ export function FailedReplyCard({ rows, group = false, botId: ownBotId, threadId
     if (first) actions.push(first);
     if (after) actions.push(after);
   }
-  if (FOLDER_GONE.test(cause) && leadBotId) actions.unshift({ label: t("botPanel.page.folder"), onClick: () => openBotSettings(dispatch, "access", { botId: leadBotId, page: "folder" }) });
   if (actions.length === 0 && !update && lead.kind !== "place" && leadBotId) actions.push({ label: t("chat.rescue.switchAi"), onClick: () => openBotSettings(dispatch, "model", { botId: leadBotId }) });
   // a sign-out notice beside a failure for another reason: still one card, its Sign in a pill on it
   const signInTile = lead.engine && aiTileOf(lead.engine);
   if (signInNotice && !actions.some((action) => action.label === t("chat.notice.signIn"))) actions.unshift({ label: t("chat.notice.signIn"), onClick: () => signInTile ? setConnecting(signInTile) : dispatch(openEngines) });
+  // a usage limit is a wait, not a failure: a calm notice that says until when
+  const limited = lead.kind === "usage_limit";
+  const limitAi = lead.engine ? providerName(lead.engine) : t("failedReply.limitHold.anAi");
+  const title = limited ? (tool.limitResetsAt ? t("failedReply.limitHit", { ai: limitAi, time: resetTime(tool.limitResetsAt) }) : t("failedReply.limitHitUnknown", { ai: limitAi }))
+    : lead.kind === "blocker" ? t("chat.blocker.title") : failedReplyTitle(items.map((item) => item.bot?.name ?? item.message.from?.name ?? ""), group);
   return (
-    <div className="mb-2 w-full px-5" data-failed-reply="">
+    <div className="mb-2 w-full px-5" data-failed-reply="" {...(limited ? { "data-limit-notice": "" } : {})}>
       <ChatErrorCard
-        icon={lead.kind === "usage_limit" ? "batteryFull" : signInNotice ? "key" : lead.kind === "place" ? "offline" : undefined}
-        title={lead.kind === "blocker" ? t("chat.blocker.title") : failedReplyTitle(items.map((item) => item.bot?.name ?? item.message.from?.name ?? ""), group)}
+        tone={limited ? "info" : undefined}
+        icon={limited ? "batteryFull" : signInNotice ? "key" : lead.kind === "place" ? "offline" : undefined}
+        title={title}
         onDismiss={close}
         actions={actions.length > 0 && actions.slice(0, lead.kind === "blocker" ? 3 : 2).map((action, index) => (
           <button key={action.label} type="button" onClick={action.onClick} className={index > 0 && lead.kind !== "blocker" ? QUIET_CARD_ACTION : CARD_ACTION}>{action.label}</button>
         ))}
       >
-        {detail && <p dir="auto" className="text-ink-secondary">{detail}</p>}
+        {detail && (
+          <p dir="auto" className="text-ink-secondary">
+            {detail}
+            {tool.errorRef && !limited && <span data-error-ref="" title={t("failedReply.refTitle")} className="ms-1.5 whitespace-nowrap text-[12px] text-ink-tertiary tabular-nums">{t("failedReply.ref", { ref: tool.errorRef })}</span>}
+          </p>
+        )}
         {did && <p dir="auto" className="text-ink-secondary">{t("failedReply.restartedDid", { done: did })}</p>}
         {update}
       </ChatErrorCard>

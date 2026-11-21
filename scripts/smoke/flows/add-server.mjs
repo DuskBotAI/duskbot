@@ -5,7 +5,12 @@
 // --signed-out starts as a new person does now: no account, "use your own server" asks for one in the browser (the
 // website's sign-up and approval), and the line comes by itself after. It ends with a chat on the server.
 //
-//   node scripts/smoke/flows/add-server.mjs [--out DIR] [--profile DIR] [--email ADDRESS] [--keep-vm] [--signed-out]
+// --orb NAME runs the line on an OrbStack machine on this Mac instead (made fresh with `orb create ubuntu:noble NAME`,
+// left for the caller to delete), as that machine's own user, the way a person pastes it over ssh. --installer FILE runs
+// that install.sh (a fix not on the link service yet) with the line's own session instead of the served one.
+//
+//   node scripts/smoke/flows/add-server.mjs [--out DIR] [--profile DIR] [--email ADDRESS] [--keep-vm] [--signed-out] [--orb NAME]
+import { execFile } from "node:child_process";
 import { join } from "node:path";
 import { until } from "../app.mjs";
 import { createFlow, flowArgs, runFlow, sleep, INSTALL_LINE, shellQuote } from "./lib.mjs";
@@ -13,13 +18,21 @@ import { createVm, leftoverVms, removeVm } from "./instabox-vm.mjs";
 import { walkthrough } from "./recorder.mjs";
 import { accountLinkFrom, webAccountStep } from "./web-account.mjs";
 
-const { root, out, profile, email, stamp, flag } = flowArgs("srv");
+const { root, out, profile, email, stamp, flag, option } = flowArgs("srv");
+const orb = option("--orb");
+const installer = option("--installer");
 const signedOut = flag("--signed-out");
 // the app works signed out now; without --signed-out this flow starts from a signed-in account, at the sign-in an install can still require
 const flow = createFlow({ name: "add-server", title: `add your own server${signedOut ? ", signed out" : ""}`, root, out, profile, email, env: signedOut ? {} : { DUSK_REQUIRE_ACCOUNT: "1" } });
 const view = () => flow.evaluate(`window.duskDesktop?.vpsLink?.state()`);
 const screen = () => flow.evaluate(`document.querySelector("[data-vps-screen]")?.getAttribute("data-vps-screen") ?? null`);
 let vm = null;
+
+function orbVm(name) {
+  const exec = (cmd, timeoutSeconds = 120) => new Promise((done) => execFile("orb", ["-m", name, "bash", "-c", cmd], { timeout: timeoutSeconds * 1000, maxBuffer: 16 << 20 },
+    (error, stdout, stderr) => done({ exitCode: error ? (typeof error.code === "number" ? error.code : 1) : 0, stdout: String(stdout), stderr: String(stderr) })));
+  return { id: `orb:${name}`, name, exec, remove: async () => {} };
+}
 
 await runFlow(flow, async () => {
   try {
@@ -32,12 +45,22 @@ await runFlow(flow, async () => {
 
     let line = null;
     await flow.step("install-line", "\"use your own server\" shows the one install line", async () => {
-      await flow.waitText(/meet dusk bot|where should your bots live/i, "the welcome", { timeout: 60_000 });
+      // the first run asks for the AI (a server of one's own is then added from the rail's "+", the same sheet); builds
+      // before that ask where the bots live and offer the server there
+      await flow.waitText(/meet dusk bot|pick the ai your bots think with|where should your bots live/i, "the welcome", { timeout: 60_000 });
       await flow.click("get started", { timeout: 10_000 }).catch(() => {});
-      await flow.waitText(/where should your bots live/i, "where should your bots live");
+      const first = await flow.waitText(/pick the ai your bots think with|where should your bots live/i, "the first choice");
       const started = Date.now();
       if (signedOut) await flow.clickSelector("[data-funnel-account-skip]", 5_000).catch(() => {});
-      await flow.click("use your own server", { contains: true });
+      if (/where should your bots live/i.test(String(first ?? "")) || /where should your bots live/i.test(await flow.text())) {
+        await flow.click("use your own server", { contains: true });
+      } else {
+        await flow.click("use free models", { contains: true });
+        await flow.waitFor(`Boolean(document.querySelector('textarea[aria-label^="Message"]'))`, "the chat", 60_000);
+        await flow.evaluate(`import("/src/lib/place-setup.ts").then((m) => { m.openPlaceSetup(); return true; })`);
+        await flow.waitFor(`Boolean(document.querySelector("[data-place-setup]"))`, "the add sheet", 15_000);
+        if (await flow.evaluate(`document.querySelector("[data-place-setup]")?.getAttribute("data-place-setup") === "choose"`)) await flow.click("your own server", { contains: true });
+      }
       // a chooser of ways to connect comes first; a new person takes the recommended one
       const chooser = await flow.waitText(/how should it connect/i, "the connect chooser", { timeout: 8_000 }).catch(() => null);
       if (chooser) {
@@ -60,7 +83,8 @@ await runFlow(flow, async () => {
       return `ready in ${flow.facts.lineSeconds}s`;
     }, { critical: true });
 
-    await flow.step("server", "a throwaway Linux server (InstaBox)", async () => {
+    await flow.step("server", orb ? `the OrbStack machine ${orb}` : "a throwaway Linux server (InstaBox)", async () => {
+      if (orb) { vm = orbVm(orb); flow.facts.vm = vm.id; return (await vm.exec("uname -m; . /etc/os-release; echo $PRETTY_NAME", 30)).stdout.replace(/\s+/g, " ").trim(); }
       // a run killed hard can leave its machine behind (the app's own exit beats the cleanup): those go first
       for (const old of await leftoverVms()) if (Date.parse(old.createdAt ?? 0) < Date.now() - 60 * 60_000) { await removeVm(old.id).catch(() => {}); flow.log(`deleted a leftover ${old.id}`); }
       vm = await createVm(`dusk-smoke-srv-${stamp.slice(5).replace(/[^0-9]/g, "")}`);
@@ -73,7 +97,19 @@ await runFlow(flow, async () => {
       const started = Date.now();
       // pasted as is, as the person would in their server's terminal
       walkthrough.did("pastes the install line into the server's terminal");
-      await vm.exec(`cd ~ && setsid nohup bash -c ${shellQuote(`${line}; echo "exit $?" >> ~/dusk-install.log`)} > ~/dusk-install.log 2>&1 < /dev/null & echo started`, 30);
+      let run = line;
+      if (installer) {
+        if (!orb) throw new Error("--installer needs --orb");
+        const short = /https:\/\/\S+\/s\/[a-z0-9]{7}(\/[a-z]+)?/.exec(line);
+        const boot = short ? await (await fetch(short[0].replace(/\/[a-z]+$/, ""))).text() : line;
+        const token = /\/i\/([a-z2-7]{10}-[a-z2-7]{26})/.exec(boot)?.[1];
+        if (!token) throw new Error("no session token in the line");
+        const way = short?.[1] ? ` --${short[1].slice(1)}` : (/ -s -- (--[a-z]+)/.exec(line)?.[1] ? ` ${/ -s -- (--[a-z]+)/.exec(line)[1]}` : "");
+        await new Promise((done, fail) => execFile("orb", ["push", "-m", orb, installer, "dusk-install.sh"], (error) => (error ? fail(error) : done())));
+        run = `sh ~/dusk-install.sh ${token}${way}`;
+        flow.facts.installer = `${installer} with session ${token.slice(0, 10)}`;
+      }
+      await vm.exec(`cd ~ && setsid nohup bash -c ${shellQuote(`${run}; echo "exit $?" >> ~/dusk-install.log`)} > ~/dusk-install.log 2>&1 < /dev/null & echo started`, 30);
       let lastLog = "";
       for (;;) {
         const v = await view().catch(() => null);
@@ -132,6 +168,12 @@ await runFlow(flow, async () => {
       await sleep(5000);
       flow.facts.windowAt = await flow.evaluate(`location.host`);
       flow.facts.serverScreen = (await flow.text()).replace(/\s+/g, " ").slice(0, 160);
+      flow.facts.serverPage = await flow.evaluate(`(async () => {
+        const scripts = [...document.querySelectorAll("script[src]")].map((s) => s.src);
+        const loads = await Promise.all(scripts.slice(0, 3).map((src) => fetch(src).then((r) => r.status + " " + (r.headers.get("content-type") ?? "")).catch((e) => "error " + e.message)));
+        const main = await import("/src/main.tsx").then(() => "ok", (e) => String(e?.stack ?? e).slice(0, 600)).catch(() => "n/a");
+        return { main, href: location.href, ready: document.readyState, rootHtml: document.getElementById("root")?.innerHTML.length ?? null, bodyHtml: document.body?.innerHTML.slice(0, 300), scripts, loads };
+      })()`).catch((error) => `error ${error.message}`);
       if (/meet dusk bot|where should your bots live/i.test(flow.facts.serverScreen)) flow.friction("confusing", "after the move", "the server opens on the welcome from the start (\"meet dusk bot\", then \"where should your bots live?\" again), though the person already chose this server");
       const running = await vm.exec("systemctl is-active duskbot.service", 30);
       flow.facts.serverService = running.stdout.trim();
@@ -142,8 +184,11 @@ await runFlow(flow, async () => {
       return `window on ${flow.facts.windowAt}; duskbot.service ${flow.facts.serverService}; bots: ${bots.join(", ")}`;
     });
 
-    if (signedOut || walkthrough.enabled) await flow.step("server-chat", "the server's bots in the sidebar, and a chat on the server", async () => {
-      await flow.waitFor(`Boolean(document.querySelector('textarea[aria-label^="Message"]'))`, "the server's chat", 60_000);
+    if (signedOut || orb || walkthrough.enabled) await flow.step("server-chat", "the server's bots in the sidebar, and a chat on the server", async () => {
+      await flow.waitFor(`Boolean(document.querySelector('textarea[aria-label^="Message"]'))`, "the server's chat", 240_000).catch(async (error) => {
+        flow.facts.serverPageLater = await flow.evaluate(`({ href: location.href, rootHtml: document.getElementById("root")?.innerHTML.slice(0, 400), text: document.body.innerText.slice(0, 300) })`).catch((e) => `error ${e.message}`);
+        throw error;
+      });
       await walkthrough.capture("app", "looks at the bots on the server");
       const started = Date.now();
       const outcome = await flow.chatOk();

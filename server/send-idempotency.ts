@@ -34,7 +34,8 @@ export function acceptedSendMatch(
   ) {
     return { kind: "conflict" };
   }
-  return { kind: "match", message };
+  const { ask: _ask, ...receipt } = message;
+  return { kind: "match", message: receipt };
 }
 
 export class SendSequencer {

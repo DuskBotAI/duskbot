@@ -12,7 +12,6 @@ import { BotRoutines } from "../routines/BotRoutines";
 import { Card, PanelSections, rowCls, RowText } from "./rows";
 import { ModelSelectRow } from "../native/ModelSelectRow";
 import { ModelRowSlot } from "./model-row-slot";
-import { BackupModelRow } from "./BackupAis";
 import { UsageMeterRow } from "../native/UsageMeter";
 import { answeringModel, useThreadBackup } from "@/lib/thread-backup";
 import { setVoicePrefs, useVoicePrefs, VOICE_LANGUAGES, VOICE_SPEEDS } from "./voice-prefs";
@@ -59,7 +58,7 @@ function VoiceChatRow({ label, children, row }: { label: string; children: React
  * language are kept per bot on this device. */
 /** The bot's model as it was on Bot settings: the Model row with the provider's mark, then its plan's usage when the
  * engine reports one. No heading over it: its first row already says Model. */
-export function ModelCard({ bot, patch }: { bot: Bot; patch?: Derived["patch"] }) {
+export function ModelCard({ bot }: { bot: Bot }) {
   useThreadBackup(bot, bot.threadId);
   const engine = answeringModel(bot, bot.threadId, bot.modelSelection).instanceId;
   const HostRow = useContext(ModelRowSlot);
@@ -70,7 +69,6 @@ export function ModelCard({ bot, patch }: { bot: Bot; patch?: Derived["patch"] }
           <ModelSelectRow bot={bot} threadId={bot.threadId} title={t("botPanel.page.model")} withThinking />
         </div>
       )}
-      {patch && bot.yourAccess !== "view" && <BackupModelRow bot={bot} onChange={(fallback) => patch({ fallback })} />}
       <UsageMeterRow engine={engine} />
     </Card>
   );
@@ -133,7 +131,7 @@ export function VoiceChatCard({ bot, patch }: { bot: Bot; patch: Derived["patch"
 
 /** Grok's Details tab (routines or the line saying what one is, then Voice chat), with the few native rows Grok has no
  * home for: the bot's conversations, Work until done, its model and how much it asks first. */
-export function DetailsTab({ bot, derived }: {
+export function DetailsTab({ bot }: {
   bot: Bot;
   derived: Derived;
   onOpen: (page: SimplePageId) => void;
@@ -142,7 +140,7 @@ export function DetailsTab({ bot, derived }: {
     <PanelSections data-panel-tabpanel="details">
       <BotRoutines bot={bot} />
 
-      <ModelCard bot={bot} patch={derived.patch} />
+      <ModelCard bot={bot} />
       <PackageProvenance bot={bot} />
     </PanelSections>
   );

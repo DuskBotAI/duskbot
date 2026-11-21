@@ -109,7 +109,7 @@ const pause = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 const retryable = (cause: unknown) => !(cause instanceof EmailLogInInstead || cause instanceof SignedOutHere)
   && !(cause instanceof ApiError && cause.status >= 400 && cause.status < 500);
 
-export function MobilePairingCard({ remote, cloudHome = false, email, children }: {
+export function MobilePairingCard({ remote, cloudHome = false, email, direct, children }: {
   remote: boolean;
   /** a dusk cloud refuses phone codes (server/index.ts createMobileLink refusal): the iPhone app reaches it by signing in */
   cloudHome?: boolean;
@@ -117,6 +117,8 @@ export function MobilePairingCard({ remote, cloudHome = false, email, children }
   email?: string;
   /** lays the pieces out; null when this workspace may not link phones */
   children?: (phone: PhoneParts | null) => ReactNode;
+  /** the code at once, for either phone, with no linked phones or phone picker around it; Done after a link calls onDone */
+  direct?: { onDone(): void };
 }) {
   const [devices, setDevices] = useState<MobileDevice[] | null>(null);
   const [cloudSignIns, setCloudSignIns] = useState<PairedDevice[] | null>(null);
@@ -162,14 +164,14 @@ export function MobilePairingCard({ remote, cloudHome = false, email, children }
   const moved = useRef(false);
 
   // every link starts at the phone picker, whatever was picked before
-  const start = (): Flow => "platform";
+  const start = (): Flow => direct ? "link" : "platform";
 
   const loadDevices = useCallback(async (epoch: number) => {
     try {
       const body = await api<{ devices: MobileDevice[]; current: string | null }>("/api/mobile/devices");
       if (generation.current !== epoch) return;
       setDevices(body.devices);
-      if (!cloudHome) setFlow((at) => at === "loading" ? (body.devices.length ? "home" : start()) : at);
+      if (!cloudHome) setFlow((at) => at === "loading" ? (body.devices.length && !direct ? "home" : start()) : at);
       if (baseline.current) {
         const added = newDeviceSince(baseline.current, body.devices);
         if (added) {
@@ -200,7 +202,7 @@ export function MobilePairingCard({ remote, cloudHome = false, email, children }
       if (generation.current !== epoch) return;
       const phones = cloudPhones(Array.isArray(body?.sessions) ? body.sessions : [], typeof body?.current === "string" ? body.current : null);
       setCloudSignIns(phones);
-      setFlow((at) => at === "loading" ? (phones.length ? "home" : start()) : at);
+      setFlow((at) => at === "loading" ? (phones.length && !direct ? "home" : start()) : at);
       if (cloudBaseline.current) {
         const known = new Set(cloudBaseline.current);
         const added = phones.find((session) => !known.has(session.id));
@@ -471,10 +473,10 @@ export function MobilePairingCard({ remote, cloudHome = false, email, children }
     </a>
   );
 
-  const apkBadge = (
+  const apkBadge = (text = t("settings.phone.apk")) => (
     <a data-phone-apk="" href={ANDROID_APP_URL} target="_blank" rel="noreferrer" aria-label={t("settings.phone.apkLabel")}
       className="relative inline-flex h-8 shrink-0 items-center gap-1.5 rounded-[8px] bg-ink ps-3 pe-3 text-[13px] font-semibold leading-4 tracking-[-0.01em] text-app transition-opacity duration-150 ease-[ease] before:absolute before:-inset-y-1.5 before:inset-x-0 hover:opacity-85 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus motion-reduce:transition-none">
-      {t("settings.phone.apk")}
+      {text}
     </a>
   );
 
@@ -529,7 +531,7 @@ export function MobilePairingCard({ remote, cloudHome = false, email, children }
 
   const steps = (second: ReactNode) => (failed && unreachable) ? null : (
     <ol data-phone-steps={kind} className="m-0 flex w-full list-none flex-col p-0 px-2">
-      {ios ? step(1, t("settings.phone.getIos"), appStoreBadge) : step(1, t("settings.phone.getAndroid"), apkBadge)}
+      {ios ? step(1, t("settings.phone.getIos"), appStoreBadge) : step(1, t("settings.phone.getAndroid"), apkBadge())}
       {step(2, second)}
     </ol>
   );
@@ -635,33 +637,35 @@ export function MobilePairingCard({ remote, cloudHome = false, email, children }
       </div>
     </div>
   );
-  const localLink = (live: boolean) => deskSignedIn === false
-    ? column(live, { "data-phone-link": "" }, t(ios ? "settings.phone.linkIos" : "settings.phone.linkAndroid"), t("settings.phone.signInFirstSub"), signInCard, t(ios ? "settings.phone.openIos" : "settings.phone.openAndroid"))
-    : column(live, { "data-phone-link": "" }, t(ios ? "settings.phone.linkIos" : "settings.phone.linkAndroid"),
-      signInEmail && desktopAccount && !plainQr.current ? <span data-phone-account-as="" className="break-all">{t("settings.phone.cloudAs", { email: signInEmail })}</span> : t("settings.phone.whichSub"),
-      signInDeclined ? declinedCard : card(offerTile(t("settings.mobile.qr")), typed, <>{codeActions}{desktopAccount && plainQr.current && <><span aria-hidden="true" className="text-[13px] text-ink-tertiary">·</span><button type="button" data-phone-include-sign-in="" onClick={includeSignIn} className={quietButton}>{t("settings.phone.includeSignIn")}</button></>}</>, status(t("mobile.desktop.waiting"), countdown)),
-      t(ios ? "settings.phone.openIos" : "settings.phone.openAndroid"));
+  const localParts = (): { sub: ReactNode; body: ReactNode } => deskSignedIn === false
+    ? { sub: t("settings.phone.signInFirstSub"), body: signInCard }
+    : { sub: signInEmail && desktopAccount && !plainQr.current ? <span data-phone-account-as="" className="break-all">{t("settings.phone.cloudAs", { email: signInEmail })}</span> : t("settings.phone.whichSub"),
+      body: signInDeclined ? declinedCard : card(offerTile(t("settings.mobile.qr")), typed, <>{codeActions}{desktopAccount && plainQr.current && <><span aria-hidden="true" className="text-[13px] text-ink-tertiary">·</span><button type="button" data-phone-include-sign-in="" onClick={includeSignIn} className={quietButton}>{t("settings.phone.includeSignIn")}</button></>}</>, status(t("mobile.desktop.waiting"), countdown)) };
+  const localLink = (live: boolean) => {
+    const { sub, body } = localParts();
+    return column(live, { "data-phone-link": "" }, t(ios ? "settings.phone.linkIos" : "settings.phone.linkAndroid"), sub, body, t(ios ? "settings.phone.openIos" : "settings.phone.openAndroid"));
+  };
 
   // a cloud from the desktop app: one qr and one letters-only code that log the phone in to the account, no email step
+  const cloudCodeCard = () => card(offerTile(t("settings.phone.cloudCodeQr")), typed, codeActions, status(t("settings.phone.waitingCloud"), countdown));
   const cloudCodeLink = (live: boolean) => column(live, { "data-phone-cloud": "", "data-phone-cloud-code": "" }, t(ios ? "settings.phone.cloudIos" : "settings.phone.cloudAndroid"),
     signInEmail && <span data-phone-cloud-as="" className="break-all">{t("settings.phone.cloudAs", { email: signInEmail })}</span>,
-    card(offerTile(t("settings.phone.cloudCodeQr")), typed, codeActions, status(t("settings.phone.waitingCloud"), countdown)),
-    t(ios ? "settings.phone.openIos" : "settings.phone.openAndroid"));
+    cloudCodeCard(), t(ios ? "settings.phone.openIos" : "settings.phone.openAndroid"));
 
   // a cloud in a browser tab or an older app: no code to make, the qr opens the app at its dusk cloud log in with the email filled in
+  const cloudEmailCard = () => card(qrTile(universalSignInLink(signInEmail), t("settings.phone.cloudQr")),
+    signInEmail
+      ? <span data-phone-cloud-sign-in="" className="max-w-[320px] break-all text-[14px] leading-5 text-ink-secondary">{t("settings.phone.logInWith")} <span className="font-medium text-ink">{signInEmail}</span></span>
+      : <span className="max-w-[300px] text-pretty text-[13px] leading-[18px] text-ink-secondary">{t("settings.phone.cloudScanAny")}</span>,
+    <span data-phone-camera-hint="" className="text-pretty text-[13px] leading-[18px] text-ink-tertiary">{t(ios ? "settings.phone.cameraIos" : "settings.phone.cameraAndroid")}</span>,
+    status(t("settings.phone.waitingCloud"), null));
   const cloudLink = (live: boolean) => codesInCloud && !emailOnly ? cloudCodeLink(live) : column(live, { "data-phone-cloud": "" }, t(ios ? "settings.phone.cloudIos" : "settings.phone.cloudAndroid"), undefined,
-    card(qrTile(universalSignInLink(signInEmail), t("settings.phone.cloudQr")),
-      signInEmail
-        ? <span data-phone-cloud-sign-in="" className="max-w-[320px] break-all text-[14px] leading-5 text-ink-secondary">{t("settings.phone.logInWith")} <span className="font-medium text-ink">{signInEmail}</span></span>
-        : <span className="max-w-[300px] text-pretty text-[13px] leading-[18px] text-ink-secondary">{t("settings.phone.cloudScanAny")}</span>,
-      <span data-phone-camera-hint="" className="text-pretty text-[13px] leading-[18px] text-ink-tertiary">{t(ios ? "settings.phone.cameraIos" : "settings.phone.cameraAndroid")}</span>,
-      status(t("settings.phone.waitingCloud"), null)),
-    t("settings.phone.logInStep"));
+    cloudEmailCard(), t("settings.phone.logInStep"));
 
   const doneStep = (live: boolean) => (
     <div role={live ? "status" : undefined} data-phone-linked="" className="flex flex-col items-center gap-6">
       {heading(live, cloudHome ? t("settings.phone.cloudLinked") : t("mobile.desktop.linked", { name: pairedName ?? "" }), t("mobile.desktop.linkedHint"), "connected")}
-      <button type="button" data-primary="" onClick={() => go("home")} className={PRIMARY}>{t("common.done")}</button>
+      <button type="button" data-primary="" onClick={() => (direct ? direct.onDone() : go("home"))} className={PRIMARY}>{t("common.done")}</button>
     </div>
   );
 
@@ -702,26 +706,56 @@ export function MobilePairingCard({ remote, cloudHome = false, email, children }
     </RowsCard>
   ) : null;
 
+  const styles = (
+  <style>{`
+    @keyframes phone-link-wait { 0%, 100% { opacity: 1; } 50% { opacity: .3; } }
+    .phone-link-wait { animation: phone-link-wait 1.6s ease-in-out infinite; }
+    @media (prefers-reduced-motion: reduce) { .phone-link-wait { animation-play-state: paused; } }
+    [data-reduced-motion="true"] .phone-link-wait { animation-play-state: paused; }
+    .phone-wipe { display: grid; }
+    .phone-wipe[data-wiping] { overflow: clip; }
+    .phone-wipe-layer { position: relative; z-index: 0; grid-area: 1 / 1; min-width: 0; background-color: var(--color-app); animation-duration: ${WIPE_MS}ms; animation-timing-function: var(--dusk-ease-out); }
+    .phone-wipe-layer[data-wipe-out] { pointer-events: none; animation-fill-mode: forwards; }
+    .phone-wipe-layer[data-wipe="push"]:not([data-wipe-out]) { z-index: 1; animation-name: dusk-wipe-push-in; }
+    .phone-wipe-layer[data-wipe="push"][data-wipe-out] { animation-name: dusk-wipe-push-out; }
+    .phone-wipe-layer[data-wipe="pop"]:not([data-wipe-out]) { animation-name: dusk-wipe-pop-in; }
+    .phone-wipe-layer[data-wipe="pop"][data-wipe-out] { z-index: 1; animation-name: dusk-wipe-pop-out; }
+    .phone-wipe-layer[data-wipe="fade"] { animation-duration: 150ms; }
+    .phone-wipe-layer[data-wipe="fade"]:not([data-wipe-out]) { z-index: 1; background-color: transparent; animation-name: dusk-fade-in; }
+    .phone-wipe-layer[data-wipe="fade"][data-wipe-out] { animation-name: dusk-fade-out; }
+  `}</style>
+  );
+  // the dialog's own description line: whose account the code logs in to, and so every place the phone gets
+  const directSub = () => {
+    const viaAccount = signInEmail && (cloudHome ? codesInCloud && !emailOnly : desktopAccount && !plainQr.current && deskSignedIn !== false);
+    if (viaAccount) return <span data-phone-account-as="" className="break-words">{t("sidebar.menu.connectPhone.everything", { email: signInEmail })}</span>;
+    return cloudHome ? (signInEmail ? t("settings.phone.cloudAs", { email: signInEmail }) : null) : localParts().sub;
+  };
+  const directSteps = (failed && unreachable) ? null : (
+    <ol data-phone-steps="any" className="m-0 mt-4 flex w-full list-none flex-col p-0 px-2">
+      {step(1, t("settings.phone.getIos"), <span className="flex shrink-0 items-center gap-2">{appStoreBadge}{apkBadge(t("settings.phone.android"))}</span>)}
+      {step(2, t(cloudHome && !(codesInCloud && !emailOnly) ? "settings.phone.logInStep" : "settings.phone.openIos"))}
+    </ol>
+  );
+  const directView = () => {
+    if (view === "done") return doneStep(true);
+    if (flow !== "link") return loadingStep;
+    const sub = directSub();
+    const body = cloudHome ? (codesInCloud && !emailOnly ? cloudCodeCard() : cloudEmailCard()) : localParts().body;
+    return (
+      <div data-phone-link="" data-phone-direct="" className="flex w-full flex-col">
+        {sub && <p className="m-0 mb-3 text-pretty text-[13px] leading-[18px] tracking-[-0.08px] text-ink/68">{sub}</p>}
+        {body}
+        {directSteps}
+      </div>
+    );
+  };
+
   const parts: PhoneParts = { top, stepping: view !== "home", phones };
+  if (direct) return <>{styles}{directView()}</>;
   return (
     <>
-      <style>{`
-        @keyframes phone-link-wait { 0%, 100% { opacity: 1; } 50% { opacity: .3; } }
-        .phone-link-wait { animation: phone-link-wait 1.6s ease-in-out infinite; }
-        @media (prefers-reduced-motion: reduce) { .phone-link-wait { animation-play-state: paused; } }
-        [data-reduced-motion="true"] .phone-link-wait { animation-play-state: paused; }
-        .phone-wipe { display: grid; }
-        .phone-wipe[data-wiping] { overflow: clip; }
-        .phone-wipe-layer { position: relative; z-index: 0; grid-area: 1 / 1; min-width: 0; background-color: var(--color-app); animation-duration: ${WIPE_MS}ms; animation-timing-function: var(--dusk-ease-out); }
-        .phone-wipe-layer[data-wipe-out] { pointer-events: none; animation-fill-mode: forwards; }
-        .phone-wipe-layer[data-wipe="push"]:not([data-wipe-out]) { z-index: 1; animation-name: dusk-wipe-push-in; }
-        .phone-wipe-layer[data-wipe="push"][data-wipe-out] { animation-name: dusk-wipe-push-out; }
-        .phone-wipe-layer[data-wipe="pop"]:not([data-wipe-out]) { animation-name: dusk-wipe-pop-in; }
-        .phone-wipe-layer[data-wipe="pop"][data-wipe-out] { z-index: 1; animation-name: dusk-wipe-pop-out; }
-        .phone-wipe-layer[data-wipe="fade"] { animation-duration: 150ms; }
-        .phone-wipe-layer[data-wipe="fade"]:not([data-wipe-out]) { z-index: 1; background-color: transparent; animation-name: dusk-fade-in; }
-        .phone-wipe-layer[data-wipe="fade"][data-wipe-out] { animation-name: dusk-fade-out; }
-      `}</style>
+      {styles}
       {children ? children(parts) : <div className="flex flex-col gap-5">{parts.top}{parts.phones}</div>}
     </>
   );

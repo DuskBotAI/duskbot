@@ -10,6 +10,7 @@ import { createTeamVpsFixture } from "../scripts/testing/team-vps-fixture.ts";
 import { SNAPSHOT_REUSE_MS } from "./harness/registry.ts";
 import { freePortBlock } from "./testing/ports.ts";
 import { removeTempDir, waitForExit } from "./testing/cleanup.ts";
+import { engineFreePath } from "./testing/engine-free-path.ts";
 import { vpsContainerName } from "./vps-computer.ts";
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
@@ -83,7 +84,7 @@ function install(home: string, vm: LocalVm) {
     output = "";
     const proc = spawn(process.execPath, [join(ROOT, "server/index.ts")], {
       cwd: ROOT, env: {
-        PATH: dirname(process.execPath), ...(process.env.SystemRoot ? { SystemRoot: process.env.SystemRoot } : {}),
+        PATH: engineFreePath(home), DUSK_TEST_SEALED_PATH: "1", ...(process.env.SystemRoot ? { SystemRoot: process.env.SystemRoot } : {}),
         HOME: home, USERPROFILE: home, DUSK_DATA_DIR: data,
         APPDATA: join(home, "appdata"), LOCALAPPDATA: join(home, "localappdata"),
         TEMP: home, TMP: home, TMPDIR: home,

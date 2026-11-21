@@ -20,3 +20,10 @@ export function standaloneEnginesRoot(dataDir: string): string {
 export function engineInstallRoots(dataDir: string): string[] {
   return [npmEnginesPrefix(dataDir), antigravityRuntimesRoot(dataDir), standaloneEnginesRoot(dataDir)];
 }
+
+/** Engine code a vendor's own installer keeps in the server's HOME, read-only in the bot box like the folders above.
+ * Cursor's installer (cursor.com/install) unpacks each version under ~/.local/share/cursor-agent/versions and links
+ * ~/.local/bin/cursor-agent there; its sign-in lives in ~/.config/cursor, never in this folder. */
+export function vendorEngineRoots(home: string): string[] {
+  return [join(home, ".local", "share", "cursor-agent")];
+}

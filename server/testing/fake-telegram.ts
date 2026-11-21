@@ -75,7 +75,7 @@ export async function startFakeTelegram(options: { token: string; bot?: { id: nu
         return ok({ message_id: nextMessage++, chat: { id: params.chat_id }, text: params.text });
       }
       case "sendPhoto": case "sendDocument": case "sendVoice": case "sendAudio": return ok({ message_id: nextMessage++ });
-      case "sendChatAction": return ok(true);
+      case "sendChatAction": case "answerCallbackQuery": case "editMessageText": case "editMessageReplyMarkup": return ok(true);
       default: return reply(400, { ok: false, error_code: 400, description: `Bad Request: method ${method} not faked` });
     }
   });
@@ -99,6 +99,10 @@ export async function startFakeTelegram(options: { token: string; bot?: { id: nu
     },
     added(input: { from: { id: number; first_name: string }; chat: { id: number; type: string; title: string } }) {
       return push({ my_chat_member: { chat: input.chat, from: input.from, date: 0, old_chat_member: { status: "left", user: bot }, new_chat_member: { status: "member", user: bot } } });
+    },
+    /** A tap on an inline button under the bot's message `messageId`. */
+    press(input: { from: { id: number; first_name: string }; chatId: number; messageId: number; data: string }) {
+      return push({ callback_query: { id: `q${nextUpdate}`, from: { ...input.from, is_bot: false }, message: { message_id: input.messageId, chat: { id: input.chatId, type: "private" } }, data: input.data } });
     },
     addFile(fileId: string, bytes: Buffer, mime: string) { files.set(fileId, { path: `photos/${fileId}.jpg`, bytes, mime }); },
     sent(method = "sendMessage") { return calls.filter((call) => call.method === method); },

@@ -51,7 +51,7 @@ it("sets up schedule and webhook triggers from chat at Ask, with no confirmation
     ]);
     const created = toolText(scheduled, "create_trigger");
     expect(created).toContain("applied at once; the person sees it right here in the chat, with Pause, Edit and Undo");
-    expect(created).toMatch(/weekdays at 9:00 [^\n(]*time\b|weekdays at 9:00 UTC/);
+    expect(created).toMatch(/weekdays at 9:0[2-7] [^\n(]*time\b|weekdays at 9:0[2-7] UTC/);
     expect(created).not.toMatch(/\b(?:Africa|America|Antarctica|Asia|Atlantic|Australia|Europe|Indian|Pacific|Etc)\/[A-Za-z_]+/);
     expect(created).not.toMatch(/\bcard\b/i);
     expect(await unanswered()).toEqual([]);

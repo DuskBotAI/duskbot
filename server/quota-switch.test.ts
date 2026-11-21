@@ -215,7 +215,7 @@ describe("quota switch", () => {
       expect(message).toMatchObject({ id: messageId, text: "how's the weather", dataContext: { cardId: "sales" } });
       expect(replyTo).toMatchObject({ id: quoted });
       expect(spoken).toEqual({});
-      expect(notices()).toContainEqual({ name: "notice: continuing on Codex after hitting the usage limit", ok: true });
+      expect(notices()).toContainEqual({ name: expect.stringMatching(/^notice: Claude hit its limit(?: until [^,]+)?, Codex is answering\.$/), ok: true });
       expect(told).toEqual([{ botId: bot.id, from: defaultSelection(), facts: { scope: "engine", backup: CODEX } }]);
       expect(moves, "so it goes back once the limit resets").toEqual([{ threadId: bot.threadId, from: defaultSelection(), to: CODEX }]);
     });
@@ -235,7 +235,7 @@ describe("quota switch", () => {
       expect(note).toContain(TAKEOVER_CAUSE);
       expect(note).toContain('"asked"');
       expect(request).toBe("asked");
-      expect(notices()).toContainEqual({ name: "notice: continuing on Codex after hitting the usage limit", ok: true });
+      expect(notices()).toContainEqual({ name: expect.stringMatching(/^notice: Claude hit its limit(?: until [^,]+)?, Codex is answering\.$/), ok: true });
     });
 
     it("sends the request again as it was when the limited turn had done nothing yet", async () => {
@@ -355,7 +355,7 @@ describe("quota switch", () => {
       await limited({ messageId: said("hi") });
       expect(thread().modelSelection).toEqual({ instanceId: "claude", model: "claude-plan" });
       expect(resend).toHaveBeenCalledTimes(1);
-      expect(notices()).toContainEqual({ name: "notice: continuing on Claude claude-plan after hitting the usage limit", ok: true });
+      expect(notices()).toContainEqual({ name: expect.stringMatching(/^notice: Claude \S+ hit its limit(?: until [^,]+)?, Claude claude-plan is answering\.$/), ok: true });
       expect(told[0]!.facts).toEqual({ scope: "credits", backup: { instanceId: "claude", model: "claude-plan" } });
     });
 

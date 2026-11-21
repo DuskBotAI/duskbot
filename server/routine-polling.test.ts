@@ -92,7 +92,7 @@ describe("a polling routine with a plain check", () => {
     const dir = tempDir();
     const probes = createRoutineProbes({ dataDir: dir, failed: (_routine, sentence) => failures.push(sentence) });
     const routine = { id: "r1", probe: { kind: "script", url: "", command: "x" }, checks: ["probe"], prompt: "p" } as never;
-    expect(await probes.check(routine, { manual: false })).toEqual({ trouble: `Couldn't check its script: ${NO_SCRIPTS}` });
+    for (let i = 0; i < 3; i++) expect(await probes.check(routine, { manual: false })).toEqual({ trouble: `Couldn't check its script: ${NO_SCRIPTS}` });
     expect(failures).toHaveLength(1);
   });
 });

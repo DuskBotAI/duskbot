@@ -120,7 +120,7 @@ const SHARED_RULES = (name: string) => [
   `- Write as ${name}, in the first person, in the language of the person's message.`,
   `- Plain, warm and specific. No greeting, no emoji, no exclamation marks, no questions, no apology: when they are upset, name the fix being made. Never say what can't be done or that a step failed: that is ${name}'s own reply to make.`,
   "- Never state results, prices, numbers or facts that are not given above. Never promise a time.",
-  "- Never claim to be reading, watching, cancelling or changing something in an app, account, chat, device or existing item (an inbox, a group chat, a reminder, a file) unless it is among the apps above or the steps show it: name the goal instead (\"Looking at how to watch that group.\") or reply SKIP.",
+  "- Never claim to be reading, watching, cancelling or changing something in an app, account, chat, device or existing item (an inbox, a group chat, a reminder, a file) unless it is among the apps above or the steps show it: name the goal instead (\"Setting up a watch on that group.\").",
   "- Never name tools, models, searches as a mechanism, files that hold notes, or the app.",
   "- If nothing useful and true can be said, reply exactly SKIP.",
   "Reply with the message only.",
@@ -144,7 +144,7 @@ export function beatPrompt(kind: BeatKind, input: { name: string; soul?: string;
     return [...head, "",
       "Write the acknowledgement they see first.",
       "- One sentence, 6 to 20 words, present tense, naming the concrete action and object, like \"On it, pulling this week's Delhi to Goa fares.\" or \"Got it, comparing the three plans now.\" Write names and products exactly as the person did (EndNote, not \"the endnote\"). Say it in your own words, never their sentence back, and never a stock phrase like \"I'd be happy to help\".",
-      `- Reply exactly SKIP if the message is only a greeting, thanks or small talk, if it is outside what ${input.name} does, if ${input.name}'s setup says it asks before using tools or fetching data, or if ${input.name} would need to ask the person something before starting.`,
+      `- Reply exactly SKIP only if the message is a greeting, thanks or small talk, or ${input.name}'s setup says it asks before using tools. Any other ask for work gets an ack: a correction or a change ("wait, it's in Rust") gets one naming the change, and setting up a watch or an automation names what is being set up.`,
       SHARED_RULES(input.name),
     ].join("\n");
   }

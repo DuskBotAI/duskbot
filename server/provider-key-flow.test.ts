@@ -54,7 +54,7 @@ it("saving and replacing a workspace key reaches an existing bot's next request 
     expect(status.openaiCompat.configured).toBe(true);
     expect(JSON.stringify(status)).not.toContain("fixture-first-key");
     expect(await api("POST", "/api/keys/test", { provider: "openaiCompat" }))
-      .toEqual({ ok: true, check: "models", models: ["fixture-model"] });
+      .toEqual({ ok: true, check: "models", models: ["fixture-model"], result: "works", model: "fixture-model" });
     for (const key of ["", "   ", 123]) {
       const response = await fetch(`${fixture.info.url}/api/keys/test`, {
         method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ provider: "openaiCompat", key }),

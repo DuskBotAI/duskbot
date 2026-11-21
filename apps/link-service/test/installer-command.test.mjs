@@ -59,9 +59,30 @@ describe("the duskbot command an install puts on the PATH", () => {
     expect(older.wrapper).toContain("runuser -u");
   });
 
+  it("switches to the server account from /, whatever folder root or a sudoer runs it in", async () => {
+    const { cli, home } = await putCommand();
+    const fakes = join(home, "..", "fakes"), here = join(home, "..", "private");
+    await mkdir(fakes, { recursive: true });
+    await mkdir(here, { recursive: true });
+    await writeFile(join(fakes, "id"), '#!/bin/sh\n[ "$1" = -un ] && echo root || echo 0\n', { mode: 0o755 });
+    await writeFile(join(fakes, "runuser"), '#!/bin/sh\necho "runuser in $(pwd)"\n', { mode: 0o755 });
+    const ran = await run(cli, ["pair"], { cwd: here, env: { PATH: `${fakes}:/usr/bin:/bin` } });
+    expect(ran.stdout.trim()).toBe("runuser in /");
+  });
+
   it("is taken off by uninstall only when it is ours", () => {
     expect(uninstall).toContain("CLI=/usr/local/bin/duskbot");
     expect(uninstall).toMatch(/cli_ours\(\) \{ grep -qs "managed by duskbot-link" "\$CLI"; \}/);
     expect(uninstall).toMatch(/if cli_ours; then x rm -f "\$CLI"/);
+  });
+});
+
+describe("the install's working folder", () => {
+  it("is / once it is root, before any step runs npm or node as another account", () => {
+    const main = script.slice(script.indexOf("\nmain() {"));
+    const root = main.indexOf('[ -n "$DEMO" ] || become_root\n');
+    expect(root).toBeGreaterThan(0);
+    expect(main.slice(root).split("\n").slice(1).find((line) => !line.trim().startsWith("#"))?.trim()).toBe("cd /");
+    expect(main.indexOf("\n  cd /\n")).toBeLessThan(main.indexOf("step check do_check"));
   });
 });

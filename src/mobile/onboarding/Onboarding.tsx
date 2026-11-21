@@ -1,7 +1,7 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { storeApp } from "@/lib/store-app";
 import { AnimatePresence } from "motion/react";
-import { ClipboardPaste, Keyboard, QrCode, UserRound } from "../../icons";
+import { ChevronRight, ClipboardPaste, Cloud, Keyboard, Laptop, QrCode, UserRound } from "../../icons";
 import { WorkingDots } from "@/components/WorkingIndicator";
 import { t } from "@/lib/i18n";
 import { upperFirst } from "@/lib/lower-first";
@@ -14,14 +14,17 @@ import { usePlatform, type CameraPermission } from "../platform";
 import { LINK_DEADLINE_MS, linkDeadline, PairError, readScanned, redeemPairing, resolveTypedCode, type TypedPairing } from "../connection/pair";
 import { followSignInService, signInServiceSwitch } from "../account/environment";
 import { Scanner } from "./Scanner";
-import { CloudPicker } from "../account/CloudPicker";
+import { CloudPicker, placeChoices, type PlaceChoice } from "../account/CloudPicker";
+import { cloudPairing, cloudPairingPayload } from "../account/cloud-pair";
+import { useConnections } from "../connection/connections";
+import { LoadingMascot } from "../Illustration";
 import { MobileSignIn } from "../account/MobileSignIn";
 import { useMobileAccount } from "../account/AccountGate";
 import { MascotTrio } from "./SkyScene";
 import { editCode, formatCode, fullCode, typedCodeComplete } from "./code-field";
 import { BackButton, ErrorLine, FIELD, HEADLINE, LINE, PRIMARY, QUIET, Screen, StepPane, TONAL } from "./parts";
 
-export type Step = "welcome" | "signin" | "clouds" | "switch" | "confirm" | "scan" | "code" | "paste";
+export type Step = "welcome" | "signin" | "clouds" | "switch" | "confirm" | "scan" | "code" | "paste" | "place";
 /** a dusk cloud's QR or link: the account it logs in to, its code when it carries one, and the cloud it was drawn on */
 type CloudQr = { email: string; code?: string; cloud?: string; pair?: TypedPairing };
 type Failure = { code: PairError["code"] | "account-offline"; name: string; companion: boolean };
@@ -42,6 +45,8 @@ export function phoneCodeFailure(outcome: Exclude<PhoneCodeOutcome, "signed-in">
 export const DOWNLOAD_URL = "https://dusk.bot/download";
 /** the account sign-in a desktop's QR carries waits this long at most, then the pairing goes on without it */
 const CARRIED_SIGN_IN_MS = 5_000;
+/** how long the account's places may take to list before the computer just linked opens on its own */
+const PLACES_MS = 5_000;
 
 function installationName(payload: TypedPairing | null, fallback = t("mobile.pair.workspace")): string {
   if (payload?.name) return payload.name;
@@ -80,7 +85,9 @@ function Failed({ failure, onSignIn }: { failure: Failure; onSignIn?: () => void
 /** First launch to linked. Pairing with your own computer needs no account (App Store guideline 5.1.1(v)): scan its QR
  * code first, or type its code. Signing in is only for a dusk cloud (the account finds it and pairs with it). The success moment and the hand-off
  * to Home belong to the connection gate. */
-export function Onboarding({ initial = null, initialSignIn, reason = null, startAtLink = false, startAt = "welcome", email, signInCode, signInCloud, onLinked, onOpen, onCancel }: {
+export function Onboarding({ initial = null, initialSignIn, reason = null, startAtLink = false, startAt = "welcome", email, signInCode, signInCloud, onLinked, onKept, onOpen, onCancel }: {
+  /** keeps a link without opening it, for a computer linked beside the place the person picked to open */
+  onKept?(record: MobileConnectionRecord, token: string): Promise<void>;
   /** the account sign-in a signed-in desktop's pairing QR carried with `initial` */
   initialSignIn?: PairSignIn;
   /** the dusk cloud a QR or link was drawn on, opened once the phone is logged in */
@@ -102,6 +109,11 @@ export function Onboarding({ initial = null, initialSignIn, reason = null, start
 }) {
   const platform = usePlatform();
   const account = useMobileAccount();
+  const { connections } = useConnections();
+  // a computer a signed-in QR just linked, waiting for the person to pick which place opens first
+  const [placePick, setPlacePick] = useState<{ record: MobileConnectionRecord; token: string; name: string; choices: PlaceChoice[] } | null>(null);
+  const [placeBusy, setPlaceBusy] = useState<string | null>(null);
+  const [placeProblem, setPlaceProblem] = useState<string | null>(null);
   const signedIn = Boolean(account?.account);
   const home: Step = firstStep({ incoming: false, signedIn, adding: startAtLink });
   const [step, setStep] = useState<Step>(() => signInCode ? "code" : firstStep({ incoming: Boolean(initial), signedIn, adding: startAtLink, startAt }));
@@ -187,7 +199,11 @@ export function Onboarding({ initial = null, initialSignIn, reason = null, start
         return redeemPairing(payload, platform, work.signal);
       })(), LINK_DEADLINE_MS, controller.signal).finally(() => work.abort());
       if (!result || !live()) return;
-      await linkDeadline(Promise.resolve(onLinked(result.record, result.token, result.record.label || installationName(payload))), LINK_DEADLINE_MS + 5_000);
+      const name = result.record.label || installationName(payload);
+      const choices = carried && account ? await placesBeside(result.record) : [];
+      if (!live()) return;
+      if (choices.length) { setPlacePick({ ...result, name, choices }); setPlaceProblem(null); setStep("place"); return; }
+      await linkDeadline(Promise.resolve(onLinked(result.record, result.token, name)), LINK_DEADLINE_MS + 5_000);
     } catch (error) {
       if (!live()) return;
       haptic("error");
@@ -199,6 +215,33 @@ export function Onboarding({ initial = null, initialSignIn, reason = null, start
         locked.current = false;
         setBusy(false);
       }
+    }
+  };
+
+  /** the account's other places, once the QR signed the phone in to it; none when it cannot tell in time */
+  const placesBeside = async (linked: MobileConnectionRecord): Promise<PlaceChoice[]> => {
+    if (!account) return [];
+    const places = await linkDeadline(account.places(), PLACES_MS).catch(() => null);
+    return places ? placeChoices(places, connections, linked) : [];
+  };
+  const openPicked = async (choice: PlaceChoice | null) => {
+    const pick = placePick;
+    if (!pick || placeBusy || !account) return;
+    setPlaceProblem(null);
+    setPlaceBusy(choice?.key ?? "computer");
+    try {
+      if (!choice) { await onLinked(pick.record, pick.token, pick.name); return; }
+      await onKept?.(pick.record, pick.token);
+      if (choice.target.kind === "kept") { onOpen?.(choice.target.id); return; }
+      const target = choice.target;
+      const result = target.kind === "cloud" ? await cloudPairing(account, target.cloud) : await account.pairTeamCloud(target.cloud);
+      if (result.outcome !== "paired") { haptic("error"); setPlaceProblem(t(`mobile.clouds.err.${result.outcome}` as Parameters<typeof t>[0], { name: choice.name })); return; }
+      await redeem(cloudPairingPayload(target.cloud, result.grant), "place");
+    } catch {
+      haptic("error");
+      setPlaceProblem(t("mobile.clouds.err.failed", { name: choice?.name ?? pick.name }));
+    } finally {
+      setPlaceBusy(null);
     }
   };
 
@@ -328,6 +371,7 @@ export function Onboarding({ initial = null, initialSignIn, reason = null, start
       case "switch": setSwitchTo(null); if (canClose) leave(); else go(home); return true;
       case "signin": go("welcome"); return true;
       case "paste": go("code"); return true;
+      case "place": return true;
       case "confirm": setConfirm(null); setFailure(null); if (canClose) leave(); else go(home); return true;
       default: go(home); return true;
     }
@@ -389,6 +433,37 @@ export function Onboarding({ initial = null, initialSignIn, reason = null, start
               <CloudPicker busy={busy} autoPick={!startAtLink && justSignedIn} target={qrTarget} onOpen={onOpen} onNone={() => setNoClouds(true)} onComputers={setWithComputers} onPairing={(payload) => redeem(payload, "clouds")} />
               {failure && <Failed failure={failure} />}
               {cameraLine}
+            </Screen>
+          </StepPane>
+        )}
+
+        {step === "place" && placePick && (
+          <StepPane id="place">
+            <Screen top={null} art={<PixelMascot color="blue" size={64} />} actions={null}>
+              <h1 className={HEADLINE}>{t("mobile.clouds.pickAnyTitle")}</h1>
+              <p className={LINE}>{t("mobile.place.pickBody", { name: placePick.name })}</p>
+              <ul data-testid="mobile-place-pick" className="mt-7 flex w-full flex-col gap-2 text-left">
+                {[{ key: "computer", name: placePick.name, status: t("mobile.settings.placeOnline"), choice: null as PlaceChoice | null }, ...placePick.choices.map((choice) => ({ key: choice.key, name: choice.name, status: choice.status, choice }))].map(({ key, name, status, choice }) => {
+                  const Icon = choice ? Cloud : Laptop;
+                  const mine = placeBusy === key;
+                  return (
+                    <li key={key}>
+                      <button type="button" data-place-choice={choice ? choice.target.kind : "computer"} disabled={Boolean(placeBusy) || busy} aria-busy={mine || undefined}
+                        aria-label={t("mobile.clouds.connect", { name })} onClick={() => void openPicked(choice)}
+                        className="mobile-press flex min-h-16 w-full items-center gap-3 rounded-[18px] bg-ink/[0.05] px-4 py-3 text-left text-ink disabled:opacity-100">
+                        <Icon size={22} className="text-ink" />
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-[17px] font-semibold">{name}</span>
+                          <span className="mt-0.5 block text-[14px] text-ink-secondary">{mine ? t("mobile.clouds.connecting") : status}</span>
+                        </span>
+                        {mine ? <LoadingMascot size={24} /> : <ChevronRight size={18} className="text-ink-tertiary" />}
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+              {placeProblem && <ErrorLine>{placeProblem}</ErrorLine>}
+              {failure && <Failed failure={failure} />}
             </Screen>
           </StepPane>
         )}

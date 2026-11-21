@@ -46,7 +46,7 @@ describe("Dusk, every person's helper", () => {
     const after = store.messagesFor(dusk.threadId);
     const rewritten = after.find((message) => message.id === intro.id)!;
     expect(rewritten.text).toBe(helperIntroMessage({ name: "dusk bot", chiefOfStaff: true }).text);
-    expect(rewritten.card?.title).toBe("Hey! I'm dusk bot. I'm new here.");
+    expect(rewritten.card?.title).toBe("Hi! I'm dusk bot. Hand me one real job and I'll get it done.");
     expect(after.find((message) => message.id === typed.id)?.text).toBe("is MausBot your old name?");
     expect(renameLegacyDefaultBots(store)).toBe(0);
   });
@@ -65,7 +65,7 @@ describe("Dusk, every person's helper", () => {
     expect(store.bot(later.id)?.name).toBe("Dusk");
     const rewritten = store.messagesFor(dusk.threadId).find((message) => message.id === intro.id)!;
     expect(rewritten.text).toBe(helperIntroMessage({ name: "dusk bot", chiefOfStaff: true }).text);
-    expect(rewritten.card?.title).toBe("Hey! I'm dusk bot. I'm new here.");
+    expect(rewritten.card?.title).toBe("Hi! I'm dusk bot. Hand me one real job and I'll get it done.");
   });
 
   it("renames an unmarked first bot still called MausBot, so the next start adopts it, but not a later bot someone named so", () => {
@@ -154,7 +154,7 @@ describe("Dusk, every person's helper", () => {
     const maus = boot(store)!;
     expect(store.bot(maus.id)?.chiefOfStaff).toBe(true);
     expect(briefChief(store)?.id).toBe(maus.id);
-    expect(intros(store, maus)[0]?.text).toContain("Hey! I'm dusk bot. I'm new here. I'm here to be your Chief of Staff. I can manage your other bots.");
+    expect(intros(store, maus)[0]?.text).toBe("Hi! I'm dusk bot. Hand me one real job and I'll get it done. What should we start with?");
   });
 
   it("makes an adopted Dusk the Chief when its place has none left", () => {
@@ -215,7 +215,7 @@ describe("Dusk, every person's helper", () => {
     const store = new Store(selection);
     const maus = boot(store)!;
     const [intro] = intros(store, maus);
-    expect(intro?.card?.options).toHaveLength(4);
+    expect(intro?.card?.options).toHaveLength(3);
     store.appendMessage(maus.threadId, { role: "user", kind: "text", text: "What can you do?" });
     expect(store.messagesFor(maus.threadId).find((message) => message.id === intro!.id)?.card?.dismissed).toBe(true);
     for (let restart = 0; restart < 2; restart++) boot(new Store(selection));
@@ -230,13 +230,13 @@ describe("Dusk, every person's helper", () => {
     expect(mdb.attentionRows(0).filter((row) => row.kind === "options")).toEqual([]);
   });
 
-  it("is hidden, never deleted or archived, and a hidden Dusk is never made again", () => {
+  it("is hidden, kept while it is the Chief, and a hidden Dusk is never made again", () => {
     const store = new Store(selection);
     const maus = boot(store)!;
     const other = store.createBot({ name: "Writer" });
-    expect(() => store.deleteBot(maus.id)).toThrow(/dusk bot can't be deleted or archived/);
+    expect(() => store.deleteBot(maus.id)).toThrow("dusk bot is your Chief of Staff. Make another bot the Chief of Staff first.");
     expect(store.bot(maus.id)).toBeTruthy();
-    expect(defaultBotPatchRefusal(maus, { hidden: true })).toMatch(/Show dusk bot in the sidebar" in Settings → Models, under New bots\./);
+    expect(defaultBotPatchRefusal(store.bot(maus.id), { hidden: true }, store.bots)).toMatch(/is your Chief of Staff/);
     expect(defaultBotPatchRefusal(other, { sidebarHidden: true })).toMatch(/Only your helper/);
     expect(defaultBotPatchRefusal(maus, { sidebarHidden: "yes" })).toBe("sidebarHidden must be true or false");
     expect(defaultBotPatchRefusal(maus, { sidebarHidden: true })).toBeNull();
@@ -246,6 +246,32 @@ describe("Dusk, every person's helper", () => {
     expect(placeDusks(restarted).map((bot) => [bot.id, bot.sidebarHidden])).toEqual([[maus.id, true]]);
     restarted.patchBot(maus.id, { sidebarHidden: false });
     expect(new Store(selection).bot(maus.id)?.sidebarHidden).toBe(false);
+  });
+
+  it("is deleted or archived like any bot once another bot is the Chief, and never made again", () => {
+    const store = new Store(selection);
+    const maus = boot(store)!;
+    expect(() => store.deleteBot(maus.id)).toThrow(/Chief of Staff/);
+    const writer = store.createBot({ name: "Writer" });
+    store.setChiefOfStaff(writer.id);
+    const freed = store.bot(maus.id)!;
+    expect(freed.chiefOfStaff).toBeFalsy();
+    expect(defaultBotPatchRefusal(freed, { hidden: true }, store.bots)).toBeNull();
+    expect(store.deleteBot(maus.id)).toBe(true);
+    expect(boot(store)).toBeNull();
+    expect(store.bots.map((bot) => bot.id)).toEqual([writer.id]);
+  });
+
+  it("stays while it is the place's only bot", () => {
+    const store = new Store(selection);
+    const maus = boot(store)!;
+    store.patchBot(maus.id, { chiefOfStaff: false });
+    const alone = store.bot(maus.id)!;
+    expect(() => store.deleteBot(maus.id)).toThrow("dusk bot is your only bot. Make another bot first, or choose Hide in its menu to take it off the sidebar.");
+    expect(defaultBotPatchRefusal(alone, { hidden: true }, store.bots)).toMatch(/is your only bot/);
+    const archived = store.createBot({ name: "Old" });
+    store.patchBot(archived.id, { hidden: true });
+    expect(() => store.deleteBot(maus.id)).toThrow(/is your only bot/);
   });
 
   it("is never made twice for one place, even once its mark is gone", () => {

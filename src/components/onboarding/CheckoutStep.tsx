@@ -5,9 +5,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { CloudAccountState } from "../../../electron/cloud-account.mjs";
 import { track } from "@/lib/analytics";
 import { continueInBrowser, stopWaitingInBrowser } from "@/lib/account-intent";
-import { offerTrialDays, usd } from "@/lib/cloud-plan";
 import { t } from "@/lib/i18n";
-import { useCloudOffer } from "@/lib/use-cloud-offer";
 import { PlaceArt } from "../ui/PlaceArt";
 import { cloudBought } from "./funnel";
 import { PRIMARY, StepFrame } from "./FunnelSteps";
@@ -21,17 +19,6 @@ type Phase = "idle" | "opening" | "waiting" | "failed";
 export function checkoutLine(account: CloudAccountState | null, signingIn: boolean): "signIn" | "checkout" {
   if (account?.status === "connected") return "checkout";
   return signingIn || account?.status === "connecting" ? "signIn" : "checkout";
-}
-
-/** dusk cloud's tile on the place step: the trial as its tag and the price after it, or nothing while unknown. */
-export function useCloudTile(enabled: boolean): { tag: string | null; note: string | null } {
-  const offer = useCloudOffer(enabled);
-  if (!offer?.plans.length) return { tag: null, note: null };
-  const price = usd(Math.min(...offer.plans.map((plan) => plan.amount)) / 100);
-  const days = offerTrialDays(offer);
-  return days
-    ? { tag: t("funnel.place.cloudTrialTag", { days }), note: null }
-    : { tag: t("funnel.place.cloudPriceTag", { price }), note: null };
 }
 
 export function CheckoutStep({ start, onPaid, onMac }: {

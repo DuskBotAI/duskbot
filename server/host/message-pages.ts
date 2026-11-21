@@ -14,9 +14,12 @@ export function pageSize(raw: string | null): number | null | undefined {
   return Math.min(size, MESSAGE_PAGE_MAX);
 }
 
+/** A message as clients see it: a screen without its image, and a person's message without the open-item ledger's state,
+ * which is the bot's bookkeeping and changes after the send was answered. */
 export function slimMessage(message: Message): Message | Record<string, unknown> {
-  if (message.kind !== "screen" || !message.png) return message;
-  const { png: _png, ...rest } = message;
+  const { ask: _ask, ...shown } = message;
+  if (shown.kind !== "screen" || !shown.png) return message.ask ? shown : message;
+  const { png: _png, ...rest } = shown;
   return { ...rest, hasImage: true };
 }
 

@@ -2,7 +2,7 @@ export type CloudMoveOfferStage = "none" | "prompt" | "banner" | "settings";
 export type CloudMoveOfferSource = "prompt" | "banner" | "settings" | "two_places";
 /** Which ask shows, and how many bots this computer would carry. */
 export interface CloudMoveOfferState { stage: CloudMoveOfferStage; bots: number }
-type Saved = { v: 1; key: string; accepted?: { at: number; from: CloudMoveOfferSource }; prompt?: number; banner?: number;
+type Saved = { v: 1; key: string; stays?: number; accepted?: { at: number; from: CloudMoveOfferSource }; prompt?: number; banner?: number;
   reported?: { move: number; started: boolean; done: boolean; failed: string[] } };
 type OfferCloud = { origin: string | null; account: string; ready: boolean; moves: boolean; ended: boolean };
 
@@ -30,6 +30,7 @@ export interface CloudMoveOffer {
   state(): CloudMoveOfferState;
   refresh(options?: { force?: boolean }): Promise<void>;
   consent(): boolean;
+  stay(): void;
   accepted(): boolean;
   accept(from: string): Promise<CloudMoveOfferState>;
   dismiss(which: string): CloudMoveOfferState;

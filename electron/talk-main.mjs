@@ -8,16 +8,20 @@ export { isTalkPanel } from "./talk-panel.mjs";
 
 /**
  * The microphone's IPC for this app's pages (dictation, calls, the talk setting), then the talk shortcut once the app
- * is ready. `speech`: speech.mjs's start/stop/finish/busy. `packaged`: asks go to `localRequest`, this computer's own
+ * is ready. `placePage(event)`: the sender is a place the person chose, so it may listen here like this computer's own
+ * page. `speech`: speech.mjs's start/stop/finish/busy. `packaged`: asks go to `localRequest`, this computer's own
  * server; in development to `devUrl`, whose Vite /api proxy reaches `pnpm dev:server`.
  */
-export function installTalk({ ipcMain, localOnly, localOrHome, BrowserWindow, appleSpeech, speech, packaged, devUrl, nativeImage, iconPath, openLink, reveal, log, fetch = globalThis.fetch, platform = process.platform }) {
+export function installTalk({ ipcMain, localOnly, placePage, BrowserWindow, appleSpeech, speech, packaged, devUrl, nativeImage, iconPath, openLink, reveal, log, fetch = globalThis.fetch, platform = process.platform }) {
   // dictation and calls listen natively on the Mac and on Windows (speech.mjs); the talk shortcut stays Mac-only
   const nativeSpeech = appleSpeech || platform === "win32";
   const callPresence = createCallPresence();
   let shortcut = null, session = null, panel = null, theme = null;
+  // a place the person chose (home, or the server this window shows): its calls listen here, whichever server runs the bot
+  const localOrPlace = (channel, handler) => (event, ...args) => (placePage(event) ? handler : localOnly(channel, handler))(event, ...args);
+  ipcMain.on("place:page", (event) => { try { event.returnValue = placePage(event) === true; } catch { event.returnValue = false; } });
 
-  ipcMain.handle("speech:start", localOrHome("speech:start", (event, options) => {
+  ipcMain.handle("speech:start", localOrPlace("speech:start", (event, options) => {
     const win = BrowserWindow.fromWebContents(event.sender);
     if (!win) return;
     if (!nativeSpeech) {
@@ -26,10 +30,10 @@ export function installTalk({ ipcMain, localOnly, localOrHome, BrowserWindow, ap
     }
     speech.start(win, options);
   }));
-  ipcMain.handle("speech:stop", localOrHome("speech:stop", (event) => {
+  ipcMain.handle("speech:stop", localOrPlace("speech:stop", (event) => {
     if (nativeSpeech) speech.stop(BrowserWindow.fromWebContents(event.sender));
   }));
-  ipcMain.handle("speech:finish", localOrHome("speech:finish", (event) => {
+  ipcMain.handle("speech:finish", localOrPlace("speech:finish", (event) => {
     if (nativeSpeech) speech.finish(BrowserWindow.fromWebContents(event.sender));
   }));
   ipcMain.handle("talk-shortcut:state", localOnly("talk-shortcut:state", () => shortcut?.state() ?? TALK_SHORTCUT_UNAVAILABLE));
@@ -37,7 +41,7 @@ export function installTalk({ ipcMain, localOnly, localOrHome, BrowserWindow, ap
     enabled: typeof change?.enabled === "boolean" ? change.enabled : undefined,
     key: typeof change?.key === "string" ? change.key : undefined,
   }) ?? TALK_SHORTCUT_UNAVAILABLE));
-  ipcMain.handle("call:active", localOrHome("call:active", (event, active) => {
+  ipcMain.handle("call:active", localOrPlace("call:active", (event, active) => {
     callPresence.set(event.sender, active === true);
   }));
 

@@ -138,6 +138,8 @@ it("applies requested Full Access workflows through MCP without duplicate approv
 
     const skill = (name: string, instruction: string) => `---\nname: ${name}\ndescription: Summarize fixture-only monthly activity.\n---\n\n# Monthly fixture review\n\n${instruction}\n`;
     const schedule = { type: "cron", expression: "0 9 1 * *", timeZone: "America/New_York" };
+    // a bot's routine on the hour is moved a few minutes off it
+    const placed = { ...schedule, expression: expect.stringMatching(/^[2-7] 9 1 \* \*$/) };
     const specialist = (name: string, section: string) => ({ action: "create", key: name,
       fields: { name, title: "Research specialist", soul: "Use only fixture evidence.", section, modelSelection } });
     const created = await run(chief, chief.activeTaskId,
@@ -171,7 +173,7 @@ it("applies requested Full Access workflows through MCP without duplicate approv
     const apps = (bot: any) => ({ composio: bot.composio, connectorTools: bot.connectorTools, connectorScopes: bot.connectorScopes, mcpServers: bot.mcpServers });
     for (const made of [mira, (await bots()).find(bot => bot.name === "Theo")]) expect(apps(made)).toEqual(apps(updatedChief));
     const routine = (await api("GET", "/api/routines")).routines.find((item: any) => item.name === "Monthly fixture report");
-    expect(routine).toMatchObject({ botId: chief.id, enabled: true, schedule });
+    expect(routine).toMatchObject({ botId: chief.id, enabled: true, schedule: placed });
     expect((await api("GET", `/api/bots/${chief.id}/skills`)).skills).toEqual(expect.arrayContaining([expect.objectContaining({ name: "monthly-fixture-review", enabled: true })]));
     await expect.poll(async () => (await api("GET", "/api/decisions")).decisions
       .filter((row: any) => row.threadId === chief.activeTaskId && ["schedule_routine", "stage_skill", "update_profile"].includes(row.tool))
@@ -191,7 +193,7 @@ it("applies requested Full Access workflows through MCP without duplicate approv
       step("propose_team_setup", { reason: "Out-of-scope fixture check", operations: [{ action: "update", botId: "no-such-bot", fields: { title: "Must not apply" } }] }, true),
     ]);
     expect((await bots()).some(bot => bot.id === mira.id)).toBe(false);
-    expect((await api("GET", "/api/routines")).routines.find((item: any) => item.id === routine.id)).toMatchObject({ enabled: false, nextRunAt: null, schedule });
+    expect((await api("GET", "/api/routines")).routines.find((item: any) => item.id === routine.id)).toMatchObject({ enabled: false, nextRunAt: null, schedule: placed });
     expect((await api("GET", `/api/bots/${chief.id}/skills/monthly-fixture-review`)).text).toContain("verify totals");
     const updatedSkills = await api("GET", `/api/bots/${chief.id}/skills`);
     expect(updatedSkills.skills).toEqual([expect.objectContaining({ name: "monthly-fixture-review", enabled: true })]);
@@ -251,7 +253,7 @@ it("applies requested Full Access workflows through MCP without duplicate approv
     expect(persisted.find((bot: any) => bot.id === inverse.id).tasks.find((task: any) => task.threadId === inverse.activeTaskId).approvalMode).toBe("full");
     expect(persisted.find((bot: any) => bot.id === peer.id).approvalMode).not.toBe("full");
     expect(persisted.find((bot: any) => bot.id === peer.id).tasks.find((task: any) => task.threadId === peerTurn.threadId)?.approvalMode).not.toBe("full");
-    expect(JSON.parse(readFileSync(join(dataDir, "routines.json"), "utf8")).routines[0]).toMatchObject({ enabled: false, schedule });
+    expect(JSON.parse(readFileSync(join(dataDir, "routines.json"), "utf8")).routines[0]).toMatchObject({ enabled: false, schedule: placed });
     evidence.push({ persistedBots: persisted, routines: await api("GET", "/api/routines"), handoffs,
       fullMessages: await messages(chief.activeTaskId), askMessages: await messages(ask.threadId), inverseMessages: await messages(inverse.activeTaskId) });
 

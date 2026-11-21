@@ -13,6 +13,7 @@ import { runHeadlessCommand } from "../server/headless/main.ts";
 import type { handleToolCall, request } from "./mcp-server.ts";
 import { launchUi, runControlDuskUi } from "./testing/control-dusk-ui.ts";
 import { removeTempDir, waitForExit } from "../server/testing/cleanup.ts";
+import { nodeOnlyFolder } from "../server/testing/engine-free-path.ts";
 import { hostTimeout } from "../server/testing/host-timeout.ts";
 import { freePortBlock } from "../server/testing/ports.ts";
 
@@ -145,6 +146,7 @@ export function verificationServerEnvironment(parentEnv: NodeJS.ProcessEnv, data
   const fixtureTemp = join(dataDir, "tmp");
   const home = verificationHome(parentEnv, dataDir);
   Object.assign(childEnv, {
+    DUSK_ZEN_LIVE_MODELS: "0",
     HOME: home,
     USERPROFILE: home,
     APPDATA: join(home, "AppData", "Roaming"),
@@ -164,7 +166,7 @@ export function verificationServerEnvironment(parentEnv: NodeJS.ProcessEnv, data
     FAKE_CLAUDE_DUMP: join(dataDir, "fake-claude-dump.json"),
     // POSIX resolves the fake CLI's `#!/usr/bin/env node` shebang through PATH;
     // Windows resolves it through spawnCli without a shell.
-    PATH: dirname(process.execPath),
+    PATH: nodeOnlyFolder(fixtureTemp),
     // Without it the server also scans /opt/homebrew/bin, /usr/local/bin and the
     // login shell's PATH, finding a developer's own engine CLIs that CI lacks.
     DUSK_TEST_SEALED_PATH: "1",

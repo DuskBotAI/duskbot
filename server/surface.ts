@@ -45,10 +45,11 @@ const OFF_NOTE =
 const NO_PERMISSION_TALK = " Never explain permissions or System Settings yourself, and never claim to have used this computer's screen.";
 
 /** A bot on this computer whose screen control the OS has not granted yet: it chats and works in its browser as usual.
- * `missing`: the grants macOS still withholds, by name; `ask`: request_screen_access is mounted. */
-export function screenAccessMissingNote(browser: boolean, missing: readonly string[] = [], ask = false): string {
+ * `missing`: the grants macOS still withholds, by name; `ask`: request_screen_access is mounted; `shell`: the bot has a shell on this computer. */
+export function screenAccessMissingNote(browser: boolean, missing: readonly string[] = [], ask = false, shell = false): string {
   const withheld = missing.length ? ` (macOS has not given dusk bot ${missing.join(" or ")} on this Mac yet)` : "";
-  const desktop = ` Only a task that truly needs this computer's own desktop apps, or files outside the browser, needs screen control${withheld}.`
+  const desktop = (shell ? " Files and commands on this computer need no screen control: your own shell and file tools work on it now, so find, read and change files and run commands with them." : "")
+    + ` Only a task that truly needs this computer's own desktop apps${shell ? "" : ", or files outside the browser,"} needs screen control${withheld}.`
     + (ask ? " For such a task, call request_screen_access with a one-line reason: the person sees one way to allow it. Never call it for web work." : "")
     + (ask ? " After calling it, say in one short line that you will carry on as soon as it is allowed, and meanwhile do what you can" : " Meanwhile do what you can")
     + (browser ? ", in your built-in browser when that could work." : ".");

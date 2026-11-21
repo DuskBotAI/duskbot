@@ -12,6 +12,7 @@ import { CONTROL_BUSY, CONTROL_REFUSAL_PLAIN, controlRefusal, createControlClien
 import { freePortBlock } from "./testing/ports.ts";
 import { readHandoffs } from "./testing/handoff-rows.ts";
 import { removeTempDir, waitForExit } from "./testing/cleanup.ts";
+import { engineFreePath } from "./testing/engine-free-path.ts";
 import { appHandsItOver } from "./testing/your-computer.ts";
 import { THIS_COMPUTER_NOT_READY } from "../shared/your-computer.ts";
 
@@ -94,7 +95,7 @@ beforeAll(async () => {
     child = spawn(process.execPath, ["--import", pathToFileURL(join(ROOT, "server/testing/group-local-vm-hooks.mjs")).href,
       "--import", pathToFileURL(join(ROOT, "server/testing/desktop-parent.mjs")).href, join(ROOT, "server/index.ts")], {
       cwd: ROOT, env: {
-        PATH: dirname(process.execPath), ...(process.env.SystemRoot ? { SystemRoot: process.env.SystemRoot } : {}),
+        PATH: engineFreePath(fixtureHome), DUSK_TEST_SEALED_PATH: "1", ...(process.env.SystemRoot ? { SystemRoot: process.env.SystemRoot } : {}),
         HOME: fixtureHome, USERPROFILE: fixtureHome, DUSK_DATA_DIR: data,
         APPDATA: join(fixtureHome, "appdata"), LOCALAPPDATA: join(fixtureHome, "localappdata"),
         TEMP: fixtureHome, TMP: fixtureHome, TMPDIR: fixtureHome,

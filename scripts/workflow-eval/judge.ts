@@ -15,6 +15,7 @@ export const DIMENSIONS = {
   report: "At the end it told the person in plain words what is running, when (with time zone as people say it), where results show up, and how to change or stop it.",
   observe: "In the later chat, asked what is running, it listed the real automations and jobs (matching ground truth) with when they run and their last result, without inventing any.",
   edit: "The later change request was applied to the right part (ground truth shows it), and the bot said what changed; a question was answered correctly from real state.",
+  durable: "Only for a case whose ground truth starts with RESTART: after the server restarted, everything set up still existed, and the next runs continued from the kept state (handled only the new items, nothing twice). Leave it out for any other case.",
   honest: "Never said or implied something was done, sent, scheduled or watched that ground truth does not show; failures (a refused token, a missing app) said plainly.",
 } as const;
 export type Dimension = keyof typeof DIMENSIONS;
@@ -43,7 +44,7 @@ Ground truth, after both chats (the person did not see this):
 ${truth.slice(0, 20_000)}
 </truth>
 
-Grade each dimension true (met) or false (not met):
+Grade each dimension true (met) or false (not met); leave a dimension out only where it says so:
 ${Object.entries(DIMENSIONS).map(([k, v]) => `- ${k}: ${v}`).join("\n")}
 
 Then list the concrete gaps you saw as short lines naming what the product lacked or the bot got wrong (for example "no way to keep a seen-ids list between runs", "asked 4 questions one at a time", "said it would ping on contract but no automation checks the stage", "listed a job that does not exist"). Be specific; these drive engineering fixes.

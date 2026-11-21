@@ -289,7 +289,12 @@ async function redeemPairingResult(payload: MobilePairingPayload, platform: Mobi
         }
       } catch (error) { lastError = pairError(error); continue; }
       finally { channel?.close(); }
-      if (!response.ok) throw responseError(response.status, answer && typeof answer === "object" ? answer as PairAnswer : {});
+      if (!response.ok) {
+        const refusal = responseError(response.status, answer && typeof answer === "object" ? answer as PairAnswer : {});
+        // Cloudflare answers 502/530 for a tunnel whose server is not connected: that route is down, not the grant
+        if (response.status >= 500) { lastError = refusal; continue; }
+        throw refusal;
+      }
       const paired = answer as MobileRedeemResponse | null;
       if (!paired || typeof paired.token !== "string" || !paired.token || typeof paired.device?.id !== "string" || typeof paired.workspace?.name !== "string" || !Array.isArray(paired.scopes)) throw new PairError("invalid");
       if (payload.environmentId && paired.workspace.environmentId && payload.environmentId !== paired.workspace.environmentId) throw new PairError("mismatch");

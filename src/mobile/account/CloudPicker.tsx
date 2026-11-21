@@ -16,7 +16,7 @@ type Problem = { outcome: Exclude<Outcome, "paired">; name: string };
 type Target = { kind: "cloud"; cloud: MobileCloud } | { kind: "team"; cloud: MobileTeamCloud } | { kind: "computer"; computer: MobileComputer };
 
 /** an asleep cloud is woken by the tap that opens it, so it reads as ready like any other */
-function statusLine(cloud: Pick<MobileCloud, "status">): string {
+export function statusLine(cloud: Pick<MobileCloud, "status">): string {
   if (cloud.status === "ready" || cloud.status === "offline") return t("mobile.clouds.ready");
   if (cloud.status === "setting_up") return t("mobile.clouds.settingUp");
   return t("mobile.clouds.stopped");
@@ -50,6 +50,20 @@ export function targetCloud(places: AccountPlaces, records: readonly MobileConne
   const kept = records.find((record) => linkedHere(one.cloud, [record]));
   if (kept) return kept;
   return pairable(one.cloud) ? one : null;
+}
+
+/** One more place to open beside a computer a QR just linked: a cloud or team cloud of the account it signed the phone in to,
+ * as a link the phone already keeps or one to pair. */
+export type PlaceChoice = { key: string; name: string; status: string; target: Extract<Target, { kind: "cloud" | "team" }> | { kind: "kept"; id: string } };
+
+export function placeChoices(places: AccountPlaces, records: readonly MobileConnectionRecord[], linked: Pick<MobileConnectionRecord, "origin" | "via">): PlaceChoice[] {
+  const clouds: Extract<Target, { kind: "cloud" | "team" }>[] = [...places.clouds.map((cloud) => ({ kind: "cloud" as const, cloud })), ...places.teams.map((cloud) => ({ kind: "team" as const, cloud }))];
+  return clouds.flatMap((target): PlaceChoice[] => {
+    if (linkedHere(target.cloud, [linked])) return [];
+    const kept = records.find((record) => linkedHere(target.cloud, [record]));
+    if (kept) return [{ key: `kept:${kept.id}`, name: target.cloud.name, status: statusLine(target.cloud), target: { kind: "kept", id: kept.id } }];
+    return pairable(target.cloud) ? [{ key: `${target.kind}:${target.cloud.id}`, name: target.cloud.name, status: statusLine(target.cloud), target }] : [];
+  });
 }
 
 /** Everything the account has to open on this phone, in the order the picker lists it: its own clouds, its teams' clouds,

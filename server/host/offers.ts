@@ -17,6 +17,7 @@ import { readMemoryTopic, writeMemoryTopic } from "../workspace.ts";
 import { plain } from "./brief-message.ts";
 import { localDate, validZone } from "./check-plan.ts";
 import { INTERESTS_TOPIC, learn, mergeSpotted, parseInterests, renderInterests, type Interest, type Learned } from "./offer-interests.ts";
+import { isQuiet, localMinute, neverAbout, type ProactivePrefs } from "./proactive-prefs.ts";
 import { judgePrompt, parseJudge, parseSpot, spotPrompt, type RosterBot, type SearchResult } from "./offer-prompts.ts";
 
 export const OFFERS_FILE = "offers.json";
@@ -102,6 +103,8 @@ export interface OffersDeps {
   /** Do it: the person's request goes to the bot, in that conversation or a new one, and starts its turn. */
   start: (input: { botId: string; threadId?: string; title: string; text: string; from: { botId: string; name: string; threadId: string }; auth: RequestAuth }) => Promise<string>;
   interests?: InterestsFile;
+  /** The person's What to tell me about: its quiet hours replace the default ones, and nothing under Never is offered. */
+  prefs?: () => ProactivePrefs;
   now?: () => number;
   random?: () => number;
   timing?: Partial<Omit<typeof OFFER_TIMING, "quiet">>;
@@ -219,8 +222,9 @@ export function createOffers(deps: OffersDeps) {
     if (!owner || !suggests(owner)) return "owner off";
     if (owner.memoryEnabled === false) return "memory off";
     const at = now();
+    const quiet = deps.prefs?.().quiet;
     const hour = localHour(at, deps.timeZone());
-    if (hour >= OFFER_TIMING.quiet.from || hour < OFFER_TIMING.quiet.to) return "quiet hours";
+    if (quiet ? isQuiet(quiet, localMinute(at, deps.timeZone())) : hour >= OFFER_TIMING.quiet.from || hour < OFFER_TIMING.quiet.to) return "quiet hours";
     if (deps.anyBusy() || at - lastPersonAt() < timing.idle) return "in a conversation";
     const kept = load();
     const day = today();
@@ -292,8 +296,10 @@ export function createOffers(deps: OffersDeps) {
   function nextGoal(owner: BotRecord): (Interest & { due?: string }) | null {
     const kept = load();
     const at = now();
+    const prefs = deps.prefs?.();
     const due = interestsOf(owner.id).filter((one) => {
       const goal = kept.goals[one.id];
+      if (prefs && neverAbout(prefs, one.title)) return false;
       if (one.stopped || (goal?.snoozedUntil ?? 0) > at) return false;
       return at - (goal?.lookedAt ?? 0) >= timing.look / one.weight;
     });
@@ -355,6 +361,8 @@ export function createOffers(deps: OffersDeps) {
       save();
       const offer = answer === null ? null : parseJudge(answer, input);
       if (!offer) return { kind: "quiet", why: answer === null ? "the background call failed" : "nothing worth it" };
+      const prefs = deps.prefs?.();
+      if (prefs && neverAbout(prefs, `${offer.find}\n${offer.action}\n${offer.ask}`)) return { kind: "quiet", why: "they asked not to hear about this" };
       const late = blocked();
       if (late) return { kind: "skipped", why: late };
       const where = home(owner, goal.id);

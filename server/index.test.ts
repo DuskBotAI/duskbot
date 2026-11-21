@@ -8340,7 +8340,7 @@ describe("harness HTTP API", () => {
       expect(ids).not.toContain("browser");
       const text = await previewText();
       expect(text).toContain("\"Works on\" setting is Off");
-      expect(text).toContain("no computer and no built-in browser");
+      expect(text).toContain("no computer or built-in browser is mounted this turn");
 
       rmSync(fakeClaudeDump, { force: true });
       expect((await api("POST", `/api/bots/${bot.id}/messages`, { text: "open a browser and check my calendar" })).status).toBe(202);
@@ -10200,7 +10200,9 @@ describe("harness HTTP API", () => {
         expect(chatLines.filter((message) => message.automation?.runId === queued.body.run.id && message.automation?.failed)).toHaveLength(1);
         const failedRun = (await api("GET", "/api/routines")).body.runs.find((run: { id: string }) => run.id === queued.body.run.id);
         expect(failedRun).toMatchObject({ routineId, routineName: "Weekday brief", status: "failed" });
-        expect(failedRun.threadId).toBe(bot.threadId);
+        // the run itself works in this chat only while every session is the owner's (earlier tests pair members), but its
+        // report always comes back here
+        expect(failedRun).toMatchObject({ resultsThreadId: bot.threadId, report: { threadId: bot.threadId } });
 
         expect((await api("POST", `/api/bots/${bot.id}/read`, { threadId: bot.threadId })).status).toBe(200);
         expect((await api("POST", `/api/routine-runs/${queued.body.run.id}/seen`)).status).toBe(200);
@@ -12036,7 +12038,7 @@ describe("bot memory API", () => {
       expect(created.status).toBe(201);
       routineId = created.body.routine.id as string;
       const soon = await api("GET", "/api/routines/wake");
-      expect(soon.body).toEqual({ hold: true, reason: "due", at });
+      expect(soon.body).toEqual({ hold: true, reason: "due", at, routines: 1 });
     } finally {
       if (routineId) await api("DELETE", `/api/routines/${routineId}`).catch(() => undefined);
       await api("DELETE", `/api/bots/${bot.id}`);

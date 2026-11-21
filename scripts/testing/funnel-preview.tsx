@@ -1,5 +1,5 @@
 // The first-run funnel's corner cards and dialogs, the real components with fake desktop bridges.
-// ?view=asleep|late|late-missed|plans|start-fresh|settings picks one. Served by scripts/verify-funnel-preview.ts.
+// ?view=asleep|late|late-missed|routine-sleep|routine-sleep-missed|sleep-setting|plans|start-fresh|settings picks one. Served by scripts/verify-funnel-preview.ts.
 import { createRoot } from "react-dom/client";
 import type { CloudAccountState } from "../../electron/cloud-account.mjs";
 import type { StartFreshView } from "../../electron/start-fresh.mjs";
@@ -7,7 +7,8 @@ import { CloudAccountSettings } from "../../src/components/CloudAccountSettings"
 import { CloudAddSheet } from "../../src/components/CloudAddDialog";
 import { ChooseScreen } from "../../src/components/cloud-buy/ChooseScreen";
 import { DesktopCapabilitiesProvider } from "../../src/components/DesktopCapabilities";
-import { AsleepWorkCard, LateRoutineCard } from "../../src/components/LateRoutineCard";
+import { AsleepWorkCard, LateRoutineCard, RoutineSleepCard } from "../../src/components/LateRoutineCard";
+import { RoutineWakeRow } from "../../src/components/routines/RoutineWakeRow";
 import { StartFreshDialog } from "../../src/components/bot-panel/StartFresh";
 import { setEmailGateDone } from "../../src/lib/analytics";
 import { initialDesktopCapabilities } from "../../src/lib/desktop";
@@ -38,6 +39,14 @@ window.duskDesktop = {
   platform: "darwin",
   getCapabilities: async () => ({ ...initialDesktopCapabilities(), windowChrome: "mac-inset" }),
   cloudAccount: { state: async () => account, onState: () => () => {} },
+  routines: (() => {
+    let wake = { keepAwake: true, pluggedIn: false, hold: false, reason: "idle", at: null, onBattery: false, sleptAt: null };
+    return {
+      wakeState: async () => wake,
+      keepAwake: async (keepAwake: boolean) => (wake = { ...wake, keepAwake }),
+      keepAwakePluggedIn: async (pluggedIn: boolean) => (wake = { ...wake, pluggedIn }),
+    };
+  })(),
   startFresh: {
     available: async () => true, preview: async () => idle, run: async () => idle, retry: async () => idle, finish: async () => idle,
     onChanged: () => () => {},
@@ -55,6 +64,9 @@ function View() {
     case "asleep": return <AsleepWorkCard slept={{ botId: "quill", name: "Quill", wokeAt: NOW }} onStart={() => {}} onNotNow={() => {}} />;
     case "late": return <LateRoutineCard now={NOW} late={{ runId: "r", routineId: "x", name: "Morning brief", dueAt: NOW - 3 * HOUR, ranAt: NOW - HOUR }} onStart={() => {}} onNotNow={() => {}} />;
     case "late-missed": return <LateRoutineCard now={NOW} late={{ runId: "r", routineId: "x", name: "Morning brief", dueAt: NOW - 3 * HOUR, ranAt: null }} onStart={() => {}} onNotNow={() => {}} />;
+    case "routine-sleep": return <RoutineSleepCard sleep={{ reason: "slept" }} onCloud={() => {}} onKeepAwake={() => {}} onDismiss={() => {}} />;
+    case "routine-sleep-missed": return <RoutineSleepCard sleep={{ reason: "missed", count: 3 }} onCloud={() => {}} onKeepAwake={() => {}} onDismiss={() => {}} />;
+    case "sleep-setting": return <div className="mx-auto max-w-[640px] p-8"><RoutineWakeRow /></div>;
     case "plans": return <CloudAddSheet kind="offer" staging={false} onClose={() => {}}>
       <ChooseScreen offer={{ plans, recommended: "pro", refundDays: 14 }} busy={false} signedOut={false} notice={null} onStart={() => {}} onSignIn={() => {}} />
     </CloudAddSheet>;

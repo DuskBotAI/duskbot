@@ -89,15 +89,19 @@ export function subscriptionFromWire(subscription: SubscriptionView, catalog: Pl
   const statuses = { pending: "pending", active: "active", payment_problem: "past_due", cancelled: "canceled", ended: "canceled" } as const;
   return { id: subscription.id, bundle: subscription.bundle, selection: selectionFromCart(subscription.cart, catalog), status: statuses[subscription.status], amountUsd: subscription.totalCents / 100, currentPeriodEnd: subscription.currentPeriodEnd ?? 0, cancelAt: subscription.cancelAtPeriodEnd ? subscription.currentPeriodEnd : null,
     ...(subscription.trialEndsAt ? { trialEndsAt: subscription.trialEndsAt } : {}),
+    ...(subscription.status === "payment_problem" && subscription.fixBy ? { fixBy: subscription.fixBy, ...(subscription.trialUnpaid ? { trialUnpaid: true as const } : {}) } : {}),
     ...(subscription.scheduledChange ? { scheduled: { bundle: subscription.scheduledChange.bundle, selection: selectionFromCart(subscription.scheduledChange.cart, catalog), amountUsd: subscription.scheduledChange.totalCents / 100, at: subscription.scheduledChange.at } } : {}) };
 }
 
 // a pending subscription has no paid period yet: it is not a plan until it turns active
 export function billingFromWire(overview: WireBillingOverview, catalog: PlanCatalog): BillingOverview {
   const subscription = overview.subscriptions.filter((item) => item.status !== "ended" && item.status !== "pending").reduce<SubscriptionView | null>((newest, item) => !newest || item.createdAt > newest.createdAt ? item : newest, null);
+  const ended = subscription ? null : overview.subscriptions.filter((item) => item.status === "ended" && item.currentPeriodEnd !== null)
+    .reduce<SubscriptionView | null>((newest, item) => !newest || item.createdAt > newest.createdAt ? item : newest, null);
   return {
     team: overview.license?.license?.kind === "team" ? overview.license.license.role : null,
     subscription: subscription ? subscriptionFromWire(subscription, catalog) : null,
+    ended: ended ? { bundle: ended.bundle, selection: selectionFromCart(ended.cart, catalog), endedAt: ended.currentPeriodEnd! } : null,
     paymentMethod: null,
     invoices: overview.invoices.invoices.map((invoice) => ({ id: invoice.id, number: invoice.id, date: invoice.at, description: invoice.description, amountUsd: invoice.amountCents / 100, status: invoice.status === "failed" ? "open" : invoice.status, url: invoice.downloadUrl })),
     retention: overview.retention ?? null,
@@ -108,7 +112,8 @@ export const SETUP_LABELS = { reserving: "reserving your machine", storage: "pre
 
 export function cloudFromWire(cloud: CloudDesktopView): CloudDesktop | null {
   if (cloud.status === "checkout" || cloud.status === "destroying" || cloud.status === "destroyed") return null;
-  const statuses = { checkout: "provisioning", provisioning: "provisioning", running: "running", sleeping: "sleeping", stopped: "stopped", payment_problem: "error", suspended: "error", error: "error" } as const;
+  // a failed charge stops it; the billing notice says why and how it comes back
+  const statuses = { checkout: "provisioning", provisioning: "provisioning", running: "running", sleeping: "sleeping", stopped: "stopped", payment_problem: "stopped", suspended: "error", error: "error" } as const;
   // asleep only because nobody used it (our cost saving, never the owner's pause): live to its owner, any use wakes it
   const resting = cloud.provider === "managed" && cloud.status === "sleeping" && (cloud.stoppedBy === "idle" || cloud.stoppedBy === null) && cloud.egress?.state !== "paused";
   const status = resting ? "running" : cloud.waking && cloud.status === "sleeping" ? "waking" : statuses[cloud.status];
@@ -116,7 +121,7 @@ export function cloudFromWire(cloud: CloudDesktopView): CloudDesktop | null {
     id: cloud.id, name: cloud.name, status, tier: desktopIds[cloud.kind], placement: cloud.placement === "pool" ? "shared" : "dedicated", region: cloud.region,
     ...cloud.machine, workspaceId: cloud.workspaceId, createdAt: cloud.createdAt,
     progress: status === "provisioning" && cloud.setupStep !== null ? { step: SETUP_LABELS[cloud.setupStep], value: (SETUP_STEPS.indexOf(cloud.setupStep) + 0.5) / 4 } : null,
-    error: cloud.status === "payment_problem" ? "the last payment did not go through. update your card to wake it." : cloud.status === "suspended" ? "it is paused. write to us at hello@dusk.bot to sort it out." : cloud.error,
+    error: cloud.status === "suspended" ? "it is paused. write to us at hello@dusk.bot to sort it out." : cloud.error,
     botComputers: { used: 0, limit: cloud.botComputers }, uptimeSec: null,
     ...(resting ? { resting: true } : {}),
     ...(cloud.revivedAt ? { revivedAt: cloud.revivedAt } : {}),

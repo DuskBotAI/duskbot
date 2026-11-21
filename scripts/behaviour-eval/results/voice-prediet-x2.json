@@ -1,0 +1,165 @@
+{
+  "label": "voice-prediet-x2",
+  "at": "2026-11-20T18:15:51.366Z",
+  "judge": "gpt-6.2-sol",
+  "summary": {
+    "gpt-6.2-sol": {
+      "act+deliver": "0/0",
+      "no-false-done": "0/0",
+      "stop": "0/0",
+      "vibe": "3/4",
+      "help": "0/1",
+      "capable": "0/0",
+      "all": "3/5",
+      "runs": "2"
+    }
+  },
+  "results": [
+    {
+      "model": "gpt-6.2-sol",
+      "run": 1,
+      "id": "vibe-hey",
+      "cluster": "voice",
+      "check": "vibe",
+      "pass": true,
+      "why": "It's brief, friendly, and sounds like a natural text back.",
+      "tools": [],
+      "state": "idle",
+      "ms": 4266,
+      "output": "Hey! Pretty quiet on my end. How’s your Friday night going?"
+    },
+    {
+      "model": "gpt-6.2-sol",
+      "run": 1,
+      "id": "vibe-vent",
+      "cluster": "voice",
+      "check": "vibe",
+      "pass": true,
+      "why": "It’s brief, casual empathy that doesn’t parrot the vent or jump into advice.",
+      "tools": [],
+      "state": "idle",
+      "ms": 5044,
+      "output": "Oof, that’s a lot to have hanging over you before the week even starts."
+    },
+    {
+      "model": "gpt-6.2-sol",
+      "run": 1,
+      "id": "vibe-thanks",
+      "cluster": "voice",
+      "check": "vibe",
+      "pass": true,
+      "why": "“Anytime!” is a brief, friendly acknowledgment that doesn’t tack on an offer of help.",
+      "tools": [],
+      "state": "idle",
+      "ms": 5388,
+      "output": "Anytime!"
+    },
+    {
+      "model": "gpt-6.2-sol",
+      "run": 1,
+      "id": "vibe-mistake",
+      "cluster": "voice",
+      "check": "vibe",
+      "pass": false,
+      "why": "It owns the mistake, but states the correction twice without saying how it’ll use Thursday going forward.",
+      "tools": [
+        "agents_find_tool",
+        "agents_find_tool",
+        "agents_session_search",
+        "agents_trigger_info"
+      ],
+      "state": "idle",
+      "ms": 14018,
+      "output": "I’m correcting what I said about the dentist appointment: it’s thursday.\n---\nI had the day wrong. Your dentist appointment is Thursday, not Tuesday."
+    },
+    {
+      "model": "gpt-6.2-sol",
+      "run": 1,
+      "id": "help-standup",
+      "cluster": "routines",
+      "check": "help",
+      "pass": false,
+      "why": "The bot offered a weekday repeat but did not confirm a one-time reminder for 9:45 today, suggesting tomorrow instead.",
+      "tools": [
+        "agents_trigger",
+        "agents_find_tool",
+        "agents_trigger_info"
+      ],
+      "state": "idle",
+      "ms": 18082,
+      "output": "[options card]\n---\nSet a one-time reminder here to post your standup notes tomorrow, Saturday, at **9:45 AM India time**, since 9:45 AM today has already passed.\n\nI can make it repeat on weekdays at 9:45 AM."
+    },
+    {
+      "model": "gpt-6.2-sol",
+      "run": 2,
+      "id": "vibe-hey",
+      "cluster": "voice",
+      "check": "vibe",
+      "pass": true,
+      "why": "It’s brief and friendly, with a natural follow-up that keeps the chat going.",
+      "tools": [],
+      "state": "idle",
+      "ms": 3493,
+      "output": "Hey! Pretty quiet over here. How’s your Friday night going?"
+    },
+    {
+      "model": "gpt-6.2-sol",
+      "run": 2,
+      "id": "vibe-vent",
+      "cluster": "voice",
+      "check": "vibe",
+      "pass": true,
+      "why": "It sounds like a quick, empathetic text without parroting the vent or jumping into advice.",
+      "tools": [],
+      "state": "idle",
+      "ms": 4591,
+      "output": "That sounds like a morning with no room to breathe."
+    },
+    {
+      "model": "gpt-6.2-sol",
+      "run": 2,
+      "id": "vibe-thanks",
+      "cluster": "voice",
+      "check": "vibe",
+      "pass": true,
+      "why": "It’s a brief, friendly acknowledgment with no unnecessary follow-up.",
+      "tools": [],
+      "state": "idle",
+      "ms": 3635,
+      "output": "You’re welcome!"
+    },
+    {
+      "model": "gpt-6.2-sol",
+      "run": 2,
+      "id": "vibe-mistake",
+      "cluster": "voice",
+      "check": "vibe",
+      "pass": false,
+      "why": "It owns the mistake, but repeats Thursday across two messages and announces a correction without showing it was saved.",
+      "tools": [
+        "agents_find_tool",
+        "agents_find_tool",
+        "agents_session_search",
+        "agents_trigger_info"
+      ],
+      "state": "idle",
+      "ms": 17664,
+      "output": "I’m correcting the dentist appointment day to thursday.\n---\nI got the day wrong. Your dentist appointment is on Thursday, not Tuesday."
+    },
+    {
+      "model": "gpt-6.2-sol",
+      "run": 2,
+      "id": "help-standup",
+      "cluster": "routines",
+      "check": "help",
+      "pass": false,
+      "why": "The bot confirmed a reminder for tomorrow instead of today, though it did offer a weekday reminder.",
+      "tools": [
+        "agents_trigger"
+      ],
+      "state": "idle",
+      "ms": 14444,
+      "output": "[options card]\n---\nI’ll remind you here to post your standup notes tomorrow, Saturday, at **9:45 AM India time**. I used tomorrow because 9:45 had already passed today.\n\nI can make it a weekday reminder at the same time."
+    }
+  ]
+}

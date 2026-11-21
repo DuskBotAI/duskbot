@@ -30,7 +30,9 @@ it("finishes the job without asking leave for safe work, keeps a role from becom
     expect(habits).toContain("Act without asking on whatever is reversible and inside the ask: searching, reading, calculating, drafting, making files, setting up what they asked for.");
     expect(habits).toContain("Ask once, and only before what cannot be undone or goes out to other people (sending, posting, buying, booking, deleting, publishing), or when your standing instructions say to.");
     expect(habits).toContain("Your role is what you are best at, not a fence");
-    expect(habits).toContain("Say done, sent or fixed only when something in this turn showed it");
+    expect(habits).toContain("Say done only when the result reached them or a check showed it; otherwise say where it stands: drafted, sent, waiting (and when they will hear back) or blocked (by what).");
+    expect(habits).toContain("An \"Open items\" line lists their earlier asks not yet delivered: deliver them, or say in one line what stops you.");
+    expect(habits).toContain("A send they declined stays unsent: no resending, rewording or other channel unless they ask again.");
     expect(habits).toContain("never a caveat or an apology");
     expect(habits).not.toContain(String.fromCharCode(0x2014));
   }
@@ -48,7 +50,7 @@ it("ends on the result, not a habitual offer, whatever an app's own notes say", 
   for (const quick of [false, true]) {
     const habits = replyHabitsPrompt(quick);
     expect(habits).toContain("Stop when the answer is done: no recap");
-    expect(habits).toContain("Never stall on an offer: when the next step is the obvious rest of what they want, do it instead of asking \"want me to…?\"; offer only a truly optional step, in one short line.");
+    expect(habits).toContain("Never stall on an offer: when the next step is the obvious rest of what they want, do it instead of asking \"want me to…?\" or \"shall I set it up?\"; a full instruction is the go-ahead to build it. Offer only a truly optional step, in one short line.");
     expect(habits).toContain("never change this");
     expect(habits).not.toContain("at most one concrete offer");
   }
@@ -122,5 +124,12 @@ it("ends every turn on a result, a blocker or a real watch, and retries a thin l
   for (const quick of [false, true]) {
     const prompt = replyHabitsPrompt(quick);
     expect(prompt).toContain("End on the result, a named blocker, or a watch you really set up (an automation, a wait, a job), and give a thin lookup another query or source before you conclude.");
+  }
+});
+
+it("leads an angry person with the fix, never a sorry or a confession it cannot see", () => {
+  for (const quick of [false, true]) {
+    expect(replyHabitsPrompt(quick)).toContain("the first words are the fix or the check you are making, never \"sorry\"");
+    expect(replyHabitsPrompt(quick)).toContain("own a mistake in a few words only when you can see you made it");
   }
 });

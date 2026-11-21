@@ -1,7 +1,7 @@
 import type { ProviderAdapter } from "./contracts.ts";
 import { supportsWorkspaceFiles } from "./workspace.ts";
 import type { ModelSelection } from "../shared/wire.ts";
-import { freeFallback, rankAis } from "../shared/ai-ranking.ts";
+import { backupOrder } from "../shared/ai-ranking.ts";
 import { readyToRun, type DefaultSelectionContext, type SelectableInstance } from "./default-model-selection.ts";
 
 type Engine = { driverKind: string; capabilities: ProviderAdapter["capabilities"] };
@@ -14,11 +14,12 @@ export function startupBackups(bot: { fallback?: Backup[] }, recovery?: { enable
   return recovery?.enabled && recovery.backup ? [recovery.backup] : [];
 }
 
-/** An automatic switch must not strand the task without its tools or move its filesystem to another machine. A USB
+/** An automatic switch must not strand the task without its tools or its files: an AI that works in the bot's folder
+ * is never carried on by a chat-only one, while a chat-only AI may be carried on by one that has the folder. A USB
  * phone is not one of those tools: only Codex and Pi drive one, Claude offers it on every desktop, and no Cloud has a
  * USB port, so counting it left a limited Claude bot with no backup but those two. */
 export function recoveryCapabilityError(from: Engine, to: Engine): string | undefined {
-  if (supportsWorkspaceFiles(from.driverKind) !== supportsWorkspaceFiles(to.driverKind)) {
+  if (supportsWorkspaceFiles(from.driverKind) && !supportsWorkspaceFiles(to.driverKind)) {
     return "The backup cannot use the same workspace.";
   }
   const tools = ["agentsMcp", "computerMcp", "composioMcp", "dataMcp", "emailMcp", "deviceMcp",
@@ -33,11 +34,8 @@ export function recoveryCapabilityError(from: Engine, to: Engine): string | unde
  * (`fallback: []`) or with its own list gets none of these. */
 export function automaticBackups(bot: { fallback?: unknown[] }, engines: readonly SelectableInstance[], from: Pick<ModelSelection, "instanceId">, context: DefaultSelectionContext = {}): Backup[] {
   if (bot.fallback !== undefined) return [];
-  const current = engines.find((engine) => engine.instanceId === from.instanceId);
   const working = engines.filter((engine) => engine.instanceId !== from.instanceId && !engine.found && readyToRun(engine, context)
     && engine.snapshot.authenticated !== false && engine.models.default.trim());
-  const ranked = rankAis(working);
-  const sameKind = ranked.filter((engine) => current && engine.driverKind === current.driverKind && !freeFallback(engine));
-  const ordered = [...sameKind, ...ranked.filter((engine) => !sameKind.includes(engine) && !freeFallback(engine)), ...ranked.filter(freeFallback)];
-  return ordered.map((engine) => ({ instanceId: engine.instanceId, model: engine.models.default }));
+  return backupOrder(working, engines.find((engine) => engine.instanceId === from.instanceId)?.driverKind)
+    .map((engine) => ({ instanceId: engine.instanceId, model: engine.models.default }));
 }

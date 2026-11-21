@@ -93,10 +93,14 @@ if (typeof window !== "undefined") {
 }
 const REMOTE_SAFE = new Set(["platform", "cloudMac", "app", "getCapabilities", "onCapabilitiesChanged", "applySkin", "setUnreadCount", "permStatus", "workspaces", "rail", "cloudAdd", "cloudPlan", "cloudSendPage", "accountSheet", "desktopNotices", "desktopNotifications", "desktopAnalytics", "desktopLanguage", "windowControls", "onOpenAppSettings", "windowFrame", "sealTrust", "linkDirect", "onSlackOAuth", "ambient", "desktopBots", "requireUserPresence", "vpsCloudMove", "trail"]);
 /** My Cloud's own page once it is the person's home (main checks the sender again): it is this app's page then. */
-const HOME_PAGE = ["home", "appUpdate", "onChatLink", "onPackageInstall", "exportDiagnostics", "openLogsFolder", "openAtLogin", "callActive", "productEvents",
-  "speechStart", "speechStop", "speechFinish", "onSpeechTranscript", "onSpeechEnd", "onSpeechLevel"];
+const HOME_PAGE = ["home", "appUpdate", "onChatLink", "onPackageInstall", "exportDiagnostics", "openLogsFolder", "openAtLogin", "productEvents"];
+/** Any place the person chose, open as this window's server (home too): its calls listen through this computer's speech. */
+const PLACE_PAGE = ["callActive", "speechStart", "speechStop", "speechFinish", "onSpeechTranscript", "onSpeechEnd", "onSpeechLevel"];
 function homePage() {
   try { return ipcRenderer.sendSync("home:page") === true; } catch { return false; }
+}
+function placePage() {
+  try { return ipcRenderer.sendSync("place:page") === true; } catch { return false; }
 }
 function reloadedForUpdate() {
   try { return ipcRenderer.sendSync("home:updating") === true; } catch { return false; }
@@ -116,7 +120,8 @@ ipcRenderer.on("desktop-language:changed", (_event, language) => {
   for (const listener of languageListeners) listener(language);
 });
 const onHomePage = !isLocalPage && homePage();
-const remoteKeys = isLocalPage ? REMOTE_SAFE : new Set([...REMOTE_SAFE, ...(onHomePage ? HOME_PAGE : [])]);
+const onPlacePage = !isLocalPage && (onHomePage || placePage());
+const remoteKeys = isLocalPage ? REMOTE_SAFE : new Set([...REMOTE_SAFE, ...(onHomePage ? HOME_PAGE : []), ...(onPlacePage ? PLACE_PAGE : [])]);
 
 // Keep in parity with shared/workspace-backup-client.ts (a sandboxed preload cannot import it).
 const COMPANY_BACKUP_CLIENT_KEYS = [
@@ -327,7 +332,8 @@ const bridge = {
   },
   routines: {
     wakeState: () => ipcRenderer.invoke("routines:wake-state"),
-    keepAwake: (enabled) => ipcRenderer.invoke("routines:keep-awake", enabled),
+    keepAwake: (enabled) => ipcRenderer.invoke("routines:keep-awake", { keepAwake: Boolean(enabled) }),
+    keepAwakePluggedIn: (enabled) => ipcRenderer.invoke("routines:keep-awake", { pluggedIn: Boolean(enabled) }),
   },
   /** Secrets stay in the main process; the renderer sees only status and narrow actions. */
   companionAccount: {

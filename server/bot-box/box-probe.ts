@@ -10,6 +10,8 @@ import { connect } from "node:net";
 import { hostname } from "node:os";
 import { join } from "node:path";
 
+import { seccompTarget } from "./seccomp.ts";
+
 export const PROBE_SPEC_ENV = "DUSK_BOX_PROBE";
 
 export interface ProbeSpec {
@@ -152,7 +154,8 @@ export async function runProbe(spec: ProbeSpec, env: Record<string, string | und
   if (spec.publicTarget) add("egress-public-allowed", (await connectThroughGate(spec.egressPort, spec.publicTarget)) === "200", `CONNECT ${spec.publicTarget}`);
   if (spec.seccomp) {
     // add_key(2) into the process keyring: fine for any user, EPERM under the box's filter. python3 is in the image.
-    const probe = "import ctypes,os;l=ctypes.CDLL(None,use_errno=True);r=l.syscall(248,b'user',b'dusk-box-probe',b'v',1,-2);print('ok' if r>=0 else os.strerror(ctypes.get_errno()))";
+    const addKey = seccompTarget()?.denied.find(([name]) => name === "add_key")?.[1] ?? 248;
+    const probe = `import ctypes,os;l=ctypes.CDLL(None,use_errno=True);r=l.syscall(${addKey},b'user',b'dusk-box-probe',b'v',1,-2);print('ok' if r>=0 else os.strerror(ctypes.get_errno()))`;
     const result = spawnSync("python3", ["-c", probe], { encoding: "utf8", timeout: 10_000 });
     const text = (result.stdout || result.stderr || "").trim();
     add("keyring-denied", /Operation not permitted/.test(text), text.slice(0, 60) || `exit ${result.status}`);

@@ -232,7 +232,7 @@ describe("peer allow-list", () => {
       expect(systemPrompt).not.toContain("use ask_bot");
       // an ordinary bot makes a bot only on its person's ask; changing teams stays a Chief's
       expect(systemPrompt).not.toContain("propose_team_setup");
-      expect(systemPrompt).toContain("[/TEAM ROSTER] If a supported API key is missing");
+      expect(systemPrompt).toContain("[/TEAM ROSTER] Secrets: when a key, token or password is needed");
 
       const providerToken = String(dump.mcpConfig?.mcpServers?.agents?.env?.DUSK_COMMS_TOKEN ?? "");
       expect(providerToken).toMatch(/^[a-f0-9]{48}$/);

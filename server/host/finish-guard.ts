@@ -1,12 +1,13 @@
 // A turn that ends with steps of its own plan still open, that agreed with a correction ("You're right") without a
-// single tool call, that ends by announcing a step it never took ("Let me check the prices."), or that stops partway
+// single tool call, that ends by announcing a step it never took ("Let me check the prices."), that calls an app change
+// done without reading it back, that leaves one of the person's asks undelivered, or that stops partway
 // through work only to ask whether to carry on, is carried on by itself: an open plan as long as each carry-on closes a
 // step (up to six times), anything else at most twice, for each message of the person's. The person should never have to
 // type "continue". A turn waiting on the person, any other question, a failed or
 // stopped turn and a person's own next message all leave it alone.
 import type { RuntimeEvent } from "../contracts.ts";
 import { effectfulCall } from "../drivers/openai-chat-habits.ts";
-import { openChecklist, promisesFollowUp, ranTool, schedulesWork, stopGateNote } from "../turn-stop-gates.ts";
+import { claimsDone, openChecklist, promisesFollowUp, ranTool, readBackWrite, schedulesWork, stopGateNote, type TurnForAsks } from "../turn-stop-gates.ts";
 
 export const MAX_CONTINUES = 2;
 export const MAX_PLAN_CONTINUES = 6;
@@ -18,11 +19,12 @@ const PLAN_TOOL = /\b(?:todowrite|todo_write|write_todos|update_plan|updateplan|
 const STATUS = /"status"\s*:\s*"(pending|in_progress|completed|cancelled)"/g;
 // engine-native tools that only look: Claude Code's and Codex's names
 const NATIVE_LOOKUP = /^(?:read|grep|glob|ls|websearch|webfetch|web_search|todowrite|notebookread|view_image)$/;
+const HANDS_OFF = /(?:^|_)(?:start_thread|coordinate_bots)$/;
 const AGREED = /\b(?:you'?re|you are)\s+(?:absolutely\s+|completely\s+|totally\s+|quite\s+)?right\b/i;
 
 export type PlanSteps = { open: number; total: number; steps?: string[] };
 export type FinishReason = { kind: "plan"; open: number; total: number; steps?: string[] } | { kind: "ack" } | { kind: "next" }
-  | { kind: "promise" } | { kind: "checklist"; items: string[] };
+  | { kind: "promise" } | { kind: "checklist"; items: string[] } | { kind: "unread"; tool: string } | { kind: "asks"; items: string[] };
 
 const lastParagraph = (text: string) => text.trim().split(/\n\s*\n/).at(-1)!.trim();
 const lastSentence = (paragraph: string) => paragraph.split("\n").at(-1)!.trim().split(/(?<=[.!])\s+/).at(-1)!;
@@ -83,7 +85,7 @@ export function planSignature(plan: PlanSteps): string {
 const endsOnQuestion = (text: string) => /\?\s*[)"'”]?\s*$/.test(text.trim());
 
 /** Why a finished turn should carry on, or null. */
-export function finishReason(turn: { text: string; tools: number; plan: PlanSteps | null; toolsAfterText?: number; scheduled?: boolean; effectful?: number; gated?: readonly string[] }): FinishReason | null {
+export function finishReason(turn: { text: string; tools: number; plan: PlanSteps | null; toolsAfterText?: number; scheduled?: boolean; effectful?: number; gated?: readonly string[]; unread?: string | null; asks?: readonly string[] }): FinishReason | null {
   if (!turn.text.trim()) return null;
   // a tool run after the last words (a choice card, a file, the very step it named) answers them
   const lastWords = !turn.toolsAfterText;
@@ -96,12 +98,16 @@ export function finishReason(turn: { text: string; tools: number; plan: PlanStep
   if (items) return { kind: "checklist", items };
   if (turn.tools === 0 && AGREED.test(turn.text)) return { kind: "ack" };
   if (lastWords && announcesStep(turn.text)) return { kind: "next" };
+  if (turn.unread && !turn.gated?.includes("unconfirmed_write") && claimsDone(turn.text)) return { kind: "unread", tool: turn.unread };
+  if (turn.asks?.length && !turn.gated?.includes("open_items")) return { kind: "asks", items: [...turn.asks] };
   return null;
 }
 
 export function continueNote(reason: FinishReason): string {
   if (reason.kind === "promise") return stopGateNote("follow_up");
   if (reason.kind === "checklist") return stopGateNote("checklist", { items: reason.items });
+  if (reason.kind === "unread") return stopGateNote("unconfirmed_write", { tool: reason.tool });
+  if (reason.kind === "asks") return stopGateNote("open_items", { items: reason.items });
   if (reason.kind === "plan") {
     const shown = reason.steps?.slice(0, NOTE_STEPS_MAX) ?? [];
     const list = shown.length ? ` Still open: ${shown.map((step, index) => `${index + 1}. ${step}`).join("; ")}${(reason.steps?.length ?? 0) > shown.length ? "; and more" : ""}.` : "";
@@ -121,10 +127,13 @@ export interface FinishGuardDeps {
   carryOn(botId: string, threadId: string, note: string): Promise<unknown>;
   /** The quiet line the person sees, "Continuing: 2 of 5 steps left". */
   line(threadId: string, reason: FinishReason): void;
+  /** The thread's open-item ledger: settles its open asks with what the turn did and returns the words of those still
+   * open that were never sent back for; `nudged` marks them sent back for; `failed` closes them after a turn that failed. */
+  asks?: { settle(threadId: string, turn: TurnForAsks): string[]; nudged(threadId: string): void; failed?(threadId: string): void };
   later?: (run: () => void, ms: number) => void;
 }
 
-interface Turn { text: string; tools: number; toolsAfterText: number; plan: PlanSteps | null; carriable: boolean; scheduled: boolean; effectful: number }
+interface Turn { text: string; said: string[]; tools: number; toolsAfterText: number; plan: PlanSteps | null; carriable: boolean; scheduled: boolean; handedOff: boolean; effectful: number; unread: string | null }
 
 export function createFinishGuard(deps: FinishGuardDeps) {
   const later = deps.later ?? ((run: () => void, ms: number) => { setTimeout(run, ms).unref?.(); });
@@ -139,7 +148,7 @@ export function createFinishGuard(deps: FinishGuardDeps) {
         const state = carried.get(threadId);
         if (state?.ours) state.ours = false;
         else carried.delete(threadId);
-        turns.set(threadId, { text: "", tools: 0, toolsAfterText: 0, plan: null, carriable: deps.botOf(threadId) !== null, scheduled: false, effectful: 0 });
+        turns.set(threadId, { text: "", said: [], tools: 0, toolsAfterText: 0, plan: null, carriable: deps.botOf(threadId) !== null, scheduled: false, handedOff: false, effectful: 0, unread: null });
         return;
       }
       const turn = turns.get(threadId);
@@ -149,15 +158,25 @@ export function createFinishGuard(deps: FinishGuardDeps) {
         turn.toolsAfterText += 1;
         turn.plan = planSteps(event.title, event.input) ?? turn.plan;
         const tool = ranTool(event.title ?? "", event.input);
+        if (HANDS_OFF.test(tool)) turn.handedOff = true;
         if (schedulesWork(tool)) turn.scheduled = true;
-        else if (!NATIVE_LOOKUP.test(tool.toLowerCase()) && effectfulCall(tool.toLowerCase(), "{}")) turn.effectful += 1;
+        else if (!NATIVE_LOOKUP.test(tool.toLowerCase()) && effectfulCall(tool.toLowerCase(), "{}")) {
+          turn.effectful += 1;
+          turn.unread = readBackWrite(tool) ? tool : null;
+        } else turn.unread = null;
       } else if (event.type === "item.completed" && event.itemType === "assistant_text") {
         turn.text = event.text;
+        if (event.text.trim()) turn.said.push(event.text);
         turn.toolsAfterText = 0;
       } else if (event.type === "turn.completed" || event.type === "session.exited") {
         turns.delete(threadId);
+        // security invariant: a turn that failed or was stopped (by the watchdog, a restart or the person) may have sent,
+        // written or changed something first, so its asks are never handed back to the bot (open items, the asks carry-on)
+        // to be done a second time
+        if ((event.type === "session.exited" || !event.ok) && turn.carriable) deps.asks?.failed?.(threadId);
         if (event.type !== "turn.completed" || !event.ok || event.stopReason === "cancelled" || event.stopReason === "interrupted") return;
-        const reason = finishReason({ ...turn, ...(event.type === "turn.completed" && event.stopGates ? { gated: event.stopGates } : {}) });
+        const asks = turn.carriable ? deps.asks?.settle(threadId, { said: turn.said, scheduled: turn.scheduled, handedOff: turn.handedOff }) ?? [] : [];
+        const reason = finishReason({ ...turn, asks, ...(event.stopGates ? { gated: event.stopGates } : {}) });
         const botId = reason && turn.carriable ? deps.botOf(threadId) : null;
         const state = carried.get(threadId) ?? { count: 0, plans: 0, ours: false };
         if (!reason || !botId) return;
@@ -172,7 +191,8 @@ export function createFinishGuard(deps: FinishGuardDeps) {
           carried.set(threadId, reason.kind === "plan"
             ? { ...state, plans: state.plans + 1, ours: true, planSignature: signature }
             : { ...state, count: state.count + 1, ours: true });
-          deps.line(threadId, reason);
+          if (reason.kind === "asks") deps.asks?.nudged(threadId);
+          else deps.line(threadId, reason);
           deps.carryOn(botId, threadId, continueNote(reason)).catch(() => carried.delete(threadId));
         }, START_DELAY_MS);
       }

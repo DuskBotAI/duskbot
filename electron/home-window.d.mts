@@ -15,7 +15,7 @@ export type HomeView = { name?: string } & (
   /** A Cloud the session's list says isn't running, so nothing looks up its address: it has ended (`deleteAt`: when its kept
    * files are deleted), its checkout wasn't finished, or its payment has a problem; `removable` while its owner may take it
    * off their list. */
-  | { screen: "ended" | "checkout" | "payment"; deleteAt?: number; removable?: true }
+  | { screen: "ended" | "checkout" | "payment"; deleteAt?: number; removable?: true; trial?: true }
   /** The edge says the Cloud was deleted: nothing looks it up again. */
   | { screen: "gone"; removable?: true });
 

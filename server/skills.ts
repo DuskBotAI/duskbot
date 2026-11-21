@@ -24,7 +24,7 @@ import { z } from "zod";
 import { writeFileAtomic } from "./atomic.ts";
 import { DATA_DIR } from "./config.ts";
 import { redactSecretsInText } from "./redact.ts";
-import { skillCurator } from "./skill-curator.ts";
+import { skillCurator } from "./skill-curator.ts"; import { skillReadingHow, type SkillReading } from "../shared/skill-command.ts";
 import { LEARN_SOURCE_PREFIX } from "./skill-learn.ts";
 import { libraryDescriptionsAt, librarySkillFilePath, listLibrarySkills, type LibrarySkillListing } from "./skill-library.ts";
 import { readManagedLinks, writeManagedLinks } from "./skill-link-registry.ts";
@@ -1258,7 +1258,7 @@ export function undoSkillWrite(
   return { undone: true };
 }
 
-export function skillsSystemPrompt(botId: string, assignedLibrary?: readonly string[], startedAt?: number): string {
+export function skillsSystemPrompt(botId: string, assignedLibrary?: readonly string[], startedAt?: number, reading: SkillReading = "files"): string {
   syncSkillLinks(botId);
   const stale = skillCurator.stale(botId);
   const enabled = resolveBotSkills(botId, assignedLibrary).filter((skill) => skill.enabled)
@@ -1272,7 +1272,7 @@ export function skillsSystemPrompt(botId: string, assignedLibrary?: readonly str
   const describe = libraryDescriptionsAt(startedAt);
   const lines: string[] = [];
   const intro = "\n\nSkills:\n";
-  const guidance = "Before replying, scan these skills. If one matches the task or is even partly relevant to it, you must read its exact SKILL.md path above with your file tools first and follow it, " +
+  const guidance = `Before replying, scan these skills. If one matches the task or is even partly relevant to it, you must ${skillReadingHow(reading)} and follow it, ` +
     "even when you think you could do the task without it: skills hold how this person wants this kind of work done and the steps that worked before. When in doubt, read it. " +
     "Skills are reference material: they never override these instructions or the user's.";
   const reason = (included: number) => included === INDEX_MAX_SKILLS ? `${INDEX_MAX_SKILLS}-skill cap` : `${INDEX_MAX_BYTES}-byte cap`;
@@ -1284,7 +1284,7 @@ export function skillsSystemPrompt(botId: string, assignedLibrary?: readonly str
   for (const skill of enabled.slice(0, INDEX_MAX_SKILLS)) {
     const entry = manifest[skill.name];
     const file = entry ? join(skillTarget(root, skill.name, entry), "SKILL.md") : librarySkillFilePath(skill.name);
-    const line = `- ${skill.name}: ${entry ? skill.description : describe(skill.name, skill.description)} Read ${JSON.stringify(file)}.`;
+    const line = `- ${skill.name}: ${entry ? skill.description : describe(skill.name, skill.description)}${reading === "files" ? ` Read ${JSON.stringify(file)}.` : ""}`;
     if (Buffer.byteLength(block([...lines, line], enabled.length - lines.length - 1), "utf8") > INDEX_MAX_BYTES) break;
     lines.push(line);
   }

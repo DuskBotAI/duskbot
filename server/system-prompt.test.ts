@@ -321,7 +321,7 @@ describe("shared sentences", () => {
     expect(PROFILE_PROMPT).toContain("propose_profile");
     // said once, after the profile part, for skills and profile alike
     expect(PROFILE_PROMPT).toContain("an applied change (your skills, profile or model, or as a Chief a teammate's) is done, with an Undo for the person, so carry on without asking again");
-    expect(PROFILE_PROMPT).toContain("a pending one waits for its owner, so end the turn. Never claim one before it applied");
+    expect(PROFILE_PROMPT).toContain("a pending one, or a card waiting for their OK, is proposed, never done: say it waits for them and end the turn. Never claim one before it applied");
     expect(PROFILE_PROMPT).toContain("Full Access never widens another bot's permissions");
     expect(LEARN_PROMPT).not.toContain("Follow the tool result");
     for (const prompt of [PROFILE_PROMPT, LEARN_PROMPT]) expect(prompt).not.toMatch(/nothing changes until the user confirms|may wait for the person/);
@@ -479,7 +479,7 @@ describe("how every bot replies", () => {
       "where the facts came from and how fresh they are",
       "use the units, currency, time zone and numbers the person has told you about",
       "no \"let me know if…\", no \"hope this helps\"",
-      "offer only a truly optional step, in one short line",
+      "Offer only a truly optional step, in one short line",
       "first check what you can already reach",
       "ask for exactly one thing, in plain words, with the reason",
       "do the parts that do not depend on it in the same turn",
@@ -538,5 +538,11 @@ describe("act first, ask last", () => {
     expect(HUMAN_CHECK_PROMPT).toMatch(/Never ask about the same site twice in one task/);
     for (const wall of ["press and hold", "unusual traffic", "access denied", "429"]) expect(HUMAN_CHECK_PROMPT).toContain(wall);
     expect(SIGN_IN_PROMPT).not.toMatch(/a CAPTCHA, passkey/);
+  });
+});
+
+describe("a shorter answer", () => {
+  it("cuts words, never the facts the ask needs", () => {
+    expect(talkingStylePrompt("warm")).toContain("never the facts the ask needs (every item, name and total it asked for)");
   });
 });

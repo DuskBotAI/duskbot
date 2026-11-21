@@ -1038,7 +1038,9 @@ export function Composer({
           onClick={(e) => setCaret((e.target as HTMLTextAreaElement).selectionStart ?? 0)}
           onKeyDown={(e) => {
             // An input method's confirming Enter and arrows pick its own candidates, not a mention or command.
-            if (imeComposing(e.nativeEvent)) return;
+            // macOS can report keyCode 229 for arrows with no composition open, so arrows trust compositionstart only.
+            const arrow = e.key === "ArrowDown" || e.key === "ArrowUp";
+            if (arrow ? composing || e.nativeEvent.isComposing : imeComposing(e.nativeEvent)) return;
             if (commandPickerOpen) {
               if (e.key === "ArrowDown" || e.key === "ArrowUp") {
                 e.preventDefault();

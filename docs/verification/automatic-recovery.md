@@ -63,20 +63,13 @@ Settings tests cover the real component's controls, drafts, validation and
 save errors. These are not an Electron visual walkthrough or proof of a real
 provider's availability, model quality, or a general cure for idle timeouts.
 
-## Simple mode
+## Backup AI switch
 
-Simple's Bot settings (the gear on the bot panel) shows the same list as
-**Backup AIs**: Add and change open the Simple model menu without the bot's own
-AI or ones already listed, the bin removes one, and the list keeps its order (up
-to five). There is no switch; the card says when a backup is used.
+A bot's settings show one Backup AI switch: on (no `fallback`), another AI the
+person has connected carries the bot on, in the order the server picks
+(`automaticBackups`); off (`fallback: []`), the bot waits for its own AI. A list
+saved before stays and is used silently; no app screen lists or reorders it.
 
 ```sh
-pnpm exec vitest run src/components/bot-panel/BackupAis.dom.test.ts src/components/BotSettingsDialog.simple.test.ts
+pnpm exec vitest run server/host/limit-takeover.test.ts server/limit-reset.e2e.test.ts --maxWorkers=2
 ```
-
-These runs come from `control-dusk ui launch --engine codex` (fake Claude and
-fake Codex in a disposable home): adding Codex in Simple saved
-`fallback: [{ instanceId: "codex", model: "gpt-fake-default" }]` on the bot and
-left `automaticRecovery` at `{ enabled: false }`.
-
-The removed Advanced model section has no current renderer check.

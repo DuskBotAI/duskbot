@@ -107,7 +107,7 @@ async function groundTruth(srv: StressServer, api: ReturnType<typeof client>, bo
   const apps = readJson(statePath) ?? {};
   const appsSummary = {
     drafts: (apps.drafts ?? []).map((d: any) => ({ to: d.to, subject: d.subject, reply_to: d.reply_to_message_id, body: String(d.body).slice(0, 160) })),
-    sent: (apps.sent ?? []).map((d: any) => ({ to: d.to, cc: d.cc, subject: d.subject, reply_to: d.reply_to_message_id, at: d.at, body: String(d.body).slice(0, 160) })),
+    sent: (apps.sent ?? []).map((d: any) => ({ to: d.to, cc: d.cc, subject: d.subject, reply_to: d.reply_to_message_id, at: d.at, body: String(d.body).slice(0, 160), ...(d.attachments?.length ? { attachments: d.attachments } : {}) })),
     sheets: Object.values(apps.sheets ?? {}).map((s: any) => ({ title: s.title, headers: s.headers, rows: s.rows.length, first_rows: s.rows.slice(0, 6) })),
     calendar_created: (apps.events ?? []).filter((e: any) => String(e.id).startsWith("evt_")).map((e: any) => ({ title: e.title, start: e.start, attendees: e.attendees })),
     labels_changed: (apps.log ?? []).filter((l: any) => l.action === "modify").length,
@@ -126,14 +126,17 @@ async function runCase(c: WorkflowCase, run: number): Promise<Record<string, unk
   const statePath = join(caseDir, "apps-state.json");
   writeFileSync(statePath, JSON.stringify({ mail: [], ...c.seed }, null, 2));
   const mcpServers = Object.fromEntries(c.apps.map((app) => [app, { command: process.execPath, args: [appsServer, app], env: { BIZ_STATE: statePath } }]));
-  let srv: StressServer | null = null;
   // two eval processes can pick the same free port pair at once: the loser exits on EADDRINUSE and tries again
-  for (let attempt = 0; !srv; attempt++) {
-    try { srv = await launchServer(values.repo!, caseDir, gateway, [values.model!], { mcpServers }); }
-    catch (error) { if (attempt >= 4) throw error; await sleep(2_000 + Math.random() * 6_000); }
-  }
+  const launch = async (reuseRoot?: string): Promise<StressServer> => {
+    for (let attempt = 0; ; attempt++) {
+      try { return await launchServer(values.repo!, caseDir, gateway, [values.model!], { mcpServers }, reuseRoot); }
+      catch (error) { if (attempt >= 4) throw error; await sleep(2_000 + Math.random() * 6_000); }
+    }
+  };
+  let srv = await launch();
   const started = Date.now();
-  const api = client(srv.url);
+  let api = client(srv.url);
+  const restartNotes: string[] = [];
   const tools: string[] = [];
   try {
     const bot = await api.createBot("Sage", values.model!);
@@ -163,6 +166,22 @@ async function runCase(c: WorkflowCase, run: number): Promise<Record<string, unk
       states.push(await say(setupThread, next));
     }
     await sleep(5_000);
+    if (c.restart) {
+      // the server stops mid-workflow and starts again on the same data; then new items arrive and each automation's
+      // time comes, so its next run has to continue from what the earlier ones kept
+      await srv.close(true);
+      srv = await launch(srv.root);
+      api = client(srv.url);
+      const state = JSON.parse(readFileSync(statePath, "utf8"));
+      state.mail = [...(state.mail ?? []), ...c.restart.arrive.map((mail) => ({ ...mail, date: new Date().toISOString() }))];
+      writeFileSync(statePath, JSON.stringify(state, null, 2));
+      const { routines } = await api.call("GET", "/api/routines?since=0");
+      const due = (routines as any[]).filter((r) => r.botId === bot.id && r.enabled && r.schedule?.type !== "once");
+      for (const routine of due) await api.call("POST", `/api/routines/${routine.id}/run`, {}).catch((error: Error) => restartNotes.push(`could not run ${routine.name}: ${error.message}`));
+      await sleep(3_000);
+      await runsSettled();
+      restartNotes.push(`the server restarted at ${new Date().toISOString()}, ${c.restart.arrive.length} new emails arrived (${c.restart.arrive.map((m) => m.subject).join("; ")}), and these automations then ran once as if their time had come: ${due.map((r) => r.name).join(", ") || "none existed"}`);
+    }
     const laterThread = await api.newThread(bot.id);
     states.push(await say(laterThread, "what's running for me right now? list everything you set up, when it runs and how the last run went"));
     states.push(await say(laterThread, c.change));
@@ -172,6 +191,7 @@ async function runCase(c: WorkflowCase, run: number): Promise<Record<string, unk
     const laterMessages = await messages(laterThread);
     for (const m of [...setupMessages, ...laterMessages]) if (m.kind === "activity" && m.tool?.name) tools.push(String(m.tool.name).slice(0, m.tool.name.startsWith("error") ? 400 : 60));
     const truth = await groundTruth(srv, api, botIds, statePath, tools);
+    if (restartNotes.length) truth.text = `RESTART: ${restartNotes.join(" ")}\n${truth.text}`;
     const setupChat = render(setupMessages);
     const laterChat = render(laterMessages);
     const verdict = await judgeWorkflow(judgeGateway, c, setupChat, laterChat, truth.text);

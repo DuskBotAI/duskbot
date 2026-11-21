@@ -607,7 +607,7 @@ export function createLifecycle(deps: LifecycleDeps) {
       if (!rereadStored(c)) return;
       const again = verdictFor(c);
       if (!again.delete) { log(c, "delete_refused", "reconciler", again.reason); return; }
-      if (again.reason === "retention_over" && !neverSetUp(c) && !(await finalBackupOpens(c))) return;
+      if (again.reason === "retention_over" && !neverSetUp(c) && !deps.entitlement(c).unpaid?.trial && !(await finalBackupOpens(c))) return;
       // recorded before the call, so a lost answer is never read as a lost machine (and rebuilt)
       c.status = "destroying"; b.deletion = { serverId: c.serverId, operationId: null, at: now(), reason: verdict.reason, sent: false }; deps.save(c);
       log(c, "delete_requested", "reconciler", verdict.reason);
@@ -627,7 +627,7 @@ export function createLifecycle(deps: LifecycleDeps) {
       if (!rereadStored(c)) return;
       const again = verdictFor(c);
       if (!again.delete) { log(c, "delete_refused", "reconciler", again.reason); return; }
-      if (again.reason === "retention_over" && !neverSetUp(c) && !(await finalBackupOpens(c))) return;
+      if (again.reason === "retention_over" && !neverSetUp(c) && !deps.entitlement(c).unpaid?.trial && !(await finalBackupOpens(c))) return;
       await provider.deleteSnapshot(b.archive.snapshotId);
       log(c, "snapshot_deleted", "reconciler", verdict.reason, { snapshot: b.archive.snapshotId });
       b.archive = null; deps.save(c);
@@ -744,7 +744,7 @@ export function createLifecycle(deps: LifecycleDeps) {
       if (c.origin && up) await deps.home.plan?.(homeOrigin(c), secret(c), { cancelled: true }).catch(() => {});
       deps.save(c);
     }
-    if (verdict.earliestAt !== null) { const kind = dueNotice({ now: now(), earliestAt: verdict.earliestAt, sent: b.notices.map(n => n.kind as NoticeKind) }); if (kind) notice(c, kind, verdict.earliestAt); }
+    if (verdict.earliestAt !== null) { const kind = dueNotice({ now: now(), earliestAt: verdict.earliestAt, sent: b.notices.map(n => n.kind as NoticeKind), quiet: !!entitlement.unpaid }); if (kind) notice(c, kind, verdict.earliestAt); }
   }
 
   /** one step; a step that ran through ends a streak of provider limits */

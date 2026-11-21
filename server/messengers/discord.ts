@@ -1,7 +1,7 @@
 // Discord bots (https://discord.com/developers/docs, API v10). Messages arrive only over the Gateway websocket, so a
 // bot answers while this process runs. The privileged Message Content intent is not asked for: Discord still sends
 // the content of direct messages and of messages that mention the bot, which is all the bot answers.
-import type { InboundFile, InboundMessage, MessengerTransport, OutboundFile } from "./bridge.ts";
+import type { ChoiceAck, InboundChoice, InboundFile, InboundMessage, MessengerTransport, OutboundFile } from "./bridge.ts";
 import { splitMessage } from "./text.ts";
 
 export class DiscordError extends Error {
@@ -117,6 +117,23 @@ export function readDiscordMessage(data: Record<string, unknown>, context: { bot
   };
 }
 
+/** A button press (INTERACTION_CREATE of a message component) as the bridge reads it, or null. */
+export function readDiscordInteraction(data: Record<string, unknown>, context: { botId: string }): InboundChoice | null {
+  const user = record(data.user), member = record(record(data.member).user);
+  const senderId = str(user.id) || str(member.id), custom = str(record(data.data).custom_id);
+  if (data.type !== 3 || !str(data.id) || !str(data.token) || !str(data.channel_id) || !senderId || !custom) return null;
+  const sentId = str(record(data.message).id);
+  return { platform: "discord", botId: context.botId, chatId: str(data.channel_id), senderId, data: custom, ...(sentId ? { sentId } : {}),
+    ack: { id: str(data.id), token: str(data.token), ...(str(data.application_id) ? { appId: str(data.application_id) } : {}) } };
+}
+
+/** Discord wants an answer to a press within 3 seconds: this one says "the message will be updated" so the card can be
+ * answered at its own pace and edited after. */
+export async function deferDiscordChoice(api: DiscordApi, token: string, ack: ChoiceAck): Promise<void> {
+  if (!ack.token) return;
+  await api.call(token, "POST", `/interactions/${encodeURIComponent(ack.id)}/${encodeURIComponent(ack.token)}/callback`, { type: 6 });
+}
+
 export function createDiscordTransport(api: DiscordApi, token: (botId: string) => string | null): MessengerTransport {
   const need = (botId: string) => {
     const value = token(botId);
@@ -138,6 +155,24 @@ export function createDiscordTransport(api: DiscordApi, token: (botId: string) =
     async typing(botId, chatId) {
       await api.call(need(botId), "POST", `/channels/${encodeURIComponent(chatId)}/typing`);
     },
+    async sendChoices(botId, chatId, text, buttons) {
+      const rows: Array<typeof buttons> = [];
+      for (let index = 0; index < buttons.length; index += 5) rows.push(buttons.slice(index, index + 5));
+      const sent = await api.call<{ id?: string } | undefined>(need(botId), "POST", `/channels/${encodeURIComponent(chatId)}/messages`, {
+        content: text.slice(0, 1_900), allowed_mentions: { parse: [] },
+        components: rows.map((row) => ({ type: 1, components: row.map((button, index) => ({ type: 2, style: index === 0 && row === rows[0] ? 1 : 2, label: button.label.slice(0, 80), custom_id: button.data })) })),
+      });
+      return sent?.id ?? null;
+    },
+    async settleChoices(botId, chatId, sentId, note, ack) {
+      const key = need(botId);
+      // a refusal with nothing to edit goes to the person who pressed only
+      if (!note && ack?.toast && ack.token && ack.appId) {
+        await api.call(key, "POST", `/webhooks/${encodeURIComponent(ack.appId)}/${encodeURIComponent(ack.token)}`, { content: ack.toast.slice(0, 1_900), flags: 64, allowed_mentions: { parse: [] } }).catch(() => {});
+      }
+      if (!sentId) return;
+      await api.call(key, "PATCH", `/channels/${encodeURIComponent(chatId)}/messages/${encodeURIComponent(sentId)}`, { ...(note ? { content: note.slice(0, 1_900) } : {}), components: [] });
+    },
   };
 }
 
@@ -145,6 +180,7 @@ export interface DiscordGatewayDeps {
   api: DiscordApi;
   token(): string | null;
   onMessage(data: Record<string, unknown>): void;
+  onInteraction?(data: Record<string, unknown>): void;
   onState(state: "connecting" | "online" | "error", error?: string): void;
   WebSocket?: typeof WebSocket;
   log?: (line: string) => void;
@@ -223,6 +259,7 @@ export function createDiscordGateway(deps: DiscordGatewayDeps) {
           deps.onState("online");
         } else if (payload.t === "RESUMED") { failures = 0; deps.onState("online"); }
         else if (payload.t === "MESSAGE_CREATE") deps.onMessage(data);
+        else if (payload.t === "INTERACTION_CREATE") deps.onInteraction?.(data);
       }
     });
     ws.addEventListener("close", (event) => {

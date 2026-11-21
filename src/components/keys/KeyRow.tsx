@@ -10,6 +10,8 @@ import { keyRemoved, keySaved, keySaveFailure, savedKeyResult } from "@/lib/prod
 import { InstanceProviderMark } from "../ProviderIcons";
 import { keyEntry, keyForInstance, looksLikeOtherKey, savedState, shownKeyEntry, type KeyEntry, type KeyId, type SavedState } from "./key-catalog";
 import { checkKey, cleanKey, looksLikeKey, saveKey } from "./key-save";
+import { keyCheckView, keyWorks, type KeyCheckAnswer } from "./key-check-view";
+import { KeyCheckNote } from "./KeyCheckNote";
 import { FormDialog } from "../ListRows";
 import { fieldLabelCls, smallButtonCls } from "../ui/GrokDialog";
 import { friendlyError } from "@/lib/plain-error";
@@ -110,6 +112,15 @@ export function KeyPlainRow({ mark, title, hint, value, actions, titleId, classN
   );
 }
 
+/** The built-in OpenAI-compatible server by its host; with no address saved it is OpenRouter. */
+function serverName(url: string | undefined): string {
+  try {
+    return new URL(url || "https://openrouter.ai/api/v1").hostname;
+  } catch {
+    return "OpenRouter";
+  }
+}
+
 function errorText(cause: unknown): string {
   return friendlyError(cause);
 }
@@ -162,6 +173,8 @@ export function KeyRow({
   const inputRef = useRef<HTMLInputElement>(null);
   const replaceRef = useRef<HTMLButtonElement>(null);
   const focusAfter = useRef<"input" | "replace" | null>(null);
+  const [checkAnswer, setCheck] = useState<KeyCheckAnswer | null>(null);
+  const [unsure, setUnsure] = useState<string | null>(null);
 
   useEffect(() => {
     const goal = focusAfter.current;
@@ -177,6 +190,8 @@ export function KeyRow({
   const pointer = row.id !== entry.id;
   const label = t(entry.labelKey);
   const saved = savedState(entry, state.config);
+  const checkName = entry.id === "openaiCompat" && state.config ? serverName(state.config.openaiCompat?.url) : entry.name;
+  const check = checkAnswer ? keyCheckView(checkAnswer, checkName) : null;
   const engineRejected = (state.instances ?? []).some((instance) => instance.access === "api" && keyForInstance(instance.instanceId) === entry.id
     && instance.snapshot.state === "available" && instance.snapshot.authenticated === false);
   // A key engine with its own CLI (DeepSeek Harness) can't use a saved key until that CLI runs here.
@@ -189,7 +204,8 @@ export function KeyRow({
     : keyEngines.find((instance) => instance.snapshot.state === "unavailable" && installsHere(instance.install));
   const installCommand = Boolean(missingEngine);
   const rejected = !works && (rejectedHere ?? (saved.configured && engineRejected));
-  const failure = problem ?? (rejected && !busy ? t("keys.testRejected") : null);
+  const failure = problem ?? (rejected && !busy && !check ? t("keys.testRejected") : null);
+  const checkedBad = check?.tone === "bad";
   const editing = !saved.configured || replacing;
   const fieldShown = compact ? dialog : editing && (!saved.included || saved.configured || ownKey);
   const other = fieldShown && draft ? looksLikeOtherKey(row, draft) : null;
@@ -197,30 +213,41 @@ export function KeyRow({
   const status: KeyStatus = busy === "saving" ? { tone: "busy", text: t("keys.row.saving") }
     : busy === "removing" ? { tone: "busy", text: t("keys.row.removing") }
       : busy === "checking" ? { tone: "busy", text: t("common.checking") }
-        : failure && (saved.configured || !fieldShown) ? { tone: "bad", text: t("keys.row.didntWork") }
+        : (failure || checkedBad) && (saved.configured || !fieldShown) ? { tone: "bad", text: t("keys.row.didntWork") }
           : saved.configured ? { tone: "ok", text: target.test || target.verifiedOnSave || works ? t("keys.connected") : t("common.saved") }
             : saved.included ? { tone: "ok", text: t("keys.includedWithCloudPro") }
               : null;
+
+  const providerTest = target.test && target.test !== "treg" ? target.test : undefined;
+  const showCheck = (answer: KeyCheckAnswer) => {
+    setCheck(answer);
+    setWorks(keyWorks(keyCheckView(answer, checkName)));
+    setVerdict(null);
+    setProblem(null);
+  };
 
   const runCheck = async (): Promise<KeyResult> => {
     if (!target.test) return "unverified";
     const mine = ++generation.current;
     setBusy("checking");
     try {
-      const check = await checkKey(target.test);
+      const answer = await checkKey(target.test);
       if (mine === generation.current) {
-        setWorks(check.ok);
-        setVerdict(check.ok ? check.text : null);
-        setProblem(check.ok ? null : check.text);
+        if (providerTest) showCheck(answer.answer);
+        else {
+          setWorks(answer.ok);
+          setVerdict(answer.ok ? answer.text : null);
+          setProblem(answer.ok ? null : answer.text);
+        }
       }
-      return check.result;
+      return answer.result;
     } catch (cause) {
       if (mine === generation.current) setProblem(errorText(cause));
       return "unverified";
     }
   };
 
-  const save = async (raw: string) => {
+  const save = async (raw: string, anyway = false) => {
     const value = cleanKey(raw);
     if (busyRef.current || !value) return;
     if (!looksLikeKey(value)) {
@@ -228,14 +255,31 @@ export function KeyRow({
       return;
     }
     busyRef.current = true;
-    generation.current += 1;
+    const mine = ++generation.current;
     const hadFocus = document.activeElement === inputRef.current;
-    setBusy("saving");
     setProblem(null);
     setNotice(null);
     setVerdict(null);
     setWorks(false);
+    setUnsure(null);
+    const confirmed = anyway && check?.confirm ? checkAnswer : null;
+    setCheck(confirmed);
+    let checked: { result: KeyResult; answer: KeyCheckAnswer } | null = null;
     try {
+      if (providerTest && !confirmed) {
+        setBusy("checking");
+        const answer = await checkKey(providerTest, { key: value });
+        if (mine !== generation.current) return;
+        checked = { result: answer.result, answer: answer.answer };
+        const view = keyCheckView(answer.answer, checkName);
+        if (view.blocks || view.confirm) {
+          setCheck(answer.answer);
+          if (view.confirm) setUnsure(value);
+          if (view.blocks) keySaved(target.analytics, via, answer.result);
+          return;
+        }
+      }
+      setBusy("saving");
       const status = await saveKey(target, value, !saved.configured);
       dispatch({ type: "configStatus", config: status });
       const now = target.saved(status);
@@ -247,7 +291,9 @@ export function KeyRow({
       if (hadFocus) focusAfter.current = now.configured ? "replace" : "input";
       if (!now.configured) setProblem(t("keys.row.notKept"));
       onSaved?.(now.configured);
-      keySaved(target.analytics, via, now.configured && target.test ? await runCheck() : savedKeyResult(target.analytics));
+      if (checked && now.configured) showCheck(checked.answer);
+      const result = checked ? checked.result : confirmed ? "unverified" : now.configured && target.test ? await runCheck() : savedKeyResult(target.analytics);
+      keySaved(target.analytics, via, result);
     } catch (cause) {
       setProblem(errorText(cause));
       keySaved(target.analytics, via, keySaveFailure(cause));
@@ -292,6 +338,8 @@ export function KeyRow({
     setBusy("removing");
     setProblem(null);
     setVerdict(null);
+    setCheck(null);
+    setUnsure(null);
     setWorks(false);
     try {
       const status = await saveKey(target, "", false);
@@ -312,6 +360,7 @@ export function KeyRow({
     setReplacing(true);
     setProblem(null);
     setVerdict(null);
+    setCheck(null);
     focusAfter.current = "input";
   };
 
@@ -330,7 +379,7 @@ export function KeyRow({
           data-key-input
           type={shown ? "text" : "password"}
           value={draft}
-          onChange={(event) => { setDraft(event.target.value); setNotice(null); setProblem(null); }}
+          onChange={(event) => { setDraft(event.target.value); setNotice(null); setProblem(null); setCheck(null); setUnsure(null); }}
           onPaste={(event) => {
             const pasted = cleanKey(event.clipboardData.getData("text"));
             if (!pasted) return;
@@ -338,6 +387,8 @@ export function KeyRow({
             setDraft(pasted);
             setNotice(null);
             setProblem(null);
+            setCheck(null);
+            setUnsure(null);
             if (looksLikeKey(pasted) && !looksLikeOtherKey(row, pasted)) void save(pasted);
           }}
           onKeyDown={(event) => {
@@ -398,9 +449,13 @@ export function KeyRow({
       <ExternalLink size={11} aria-hidden="true" />
     </a>
   );
+  const checkNote = check && (
+    <KeyCheckNote view={check} creditHref={target.creditHref} busy={busy !== null}
+      onSaveAnyway={unsure && check.confirm ? () => void save(unsure, true) : undefined} />
+  );
   const messages = (
     <>
-        {(notice || failure || other || warning || installCommand || note || verdict || (fieldShown && target.href && !linkInHeading) || (!fieldShown && saved.configured && target.test)) && (
+        {(notice || failure || checkNote || other || warning || installCommand || note || verdict || (fieldShown && target.href && !linkInHeading) || (!fieldShown && saved.configured && target.test)) && (
         <div className="flex flex-col gap-1.5 text-[12px] leading-4">
           {notice && <p role="alert" className="text-danger">{notice}</p>}
           {failure && (
@@ -409,6 +464,7 @@ export function KeyRow({
               <span>{t("keys.row.failed", { reason: failure })}</span>
             </p>
           )}
+          {checkNote}
           {other && (
             <p className="flex gap-1.5 text-warning">
               <TriangleAlert size={13} aria-hidden="true" className="mt-px shrink-0" />
@@ -472,6 +528,8 @@ export function KeyRow({
       setNotice(null);
       setProblem(null);
       setVerdict(null);
+      setCheck(null);
+      setUnsure(null);
     };
     const closeDialog = () => {
       if (busy === "saving") return;
@@ -485,7 +543,7 @@ export function KeyRow({
     };
     const name = title ?? t(row.labelKey);
     const purposeLine = !quiet ? t(row.purposeKey) : null;
-    const bad = failure && saved.configured && !dialog;
+    const bad = (failure || checkedBad) && saved.configured && !dialog;
     const masked = saved.configured && <><span aria-hidden="true"> · </span><span data-key-masked className="font-mono text-[12px]">
       <span aria-hidden="true">{MASK}{saved.last4 ?? ""}</span>
       <span className="sr-only">{saved.last4 ? t("keys.row.endsIn", { label, last4: saved.last4 }) : t("keys.row.savedKey", { label })}</span>
@@ -495,7 +553,7 @@ export function KeyRow({
         : saved.configured ? <>{status?.text ?? t("keys.connected")}{masked}</>
           : saved.included ? t("keys.includedWithCloudPro") : t("keys.row.notConnected");
     const action = saved.configured ? t("keys.row.change") : saved.included ? t("keys.row.useOwn") : setUp ? t("keys.row.setUp") : t("keys.row.add");
-    const rowMessages = !dialog && (failure && saved.configured || verdict || (installCommand && missingEngine)) ? messages : null;
+    const rowMessages = !dialog && (failure && saved.configured || verdict || (check && saved.configured) || (installCommand && missingEngine)) ? messages : null;
     return (
       <KeyPlainRow {...attributes} titleId={titleId} className={className} mark={<KeyMarkIcon entry={row} />} title={name}
         hint={<span aria-live="polite">{purposeLine ?? stateLine}</span>} value={purposeLine ? stateLine : undefined}
@@ -535,7 +593,7 @@ export function KeyRow({
                 <label htmlFor={`${titleId}-field`} className={fieldLabelCls}>{replacing ? t("keys.row.newKey") : label}</label>
                 {field}
               </div>
-              {(notice || failure || other || note || verdict || target.href) && (
+              {(notice || failure || checkNote || other || note || verdict || target.href) && (
                 <div className="flex flex-col gap-1.5 text-[12px] leading-4">
                   {notice && <p role="alert" className="m-0 text-danger">{notice}</p>}
                   {failure && (
@@ -544,6 +602,7 @@ export function KeyRow({
                       <span>{t("keys.row.failed", { reason: failure })}</span>
                     </p>
                   )}
+                  {checkNote}
                   {other && <p className="m-0 text-ink-secondary">{t("keys.row.looksLike", { label: t(other.labelKey) })}</p>}
                   {note && <p className="m-0 text-ink-secondary">{note}</p>}
                   {verdict && <p role="status" className="m-0 whitespace-pre-line text-ink-secondary">{verdict}</p>}

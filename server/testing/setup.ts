@@ -19,6 +19,9 @@ delete process.env.HERMES_HOME;
 // Named explicitly although homedir() already covers it: the device tests delete this directory wholesale.
 process.env.DUSK_COMPANION_DIR = join(home, ".duskbot-companion");
 
+// OpenCode Zen's live model list is a network read; fakes never make one.
+process.env.DUSK_ZEN_LIVE_MODELS = "0";
+
 // Product code follows navigator.language; pin it so English assertions do not depend on the host locale.
 Object.defineProperty(globalThis.navigator, "language", { value: "en", configurable: true });
 

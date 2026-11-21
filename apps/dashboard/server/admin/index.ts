@@ -454,7 +454,7 @@ export function createAdmin(options: AdminOptions) {
     const hidden = v.hidden(), real = <T extends { accountId: string; workspaceId?: string }>(rows: readonly T[]) => rows.filter(row => !hidden.has(row.accountId) && !isTestInstall(row.workspaceId));
     const state = v.store();
     return {
-      input: { now: time, accounts: accountIds ? accounts.filter(account => accountIds.has(account.id)) : accounts, sessions: mine(sessions), billing: { subscriptions: mine(state.subscriptions), invoices: state.invoices, feedback: state.feedback ?? [], customers: state.customers },
+      input: { now: time, accounts: accountIds ? accounts.filter(account => accountIds.has(account.id)) : accounts, sessions: mine(sessions), billing: { subscriptions: mine(state.subscriptions), invoices: state.invoices, feedback: state.feedback ?? [], customers: state.customers, ledger: state.ledger ?? [] },
         events: mine(events), people: mine(real(people)), snapshots: mine(real(snapshots)), workspaces: mine(v.workspaces()),
         clouds: mine(v.clouds()).map(c => ({ accountId: c.accountId, workspaceId: c.workspaceId ?? null, status: billing.clouds.view(c).status })), planOf: subscriberPlan },
       state, accounts, partialBefore: partialOf(events),
@@ -488,7 +488,7 @@ export function createAdmin(options: AdminOptions) {
       account: { id, handle: row.handle, email: account.email, name: account.name ?? null, createdAt: account.createdAt }, row, daily,
       timeline: timelineOf(events, subs, feedback, account.createdAt, time), usage: usageOf(events),
       reports: reports.map(({ id: reportId, source, description, appVersion, platform, status, fixedIn, receivedAt }) => ({ id: reportId, source, description, appVersion, platform, status, fixedIn, receivedAt })),
-      cancel: feedback.map(({ answer, expected, improve, at }) => ({ answer, expected: expected ?? null, improve: improve ?? null, at })),
+      cancel: feedback.map(({ answer, expected, improve, offer, outcome, at }) => ({ answer, expected: expected ?? null, improve: improve ?? null, offer: offer ?? null, outcome: outcome ?? "cancelled", at })),
     };
   }
 

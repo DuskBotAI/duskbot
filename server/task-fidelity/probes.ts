@@ -7,7 +7,7 @@ export interface Probe { id: string; applies(c: Case): boolean; test: RegExp; wh
 const outward = (c: Case) => c.expect.destination !== "none" && c.expect.destination !== "any";
 
 export const PROBES: Probe[] = [
-  { id: "destination-from-words", applies: outward, where: "prompt", test: /channel[^.]*\b(DM|direct message)\b[^.]*(never|not)\b|\b(never|not)\b[^.]*\b(DM|direct message)\b[^.]*channel/i },
+  { id: "destination-from-words", applies: outward, where: "prompt", test: /channel[^.]*\b(DM|direct message)\b[^.]*(never|not)\b|\b(never|not)\b[^.]*\b(DM|direct message)\b[^.]*channel|\b(never|not)\b[^.]*channel[^.]*\b(DM|direct message)\b/i },
   { id: "ask-when-open", applies: (c) => c.expect.ask === true, where: "prompt", test: /\b(unclear|open|ambiguous)\b[^.]*\bask\b[^.]*\bone\b[^.]*question|\bask\b[^.]*\bone\b[^.]*question[^.]*\b(which|who|where)\b/i },
   { id: "draft-before-send", applies: (c) => c.expect.draft === true, where: "prompt", test: /\b(show|share)\b[^.]*\bdraft\b[^.]*\b(before|then)\b[^.]*\b(send|post)/i },
   { id: "connected-app-first", applies: (c) => c.expect.tool.includes("connector") && (c.world.browser || !!c.world.computer), where: "prompt", test: /connected app[^.]*before any browser or screen/i },

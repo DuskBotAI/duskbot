@@ -1,10 +1,11 @@
-import { createHash } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { MESSENGER_LABELS, type MessengerPlatform } from "../../shared/messengers.ts";
 import { isErrorDump } from "../../shared/failed-turn.ts";
 import { requestNeedsInput } from "../guarded-requests.ts";
 import type { Message } from "../store.ts";
 import type { MessengerLink } from "./secrets.ts";
-import type { MessengerPending, MessengerState } from "./state.ts";
+import { cardChoices, cardText, type CardChoice } from "./cards.ts";
+import type { MessengerOffer, MessengerPending, MessengerState } from "./state.ts";
 
 export interface MessengerPerson { id: string; name: string; handle?: string }
 export interface InboundFile { name: string; mime?: string; size?: number; fetch(): Promise<{ bytes: Buffer; mime: string }> }
@@ -22,8 +23,15 @@ export interface InboundMessage {
   addressed: boolean;
 }
 export interface OutboundFile { bytes: Buffer; mime: string; name: string; kind: "image" | "file" | "audio" }
+/** A tap on one of a card's buttons: Telegram's callback query, or Discord's interaction (its id and token). */
+export interface ChoiceAck { id: string; token?: string; appId?: string }
+export interface InboundChoice { platform: MessengerPlatform; botId: string; chatId: string; senderId: string; data: string; sentId?: string; ack: ChoiceAck }
 export interface MessengerTransport {
   sendText(botId: string, chatId: string, text: string, replyTo?: string): Promise<void>;
+  /** A message with one button per choice; resolves to the sent message's id. */
+  sendChoices(botId: string, chatId: string, text: string, buttons: Array<{ label: string; data: string }>): Promise<string | null>;
+  /** Takes the buttons off a sent card and says what happened; with `ack`, also answers the tap (a short toast on Telegram). */
+  settleChoices(botId: string, chatId: string, sentId: string | undefined, note: string, ack?: ChoiceAck & { toast?: string }): Promise<void>;
   sendFile(botId: string, chatId: string, file: OutboundFile, replyTo?: string): Promise<void>;
   typing(botId: string, chatId: string): Promise<void>;
   typingEveryMs: number;
@@ -44,6 +52,8 @@ export interface MessengerBridgeDeps {
    * chat, so the turn runs as outside work. */
   send(input: { botId: string; threadId: string; text: string; sendId: string; person: MessengerPerson; outside: boolean; platform: MessengerPlatform }): Promise<void>;
   messages(threadId: string): readonly Message[];
+  /** Answers a card the way the owner's 👍 or a Live call does (the app's own checks on the card still apply). */
+  answerCard(threadId: string, requestId: string, reply: CardChoice["reply"]): Promise<{ ok: true } | { ok: false; error: string }>;
   onChange(listener: (change: { type: string; threadId?: string }) => void): () => void;
   saveAttachment(bytes: Buffer, name: string, mime: string): Promise<{ path: string; kind: "image" | "file"; name: string } | null>;
   readAttachment(path: string): { bytes: Buffer; mime: string; name: string } | null;
@@ -90,6 +100,7 @@ export function createMessengerBridge(deps: MessengerBridgeDeps) {
   const settling = new Map<string, { cancel(): void }>();
   const typing = new Map<string, { cancel(): void }>();
   const inbound = new Map<string, Promise<void>>();
+  const offering = new Set<string>();
   const generations = new Map<string, number>();
   let sweep: { cancel(): void } | undefined;
   let stopped = false;
@@ -201,18 +212,80 @@ export function createMessengerBridge(deps: MessengerBridgeDeps) {
       const r = result(p);
       if (!r) continue;
       if (r.user.requestCancelled) { drop([p]); continue; }
+      // a question card outlives its turn, so cards are offered whether or not the turn is still running
+      const offerable = p.owner ? r.later.filter((m) => cardChoices(m.card)) : [];
+      for (const m of offerable) void offer(p, m);
       if (r.done) {
         if (!settling.has(threadId)) settling.set(threadId, setTimer(() => {
           settling.delete(threadId);
           void finalize(threadId).catch(() => log("A chat app reply could not be completed."));
         }, deps.settleMs ?? 300));
-      } else if (!p.notifiedInput && r.later.some(requestNeedsInput)) {
-        deps.state.patchPending(p.sendId, { notifiedInput: true });
-        void say(p.platform, p.botId, p.chatId, NEEDS_INPUT, p.replyTo);
+      } else {
+        if (!p.notifiedInput && r.later.some((m) => requestNeedsInput(m) && !offerable.includes(m))) {
+          deps.state.patchPending(p.sendId, { notifiedInput: true });
+          void say(p.platform, p.botId, p.chatId, NEEDS_INPUT, p.replyTo);
+        }
       }
     }
   }
-  const unsubscribe = deps.onChange((change) => { if (change.threadId) evaluate(change.threadId); });
+  const unsubscribe = deps.onChange((change) => { if (change.threadId) { evaluate(change.threadId); settleStale(change.threadId); } });
+
+  async function offer(p: MessengerPending, message: Message): Promise<void> {
+    const key = `${p.threadId}:${message.id}`;
+    const transport = deps.transport(p.platform), choices = cardChoices(message.card);
+    if (!transport || !choices || offering.has(key) || deps.state.offers().some((one) => one.threadId === p.threadId && one.cardMessageId === message.id)) return;
+    offering.add(key);
+    const id = randomBytes(8).toString("base64url");
+    const record: MessengerOffer = { id, botId: p.botId, platform: p.platform, chatId: p.chatId, threadId: p.threadId, requestId: message.card!.requestId!,
+      cardMessageId: message.id, labels: choices.map((choice) => choice.label), at: now() };
+    deps.state.addOffer(record);
+    try {
+      const sentId = await transport.sendChoices(p.botId, p.chatId, cardText(message.card!), choices.map((choice, index) => ({ label: choice.label, data: `dk:${id}:${index}` })));
+      if (sentId) deps.state.patchOffer(id, { sentId });
+    } catch {
+      log(`${MESSENGER_LABELS[p.platform]} approval buttons could not be sent.`);
+      deps.state.patchOffer(id, { settled: true });
+      await say(p.platform, p.botId, p.chatId, NEEDS_INPUT);
+    } finally { offering.delete(key); }
+  }
+
+  /** A card answered, dismissed or expired anywhere loses its buttons. */
+  function settleStale(threadId: string): void {
+    for (const one of deps.state.offers()) {
+      if (one.threadId !== threadId || one.settled) continue;
+      const card = deps.messages(threadId).find((m) => m.id === one.cardMessageId)?.card;
+      if (card && cardChoices(card)) continue;
+      deps.state.patchOffer(one.id, { settled: true });
+      const words = card?.answered ? `Answered in dusk bot: ${card.answeredText ?? card.answered}.` : "This is no longer waiting.";
+      void deps.transport(one.platform)?.settleChoices(one.botId, one.chatId, one.sentId, words).catch(() => {});
+    }
+  }
+
+  async function choose(choice: InboundChoice): Promise<void> {
+    const transport = deps.transport(choice.platform);
+    if (!transport) return;
+    const [, id, index] = /^dk:([\w-]{6,20}):(\d{1,2})$/.exec(choice.data) ?? [];
+    const one = deps.state.offers().find((offer) => offer.id === id);
+    const ack = (toast: string) => transport.settleChoices(choice.botId, choice.chatId, undefined, "", { ...choice.ack, toast }).catch(() => {});
+    if (!one || one.botId !== choice.botId || one.platform !== choice.platform || one.chatId !== choice.chatId) { await ack("That choice is no longer open."); return; }
+    const link = deps.link(choice.botId, choice.platform);
+    if (!link?.owner || link.owner.id !== choice.senderId) { await ack("Only the bot's owner can answer this."); return; }
+    const card = deps.messages(one.threadId).find((m) => m.id === one.cardMessageId)?.card;
+    const choices = cardChoices(card);
+    const picked = choices?.[Number(index)];
+    if (one.settled || !choices || !picked || picked.label !== one.labels[Number(index)]) {
+      deps.state.patchOffer(one.id, { settled: true });
+      await transport.settleChoices(choice.botId, choice.chatId, one.sentId ?? choice.sentId, "This was already answered.", { ...choice.ack, toast: "Already answered." }).catch(() => {});
+      return;
+    }
+    deps.state.patchOffer(one.id, { settled: true });
+    let result: Awaited<ReturnType<MessengerBridgeDeps["answerCard"]>>;
+    try { result = await deps.answerCard(one.threadId, one.requestId, picked.reply); }
+    catch { result = { ok: false, error: "It could not be answered." }; }
+    const text = card ? cardText(card) : "";
+    await transport.settleChoices(choice.botId, choice.chatId, one.sentId ?? choice.sentId,
+      result.ok ? `${text}\n\nYou chose: ${picked.label}` : `${text}\n\n${result.error}`, { ...choice.ack, toast: result.ok ? picked.label : result.error }).catch(() => {});
+  }
 
   async function files(message: InboundMessage): Promise<string[]> {
     const notes: string[] = [], tags: string[] = [];
@@ -302,6 +375,7 @@ export function createMessengerBridge(deps: MessengerBridgeDeps) {
       startedAt: now(), notifiedInput: false,
     };
     const owner = message.chatKind === "dm" && link.owner?.id === message.sender.id;
+    if (owner) p.owner = true;
     deps.state.addPending(p);
     keepTyping(p);
     try {
@@ -326,6 +400,10 @@ export function createMessengerBridge(deps: MessengerBridgeDeps) {
       inbound.set(lane, tail);
       void tail.then(() => { if (inbound.get(lane) === tail) inbound.delete(lane); });
       return tail;
+    },
+    /** A tap on a card's button; only the paired owner's answer reaches the card. */
+    choose(choice: InboundChoice): Promise<void> {
+      return choose(choice).catch(() => log("A chat app button press could not be handled."));
     },
     /** Replies still owed from before a restart. */
     resume(): void {

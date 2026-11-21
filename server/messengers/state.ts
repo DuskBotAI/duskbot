@@ -11,6 +11,13 @@ const conversationSchema = z.object({ botId: z.string(), platform, chatId: z.str
 const pendingSchema = z.object({
   botId: z.string(), platform, chatId: z.string(), threadId: z.string(), sendId: z.string(), replyTo: z.string().optional(),
   startedAt: z.number(), notifiedInput: z.boolean(),
+  /** The paired owner's own direct chat: its cards are offered as buttons there. */
+  owner: z.boolean().optional(),
+});
+/** A card sent to a chat as buttons; `id` goes out in each button's callback, never the request id itself. */
+const offerSchema = z.object({
+  id: z.string(), botId: z.string(), platform, chatId: z.string(), threadId: z.string(), requestId: z.string(), cardMessageId: z.string(),
+  labels: z.array(z.string()), sentId: z.string().optional(), at: z.number(), settled: z.boolean().optional(),
 });
 const knockSchema = z.object({ botId: z.string(), platform, id: z.string(), kind: z.enum(["person", "chat"]), name: z.string(), at: z.number(), toldAt: z.number().optional() });
 const schema = z.object({
@@ -20,18 +27,21 @@ const schema = z.object({
   /** Telegram getUpdates offset per bot. */
   offsets: z.record(z.string(), z.number()),
   knocks: z.array(knockSchema),
+  offers: z.array(offerSchema).default([]),
 });
 export type MessengerConversation = z.infer<typeof conversationSchema>;
 export type MessengerPending = z.infer<typeof pendingSchema>;
 export type MessengerKnock = z.infer<typeof knockSchema>;
+export type MessengerOffer = z.infer<typeof offerSchema>;
 type Data = z.infer<typeof schema>;
 
 const MAX_PENDING = 500;
 const MAX_KNOCKS_PER_BOT = 20;
+const MAX_OFFERS = 300;
 
 export class MessengerState {
   private readonly path: string;
-  private data: Data = { version: 1, conversations: {}, pending: [], offsets: {}, knocks: [] };
+  private data: Data = { version: 1, conversations: {}, pending: [], offsets: {}, knocks: [], offers: [] };
 
   constructor(dataDir: string) {
     mkdirSync(dataDir, { recursive: true });
@@ -111,6 +121,20 @@ export class MessengerState {
     return told;
   }
 
+  offers(): MessengerOffer[] {
+    return this.data.offers.map((one) => ({ ...one, labels: [...one.labels] }));
+  }
+
+  addOffer(value: MessengerOffer): void {
+    this.data.offers = [...this.data.offers.filter((one) => one.id !== value.id), value].slice(-MAX_OFFERS);
+    this.save();
+  }
+
+  patchOffer(id: string, patch: Partial<MessengerOffer>): void {
+    this.data.offers = this.data.offers.map((one) => (one.id === id ? { ...one, ...patch } : one));
+    this.save();
+  }
+
   forgetKnock(botId: string, platformName: z.infer<typeof platform>, id: string): void {
     this.data.knocks = this.data.knocks.filter((one) => !(one.botId === botId && one.platform === platformName && one.id === id));
     this.save();
@@ -119,6 +143,7 @@ export class MessengerState {
   removeThread(threadId: string): void {
     this.data.conversations = Object.fromEntries(Object.entries(this.data.conversations).filter(([, one]) => one.threadId !== threadId));
     this.data.pending = this.data.pending.filter((one) => one.threadId !== threadId);
+    this.data.offers = this.data.offers.filter((one) => one.threadId !== threadId);
     this.save();
   }
 
@@ -127,6 +152,7 @@ export class MessengerState {
     this.data.conversations = Object.fromEntries(Object.entries(this.data.conversations).filter(([, one]) => !mine(one)));
     this.data.pending = this.data.pending.filter((one) => !mine(one));
     this.data.knocks = this.data.knocks.filter((one) => !mine(one));
+    this.data.offers = this.data.offers.filter((one) => !mine(one));
     if (!platformName || platformName === "telegram") delete this.data.offsets[botId];
     this.save();
   }

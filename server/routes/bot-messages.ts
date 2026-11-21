@@ -64,7 +64,7 @@ export interface BotMessageRouteDeps {
   /** The turn running in a thread now, as its runtime events name it. */
   liveTurn(threadId: string): string | undefined;
   phoneSecretSubmissions: Pick<PhoneSecretSubmissionRegistry, "hasThread">;
-  /** A typed line while a send or purchase card waits in this thread: those cards stop waiting, so the turn reads it. */
+  /** A typed line in this thread: a waiting send or purchase card stops waiting so the turn reads it, and a routine run's question there is answered. */
   typedOverHeldCards?(threadId: string): void;
   directTurnDispatchClaims: { get(threadId: string): { threadId: string } | undefined };
   groupSpeakers: ReadonlyMap<string, { botId: string }>;

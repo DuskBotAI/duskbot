@@ -118,7 +118,7 @@ export function createBotPatchRoutes(deps: BotPatchRouteDeps): RouteHandler {
       if (body.pinned !== undefined && typeof body.pinned !== "boolean") {
         return json(res, 400, { error: "pinned must be true or false" });
       }
-      const existingBot = store.bot(m[1]); const defaultBotRefused = defaultBotPatchRefusal(existingBot, body);
+      const existingBot = store.bot(m[1]); const defaultBotRefused = defaultBotPatchRefusal(existingBot, body, store.bots);
       if (defaultBotRefused) return json(res, 400, { error: defaultBotRefused });
       const rawSelection = (body as Record<string, unknown>).modelSelection;
       if (body.threadId !== undefined && rawSelection === undefined) {
@@ -185,6 +185,7 @@ export function createBotPatchRoutes(deps: BotPatchRouteDeps): RouteHandler {
       for (const key of ["unread", "cloudBackend", "color", "mascotExpression", "mascotBody", "pinned", "hidden", "sidebarHidden", "welcomed"] as const) {
         if (body[key] !== undefined) patch[key] = body[key];
       }
+      if (body.hidden === true && existingBot?.defaultBot) Object.assign(patch, { defaultBot: undefined, sidebarHidden: undefined });
       if (body.cloudBackend === "box" || body.cloudBackend === "vps") patch.cloudBackend = "vps";
       const computerSpecified = Object.prototype.hasOwnProperty.call(body, "computer");
       let requestedComputer = existingBot?.computer;

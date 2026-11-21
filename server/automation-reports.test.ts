@@ -130,6 +130,7 @@ describe("automation reports", () => {
     f.store.patchTask(f.bot.id, f.main, { unread: false });
     f.reports.runSettled(run, `turn-${run.id}`);
     expect(f.added()).toEqual([]);
+    expect(f.store.messagesFor(run.threadId!).find((message) => message.role === "bot" && message.kind === "text")?.quietRun, "hidden in the run's own conversation too").toBe(true);
     expect(f.store.taskByThread(f.bot.id, f.main)?.unread).toBe(false);
     expect(f.runs.get(run.id)!.report).toEqual({ state: "quiet" });
     expect(f.wrote).toEqual([]);

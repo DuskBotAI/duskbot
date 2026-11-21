@@ -30,6 +30,7 @@ async function fixture() {
   const titles = new Map<string, string>();
   const listeners = new Set<(change: { type: string; threadId?: string }) => void>();
   const sent: Array<{ threadId: string; text: string; outside: boolean }> = [];
+  const answers: Array<{ threadId: string; requestId: string; behavior: string }> = [];
   const change = (threadId: string) => { for (const listener of listeners) listener({ type: "message", threadId }); };
   const key = "d".repeat(64);
   const host = createMessengerHost({
@@ -46,6 +47,13 @@ async function fixture() {
       threads.get(input.threadId)!.push({ id: `u${sent.length}`, role: "user", kind: "text", text: input.text, sendId: input.sendId } as unknown as Message);
       change(input.threadId);
     },
+    answerCard: async (threadId, requestId, reply) => {
+      answers.push({ threadId, requestId, behavior: reply.behavior });
+      const card = threads.get(threadId)?.find((m) => m.card?.requestId === requestId)?.card;
+      if (card) card.answered = reply.behavior;
+      change(threadId);
+      return { ok: true };
+    },
     hookBase: () => null, settleMs: 10, log: () => {},
   });
   cleanups.push(() => host.stop());
@@ -54,7 +62,11 @@ async function fixture() {
     threads.get(threadId)!.push({ id: `r${Math.random()}`, role: "bot", kind: "text", text, turnTerminal: true, ...extra } as unknown as Message);
     change(threadId);
   };
-  return { fake, host, sent, titles, reply };
+  const card = (threadId: string, card: Record<string, unknown>) => {
+    threads.get(threadId)!.push({ id: `c${Math.random()}`, role: "bot", kind: "text", text: "", card: { subtitle: "", options: [], ...card } } as unknown as Message);
+    change(threadId);
+  };
+  return { fake, host, sent, titles, reply, answers, card };
 }
 
 describe("Discord chat channel", () => {
@@ -109,5 +121,31 @@ describe("Discord chat channel", () => {
     const f = await fixture();
     await expect(f.host.connect("bot-nova", "discord", `${"A".repeat(26)}.Gabcde.${"z".repeat(38)}`)).rejects.toThrow(/didn't accept/);
     expect(f.host.status("bot-nova").platforms[1]!.state).toBe("not_connected");
+  });
+
+  it("puts an approval in the owner's DM as buttons, defers each press and lets only the owner answer", async () => {
+    const f = await fixture();
+    const status = await f.host.connect("bot-nova", "discord", TOKEN);
+    await until(() => f.host.status("bot-nova").platforms[1]!.state === "online");
+    f.fake.message({ author: OWNER, channelId: "301", content: status.pairCode! });
+    await until(() => f.host.status("bot-nova").platforms[1]!.owner);
+    f.fake.message({ author: OWNER, channelId: "301", content: "deploy it" });
+    const turn = await until(() => f.sent[0]);
+    f.card(turn.threadId, { requestId: "req-1", title: "Run a command", subtitle: "deploy.sh", tool: "Bash" });
+    const offer = await until(() => f.fake.posted().find((call) => call.body.components));
+    const buttons = (offer.body.components as Array<{ components: Array<{ label: string; custom_id: string }> }>).flatMap((row) => row.components);
+    expect(buttons.map((button) => button.label)).toEqual(["Allow", "Deny"]);
+    expect(buttons[0]!.custom_id).not.toContain("req-1");
+
+    f.fake.press({ user: STRANGER, channelId: "301", messageId: "1", customId: buttons[0]!.custom_id });
+    await until(() => f.fake.calls.find((call) => call.path.startsWith("/webhooks/") && /Only the bot's owner/.test(String(call.body.content))));
+    expect(f.answers).toHaveLength(0);
+
+    f.fake.press({ user: OWNER, channelId: "301", messageId: "1", customId: buttons[1]!.custom_id });
+    await until(() => f.answers[0]);
+    expect(f.answers[0]).toEqual({ threadId: turn.threadId, requestId: "req-1", behavior: "deny" });
+    expect(f.fake.calls.filter((call) => call.path.endsWith("/callback")).map((call) => call.body)).toEqual([{ type: 6 }, { type: 6 }]);
+    const edit = await until(() => f.fake.calls.find((call) => call.method === "PATCH" && /You chose: Deny/.test(String(call.body.content))));
+    expect(edit.body.components).toEqual([]);
   });
 });

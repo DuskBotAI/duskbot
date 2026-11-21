@@ -119,7 +119,8 @@ export function cloudScreen(cloud) {
   const state = cloudState(cloud);
   if (!state) return null;
   if (state === "setup") return { screen: "setup", ...(cloud.setup?.step ? { step: cloud.setup.step } : {}) };
-  return { screen: state, name: cloud.name, ...(state === "ended" && cloud.deleteAfter ? { deleteAt: cloud.deleteAfter } : {}), ...(cloud.removable ? { removable: true } : {}) };
+  return { screen: state, name: cloud.name, ...(state === "ended" && cloud.deleteAfter ? { deleteAt: cloud.deleteAfter } : {}),
+    ...(state === "payment" && cloud.payment ? { deleteAt: cloud.payment.fixBy, ...(cloud.payment.trial ? { trial: true } : {}) } : {}), ...(cloud.removable ? { removable: true } : {}) };
 }
 
 /** Another Cloud of the person's own, asked for (`{ cloud }`) or remembered: the session's word, as placeOf reads a team. One

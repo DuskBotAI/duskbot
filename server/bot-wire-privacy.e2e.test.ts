@@ -48,7 +48,7 @@ describe("bot wire privacy against the real server", () => {
         PATH: dirname(process.execPath), ...(process.env.SystemRoot ? { SystemRoot: process.env.SystemRoot } : {}),
         HOME: home, USERPROFILE: home, DUSK_DATA_DIR: data,
         APPDATA: join(home, "appdata"), LOCALAPPDATA: join(home, "localappdata"),
-        DUSK_PORT: String(port), DUSK_WEBHOOK_PORT: String(port + 1),
+        DUSK_PORT: String(port), DUSK_WEBHOOK_PORT: String(port + 1), DUSK_TEST_SEALED_PATH: "1",
       },
       stdio: ["ignore", "pipe", "pipe"],
     });

@@ -19,6 +19,8 @@ vi.mock("react", async (original) => {
 });
 vi.mock("@/state/store", async (original) => ({ ...await original<typeof import("@/state/store")>(), api: fixture.api }));
 vi.mock("@/lib/analytics", () => ({ track: fixture.track }));
+// sealing has its own tests (src/lib/sealed-send.test.ts)
+vi.mock("@/lib/sealed-send", () => ({ sendSealed: (_purpose: unknown, _target: unknown, _values: unknown, send: (sealed: null) => unknown) => send(null) }));
 
 afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
@@ -92,24 +94,36 @@ describe("adding another OpenAI-compatible server", () => {
     await flush();
   }
 
+  const works = { ok: true, check: "models", models: ["m"], result: "works", model: "m" };
   it.each([
-    ["unverified", () => fixture.api.mockResolvedValueOnce({ instances: [] })],
-    ["error", () => fixture.api.mockRejectedValueOnce(new store.ApiError(`unreachable https://ada.example.com/v1 ${KEY}`, 502, {}))],
-  ])("reports one custom endpoint key save (%s), with no name, address or key", async (result, answer) => {
+    ["ok", () => fixture.api.mockResolvedValueOnce(works).mockResolvedValueOnce({ instances: [] })],
+    ["error", () => fixture.api.mockResolvedValueOnce(works).mockRejectedValueOnce(new store.ApiError(`unreachable https://ada.example.com/v1 ${KEY}`, 502, {}))],
+  ])("tests the key first, then reports one custom endpoint key save (%s), with no name, address or key", async (result, answer) => {
     fixture.values = [];
     fixture.track.mockReset();
     fixture.api.mockReset();
     answer();
     await add();
-    expect(fixture.api).toHaveBeenCalledExactlyOnceWith("/api/instances/openai-compat", expect.objectContaining({ method: "POST" }));
+    expect(fixture.api.mock.calls.map(([path]) => path)).toEqual(["/api/keys/test", "/api/instances/openai-compat"]);
+    expect(JSON.parse(fixture.api.mock.calls[0][1].body)).toEqual({ provider: "openaiCompat", url: "https://ada.example.com/v1" });
     expect(fixture.track.mock.calls).toEqual([["api_key_saved", { provider: "custom_endpoint", via: "settings", result }]]);
     expect(JSON.stringify(fixture.track.mock.calls)).not.toMatch(/ada|example|ZZtest|SECRET/);
+  });
+
+  it("adds nothing when the server refuses the key", async () => {
+    fixture.values = [];
+    fixture.track.mockReset();
+    fixture.api.mockReset();
+    fixture.api.mockResolvedValueOnce({ ok: false, reason: "rejected", status: 401, result: "wrong_key" });
+    await add();
+    expect(fixture.api.mock.calls.map(([path]) => path)).toEqual(["/api/keys/test"]);
+    expect(fixture.track.mock.calls).toEqual([["api_key_saved", { provider: "custom_endpoint", via: "settings", result: "rejected" }]]);
   });
 
   it("fills in Google Gemini, so only the AI Studio key is left to paste", async () => {
     fixture.values = [];
     fixture.api.mockReset();
-    fixture.api.mockResolvedValueOnce({ instances: [] });
+    fixture.api.mockResolvedValueOnce(works).mockResolvedValueOnce({ instances: [] });
     const button = (text: string) => form().find((node) => node.type === "button" && JSON.stringify(node.props.children ?? "").includes(text))!;
     expect(JSON.stringify(form().map((node) => node.props.children ?? ""))).not.toContain("aistudio.google.com");
     button("Fill in Google Gemini").props.onClick!();
@@ -117,8 +131,8 @@ describe("adding another OpenAI-compatible server", () => {
     form().find((node) => node.props["aria-label"] === "API key")!.props.onChange!({ target: { value: "gemini-fixture" } });
     button("Add server").props.onClick!();
     await flush();
-    expect(fixture.api).toHaveBeenCalledExactlyOnceWith("/api/instances/openai-compat", expect.objectContaining({ method: "POST" }));
-    expect(JSON.parse(fixture.api.mock.calls[0][1].body)).toEqual({ displayName: "Google Gemini", url: "https://generativelanguage.googleapis.com/v1beta/openai", key: "gemini-fixture" });
+    expect(fixture.api.mock.calls.map(([path]) => path)).toEqual(["/api/keys/test", "/api/instances/openai-compat"]);
+    expect(JSON.parse(fixture.api.mock.calls[1][1].body)).toEqual({ displayName: "Google Gemini", url: "https://generativelanguage.googleapis.com/v1beta/openai", key: "gemini-fixture" });
   });
 });
 

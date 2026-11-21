@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
-// Dusk's first messages: three short bubbles, a follow-up once it has looked around (written once by the server, as
-// a real message) and chips for only what is still missing.
+// Dusk's first messages: one message, a starter card of three first jobs and the person's own words, and chips for only
+// what is still missing.
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -52,7 +52,7 @@ vi.mock("@/lib/setup-import", () => ({
   detectSetupWithin: () => { f.detect(); return { found: Promise.resolve(f.found), cancel: () => {} }; },
 }));
 const { HelperIntro } = await import("./HelperIntro");
-const { followupLine, INTRO_TIMING, introLines, whoConnectsAi } = await import("./SimpleHelperIntro");
+const { followupLine, INTRO_TIMING, introLine, introLines, whoConnectsAi } = await import("./SimpleHelperIntro");
 const { setTeamPeople } = await import("@/state/team-people");
 const { chipAction } = await import("./HelperSetup");
 const { SIMPLE_BOT_BUBBLE } = await import("./chat-bubble");
@@ -68,6 +68,7 @@ const saved = (facts: HelperFollowupFacts): Message => ({ id: "f", role: "bot", 
 
 let host: HTMLDivElement, root: Root;
 const lines = () => [...host.querySelectorAll("[data-helper-line]")].map((node) => node.textContent);
+const asks = () => [...host.querySelectorAll<HTMLElement>("[data-helper-ask]")].map((node) => node.textContent);
 const chips = () => [...host.querySelectorAll<HTMLElement>("[data-helper-step]")].map((node) => node.dataset.helperStep);
 const settle = async () => { for (let i = 0; i < 6; i++) await act(async () => {}); };
 const show = async (answered = false, followup?: Message) => {
@@ -112,115 +113,92 @@ afterEach(async () => {
 });
 
 describe("what Dusk says first", () => {
-  it("as the Chief: who it is, what it does here, and that it is looking around, never by the person's name", () => {
-    const said = [
-      "Hey! I'm Dusk. I'm new here.",
-      "I'm here to be your chief of staff. I can manage your other bots. Task me with anything. I'll make sure it gets to the right bot.",
-      "I'm taking a look around to see if there's anything I can pick up for you. I'll follow up in a moment.",
-    ];
-    expect(introLines({ name: "Dusk", chief: true })).toEqual(said);
-    expect(introLines({ name: "Dusk", chief: true, person: "Ada" })).toEqual(said);
-    expect(introLines({ name: "Dusk", chief: true, team: "Acme" })[1]).toBe(`${said[1]} On Acme, I'm here for you and look after your own bots.`);
+  it("as the Chief: one message, who it is and that it wants one real job, never by the person's name", () => {
+    expect(introLine({ name: "Dusk", chief: true })).toBe("Hi! I'm Dusk. Hand me one real job and I'll get it done.");
+    expect(introLine({ name: "Dusk", chief: true, person: "Ada" })).toBe("Hi! I'm Dusk. Hand me one real job and I'll get it done.");
   });
 
   it("on a cloud set up from the computer: the Chief greets the person by name and says what came along", () => {
-    const lines = introLines({ name: "Dusk", chief: true, person: "Ada", fromComputer: true, carried: true });
-    expect(lines[0]).toBe("Hey Ada! I'm Dusk. I'm new here.");
-    expect(lines[1]).toMatch(/I brought over what you told me about yourself on your computer\.$/);
-    expect(introLines({ name: "Dusk", chief: true, fromComputer: true })[0]).toBe("Hey! I'm Dusk. I'm new here.");
+    const line = introLine({ name: "Dusk", chief: true, person: "Ada", fromComputer: true, carried: true });
+    expect(line).toMatch(/^Hi Ada! I'm Dusk\./);
+    expect(line).toMatch(/I brought over what you told me about yourself on your computer\.$/);
   });
 
-  it("keeps a helper's lines for a Dusk that is not the Chief", () => {
-    expect(introLines({ name: "Dusk", chief: false })[0]).toBe("Hi! I'm Dusk, your helper for everything here.");
-    expect(introLines({ name: "Dusk", chief: false, person: "Ada" })[0]).toBe("Hi Ada! I'm Dusk, your helper for everything here.");
-    const member = introLines({ name: "Dusk", chief: false, team: "Acme" });
-    expect(member[1]).toBe("Ask me how to do anything here. I can set up bots, apps and routines with you. On Acme, I'm here for you and look after your own bots.");
+  it("keeps a helper's hello and what it does for a Dusk that is not the Chief, or a Team Cloud member's", () => {
+    expect(introLine({ name: "Dusk", chief: false })).toBe(`${introLines({ name: "Dusk", chief: false })[0]} ${introLines({ name: "Dusk", chief: false })[1]}`);
+    expect(introLine({ name: "Dusk", chief: false, team: "Acme" })).toContain("On Acme, I'm here for you and look after your own bots.");
   });
 
-  it("follows up on what it found, never naming the AI it thinks with", () => {
+  it("a follow-up an older intro wrote never names the AI it thinks with", () => {
     const none = { apps: [], bots: 0, routines: 0 };
-    expect(followupLine({ ai: "own", ...none })).toBe("I looked around and nothing's waiting on you yet. There's no unfinished work, no other bots or routines, and no apps are connected so far. If you'd like me to keep an eye on your day, I can connect your email and calendar so I can flag what matters each morning. Just say the word, or hand me whatever's on your plate today.");
-    expect(followupLine({ ai: "own", apps: [], bots: 1, routines: 3 })).toContain("You have 1 other bot and 3 routines, and no apps are connected so far.");
-    expect(followupLine({ ai: "own", apps: [], bots: 2, routines: 0 })).toContain("You have 2 other bots and no routines,");
-    expect(followupLine({ ai: "own", apps: ["Gmail", "GitHub"], bots: 0, routines: 0 })).toBe("I looked around and nothing's waiting on you yet. I can already use Gmail and GitHub. Hand me whatever's on your plate today, or ask me to set up a bot for something you do every week.");
-    expect(followupLine({ ai: "own", apps: ["Gmail", "GitHub", "Slack", "Notion", "Linear"], bots: 0, routines: 0 })).toContain("Gmail, GitHub, Slack, and 2 more");
+    expect(followupLine({ ai: "own", apps: ["Gmail", "GitHub"], bots: 0, routines: 0 })).toContain("I can already use Gmail and GitHub.");
     expect(followupLine({ ai: "none", ...none })).toBe(t("helperIntro.followup.noAi"));
     expect(followupLine({ ai: "backup", ...none })).toContain("free backup model");
     expect(whoConnectsAi(null), "off a team").toBeUndefined();
-    expect(followupLine({ ai: "backup", ...none, connects: "" })).toBe(t("helperIntro.followup.backupTeamOwner"));
-    expect(followupLine({ ai: "own", ...none, connects: "Olive" }), "with an AI there is nothing to connect").toContain("nothing's waiting");
   });
 });
 
 describe("in the chat (Simple mode)", () => {
-  it("draws its lines and follow-up as the chat's own bubbles, with chips for only what is missing", async () => {
+  it("says one message as the chat's own bubble, then the starter card, then chips for only what is missing", async () => {
     f.services = { gmail: { connected: false } };
-    await show(false, saved({ ai: "own", apps: [], bots: 0, routines: 0 }));
-    expect(lines()).toHaveLength(4);
-    expect(host.querySelector("[data-helper-followup]")?.textContent).toContain("nothing's waiting on you yet");
+    await show();
+    expect(lines()).toEqual(["Hi! I'm Dusk. Hand me one real job and I'll get it done."]);
     const first = host.querySelector<HTMLElement>('[data-helper-line="0"]')!;
     expect(first.dataset.chatBubble, "the chat's own Simple bubble").toBe("simple");
     expect(first.className).toContain(SIMPLE_BOT_BUBBLE);
+    expect(host.querySelector("[data-helper-start]")?.textContent).toContain("What should we start with?");
+    expect(asks()).toEqual(["Help me plan my week", "Watch a price for me", "Research something for me"]);
+    expect(host.querySelector("[data-helper-start] textarea")?.getAttribute("aria-label"), "and the person's own words").toBe("Something else");
     expect(chips()).toEqual(["apps", "phone", "cloud"]);
-    expect([...host.querySelectorAll("[data-helper-step]")].map((node) => node.textContent)).toEqual(["Connect email & calendar", "Connect your phone", "Try cloud"]);
-    expect(f.followups, "only a first run asks for a follow-up").toEqual([]);
+    expect(f.followups, "no follow-up is asked for any more").toEqual([]);
   });
 
-  it("shows no chips or asks while the app connects or reconnects, or the transcript is still loading", async () => {
-    f.services = { gmail: { connected: false } };
-    const followup = saved({ ai: "own", apps: [], bots: 0, routines: 0 });
+  it("keeps the follow-up an older intro already wrote, under its message", async () => {
+    await show(true, saved({ ai: "own", apps: [], bots: 0, routines: 0 }));
+    expect(lines()).toHaveLength(2);
+    expect(host.querySelector("[data-helper-followup]")?.textContent).toContain("nothing's waiting on you yet");
+  });
+
+  it("shows no card or chips while the app connects or reconnects, or the transcript is still loading", async () => {
     f.state = { ...f.state, connected: false };
-    await show(false, followup);
+    await show();
     expect(chips()).toEqual([]);
-    expect(host.querySelector("[data-helper-setup]")).toBeNull();
+    expect(host.querySelector("[data-helper-start]")).toBeNull();
     f.state = { ...f.state, connected: true, bots: [maus({ transcriptLoaded: false })] };
-    await show(false, followup);
-    expect(host.querySelector("[data-helper-setup]")).toBeNull();
+    await show();
+    expect(host.querySelector("[data-helper-start]")).toBeNull();
     f.state = { ...f.state, bots: [maus()] };
-    await show(false, followup);
-    expect(chips(), "back under the message once the chat is shown").toEqual(["apps", "phone", "cloud"]);
+    await show();
+    expect(host.querySelector("[data-helper-start]"), "back under the message once the chat is shown").not.toBeNull();
   });
 
   it("offers no phone while the phone app is hidden", async () => {
     vi.stubEnv("VITE_DUSK_PHONE_APP", "0");
-    f.services = { gmail: { connected: false } };
-    await show(false, saved({ ai: "own", apps: [], bots: 0, routines: 0 }));
+    await show();
     expect(chips()).toEqual(["apps", "cloud"]);
   });
 
-  it("tells a User the team's owner connects the AI, even under a follow-up written before it knew to", async () => {
+  it("with no AI says what is missing, with no card yet, and a User hears the team's owner connects it", async () => {
+    f.state = { ...f.state, instances: [claude(false)] };
+    await show();
+    expect(lines()[1]).toBe(t("helperIntro.followup.noAi"));
+    expect(host.querySelector("[data-helper-start]")).toBeNull();
+    expect(chips()).toEqual(["ai", "apps", "phone"]);
     const dana = { email: "dana@acme.test", name: "Dana", role: "member", you: true as const };
     const olive = { email: "olive@acme.test", name: "Olive", role: "owner" };
     f.state = { ...f.state, instances: [] };
     setTeamPeople({ people: [dana, olive], me: dana, admin: false, needsYou: [] });
-    await show(false, saved({ ai: "none", apps: [], bots: 0, routines: 0 }));
-    expect(lines()[3]).toBe(t("helperIntro.followup.noAiOwner", { name: "Olive" }));
-    expect(lines()[3]).not.toMatch(/sign in/i);
-    setTeamPeople({ people: [dana], me: dana, admin: false, needsYou: [] });
-    await show(false, saved({ ai: "none", apps: [], bots: 0, routines: 0 }));
-    expect(lines()[3]).toBe(t("helperIntro.followup.noAiTeamOwner"));
-    setTeamPeople({ people: [{ ...dana, role: "admin" }, olive], me: dana, admin: true, needsYou: [] });
-    await show(false, saved({ ai: "none", apps: [], bots: 0, routines: 0 }));
-    expect(lines()[3], "an admin can connect one").toBe(t("helperIntro.followup.noAi"));
+    await show();
+    expect(lines()[1]).toBe(t("helperIntro.followup.noAiOwner", { name: "Olive" }));
     setTeamPeople(null);
   });
 
-  it("shows three chips at most, AI first, and a tapped one stays to be tapped again", async () => {
+  it("a tapped chip stays to be tapped again", async () => {
     f.state = { ...f.state, instances: [claude(false)] };
     await show();
-    expect(lines()[3]).toBe(t("helperIntro.followup.noAi"));
-    expect(chips()).toEqual(["ai", "apps", "phone"]);
     await act(async () => { host.querySelector<HTMLElement>('[data-helper-step="phone"]')!.click(); });
     expect(f.dispatch).toHaveBeenCalledWith(expect.objectContaining({ type: "toggleAppSettings", section: "companion", phonePairing: true }));
     expect(chips()).toEqual(["ai", "apps", "phone"]);
-  });
-
-  it("opens the dusk cloud sheet from its chip and keeps the chip", async () => {
-    f.state = { ...f.state, instances: [claude(true)] };
-    await show();
-    await act(async () => { host.querySelector<HTMLElement>('[data-helper-step="cloud"]')!.click(); });
-    expect(f.dispatch).toHaveBeenCalledWith({ type: "openCloudAdd", source: "app_onboarding" });
-    expect(chips()).toContain("cloud");
   });
 
   it("opens the Connect an AI dialog in place from its chip, not Settings", async () => {
@@ -231,11 +209,11 @@ describe("in the chat (Simple mode)", () => {
     expect(f.dispatch).not.toHaveBeenCalled();
   });
 
-  it("never counts OpenCode's free model as the person's own AI", async () => {
+  it("offers the starter card on OpenCode's free model, which it never counts as the person's own AI", async () => {
     f.state = { ...f.state, instances: [{ instanceId: "opencodeGo", driverKind: "opencodeGo", displayName: "OpenCode",
       snapshot: { state: "available", authenticated: true, freeFallback: true }, models: { default: "m", options: [] } }] };
     await show();
-    expect(lines()[3]).toContain("free backup model");
+    expect(asks()).toHaveLength(3);
     expect(chips()[0]).toBe("ai");
   });
 
@@ -247,47 +225,34 @@ describe("in the chat (Simple mode)", () => {
     expect(chipAction("import")).toEqual({ type: "toggleAppSettings", open: true, section: "import" });
   });
 
-  it("offers first jobs to tap, each sent as the person's first message, and the message box takes the focus", async () => {
+  it("sends a first job or the person's own words as their first message, and the message box takes the focus", async () => {
     const box = document.createElement("div");
     box.dataset.tour = "composer";
     const field = document.createElement("textarea");
     box.append(field);
     document.body.append(box);
-    await show(false, saved({ ai: "own", apps: [], bots: 0, routines: 0 }));
-    const asks = [...host.querySelectorAll<HTMLElement>("[data-helper-ask]")];
-    expect(asks.map((node) => node.textContent)).toEqual(["Keep an eye on my day", "Set up a bot for my inbox", "Help me plan my week"]);
-    expect(asks[0]!.closest("[data-helper-setup]"), "in the chips' own row, before them").toBe(host.querySelector("[data-helper-setup]"));
-    await act(async () => { asks[0]!.click(); });
+    await show();
+    await act(async () => { host.querySelector<HTMLElement>("[data-helper-ask]")!.click(); });
     await act(async () => { await new Promise((done) => requestAnimationFrame(() => done(null))); });
-    expect(f.dispatch).toHaveBeenCalledWith({ type: "answerCard", botId: "maus", threadId: "t", messageId: "intro", answer: "Keep an eye on my day" });
+    expect(f.dispatch).toHaveBeenCalledWith({ type: "answerCard", botId: "maus", threadId: "t", messageId: "intro", answer: "Help me plan my week" });
+    expect(analytics.track).toHaveBeenCalledWith("onboarding_starter", { task: "week" });
     expect(document.activeElement).toBe(field);
     box.remove();
   });
 
-  it("fits the first jobs to a connected inbox", async () => {
-    rememberConnectorStatus({ gmail: { connected: true } } as Parameters<typeof rememberConnectorStatus>[0], true);
-    await show(false, saved({ ai: "own", apps: ["Gmail"], bots: 0, routines: 0 }));
-    rememberConnectorStatus({}, true);
-    expect([...host.querySelectorAll<HTMLElement>("[data-helper-ask]")].map((node) => node.textContent))
-      .toEqual(["Keep an eye on my day", "What needs a reply in my inbox?", "Help me plan my week"]);
-  });
-
-  it("offers no jobs to tap before there is an AI to do them, or once the person has written", async () => {
-    f.state = { ...f.state, instances: [claude(false)] };
+  it("fits the first jobs to a connected inbox and calendar", async () => {
+    rememberConnectorStatus({ gmail: { connected: true }, googlecalendar: { connected: true } } as Parameters<typeof rememberConnectorStatus>[0], true);
     await show();
-    expect(host.querySelector("[data-helper-ask]")).toBeNull();
-    expect(chips()[0]).toBe("ai");
-    f.state = { ...f.state, instances: [claude(true)] };
-    await show(true, saved({ ai: "own", apps: [], bots: 0, routines: 0 }));
-    expect(host.querySelector("[data-helper-ask]")).toBeNull();
+    rememberConnectorStatus({}, true);
+    expect(asks()).toEqual(["Summarize my inbox", "What's on my calendar today?", "Help me plan my week"]);
   });
 
-  it("drops the chips once the person has written, and no longer looks for skills", async () => {
+  it("drops the card and chips once the person has written, and no longer looks for skills", async () => {
     f.local = true;
-    await show(true, saved({ ai: "own", apps: [], bots: 0, routines: 0 }));
-    expect(lines()).toHaveLength(4);
+    await show(true);
+    expect(lines()).toHaveLength(1);
+    expect(host.querySelector("[data-helper-start]")).toBeNull();
     expect(chips()).toEqual([]);
-    expect(host.querySelector("[data-help-improve]")).toBeNull();
     expect(f.detect).not.toHaveBeenCalled();
   });
 
@@ -312,55 +277,24 @@ describe("in the chat (Simple mode)", () => {
 });
 
 describe("as a first run lands in the chat", () => {
-  it("arrives part by part: three lines, the bot typing, its follow-up (written once by the server), then the chips", async () => {
+  it("arrives part by part: the message, then the starter card and the chips", async () => {
     vi.useFakeTimers();
-    f.bots = 2;
     stageIntro("maus");
     await show();
     expect(lines()).toEqual([]);
-    expect(f.followups, "asked for once its look around settles").toEqual([{ threadId: "t", ai: "own", apps: [] }]);
     await tick(INTRO_TIMING.first);
     expect(lines()).toHaveLength(1);
-    await tick(INTRO_TIMING.line);
-    expect(lines()).toHaveLength(2);
-    await tick(INTRO_TIMING.line);
-    expect(lines()).toHaveLength(3);
-    expect(host.querySelector("[data-helper-typing]")).toBeNull();
-    await tick(INTRO_TIMING.typing);
-    expect(host.querySelector("[data-helper-typing]")?.textContent).toContain("Typing…");
-    await tick(INTRO_TIMING.followup - 1);
-    expect(lines()).toHaveLength(3);
-    await tick(1);
-    expect(lines()[3], "the server's counts").toContain("You have 2 other bots and no routines");
-    expect(host.querySelector("[data-helper-typing]")).toBeNull();
-    expect(chips()).toEqual([]);
-    await tick(INTRO_TIMING.chips);
+    expect(host.querySelector("[data-helper-start]")).toBeNull();
+    await tick(INTRO_TIMING.card);
+    expect(asks()).toHaveLength(3);
     expect(chips()).toEqual(["apps", "phone", "cloud"]);
-    await show();
-    expect(f.followups, "never asked twice").toHaveLength(1);
   });
 
-  it("with no AI shows no typing row, and follows up soon after the last line", async () => {
-    vi.useFakeTimers();
-    f.state = { ...f.state, instances: [claude(false)] };
-    stageIntro("maus");
-    await show();
-    await tick(INTRO_TIMING.first);
-    await tick(INTRO_TIMING.line);
-    await tick(INTRO_TIMING.line);
-    expect(lines()).toHaveLength(3);
-    await tick(INTRO_TIMING.noAi);
-    expect(host.querySelector("[data-helper-typing]")).toBeNull();
-    expect(lines()[3]).toBe(t("helperIntro.followup.noAi"));
-  });
-
-  it("shows everything at once with reduced motion, and says what it saw itself when the server can't save it", async () => {
+  it("shows everything at once with reduced motion", async () => {
     f.reduced = true;
-    f.saves = false;
     stageIntro("maus");
     await show();
-    expect(f.followups).toHaveLength(1);
-    expect(lines()).toHaveLength(4);
-    expect(chips()).toEqual(["apps", "phone", "cloud"]);
+    expect(lines()).toHaveLength(1);
+    expect(asks()).toHaveLength(3);
   });
 });

@@ -20,6 +20,10 @@ const EXCERPT = 6_000;
 const FEED_ITEMS = 30;
 const PENDING_MS = 3 * 60 * 60_000;
 const LAST_KEPT = 2_000;
+/** Failed reads in a row before the person hears of it, once per streak; from then on reads back off. */
+export const STUCK_AFTER = 3;
+const RETRY_FIRST_MS = 15 * 60_000;
+const RETRY_MAX_MS = 4 * 60 * 60_000;
 export const NO_SCRIPTS = "Script checks run only on the person's own computer, not here.";
 
 /** What one read found: `value` is what is compared (a hash, a price), `items` a feed's newest item ids. */
@@ -41,6 +45,10 @@ interface Kept {
   price?: string;
   at: number;
   failing?: true;
+  /** Failed reads in a row, and no read before `retryAt` once they reach STUCK_AFTER. */
+  fails?: number;
+  retryAt?: number;
+  trouble?: string;
   /** A script's last output, so a change can be shown beside it. */
   last?: string;
   pending?: Record<string, { at: number; value: string; seen?: string[]; price?: string; last?: string }>;
@@ -145,8 +153,9 @@ export interface RoutineProbesDeps {
   fetch?: (url: string) => Promise<PublicPage>;
   /** Runs a script check's command; absent, script checks fail with NO_SCRIPTS. */
   script?: (routine: Routine, command: string) => Promise<ScriptResult>;
-  /** Once per streak of failed reads: the person hears it, so a probe that cannot read never looks quiet. */
-  failed?(routine: Routine, sentence: string): void;
+  /** Once per streak, at its STUCK_AFTER-th failed read: the person hears it, so a probe that cannot read never looks
+   * quiet for long. */
+  failed?(routine: Routine, sentence: string, count: number): void;
 }
 
 export function createRoutineProbes(deps: RoutineProbesDeps) {
@@ -209,15 +218,20 @@ export function createRoutineProbes(deps: RoutineProbesDeps) {
       for (const [key, pending] of Object.entries(kept?.pending ?? {})) if (now() - pending.at > PENDING_MS) delete kept!.pending![key];
       // a run already holds a change: it is that run's to answer
       if (kept?.pending && Object.keys(kept.pending).length) return { held: true };
+      if (!context.manual && kept?.retryAt !== undefined && now() < kept.retryAt) return { held: true, ...(kept.trouble ? { trouble: kept.trouble } : {}) };
       const reading = await read(routine, probe);
       if ("error" in reading) {
         const sentence = `Couldn't check ${where(probe)}: ${reading.error}`;
-        if (kept && !kept.failing) { kept.failing = true; save(); deps.failed?.(routine, sentence); }
-        else if (!kept) { state[routine.id] = { url: from, kind: probe.kind, value: "", at: now(), failing: true }; save(); deps.failed?.(routine, sentence); }
+        kept ??= state[routine.id] = { url: from, kind: probe.kind, value: "", at: now() };
+        const fails = (kept.fails ?? 0) + 1;
+        Object.assign(kept, { fails, failing: true as const, trouble: sentence }, fails >= STUCK_AFTER ? { retryAt: now() + Math.min(RETRY_FIRST_MS * 2 ** (fails - STUCK_AFTER), RETRY_MAX_MS) } : {});
+        save();
+        if (fails === STUCK_AFTER) deps.failed?.(routine, sentence, fails);
         return { trouble: sentence };
       }
+      if (kept) for (const field of ["failing", "fails", "retryAt", "trouble"] as const) delete kept[field];
       if ("asleep" in reading) {
-        if (kept) { delete kept.failing; kept.at = now(); save(); }
+        if (kept) { kept.at = now(); save(); }
         return {};
       }
       const last = probe.kind === "script" ? reading.text!.slice(0, LAST_KEPT) : undefined;
@@ -229,7 +243,6 @@ export function createRoutineProbes(deps: RoutineProbesDeps) {
         return {};
       }
       kept ??= state[routine.id] = { url: from, kind: probe.kind, value: "", at: now() };
-      if (kept.failing) delete kept.failing;
       const fresh = reading.items?.filter((item) => !kept!.seen?.includes(item.id)) ?? [];
       const changed = reading.wake || (probe.kind === "feed" ? fresh.length > 0 : reading.value !== kept.value);
       if (!changed) {

@@ -100,6 +100,7 @@ try {
   await withPage(async (page) => {
     const views: Record<string, string> = {
       asleep: "[data-asleep-work-start]", late: "[data-late-routine-start]", "late-missed": "[data-late-routine-start]",
+      "routine-sleep": "[data-routine-sleep-cloud]", "routine-sleep-missed": "[data-routine-sleep-cloud]", "sleep-setting": "[data-settings-block=routine-wake]",
       plans: "[data-plan-terms]", "start-fresh": "input", settings: "[data-cloud-delete-account]",
     };
     for (const [view, ready] of Object.entries(views)) {

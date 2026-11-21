@@ -163,6 +163,14 @@ RUN apt-get update \
   && python3 -c "import reportlab, docx, pptx, openpyxl, matplotlib, pandas, numpy, PIL, requests, bs4, lxml, pypdf" \
   && ffmpeg -version | head -1 && soffice --version && rsvg-convert --version && convert -version | head -1 \
   && rm -rf /tmp/node-compile-cache
+# Finding the song in a reel or video (skills/song-from-video): yt-dlp (Unlicense) downloads it and shazamio-core (MIT)
+# fingerprints it for Shazam's matcher. About 50 MB unpacked (13 MB to pull), in their own layer above the big one, so a yt-dlp bump re-pulls
+# only this. The voice remover (Demucs on CPU torch, about 700 MB) stays out of the image: the skill installs it into
+# the volume's cache the first time a song is buried under a voiceover.
+ARG BOT_MEDIA_PACKAGES="yt-dlp[default]==2026.10.26 shazamio-core==2.0.0"
+RUN pip install --no-cache-dir --break-system-packages $BOT_MEDIA_PACKAGES \
+  && python3 -c "import yt_dlp, shazamio_core" && yt-dlp --version \
+  && rm -rf /tmp/node-compile-cache
 # Caddy and Grok are pinned, so they sit beneath the engines, which change
 # more often.
 COPY --from=edge /caddy /usr/local/bin/caddy
@@ -231,6 +239,8 @@ CMD ["node", "/app/dist-server/cloud-home-start.js"]
 
 # The self-hosted server, last so a build without --target builds it.
 FROM runtime AS server
+ARG RELEASE_IMAGE
+ENV DUSK_RELEASE_IMAGE=${RELEASE_IMAGE}
 # Optional engine CLIs baked into the image (space-separated npm packages).
 ARG ENGINES=""
 RUN if [ -n "$ENGINES" ]; then HOME=/tmp/dusk-build-home npm install -g $ENGINES && rm -rf /tmp/dusk-build-home /tmp/node-compile-cache; fi

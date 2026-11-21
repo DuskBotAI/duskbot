@@ -134,7 +134,7 @@ export const skillCurator = createSkillCurator({ statePath: join(DATA_DIR, "skil
 
 const escape = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
-/** Skills a turn read: a tool call that opened `<name>/SKILL.md`, or a `/name` the person typed. */
+/** Skills a turn read: a tool call that opened `<name>/SKILL.md`, read_skill, or a `/name` the person typed. */
 export function skillsReadInTurn(
   messages: ReadonlyArray<{ role?: string; kind?: string; turnId?: string; text?: string; tool?: { name?: string; input?: string; summary?: string } }>,
   turnId: string,
@@ -146,5 +146,7 @@ export function skillsReadInTurn(
   const firstReply = messages.findIndex((message) => message.turnId === turnId && message.role !== "user");
   const asked = (firstReply >= 0 ? messages.slice(0, firstReply) : messages)
     .findLast((message) => message.role === "user" && message.kind === "text")?.text ?? "";
-  return names.filter((name) => tools.includes(`${name}/SKILL.md`) || new RegExp(`(^|\\s)/${escape(name)}(?![\\w-])`).test(asked));
+  const loaded = messages.filter((message) => message.kind === "activity" && message.turnId === turnId && message.tool?.name?.endsWith("read_skill"))
+    .map((message) => message.tool!.input ?? "").join("\n");
+  return names.filter((name) => tools.includes(`${name}/SKILL.md`) || loaded.includes(JSON.stringify(name)) || new RegExp(`(^|\\s)/${escape(name)}(?![\\w-])`).test(asked));
 }

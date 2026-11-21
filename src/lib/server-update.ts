@@ -2,16 +2,8 @@ import { compareVersions } from "../../shared/update-guard";
 import { appVersion } from "./app-links";
 import { t } from "./i18n";
 
-/** GET /api/updates/check (server/update-check.ts). */
-export interface ServerUpdateCheck {
-  current: string;
-  install: "desktop" | "managed" | "docker" | "podman" | "npm" | "git" | "unknown";
-  latest?: string;
-  available: boolean;
-  releaseUrl?: string;
-  command?: string;
-  restart?: boolean;
-}
+import type { UpdateCheck as ServerUpdateCheck } from "../../shared/server-update";
+export type { UpdateCheck as ServerUpdateCheck } from "../../shared/server-update";
 
 export type ServerUpdatePhase = "idle" | "checking" | "up-to-date" | "available" | "reload" | "error";
 
@@ -45,7 +37,7 @@ export function serverUpdateRow(
     const how = otherServer
       ? (check.restart ? "sidebar.update.howOtherRestart" : "sidebar.update.howOther")
       : (check.restart ? "sidebar.update.howRestart" : "sidebar.update.how");
-    const subtitle = check.command ? t(how, { command: check.command }) : undefined;
+    const subtitle = check.pinned ? t("settings.updates.pinned", { image: check.pinned }) : check.command ? t(how, { command: check.command }) : undefined;
     const label = otherServer
       ? t("sidebar.update.availableOther", { name: otherServer, version: check.latest })
       : t("sidebar.update.availableServer", { version: check.latest });

@@ -46,11 +46,11 @@ function transcript(threads: ThreadLog[]): string {
 }
 
 export async function judge(gateway: Gateway, scenario: Scenario, threads: ThreadLog[], facts: {
-  tools: string[]; routines: unknown[]; waits: unknown[]; jobs: unknown[]; liveCheck?: unknown; memory: string; aboutMe: string; checked: Checked;
+  tools: string[]; routines: unknown[]; waits: unknown[]; jobs: unknown[]; webhooks?: unknown[]; compactions?: number; liveCheck?: unknown; memory: string; aboutMe: string; checked: Checked;
 }): Promise<Verdict> {
   const c = facts.checked;
   const prompt = `You grade a personal assistant bot ("dusk bot") in a realistic test. Persona: ${scenario.persona}. Shape: ${scenario.shape}.
-The bot runs in a test workspace; the person's local time now is ${new Date().toString()} (${Intl.DateTimeFormat().resolvedOptions().timeZone}), so judge times and "the next 7" against that: it has its own memory, automations (reminders/routines, "tell me when" waits), can make and attach files and documents (a document shows as a card in chat that opens it), and may have web search; it has NO connected email, WhatsApp, Telegram, X, calendar, phone or access to the person's own computer/files${scenario.browser ? "; it DOES have a headless web browser" : "; it has no browser"}.
+The bot runs in a test workspace; the person's local time now is ${new Date().toString()} (${Intl.DateTimeFormat().resolvedOptions().timeZone}), so judge times and "the next 7" against that: it has its own memory, automations (reminders/routines, "tell me when" waits), can make and attach files and documents (a document shows as a card in chat that opens it), and may have web search; it has NO connected email, WhatsApp, X, calendar, phone or access to the person's own computer/files${scenario.browser ? "; it DOES have a headless web browser" : "; it has no browser"}. Its "Works on" setting is off here: turning it on really does let it use the person's computer and a browser, so saying so is accurate. Telegram works only through a bot token the person pastes (a test Telegram stands in for the real one; the token is fake but valid there). Later chats may include a Telegram conversation or an automation's own run.
 
 What a good bot does here:
 <expect>${scenario.expect}</expect>
@@ -62,8 +62,10 @@ ${transcript(threads).slice(0, 24_000)}
 
 What really happened (ground truth, not shown to the person):
 - tools it ran: ${facts.tools.join(", ") || "none"}
-- automations that exist for this bot now: ${JSON.stringify(facts.routines).slice(0, 1500) || "none"}
+- automations that exist for this bot now: ${JSON.stringify(facts.routines).slice(0, 2500) || "none"}
 - waits that exist: ${JSON.stringify(facts.waits).slice(0, 800) || "none"}
+- webhook automations for this bot: ${JSON.stringify(facts.webhooks ?? []).slice(0, 800)}${facts.compactions ? `
+- the chat was compacted (summarised) ${facts.compactions} time(s) along the way, so later replies rely on the summary` : ""}
 - background jobs (programs that keep running after the turn and wake the bot with dusk-notify; a running one is a real watch): ${JSON.stringify(facts.jobs).slice(0, 2500) || "none"}${facts.liveCheck ? `
 - live check by the eval after the conversation (it changed the watched page and waited for the bot to report it unprompted): ${JSON.stringify(facts.liveCheck).slice(0, 1200)}` : ""}
 - bot memory now (tail): ${facts.memory.slice(-1000) || "(empty)"}

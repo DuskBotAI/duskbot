@@ -15,6 +15,7 @@ import {
 } from "./check-plan.ts";
 import { checkedPrompt, watchPrompt, type CheckItems } from "./check-prompts.ts";
 import type { InboxTriage } from "./inbox-triage.ts";
+import { isQuiet, localMinute, type QuietHours } from "./proactive-prefs.ts";
 
 const MINUTE = 60_000;
 const CHECK_MS = 15 * MINUTE;
@@ -101,12 +102,15 @@ export interface RoutineChecksDeps {
   inbox?: Pick<InboxTriage, "ready" | "triage">;
   /** The bot is working (a turn of its own runs): a proactive check then skips its reads. Absent, always idle. */
   busy?(botId: string): boolean;
+  /** The person's quiet hours (host/proactive-prefs.ts): no proactive check falls inside them. */
+  quietHours?(): QuietHours | null;
 }
 
 /** The next proactive check after `at`, while it falls inside the day's hours in `timeZone`; undefined after them, when
  * the brief's next scheduled check comes first. */
-export function nextProactiveAt(at: number, timeZone: string | undefined): number | undefined {
+export function nextProactiveAt(at: number, timeZone: string | undefined, quiet: QuietHours | null = null): number | undefined {
   const next = at + PROACTIVE_MS;
+  if (isQuiet(quiet, localMinute(next, timeZone))) return undefined;
   let hour: number;
   try { hour = Number(new Intl.DateTimeFormat("en-US", { hour: "numeric", hourCycle: "h23", ...(timeZone ? { timeZone } : {}) }).format(next)); }
   catch { hour = new Date(next).getHours(); }
@@ -215,7 +219,7 @@ export function createRoutineChecks(deps: RoutineChecksDeps): RoutineChecks & {
     const entry = of(routine.id);
     const at = now();
     const brief = routine.deliver === "brief";
-    const proactive = brief ? nextProactiveAt(at, deps.timeZone()) : undefined;
+    const proactive = brief ? nextProactiveAt(at, deps.timeZone(), deps.quietHours?.() ?? null) : undefined;
     if (brief && entry.proactiveWake && !context.manual && !context.scheduled && deps.busy?.(routine.botId)) {
       return proactive !== undefined ? { wakeAt: proactive, held: true } : { held: true };
     }

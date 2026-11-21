@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 
-import { createRoutineWakeHold, rememberRoutineWake, routineWakeDecision, routineWakeSettings } from "./routine-wake.mjs";
+import { createRoutineWakeHold, rememberRoutineWake, routineWakeDecision, routineWakePatch, routineWakeSettings, sleepMissesRoutines } from "./routine-wake.mjs";
 
 test("the hold is on only when enabled, plugged in, and the server says a routine is due or running", () => {
   const due = { hold: true, reason: "due", at: 1_700_000_000_000 };
@@ -16,14 +16,43 @@ test("the hold is on only when enabled, plugged in, and the server says a routin
   assert.deepEqual(routineWakeDecision({ enabled: false, onBattery: false, status: due }), { hold: false, reason: "off", at: null });
 });
 
-test("the toggle is on until switched off, and survives a reread", () => {
+test("plugged in, keep awake while plugged in holds whenever a routine is enabled here, and never on battery", () => {
+  const two = { hold: false, routines: 2 };
+  assert.deepEqual(routineWakeDecision({ enabled: false, pluggedIn: true, onBattery: false, status: two }), { hold: true, reason: "plugged-in", at: null });
+  assert.deepEqual(routineWakeDecision({ enabled: true, pluggedIn: true, onBattery: false, status: two }), { hold: true, reason: "plugged-in", at: null });
+  assert.deepEqual(routineWakeDecision({ enabled: false, pluggedIn: true, onBattery: true, status: two }), { hold: false, reason: "battery", at: null });
+  assert.deepEqual(routineWakeDecision({ enabled: false, pluggedIn: true, onBattery: false, status: { hold: false, routines: 0 } }), { hold: false, reason: "idle", at: null });
+  assert.deepEqual(routineWakeDecision({ enabled: false, pluggedIn: true, onBattery: false, status: { hold: false } }), { hold: false, reason: "idle", at: null });
+  assert.deepEqual(routineWakeDecision({ enabled: false, pluggedIn: true, onBattery: false, status: null }), { hold: false, reason: "idle", at: null });
+  assert.deepEqual(routineWakeDecision({ enabled: false, pluggedIn: false, onBattery: false, status: two }), { hold: false, reason: "off", at: null });
+  assert.deepEqual(routineWakeDecision({ enabled: true, pluggedIn: true, onBattery: false, status: { hold: true, reason: "due", at: 7, routines: 0 } }), { hold: true, reason: "due", at: 7 });
+});
+
+test("the renderer's patch passes only booleans", () => {
+  assert.deepEqual(routineWakePatch({ keepAwake: false, pluggedIn: true, extra: 1 }), { keepAwake: false, pluggedIn: true });
+  assert.deepEqual(routineWakePatch({ pluggedIn: "yes" }), {});
+  assert.deepEqual(routineWakePatch(true), {});
+  assert.deepEqual(routineWakePatch(null), {});
+});
+
+test("a sleep misses routines only with one enabled here and keep awake while plugged in off", () => {
+  assert.equal(sleepMissesRoutines({ pluggedIn: false, status: { hold: false, routines: 1 } }), true);
+  assert.equal(sleepMissesRoutines({ pluggedIn: true, status: { hold: false, routines: 1 } }), false);
+  assert.equal(sleepMissesRoutines({ pluggedIn: false, status: { hold: false, routines: 0 } }), false);
+  assert.equal(sleepMissesRoutines({ pluggedIn: false, status: { hold: false } }), false);
+  assert.equal(sleepMissesRoutines({ pluggedIn: false, status: null }), false);
+});
+
+test("the toggles survive a reread: keep awake on and keep awake while plugged in off until switched", () => {
   const dir = mkdtempSync(join(tmpdir(), "dusk-routine-wake-"));
   try {
-    assert.deepEqual(routineWakeSettings(dir), { keepAwake: true });
-    rememberRoutineWake(dir, false);
-    assert.deepEqual(routineWakeSettings(dir), { keepAwake: false });
-    rememberRoutineWake(dir, true);
-    assert.deepEqual(routineWakeSettings(dir), { keepAwake: true });
+    assert.deepEqual(routineWakeSettings(dir), { keepAwake: true, pluggedIn: false });
+    rememberRoutineWake(dir, { keepAwake: false });
+    assert.deepEqual(routineWakeSettings(dir), { keepAwake: false, pluggedIn: false });
+    rememberRoutineWake(dir, { pluggedIn: true });
+    assert.deepEqual(routineWakeSettings(dir), { keepAwake: false, pluggedIn: true });
+    rememberRoutineWake(dir, { keepAwake: true });
+    assert.deepEqual(routineWakeSettings(dir), { keepAwake: true, pluggedIn: true });
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -50,7 +79,7 @@ test("one assertion is taken while a hold is warranted and released when it is n
     pollMs: 60_000,
   });
 
-  assert.deepEqual(await hold.poll(), { hold: true, reason: "due", at: 42, keepAwake: true, onBattery: false });
+  assert.deepEqual(await hold.poll(), { hold: true, reason: "due", at: 42, keepAwake: true, pluggedIn: undefined, onBattery: false, sleptAt: null });
   assert.equal(hold.holding(), true);
   await hold.poll();
   assert.deepEqual(calls, [["start", "prevent-app-suspension", 1]]);
@@ -76,6 +105,70 @@ test("one assertion is taken while a hold is warranted and released when it is n
   hold.stop();
   assert.equal(hold.holding(), false);
   assert.deepEqual(calls.at(-1), ["stop", 3]);
+});
+
+test("plugged in, the hold follows the power source and the routines; a sleep with a routine here is remembered", async () => {
+  const started = new Set();
+  let nextId = 1;
+  const blocker = { start() { const id = nextId++; started.add(id); return id; }, stop(id) { started.delete(id); }, isStarted: (id) => started.has(id) };
+  const listeners = {};
+  let status = { hold: false, routines: 1 };
+  let onBattery = false;
+  let settings = { keepAwake: true, pluggedIn: true };
+  const hold = createRoutineWakeHold({
+    fetchStatus: async () => status,
+    isOnBattery: () => onBattery,
+    blocker,
+    settings: () => settings,
+    log() {},
+    pollMs: 60_000,
+    now: () => 1_000,
+    powerMonitor: { on: (event, listener) => { listeners[event] = listener; } },
+  });
+  hold.start();
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  assert.equal(hold.holding(), true);
+  assert.equal(hold.state().reason, "plugged-in");
+
+  onBattery = true;
+  listeners["on-battery"]();
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  assert.equal(hold.holding(), false);
+  onBattery = false;
+  listeners["on-ac"]();
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  assert.equal(hold.holding(), true);
+
+  status = { hold: false, routines: 0 };
+  await hold.poll();
+  assert.equal(hold.holding(), false);
+  status = { hold: false, routines: 1 };
+  settings = { keepAwake: true, pluggedIn: false };
+  await hold.poll();
+  assert.equal(hold.holding(), false);
+
+  listeners.suspend();
+  assert.equal(hold.state().sleptAt, 1_000);
+  hold.stop();
+  assert.equal(started.size, 0);
+});
+
+test("a sleep is not remembered while keep awake while plugged in is on, or with no routine here", async () => {
+  const listeners = {};
+  let status = { hold: false, routines: 0 };
+  const hold = createRoutineWakeHold({
+    fetchStatus: async () => status,
+    isOnBattery: () => true,
+    blocker: { start: () => 1, stop() {}, isStarted: () => false },
+    settings: () => ({ keepAwake: true, pluggedIn: false }),
+    log() {},
+    powerMonitor: { on: (event, listener) => { listeners[event] = listener; } },
+  });
+  hold.start();
+  await hold.poll();
+  listeners.suspend();
+  assert.equal(hold.state().sleptAt, null);
+  hold.stop();
 });
 
 test("after a wake the server hears resume, then online once the network reads online twice in a row", async () => {

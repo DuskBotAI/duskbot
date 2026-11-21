@@ -1,6 +1,7 @@
 // The subscribers page: one row per person with a subscription, built for watching the trial flow (who is in a trial, who
 // pays, who is leaving and why), what each of them does in the app, and the launch cohort's money.
 import { createHash } from "node:crypto";
+import { cancelledFeedback, type RetentionOutcome } from "../../../../shared/billing-api.ts";
 import type { StoredEvent } from "../analytics/sink.ts";
 import type { PersonDay, SnapshotRow } from "../analytics/usage.ts";
 import type { BillingState, StoredSubscription } from "../billing/store.ts";
@@ -89,12 +90,14 @@ export interface SubscriberRow {
   started: number; trialEndsAt: number | null; renewsAt: number | null;
   messages7d: number; messages: number; turns: number; turns7d: number; failed: number; engines: string[]; apps: number; routines: number; bots: number;
   lastActive: number | null; platforms: string[]; places: Place[]; cloud: "running" | "asleep" | "starting" | "stopped" | null;
+  /** a payment of theirs is disputed and the dispute is still open: only the operator sees this, nothing changes for them */
+  atRisk: "dispute" | null;
 }
 export interface SubscribersInput {
   now: number;
   accounts: ReadonlyArray<{ id: string; email: string; name?: string | null; createdAt: number }>;
   sessions: ReadonlyArray<{ accountId: string; kind: string; platform?: string | null; lastSeenAt: number }>;
-  billing: Pick<BillingState, "subscriptions" | "invoices" | "feedback" | "customers">;
+  billing: Pick<BillingState, "subscriptions" | "invoices" | "feedback" | "customers"> & { ledger?: BillingState["ledger"] };
   /** analytics events of the people's apps over the window read: app_messages and app_open */
   events: readonly StoredEvent[];
   people: readonly PersonDay[];
@@ -106,6 +109,11 @@ export interface SubscribersInput {
 const CLOUD_STATE: Record<string, SubscriberRow["cloud"]> = { running: "running", sleeping: "asleep", stopped: "stopped", provisioning: "starting", checkout: "starting" };
 const PLATFORM: Record<string, string> = { darwin: "mac", mac: "mac", macos: "mac", win32: "windows", windows: "windows", linux: "linux", ios: "iphone", android: "android" };
 
+/** the accounts with a dispute opened and not yet won, lost, accepted, cancelled or expired */
+export function openDisputes(ledger: NonNullable<BillingState["ledger"]>): Set<string> {
+  const closed = new Set(ledger.filter(row => /^dispute\.(won|lost|accepted|cancelled|expired)$/.test(row.type)).map(row => row.providerRef));
+  return new Set(ledger.filter(row => row.type === "dispute.opened" && row.accountId && !closed.has(row.providerRef)).map(row => row.accountId!));
+}
 export function subscriberRows(input: SubscribersInput): SubscriberRow[] {
   const { now } = input, week = now - 7 * DAY, weekDay = new Date(week).toISOString().slice(0, 10);
   const subs = new Map<string, Sub[]>();
@@ -156,7 +164,8 @@ export function subscriberRows(input: SubscribersInput): SubscriberRow[] {
   }
   const accounts = new Map(input.accounts.map(account => [account.id, account]));
   const reasons = new Map<string, string>();
-  for (const row of [...input.billing.feedback].sort((a, b) => a.at - b.at)) reasons.set(row.subscriptionId ?? row.accountId, [row.answer, row.expected, row.improve].filter(Boolean).join(": "));
+  for (const row of input.billing.feedback.filter(cancelledFeedback).sort((a, b) => a.at - b.at)) reasons.set(row.subscriptionId ?? row.accountId, [row.answer, row.expected, row.improve].filter(Boolean).join(": "));
+  const disputed = openDisputes(input.billing.ledger ?? []);
   const country = new Map(input.billing.customers.map(row => [row.accountId, row.attribution?.country ?? null]));
   const rows: SubscriberRow[] = [];
   for (const [accountId, list] of subs) {
@@ -172,6 +181,7 @@ export function subscriberRows(input: SubscribersInput): SubscriberRow[] {
       renewsAt: bucket === "paid" || bucket === "trial" || bucket === "payment_problem" ? sub.currentPeriodEnd ?? sub.trialEndsAt ?? null : null,
       messages7d: msg.week, messages: msg.all, turns: use.turns, turns7d: use.week, failed: use.failed, engines: [...snap.engines].sort(), apps: appsOf.get(accountId) ?? 0,
       routines: snap.routines, bots: snap.bots, lastActive, platforms: [...platforms(accountId)].sort(), places: [...places(accountId)].sort(), cloud: clouds.get(accountId) ?? null,
+      atRisk: disputed.has(accountId) ? "dispute" : null,
     });
   }
   return rows.sort((a, b) => b.started - a.started);
@@ -191,14 +201,14 @@ const STEP_LABEL: Record<string, (event: StoredEvent) => string | null> = {
   billing: event => typeof event.props.type === "string" ? event.props.type.replace(/[._]/g, " ") : null,
   cancel_flow: event => event.props.outcome === "cancelled" ? `cancelled (${String(event.props.reason ?? "no reason")})` : null,
 };
-export function timelineOf(events: readonly StoredEvent[], subs: readonly Sub[], feedback: ReadonlyArray<{ at: number; answer: string }>, accountCreated: number, now: number): Step[] {
+export function timelineOf(events: readonly StoredEvent[], subs: readonly Sub[], feedback: ReadonlyArray<{ at: number; answer: string; outcome?: RetentionOutcome }>, accountCreated: number, now: number): Step[] {
   const steps: Step[] = [{ at: accountCreated, kind: "account", label: "account made" }];
   for (const event of events) { const label = STEP_LABEL[event.name]?.(event); if (label) steps.push({ at: event.at, kind: event.name, label }); }
   for (const sub of subs) {
     steps.push({ at: sub.createdAt, kind: "subscription", label: sub.trialEndsAt ? `trial started (${Math.max(1, Math.ceil((sub.trialEndsAt - sub.createdAt) / DAY))} days)` : "subscription started" });
     if (sub.trialEndsAt && sub.trialEndsAt <= now && bucketOf(sub, now) !== "cancelled") steps.push({ at: sub.trialEndsAt, kind: "trial_end", label: "trial ended, first charge" });
   }
-  for (const row of feedback) steps.push({ at: row.at, kind: "cancel_survey", label: `cancel survey: ${row.answer}` });
+  for (const row of feedback) steps.push({ at: row.at, kind: "cancel_survey", label: cancelledFeedback(row) ? `cancel survey: ${row.answer}` : `stayed from the cancel flow (${row.outcome}): ${row.answer}` });
   return steps.sort((a, b) => a.at - b.at);
 }
 

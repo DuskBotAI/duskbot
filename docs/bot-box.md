@@ -87,8 +87,11 @@ ends. A server that answers directly but not through the broker fails the test w
 server", never "Connected", and says the fault is ours. Connected apps (Composio)
 were already behind the harness (`/api/internal/connectors/*` with a per-turn bearer) and stay there.
 
-A key whose CLI takes no base URL from the environment (xAI, Mistral, Groq, Greenference, Cerebras, MiniMax, Kimi, Cursor, Factory,
-Cline, OpenCode, OpenRouter's own variable) stays raw in that box, and the report names it under `broker.unbrokered`,
+Codex takes no base URL from the environment; each of its model providers names its address and its key's variable on
+the command line (`-c model_providers.<id>.base_url=…`, `…env_key=…`): the ChatGPT plan's token, a Company key, a local
+model's key. The box rewrites those two settings the same way, so the variable holds the token and the address is the
+broker's (grant `codex-<id>`). A key whose CLI takes no base URL at all (xAI, Mistral, Groq, Greenference, Cerebras, MiniMax,
+Kimi, Cursor, Factory, Cline, OpenCode, OpenRouter's own variable, `CODEX_API_KEY`) stays raw in that box, and the report names it under `broker.unbrokered`,
 so the gap is visible. The self-check adds six broker checks (29 in all): the key is nowhere in the box's environment
 or files, the base URL is the broker, a call with the token reaches the upstream with the real key, a wrong token is
 401, a grant the token lacks is 403.
@@ -102,7 +105,7 @@ or files, the base URL is the broker, a call with the token reaches the upstream
 | Network namespace + the two gates | every boxed process with its own network | reaching this machine's other listeners, the local network, link-local, metadata, Fly's private network; any route out except the egress gate; any server route except `/api/internal/*` | what the harness routes allow with a valid per-turn bearer; a public destination |
 | Environment allow-list | every boxed process | `DUSK_CLOUD_*`, the server's placement, workspace credentials, any unlisted name | the engines' own settings |
 | Credential broker (T0b) | every boxed process with its own network | holding a provider key or an MCP header; using a token after its process or conversation ends; choosing the upstream | keys with no base-URL setting (named in the report); subscription logins |
-| seccomp filter (T0c) | every boxed process on x86-64 | 34 system calls that only reach the kernel's attack surface: mount family, kernel modules, bpf, perf, userfaultfd, the kernel keyring, `open_by_handle_at`, `setns`, kexec, reboot, swap, clock setting, I/O ports (EPERM); a process of another architecture (killed) | anything an engine, shell, git, npm, python or Chrome uses: all allowed |
+| seccomp filter (T0c) | every boxed process on x86-64 and arm64 (each by its own system call numbers; arm64 has no I/O port calls) | 34 system calls that only reach the kernel's attack surface: mount family, kernel modules, bpf, perf, userfaultfd, the kernel keyring, `open_by_handle_at`, `setns`, kexec, reboot, swap, clock setting, I/O ports (EPERM); a process of another architecture (killed) | anything an engine, shell, git, npm, python or Chrome uses: all allowed |
 | `hidepid=invisible` on the host's /proc (T0c) | the whole machine, set by the root supervisor at boot | a `maus` process outside a box (the browser engine, a helper) listing or reading root's processes | `maus` processes seeing each other; a box has its own /proc anyway |
 | `/.fly` root-only (T0c) | the whole machine | a `maus` process reaching Fly's local API socket | nothing else |
 

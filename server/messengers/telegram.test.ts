@@ -7,7 +7,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import type { Message } from "../store.ts";
 import { startFakeTelegram, type FakeTelegram } from "../testing/fake-telegram.ts";
-import { createMessengerHost, type MessengerHost } from "./host.ts";
+import { createMessengerHost, messengerSendAs, type MessengerHost } from "./host.ts";
 import { markdownToTelegramHtml } from "./text.ts";
 
 const TOKEN = "7000001:AAH" + "x".repeat(32);
@@ -37,6 +37,7 @@ async function fixture(options: { dataDir?: string; fake?: FakeTelegram; hookBas
   const threads = new Map<string, Message[]>();
   const listeners = new Set<(change: { type: string; threadId?: string; botId?: string }) => void>();
   const sent: Sent[] = [];
+  const answers: Array<{ threadId: string; requestId: string; reply: { behavior: string; message?: string } }> = [];
   let threadCount = 0;
   const change = (threadId: string) => { for (const listener of listeners) listener({ type: "message", threadId }); };
   const host: MessengerHost = createMessengerHost({
@@ -54,6 +55,13 @@ async function fixture(options: { dataDir?: string; fake?: FakeTelegram; hookBas
       threads.get(input.threadId)!.push({ id: `m-${sent.length}`, role: "user", kind: "text", text: input.text, sendId: input.sendId } as unknown as Message);
       change(input.threadId);
     },
+    answerCard: async (threadId, requestId, reply) => {
+      answers.push({ threadId, requestId, reply });
+      const card = threads.get(threadId)?.find((m) => m.card?.requestId === requestId)?.card;
+      if (card) card.answered = reply.behavior;
+      change(threadId);
+      return { ok: true };
+    },
     hookBase: () => options.hookBase ?? null,
     settleMs: 10,
     log: () => {},
@@ -65,7 +73,13 @@ async function fixture(options: { dataDir?: string; fake?: FakeTelegram; hookBas
     threads.get(threadId)!.push({ id: `r-${randomBytes(4).toString("hex")}`, role: "bot", kind: "text", text, turnTerminal: true, ...extra } as unknown as Message);
     change(threadId);
   };
-  return { fake, host, sent, threads, titles, reply, dataDir };
+  const card = (threadId: string, card: Record<string, unknown>) => {
+    const message = { id: `c-${randomBytes(4).toString("hex")}`, role: "bot", kind: "text", text: "", card: { subtitle: "", options: [], ...card } } as unknown as Message;
+    threads.get(threadId)!.push(message);
+    change(threadId);
+    return message;
+  };
+  return { fake, host, sent, threads, titles, reply, dataDir, answers, card, change };
 }
 
 async function claimed() {
@@ -244,8 +258,50 @@ describe("Telegram chat channel", () => {
     expect(await until(() => f.sent[0])).toMatchObject({ text: "still me", outside: false });
   });
 
+  it("sends the owner's own direct chat as the owner at the keyboard, and anyone else as a relayed outsider", () => {
+    expect(messengerSendAs(false, "Sid")).toEqual({ trigger: { kind: "owner" }, personPresent: true });
+    expect(messengerSendAs(true, "Mallory")).toEqual({ sender: { name: "Mallory" }, trigger: { kind: "user", label: "Mallory" }, personPresent: false, relayed: true });
+  });
+
   it("writes markdown as Telegram HTML with everything else escaped", () => {
     expect(markdownToTelegramHtml("# Plan\n- **a** <b> & `x<y`\n```\nif (a < b) {}\n```\n[site](https://x.test/?a=1&b=2)"))
       .toBe('<b>Plan</b>\n• <b>a</b> &lt;b&gt; &amp; <code>x&lt;y</code>\n<pre><code>if (a &lt; b) {}</code></pre>\n<a href="https://x.test/?a=1&amp;b=2">site</a>');
+  });
+
+  it("puts an approval in the owner's own chat as buttons: only the owner's tap answers it, and the app's answer clears them", async () => {
+    const f = await claimed();
+    f.fake.message({ from: OWNER, text: "clean the folder" });
+    const turn = await until(() => f.sent[0]);
+    f.card(turn.threadId, { requestId: "req-1", title: "Run a command", subtitle: "rm -rf build", tool: "Bash" });
+    const offer = await until(() => f.fake.sent().find((call) => call.params.reply_markup));
+    const keyboard = (offer.params.reply_markup as { inline_keyboard: Array<Array<{ text: string; callback_data: string }>> }).inline_keyboard.flat();
+    expect(keyboard.map((button) => button.text)).toEqual(["Allow", "Deny"]);
+    expect(keyboard[0]!.callback_data).not.toContain("req-1");
+
+    f.fake.press({ from: STRANGER, chatId: OWNER.id, messageId: 1, data: keyboard[0]!.callback_data });
+    await until(() => f.fake.sent("answerCallbackQuery").find((call) => /Only the bot's owner/.test(String(call.params.text))));
+    expect(f.answers).toHaveLength(0);
+
+    f.fake.press({ from: OWNER, chatId: OWNER.id, messageId: 1, data: keyboard[0]!.callback_data });
+    await until(() => f.answers[0]);
+    expect(f.answers[0]).toEqual({ threadId: turn.threadId, requestId: "req-1", reply: { behavior: "allow" } });
+    const settled = await until(() => f.fake.sent("editMessageText").find((call) => /You chose: Allow/.test(String(call.params.text))));
+    expect(settled.params.reply_markup).toEqual({ inline_keyboard: [] });
+
+    const second = f.card(turn.threadId, { requestId: "req-2", title: "Pick a size", options: ["Small", "Large"] });
+    await until(() => f.fake.sent().filter((call) => call.params.reply_markup).length === 2);
+    second.card!.answered = "Large";
+    f.change(turn.threadId);
+    await until(() => f.fake.sent("editMessageText").find((call) => /Answered in dusk bot: Large/.test(String(call.params.text))));
+    expect(f.answers).toHaveLength(1);
+  });
+
+  it("keeps a purchase or review card for dusk bot: no buttons, just the notice", async () => {
+    const f = await claimed();
+    f.fake.message({ from: OWNER, text: "buy it" });
+    const turn = await until(() => f.sent[0]);
+    f.card(turn.threadId, { requestId: "req-3", title: "Buy the plan", tool: "Bash", purchase: { amount: "$5" } });
+    await until(() => f.fake.sent().find((call) => /I need you in dusk bot/.test(String(call.params.text))));
+    expect(f.fake.sent().some((call) => call.params.reply_markup)).toBe(false);
   });
 });

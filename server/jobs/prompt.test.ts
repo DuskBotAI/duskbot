@@ -7,5 +7,5 @@ it("routes a watch: a checked schedule for what polls, a job only for a live sou
   expect(prompt).toContain("never a reason to say you can't monitor");
   expect(prompt).toContain("is a schedule with a check, which runs no AI until something changed");
   expect(prompt).toContain("only for a live source that pushes (a Telegram or Discord bot, a websocket, a stream) or checks under a minute apart");
-  expect(prompt).toContain("keeps running after it reports, unless they asked for one alert");
+  expect(prompt).toContain("ends after it reports, and after 30 days at most");
 });

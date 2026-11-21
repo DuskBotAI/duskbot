@@ -435,14 +435,14 @@ test("the window's IPC: the screen reads and retries, My Cloud's page renews its
 });
 
 const PRELOAD = readFileSync(new URL("./preload.cjs", import.meta.url), "utf8");
-function preload(origin, { home = false, activation = false, pairedElsewhere = false } = {}) {
+function preload(origin, { home = false, place = false, activation = false, pairedElsewhere = false } = {}) {
   let bridge; const invoked = [], synced = [], listeners = new Map();
   vm.runInNewContext(PRELOAD, {
     process: { platform: "darwin", argv: [`--dusk-local-origin=${LOCAL}`, ...(pairedElsewhere ? ["--duskbot-remote-client"] : ["--dusk-company-desktop=1"])] },
     location: { origin }, navigator: { userActivation: { isActive: activation } }, TextEncoder, localStorage: { getItem: () => null },
     queueMicrotask,
     require: () => ({ webUtils: {}, contextBridge: { exposeInMainWorld: (_name, value) => { bridge = value; } },
-      ipcRenderer: { on: (channel, listener) => listeners.set(channel, listener), removeListener() {}, send() {}, sendSync: (channel) => { synced.push(channel); return channel === "home:page" ? home : null; },
+      ipcRenderer: { on: (channel, listener) => listeners.set(channel, listener), removeListener() {}, send() {}, sendSync: (channel) => { synced.push(channel); return channel === "home:page" ? home : channel === "place:page" ? place : null; },
         invoke: (...args) => { invoked.push(args); return Promise.resolve(); } } }),
   });
   const tell = (channel, ...args) => listeners.get(channel)?.({}, ...args);
@@ -1011,4 +1011,18 @@ test("My Cloud opened from this computer's page loads under that page's picture 
   moved.window.webContents.getURL = () => "about:blank";
   await moved.home.show();
   assert.equal(new URL(moved.url).origin, CLOUD, "a window not on this computer's page loads as before");
+});
+
+test("a server the person chose listens and reports its call through this app, without the home page's other keys", async () => {
+  const speech = ["speechStart", "speechStop", "speechFinish", "onSpeechTranscript", "onSpeechEnd", "onSpeechLevel", "callActive"];
+  const place = preload("https://bots.example.test", { place: true });
+  for (const key of speech) assert.equal(typeof place.bridge[key], "function", key);
+  for (const key of ["home", "onChatLink", "exportDiagnostics", "openLogsFolder"]) assert.equal(place.bridge[key], undefined, key);
+  await place.bridge.speechStart({ endpointMs: 850 });
+  assert.deepEqual(place.invoked.at(-1), ["speech:start", { endpointMs: 850 }]);
+  const stranger = preload("https://bots.example.test");
+  for (const key of speech) assert.equal(stranger.bridge[key], undefined, key);
+  const home = preload(CLOUD, { home: true });
+  for (const key of speech) assert.equal(typeof home.bridge[key], "function", key);
+  assert.equal(home.synced.includes("place:page"), false, "the home page needs no second ask");
 });

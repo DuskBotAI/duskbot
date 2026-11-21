@@ -230,7 +230,9 @@ describe("staged home updates", () => {
   });
 });
 
-describe("omb-home on the machine", () => {
+// POSIX only: the fixture runs the real control script under bash with a POSIX PATH and shell stubs, presents docker
+// as a unix socket at a path (which the script finds with `[ -S ]`), and archives with the system tar.
+describe.skipIf(process.platform === "win32")("omb-home on the machine", () => {
   // the real control script, its root paths moved into a temp folder and root-only commands stubbed
   function machine() {
     const dir = mkdtempSync(join(tmpdir(), "dusk-machine-")); cleanup.push(() => rmSync(dir, { recursive: true, force: true }));

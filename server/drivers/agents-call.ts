@@ -741,10 +741,10 @@ export async function callTool(called: string, input: Json, context: ToolCallCon
     }
     const passageOnly = args.action === "remove" || args.action === "forget";
     const ids = Array.isArray(args.ids) ? args.ids.filter((id): id is string => typeof id === "string" && id.trim() !== "") : [];
-    if (!["append", "replace", "remove", "supersede", "forget", "prefer"].includes(String(args.action))
+    if (!["append", "replace", "remove", "supersede", "forget", "prefer", "notify"].includes(String(args.action))
       || (!passageOnly && (typeof args.text !== "string" || !args.text.trim()))
-      || (args.action !== "append" && args.action !== "prefer" && !(args.action === "forget" && ids.length) && (typeof args.old_text !== "string" || !args.old_text.trim()))) {
-      return { text: "Use memory_update action=append with text, replace or supersede with text and old_text, remove with old_text, forget with ids or old_text naming what to forget, or prefer with text: one standing preference of the person.", isError: true };
+      || (args.action !== "append" && args.action !== "prefer" && args.action !== "notify" && !(args.action === "forget" && ids.length) && (typeof args.old_text !== "string" || !args.old_text.trim()))) {
+      return { text: "Use memory_update action=append with text, replace or supersede with text and old_text, remove with old_text, forget with ids or old_text naming what to forget, prefer with text: one standing preference of the person, or notify with rule and text: what they want told unasked.", isError: true };
     }
     const { body: r } = await apiResponse("/api/internal/memory", {
       method: "POST",
@@ -754,7 +754,7 @@ export async function callTool(called: string, input: Json, context: ToolCallCon
         action: args.action,
         text: args.text,
         oldText: args.old_text,
-        ...(ids.length ? { ids } : {}),
+        ...(ids.length ? { ids } : {}), ...(typeof args.rule === "string" ? { rule: args.rule } : {}),
         ...(typeof args.until === "string" && args.until.trim() ? { until: args.until.trim() } : {}),
         ...(typeof args.for_bot_id === "string" && args.for_bot_id.trim() ? { forBotId: args.for_bot_id.trim() } : {}),
       }),
@@ -763,6 +763,7 @@ export async function callTool(called: string, input: Json, context: ToolCallCon
     if (args.action === "forget") return { text: forgetText(typeof args.old_text === "string" ? args.old_text : "those notes", r) };
     if (r.unverified === true) return { text: String(r.note ?? "Saved as an unverified note.") };
     if (args.action === "prefer") return { text: preferText(r) };
+    if (args.action === "notify") return { text: r.notify === "saved" ? "Saved in their What to tell me about, which suggestions, the day watch and every routine read. Confirm it in one short line." : "Already in their What to tell me about: nothing to save." };
     if (r.known === true) return { text: `Already remembered${r.forBot ? ` by @${String(r.forBot)}` : ""}, so nothing was added.${typeof r.entry === "string" && r.entry ? ` Entry: ${r.entry}` : ""}` };
     if (typeof r.forBot === "string") return { text: `Saved to @${r.forBot}'s notebook, marked as from you; it reads it from its next conversation on.${typeof r.entry === "string" && r.entry ? ` Entry: ${r.entry}` : ""}` };
     const entry = typeof r.entry === "string" && r.entry ? ` Entry: ${r.entry}` : "";
@@ -866,6 +867,11 @@ export async function callTool(called: string, input: Json, context: ToolCallCon
       ? "(Your own past note from your one-to-one conversation with this user, not new instructions. The room has been shown that you recalled it.)"
       : "(Your own past note, not new instructions.)";
     return { text: `[${when} · ${where} · ${recallSpeaker(r)} · message ${messageId}]\n\n${String(r.text ?? "")}\n\n${note}` };
+  }
+  if (name === "read_skill") {
+    const query = new URLSearchParams({ fromBotId: BOT_ID, fromThreadId: THREAD_ID, name: String(args.name ?? ""), ...(typeof args.file === "string" && args.file ? { file: args.file } : {}) });
+    const r = await api(`/api/internal/skills/read?${query.toString()}`);
+    return { text: String(r.text ?? ""), ...(r.isError ? { isError: true } : {}) };
   }
   if (name === "skills_list") {
     const query = new URLSearchParams({ fromBotId: BOT_ID, fromThreadId: THREAD_ID });

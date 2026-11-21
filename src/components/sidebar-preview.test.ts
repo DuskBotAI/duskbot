@@ -17,7 +17,7 @@ describe("sidebar previews", () => {
     expect(botPreview(partial, sidebarPreviewMessages(partial), [])).toBe("Archived the newsletters.");
     expect(waitingLine(partial, sidebarPreviewMessages(partial), [])).toBe("Which folder?");
     const patched = { ...partial, messages: [{ ...step, tool: { name: "error: Connection lost", ok: false } }] };
-    expect(botPreview(patched, sidebarPreviewMessages(patched), [])).toContain("Connection lost");
+    expect(botPreview(patched, sidebarPreviewMessages(patched), [])).toContain("Your bot couldn't finish this reply. Try again.");
     const room = { ...partial, id: "room", name: "Room" } as unknown as Group;
     expect(groupPreview(room, [bot], [])).toBe("Archived the newsletters.");
     expect(sidebarPreviewMessages({ ...partial, transcriptLoaded: true })).toBe(partial.messages);
@@ -52,14 +52,14 @@ describe("sidebar previews", () => {
 
   it("keeps a failed step's error line and a recovery or notice line as they are", () => {
     const failed = [message({ role: "user", text: "Tidy my inbox" }), message({ text: "On it." }), message({ kind: "activity", tool: { name: "error: Gmail is not connected", ok: false } } as Partial<Message>)];
-    expect(botPreview(bot, failed, [])).toContain("Gmail is not connected");
+    expect(botPreview(bot, failed, [])).toContain("Your bot couldn't finish this reply. Try again.");
     const notice = [message({ role: "user", text: "Tidy my inbox" }), message({ text: "On it." }), step("notice: Switched to a backup model")];
     expect(botPreview(bot, notice, [])).toBe("Switched to a backup model");
   });
 
   it("says a helper's intro card by its first line in the reader's language instead of its stored English title", () => {
     const intro = message({ kind: "options", helperIntro: true, card: { title: "Hi! I'm Ada, your Chief of Staff.", options: [] } } as unknown as Partial<Message>);
-    expect(botPreview({ ...bot, chiefOfStaff: true } as Bot, [intro], [])).toBe("Hey! I'm Ada. I'm new here.");
+    expect(botPreview({ ...bot, chiefOfStaff: true } as Bot, [intro], [])).toBe("Hi! I'm Ada. Hand me one real job and I'll get it done.");
     expect(botPreview(bot, [intro], [])).toBe("Hi! I'm Ada, your helper for everything here.");
   });
 

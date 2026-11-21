@@ -42,7 +42,6 @@ describe("every pairing code waits for the presence check", () => {
     before(source("MobilePairingCard.tsx"), "if ((!codesInCloud && !(await requireUserPresence())) || generation.current !== epoch) return;", 'api<MobilePairingResponse>("/api/mobile/pairing"');
     before(source("ServerPairingCard.tsx"), "if (!(await requireUserPresence())) return;", 'api("/api/auth/pairing"');
     before(source("TeamPhoneCard.tsx"), "if (!(await requireUserPresence())) return;", "api(TEAM_PHONE_PAIRING");
-    before(source("onboarding/FunnelSteps.tsx"), "if (!(await requireUserPresence()))", 'api<MobilePairingResponse>("/api/mobile/pairing"');
   });
 
   it("gates every way into the desktop phone setup flow, and forgets the pass when the flow ends", () => {
@@ -64,7 +63,7 @@ describe("every pairing code waits for the presence check", () => {
       .filter((file) => readFileSync(new URL(file, root), "utf8").includes('from "qrcode.react"'))
       .map((file) => file.replace(/^components[\\/]/, "").split("\\").join("/"))
       .sort();
-    expect(drawing).toEqual(["MobilePairingCard.tsx", "PhoneFlowRows.tsx", "PhoneSetupFlow.tsx", "ServerPairingCard.tsx", "TeamPhoneCard.tsx", "onboarding/FunnelSteps.tsx"]);
+    expect(drawing).toEqual(["MobilePairingCard.tsx", "PhoneFlowRows.tsx", "PhoneSetupFlow.tsx", "ServerPairingCard.tsx", "TeamPhoneCard.tsx"]);
     for (const file of drawing.filter((name) => name !== "PhoneFlowRows.tsx")) expect(source(file)).toContain("requireUserPresence");
   });
 

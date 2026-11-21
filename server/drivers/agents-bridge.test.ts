@@ -25,7 +25,7 @@ import {
 } from "./agents-bridge.ts";
 
 const flag = (on: boolean) => (on ? "1" : "0");
-const profile = (options: { chief?: boolean; skills?: boolean; voice?: boolean; cloudHome?: boolean; memory?: boolean; screenAccess?: boolean; botId?: string } = {}): CatalogProfile =>
+const profile = (options: { chief?: boolean; skills?: boolean; voice?: boolean; cloudHome?: boolean; memory?: boolean; screenAccess?: boolean; skillReader?: boolean; botId?: string } = {}): CatalogProfile =>
   catalogProfileFromEnv({
     DUSK_BOT_ID: options.botId ?? "bot-bridge",
     DUSK_CHIEF_OF_STAFF: flag(options.chief ?? false),
@@ -34,6 +34,7 @@ const profile = (options: { chief?: boolean; skills?: boolean; voice?: boolean; 
     DUSK_CLOUD_HOME: flag(options.cloudHome ?? false),
     DUSK_MEMORY_ENABLED: flag(options.memory ?? true),
     DUSK_SCREEN_ACCESS: flag(options.screenAccess ?? false),
+    DUSK_SKILL_READER: flag(options.skillReader ?? false),
     // A person's own request, which may pick its computer.
     DUSK_COMPUTER_SELECTION: "1",
   });
@@ -48,6 +49,7 @@ function everyProfile(): Array<{ name: string; profile: CatalogProfile }> {
   all.push({ name: "memory off", profile: profile({ memory: false }) });
   all.push({ name: "watcher", profile: profile({ botId: WATCHER_OPTIONS_CARD_BOT_ID }) });
   all.push({ name: "screen access", profile: profile({ screenAccess: true }) });
+  all.push({ name: "skill reader", profile: profile({ skillReader: true }) });
   return all;
 }
 
@@ -140,6 +142,8 @@ describe("what a bridged turn is listed", () => {
     expect(names(bridgeFor({ memory: false }).listed)).not.toContain("memory_update");
     expect(names(bridgeFor({ screenAccess: true }).listed)).toContain("request_screen_access");
     expect(names(bridgeFor().listed)).not.toContain("request_screen_access");
+    expect(names(bridgeFor({ skillReader: true }).listed)).toContain("read_skill");
+    expect(names(bridgeFor().listed)).not.toContain("read_skill");
     // A role and the other features change only what sits behind use_tool.
     for (const options of [{ chief: true }, { skills: true }, { cloudHome: true }]) {
       expect(names(bridgeFor(options).listed), JSON.stringify(options)).toEqual(names(bridgeFor().listed));

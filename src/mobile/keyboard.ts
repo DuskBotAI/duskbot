@@ -27,6 +27,14 @@ function isComposerField(field: HTMLElement): boolean {
   return Boolean(field.closest("[data-mobile-chat] [data-tour=composer]"));
 }
 
+/** The system scrolls only the document to a focused field, and the page's document never scrolls: once the layout has
+ * made room for the keyboard, a field on the page (a dialog's or a sheet's) is scrolled into what is left above it. */
+function revealField(root: HTMLElement): void {
+  const field = document.activeElement;
+  if (!(field instanceof HTMLElement) || !root.contains(field) || !field.matches(TEXT_FIELD) || isComposerField(field)) return;
+  requestAnimationFrame(() => field.scrollIntoView({ block: "nearest", inline: "nearest" }));
+}
+
 /** The composer's field, when it holds focus (the keyboard is up for it). */
 function composerField(root: HTMLElement): HTMLElement | null {
   const active = document.activeElement;
@@ -170,13 +178,16 @@ export function useKeyboardSync(platform: MobilePlatform, rootRef: RefObject<HTM
       set(height, 0);
       if (list) list.scrollTop = top + shift - Math.max(0, committed - safeBottom(root));
       committed = height;
+      revealField(root);
     };
 
     const mode = platform.keyboardMode;
     const focused = (event: FocusEvent) => {
-      if (event.target instanceof HTMLElement && event.target.matches(TEXT_FIELD)) mode?.(isComposerField(event.target));
+      if (!(event.target instanceof HTMLElement) || !event.target.matches(TEXT_FIELD)) return;
+      mode?.(isComposerField(event.target));
+      if (committed > 0) revealField(root);
     };
-    if (mode) root.addEventListener("focusin", focused);
+    root.addEventListener("focusin", focused);
     let nativeRide = false;
     /** The page's own share of a keyboard the native side lifts it for: only the part the lift leaves covered (a short
      * chat's empty space), so its layout never moves anything on screen and nothing scrolls. */
@@ -251,7 +262,7 @@ export function useKeyboardSync(platform: MobilePlatform, rootRef: RefObject<HTM
     }
 
     const vv = window.visualViewport;
-    if (!vv) return;
+    if (!vv) return () => root.removeEventListener("focusin", focused);
     let frame = 0;
     const sync = () => {
       cancelAnimationFrame(frame);
@@ -265,7 +276,7 @@ export function useKeyboardSync(platform: MobilePlatform, rootRef: RefObject<HTM
         committed = inset;
         set(inset, 0);
         if (pin) toLatest(root);
-        if (inset) root.dataset.keyboard = "open";
+        if (inset) { root.dataset.keyboard = "open"; revealField(root); }
         else delete root.dataset.keyboard;
         if (inset && (window.scrollY > 0 || vv.offsetTop > 0)) window.scrollTo(0, 0);
       });
@@ -274,6 +285,7 @@ export function useKeyboardSync(platform: MobilePlatform, rootRef: RefObject<HTM
     vv.addEventListener("resize", sync);
     vv.addEventListener("scroll", sync);
     return () => {
+      root.removeEventListener("focusin", focused);
       cancelAnimationFrame(frame);
       vv.removeEventListener("resize", sync);
       vv.removeEventListener("scroll", sync);

@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { cpuTimeMs, JOB_MESSAGES, jobTurnRefusal } from "./host.ts";
 import { envNameRefusal } from "./launch.ts";
-import { messagesOf, noteFor, wanted } from "./telegram-watch.ts";
+import { apiBase, messagesOf, noteFor, wanted } from "./telegram-watch.ts";
 import { jobsFixture, PERSON_TURN } from "./testing.ts";
 
 const fixtures: Array<{ close(): Promise<void> }> = [];
@@ -37,6 +37,8 @@ describe("background jobs host", () => {
     rmSync(fixture.workspace, { recursive: true, force: true });
     const started = await fixture.call({ action: "start", label: "Fresh", command: "sleep 30" });
     expect(started.status, JSON.stringify(started.body)).toBe(201);
+    // started at once in this turn, so the person's Stop on the chat stops it too
+    expect(fixture.startedIds).toEqual([started.body.id]);
     expect(existsSync(fixture.workspace)).toBe(true);
     expect((await fixture.call({ action: "stop", id: started.body.id })).status).toBe(200);
   }, 30_000);
@@ -72,6 +74,8 @@ describe("background jobs host", () => {
     expect(fixture.host.supervisor.list()).toMatchObject([{ label: "Deal watch", state: "running" }]);
     expect(fixture.cards[0]!.card.answered).toBe("allow");
     expect(fixture.lines.at(-1)!.text).toContain("Started Deal watch");
+    // the person set it up on the card, so a Stop on the chat never ends it
+    expect(fixture.startedIds).toEqual([]);
     expect(fixture.host.ownCards(String(asked.body.requestId), "allow")).toBe(false);
 
     const denied = await fixture.call({ action: "start", label: "Other", command: "sleep 30" }, { ...PERSON_TURN, asksFirst: true });
@@ -102,5 +106,10 @@ describe("telegram_watch", () => {
     expect(messages.filter((m) => wanted(m, ["-11"], []))).toHaveLength(1);
     expect(noteFor(messages)).toMatch(/^New Telegram messages \(3\):\n\[Brand deals\] Ana \(2023-11-14 22:13 UTC\): Acme signed the LOI/);
     expect(noteFor(messages, 120)).toContain("[more messages were left out]");
+  });
+  it("talks to a test Bot API only on loopback, Telegram otherwise", () => {
+    expect(apiBase({ DUSK_TELEGRAM_API_URL: "http://127.0.0.1:9123" })).toBe("http://127.0.0.1:9123");
+    expect(apiBase({ DUSK_TELEGRAM_API_URL: "http://evil.example:80" })).toBe("https://api.telegram.org");
+    expect(apiBase({})).toBe("https://api.telegram.org");
   });
 });

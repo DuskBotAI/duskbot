@@ -58,7 +58,8 @@ function profiles(): Record<string, Record<string, string>> {
     all[`${name}+cloud-home`] = { ...all[name]!, DUSK_CLOUD_HOME: "1" };
   }
   all["skills+voice+x"] = { ...all["skills+voice"]!, DUSK_X_RESEARCH: "1", DUSK_RESEARCH: "1" };
-  all["skills+voice+x+team"] = { ...all["skills+voice+x"]!, DUSK_TEAM_PEOPLE: "1" };
+  all["skills+voice+x+team"] = { ...all["skills+voice+x"]!, DUSK_TEAM_PEOPLE: "1", DUSK_SKILL_READER: "1" };
+  all["skills+skill-reader"] = { ...all.skills!, DUSK_SKILL_READER: "1" };
   all["default+legacy-switches"] = { ...all.default!, DUSK_ROOM_TURN: "1", DUSK_OWN_THREAD_CREATION: "1", DUSK_EXTERNAL_RUNTIME: "1", DUSK_ACTIVE_WAITS: "0" };
   for (const name of ["default", "skills+voice"]) all[`${name}+dusk`] = { ...all[name]!, DUSK_DEFAULT_BOT: "1" };
   all["default+no-computer-pick"] = { ...all.default!, DUSK_COMPUTER_SELECTION: "0" };
@@ -77,24 +78,25 @@ const FULL = "skills+voice+x+team";
  * either: lock a saving in by lowering the number. A Chief's list is longer
  * than another bot's only by the Chief-only names in find_tool's description. */
 const BUDGET_BASELINE: Record<string, number> = {
-  "default": 29190,
-  "voice": 29968,
-  "skills": 29217,
-  "skills+voice": 29995,
-  "non-chief": 29104,
-  "voice+non-chief": 29882,
-  "skills+non-chief": 29131,
-  "skills+voice+non-chief": 29909,
-  "skills+voice+cloud-home": 30012,
-  "skills+voice+non-chief+cloud-home": 29926,
-  "skills+voice+x": 30073,
-  "skills+voice+x+team": 30073,
-  "default+legacy-switches": 29190,
-  "default+dusk": 29242,
-  "skills+voice+dusk": 30047,
-  "default+no-computer-pick": 27983,
-  "default+room": 27884,
-  "non-chief+room": 27798,
+  "default": 30565,
+  "voice": 31343,
+  "skills": 30592,
+  "skills+voice": 31370,
+  "non-chief": 30479,
+  "voice+non-chief": 31257,
+  "skills+non-chief": 30506,
+  "skills+voice+non-chief": 31284,
+  "skills+voice+cloud-home": 31387,
+  "skills+voice+non-chief+cloud-home": 31301,
+  "skills+voice+x": 31448,
+  "skills+voice+x+team": 31864,
+  "skills+skill-reader": 31008,
+  "default+legacy-switches": 30565,
+  "default+dusk": 30617,
+  "skills+voice+dusk": 31422,
+  "default+no-computer-pick": 29358,
+  "default+room": 29259,
+  "non-chief+room": 29173,
 };
 
 type RpcAnswer = { id: number; result?: { tools?: unknown[]; content?: Array<{ text: string }>; isError?: boolean }; error?: { code: number; message: string } };
@@ -266,8 +268,9 @@ describe("agents proxy tools/list golden with the tool bridge on", () => {
     expect(base).toEqual(["set_status", "send_message", "tool_result_read", "list_room_targets", "coordinate_bots", "list_bots", "list_rooms", "select_computer", "attach_file", "publish_page", "confirm_purchase", "post_to_room", "request_credential", "request_sign_in", "fill_login", "message_person", "memory_update", "trigger"]);
     for (const name of Object.keys(PROFILES)) {
       const selects = PROFILES[name]!.DUSK_COMPUTER_SELECTION === "1";
-      expect(hotOf(name).filter((tool) => tool !== "send_voice_note"), name).toEqual(selects ? base : base.filter((tool) => tool !== "select_computer"));
+      expect(hotOf(name).filter((tool) => tool !== "send_voice_note" && tool !== "read_skill"), name).toEqual(selects ? base : base.filter((tool) => tool !== "select_computer"));
       expect(hotOf(name).includes("send_voice_note"), name).toBe(PROFILES[name]!.DUSK_VOICE_NOTES === "1");
+      expect(hotOf(name).includes("read_skill"), name).toBe(PROFILES[name]!.DUSK_SKILL_READER === "1");
     }
   });
 
@@ -363,7 +366,7 @@ describe("agents proxy tools/list wire size with the tool bridge on", () => {
         `  ${String(bytes(JSON.stringify(tool))).padStart(6)} ${String(bytes(JSON.stringify(tool.inputSchema))).padStart(6)}  ${tool.name}  (${name})`)),
     ];
     console.log(lines.join("\n"));
-    for (const [name, wire] of Object.entries(wires)) expect(bytes(wire), name).toBeLessThan(bytes(unbridgedWire(name)) * 0.55);
+    for (const [name, wire] of Object.entries(wires)) expect(bytes(wire), name).toBeLessThan(bytes(unbridgedWire(name)) * 0.56);
   });
 
   it.each(Object.keys(PROFILES))("%s stays within 2% of its budget baseline", (name) => {

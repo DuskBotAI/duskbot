@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { phoneSpeech, type SpeechPermissions, type SpeechPlugin } from "../../apps/mobile/src/native-platform";
 
 type Listener = (event: Record<string, unknown>) => void;
@@ -124,5 +124,42 @@ describe("phone speech bridge", () => {
     const seen = watch(bridge);
     await bridge.speechStart();
     expect(seen.ends.mock.calls).toEqual([[expected]]);
+  });
+
+  describe("in a call", () => {
+    beforeEach(() => vi.useFakeTimers());
+    afterEach(() => vi.useRealTimers());
+
+    it("finishes the turn once the words stop for the call's endpoint, and not while they keep coming", async () => {
+      const fake = fakePlugin();
+      const bridge = phoneSpeech(fake.typed);
+      watch(bridge);
+      await bridge.speechStart({ endpointMs: 850 });
+      const session = fake.session();
+      vi.advanceTimersByTime(5_000);
+      expect(fake.plugin.finish).not.toHaveBeenCalled();
+      fake.emit("transcript", { text: "what is", partial: true, session });
+      vi.advanceTimersByTime(800);
+      fake.emit("transcript", { text: "what is on today", partial: true, session });
+      vi.advanceTimersByTime(800);
+      expect(fake.plugin.finish).not.toHaveBeenCalled();
+      vi.advanceTimersByTime(50);
+      expect(fake.plugin.finish).toHaveBeenCalledTimes(1);
+    });
+
+    it("leaves dictation without an endpoint to the person, and a stopped call never finishes later", async () => {
+      const fake = fakePlugin();
+      const bridge = phoneSpeech(fake.typed);
+      watch(bridge);
+      await bridge.speechStart();
+      fake.emit("transcript", { text: "a long note", partial: true, session: fake.session() });
+      vi.advanceTimersByTime(10_000);
+      expect(fake.plugin.finish).not.toHaveBeenCalled();
+      await bridge.speechStart({ endpointMs: 850 });
+      fake.emit("transcript", { text: "hello", partial: true, session: fake.session() });
+      await bridge.speechStop();
+      vi.advanceTimersByTime(2_000);
+      expect(fake.plugin.finish).not.toHaveBeenCalled();
+    });
   });
 });

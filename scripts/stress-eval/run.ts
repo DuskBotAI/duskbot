@@ -8,13 +8,15 @@
 //     [--model gpt-6.2-sol] [--judge gpt-6.2-sol] [--repeat 2] [--servers 4] [--parallel 3] [--recycle 9] [--only id,id]
 import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync } from "node:fs";
 import { createServer } from "node:http";
-import { randomUUID } from "node:crypto";
+import { randomBytes, randomInt, randomUUID } from "node:crypto";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 import { client } from "../memory-eval/client.ts";
 import { gatewayFromEnv, type Gateway } from "../memory-eval/sandbox.ts";
-import { launchServer, type StressServer } from "./server.ts";
+import { launchServer, type Engine, type StressServer } from "./server.ts";
+import { startTelegram } from "./telegram.ts";
+import { SCENARIOS_2 } from "./scenarios2.ts";
 import { listen, type Frame } from "./events.ts";
 import { SCENARIOS, type Scenario } from "./scenarios.ts";
 import { hardChecks, type Checked } from "./checks.ts";
@@ -38,6 +40,11 @@ const { values } = parseArgs({ options: {
   keep: { type: "boolean", default: false },
   /** how long the live check waits for a watch to report the changed page */
   "live-wait": { type: "string", default: "240000" },
+  /** base: round one's scenarios; new: scenarios2.ts; all; matrix: the 60 the engine matrix runs */
+  set: { type: "string", default: "base" },
+  engine: { type: "string", default: "openai-compat" },
+  /** context.compactAt for every server, so long chats fold within a test */
+  "compact-at": { type: "string", default: "" },
 } });
 if (!values.tmp || !values.out || !values.fixtures) throw new Error("--tmp, --out and --fixtures are required");
 const out = values.out;
@@ -50,8 +57,22 @@ const gateway: Gateway = gatewayFromEnv(values.model!);
 const done = new Set(existsSync(resultsPath) ? readFileSync(resultsPath, "utf8").split("\n").filter(Boolean).map((line) => JSON.parse(line).key as string) : []);
 const only = values.only ? new Set(values.only.split(",")) : null;
 let jobs: Array<{ key: string; run: number; scenario: Scenario }> = [];
+const MATRIX = ["biz-sales-followup", "biz-sales-leads-csv", "biz-sales-pitch-correct", "biz-sales-pipeline-sheet", "biz-support-inbox-check", "biz-hiring-cv",
+  "biz-books-bank-csv", "biz-books-invoice-pdf", "biz-books-receipt-split", "biz-mkt-chart-image", "biz-mkt-sales-csv", "agency-monitor-telegram", "agency-weekly-report-routine",
+  "student-homework-math", "student-pdf-summary", "student-whiteboard", "dev-regex", "dev-script-file", "dev-interrupt", "creator-yt-titles", "nonnative-email-boss",
+  "vent-angry-bot", "vague-fix-it", "typo-heavy", "hinglish-reminder", "pt-email", "mem-veg-later", "mem-update", "rt-morning-brief", "rt-cancel-none",
+  "rt-one-off-relative", "mon-price", "mon-local-page", "cap-what-can", "cap-whatsapp", "computer-files", "edge-doctor-note", "edge-fake-review", "ref-earlier-list",
+  "ref-correction-number", "interrupt-stop", "interrupt-change", "burst-messages", "tone-hi", "tone-thanks", "long-business-plan", "long-ppt-outline",
+  "x-inbox-chief", "x-receipt-adjust", "x-price-guard", "x-receivables", "x-book-approval", "bw-inbox-triage", "bw-outreach-approve", "bw-hiring-screen",
+  "mt-three-in-one", "mt-rapid-separate", "bg-tg-urgent", "ca-tg-connect", "pr-spend-csv"];
+const ALL = [...SCENARIOS, ...SCENARIOS_2];
+const chosen = values.set === "new" ? SCENARIOS_2 : values.set === "all" ? ALL : values.set === "matrix" ? MATRIX.map((id) => ALL.find((one) => one.id === id)!) : SCENARIOS;
+if (chosen.some((one) => !one)) throw new Error("a matrix id names no scenario");
+const engine = values.engine as Engine;
+if (!["openai-compat", "codex", "opencode"].includes(engine)) throw new Error("--engine is openai-compat, codex or opencode");
+const telegram = await startTelegram();
 for (let run = 1; run <= Number(values.repeat); run++) {
-  for (const scenario of SCENARIOS) if (!only || only.has(scenario.id)) jobs.push({ key: `${scenario.id}#${run}`, run, scenario });
+  for (const scenario of chosen) if (!only || only.has(scenario.id)) jobs.push({ key: `${scenario.id}#${run}`, run, scenario });
 }
 jobs = jobs.filter((job) => !done.has(job.key));
 if (Number(values.limit) > 0) jobs = jobs.slice(0, Number(values.limit));
@@ -99,6 +120,26 @@ type Message = {
 export interface ThreadLog { threadId: string; messages: Message[] }
 
 const MIME: Record<string, string> = { png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", pdf: "application/pdf", csv: "text/csv" };
+const OWNER = { fromId: 501, from: "Sid" };
+
+/** Every thread the bot has now: a webhook run or a chat app conversation may open its own. */
+async function botThreads(api: ReturnType<typeof client>, botId: string): Promise<string[]> {
+  const listed = await api.call("GET", "/api/bots?messages=0").catch(() => ({ bots: [] }));
+  const bot = (listed.bots as Array<{ id: string; tasks?: Array<{ threadId: string }> }>).find((one) => one.id === botId);
+  // the main thread holds only the bot's hello unless the conversation used it
+  return (bot?.tasks ?? []).map((task) => task.threadId).filter((id) => id !== mainThreads.get(botId));
+}
+const mainThreads = new Map<string, string>();
+
+/** The first bot text after `since` in any of the bot's threads. */
+async function saidSince(api: ReturnType<typeof client>, botId: string, since: number): Promise<{ text: string; afterMs: number; threadId: string } | null> {
+  for (const id of await botThreads(api, botId)) {
+    const said = ((await api.call("GET", `/api/threads/${id}/messages?limit=50`).catch(() => ({ messages: [] }))).messages as Message[])
+      .find((m) => m.role === "bot" && m.kind === "text" && atMs(m.at) > since && (m.text ?? "").trim());
+    if (said) return { text: (said.text ?? "").slice(0, 600), afterMs: atMs(said.at) - since, threadId: id };
+  }
+  return null;
+}
 
 async function upload(base: string, name: string): Promise<string> {
   const ext = name.split(".").at(-1)!.toLowerCase();
@@ -135,6 +176,8 @@ async function converse(srv: StressServer, frames: Frame[], job: { key: string; 
   const { scenario } = job;
   const started = Date.now();
   const bot = await api.createBot("Sage", values.model!);
+  mainThreads.set(bot.id, bot.threadId);
+  const tgToken = `${randomInt(7_000_000, 7_999_999)}:AAH${randomBytes(24).toString("base64url").slice(0, 32)}`;
   if (scenario.browser) await api.call("PATCH", `/api/bots/${bot.id}`, { computer: "browser", browser: true });
   let threadId = await api.newThread(bot.id);
   const threads = [threadId];
@@ -142,7 +185,9 @@ async function converse(srv: StressServer, frames: Frame[], job: { key: string; 
   const states: string[] = [];
   const turnTimeout = scenario.long ? 600_000 : 300_000;
   const pagePath = `/order/${randomUUID().slice(0, 8)}`;
-  if (scenario.localPage) pages.set(pagePath, { status: "PROCESSING", hits: 0 });
+  const live = scenario.live ?? (scenario.localPage ? "page" : undefined);
+  const liveWait = scenario.liveWaitMs ?? Number(values["live-wait"]);
+  if (live === "page") pages.set(pagePath, { status: "PROCESSING", hits: 0 });
   for (let i = 0; i < scenario.turns.length; i++) {
     const turn = scenario.turns[i]!;
     if (turn.newThread) {
@@ -150,7 +195,7 @@ async function converse(srv: StressServer, frames: Frame[], job: { key: string; 
       threadId = await api.newThread(bot.id);
       threads.push(threadId);
     }
-    const parts = [turn.say.replaceAll("{{PAGE}}", `${pageBase}${pagePath}`)];
+    const parts = [turn.say.replaceAll("{{PAGE}}", `${pageBase}${pagePath}`).replaceAll("{{TG_TOKEN}}", tgToken)];
     for (const name of turn.attach ?? []) parts.push(await upload(srv.url, name));
     const sentAt = Date.now();
     await api.call("POST", `/api/bots/${bot.id}/messages`, { text: parts.join("\n\n"), threadId, sendId: randomUUID() });
@@ -178,32 +223,70 @@ async function converse(srv: StressServer, frames: Frame[], job: { key: string; 
     const visible = [text?.at, delta?.at].filter((v): v is number => typeof v === "number");
     t.firstVisibleMs = visible.length ? Math.min(...visible) - t.sentAt : null;
   }
-  // the live check: change the watched page and wait for the bot to say so by itself in its chats
+  // the live check: make the thing happen that only a running watch, automation or chat app sees, and wait for the bot
   let liveCheck: Record<string, unknown> | undefined;
-  if (scenario.localPage) {
-    const page = pages.get(pagePath)!;
+  if (live) {
     const jobsBefore = jobsOf(srv.dataDir, bot.id);
-    const hitsBefore = page.hits;
+    const page = live === "page" ? pages.get(pagePath)! : null;
+    const hitsBefore = page?.hits ?? 0;
     await sleep(5_000);
     const flipAt = Date.now();
-    page.status = "SHIPPED";
-    let notified: { text: string; afterMs: number } | null = null;
-    const deadline = flipAt + Number(values["live-wait"]);
-    while (!notified && Date.now() < deadline) {
-      await sleep(5_000);
-      for (const id of threads) {
-        const said = ((await api.call("GET", `/api/threads/${id}/messages?limit=50`).catch(() => ({ messages: [] }))).messages as Message[])
-          .find((m) => m.role === "bot" && m.kind === "text" && atMs(m.at) > flipAt && (m.text ?? "").trim());
-        if (said) notified = { text: (said.text ?? "").slice(0, 400), afterMs: atMs(said.at) - flipAt };
+    const extra: Record<string, unknown> = {};
+    let notified: { text: string; afterMs: number; threadId?: string } | null = null;
+    if (live === "page") page!.status = "SHIPPED";
+    if (live === "tg-watch") for (const one of scenario.tgPush ?? []) telegram.message(tgToken, { fromId: 900 + one.from.length, from: one.from, text: one.text, chatTitle: one.chat });
+    if (live === "webhook") {
+      const hooks = (await api.call("GET", "/api/webhooks").catch(() => ({ webhooks: [] }))).webhooks as Array<{ id: string; botId?: string; name?: string }>;
+      const hook = hooks.find((one) => one.botId === bot.id) ?? hooks.at(-1);
+      extra.webhooks = hooks.map((one) => ({ id: one.id, botId: one.botId, name: one.name }));
+      if (hook) {
+        const address = await api.call("GET", `/api/webhooks/${hook.id}/address`).catch((error: Error) => ({ error: error.message }));
+        const credential = address.credential as { url?: string; bearer?: string } | undefined;
+        if (credential?.url) {
+          const posted = await fetch(credential.url, { method: "POST", headers: { "content-type": "application/json", ...(credential.bearer ? { authorization: `Bearer ${credential.bearer}` } : {}) }, body: JSON.stringify(scenario.webhookBody ?? {}) }).catch(() => null);
+          extra.webhookPost = posted?.status ?? "unreachable";
+        } else extra.webhookPost = `no address: ${JSON.stringify(address).slice(0, 200)}`;
+      } else extra.webhookPost = "no webhook automation exists";
+    }
+    if (live === "tg-chat") {
+      const said = (await Promise.all(threads.map((id) => api.call("GET", `/api/threads/${id}/messages?limit=100`).then((r) => r.messages as Message[]).catch(() => [] as Message[])))).flat()
+        .filter((m) => m.role === "bot").map((m) => m.text ?? "").join("\n");
+      const code = /start=([\w-]{4,64})/.exec(said)?.[1] ?? /\/start\s+([\w-]{4,64})/.exec(said)?.[1] ?? null;
+      extra.pairCode = code ? "found in chat" : "not in chat";
+      const connected = telegram.calls.some((call) => call.token === tgToken && call.method === "getMe");
+      extra.telegramConnected = connected;
+      if (code) {
+        telegram.message(tgToken, { ...OWNER, text: `/start ${code}` });
+        await sleep(6_000);
+        const asked = Date.now();
+        telegram.message(tgToken, { ...OWNER, text: scenario.tgAsk ?? "hi" });
+        const deadline = asked + liveWait;
+        while (!notified && Date.now() < deadline) {
+          await sleep(3_000);
+          const reply = telegram.sent(tgToken).filter((call) => call.at > asked).map((call) => String(call.params.text ?? "")).filter((text) => text.trim() && !text.startsWith("Connected."));
+          if (reply.length) notified = { text: reply.join(" | ").slice(0, 600), afterMs: Date.now() - asked };
+        }
+        extra.telegramSent = telegram.sent(tgToken).map((call) => String(call.params.text ?? "").slice(0, 200));
+      }
+    } else {
+      const deadline = flipAt + liveWait;
+      while (!notified && Date.now() < deadline) {
+        await sleep(5_000);
+        notified = await saidSince(api, bot.id, flipAt);
       }
     }
-    if (notified) await waitIdle(api, threadId, 120_000);
-    liveCheck = { pageHitsBeforeChange: hitsBefore, pageHitsAfterChange: page.hits - hitsBefore, jobsBefore: jobsBefore.map(({ log: _log, ...job }) => job),
-      jobsAfter: jobsOf(srv.dataDir, bot.id), notified: notified !== null, ...(notified ? { notifiedAfterMs: notified.afterMs, notice: notified.text } : { waitedMs: Number(values["live-wait"]) }) };
+    for (const id of await botThreads(api, bot.id)) if (!threads.includes(id)) threads.push(id);
+    if (notified) await waitIdle(api, notified.threadId ?? threadId, 120_000);
+    liveCheck = { kind: live, ...(page ? { pageHitsBeforeChange: hitsBefore, pageHitsAfterChange: page.hits - hitsBefore } : {}), jobsBefore: jobsBefore.map(({ log: _log, ...job }) => job),
+      jobsAfter: jobsOf(srv.dataDir, bot.id), ...extra, notified: notified !== null, ...(notified ? { notifiedAfterMs: notified.afterMs, notice: notified.text } : { waitedMs: liveWait }) };
     pages.delete(pagePath);
   }
   const threadLogs: ThreadLog[] = [];
-  for (const id of threads) threadLogs.push({ threadId: id, messages: (await api.call("GET", `/api/threads/${id}/messages?limit=300`)).messages });
+  if (!live) for (const id of await botThreads(api, bot.id)) if (!threads.includes(id)) threads.push(id);
+  for (const id of threads) {
+    const messages = (await api.call("GET", `/api/threads/${id}/messages?limit=300`)).messages as Message[];
+    if (messages.length || id === threads[0]) threadLogs.push({ threadId: id, messages });
+  }
   for (const message of threadLogs.flatMap((t) => t.messages)) {
     if (!message.document) continue;
     const res = await fetch(`${srv.url}/api/bots/${message.document.botId}/documents/${message.document.id}`, { headers: { origin: srv.url } }).catch(() => null);
@@ -218,7 +301,9 @@ async function converse(srv: StressServer, frames: Frame[], job: { key: string; 
   const runtimeErrors = runtime.filter((e) => e?.type === "runtime.error" || e?.type === "runtime.notice" || e?.type === "turn.retrying").map((e) => `${e.type}: ${String(e.message ?? e.reason ?? "").slice(0, 300)}`);
   const routines = (await api.call("GET", "/api/routines").catch(() => ({ routines: [] }))).routines
     .filter((r: { botId: string }) => r.botId === bot.id)
-    .map((r: { name: string; prompt: string; enabled: boolean; schedule: unknown }) => ({ name: r.name, enabled: r.enabled, schedule: r.schedule, prompt: r.prompt.slice(0, 200) }));
+    .map((r: { name: string; prompt: string; enabled: boolean; schedule: unknown; checks?: unknown[]; checkedAt?: number; checkTrouble?: string; lastRunAt?: unknown }) =>
+      ({ name: r.name, enabled: r.enabled, schedule: r.schedule, prompt: r.prompt.slice(0, 700), ...(r.checks?.length ? { checks: JSON.stringify(r.checks).slice(0, 400) } : {}), ...(r.checkedAt ? { checkedAt: new Date(r.checkedAt).toISOString() } : {}),
+        ...(r.checkTrouble ? { checkTrouble: r.checkTrouble } : {}), ...(r.lastRunAt ? { lastRunAt: r.lastRunAt } : {}) }));
   const waitsFile = join(srv.dataDir, "waits.json");
   let waits: unknown[] = [];
   try {
@@ -227,14 +312,17 @@ async function converse(srv: StressServer, frames: Frame[], job: { key: string; 
     waits = (list as Array<Record<string, unknown>>).filter((w) => JSON.stringify(w).includes(bot.id)).map((w) => ({ label: w.label, kind: w.kind, state: w.state ?? w.status }));
   } catch { /* no waits */ }
   const jobFacts = jobsOf(srv.dataDir, bot.id);
+  const compactions = threadLogs.flatMap((t) => t.messages).filter((m) => m.kind === "compaction").length;
+  const webhooks = ((await api.call("GET", "/api/webhooks").catch(() => ({ webhooks: [] }))).webhooks as Array<Record<string, unknown>>)
+    .filter((one) => one.botId === bot.id).map((one) => ({ name: one.name, enabled: one.enabled, instructions: String(one.instructions ?? one.prompt ?? "").slice(0, 200) }));
   const memory = await api.call("GET", `/api/bots/${bot.id}/memory`).then((m) => String(m.text ?? "")).catch(() => "");
   const aboutMe = await api.aboutMe().catch(() => "");
   const checked: Checked = await hardChecks(srv.url, threadLogs, timings, states, runtimeErrors);
-  const verdict: Verdict = await judge(gatewayFromEnv(values.judge!), scenario, threadLogs, { tools, routines, waits, jobs: jobFacts, ...(liveCheck ? { liveCheck } : {}), memory: memory.slice(-1500), aboutMe: aboutMe.slice(-800), checked });
+  const verdict: Verdict = await judge(gatewayFromEnv(values.judge!), scenario, threadLogs, { tools, routines, waits, jobs: jobFacts, webhooks, compactions, ...(liveCheck ? { liveCheck } : {}), memory: memory.slice(-1500), aboutMe: aboutMe.slice(-800), checked });
   return {
     key: job.key, id: scenario.id, run: job.run, persona: scenario.persona, shape: scenario.shape, model: values.model, at: new Date().toISOString(),
     wallMs: Date.now() - started, states, timings: timings.map(({ say, firstVisibleMs, firstTextMs, totalMs, state }) => ({ say: say.slice(0, 120), firstVisibleMs, firstTextMs, totalMs, state })),
-    tools, runtimeErrors, routines, waits, jobs: jobFacts, ...(liveCheck ? { liveCheck } : {}), checked, verdict, dataDir: srv.dataDir, memory: memory.slice(-1500), aboutMe: aboutMe.slice(-800),
+    engine, tools, runtimeErrors, routines, waits, jobs: jobFacts, webhooks, compactions, ...(liveCheck ? { liveCheck } : {}), checked, verdict, dataDir: srv.dataDir, memory: memory.slice(-1500), aboutMe: aboutMe.slice(-800),
     transcript: threadLogs.map((t) => t.messages.filter((m) => m.kind === "text" || (m.role === "bot" && m.kind !== "activity" && m.kind !== "digest")).map((m) => ({
       role: m.role, kind: m.kind, text: (m.text ?? "").slice(0, 4_000), ...(m.document ? { document: { title: m.document.title, kind: m.document.kind, bytes: m.document.bytes, status: m.documentRead?.status } } : {}), attachments: (m.attachments ?? []).map((a) => ({ kind: a.kind, name: a.name ?? a.path.split("/").at(-1) })),
     }))),
@@ -256,7 +344,8 @@ async function worker(index: number): Promise<void> {
     const label = `w${index}-${Date.now()}`;
     let srv: StressServer;
     try {
-      srv = await launchServer(values.repo!, values.tmp!, gateway, [values.model!]);
+      srv = await launchServer(values.repo!, values.tmp!, gateway, [values.model!],
+        values["compact-at"] ? { context: { compactAt: Number(values["compact-at"]) } } : {}, undefined, { engine, env: { DUSK_TELEGRAM_API_URL: telegram.origin } });
     } catch (error) {
       log("server failed to start", (error as Error).message);
       jobs.unshift(...batch);
@@ -291,3 +380,4 @@ async function worker(index: number): Promise<void> {
 await Promise.all(Array.from({ length: Number(values.servers) }, (_, i) => worker(i)));
 log("all done; results in", resultsPath, readdirSync(out).join(", "));
 pageServer.close();
+await telegram.close();

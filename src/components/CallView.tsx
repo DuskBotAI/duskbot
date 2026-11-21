@@ -25,7 +25,7 @@ import { isRoutineApproval, isSkillApproval, pendingApprovals, spokenApprovalPro
 import { callStarted } from "@/lib/product-events";
 import { useDesktopCapabilities } from "./DesktopCapabilities";
 import { callCapabilityHelp, type CallCapabilityHelp } from "@/lib/call-capability";
-import { serverListeningReady, listensHere, speechBridge } from "@/lib/speech";
+import { phoneListener, serverListeningReady, listensHere, speechBridge } from "@/lib/speech";
 import { VoiceSetupDialog } from "./lazy-screens";
 import { useLocalVoiceCall } from "@/lib/voice-call/availability";
 import { VoiceCall } from "./VoiceCallBar";
@@ -101,7 +101,7 @@ export function CallTargetButton({
   const onCall = useOnCall() === targetId;
   const active = onCall || onLiveCall;
   const remoteClient = globalThis.window?.duskDesktop?.remoteClient?.active === true;
-  const capabilityHelp = capabilitiesReady
+  const capabilityHelp = phoneListener() ? null : capabilitiesReady
     ? callCapabilityHelp(capabilities, Boolean(speechBridge()?.speechStart), serverListeningReady(state.config))
     : null;
   const builtInVoice = useLocalVoiceCall() === true;

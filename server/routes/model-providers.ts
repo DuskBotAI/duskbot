@@ -15,6 +15,7 @@ import { catalogStats } from "../model-catalog/trim.ts";
 import {
   CatalogIndex, addressProblem, buildConnection, catalogGroups, listProviderModels, moreProviders, probeLocalProviders, resolveProvider,
 } from "../model-providers.ts";
+import { keyResult } from "../key-check.ts";
 import { unsealFields } from "../sealed-fields.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 
@@ -150,11 +151,17 @@ export function createModelProviderRoutes(deps: ModelProviderRouteDeps): RouteHa
       if (!baseUrl) return json(res, 400, { error: "Fill in the provider's details first." });
       const problem = addressProblem(baseUrl, deps.place);
       if (problem) return json(res, 400, { error: problem });
-      const listed = await listProviderModels({ def, baseUrl, key: body.key?.trim() || undefined, ...(deps.fetch ? { fetch: deps.fetch } : {}) });
+      const key = body.key?.trim() || undefined;
+      const listed = await listProviderModels({ def, baseUrl, key, ...(deps.fetch ? { fetch: deps.fetch } : {}) });
       const fromCatalog = def.catalogId ? Object.keys(catalog.providers[def.catalogId]?.models ?? {}) : [];
+      const checked = key
+        ? await keyResult({ listed, wire: def.wire, baseUrl, key, model: body.fields?.model, fallbackModels: fromCatalog, ...(deps.fetch ? { fetch: deps.fetch } : {}) })
+        : { result: listed.ok ? "works" as const : listed.reason === "rejected" ? "wrong_key" as const : "unreachable" as const };
+      const { status: _probeStatus, ...found } = checked as typeof checked & { status?: number };
+      res.setHeader("cache-control", "no-store");
       return json(res, 200, listed.ok
-        ? { ok: true, models: listed.models.length ? listed.models : fromCatalog, source: listed.models.length ? "provider" : "catalog" }
-        : { ok: false, reason: listed.reason, ...(listed.status ? { status: listed.status } : {}) });
+        ? { ok: true, models: listed.models.length ? listed.models : fromCatalog, source: listed.models.length ? "provider" : "catalog", ...found }
+        : { ok: false, reason: listed.reason, ...(listed.status ? { status: listed.status } : {}), ...found });
     }
 
     if (method === "POST" && path === "/api/model-providers/connect") {

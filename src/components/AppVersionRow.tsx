@@ -8,7 +8,7 @@ import { productName } from "../lib/brand";
 import { ItemRow, NavRow } from "./ListRows";
 
 function ownBridge() {
-  return window.duskDesktop?.remoteClient?.active === true ? undefined : window.duskDesktop?.appUpdate;
+  return window.duskDesktop?.app?.ownPage === false || window.duskDesktop?.remoteClient?.active === true ? undefined : window.duskDesktop?.appUpdate;
 }
 
 /**

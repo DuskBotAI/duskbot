@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { MobileTransport } from "../../../shared/mobile-link";
 import {
-  COMPANION_HEAD_START_MS, DIRECT_BUDGET_MS, DIRECT_TRY_MS, directStillWorthIt, HTTPS_HEAD_START_MS, raceRoutes, RELAY_HEAD_START_MS, routeHeadStart,
+  COMPANION_HEAD_START_MS, DIRECT_BUDGET_MS, DIRECT_TRY_MS, directStillWorthIt, HTTPS_BEFORE_RELAY_MS, HTTPS_HEAD_START_MS, raceRoutes, RELAY_HEAD_START_MS, routeHeadStart,
   routeOrder, routeTimeout, type RouteOutcome,
 } from "./route-order";
 
@@ -23,6 +23,12 @@ describe("route order", () => {
     expect(routeOrder([https, relay])).toEqual([https, relay]);
     expect(routeOrder([lan, tailnet])).toEqual([lan, tailnet]);
     expect(routeTimeout(lan, [lan], 15_000)).toBe(15_000);
+  });
+
+  it("gives a server's https address ahead of its relay a short try, so a silent one leaves the relay time in the deadline", () => {
+    for (const os of ["ios", "android"]) expect(routeTimeout(https, [https, relay], 15_000, os)).toBe(HTTPS_BEFORE_RELAY_MS);
+    expect(routeTimeout(https, [https], 15_000)).toBe(15_000);
+    expect(HTTPS_BEFORE_RELAY_MS + 5_000).toBeLessThanOrEqual(15_000);
   });
 
   it("stops trying direct routes once their budget is spent, only when a relay waits", () => {

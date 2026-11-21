@@ -281,3 +281,34 @@ test("once all moved, My Cloud opens on Open dusk cloud, or by itself when nobod
   createOpenWhenAsked({ open: () => plain.push("cloud"), waitMs: 0 }).done();
   assert.deepEqual(plain, ["cloud"], "without the offer it opens at once, as before");
 });
+
+test("once the person chooses This computer or brings bots back, nothing moves by itself again, for any Cloud", async () => {
+  const store = memory();
+  let journal = null, keeping = false;
+  const offer = createCloudMoveOffer({ store, cloud: () => READY, journal: () => journal, keep: { on: () => keeping, set: async (on) => { keeping = on; } },
+    summary: async () => IMPORTED, kick: () => {}, now: () => 5 });
+  await offer.refresh({ force: true });
+  assert.equal(offer.consent(), true, "a fresh Mac's imports go by themselves");
+  offer.stay();
+  assert.equal(offer.consent(), false, "chose This computer: waits for a yes");
+  assert.equal(offer.state().stage, "settings", "the move stays in Settings, never asked again");
+  assert.equal(parseOffer(store.get(), "acct-2 https://another.fly.dev").stays, 5, "kept for another Cloud too");
+  const other = createCloudMoveOffer({ store, cloud: () => ({ ...READY, account: "acct-2", origin: "https://another.fly.dev" }), journal: () => null,
+    keep: { on: () => false, set: async () => {} }, summary: async () => IMPORTED, kick: () => {} });
+  await other.refresh({ force: true });
+  assert.equal(other.consent(), false, "a new Cloud does not move it either");
+  await offer.accept("settings");
+  assert.equal(offer.consent(), true, "their own yes still moves it");
+
+  for (const back of [{ journal: { v: 1, phase: "back", cloud: { origin: ORIGIN, account: "acct-1" } } }, { keeping: true }]) {
+    const kept = memory();
+    journal = back.journal ?? null; keeping = back.keeping ?? false;
+    const again = createCloudMoveOffer({ store: kept, cloud: () => READY, journal: () => journal, keep: { on: () => keeping, set: async () => {} },
+      summary: async () => IMPORTED, kick: () => {}, now: () => 7 });
+    await again.refresh({ force: true });
+    assert.equal(again.consent(), false, "bots brought back here are not moved again by themselves");
+    journal = null; keeping = false;
+    assert.equal(again.consent(), false, "even once the journal is gone");
+    assert.equal(parseOffer(kept.get(), "acct-1 " + ORIGIN).stays, 7);
+  }
+});

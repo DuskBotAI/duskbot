@@ -1,7 +1,14 @@
 import { cloneAttachments } from "./routine-attachments.ts";
-import type { Routine, RoutineManagerOptions, RoutineRun } from "./routines.ts";
+import { cloneSchedule } from "./routine-schedules.ts";
+import type { Routine, RoutineManagerOptions, RoutineRequestOwner, RoutineRun } from "./routines.ts";
 
 export type ResultsThreadAllocation = { botId: string; threadId: string };
+
+export function cloneRoutine(routine: Routine): Routine {
+  return { ...routine, schedule: cloneSchedule(routine.schedule), attachments: cloneAttachments(routine.attachments) };
+}
+
+export const routineRequestOwnerKey = (owner: RoutineRequestOwner): string => JSON.stringify([owner.requestId, owner.messageId, owner.botId, owner.threadId]);
 
 export function cloneRun(run: RoutineRun): RoutineRun {
   return {

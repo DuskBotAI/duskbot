@@ -9,6 +9,7 @@ import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, expect, it, vi } from "vitest";
 import { cloudPairingSignature } from "./cloud-home.ts";
 import { removeTempDir, waitForExit } from "./testing/cleanup.ts";
+import { engineFreePath } from "./testing/engine-free-path.ts";
 import { freePortBlock } from "./testing/ports.ts";
 import { startBrokerFake, type BrokerFake } from "./testing/broker-fake.ts";
 
@@ -61,7 +62,7 @@ beforeAll(async () => {
   child = spawn(process.execPath, ["--import", offline, join(SERVER_DIR, "index.ts")], {
     cwd: join(SERVER_DIR, ".."),
     env: {
-      PATH: process.env.PATH, HOME: home, USERPROFILE: home, DUSK_DATA_DIR: dataDir, DUSK_PORT: String(port), DUSK_WEBHOOK_PORT: String(port + 1),
+      PATH: engineFreePath(home, process.env.PATH), DUSK_TEST_SEALED_PATH: "1", HOME: home, USERPROFILE: home, DUSK_DATA_DIR: dataDir, DUSK_PORT: String(port), DUSK_WEBHOOK_PORT: String(port + 1),
       DUSK_CLOUD_ROLE: "home", DUSK_CLOUD_MACHINE_ID: MACHINE, DUSK_CLOUD_ADMIN_URL: "https://cloud.example.test",
       DUSK_CLOUD_BOOTSTRAP_SECRET: secret, DUSK_PUBLIC_URL: `https://${HOST}`, FAKE_CLAUDE_MODE: "happy",
       DUSK_COMPOSIO_BROKER_URL: broker.url, DUSK_CLOUD_CONNECTED_APPS_GRANT: broker.cloudGrant(MACHINE),

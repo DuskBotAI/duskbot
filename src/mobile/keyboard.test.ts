@@ -207,6 +207,39 @@ describe("a keyboard the native side lifts the page for", () => {
   });
 });
 
+describe("a field in a dialog on the page", () => {
+  const dialogField = (id: string) => {
+    const input = document.createElement("input");
+    input.id = id;
+    host.querySelector(".dusk-mobile")!.append(input);
+    return Object.assign(input, { scrollIntoView: vi.fn() });
+  };
+
+  it("is scrolled into the space left above the keyboard once it settles, and again for the next field", () => {
+    flushSync(() => root.render(createElement(Shell, { platform: platform(true) })));
+    const url = dialogField("url"), key = dialogField("key");
+    url.focus();
+    keyboard!({ height: 336, phase: "will", duration: 0.38, at: Date.now() });
+    expect(url.scrollIntoView).not.toHaveBeenCalled();
+    keyboard!({ height: 336, phase: "did" });
+    expect(url.scrollIntoView).toHaveBeenCalledWith({ block: "nearest", inline: "nearest" });
+    key.focus();
+    expect(key.scrollIntoView).toHaveBeenCalledTimes(1);
+  });
+
+  it("is left where it is for the chat's own composer", () => {
+    flushSync(() => root.render(createElement(Shell, { platform: platform(true) })));
+    const composer = document.createElement("div");
+    composer.dataset.tour = "composer";
+    const own = Object.assign(document.createElement("textarea"), { scrollIntoView: vi.fn() });
+    composer.append(own);
+    host.querySelector("[data-mobile-chat]")!.append(composer);
+    own.focus();
+    keyboard!({ height: 336, phase: "did" });
+    expect(own.scrollIntoView).not.toHaveBeenCalled();
+  });
+});
+
 describe("the Android keyboard", () => {
   const android = (mode: (ride: boolean) => void) => ({ ...platform(true), kind: "android", keyboardMode: mode }) as MobilePlatform;
 

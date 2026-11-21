@@ -77,6 +77,8 @@ describe("Japanese IME in the real composer", () => {
     for (const draft of ["@", "/"]) {
       const input = fill(draft);
       expect(container.querySelector('[role="listbox"]')).not.toBeNull();
+      // a real input method opens a composition before its candidate keys arrive
+      flushSync(() => input.dispatchEvent(new CompositionEvent("compositionstart", { bubbles: true })));
       for (const key of ["Enter", "Tab", "ArrowDown", "ArrowUp", "Escape"]) {
         expect(press(input, key, init).defaultPrevented).toBe(false);
         expect(input.value).toBe(draft);

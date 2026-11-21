@@ -493,6 +493,7 @@ export const PiDriver: ProviderDriver<PiConfig> = {
               ...input.environment,
               DUSK_MCP_CONFIG: join(mcpTempDir, "mcp.json"),
             }),
+            box: { rw: [mcpTempDir] },
           }, "bot");
         } catch (err) {
           try {

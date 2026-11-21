@@ -18,6 +18,7 @@ describe("undeliveredApprovalTool", () => {
       expect(undeliveredApprovalTool(outcome, "full-access")).toEqual({
         name: "error: could not deliver approval to the provider; retry the task after reconnecting.",
         ok: false,
+        errorRef: expect.stringMatching(/^D-[2-9A-Z]{4}$/),
       });
     }
   });

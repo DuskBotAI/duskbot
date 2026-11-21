@@ -111,6 +111,15 @@
 :root[data-reduced-motion="true"] :is(.working-mascot-bob, .working-mascot-glance) { animation: none; }
 :root[data-reduced-motion="true"] .working-mascot-blink { animation-name: working-mascot-blink-still; }
 
+.live-card { padding-top: 0; transition: padding-top 280ms var(--dusk-ease-out); }
+.live-card[data-peeking] { padding-top: 24px; }
+.live-card-peek { transition: transform 280ms var(--dusk-ease-out), opacity 160ms ease; }
+.live-card-peek[data-ducked] { transform: translateY(60%); opacity: 0; }
+.live-card-fold { display: grid; width: 0; min-width: 100%; grid-template-rows: 1fr; transition: grid-template-rows 280ms var(--dusk-ease-out); }
+.live-card-fold[data-folded] { grid-template-rows: 0fr; }
+.live-card-fold > * { min-height: 0; overflow: hidden; }
+:root[data-reduced-motion="true"] :is(.live-card, .live-card-peek, .live-card-fold) { transition: none; }
+
 /* bencho's press: a button gives to 96% on the out curve and lets go with a hair of overshoot; colours keep Grok's 120ms */
 .dusk-press {
   transition-property: background-color, border-color, color, box-shadow, opacity, scale;
@@ -148,4 +157,5 @@
   [data-working-mascot] :is(.working-mascot-bob, .working-mascot-glance) { animation: none; }
   [data-working-mascot] .working-mascot-blink { animation: working-mascot-blink-still 3.8s ease-in-out infinite; }
   [data-mood="done"] .working-mascot-blink { animation: none; }
+  .live-card, .live-card-peek, .live-card-fold { transition: none; }
 }

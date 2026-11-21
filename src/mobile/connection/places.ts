@@ -111,6 +111,7 @@ export type PlacesState = {
   open(place: Place): Promise<PlaceOutcome>;
   rename(place: Place, name: string): Promise<boolean>;
   remove(place: Place): Promise<{ ok: boolean; reload: boolean }>;
+  payment: { name: string; fixBy: number; trial?: true } | null;
 };
 
 /** The places list for Settings: null until both the saved links and the account's answer are in, so the rows draw once
@@ -242,5 +243,6 @@ export function usePlaces(connected: boolean): PlacesState {
     }
     return { ok: false, reload: false };
   }, [activeId, platform, refreshConnections, updateComputers]);
-  return { places, expected: remembered || connections.length, open, rename, remove };
+  const owing = remote?.clouds.find((cloud) => cloud.payment);
+  return { places, expected: remembered || connections.length, open, rename, remove, payment: owing?.payment ? { name: owing.name, ...owing.payment } : null };
 }

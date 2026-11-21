@@ -445,6 +445,8 @@ test("the Server menu opens My Cloud through the Cloud's own connection, never a
     // the first-pick mark main keeps beside switchEnvironment (47ad2f03a)
     placesChosenStore: () => ({ choose() {} }), jsonFile: () => ({}), path: { join: (...parts) => parts.join("/") }, app: { getPath: () => "/data" },
     workspaceSwitch: { around: (action) => { covered += 1; return action(); } },
+    // the cloud-move offer main keeps beside switchEnvironment (152f1d72fd): none is open here
+    oneHome: { offer: () => null },
   });
   let answers = true;
   vm.runInContext(`${source.slice(start, end)}; this.switchEnvironment = switchEnvironment; this.remember = value => { rememberedHome = value; };`, context);

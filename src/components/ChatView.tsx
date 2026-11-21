@@ -13,6 +13,7 @@ import { localSystemVoiceActive } from "@/lib/local-voice";
 import { computerStartLine, useScreensWhile } from "@/lib/computer-start";
 import { useCaptionChrome, useDesktopCapabilities } from "@/components/DesktopCapabilities";
 import {
+  api,
   currentTaskBot,
   shownTranscript,
   useStore,
@@ -38,7 +39,10 @@ import { ScreenAccessNotice } from "./ScreenAccessNotice";
 import { ComposerNoticeSlot } from "./ComposerNoticeSlot";
 import { macCuaPermissionMessage, missingMacCuaPermissions } from "@/lib/mac-cua-permissions";
 import { claudeUpdateTarget, failedTurnCause, signedOutEngine } from "@/lib/failed-turn";
-import { plainErrorLine } from "@/lib/plain-error";
+import { blockerDetail, failedReplyDetail, failedReplyKind } from "@/lib/failed-reply";
+import { resetTime } from "@/lib/limit-resets";
+import { openBotSettings } from "./bot-panel/panel-link";
+import { providerName } from "@/lib/simple-model-menu";
 import { lowerFirst } from "@/lib/lower-first";
 import { openPlaceAction, placeRowViewFor, usePlaceSeat, worksOnSimpleLabel } from "@/lib/place-view";
 import type { PlaceRow } from "../../shared/place-view";
@@ -72,7 +76,7 @@ import { enterFromComposer, growFromMascot, hasSendLaunch } from "./bubble-entra
 import { STATUS_MOUNT_MS, useReached } from "@/hooks/use-reached";
 import { lifeDraw } from "@/lib/reply-life";
 import { lastNonReceipt } from "@/lib/receipts";
-import { routineStartName } from "./RoutineStartLine"; import { useTurnLive } from "@/state/turn-status"; import { useLiveReplyActive } from "@/state/live-reply"; import { useTurnNow } from "./NowCard"; import { useThreadRoutineRun } from "@/state/older-routine-runs";
+import { routineStartName } from "./RoutineStartLine"; import { SILENT_LINE } from "../../shared/routine-run.ts"; import { useTurnLive } from "@/state/turn-status"; import { useLiveReplyActive } from "@/state/live-reply"; import { useTurnNow } from "./NowCard"; import { useThreadRoutineRun } from "@/state/older-routine-runs";
 import { followSentTurn, sentTurn, useSentTurn } from "@/state/sent-turn";
 import { waitsForNetwork } from "@/state/network-wait";
 import { useOffline } from "@/mobile/network";
@@ -204,9 +208,13 @@ export function ErrorRow({
   action,
   setupInstance,
   claudeUpdateInstance,
+  plain,
 }: {
   message: string;
   headline?: string;
+  /** a failed reply read by the one classifier: its sentence alone, a notice for a usage limit, the reference code beside
+   * it, and never the raw words or a Copy details */
+  plain?: { tone?: "info"; errorRef?: string };
   onRetry?: () => void;
   action?: { label: string; onClick: () => void } | null;
   setupInstance?: InstanceInfo;
@@ -239,10 +247,13 @@ export function ErrorRow({
     <div className="flex justify-start">
       <ChatErrorCard
         className="w-fit max-w-[min(var(--chat-bubble-max),var(--chat-bubble-pct))]"
+        tone={plain?.tone}
+        icon={plain?.tone === "info" ? "batteryFull" : undefined}
         title={headline}
-        details={headline !== message ? details : null}
+        details={!plain && headline !== message ? details : null}
         actions={button}
       >
+        {plain?.errorRef && <span data-error-ref="" title={t("failedReply.refTitle")} className="block text-[12px] text-ink-tertiary tabular-nums">{t("failedReply.ref", { ref: plain.errorRef })}</span>}
         {macCuaReason && <MacCuaRecoveryActions reason={message} />}
         {!usageUrl && claudeUpdateInstance ? (
           <ClaudeUpdatePrompt instance={claudeUpdateInstance} onRetry={onRetry} />
@@ -286,17 +297,31 @@ export function FailedTurnRow({ tool, engine, onRetry, botId, threadId }: {
   threadId?: string;
 }) {
   const resume = useLimitResetContinue(botId, threadId, tool.limitResetsAt);
+  const { dispatch } = useStore();
   if (tool.place && botId) return <PlaceFailedRow place={tool.place} botId={botId} threadId={threadId} onRetry={onRetry} />;
   const cause = failedTurnCause(tool.name) ?? tool.name;
   if (tool.partial) return tool.owned ? null : <PartlyDoneRow cause={cause} onRetry={onRetry} />;
-  const signedOut = signedOutEngine(tool, engine);
+  const kind = failedReplyKind(tool, engine, true);
+  const signedOut = kind === "signed_out" ? signedOutEngine(tool, engine) : undefined;
+  // the kinds a setting fixes: the button opens that setting
+  const fix = kind === "key_rejected" ? { label: t("failedReply.updateKey"), onClick: () => dispatch({ type: "toggleAppSettings", open: true, section: "connections" }) }
+    : kind === "plan_limit" ? { label: t("failedReply.seePlan"), onClick: () => dispatch({ type: "toggleAppSettings", open: true, section: "cloudAccount" }) }
+    : kind === "folder_gone" && botId ? { label: t("botPanel.page.folder"), onClick: () => openBotSettings(dispatch, "access", { botId, page: "folder" }) }
+    : undefined;
+  const limited = kind === "usage_limit";
+  const ai = engine ? providerName(engine) : t("failedReply.limitHold.anAi");
+  const headline = signedOut ? t("chat.error.signedOut", { name: signedOut.displayName })
+    : limited ? (tool.limitResetsAt ? t("failedReply.limitHit", { ai, time: resetTime(tool.limitResetsAt) }) : t("failedReply.limitHitUnknown", { ai }))
+    : tool.blocker ? blockerDetail(tool.blocker)
+    : failedReplyDetail(kind, engine?.displayName ?? t("failedReply.yourAi"), false);
   return (
     <ErrorRow
       message={cause}
-      headline={signedOut ? t("chat.error.signedOut", { name: signedOut.displayName }) : plainErrorLine(cause)}
+      headline={headline}
+      plain={{ ...(limited ? { tone: "info" as const } : {}), ...(tool.errorRef && !limited ? { errorRef: tool.errorRef } : {}) }}
       onRetry={onRetry}
-      action={resume}
-      setupInstance={tool.setup ? engine : undefined}
+      action={fix ?? resume}
+      setupInstance={tool.setup && !fix ? engine : undefined}
       claudeUpdateInstance={tool.claudeUpdate ? claudeUpdateTarget(engine) : undefined}
     />
   );
@@ -368,7 +393,7 @@ const Bubble = memo(function Bubble({
     pin: remoteClient ? undefined : {
       pinned,
       onToggle: () => dispatch({ type: "updateTask", botId, threadId, patch: { pinnedMessageId: pinned ? "" : message.id } }),
-    },
+    }, onStopSending: message.automation && !remoteClient ? () => void api("/api/proactive/stop", { method: "POST", body: JSON.stringify({ threadId, messageId: message.id }) }).catch(() => {}) : undefined,
   });
   noteMediaSizes(message.media);
   const attached = useMemo(() => splitMessageAttachments(message.attachments), [message.attachments]);
@@ -752,6 +777,7 @@ const hiddenSteps = (item: TranscriptItem) => item.kind !== "message";
 
 function hiddenChatRow(message: Message, botId: string, showToolCalls: boolean): boolean {
   if (message.reaction || message.quietRun || isCancelledTranscriptRow(message)) return true;
+  if (message.role === "bot" && message.kind === "text" && !message.attachments?.length && SILENT_LINE.test(message.text ?? "")) return true;
   switch (richRowKind(message)) {
     case "activity":
       return Boolean(message.peerResume) || (!message.dataResult && !isStatusActivity(message) && quietRow(message, showToolCalls));

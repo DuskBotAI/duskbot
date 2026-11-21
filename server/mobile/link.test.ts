@@ -170,6 +170,30 @@ describe("mobile link", () => {
     expect(after.body.channels.some((one: { kind: string }) => one.kind === "device")).toBe(false);
   });
 
+  it("leaves the link agent's https address out of a code while it answers 5xx or nothing, so a phone pairs over the relay", async () => {
+    const agent = { base: "https://link.test", tunnel: "abcdefghij", pub: "A".repeat(43), origin: "https://box.trycloudflare.com" };
+    for (const [health, kinds] of [[530, ["relay"]], ["down", ["relay"]], [200, ["https", "relay"]]] as const) {
+      const checked: string[] = [];
+      const mobile = link({
+        publicOrigin: () => null,
+        fetch: (async (url: string) => {
+          if (!url.endsWith("/api/health")) return new Response("{}", { status: 201 });
+          checked.push(url);
+          if (health === "down") throw new TypeError("fetch failed");
+          return new Response("", { status: health });
+        }) as typeof fetch,
+      });
+      await call(mobile, owner, "POST", "/api/mobile/relay/sync", { ...agent, applied: 0, wait: 0 });
+      const syncing = call(mobile, owner, "POST", "/api/mobile/relay/sync", { ...agent, applied: 1, wait: 5 });
+      const pairing = call(mobile, owner, "POST", "/api/mobile/pairing");
+      const held = await syncing;
+      void call(mobile, owner, "POST", "/api/mobile/relay/sync", { ...agent, applied: held.body.rev, wait: 5 });
+      const answer = (await pairing).body as MobilePairingResponse;
+      expect(answer.payload.via.map((one) => one.kind)).toEqual(kinds);
+      expect(checked).toEqual(["https://box.trycloudflare.com/api/health"]);
+    }
+  });
+
   it("a desktop with its own relay hub puts the relay and its wi-fi routes in one code and stays a computer", async () => {
     const mobile = link({ publicOrigin: () => null, workspace: () => ({ name: "My Mac", environmentId: "env-mac", kind: "mac" }) });
     const agent = { base: "https://link.test", tunnel: "abcdefghij", pub: "A".repeat(43) };

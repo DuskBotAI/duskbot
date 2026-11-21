@@ -61,6 +61,8 @@ describe("the skill curator", () => {
     ];
     expect(skillsReadInTurn(messages, "t1", ["weekly-report", "invoice-export", "weekly"])).toEqual(["weekly-report", "invoice-export"]);
     expect(skillsReadInTurn(messages, "t2", ["invoice-export"])).toEqual([]);
+    const viaTool = [{ role: "bot", kind: "activity", turnId: "t3", tool: { name: "agents_read_skill", input: '{ "name": "weekly-report" }' } }];
+    expect(skillsReadInTurn(viaTool, "t3", ["weekly-report", "weekly"])).toEqual(["weekly-report"]);
   });
 });
 

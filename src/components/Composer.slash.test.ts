@@ -84,6 +84,34 @@ describe("the / menu in the composer", () => {
     expect(input.value).toBe("use /standup later");
   });
 
+  it("moves the highlight with the arrow keys and wraps at both ends", () => {
+    const input = fill("/");
+    const selected = () => labels()[options().findIndex((option) => option.getAttribute("aria-selected") === "true")];
+    const press = (key: string) => {
+      flushSync(() => input.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true })));
+      flushSync(() => input.dispatchEvent(new KeyboardEvent("keyup", { key, bubbles: true })));
+    };
+    expect(selected()).toBe("/goal");
+    press("ArrowDown");
+    expect(selected()).toBe("/learn");
+    press("ArrowDown");
+    expect(selected()).toBe("/setup");
+    press("ArrowUp");
+    expect(selected()).toBe("/learn");
+    press("ArrowUp");
+    press("ArrowUp");
+    expect(selected()).toBe("/standup");
+  });
+
+  it("still moves the highlight when macOS reports arrows as keyCode 229 with no composition open", () => {
+    const input = fill("/");
+    const selected = () => labels()[options().findIndex((option) => option.getAttribute("aria-selected") === "true")];
+    const down = new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true, cancelable: true });
+    Object.defineProperty(down, "keyCode", { value: 229 });
+    flushSync(() => input.dispatchEvent(down));
+    expect(selected()).toBe("/learn");
+  });
+
   it("opens nothing inside a path or link", () => {
     fill("open notes/st");
     expect(options()).toEqual([]);

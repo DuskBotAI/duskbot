@@ -22,6 +22,15 @@ data folder; results hold transcripts, so keep `--out` outside the repo.
   typos and dictation; Hindi and Hinglish; Portuguese) times shapes (corrections, interruptions sent while the bot
   works, "make it 3 bullets", follow-ups on earlier files, image/PDF/CSV attachments, memory across new chats,
   routines, monitors, capability questions, the headless browser, harmful-but-benign asks, long jobs).
+- **Round two** (`scenarios2.ts`, `--set new`): the top use cases people post about agent bots, business workflows
+  (inbox triage, a deals sheet from Telegram, outreach behind approval, weekly report, hiring screen), many asks at
+  once, long chats (`--compact-at <tokens>` folds them within a test), routines and watchers the eval makes fire, and
+  Telegram as a chat app. A scenario's `live` check happens after the conversation: `page` changes the page it watches,
+  `tg-watch` posts in a group of the fake Telegram (`telegram.ts`, any token is its own bot), `tg-chat` pairs with the
+  start code the bot gave and asks on Telegram, `webhook` calls the bot's webhook automation; the eval then waits for
+  the bot to speak by itself. `--set matrix` is the 60 conversations the engine matrix runs, and `--engine codex`
+  (the gateway as Codex's Company endpoint) or `--engine opencode --model opencode/big-pickle` (Zen's free models, no
+  key, needs the network) swap the engine; those servers set `DUSK_ALLOW_REAL_ENGINES=1`.
 - **Hard checks** (`checks.ts`): every file and document a bot shared opens, web links load, no tool names or step
   traces in chat, no error text or runtime errors, no turn without a reply, no stuck turn, first words within 20 s
   and turns within 120 s.

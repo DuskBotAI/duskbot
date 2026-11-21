@@ -46,7 +46,7 @@ export async function hardChecks(base: string, threads: ThreadLog[], timings: Ar
       }
       for (const m of text.matchAll(/https?:\/\/[^\s)\]>"'`]+/g)) {
         const url = m[0].replace(/[.,;:!?]+$/, "");
-        if (result.links.some((l) => l.url === url) || /127\.0\.0\.1|localhost/.test(url)) continue;
+        if (result.links.some((l) => l.url === url) || /127\.0\.0\.1|localhost|t\.me\/sage_\d+_bot/.test(url)) continue;
         const status = await fetch(url, { redirect: "follow", headers: { "user-agent": "Mozilla/5.0 (Macintosh) dusk-stress-eval" }, signal: AbortSignal.timeout(12_000) })
           .then(async (r) => { await r.arrayBuffer().catch(() => null); return r.status; }).catch((e: Error) => e.name === "TimeoutError" ? "timeout" : "unreachable");
         result.links.push({ url, status });
@@ -54,7 +54,7 @@ export async function hardChecks(base: string, threads: ThreadLog[], timings: Ar
     }
   }
   result.noReplyTurns = timings.filter((t, i) => t.firstTextMs === null && !(timings[i + 1] && timings[i + 1]!.sentAt - t.sentAt < 15_000)).length;
-  result.stuck = states.filter((s) => s !== "completed" && s !== "idle");
+  result.stuck = states.filter((s) => s !== "completed" && s !== "idle" && s !== "needs-input");
   result.slowFirst = timings.filter((t) => t.firstVisibleMs !== null && t.firstVisibleMs > 20_000).length;
   result.slowTotal = timings.filter((t) => (t.totalMs ?? 0) > 120_000).length;
   if (result.files.some((f) => f.status !== 200)) result.flags.push("broken-file");

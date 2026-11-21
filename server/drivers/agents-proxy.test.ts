@@ -668,7 +668,7 @@ describe("agents-proxy MCP surface", () => {
       "message_person",
       "report_bug",
       "app_settings",
-      "messaging_channels",
+      "chat_app_bots",
       "memory_update",
       "retry_thread",
       "memory_log",
@@ -790,7 +790,7 @@ describe("agents-proxy MCP surface", () => {
     const list = await rpc("tools/list");
     const create = list.result.tools.find((t: { name: string }) => t.name === "trigger");
     expect(create.inputSchema.required).toEqual(["action"]);
-    expect(create.inputSchema.properties.action.enum).toEqual(["create", "update", "pause", "resume", "run_now"]);
+    expect(create.inputSchema.properties.action.enum).toEqual(["create", "update", "pause", "resume", "run_now", "email"]);
     expect(Object.keys(create.inputSchema.properties)).not.toContain("changes");
     expect(create.inputSchema.properties.when.enum).toEqual(["schedule", "app_event", "webhook", "limit_reset"]);
     expect(create.inputSchema.properties.repeat.enum).toEqual(["once", "every_reset"]);
@@ -2412,7 +2412,7 @@ describe("tool bridge", () => {
   /** The main child's switches: a Chief with skills. */
   const CHIEF = { DUSK_SKILL_AUTHORING_ENABLED: "1", DUSK_CHIEF_OF_STAFF: "1", DUSK_COMPUTER_SELECTION: "1" };
   const CHIEF_ONLY = ["list_team_setup", "propose_team_setup", "propose_bot_deletion", "manage_room", "retry_thread"];
-  const HOT = ["set_status", "send_message", "tool_result_read", "list_room_targets", "coordinate_bots", "list_bots", "list_rooms", "select_computer", "attach_file", "publish_page", "confirm_purchase", "post_to_room", "request_credential", "request_sign_in", "fill_login", "message_person", "memory_update"];
+  const HOT = ["set_status", "send_message", "tool_result_read", "list_room_targets", "coordinate_bots", "list_bots", "list_rooms", "select_computer", "attach_file", "publish_page", "confirm_purchase", "post_to_room", "request_credential", "request_sign_in", "fill_login", "message_person", "memory_update", "trigger"];
   let chief: Rpc;
   let plain: Rpc;
   let off: Rpc;
@@ -2492,9 +2492,9 @@ describe("tool bridge", () => {
 
   it("find_tool finds a hidden tool from a natural request, with the description and schema the unbridged turn lists", async () => {
     const unbridged = new Map((await listed(rpc)).map((tool) => [tool.name, tool]));
-    const matches = matchesOf(await find(chief, "schedule a recurring task every morning"));
+    const matches = matchesOf(await find(chief, "which routines do I have and when do they run next"));
     expect(matches.length).toBeLessThanOrEqual(3);
-    const { name, description, inputSchema } = unbridged.get("trigger");
+    const { name, description, inputSchema } = unbridged.get("trigger_info");
     expect(matches[0]).toEqual({ name, description, inputSchema });
     expect(matchesOf(await find(chief, "create a new specialist bot"))[0]!.name).toBe("create_bot");
     // a search that could not be made is a failed call, told how to search
@@ -2512,10 +2512,8 @@ describe("tool bridge", () => {
     }
   });
 
-  it("use_tool runs a hidden tool end to end, with the request and the result a direct call gives", async () => {
+  it("use_tool runs a tool by an old name end to end, with the request and the result a direct call gives", async () => {
     const routine = { when: "schedule", name: "Morning brief", instructions: "Summarize today's priorities.", schedule: { type: "weekly", time: "09:00", weekdays: ["monday", "friday"] }, timeout_minutes: 15 };
-    // found first, as a bot would, from how a person would ask
-    expect(matchesOf(await find(chief, "schedule a recurring task every morning"))[0]!.name).toBe("trigger");
     lastRoutineRequestBody = null;
     const direct = await callTool("create_trigger", routine);
     const directBody = lastRoutineRequestBody;

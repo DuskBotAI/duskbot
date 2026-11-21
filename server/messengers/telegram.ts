@@ -3,7 +3,7 @@
 // whose edge wakes a sleeping home and queues the update for it. Telegram allows one of the two at a time per token.
 import { timingSafeEqual } from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
-import type { InboundFile, InboundMessage, MessengerTransport, OutboundFile } from "./bridge.ts";
+import type { InboundChoice, InboundFile, InboundMessage, MessengerTransport, OutboundFile } from "./bridge.ts";
 import { markdownToTelegramHtml, splitMessage } from "./text.ts";
 
 export class TelegramError extends Error {
@@ -22,7 +22,7 @@ export const TELEGRAM_HOOK_PATH = /^\/hooks\/telegram\/([\w-]{1,128})$/;
 const TEXT_MAX = 4096;
 const UPLOAD_MAX = 50 * 1024 * 1024;
 const PHOTO_MAX = 10 * 1024 * 1024;
-export const TELEGRAM_UPDATES = ["message", "my_chat_member"];
+export const TELEGRAM_UPDATES = ["message", "my_chat_member", "callback_query"];
 
 /** A test or self-hosted Bot API server on loopback only (DUSK_TELEGRAM_API_URL); anything else is api.telegram.org. */
 export function telegramApiBase(env: NodeJS.ProcessEnv = process.env): string {
@@ -98,7 +98,14 @@ export interface TelegramChatAdded { chatId: string; title: string; by: { id: st
 export function readTelegramUpdate(
   update: Record<string, unknown>,
   context: { botId: string; account: TelegramAccount; file(fileId: string): Promise<{ bytes: Buffer; mime: string }> },
-): { message: InboundMessage } | { added: TelegramChatAdded } | null {
+): { message: InboundMessage } | { added: TelegramChatAdded } | { choice: InboundChoice } | null {
+  const query = record(update.callback_query);
+  if (Object.keys(query).length) {
+    const sent = record(query.message), chat = record(sent.chat);
+    if (!str(query.id) || !str(record(query.from).id) || !str(chat.id)) return null;
+    return { choice: { platform: "telegram", botId: context.botId, chatId: str(chat.id), senderId: str(record(query.from).id), data: str(query.data),
+      ...(str(sent.message_id) ? { sentId: str(sent.message_id) } : {}), ack: { id: str(query.id) } } };
+  }
   const member = record(update.my_chat_member);
   if (Object.keys(member).length) {
     const chat = record(member.chat), status = str(record(member.new_chat_member).status);
@@ -182,6 +189,19 @@ export function createTelegramTransport(api: TelegramApi, token: (botId: string)
     },
     async typing(botId, chatId) {
       await api.call(need(botId), "sendChatAction", { chat_id: chatId, action: "typing" });
+    },
+    async sendChoices(botId, chatId, text, buttons) {
+      const rows = buttons.length <= 2 ? [buttons] : buttons.map((button) => [button]);
+      const sent = await api.call<{ message_id?: number }>(need(botId), "sendMessage", { chat_id: chatId, text: text.slice(0, TEXT_MAX),
+        reply_markup: { inline_keyboard: rows.map((row) => row.map((button) => ({ text: button.label.slice(0, 64), callback_data: button.data }))) } });
+      return sent.message_id === undefined ? null : String(sent.message_id);
+    },
+    async settleChoices(botId, chatId, sentId, note, ack) {
+      const key = need(botId);
+      if (ack) await api.call(key, "answerCallbackQuery", { callback_query_id: ack.id, ...(ack.toast ? { text: ack.toast.slice(0, 190) } : {}) }).catch(() => {});
+      if (!sentId) return;
+      if (note) await api.call(key, "editMessageText", { chat_id: chatId, message_id: Number(sentId), text: note.slice(0, TEXT_MAX), reply_markup: { inline_keyboard: [] } });
+      else await api.call(key, "editMessageReplyMarkup", { chat_id: chatId, message_id: Number(sentId), reply_markup: { inline_keyboard: [] } });
     },
   };
 }

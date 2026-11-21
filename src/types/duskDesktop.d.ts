@@ -135,11 +135,15 @@ const __APP_VERSION__: string;
     keepAwake: boolean;
     /** a power assertion is held right now */
     hold: boolean;
-    /** "due" | "running" while held; "off" | "battery" | "idle" | "stopped" otherwise */
+    /** keep awake while plugged in, whenever a routine is enabled here */
+    pluggedIn?: boolean;
+    /** "due" | "running" | "plugged-in" while held; "off" | "battery" | "idle" | "stopped" otherwise */
     reason: string;
     /** the due routine's time, when the hold is for a due routine */
     at: number | null;
     onBattery: boolean;
+    /** when this computer last went to sleep, in this app run, with a routine enabled here and keep awake while plugged in off */
+    sleptAt?: number | null;
   }
   interface CloudMacBridge {
     state(): Promise<import("../../shared/cloud-mac").CloudMacState>;
@@ -354,6 +358,8 @@ const __APP_VERSION__: string;
       routines?: {
         wakeState(): Promise<DesktopRoutineWake>;
         keepAwake(enabled: boolean): Promise<DesktopRoutineWake>;
+        /** Hold this computer awake whenever a routine is enabled here, on AC power only. */
+        keepAwakePluggedIn?(enabled: boolean): Promise<DesktopRoutineWake>;
       };
       companionAccount?: {
         state(): Promise<CompanionAccountState>;

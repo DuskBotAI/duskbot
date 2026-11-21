@@ -188,6 +188,11 @@ describe("own clouds", () => {
     expect(clouds?.map((cloud) => [cloud.id, cloud.asleep])).toEqual([["c0123456789abcdef01234567", false], ["second", true]]);
     expect(fetcher.mock.calls[0][0]).toBe(`${origin}/api/cloud/desktop/session`);
   });
+  it("keeps a cloud's failed renewal date, and nothing malformed", async () => {
+    await signIn();
+    fetcher.mockResolvedValueOnce(response({ clouds: [listed({ payment: { fixBy: 1_900_000_000_000 } }), listed({ id: "second", primary: false, payment: { fixBy: "x" } })] }));
+    expect((await client.clouds())?.map((cloud) => cloud.payment ?? null)).toEqual([{ fixBy: 1_900_000_000_000 }, null]);
+  });
   it("drops an origin that is not plain https", async () => {
     await signIn();
     fetcher.mockResolvedValueOnce(response({ clouds: [listed({ origin: "http://d1.dusk.bot" })] }));

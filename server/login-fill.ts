@@ -65,15 +65,34 @@ const MARK = "data-dusk-login";
 // Shared by every page script: what a person could see, which fields this fill marked, a site's error line, a CAPTCHA.
 const PAGE_HELPERS = `
   const MARK = ${JSON.stringify(MARK)};
+  // Sites built from web components (Material Web, Lit) keep their inputs in open shadow roots, where document.querySelector
+  // never looks: search through them, in page order.
+  const deepAll = (selector, root = document) => {
+    const found = [];
+    const walk = (node) => {
+      for (const el of node.children) {
+        if (el.matches(selector)) found.push(el);
+        if (el.shadowRoot) walk(el.shadowRoot);
+        walk(el);
+      }
+    };
+    walk(root);
+    return found;
+  };
+  const deepActive = () => {
+    let active = document.activeElement;
+    while (active && active.shadowRoot && active.shadowRoot.activeElement) active = active.shadowRoot.activeElement;
+    return active;
+  };
   const visible = (el) => {
     if (!(el instanceof Element) || !el.isConnected || el.getClientRects().length === 0) return false;
-    for (let node = el; node instanceof Element; node = node.parentElement) {
+    for (let node = el; node instanceof Element; node = node.parentElement || node.getRootNode().host || null) {
       const style = getComputedStyle(node);
       if (style.display === "none" || style.visibility === "hidden" || style.visibility === "collapse" || style.opacity === "0") return false;
     }
     return true;
   };
-  const marked = (prefix) => Array.from(document.querySelectorAll("[" + MARK + "]")).filter((el) => (el.getAttribute(MARK) || "").startsWith(prefix));
+  const marked = (prefix) => deepAll("[" + MARK + "]").filter((el) => (el.getAttribute(MARK) || "").startsWith(prefix));
   const secretField = (el) => /:(?:password|code\\d+)$/.test(el.getAttribute(MARK) || "");
   const alertText = () => {
     for (const el of document.querySelectorAll('[role="alert"], [aria-live="assertive"], [aria-live="polite"], .error, .alert, [class*="error" i]')) {
@@ -102,7 +121,7 @@ const PAGE_HELPERS = `
 const FIND_FIELDS = `((nonce, step) => {
   ${PAGE_HELPERS}
   const key = nonce + ":" + step + ":";
-  for (const old of document.querySelectorAll("[" + MARK + "]")) {
+  for (const old of deepAll("[" + MARK + "]")) {
     const owner = old.getAttribute(MARK) || "";
     if (!owner.startsWith(nonce + ":") || owner.startsWith(key)) old.removeAttribute(MARK);
   }
@@ -119,7 +138,7 @@ const FIND_FIELDS = `((nonce, step) => {
   const isCode = (el) => tokens(el).includes("one-time-code") ||
     ((plain(el) || el.type === "number" || el.type === "password") && STRONG.test(hint(el)) && !NOT_CODE.test(hint(el))) ||
     ((plain(el) || el.type === "number") && WEAK.test(hint(el)) && !NOT_CODE.test(hint(el)));
-  const inputs = Array.from(document.querySelectorAll("input")).filter(usable);
+  const inputs = deepAll("input").filter(usable);
   const codes = inputs.filter(isCode);
   const rest = inputs.filter((el) => !codes.includes(el));
   const passwords = rest.filter((el) => el.type === "password" && !tokens(el).includes("new-password"));
@@ -129,7 +148,7 @@ const FIND_FIELDS = `((nonce, step) => {
   let username = null;
   if (password) {
     const scope = rest.filter((el) => el !== password && plain(el) && (password.form ? el.form === password.form : !el.form));
-    const before = scope.filter((el) => el.compareDocumentPosition(password) & Node.DOCUMENT_POSITION_FOLLOWING);
+    const before = scope.filter((el) => inputs.indexOf(el) < inputs.indexOf(password));
     username = before.filter(userLike).pop() || before.pop() || scope.find(userLike) || null;
   } else {
     username = rest.find((el) => tokens(el).includes("username")) || rest.find((el) => plain(el) && userLike(el)) || null;
@@ -151,7 +170,7 @@ const FIND_FIELDS = `((nonce, step) => {
  * and listens for the form being sent. */
 const FOCUS_FIELD = `((nonce, key, mode, keep) => {
   ${PAGE_HELPERS}
-  const el = document.querySelector("[" + MARK + "=\\"" + key + "\\"]");
+  const el = deepAll("[" + MARK + "=\\"" + key + "\\"]")[0];
   if (!(el instanceof HTMLInputElement)) return JSON.stringify({ href: location.href, focused: false, same: false });
   if (mode === "type" && typeof keep === "string" && el.value === keep) return JSON.stringify({ href: location.href, focused: true, same: true });
   if (mode === "submit" && !window["__duskLogin" + nonce]) {
@@ -167,7 +186,7 @@ const FOCUS_FIELD = `((nonce, key, mode, keep) => {
     el.dispatchEvent(new Event("input", { bubbles: true }));
   }
   const busy = mode === "submit" && sending(marked(nonce + ":").filter((field) => field instanceof HTMLInputElement));
-  return JSON.stringify({ href: location.href, focused: document.activeElement === el, same: false, busy });
+  return JSON.stringify({ href: location.href, focused: deepActive() === el, same: false, busy });
 })`;
 
 const CHECK_FIELDS = `((key) => {
@@ -189,7 +208,7 @@ const MARK_SUBMIT = `((key) => {
     ? Array.from(field.form.querySelectorAll("button, input[type=submit], input[type=image]")).filter((el) => enabled(el) && (el.type === "submit" || el.type === "image"))
     : [];
   const control = inForm.find((el) => NAMED.test(label(el))) || inForm[0] ||
-    Array.from(document.querySelectorAll('button, [role="button"], input[type=submit], input[type=button]')).find((el) => enabled(el) && NAMED.test(label(el)));
+    deepAll('button, [role="button"], input[type=submit], input[type=button]').find((el) => enabled(el) && NAMED.test(label(el)));
   if (!control) return JSON.stringify({ found: false });
   control.setAttribute(MARK, key + "submit");
   return JSON.stringify({ found: true });

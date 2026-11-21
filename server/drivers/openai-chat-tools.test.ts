@@ -1172,7 +1172,9 @@ describe("structured tool execution boundaries", () => {
     await f.start({ approvalMode: "full" });
     expect(await f.completed()).toMatchObject({ ok: true });
     expect(f.effects()).toHaveLength(2);
-    expect(f.requests).toHaveLength(3);
+    // the reply calls a write done with no lookup after it, so the unchecked-write gate sends it back once
+    expect(f.requests).toHaveLength(4);
+    expect(f.requests[3].messages.at(-1)).toMatchObject({ role: "user", content: expect.stringContaining("audit_write changed something but only answered that it worked") });
     expect(f.recorder.events.some((event) => event.type === "request.opened")).toBe(false);
   });
 

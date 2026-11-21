@@ -684,3 +684,59 @@ describe("typing a computer's code", () => {
     expect(lookups()).toHaveLength(1);
   });
 });
+
+describe("a desktop's QR that signs the phone in asks which place opens", () => {
+  const payload = { v: 1, transport: "https", origin: "https://mac.example.org", credential: `omb_pair_${"a".repeat(43)}`, name: "Studio Mac" } as const;
+  const owner = { id: "owner", email: "owner@example.com" };
+  const home = { id: "c1", name: "Home cloud", role: "owner", status: "ready", origin: "https://d0123456789abcdef0123.dusk.bot", primary: true };
+  let paired: string[];
+  const route = (clouds: unknown[]) => fetcher.mockImplementation(async (input, init) => {
+    const url = String(input);
+    if (url.endsWith("/api/cloud/app/sign-in/phone")) return response({ cloudContractVersion: 1, accessToken: token, expiresAt: Date.now() + 86_400_000, device: { id: "phone" }, account: owner });
+    if (url.endsWith("/api/cloud/desktop/session") && init?.method !== "DELETE") return response({ ok: true, clouds });
+    if (url.endsWith("/v1/app/computers")) return response({ v: 1, computers: [] });
+    if (url.endsWith("/api/cloud/desktop/pairing")) { paired.push("c1"); return response({ cloudContractVersion: 1, origin: home.origin, code: "ABCD-EFGH-JKLM", expiresAt: Date.now() + 60_000 }); }
+    return response({ v: 1, providers: [], signupOpen: true });
+  });
+  const settle = async (done: () => boolean) => { for (let i = 0; i < 400 && !done(); i++) await act(async () => { await new Promise((resolve) => setTimeout(resolve, 10)); }); };
+  const link = () => act(async () => { [...host.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent === "Link")!.click(); });
+  const choices = () => [...host.querySelectorAll<HTMLButtonElement>("[data-place-choice]")].map((button) => [button.dataset.placeChoice, button.querySelector("span span")?.textContent]);
+  beforeEach(() => { paired = []; });
+
+  it("with a cloud on the account: the computer and the cloud, nothing opened until one is picked; the computer opens as linked", async () => {
+    route([home]);
+    const onLinked = vi.fn(), onKept = vi.fn(async () => {});
+    await mount(onboarding({ initial: payload, initialSignIn: { code: "WXYZQRST", email: owner.email }, onLinked, onKept }));
+    await link();
+    await settle(() => choices().length > 0);
+    expect(heading()).toBe("Pick where to work");
+    expect(choices()).toEqual([["computer", "Studio Mac"], ["cloud", "Home cloud"]]);
+    expect(onLinked).not.toHaveBeenCalled();
+    await press("[data-place-choice=computer]");
+    expect(onLinked).toHaveBeenCalledWith(expect.objectContaining({ id: "linked" }), "session", "Studio Mac");
+    expect(onKept).not.toHaveBeenCalled();
+  });
+
+  it("picking the cloud keeps the computer's link and opens the cloud", async () => {
+    route([home]);
+    const onLinked = vi.fn(), onKept = vi.fn(async () => {});
+    await mount(onboarding({ initial: payload, initialSignIn: { code: "WXYZQRST", email: owner.email }, onLinked, onKept }));
+    await link();
+    await settle(() => choices().length > 0);
+    await press("[data-place-choice=cloud]");
+    await settle(() => onLinked.mock.calls.length > 0);
+    expect(onKept).toHaveBeenCalledWith(expect.objectContaining({ id: "linked", label: "Studio Mac" }), "session");
+    expect(paired).toEqual(["c1"]);
+    expect(onLinked).toHaveBeenCalledWith(expect.anything(), "session", "Home cloud");
+  });
+
+  it("an account with nothing else opens the computer at once, never a picker of one", async () => {
+    route([]);
+    const onLinked = vi.fn();
+    await mount(onboarding({ initial: payload, initialSignIn: { code: "WXYZQRST", email: owner.email }, onLinked }));
+    await link();
+    await settle(() => onLinked.mock.calls.length > 0);
+    expect(onLinked).toHaveBeenCalledWith(expect.objectContaining({ id: "linked" }), "session", "Studio Mac");
+    expect(host.querySelector("[data-place-choice]")).toBeNull();
+  });
+});

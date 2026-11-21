@@ -472,4 +472,27 @@ describe("the Mac app's own account", () => {
     await mount({ remote: false });
     expect(host.querySelector("[data-phone-qr]")?.getAttribute("data-phone-qr")).toBe("https://dusk.bot/m/pair#m=offer1&c=ABCDEFGH0001");
   });
+
+  it("the Connect your phone dialog: one QR at once that also logs the phone in, for either phone, one Touch ID, Done closes it", async () => {
+    const bridge = desktop(true);
+    const onDone = vi.fn();
+    await mount({ remote: false, direct: { onDone } }, false);
+    await flush();
+    expect(host.querySelector("[data-phone-flow]"), "no picker and no linked phones list").toBeNull();
+    expect(bridge.phoneSignIn).toHaveBeenCalledOnce();
+    expect(minted).toBe(1);
+    expect(host.querySelector("[data-phone-qr]")?.getAttribute("data-phone-qr")).toContain("&a=WXYZQRST");
+    expect(host.querySelector("[data-phone-account-as]")?.textContent).toBe("Your phone logs in as owner@example.test and gets every place on your account.");
+    const steps = host.querySelector("[data-phone-steps=any]")!;
+    expect(steps.querySelector("[data-phone-app-store]")).not.toBeNull();
+    expect(steps.querySelector("[data-phone-apk]")?.textContent).toBe("Android");
+    window.dispatchEvent(new Event("focus"));
+    await act(async () => { await vi.advanceTimersByTimeAsync(10_000); });
+    expect(bridge.phoneSignIn, "polls and refocus never ask again").toHaveBeenCalledOnce();
+    api.mockImplementation(async (path: string) => path === "/api/mobile/devices"
+      ? { devices: [{ id: "p1", name: "Sam's iPhone", platform: "ios", createdAt: 1, lastSeenAt: 1 }], current: null } : { sessions: [], current: null });
+    await act(async () => { await vi.advanceTimersByTimeAsync(2_500); });
+    await click("[data-phone-linked] [data-primary]");
+    expect(onDone).toHaveBeenCalledOnce();
+  });
 });

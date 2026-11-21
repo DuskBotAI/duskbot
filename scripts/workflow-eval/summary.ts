@@ -11,7 +11,10 @@ const mean = (xs: number[]) => (xs.length ? (xs.reduce((a, b) => a + b, 0) / xs.
 for (const [i, rows] of files.entries()) {
   console.log(`\n## ${process.argv[2 + i]}: ${rows.length} cases, mean score ${mean(rows.map((r) => r.verdict.score))}`);
   console.log(`| dimension | met |\n| --- | --- |`);
-  for (const d of dims) console.log(`| ${d} | ${rows.filter((r) => r.verdict.dims?.[d] === true).length}/${rows.length} |`);
+  for (const d of dims) {
+    const graded = rows.filter((r) => typeof r.verdict.dims?.[d] === "boolean");
+    console.log(`| ${d} | ${graded.filter((r) => r.verdict.dims[d] === true).length}/${graded.length} |`);
+  }
   console.log(`\n| case | score | missed |\n| --- | --- | --- |`);
-  for (const r of rows) console.log(`| ${r.key} | ${r.verdict.score} | ${dims.filter((d) => r.verdict.dims?.[d] !== true).join(", ")} |`);
+  for (const r of rows) console.log(`| ${r.key} | ${r.verdict.score} | ${dims.filter((d) => r.verdict.dims?.[d] === false).join(", ")} |`);
 }

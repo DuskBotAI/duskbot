@@ -5,7 +5,7 @@
 // next flush, which the server runs whenever it releases what was queued behind a turn, ahead of that queue. A routine
 // that delivers to the brief posts no line: its answer goes to the brief, which reads it as a small JSON result.
 import { liveCardKind } from "../shared/live-approval.ts";
-import type { AutomationLine } from "../shared/routine-run.ts";
+import { SILENT_LINE, type AutomationLine } from "../shared/routine-run.ts";
 import { signInWaits } from "../shared/sign-in-request.ts";
 import { intlLocale } from "./language.ts";
 import { needsInputQuestion } from "./runtime-coordinator.ts";
@@ -15,7 +15,6 @@ import type { BotRecord, Message, Store } from "./store.ts";
 import { hostTimeZone } from "./turn-clock.ts";
 import { AUTHORITY, fromNote, routineWho } from "./provenance-label.ts";
 
-const QUIET = /^[\s*_`"'.!-]*nothing new[\s*_`"'.!-]*$/i;
 const NEEDS_INPUT = /^\s*needs input:\s*/i;
 
 export type RunReply = { quiet: true } | { quiet: false; text: string; question?: string };
@@ -23,7 +22,7 @@ export type RunReply = { quiet: true } | { quiet: false; text: string; question?
 /** What a run's last reply says to the person. Its last line alone being NOTHING NEW keeps the run quiet. */
 export function readRunReply(text: string, attached = false): RunReply {
   const lines = text.trim().split(/\r?\n/);
-  if (QUIET.test(lines.at(-1) ?? "") || (!text.trim() && !attached)) return { quiet: true };
+  if (SILENT_LINE.test(lines.at(-1) ?? "") || (!text.trim() && !attached)) return { quiet: true };
   const question = needsInputQuestion(text);
   if (question === undefined) return { quiet: false, text: text.trim() };
   const at = lines.findLastIndex((line) => NEEDS_INPUT.test(line));
@@ -257,6 +256,7 @@ export function createAutomationReports(deps: AutomationReportDeps) {
       if (run.deliver === "brief") return deps.brief?.(run, turnId);
       const said = turnId ? store.activePath(run.threadId).findLast((message) => message.role === "bot" && message.kind === "text" && message.turnId === turnId) : replyOf(run);
       const reply = read(said);
+      if (reply.quiet && said) store.patchMessage(run.threadId, said.id, { quietRun: true });
       const bot = store.bot(run.botId);
       const target = destination(run);
       if (target && (!reply.quiet || lastSaidFailed(run, target.threadId))) hold(run.id, { kind: "reply", run, ...(said ? { messageId: said.id } : {}) });

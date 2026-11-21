@@ -26,7 +26,8 @@
 //     | list-peers (list_bots through the agents MCP; keeps the first agents server it is offered, like Hermes)
 //   FAKE_ACP_MCP_TRANSPORTS  remote MCP transports advertised in initialize, e.g. "http,sse"
 //   FAKE_ACP_PERMISSION_OPTIONS  JSON options override in permission mode
-//   FAKE_ACP_DUMP  path for {argv, env}; with FAKE_ACP_MODES or FAKE_ACP_MODELS also <dump>.prompts.jsonl
+//   FAKE_ACP_DUMP  path for {argv, env}; with FAKE_ACP_MODES or FAKE_ACP_MODELS also <dump>.prompts.jsonl (each prompt's
+//     blocks too with FAKE_ACP_DUMP_PROMPT=1)
 //   FAKE_ACP_LAUNCH_COUNT_FILE  process counter incremented at startup
 //   FAKE_ACP_RPC_DUMP  this process's method list, rewritten after every request
 //   FAKE_ACP_RPC_APPEND_FILE  one {"pid","method","cwd"} line appended per request
@@ -953,6 +954,7 @@ function handle(msg: any) {
       if (process.env.FAKE_ACP_DUMP && (modes.length || models.length)) {
         appendFileSync(`${process.env.FAKE_ACP_DUMP}.prompts.jsonl`, JSON.stringify({
           pid: process.pid, sessionId: msg.params?.sessionId, mode: currentMode, model: currentModel,
+          ...(process.env.FAKE_ACP_DUMP_PROMPT === "1" ? { prompt: msg.params?.prompt ?? null } : {}),
         }) + "\n");
       }
       emitConfigUpdates("session/prompt", msg.params.sessionId);

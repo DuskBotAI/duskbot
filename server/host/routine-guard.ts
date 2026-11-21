@@ -6,6 +6,7 @@ import { join } from "node:path";
 
 import type { RoutinePause } from "../../shared/routines.ts";
 import { writeFileAtomic } from "../atomic.ts";
+import { endsOnReport, watchExpired, WATCH_MAX_DAYS } from "../routine-bot-guard.ts";
 import { outcomesNewestFirst } from "../routine-outcomes.ts";
 import type { Routine, RoutineRun } from "../routines.ts";
 import { serverLine } from "../server-lines.ts";
@@ -34,7 +35,14 @@ export interface RoutineGuardDeps {
   spendOver(botId: string, routineId: string): CapHit | null;
   /** Why no run may start while the account's weekly allowance is used up (server/allowance.ts), or null. */
   allowanceHeld?(run: RoutineRun, language: string | undefined): string | null;
+  /** The connected apps (by slug) a finished run found signed out. */
+  signedOut?(run: RoutineRun): string[];
+  /** One card in the routine's chat that reconnects the app; connecting it calls `reconnected(RECONNECT_KEY + id)`. */
+  reconnect?(routine: Routine, threadId: string | undefined, slug: string): void;
+  resume?(id: string): void;
 }
+
+export const RECONNECT_KEY = "routine-auth:";
 
 export const isNotYet = (output: string | undefined): boolean => Boolean(output && NOT_YET.test(output));
 
@@ -53,6 +61,14 @@ export function failedAlike(runs: readonly RoutineRun[], routineId: string): str
   const recent = outcomesNewestFirst(runs.filter((run) => !run.dryRun), routineId).slice(0, FATIGUE_RUNS);
   if (recent.length < FATIGUE_RUNS || recent.some((run) => run.status !== "failed" || !run.error)) return null;
   return recent.every((run) => run.error === recent[0]!.error) ? recent[0]!.error! : null;
+}
+
+/** The app every one of the three newest outcomes found signed out, none of them a test run. */
+export function signedOutAlike(runs: readonly RoutineRun[], routineId: string, signedOut: (run: RoutineRun) => string[]): string | null {
+  const recent = outcomesNewestFirst(runs.filter((run) => !run.dryRun), routineId).slice(0, FATIGUE_RUNS);
+  if (recent.length < FATIGUE_RUNS) return null;
+  const [first, ...rest] = recent.map(signedOut);
+  return first!.find((slug) => rest.every((apps) => apps.includes(slug))) ?? null;
 }
 
 export function createRoutineGuard(deps: RoutineGuardDeps) {
@@ -88,6 +104,26 @@ export function createRoutineGuard(deps: RoutineGuardDeps) {
 
   const resultsThread = (routine: Routine) => routine.resultsThreadId ?? routine.sourceThreadId;
 
+  /** The third run in a row that found the same app signed out pauses its routine, with one reconnect card. */
+  function signedOutPause(run: RoutineRun): boolean {
+    const routine = deps.routine(run.routineId);
+    if (!routine?.enabled || !deps.signedOut) return false;
+    const slug = signedOutAlike(deps.runs(), run.routineId, deps.signedOut);
+    if (!slug) return false;
+    pause(routine, { by: "failures", error: `${slug} is signed out`, at: now() });
+    deps.reconnect?.(routine, resultsThread(routine), slug);
+    return true;
+  }
+
+  /** A one-off watch that told the person what they asked for is done: it stops, with a quiet line. */
+  function endWatch(run: RoutineRun): void {
+    const routine = deps.routine(run.routineId);
+    if (!routine?.enabled || !endsOnReport(routine)) return;
+    deps.pause(routine.id);
+    const thread = resultsThread(routine);
+    deps.tell(routine.botId, thread, serverLine(deps.language(thread), "server.routine.watchDone", { routine: routine.name }), true);
+  }
+
   return {
     /** Why a run may not start now, or null. Past a cap, a run someone started, or a test, still may. */
     held(run: RoutineRun): string | null {
@@ -95,6 +131,13 @@ export function createRoutineGuard(deps: RoutineGuardDeps) {
       const waiting = deps.allowanceHeld?.(run, deps.language(run.resultsThreadId ?? run.sourceThreadId));
       if (waiting) return waiting;
       if (run.manual || run.dryRun || run.target !== "bot") return null;
+      const watch = deps.routine(run.routineId);
+      if (watch?.enabled && watchExpired(watch, now())) {
+        deps.pause(watch.id);
+        const thread = resultsThread(watch);
+        deps.tell(watch.botId, thread, serverLine(deps.language(thread), "server.routine.watchExpired", { routine: watch.name, days: WATCH_MAX_DAYS }));
+        return `Not started: this watch ended after ${WATCH_MAX_DAYS} days`;
+      }
       const hit = deps.spendOver(run.botId, run.routineId);
       if (!hit) return null;
       const routine = deps.routine(run.routineId);
@@ -126,7 +169,7 @@ export function createRoutineGuard(deps: RoutineGuardDeps) {
 
     /** After a run failed: the third identical failure in a row pauses its routine, with one alert. */
     failed(run: RoutineRun): void {
-      if (run.dryRun) return;
+      if (run.dryRun || signedOutPause(run)) return;
       const routine = deps.routine(run.routineId);
       const error = routine?.enabled ? failedAlike(deps.runs(), run.routineId) : null;
       if (!routine || !error) return;
@@ -137,9 +180,11 @@ export function createRoutineGuard(deps: RoutineGuardDeps) {
 
     /** A finished run whose input had not arrived is checked again before its next scheduled time, with backoff. */
     changed(run: RoutineRun): void {
+      if (run.status === "completed" && !run.dryRun && run.report?.state === "posted" && !isNotYet(run.output)) endWatch(run);
       if (run.status !== "completed" || run.dryRun || seen.has(run.id)) return;
       seen.add(run.id);
       if (seen.size > 2_000) seen.delete(seen.values().next().value!);
+      if (signedOutPause(run)) return;
       const routine = deps.routine(run.routineId);
       if (!routine?.enabled || routine.checks || run.triggerSource === "webhook") return;
       if (!isNotYet(run.output)) {
@@ -169,6 +214,15 @@ export function createRoutineGuard(deps: RoutineGuardDeps) {
         return {};
       }
       return why ? { pausedFor: why } : {};
+    },
+
+    /** A reconnect card from `signedOutPause` connected its app: the routine it paused runs again. */
+    reconnected(resumeKey: string, connected: boolean): boolean {
+      if (!resumeKey.startsWith(RECONNECT_KEY)) return false;
+      const id = resumeKey.slice(RECONNECT_KEY.length);
+      const routine = deps.routine(id);
+      if (connected && routine && !routine.enabled && pauses[id]?.by === "failures") deps.resume?.(id);
+      return true;
     },
 
     /** One notice the person sees (see RoutineGuardDeps.tell). */

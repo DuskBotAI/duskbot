@@ -144,6 +144,8 @@ export const MODEL_PROVIDERS: readonly ModelProviderDef[] = [
     keyUrl: "https://docs.nano-gpt.com/", listModels: "openai", hosts: ["nano-gpt.com"], words: ["nano-gpt", "pay as you go", "every model"] },
   { id: "aimlapi", label: "AI/ML API", section: "router", wire: "openai", baseUrl: "https://api.aimlapi.com/v1", catalogId: "aimlapi",
     keyUrl: "https://docs.aimlapi.com/", listModels: "openai", hosts: ["api.aimlapi.com"], words: ["aimlapi", "every model"] },
+  { id: "llmtr", label: "LLMTR", section: "router", wire: "openai", baseUrl: "https://llmtr.com/v1",
+    keyUrl: "https://llmtr.com/docs/", listModels: "openai", hosts: ["llmtr.com"], words: ["gateway", "router", "turkey", "türkiye"] },
   { id: "azure", label: "Azure OpenAI", section: "enterprise", wire: "openai", baseUrl: "https://{resource}.openai.azure.com/openai/v1", catalogId: "azure",
     fields: [{ id: "resource", label: "Resource name", placeholder: "my-resource" }], keyUrl: "https://portal.azure.com", listModels: "openai",
     hosts: [".openai.azure.com", ".services.ai.azure.com", ".cognitiveservices.azure.com"], words: ["microsoft", "foundry", "azure ai"],

@@ -25,8 +25,8 @@ describe("limitBackupAllowed", () => {
 });
 
 it("says in one plain line who took over and when the limit resets", () => {
-  expect(failoverLine("Claude", "Codex", undefined)).toBe("Claude hit its limit, so Codex took over.");
-  expect(failoverLine("Claude", "Codex", NOW + HOUR)).toMatch(/^Claude hit its limit \(resets .+\), so Codex took over\.$/);
+  expect(failoverLine("Claude", "Codex", undefined)).toBe("Claude hit its limit, Codex is answering.");
+  expect(failoverLine("Claude", "Codex", NOW + HOUR)).toMatch(/^Claude hit its limit until .+, Codex is answering\.$/);
 });
 
 describe("LimitFailovers", () => {

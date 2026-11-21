@@ -60,10 +60,10 @@ describe("what Dusk offers to set up", () => {
   });
 
   it("offers three first jobs, the inbox and calendar ones fitted to whether those are connected", () => {
-    expect(introAsks([])).toEqual(["day", "inbox", "week"]);
-    expect(introAsks(["gmail"])).toEqual(["day", "inboxNow", "week"]);
-    expect(introAsks(["googlecalendar", "github"])).toEqual(["today", "inbox", "week"]);
-    expect(introAsks(["outlook"])).toEqual(["today", "inboxNow", "week"]);
+    expect(introAsks([])).toEqual(["week", "price", "research"]);
+    expect(introAsks(["gmail"])).toEqual(["inboxSummary", "week", "price"]);
+    expect(introAsks(["googlecalendar", "github"])).toEqual(["today", "week", "price"]);
+    expect(introAsks(["outlook"])).toEqual(["inboxSummary", "today", "week"]);
   });
 
   it("offers the first jobs on OpenCode's free backup too, never with no AI", () => {

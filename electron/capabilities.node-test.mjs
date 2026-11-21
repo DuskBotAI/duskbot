@@ -32,3 +32,18 @@ test("the home page (My Cloud or the person's own server) still listens through 
   const linux = desktopCapabilities({ platform: "freebsd", env: {}, remote: true, homeSpeech: true });
   assert.equal(linux.dictation.available, false);
 });
+
+test("another place the person chose listens through this computer's own recognizer, nothing else", () => {
+  for (const platform of ["darwin", "win32"]) {
+    const place = desktopCapabilities({ platform, env: {}, packaged: true, localConnection: { status: "ready", enabled: true }, remote: true, placeSpeech: true });
+    assert.equal(place.dictation.available, true, platform);
+    assert.equal(place.dictation.onDevice, true, platform);
+    assert.equal(place.screenPreview.available, false);
+    assert.equal(place.localComputer.available, false);
+    assert.equal(place.host.homeDir, "");
+  }
+  const linux = desktopCapabilities({ platform: "linux", env: { DISPLAY: ":0" }, remote: true, placeSpeech: true });
+  assert.deepEqual(linux.dictation, { available: false, engine: "none", onDevice: false, reasonCode: "remote-server" });
+  const unknown = desktopCapabilities({ platform: "darwin", env: {}, remote: true });
+  assert.equal(unknown.dictation.reasonCode, "remote-server");
+});

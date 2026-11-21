@@ -1,11 +1,11 @@
-import { useState, type ReactNode } from "react";
+import { useId, useState, type ReactNode } from "react";
 import { ArrowUpRight, Minus } from "@/icons";
 import { useCloud } from "../data/cloud";
 import type { PlanCatalog, Selection } from "../data/contracts";
 import { bundleOf, priceCart } from "../data/pricing";
 import { useAccountUsage } from "../data/usage";
 import { useSession } from "../data/session";
-import type { CancelAnswer, RetentionInput } from "../data/wire";
+import type { CancelAnswer, RetentionInput, RetentionOfferShown } from "../data/wire";
 import { longDate } from "../lib/format";
 import { Link } from "../lib/router";
 import { Choice, Modal } from "../ui/controls";
@@ -23,47 +23,38 @@ export const REASONS: Array<{ id: CancelAnswer; label: string }> = [
   { id: "switching", label: "i'm switching to something else" },
   { id: "other", label: "something else" },
 ];
-/** reasons with their own help before the cancel */
-const HELPED: ReadonlySet<CancelAnswer> = new Set(["price", "unused", "broken", "feature"]);
+/** the paid plans keep a dusk cloud's files this many days after the plan ends, then delete them */
+export const KEPT_DAYS = 30;
+const DAY = 86_400_000;
 
-export type FlowStep = "reason" | "help" | "confirm";
-/** every reason, or none, sees a way to keep the plan before the cancel when there is one: its own help, a discount or a smaller plan */
-export const nextStep = (step: FlowStep, reason: CancelAnswer | null, canSave = false): FlowStep =>
-  step === "reason" && ((reason && HELPED.has(reason)) || canSave) ? "help" : "confirm";
+/** what the reason step offers for a reason: only what this plan can really take */
+export function offerFor(reason: CancelAnswer | null, can: { discount: boolean; cheaper: boolean }): RetentionOfferShown {
+  if (reason === "price") return can.discount ? "discount" : can.cheaper ? "downgrade" : "none";
+  if (reason === "unused" || reason === "broken") return "help";
+  if (reason === "feature" || reason === "switching" || reason === "other") return "note";
+  return "none";
+}
+
+export type FlowStep = "before" | "reason" | "confirm" | "done";
 
 /** what ends with the plan, as plain lines, in the person's own numbers when known; `keepsLicense` is a work license that outlives the dusk cloud */
-export function losses(opts: { desk: boolean; work: boolean; keepsLicense: boolean; bots?: number; routines?: number }): string[] {
+export function losses(opts: { desk: boolean; work: boolean; keepsLicense: boolean; bots?: number; routines?: number; keptUntil: string }): string[] {
   const bots = opts.bots && opts.bots > 1 ? `your ${opts.bots} bots stop` : opts.bots === 1 ? "your bot stops" : "your bots stop";
   const routines = opts.routines && opts.routines > 1 ? `your ${opts.routines} routines only run` : opts.routines === 1 ? "your routine only runs" : "routines only run";
   return [
-    ...(opts.desk ? [`${bots} working when your mac sleeps`, `${routines} while your mac is awake`, "your dusk cloud files are kept for 30 days, then deleted"] : []),
+    ...(opts.desk ? [`${bots} working when your mac sleeps`, `${routines} while your mac is awake`, `your dusk cloud files are kept until ${opts.keptUntil}, then deleted`] : []),
     ...(opts.work && !opts.keepsLicense ? ["work use is no longer covered. personal use stays free."] : []),
   ];
 }
 
-/** the plan's losses in this person's own numbers; read only once the flow is open */
-function useLosses(opts: { desk: boolean; work: boolean; keepsLicense: boolean }) {
+function Losses({ desk, work, keepsLicense, keptUntil }: { desk: boolean; work: boolean; keepsLicense: boolean; keptUntil: string }) {
   const { bots } = useAccountUsage();
-  return losses({ ...opts, bots: bots.length, routines: bots.reduce((sum, row) => sum + (row.bot.routines?.length ?? 0), 0) });
-}
-
-function LeadLine({ desk, work, keepsLicense }: { desk: boolean; work: boolean; keepsLicense: boolean }) {
-  const lost = useLosses({ desk, work, keepsLicense });
-  return <p>{desk ? `once it ends, ${lost[0]}. ` : ""}if it's the cost, there's a lighter way to keep it.</p>;
-}
-
-function Confirm({ desk, work, keepsLicense, trial, until }: { desk: boolean; work: boolean; keepsLicense: boolean; trial: boolean; until: string }) {
-  const lost = useLosses({ desk, work, keepsLicense });
+  const lost = losses({ desk, work, keepsLicense, keptUntil, bots: bots.length, routines: bots.reduce((sum, row) => sum + (row.bot.routines?.length ?? 0), 0) });
+  if (!lost.length) return null;
   return (
-    <>
-      <p>{keepsLicense ? `your dusk cloud keeps working until ${until} and isn't charged again. your work license stays and keeps renewing.` : `everything keeps working until ${until}, and you won't be charged${trial ? "" : " again"}.`}{lost.length ? " after that:" : ""}</p>
-      {lost.length > 0 && (
-        <ul className="mt-3 flex flex-col gap-2">
-          {lost.map((l) => <li key={l} className="flex gap-2.5 text-14 text-ink-2"><Minus size={16} strokeWidth={1.75} className="mt-0.5 shrink-0 text-ink-4" aria-hidden />{l}</li>)}
-        </ul>
-      )}
-      <p className="mt-3">you can come back any time.</p>
-    </>
+    <ul className="mt-3 flex flex-col gap-2">
+      {lost.map((l) => <li key={l} className="flex gap-2.5 text-14 text-ink-2"><Minus size={16} strokeWidth={1.75} className="mt-0.5 shrink-0 text-ink-4" aria-hidden />{l}</li>)}
+    </ul>
   );
 }
 
@@ -115,14 +106,17 @@ function Saves({ offer, plus, smaller, work, busy, onDiscount, onDowngrade, cata
   );
 }
 
-/** account, billing, manage subscription: why, a tailored offer or fix, then what ends and the cancel itself.
- * consumer rules (US, EU, India) need an online cancel: the reason is optional and the cancel is at most three screens in. */
+/** account, billing, manage subscription: what ends, why with an offer that fits, then the cancel at the period's end.
+ * consumer rules (California's online cancel, US, EU, India) need an online cancel: the reason is optional, the cancel
+ * is always one clear button away, and it is at most three screens in. */
 export function CancelFlow({ open, onClose, catalog }: { open: boolean; onClose(): void; catalog: PlanCatalog }) {
-  const { billing, cancel, changePlan, updateCard, retentionStep, takeDiscount } = useCloud();
+  const { billing, cancel, keep: renew, changePlan, updateCard, retentionStep, takeDiscount } = useCloud();
   const { toast } = useSession();
-  const [step, setStep] = useState<FlowStep>("reason");
+  const noteId = useId();
+  const [step, setStep] = useState<FlowStep>("before");
   const [reason, setReason] = useState<CancelAnswer | null>(null);
-  const [busy, setBusy] = useState<"discount" | "downgrade" | "cancel" | null>(null);
+  const [note, setNote] = useState("");
+  const [busy, setBusy] = useState<"discount" | "downgrade" | "cancel" | "restart" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const sub = billing?.subscription;
   if (!sub) return null;
@@ -137,20 +131,21 @@ export function CancelFlow({ open, onClose, catalog }: { open: boolean; onClose(
   const plus = bundleOf(catalog, "starter");
   const smaller: Selection = planSelection(catalog, "starter", { interval: sel.interval, region: sel.region, work: false, keep: sel });
   const until = longDate(sub.currentPeriodEnd);
+  const keptUntil = longDate(sub.currentPeriodEnd + KEPT_DAYS * DAY);
   const cheaper = onPro && plus && !trial ? plus : null;
   const canSave = Boolean(offer || cheaper);
+  const shown = offerFor(reason, { discount: Boolean(offer), cheaper: Boolean(cheaper) });
+  const said = note.trim();
 
-  const log = (s: RetentionInput["step"], outcome: RetentionInput["outcome"]) => { if (reason) retentionStep({ reason, step: s, outcome }); };
-  const close = onClose;
-  const keep = () => { log(step, "kept"); close(); };
-  const next = () => {
-    if (step === "reason" && reason) log("reason", "shown");
-    setError(null);
-    setStep(nextStep(step, reason, canSave));
+  const log = (s: RetentionInput["step"], outcome: RetentionInput["outcome"]) => {
+    if (reason) retentionStep({ reason, step: s, outcome, offer: shown, ...(said && outcome !== "shown" ? { note: said } : {}) });
   };
-  const run = async (kind: "discount" | "downgrade" | "cancel", action: () => Promise<void>) => {
+  const keep = () => { if (step === "reason" || step === "confirm") log(step, "kept"); onClose(); };
+  const go = (to: FlowStep) => { setError(null); setStep(to); };
+  const toConfirm = () => { log("reason", "shown"); go("confirm"); };
+  const run = async (kind: NonNullable<typeof busy>, action: () => Promise<void>, after: () => void = onClose) => {
     setBusy(kind); setError(null);
-    try { await action(); close(); } catch (e) { setError((e as Error).message); } finally { setBusy(null); }
+    try { await action(); after(); } catch (e) { setError((e as Error).message); } finally { setBusy(null); }
   };
   const discount = () => run("discount", async () => { await takeDiscount(reason ?? "price"); toast(`${offer!.percent}% off your next ${offer!.cycles} months`); });
   const downgrade = () => run("downgrade", async () => {
@@ -160,21 +155,34 @@ export function CancelFlow({ open, onClose, catalog }: { open: boolean; onClose(
   });
   const stop = () => run("cancel", async () => {
     if (keepsLicense) { await changePlan({ ...sel, desktop: "none", size: null }); log("confirm", "cancelled"); }
-    else await cancel(reason ?? "");
-    toast(keepsLicense ? `cancelled. your dusk cloud works until ${until}.` : `cancelled. everything keeps working until ${until}.`);
+    else await cancel(reason ? { answer: reason, offer: shown, ...(said ? { improve: said } : {}) } : null);
+  }, () => go("done"));
+  const restart = () => run("restart", async () => {
+    if (keepsLicense) await changePlan(sel, 0); else await renew();
+    if (reason) retentionStep({ reason, step: "confirm", outcome: "kept", offer: shown });
+    toast(`your plan renews again on ${until}`);
   });
 
-  const title = step === "reason" ? "what's going on?" : step === "help" ? (reason === "broken" ? "let's fix it first" : reason === "price" ? "a lighter way to keep it" : reason === "unused" ? "here's what it can do" : reason === "feature" ? "tell us what's missing" : "before you go") : keepsLicense ? "cancel your dusk cloud?" : "cancel your plan?";
+  const title = step === "before" ? "before you go" : step === "reason" ? "why are you leaving?"
+    : step === "confirm" ? (keepsLicense ? "cancel your dusk cloud?" : "cancel your plan?")
+      : keepsLicense ? "your dusk cloud is cancelled" : "your plan is cancelled";
   const saves = <Saves offer={offer} plus={cheaper} smaller={cheaper ? smaller : null} work={work} busy={busy} onDiscount={() => void discount()} onDowngrade={() => void downgrade()} catalog={catalog} interval={sel.interval} />;
-  // past the reason, keeping the plan is the button that stands out; cancelling stays one clear click away
-  const footer = step === "confirm"
-    ? <><Button variant="primary" onClick={keep}>keep my plan</Button><Button variant="danger" onClick={() => void stop()} disabled={busy !== null}>{busy === "cancel" ? "cancelling" : keepsLicense ? "cancel dusk cloud" : "cancel my plan"}</Button></>
-    : step === "help"
-      ? <><Button variant="primary" onClick={keep}>keep my plan</Button><Button onClick={next} disabled={busy !== null}>continue to cancel</Button></>
-      : <><Button onClick={keep}>keep my plan</Button><Button variant="primary" onClick={next} disabled={busy !== null}>continue</Button></>;
+  const footer = step === "done"
+    ? <><Button onClick={() => void restart()} disabled={busy !== null}>{busy === "restart" ? "restarting" : "restart plan"}</Button><Button variant="primary" onClick={onClose}>done</Button></>
+    : step === "confirm"
+      ? <><Button variant="primary" onClick={keep}>keep my plan</Button><Button variant="danger" onClick={() => void stop()} disabled={busy !== null}>{busy === "cancel" ? "cancelling" : `cancel on ${until}`}</Button></>
+      : <><Button variant="primary" onClick={keep}>keep my plan</Button><Button onClick={step === "before" ? () => go("reason") : toConfirm} disabled={busy !== null}>continue to cancel</Button></>;
 
   return (
-    <Modal open={open} onClose={close} title={title} footer={footer} wide>
+    <Modal open={open} onClose={step === "reason" || step === "confirm" ? keep : onClose} title={title} footer={footer} wide>
+      {step === "before" && (
+        <>
+          <p>{keepsLicense ? `if you cancel, your dusk cloud keeps working until ${until}. your work license stays. after that:` : `if you cancel, everything keeps working until ${until}. after that:`}</p>
+          <Losses desk={desk} work={work} keepsLicense={keepsLicense} keptUntil={keptUntil} />
+          <p className="mt-3">you can restart any time before {until} and nothing changes.</p>
+        </>
+      )}
+
       {step === "reason" && (
         <>
           <p>pick the closest one, or skip it. it helps us fix the right thing.</p>
@@ -184,43 +192,41 @@ export function CancelFlow({ open, onClose, catalog }: { open: boolean; onClose(
               {REASONS.map((r) => <Choice key={r.id} name="cancel-reason" value={r.id} checked={reason === r.id} onChange={() => setReason(r.id)} title={r.label} />)}
             </div>
           </fieldset>
-          <button type="button" className="text-link mt-3 h-9 text-13" onClick={() => void updateCard()}>update your card instead</button>
+          {reason === "price" && (canSave ? saves : <p className="mt-4 rounded-[16px] bg-card px-4 py-3 text-14">you're on our smallest plan. free keeps your bots running on your mac at no cost.</p>)}
+          {reason === "unused" && <div className="mt-4"><Unused onHelped={() => log("help", "helped")} />{canSave && <><p className="mt-5">or keep it for less:</p>{saves}</>}</div>}
+          {reason === "broken" && (
+            <div className="mt-4">
+              <p>most problems clear up with a restart, and we answer every message.</p>
+              <div className="mt-3 flex flex-col gap-1.5">
+                {desk && <HelpLink to="/cloud" onClick={() => log("help", "helped")}>restart your dusk cloud</HelpLink>}
+                <HelpLink to="/workspaces" onClick={() => log("help", "helped")}>check that your computers are connected</HelpLink>
+                <HelpLink to={`${CONTACT}?subject=${encodeURIComponent("something broke")}`} external onClick={() => log("help", "helped")}>tell us what broke at hello@dusk.bot</HelpLink>
+              </div>
+            </div>
+          )}
+          {(reason === "feature" || reason === "switching" || reason === "other") && (
+            <div className="mt-4">
+              <label htmlFor={noteId} className="mb-1.5 block text-13 text-ink-2">{reason === "other" ? "anything we should know? (optional)" : "what's missing? (optional)"}</label>
+              <textarea id={noteId} value={note} maxLength={2000} rows={3} onChange={(e) => setNote(e.target.value)} className="field !h-auto min-h-[88px] resize-y !py-3 !text-14" />
+              <p className="mt-2 text-13 text-ink-3">we read every note. keep your plan and we'll write back when it's there.</p>
+            </div>
+          )}
+          {sub.status === "past_due" && <button type="button" className="text-link mt-3 h-9 text-13" onClick={() => void updateCard()}>update your card instead</button>}
         </>
       )}
 
-      {step === "help" && reason === "price" && (
+      {step === "confirm" && (
         <>
-          <p>before you go, here's what we can do.</p>
-          {canSave ? saves : <p className="mt-4 rounded-[16px] bg-card px-4 py-3 text-14">you're on our smallest plan. free keeps your bots running on your mac at no cost.</p>}
-        </>
-      )}
-      {step === "help" && (reason === null || reason === "switching" || reason === "other") && (
-        <>
-          <LeadLine desk={desk} work={work} keepsLicense={keepsLicense} />
-          {saves}
-        </>
-      )}
-      {step === "help" && reason === "unused" && <><Unused onHelped={() => log("help", "helped")} />{canSave && <><p className="mt-5">or keep it for less:</p>{saves}</>}</>}
-      {step === "help" && reason === "broken" && (
-        <>
-          <p>most problems clear up with a restart, and we answer every message.</p>
-          <div className="mt-4 flex flex-col gap-1.5">
-            {desk && <HelpLink to="/cloud" onClick={() => log("help", "helped")}>restart your dusk cloud</HelpLink>}
-            <HelpLink to="/workspaces" onClick={() => log("help", "helped")}>check that your computers are connected</HelpLink>
-            <HelpLink to={`${CONTACT}?subject=${encodeURIComponent("something broke")}`} external onClick={() => log("help", "helped")}>write to us at hello@dusk.bot</HelpLink>
-          </div>
-        </>
-      )}
-      {step === "help" && reason === "feature" && (
-        <>
-          <p>tell us what you need. we read every note, and it shapes what we build next.</p>
-          <div className="mt-4 flex flex-col gap-1.5">
-            <HelpLink to={`${CONTACT}?subject=${encodeURIComponent("a feature i need")}`} external onClick={() => log("help", "helped")}>write to us at hello@dusk.bot</HelpLink>
-          </div>
+          <p>{keepsLicense ? `your dusk cloud ends on ${until}, not today. it keeps working until then and isn't charged again. your work license stays and keeps renewing.`
+            : `your plan ends on ${until}, not today. everything keeps working until then, and you won't be charged${trial ? "" : " again"}.`}</p>
+          {desk && <p className="mt-3">your dusk cloud files are kept until {keptUntil}, then deleted.</p>}
+          <p className="mt-3">you can restart any time before {until}.</p>
         </>
       )}
 
-      {step === "confirm" && <Confirm desk={desk} work={work} keepsLicense={keepsLicense} trial={trial} until={until} />}
+      {step === "done" && (
+        <p role="status">{keepsLicense ? `your dusk cloud works until ${until} and isn't charged again.` : `everything keeps working until ${until}, and you won't be charged again.`} changed your mind? restart it any time before then.</p>
+      )}
       {error && <p role="alert" className="mt-3 text-13 text-bad">{error}</p>}
     </Modal>
   );

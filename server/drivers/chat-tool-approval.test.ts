@@ -244,3 +244,13 @@ describe("a refused call, as the model reads it", () => {
     expect(refusal(null, () => undefined)).toBe("Permission denied or expired; the tool was not executed. Tell the person in one line what you did not do, offer the simplest other way (for a file: drag it into the chat or paste its text), and say what you will deliver once you have it.");
   });
 });
+
+describe("chat tool approval and declined sends", () => {
+  it("carries the send's key on its ask, so a declined send can be refused when asked again", () => {
+    const open = vi.fn();
+    const gate = createChatToolApproval({ signal: new AbortController().signal, open, resolved: vi.fn(), openQuestion: vi.fn(), resolvedQuestion: vi.fn() });
+    void gate.ask("slack_post", "Post in #general", undefined, "k1");
+    void gate.ask("slack_read", "Read #general");
+    expect(open.mock.calls.map(([ask]) => ask.sendKey)).toEqual(["k1", undefined]);
+  });
+});

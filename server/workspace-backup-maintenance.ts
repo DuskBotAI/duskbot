@@ -3,8 +3,16 @@ export class WorkspaceBackupMaintenance {
   active = false;
   pendingRestore = false;
   private requests = 0;
+  private updating = false;
+
+  reserveUpdate(idle: () => boolean): (() => void) | null {
+    if (this.active || this.requests || !idle()) return null;
+    this.active = this.updating = true;
+    return () => { this.updating = this.active = false; };
+  }
 
   assertAvailable(): void {
+    if (this.updating) throw Object.assign(new Error("The server is installing an update. Try again after it restarts."), { status: 503 });
     if (this.active) throw Object.assign(new Error(this.pendingRestore
       ? "A workspace restore is ready. Fully quit and reopen dusk bot (or restart the hosted server) to finish."
       : "A workspace backup is in progress. Try again when it finishes."), { status: 503 });

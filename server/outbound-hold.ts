@@ -1,5 +1,7 @@
 import { randomUUID } from "node:crypto";
 
+import { DECLINED_BEFORE, declinedBefore, sendKey } from "../shared/declined-sends.ts";
+
 import { draftSent, editedEmailArguments, editedEmailReview, emailReviewOf, type EmailEdits, type EmailReview } from "../shared/email-review.ts";
 import type { ConnectorCall, OutboundPolicy } from "../shared/outbound.ts";
 import { DEFAULT_OUTBOUND_POLICY, OUTBOUND_DEFAULT_CAP } from "../shared/outbound.ts";
@@ -76,7 +78,7 @@ function emailText(email: EmailReview): string {
   return `${head.filter(Boolean).join("\n")}\n\n${email.body}`;
 }
 
-type CardInput = Pick<OptionCardData, "title" | "subtitle" | "options" | "email" | "purchase"> & { outboundRequest: NonNullable<OptionCardData["outboundRequest"]> };
+type CardInput = Pick<OptionCardData, "title" | "subtitle" | "options" | "email" | "purchase" | "send"> & { outboundRequest: NonNullable<OptionCardData["outboundRequest"]> };
 type Asked = { ok: true; messageId: string; edits: EmailEdits | null } | { ok: false; text: string };
 
 export interface OutboundHold {
@@ -130,6 +132,10 @@ export function createOutboundHold(deps: OutboundHoldDeps): OutboundHold {
       }
     }
     if (answer === "allow") return { ok: true, messageId: card.id, edits };
+    if (answer === "deny" && input.send) {
+      const row = store.messagesFor(threadId).find((message) => message.id === card.id);
+      if (row?.card?.send) store.patchMessage(threadId, row.id, { card: { ...row.card, send: { ...row.card.send, declined: true } } });
+    }
     if (answer === "timeout" || answer === "replied") {
       const stale = store.messagesFor(threadId).find((message) => message.id === card.id);
       if (stale?.card && !stale.card.answered) {
@@ -163,6 +169,11 @@ export function createOutboundHold(deps: OutboundHoldDeps): OutboundHold {
     async hold({ bot: currentSender, threadId, tool: outboundTool, calls: outboundCalls, opaque, fullAccess, active, readDraft }) {
       const refuseOutbound = (text: string): OutboundHoldAnswer => ({ ok: false, text });
       const ask = cardAsk(outboundCalls);
+      const sent = sendKey(outboundCalls);
+      if (declinedBefore(store.messagesFor(threadId), sent)) {
+        appendDecision(DATA_DIR, { threadId, botId: currentSender.id, botName: currentSender.name, tool: outboundTool, decision: "auto-denied", source: "outbound", rule: "declined-before" });
+        return refuseOutbound(DECLINED_BEFORE);
+      }
       const allowance = outboundDailyCap(currentSender.outbound, fullAccess, opaque, ask);
       const { app, calls, summary } = outboundCard(outboundCalls);
       const capNote = (count: number, full: boolean) =>
@@ -188,7 +199,7 @@ export function createOutboundHold(deps: OutboundHoldDeps): OutboundHold {
         : email
           ? { title: EMAIL_TITLE, subtitle: emailText(email), options: EMAIL_OPTIONS, email, outboundRequest }
           : { title: SEND_TITLE, subtitle: summary, options: ["Allow", "Deny"], outboundRequest };
-      const asked = await askOnCard(currentSender, threadId, outboundTool, summary, active, card);
+      const asked = await askOnCard(currentSender, threadId, outboundTool, summary, active, { ...card, send: { key: sent } });
       if (!asked.ok) return refuseOutbound(asked.text);
       if (ask.kind === "draft" && asked.edits) return refuseOutbound("dusk bot did not send this: a saved draft goes out as saved, and the person changed it on the card. Update the draft with their changes first, then send it again.");
       if (ask.kind === "email" && asked.edits) applyEdits(threadId, asked.messageId, outboundCalls[0]!, ask.email, asked.edits);

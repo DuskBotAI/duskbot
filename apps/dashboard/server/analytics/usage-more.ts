@@ -4,6 +4,7 @@ import { LATENCY_EDGES, REASON_WORDS, type PersonDay, type RoutineSpan, type Sna
 import type { StoredEvent } from "./sink.ts";
 import type { FocusItem } from "./usage-summary.ts";
 import { ACCOUNT_SIGN_IN_STEPS } from "../../../../shared/product-signals.ts";
+import { cancelledFeedback, type RetentionOutcome } from "../../../../shared/billing-api.ts";
 
 const DAY = 86_400_000;
 export interface Count { key: string; count: number }
@@ -33,7 +34,7 @@ export interface HandoffStep { step: string; side: "app" | "web"; from: string |
 export interface MoreInput {
   days: string[]; daily: Map<string, Record<string, number>>; people: PersonDay[]; snapshots: SnapshotRow[]; routines: RoutineSpan[]; events: StoredEvent[];
   billing: { checkouts: Array<{ accountId: string; status: string; createdAt: number }>; subscriptions: Array<{ accountId: string; totalCents: number; createdAt: number; status: string }>;
-    feedback: Array<{ answer: string; at: number }> };
+    feedback: Array<{ answer: string; at: number; outcome?: RetentionOutcome }> };
   accounts: ReadonlyArray<{ id: string; createdAt: number }>; from: number; to: number; now: number;
   /** cloud wake times as the slack edge measures them, per desktop kind */
   wake?: { count: number; p50Ms: number | null; p90Ms: number | null };
@@ -151,7 +152,7 @@ export function moreOf(input: MoreInput): MoreAnswer {
     routines: { every: keys("every:").map(key => { const n = total(`every:${key}`), bad = total(`every_fail:${key}`); return { key, total: n, good: n - bad, bad, rate: rate(n - bad, n) }; }).sort((a, b) => b.total - a.total),
       runP50: bucketQuantile(buckets("run_ms:"), 0.5), survival: { eligible: eligible.length, survived: survived.length, share: rate(survived.length, eligible.length) } },
     money: { planViews, checkouts: { started: checkouts.length, paid, abandoned, rate: rate(paid, checkouts.length) },
-      cancelReasons: counts(input.billing.feedback.filter(entry => entry.at >= input.from && entry.at < input.to).map(entry => entry.answer)), upgrades, downgrades },
+      cancelReasons: counts(input.billing.feedback.filter(entry => entry.at >= input.from && entry.at < input.to && cancelledFeedback(entry)).map(entry => entry.answer)), upgrades, downgrades },
     discovery,
     setups: { version: counts(opens.map(event => String(event.props.appVersion ?? "")).filter(Boolean)).slice(0, 8), os: setupsOf("os"), arch: setupsOf("arch"), locale: setupsOf("locale"), screen: setupsOf("screen"),
       theme: setupsOf("theme"), skin: setupsOf("skin"), notifications: setupsOf("notifications") },

@@ -85,3 +85,17 @@ describe("document cards and files", () => {
     expect(documentFileName("Q3: plan/draft", "sheet")).toBe("Q3_ plan_draft.csv");
   });
 });
+
+describe("the person's manual", () => {
+  it("is read by the bot and never changed by it; the person edits it and restores it", () => {
+    const { documents } = store();
+    const manual = created(documents.create("bot1", { title: "Finance manual", kind: "markdown", content: "Refunds: never issue.", manual: true }, "bot"));
+    expect(manual.manual).toBe(true);
+    expect(documents.update("bot1", manual.id, { content: "Refunds: issue freely." }, "bot")).toMatchObject({ ok: false, status: 409, error: expect.stringContaining("only they change it") });
+    expect(documents.get("bot1", manual.id)?.content).toBe("Refunds: never issue.");
+    const edited = documents.update("bot1", manual.id, { content: "Refunds: ask Maya." }, "person");
+    expect(edited).toMatchObject({ ok: true, document: { content: "Refunds: ask Maya.", manual: true, version: 2 } });
+    expect(documents.restore("bot1", manual.id, 1, "person")).toMatchObject({ ok: true, document: { content: "Refunds: never issue." } });
+    expect(created(documents.create("bot1", { title: "Notes", kind: "markdown", content: "x" }, "bot")).manual).toBeUndefined();
+  });
+});

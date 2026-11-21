@@ -564,7 +564,7 @@ it("a routine of the owner's not yet cleared for the Mac can't clear itself: its
   const tuned = JSON.stringify(await (await agentTools())("manage_trigger", { trigger_id: before.fullApproved, action: "update",
     changes: { schedule: { type: "cron", expression: "0 3 * * *", timeZone: "America/New_York" } } }));
   expect(tuned).not.toContain("isError\":true");
-  expect((await api("GET", "/api/routines", { token: owner })).body.routines.find((routine: any) => routine.id === before.fullApproved).schedule.expression, tuned).toBe("0 3 * * *");
+  expect((await api("GET", "/api/routines", { token: owner })).body.routines.find((routine: any) => routine.id === before.fullApproved).schedule.expression, tuned).toMatch(/^[2-7] 3 \* \* \*$/);
   expect(authors().routines[before.fullApproved]).toBeUndefined();
   for (const active of (await api("GET", "/api/routines", { token: owner })).body.runs ?? []) await api("POST", `/api/routine-runs/${active.id}/cancel`, { token: owner });
   await idle(before.full, owner);

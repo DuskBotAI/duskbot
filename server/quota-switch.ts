@@ -21,6 +21,7 @@ import type { BotRecord, Message, Store, TaskRecord } from "./store.ts";
 import type { TurnStops } from "./turn-outcome.ts";
 import { signedOutStop, type LimitTakeover, type TakeoverScope } from "./host/limit-takeover.ts";
 import { aiProductName } from "./limit-resets.ts";
+import { failoverLine } from "./limit-failover.ts";
 import { resumeNote } from "./host/limit-hold.ts";
 import { TAKEOVER_CAUSE } from "./limit-resume.ts";
 import { serverLine } from "./server-lines.ts";
@@ -185,8 +186,8 @@ export function createQuotaSwitch(deps: QuotaSwitchDeps): QuotaSwitch {
     .sort((a, b) => a.createdAt - b.createdAt).at(-1)?.id;
 
   /** The backup picks the limited turn up where it was cut off: the conversation and the steps it ran stay its context. */
-  const carryOnWith = async (botId: string, threadId: string, limited: QuotaSwitchEngine, name: string, asked: string | undefined): Promise<void> => {
-    notice(threadId, `continuing on ${name} after hitting the usage limit`, true);
+  const carryOnWith = async (botId: string, threadId: string, limited: QuotaSwitchEngine, name: string, line: string, asked: string | undefined): Promise<void> => {
+    notice(threadId, line, true);
     try {
       await deps.carryOn!(botId, threadId, resumeNote({ engineName: aiProductName(limited, limited.instanceId), ...(asked ? { request: asked } : {}) }, null, TAKEOVER_CAUSE), asked);
     } catch (error) {
@@ -216,12 +217,13 @@ export function createQuotaSwitch(deps: QuotaSwitchDeps): QuotaSwitch {
     }
     deps.takeover?.moved(botId, threadId, before.modelSelection, checked.selection, resetsAt, scope);
     const name = engine.instanceId === current.instanceId ? `${nameOf(engine)} ${checked.selection.model}` : nameOf(engine);
-    const why = scope === "signed-out" ? `while ${nameOf(current)} is signed out`
-      : scope === "provider" ? `because ${nameOf(current)} did not answer` : "after hitting the usage limit";
+    const limitedName = scope === "model" || scope === "credits" ? `${nameOf(current)} ${before.modelSelection.model}` : nameOf(current);
+    const why = scope === "signed-out" ? `while ${nameOf(current)} is signed out` : `because ${nameOf(current)} did not answer`;
+    const line = LIMITS.has(scope) ? failoverLine(limitedName, name, resetsAt, deps.language?.(threadId)) : `continuing on ${name} ${why}`;
     const held = heldBy(botId, threadId, rootOf(threadId, request));
     const original = held ? undefined : resendable(store, threadId, request.messageId);
     if (!held && acted && LIMITS.has(scope) && deps.carryOn) {
-      await carryOnWith(botId, threadId, current, name, request.origin?.kind === "user" ? request.origin.request : original?.text);
+      await carryOnWith(botId, threadId, current, name, line, request.origin?.kind === "user" ? request.origin.request : original?.text);
     } else if (held === "card") notice(threadId, `switched to ${name}. Your request waits on a card above and continues on ${name} once you act on it.`, true);
     else if (held === "runtime") notice(threadId, `switched to ${name}. Your request is still under way here and continues on ${name}.`, true);
     else if (held === "busy") notice(threadId, `switched to ${name}. This conversation is working, so your message was not sent again.`, true);
@@ -230,7 +232,7 @@ export function createQuotaSwitch(deps: QuotaSwitchDeps): QuotaSwitch {
     } else if (!original) {
       notice(threadId, `switched to ${name}, but your message could not be found to send again. Send it again.`, false);
     } else {
-      notice(threadId, `continuing on ${name} ${why}`, true);
+      notice(threadId, line, true);
       try {
         await deps.resend(botId, threadId, original, original.replyToId ? store.messagesFor(threadId).find((message) => message.id === original.replyToId) : undefined, spokenLineFields(original.via, original.callId));
       } catch (error) {
@@ -448,7 +450,7 @@ export function createQuotaSwitch(deps: QuotaSwitchDeps): QuotaSwitch {
       notice(threadId, `${now}. A teammate's question is waiting for your answer in this conversation, so your message was not sent again: answer it, then send your message again.`, false);
     } else if (card.quotaSwitch!.wait && deps.carryOn) {
       const origin = deps.request(threadId)?.origin;
-      await carryOnWith(botId, threadId, current, chosen.name, original?.text ?? (origin?.kind === "user" ? origin.request : undefined));
+      await carryOnWith(botId, threadId, current, chosen.name, failoverLine(nameOf(current), chosen.name, card.quotaSwitch!.wait.resetsAt, deps.language?.(threadId)), original?.text ?? (origin?.kind === "user" ? origin.request : undefined));
     } else if (!original) {
       notice(threadId, `${now}, but the message that hit quota could not be found to resend: send it again.`, false);
     } else {

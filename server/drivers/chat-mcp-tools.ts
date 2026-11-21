@@ -24,6 +24,7 @@ import { listsComputerTool } from "../computer-tool-list.ts";
 import { capToolList, shareToolBudget, toolLimitFromEnv } from "../tool-count-limit.ts";
 import { harnessMcpRequest, parseHarnessMcpKind } from "../harness-mcp-request.ts";
 import { harnessMcpTokenEnv } from "../harness-mcp-token.ts";
+import { HOST_SHELL_SERVER } from "../host-shell-mcp.ts";
 import { SPAWNED_PROXIES } from "../proxy-paths.ts";
 import { agentsMcp } from "./agents-mcp.ts";
 import type { Json } from "./agents-client.ts";
@@ -514,6 +515,7 @@ export async function mountChatTools(integrations: SendTurnInput["integrations"]
   if (agentsServer && eligible("agents")) servers.push(["agents", agentsServer]);
   if (integrations?.composio && eligible("composio")) servers.push(["composio", integrations.composio]);
   if (integrations?.composioOwn && eligible(OWN_APPS_SERVER)) servers.push([OWN_APPS_SERVER, integrations.composioOwn]);
+  if (integrations?.shell && eligible(HOST_SHELL_SERVER)) servers.push([HOST_SHELL_SERVER, integrations.shell]);
   if (integrations?.data && eligible("data")) servers.push(["data", integrations.data]);
   if (integrations?.email && eligible("email")) servers.push(["email", integrations.email]);
   if (integrations?.device && eligible("device")) servers.push(["device", integrations.device]);

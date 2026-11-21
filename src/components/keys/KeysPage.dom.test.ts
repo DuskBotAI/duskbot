@@ -26,7 +26,10 @@ vi.mock("@/state/store", async (original) => {
   };
 });
 // sealing has its own tests (src/lib/sealed-send.test.ts): here the patch the row asked to save is what the server gets
-vi.mock("@/lib/sealed-send", () => ({ putConfig: (patch: unknown) => fx.api("/api/config", { method: "PUT", body: JSON.stringify(patch) }) }));
+vi.mock("@/lib/sealed-send", () => ({
+  putConfig: (patch: unknown) => fx.api("/api/config", { method: "PUT", body: JSON.stringify(patch) }),
+  sendSealed: (_purpose: unknown, _target: unknown, _values: unknown, send: (sealed: null) => unknown) => send(null),
+}));
 vi.mock("@/lib/analytics", () => ({ track: vi.fn() }));
 vi.mock("@/lib/live-call-media", () => ({ dismissLiveNotice: vi.fn() }));
 
@@ -207,19 +210,45 @@ describe("the keys page", () => {
     expect(fx.api).not.toHaveBeenCalled();
   });
 
-  it("saves a pasted key, reads it back masked with a check, and keeps it in view when a later check rejects it", async () => {
+  it("checks a pasted key before saving it, then reads it back masked and says it works", async () => {
     fx.api.mockImplementation(async (path: string) => path === "/api/config"
       ? { ...fx.config, openai: { configured: true, last4: "a1b2" } }
-      : { ok: false, reason: "rejected" });
+      : { ok: true, check: "models", models: ["gpt-5-mini"], result: "works", model: "gpt-5-mini" });
     page();
     paste(openDialog("openai").querySelector<HTMLInputElement>("[data-key-input]")!, "sk-proj-abcdefghijklmnopa1b2");
-    await vi.waitFor(() => expect(row("openai")!.textContent).toContain("Didn't work: The provider rejected this key."));
-    expect(fx.api.mock.calls.map(([path]) => path)).toEqual(["/api/config", "/api/keys/test"]);
-    expect(JSON.parse(fx.api.mock.calls[0]![1].body)).toEqual({ openai: { key: "sk-proj-abcdefghijklmnopa1b2" } });
-    const masked = row("openai")!.querySelector("[data-key-masked]")!;
-    expect(masked.textContent).toContain("••••••••a1b2");
+    await vi.waitFor(() => expect(row("openai")!.textContent).toContain("OpenAI accepted this key."));
+    expect(fx.api.mock.calls.map(([path]) => path)).toEqual(["/api/keys/test", "/api/config"]);
+    expect(JSON.parse(fx.api.mock.calls[1]![1].body)).toEqual({ openai: { key: "sk-proj-abcdefghijklmnopa1b2" } });
+    expect(row("openai")!.querySelector("[data-key-masked]")!.textContent).toContain("••••••••a1b2");
     expect(dialog("openai")).toBeNull();
-    expect(row("openai")!.querySelector("[data-key-replace]")).not.toBeNull();
+  });
+
+  it("keeps a pasted key the provider refuses out of settings, and says what to do under the field", async () => {
+    fx.api.mockImplementation(async () => ({ ok: false, reason: "rejected", status: 401, result: "wrong_key" }));
+    page();
+    paste(openDialog("openai").querySelector<HTMLInputElement>("[data-key-input]")!, "sk-proj-abcdefghijklmnopa1b2");
+    await vi.waitFor(() => expect(dialog("openai")!.querySelector("[data-key-check=wrong_key]")).not.toBeNull());
+    const note = dialog("openai")!.querySelector("[data-key-check]")!;
+    expect(note.textContent).toContain("Wrong key");
+    expect(note.textContent).toContain("OpenAI didn't accept this key.");
+    expect([...dialog("openai")!.querySelectorAll("a")].map((link) => link.getAttribute("href"))).toEqual(["https://platform.openai.com/api-keys"]);
+    expect(fx.api.mock.calls.map(([path]) => path)).toEqual(["/api/keys/test"]);
+    expect(dialog("openai")!.querySelector<HTMLInputElement>("[data-key-input]")!.value).toBe("sk-proj-abcdefghijklmnopa1b2");
+  });
+
+  it("saves a key with no credit only after Save anyway, and links to the provider's credit page", async () => {
+    fx.api.mockImplementation(async (path: string) => path === "/api/config"
+      ? { ...fx.config, openai: { configured: true, last4: "a1b2" } }
+      : { ok: false, reason: "credits", status: 429, result: "no_credit", model: "gpt-5-mini" });
+    page();
+    paste(openDialog("openai").querySelector<HTMLInputElement>("[data-key-input]")!, "sk-proj-abcdefghijklmnopa1b2");
+    await vi.waitFor(() => expect(dialog("openai")!.querySelector("[data-key-check=no_credit]")).not.toBeNull());
+    expect(dialog("openai")!.querySelector("[data-key-check] a")!.getAttribute("href")).toBe("https://platform.openai.com/settings/organization/billing");
+    expect(fx.api.mock.calls.map(([path]) => path)).toEqual(["/api/keys/test"]);
+    flushSync(() => dialog("openai")!.querySelector<HTMLButtonElement>("[data-key-check-anyway]")!.click());
+    await vi.waitFor(() => expect(row("openai")!.querySelector("[data-key-masked]")?.textContent).toContain("••••••••a1b2"));
+    expect(fx.api.mock.calls.map(([path]) => path)).toEqual(["/api/keys/test", "/api/config"]);
+    expect(row("openai")!.querySelector("[data-key-check=no_credit]")).not.toBeNull();
   });
 
   it("confirms a key the server checked on save as Connected", async () => {

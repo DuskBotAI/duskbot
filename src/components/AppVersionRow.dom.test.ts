@@ -87,3 +87,12 @@ it("the sidebar says once that the app updated, and a click puts it away", async
   await hear({ ready: null, mode: "self", updated: null });
   expect(host.querySelector("[data-app-updated]")).toBeNull();
 });
+
+it("uses the linked workspace even when an older Mac bridge also offers app updates", async () => {
+  vi.stubGlobal("duskDesktop", { app: { ownPage: false }, appUpdate: bridge });
+  try {
+    await act(async () => { root.render(createElement(AppVersionRow, { fallback: createElement("p", { "data-fallback": "" }) })); });
+    expect(host.querySelector("[data-fallback]")).not.toBeNull();
+    expect(bridge.state).not.toHaveBeenCalled();
+  } finally { vi.unstubAllGlobals(); }
+});

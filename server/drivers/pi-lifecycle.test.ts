@@ -2,7 +2,7 @@ import { chmodSync, existsSync, mkdtempSync, readFileSync } from "node:fs";
 import type { ChildProcess } from "node:child_process";
 import { once } from "node:events";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { ensureDirs } from "../config.ts";
@@ -42,6 +42,21 @@ afterEach(async () => {
   }
   events.stop();
   await removeTempDir(dir);
+});
+
+it("hands its bot box the MCP config's folder, which a box's private /tmp would hide", async () => {
+  const spawn = vi.spyOn(procs, "spawnCli");
+  try {
+    await instance.adapter.sendTurn({ threadId: "boxed", text: "wait" });
+    await events.until((event) => event.type === "item.started");
+    const [, , options, owner] = spawn.mock.calls.find((call) => call[3] === "bot")!;
+    const config = options.env?.DUSK_MCP_CONFIG;
+    expect(config && options.box && typeof options.box === "object" ? options.box.rw : null).toEqual([dirname(config!)]);
+    expect(owner).toBe("bot");
+  } finally {
+    spawn.mockRestore();
+    await instance.adapter.interruptTurn("boxed");
+  }
 });
 
 it.each(["interrupt", "stopAll", "dispose"])("keeps ownership through %s until the CLI has stopped", async (action) => {

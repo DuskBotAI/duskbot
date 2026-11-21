@@ -51,6 +51,7 @@ export const BRIDGE_HOT_TOOL_NAMES: ReadonlySet<string> = new Set([
   "message_person",
   "send_voice_note",
   "memory_update",
+  "read_skill",
   "trigger",
 ]);
 

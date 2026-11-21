@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { bareAck, MAX_STOP_GATES, TurnGates, openChecklist, promisesFollowUp, ranTool, schedulesWork, stopGateFor, type StopGate, type TurnSoFar } from "./turn-stop-gates.ts";
+import { bareAck, claimsDone, MAX_STOP_GATES, TurnGates, openChecklist, promisesFollowUp, ranTool, schedulesWork, settleAsks, stopGateFor, stopGateNote, type Ask, type StopGate, type TurnForAsks, type TurnSoFar } from "./turn-stop-gates.ts";
 
 const turn = (over: Partial<TurnSoFar>): TurnSoFar => ({ reply: "", applied: new Set(), canSchedule: true, scheduled: false, effectful: 0, unconfirmed: null, ...over });
 
@@ -107,5 +107,71 @@ describe("TurnGates", () => {
     gates.mount(["mail_send", "wait_until"], true);
     gates.ran("mail_send", "{}", true, "ok");
     expect(gates.gate("Sent. I'll let you know when they reply.")).toBeNull();
+  });
+});
+
+describe("honest status words", () => {
+  it.each(["Done.", "All set, the invoice is updated.", "That's taken care of.", "Fixed it: the row now reads 42."])("hears a claim of done: %s", (text) => {
+    expect(claimsDone(text)).toBe(true);
+  });
+  it.each(["Drafted it, nothing sent yet.", "Not done yet: waiting on the bank.", "Once you approve, it's done.", "Is that done?", "Sent the email to Ana."])("leaves other states alone: %s", (text) => {
+    expect(claimsDone(text)).toBe(false);
+  });
+
+  it("sends a done claim back when the last app change was never read back, whatever its tool answered", () => {
+    const gates = new TurnGates();
+    gates.mount(["mcp__sheets__update_row", "mcp__sheets__get_row"]);
+    gates.ran("mcp__sheets__update_row", "{}", true, '{"updatedRange":"A2:C2"}');
+    expect(gates.gate("Sent you the summary above.")).toBeNull();
+    expect(gates.gate("Done, the row is updated.")).toContain("changed something");
+    expect(gates.applied.has("unconfirmed_write")).toBe(true);
+  });
+
+  it("lets done stand after a read-back, after a send, and with no way to read", () => {
+    const read = new TurnGates();
+    read.mount(["mcp__sheets__update_row", "mcp__sheets__get_row"]);
+    read.ran("mcp__sheets__update_row", "{}", true, '{"updatedRange":"A2:C2"}');
+    read.ran("mcp__sheets__get_row", "{}", true, "A2: 42");
+    expect(read.gate("Done.")).toBeNull();
+
+    const sent = new TurnGates();
+    sent.mount(["GMAIL_SEND_EMAIL", "GMAIL_FETCH_EMAILS"]);
+    sent.ran("GMAIL_SEND_EMAIL", "{}", true, '{"id":"m1"}');
+    expect(sent.gate("Done, it's on its way.")).toBeNull();
+
+    const blind = new TurnGates();
+    blind.mount(["mcp__door__unlock"]);
+    blind.ran("mcp__door__unlock", "{}", true, "unlocked");
+    expect(blind.gate("Done.")).toBeNull();
+  });
+});
+
+describe("settleAsks", () => {
+  const ask = (id: string, text: string): Ask => ({ id, text, state: "open" });
+  const turn = (said: string[], over: Partial<TurnForAsks> = {}): TurnForAsks => ({ said, scheduled: false, handedOff: false, ...over });
+
+  it("delivers a lone ask with any real answer, and keeps it open on an acknowledgement alone", () => {
+    expect(settleAsks([ask("a", "what's 18% of 2450")], turn(["18% of 2450 is 441."]))).toEqual([{ id: "a", state: "delivered" }]);
+    expect(settleAsks([ask("a", "what's 18% of 2450")], turn(["On it, checking now."]))).toEqual([]);
+    expect(settleAsks([ask("a", "what's 18% of 2450")], turn([]))).toEqual([]);
+    expect(settleAsks([ask("a", "thanks!")], turn(["Anytime."]))).toEqual([{ id: "a", state: "delivered" }]);
+    expect(settleAsks([ask("a", "send that email")], turn(["Which email do you mean?"]))).toEqual([{ id: "a", state: "blocked" }]);
+  });
+
+  it("with several asks, delivers those the words take up and leaves the rest open", () => {
+    const asks = [ask("a", "a one-line caption for my bakery's diwali post"), ask("b", "what's the weather in mumbai in july")];
+    expect(settleAsks(asks, turn(["Caption: Sweet lights, sweeter bites this Diwali at our bakery!"]))).toEqual([{ id: "a", state: "delivered" }]);
+  });
+
+  it("marks an ask waiting when the turn set up later work, and blocked when the words name what stops it", () => {
+    expect(settleAsks([ask("a", "remind me tomorrow at 9 to call my CA")], turn(["I'll remind you tomorrow at 9."], { scheduled: true }))).toEqual([{ id: "a", state: "waiting" }]);
+    expect(settleAsks([ask("a", "message Ramesh on whatsapp")], turn(["WhatsApp isn't connected, so I couldn't send it. Here's a draft."]))).toEqual([{ id: "a", state: "blocked" }]);
+    expect(settleAsks([ask("a", "x"), ask("b", "dig through the quarterly invoices")], turn(["Handed it to a thread of its own."], { handedOff: true }))).toEqual([{ id: "a", state: "waiting" }, { id: "b", state: "waiting" }]);
+  });
+
+  it("names the open asks in the note it sends back", () => {
+    const note = stopGateNote("open_items", { items: ["what's the weather in mumbai in july"] });
+    expect(note).toContain('"what\'s the weather in mumbai in july"');
+    expect(note).toContain("still needs their yes");
   });
 });

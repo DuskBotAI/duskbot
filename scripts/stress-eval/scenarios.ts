@@ -24,6 +24,16 @@ export interface Scenario {
   /** the turns name a page the eval serves at {{PAGE}}; after the conversation the eval changes it and waits for the
    * bot to say so by itself, which only a watch that really runs can do */
   localPage?: boolean;
+  /** after the conversation the eval makes something happen that only a running watch, automation or chat app sees:
+   * page: changes {{PAGE}}; tg-watch: posts tgPush in a fake Telegram group; tg-chat: pairs through the start code the
+   * bot gave and asks tgAsk on Telegram; webhook: calls the bot's webhook automation with webhookBody */
+  live?: "page" | "tg-watch" | "tg-chat" | "webhook";
+  liveWaitMs?: number;
+  tgPush?: Array<{ chat: string; from: string; text: string }>;
+  tgAsk?: string;
+  webhookBody?: unknown;
+  /** a chat long enough to pass the compaction point (run with --compact-at) */
+  compact?: boolean;
 }
 
 const s = (id: string, persona: string, shape: string, turns: Array<string | Turn>, expect: string, extra: Partial<Scenario> = {}): Scenario =>
@@ -280,6 +290,12 @@ export const SCENARIOS: Scenario[] = [
     "The final list includes baby items."),
   s("burst-messages", "interruptions", "message burst", ["hey", { say: "so", afterMs: 400 }, { say: "I need a gift for my dad", afterMs: 800 }, { say: "he likes gardening and old jazz. budget 3000 rupees", afterMs: 1200 }],
     "Treats the burst as one request and answers once with concrete gift picks within ₹3000 for gardening/jazz; no separate replies to each fragment."),
+  s("multi-ask-three", "interruptions", "several asks at once", ["three things: what's 18% of 2450, a one-line caption for my bakery's diwali instagram post, and remind me tomorrow at 9am to call my CA"],
+    "All three handled in the one conversation: 441, a usable one-line Diwali caption, and a one-time 9am reminder for tomorrow that exists in state after; none of the three silently dropped."),
+  s("multi-ask-side", "interruptions", "second ask while working", ["write a short packing list for a 2 day work trip to Mumbai", { say: "also what's the weather usually like there in july?", afterMs: 2500 }],
+    "Both answered: a short packing list and the July weather (monsoon, heavy rain); the list suits the rain; neither ask left unanswered."),
+  s("send-whatsapp-landlord", "send on behalf", "send without access", ["send a whatsapp to my landlord Ramesh saying the rent will be 2 days late this month, sorry"],
+    "WhatsApp is not connected: writes the message as a draft and says plainly it was not sent (drafted, not sent); never says sent or done."),
   // smalltalk / tone
   s("tone-hi", "smalltalk", "tone", ["hii"],
     "One short casual line back; no capability menu, no 'How can I help you today?'."),

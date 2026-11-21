@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { freePortBlock } from "./testing/ports.ts";
 import { removeTempDir, waitForExit } from "./testing/cleanup.ts";
+import { engineFreePath } from "./testing/engine-free-path.ts";
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 let child: ChildProcess;
@@ -124,7 +125,7 @@ beforeAll(async () => {
   base = `http://127.0.0.1:${port}`;
   child = spawn(process.execPath, [join(ROOT, "server/index.ts")], {
     cwd: ROOT, env: {
-      PATH: process.env.PATH, HOME: fixtureHome, USERPROFILE: fixtureHome, DUSK_DATA_DIR: data,
+      PATH: engineFreePath(fixtureHome, process.env.PATH), DUSK_TEST_SEALED_PATH: "1", HOME: fixtureHome, USERPROFILE: fixtureHome, DUSK_DATA_DIR: data,
       APPDATA: join(fixtureHome, "appdata"), LOCALAPPDATA: join(fixtureHome, "localappdata"),
       TEMP: fixtureHome, TMP: fixtureHome, TMPDIR: fixtureHome,
       DUSK_PORT: String(port), DUSK_WEBHOOK_PORT: String(port + 1), DUSK_STATIC_DIR: ui,

@@ -297,7 +297,7 @@ describe("dreaming in the upkeep loop", () => {
       aboutMe: 1,
     });
     expect(memory()).toContain("~~The person lives in Pune~~ · superseded 2026-10-22");
-    expect(memory()).toContain("- 2026-10-22 · from dream across 2 chats · The person lives in Bangalore");
+    expect(memory()).toContain("- 2026-10-22 · from dream across 2 chats, corrected · The person lives in Bangalore");
     expect(memory()).toContain("- 2026-10-22 · from dream across 2 chats · The person wants drafts under 100 words");
     expect(readMemoryTopic(BOT.id, "work.md")).toContain("The person reviews drafts with their editor");
     expect(aboutMeAdded).toEqual(["The person prefers plain words"]);

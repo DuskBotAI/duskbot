@@ -135,6 +135,17 @@ describe("suggestions: scheduling and guardrails", () => {
     expect(env.prompts).toEqual([]);
   });
 
+  it("keeps the person's own quiet hours and offers nothing under Never", async () => {
+    let prefs = { tell: [] as string[], never: [] as string[], quiet: { from: "11:00", to: "14:00" } as { from: string; to: string } | null };
+    const env = setup({ prefs: () => prefs });
+    await env.due();
+    expect(await env.offers.pass()).toEqual({ kind: "skipped", why: "quiet hours" });
+    env.at(Date.parse("2026-11-20T16:00:00Z"));
+    prefs = { tell: [], never: ["design jobs"], quiet: null };
+    expect(await env.offers.pass()).toEqual({ kind: "quiet", why: "they asked not to hear about this" });
+    expect(env.notified).toEqual([]);
+  });
+
   it("is quiet at night in a zone where it is night, though it is noon in UTC", async () => {
     const env = setup({ timeZone: () => "Pacific/Auckland" });
     await env.due();

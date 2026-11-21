@@ -12,6 +12,7 @@ import {
   pinSource,
   placeUnavailable,
   resolveSurface,
+  screenAccessMissingNote,
   surfaceOfComputerKind,
   surfacePrompt,
 } from "./surface.ts";
@@ -445,5 +446,14 @@ describe("a connected app before any screen", () => {
   });
   it("is not said where nothing on a screen can be done", () => {
     expect(surfacePrompt({ computer: null, browser: false })).not.toContain(RULE);
+  });
+});
+
+describe("screenAccessMissingNote", () => {
+  it("tells a bot with a shell that files and commands on this computer need no screen control", () => {
+    const shell = screenAccessMissingNote(false, ["Accessibility"], false, true);
+    expect(shell).toContain("Files and commands on this computer need no screen control");
+    expect(shell).not.toContain("files outside the browser");
+    expect(screenAccessMissingNote(false, ["Accessibility"])).toContain("or files outside the browser, needs screen control");
   });
 });

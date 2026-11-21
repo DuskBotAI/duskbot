@@ -66,7 +66,9 @@ export function continuityCarry(run: RoutineRun, routines: readonly Pick<Routine
 
 export const DRY_RUN_NOTE = "[dusk bot: this is a test run. Nothing may leave this computer: do not send, post, book, buy, pay, " +
   "delete or submit anything, in an app or in the browser. Where the routine would, stop before that step and put exactly what it " +
-  "would send or do in your reply as a draft. Read whatever you need.]";
+  "would send or do in your reply as a draft. Read whatever you need. Take one item through every step: a real one if there " +
+  "is one, otherwise a realistic sample you make up and name as a sample (an email, an order, an applicant). Report each step " +
+  "for it: what it read, what it decided, and what it would write, send or post.]";
 
 export function composeExecutionPrompt(
   routine: { id: string; name: string; trigger: RoutineRunTrigger; runOn: RoutineRunOn; dryRun?: boolean },

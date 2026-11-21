@@ -8,7 +8,7 @@ import { useMenuMotion } from "@/components/MenuMotion";
 import { useGroupYou } from "@/components/GroupAvatar";
 import { UserFace } from "@/components/UserAvatar";
 import { trackUpsell, watchUpsell } from "@/lib/cloud-upsell";
-import { t } from "@/lib/i18n";
+import { activeLocale, t } from "@/lib/i18n";
 import { effectiveLanguage, setLanguageChoice, useLanguageChoice, usePageLanguage } from "@/lib/language-preference";
 import { applySkinChoice, readSkinChoice, subscribeSkin, THEME_SKINS } from "@/lib/skins";
 import { systemMenu } from "@/lib/system-menu";
@@ -96,6 +96,20 @@ function CloudCard({ onOpen }: { onOpen: () => void }) {
         <span className="mt-0.5 block text-[14px] font-medium leading-5 text-ink-secondary">{t("cloudUpsell.mobileDetail")}</span>
       </span>
     </button>
+  );
+}
+
+/** a failed charge, in one line: the cloud is stopped, and until when its data is kept. Update card only where the dashboard may be linked:
+ * the store apps never link to where plans are paid (App Store 3.1.1, Play payments policy) */
+export function PaymentLine({ payment, onUpdate }: { payment: { name: string; fixBy: number; trial?: true }; onUpdate: (() => void) | null }) {
+  const date = new Intl.DateTimeFormat(activeLocale(), { dateStyle: "medium" }).format(new Date(payment.fixBy));
+  return (
+    <SettingsSection card>
+      <div data-payment-notice="" className="flex items-center gap-3 px-4 py-3.5">
+        <p role="status" className="min-w-0 flex-1 text-[15px] leading-5 text-ink">{t(payment.trial ? "cloudAccount.trialNotice" : "cloudAccount.paymentNotice", { name: payment.name, date })}</p>
+        {onUpdate && <button type="button" onClick={onUpdate} className="mobile-press shrink-0 rounded-full bg-ink px-3.5 py-1.5 text-[15px] font-semibold text-app">{t(payment.trial ? "cloudHome.upgrade" : "cloudAccount.updateCard")}</button>}
+      </div>
+    </SettingsSection>
   );
 }
 
@@ -217,7 +231,7 @@ function SettingsList({ onClose, push, placesState }: { onClose: () => void; pus
   const skin = useSyncExternalStore(subscribeSkin, readSkinChoice, () => "system");
   const language = effectiveLanguage(useLanguageChoice(), state.config?.language);
   usePageLanguage(language);
-  const { places, expected, open: openPlace } = placesState;
+  const { places, expected, open: openPlace, payment } = placesState;
   const [opening, setOpening] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const appearanceId = useId();
@@ -298,6 +312,8 @@ function SettingsList({ onClose, push, placesState }: { onClose: () => void; pus
         ))}
         {account?.account && account.offered && <SettingsRow icon={<UserPlus />} label={t("mobile.settings.addAccount")} onClick={() => { haptic("pick"); onClose(); window.dispatchEvent(new Event("dusk:add-account")); }} />}
       </SettingsSection>
+
+      {payment && <PaymentLine payment={payment} onUpdate={rows.dashboard ? () => void accountDashboardUrl().then((url) => platform.openExternal(url)) : null} />}
 
       <SettingsSection card title={t("mobile.settings.workspaces")} hint={error ? <span role="alert" className="text-danger">{error}</span> : email ? t("mobile.settings.workspacesHint") : undefined}>
         {(places === null || places.length > 0) && (

@@ -19,6 +19,8 @@ export interface WorkflowCase {
   change: string;
   /** source of the case, when it comes from people's posts */
   source?: string;
+  /** after setup the server restarts on the same data, these emails arrive, and every automation runs once */
+  restart?: { arrive: Mail[] };
 }
 
 const day = (offset: number, hour = 9, min = 0) => {
@@ -252,5 +254,16 @@ export const CASES: WorkflowCase[] = [
     brief: "Inbox is the connected Gmail (labels support, deals). Support drafts replies; sales keeps a deals sheet; bookkeeping logs receipts into a sheet. 7am Bangalore time. Nothing goes to customers without your OK in the first week.",
     expect: "Three specialist bots with one job each and clear standing instructions (create_bot), the main bot's automation that triages new inbox mail and hands each item to the right bot (coordinate_bots or the specialists' own label-scoped automations), approval-gated customer sends, and a 7am Bangalore daily decision message that collects only what needs a yes.",
     change: "what is each of my bots doing right now?",
+  },
+  {
+    id: "support-restart", dept: "support", apps: ["gmail", "google_sheets"], seed: { mail: SUPPORT.slice(0, 5) },
+    ask: "every weekday at 8:30 answer the easy support emails in my voice and draft the hard ones for me, and keep a log so nothing gets answered twice",
+    brief: "You are Maya, founder of Loomware. Support mail is the 'support' label in the connected Gmail. Voice: warm, short, first name, sign off '- Maya'. Easy = order status, password reset, shipping questions; refunds, legal, bulk always draft only. India time. Log in a sheet is fine.",
+    restart: { arrive: [
+      mail("nina.r@gmail.com", "Do you ship to Australia?", "Hi, do you ship the Loom Lite to Melbourne and how long does it take?", 1, { labels: ["INBOX", "support"] }),
+      mail("dave@fastmail.com", "I want a refund", "My Loom Lite arrived with a cracked frame. I want my $129 back.", 1, { labels: ["INBOX", "support"] }),
+    ] },
+    expect: "A weekday 8:30 India-time automation with a log keyed by message id. After the server restarts, the automation still exists unchanged and its next run handles only the two new emails: answers the shipping question, drafts (never sends) the refund, and does not reply again to any email the earlier runs handled; 'what's running' after the restart lists it with that run's result.",
+    change: "what did you do with the emails that came in since the restart?",
   },
 ];

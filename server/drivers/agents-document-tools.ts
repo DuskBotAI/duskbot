@@ -33,6 +33,7 @@ export const DOCUMENT_TOOL_DEFINITIONS = [
         title: { type: "string", maxLength: DOCUMENT_TITLE_MAX },
         kind: { type: "string", enum: ["markdown", "sheet", "html"] },
         content: { type: "string", description: CONTENT },
+        manual: { type: "boolean", description: "The person's standing rules for you or a workflow: you reread it, never change it." },
       },
       required: ["title", "kind", "content"],
     },
@@ -54,11 +55,11 @@ export const DOCUMENT_TOOL_DEFINITIONS = [
   },
   {
     name: "list_documents",
-    description: "Read-only: your documents, newest first; with id, its current text.",
+    description: "Read-only: your documents, newest first; with id, its current text; with id and export_as, a file of it to attach or email.",
     inputSchema: {
       type: "object",
       additionalProperties: false,
-      properties: { id: DOCUMENT_ID },
+      properties: { id: DOCUMENT_ID, export_as: { type: "string", enum: ["pdf", "xlsx", "docx", "csv", "md"] } },
     },
   },
 ];

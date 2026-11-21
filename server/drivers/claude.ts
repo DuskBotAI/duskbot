@@ -1,5 +1,6 @@
 // Claude Code over stream-json both ways: prompt on stdin, one retained CLI process per thread,
 // each turn settled by the CLI's own `result` frame.
+import { outboundSendKey } from "../../shared/declined-sends.ts";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
 import { createServer as createNetServer } from "node:net";
@@ -1241,6 +1242,7 @@ export const ClaudeDriver: ProviderDriver<ClaudeConfig> = {
                 // The Bash command, for exact-command grants and for the safety floor.
                 ...shellRequest(ask.kind === "permission" && ask.tool === "Bash" ? ask.input.command : undefined, commandCwd), ...(ask.kind === "permission" && readToolPaths(ask.tool, ask.input) ? { reads: readToolPaths(ask.tool, ask.input) } : {}),
                 ...(ask.kind === "permission" && typeof ask.tool === "string" && ask.tool.startsWith("mcp__") ? { callFacts: toolCallFacts(ask.input) } : {}),
+                ...(ask.kind === "permission" && typeof ask.tool === "string" && outboundSendKey(ask.tool, ask.input) ? { sendKey: outboundSendKey(ask.tool, ask.input) } : {}),
                 requiresExplicitApproval: ask.kind === "permission" && ask.tool === "Bash" && ask.input.dangerouslyDisableSandbox === true || undefined,
                 nativeReview,
                 allowSession: ask.kind === "permission" && !(controlsHost && typeof ask.tool === "string" && ask.tool.startsWith("mcp__computer")) ? true : undefined,

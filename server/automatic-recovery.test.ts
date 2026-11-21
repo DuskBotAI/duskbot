@@ -21,8 +21,9 @@ describe("automatic recovery capabilities", () => {
     expect(recoveryCapabilityError(claude, opencode)).toBeUndefined();
     expect(recoveryCapabilityError(claude, { ...opencode, capabilities: { ...opencode.capabilities, browserMcp: false } })).toMatch(/tools and attachments/);
   });
-  it("does not silently move work to a file-less engine", () => {
+  it("does not silently move work to a file-less engine, but lets one with files carry a chat-only engine on", () => {
     expect(recoveryCapabilityError(engine, { ...engine, driverKind: "openai-compat" })).toMatch(/same workspace/);
+    expect(recoveryCapabilityError({ ...engine, driverKind: "openai-compat" }, engine)).toBeUndefined();
   });
 });
 

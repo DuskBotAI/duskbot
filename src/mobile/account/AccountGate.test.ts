@@ -6,7 +6,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { setLocale } from "@/lib/i18n";
 import { AccountGate, mobileAccountOrigin, providersFor, useMobileAccount } from "./AccountGate";
 import { MobileSignIn } from "./MobileSignIn";
-import { PlatformContext, webPlatform, type MobilePlatform } from "../platform";
+import { PlatformContext, SecretsLocked, webPlatform, type MobilePlatform } from "../platform";
 
 vi.mock("@/components/Avatar", () => ({ MausAvatar: () => createElement("span") }));
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -67,6 +67,19 @@ it("honors the native signed-out development override", () => {
 it("restores an account and provides its identity through context", async () => {
   save(); fetcher.mockResolvedValue(response({}));
   await mount(); expect(host.textContent).toBe(signedIn); expect(host.querySelector("h1")).toBeNull();
+});
+it("a Keychain it cannot read at launch (a locked phone) never shows the sign-in: it waits, then reads it in front", async () => {
+  save(); fetcher.mockResolvedValue(response({}));
+  let locked = true;
+  const read = platform.secrets.get;
+  platform = { ...platform, secrets: { ...platform.secrets, get: async (key) => { if (locked) throw new SecretsLocked(); return read(key); } } };
+  await mount();
+  expect(host.querySelector("h1"), "no sign-in over a session it could not read").toBeNull();
+  expect(host.textContent).not.toBe(signedIn);
+  expect(secrets.has("dusk.account")).toBe(true);
+  locked = false;
+  await act(async () => { resume?.(); await new Promise((done) => setTimeout(done, 0)); });
+  expect(host.textContent).toBe(signedIn);
 });
 it("shows the saved sign-in before the service answers, and stays signed in when the check fails", async () => {
   save();

@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto"; import { shapeNewRoutine } from "./routine-shape.ts"; import { cleanProbe } from "./routine-quiet.ts"; import { serverLine } from "./server-lines.ts";
+import { createHash } from "node:crypto"; import { shapeNewRoutine } from "./routine-shape.ts"; import { duplicateOf, duplicateRefusal, guardAgainst, jitter } from "./routine-bot-guard.ts"; const withJitter = (changes: RoutineRequestChanges, current: Routine): RoutineRequestChanges => (changes.schedule ? { ...changes, schedule: jitter(changes.schedule, changes.name ?? current.name, changes.instructions ?? current.prompt) } : changes); import { cleanProbe } from "./routine-quiet.ts"; import { serverLine } from "./server-lines.ts";
 import { isDeepStrictEqual } from "node:util";
 
 import { cronScheduleLabel } from "../shared/cron-label.ts";
@@ -418,9 +418,9 @@ function normalizedOperation(
   if (validated.action === "create") {
     const operation: Extract<RoutineRequestOperation, { action: "create" }> = {
       action: "create",
-      routine: normalizeDefinition(validated.routine, now, ownEngine),
+      routine: guardAgainst(normalizeDefinition(validated.routine, now, ownEngine), manager.listRoutines().filter((one) => one.botId === (validated.forBot?.botId ?? botId)), now),
     };
-    if (validated.forBot) operation.forBot = validated.forBot;
+    if (validated.forBot) operation.forBot = validated.forBot; const twin = duplicateOf(manager.listRoutines(), validated.forBot?.botId ?? botId, operation.routine); if (twin) throw new RoutineRequestError(duplicateRefusal(twin), 409);
     return operation;
   }
   const id = routineId(validated.routineId);
@@ -433,7 +433,7 @@ function normalizedOperation(
       action: "update",
       routineId: id,
       expectedUpdatedAt: current.updatedAt,
-      changes: normalizeChanges(validated.changes, now, ownEngine),
+      changes: withJitter(normalizeChanges(validated.changes, now, ownEngine), current),
       ...(validated.forBot ? { forBot: validated.forBot } : {}),
     };
   }

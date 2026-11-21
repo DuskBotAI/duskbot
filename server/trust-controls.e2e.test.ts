@@ -192,7 +192,11 @@ it("honors outbound approval and the daily allowance at Full access, and still r
   expect(relayed).toHaveLength(before);
   await api("POST", `/api/threads/${b.threadId}/respond`, { requestId: deniedCard.card.requestId, behavior: "deny" });
   expect((await denied).body.result.isError).toBe(true);
-  const allowed = relay(token, "GMAIL_SEND_EMAIL", { to: "first@fixture.test" });
+  // a declined send is final for the chat: the same one again is refused with no new card
+  const cardsAfterDeny = (await cards(b.threadId)).filter(row => row.card?.outboundRequest).length;
+  expect((await relay(token, "GMAIL_SEND_EMAIL", { to: "first@fixture.test" })).body.result.isError).toBe(true);
+  expect((await cards(b.threadId)).filter(row => row.card?.outboundRequest)).toHaveLength(cardsAfterDeny);
+  const allowed = relay(token, "GMAIL_SEND_EMAIL", { to: "second@fixture.test" });
   const allowedCard = await pending(b.threadId);
   expect(relayed).toHaveLength(before);
   await api("POST", `/api/threads/${b.threadId}/respond`, { requestId: allowedCard.card.requestId, behavior: "allow" });
@@ -224,7 +228,7 @@ it("honors Ask every time at Full access before the first send for any prompt la
     expect((await api("POST", `/api/bots/${b.id}/messages`, { text, threadId: b.threadId })).status).toBe(202);
     await expect.poll(async () => (await api("GET", "/api/bots")).body.bots.find((bot: any) => bot.id === b.id).busy, { timeout: 10_000 }).toBe(false);
     const token = await mint(b.id, b.threadId);
-    const send = relay(token, "GMAIL_REPLY_TO_THREAD", { thread_id: "ask-policy", body: "Never sent without consent" });
+    const send = relay(token, "GMAIL_REPLY_TO_THREAD", { thread_id: "ask-policy", body: `Never sent without consent: ${text}` });
     const card = await pending(b.threadId);
     expect(relayed).toHaveLength(before);
     await api("POST", `/api/threads/${b.threadId}/respond`, { requestId: card.card.requestId, behavior: "deny" });
@@ -377,23 +381,24 @@ it("honors Ask every time on Full-access delegated and resumed turns without rel
 
 it("sends 25 a day at Full access with no sending rule, refuses the 26th, and a routine at the cap reports it with no card", async () => {
   const b = capBot;
-  const email = (to: string) => ({ recipient_email: to, subject: "Reminder", body: "See you at nine." });
+  // an email waits on the person's review even here, so the allowance is counted with chat messages
+  const message = (channel: string) => ({ channel, text: "Reminder: see you at nine." });
   const token = await mint(b.id, b.threadId);
   const before = relayed.length;
   const sent = () => relayed.slice(before).filter((frame: any) => frame.method === "tools/call").length;
-  for (let count = 0; count < 25; count++) expect((await relay(token, "GMAIL_SEND_EMAIL", email(`person${count}@example.test`))).body.result.isError).not.toBe(true);
+  for (let count = 0; count < 25; count++) expect((await relay(token, "SLACK_SEND_MESSAGE", message(`person${count}`))).body.result.isError).not.toBe(true);
   expect(sent()).toBe(25);
   expect((await api("GET", `/api/bots/${b.id}/outbound`)).body.today).toBe(25);
-  const refused = (await relay(token, "GMAIL_SEND_EMAIL", email("late@example.test"))).body.result;
+  const refused = (await relay(token, "SLACK_SEND_MESSAGE", message("late"))).body.result;
   expect(refused.isError).toBe(true);
   expect(refused.content[0].text).toMatch(/did not send this\. Full default cap fixture has reached its daily limit of 25 outbound actions at Full access/);
   expect(sent(), "nothing was sent").toBe(25);
 
   expect((await api("PATCH", `/api/bots/${b.id}`, { modelSelection: { instanceId: "gmailFixture", model: "claude-sonnet-5" }, threadId: b.threadId })).status).toBe(200);
   writeFileSync(join(fixture.info.dataDir, "gmail-plan.json"), JSON.stringify({ [b.id]: { timeoutMs: 60_000,
-    steps: [{ server: "composio", tool: "GMAIL_SEND_EMAIL", arguments: email("team@example.test"), expectError: true }],
+    steps: [{ server: "composio", tool: "SLACK_SEND_MESSAGE", arguments: message("team"), expectError: true }],
     reply: "Report: the reminder was not sent, the daily sending limit is reached." } }));
-  const created = await api("POST", "/api/routines", { name: "Morning reminder", prompt: "Send the morning reminder email to the team.", botId: b.id, schedule: { type: "interval", everyMinutes: 1440, anchorAt: Date.now() + 86_400_000 } });
+  const created = await api("POST", "/api/routines", { name: "Morning reminder", prompt: "Send the morning reminder to the team channel.", botId: b.id, schedule: { type: "interval", everyMinutes: 1440, anchorAt: Date.now() + 86_400_000 } });
   expect(created.status, JSON.stringify(created.body)).toBe(201);
   const { run } = (await api("POST", `/api/routines/${created.body.routine.id}/run`)).body;
   let finished: any;
@@ -494,7 +499,9 @@ it("honors Ask every time enabled while a Full-access send is waiting for dispat
   await api("POST", `/api/threads/${b.threadId}/respond`, { requestId: card.card.requestId, behavior: "deny" });
   expect((await nextSend).body.result.isError).toBe(true);
   expect((await api("PATCH", `/api/bots/${b.id}`, { outbound: { policy: "allow", dailyCap: 100 } })).status).toBe(200);
-  expect((await relay(token, "GMAIL_SEND_EMAIL", { to: "sam@example.test" })).body.result.isError).not.toBe(true);
+  // the send declined on the card stays declined; another goes out at once
+  expect((await relay(token, "GMAIL_SEND_EMAIL", { to: "sam@example.test" })).body.result.isError).toBe(true);
+  expect((await relay(token, "GMAIL_SEND_EMAIL", { to: "lee@example.test" })).body.result.isError).not.toBe(true);
   expect(relayed).toHaveLength(before + 1);
 });
 

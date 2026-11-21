@@ -16,7 +16,7 @@ const json = body => Promise.resolve(new Response(JSON.stringify(body), { status
 const names = windows => windows.map(win => win?.name ?? null);
 
 function harness({ packaged = true, appleSpeech = true, platform = "darwin", remote = false, register, serve = () => undefined } = {}) {
-  const h = { handlers: new Map(), guards: new Map(), started: [], stopped: [], finished: [], requests: [], links: [], reveals: 0, log: [],
+  const h = { handlers: new Map(), listeners: new Map(), guards: new Map(), started: [], stopped: [], finished: [], requests: [], links: [], reveals: 0, log: [],
     registered: new Map(), windows: [], busy: false, fail: {}, away: false, starting: false };
   const owners = new Map();
   class FakeBrowserWindow {
@@ -46,8 +46,8 @@ function harness({ packaged = true, appleSpeech = true, platform = "darwin", rem
   const answer = route => serve(route) ?? new Promise(() => {});
   const guard = kind => (channel, handler) => { h.guards.set(channel, kind); return handler; };
   h.talk = installTalk({
-    ipcMain: { handle: (channel, handler) => h.handlers.set(channel, handler) },
-    localOnly: guard("localOnly"), localOrHome: guard("localOrHome"), BrowserWindow: FakeBrowserWindow, appleSpeech, platform,
+    ipcMain: { handle: (channel, handler) => h.handlers.set(channel, handler), on: (channel, listener) => h.listeners.set(channel, listener) },
+    localOnly: guard("localOnly"), placePage: event => { if (event?.place === "throws") throw new Error("gone"); return event?.place === true; }, BrowserWindow: FakeBrowserWindow, appleSpeech, platform,
     speech: {
       start: (target, options) => { h.started.push([target, options]); },
       stop: failing("stop", owner => { h.stopped.push(owner); }),
@@ -88,7 +88,7 @@ test("every list of the app's windows leaves the talk box out", () => {
 });
 
 test("main hands the talk wiring its speech sinks, this computer's own server and window, and closes it first on quit", () => {
-  assert.match(main, /const talk = installTalk\(\{ ipcMain, localOnly, localOrHome, BrowserWindow, appleSpeech: nativeActions\.appleSpeech,\s*speech: \{ start: startSpeech, stop: stopSpeech, finish: finishSpeech, busy: speechBusy \},/);
+  assert.match(main, /const talk = installTalk\(\{ ipcMain, localOnly, placePage: event => homeWindow\.homePage\(event\) \|\| Boolean\(activePageOrigin\(event\)\), BrowserWindow, appleSpeech: nativeActions\.appleSpeech,\s*speech: \{ start: startSpeech, stop: stopSpeech, finish: finishSpeech, busy: speechBusy \},/);
   assert.match(main, /packaged: app\.isPackaged, devUrl: DEV_URL, nativeImage, iconPath: APP_ICON, openLink: queueChatLink, reveal: revealForLink, log: slog \}\);/);
   assert.match(main, /talk\.start\(\{ globalShortcut, screen, prefs: desktopPrefs, remote: \(\) => Boolean\(desktopRemoteAccess\), away: \(\) => homeWindow\.current\(\)\.kind !== "computer", starting: \(\) => !serverReady, localRequest: localServerRequest, dataDir: \(\) => runningDataDir \}\);/);
   assert.match(main, /app\.on\("before-quit", \(e\) => \{\s*talk\.close\(\);/);
@@ -100,23 +100,36 @@ test("main tells the talk wiring when home changes and which skin the app painte
   assert.match(main, /ipcMain\.handle\("desktop:skin", \(event, skin\) => \{\s*if \(!isKnownSkin\(skin\)\) return false;\s*if \(chromeRail\.owns\(event\)\) return true;\s*try \{\s*talk\.skin\(skin\);/);
 });
 
-test("the talk bridge keys stay off other servers' pages; a call can be reported from My Cloud's page", () => {
+test("the talk bridge keys stay off unknown pages; any place the person chose listens and reports its call", () => {
   const list = name => preload.match(new RegExp(`const ${name} = (?:new Set\\()?\\[([^\\]]*)\\]`))[1];
   assert.doesNotMatch(list("REMOTE_SAFE"), /talkShortcut|callActive/);
-  assert.match(list("HOME_PAGE"), /"callActive"/);
-  // the home page (My Cloud or the person's own server) listens through this computer's own speech
-  for (const key of ["speechStart", "speechStop", "speechFinish", "onSpeechTranscript", "onSpeechEnd", "onSpeechLevel"]) assert.match(list("HOME_PAGE"), new RegExp(`"${key}"`));
+  for (const key of ["callActive", "speechStart", "speechStop", "speechFinish", "onSpeechTranscript", "onSpeechEnd", "onSpeechLevel"]) assert.match(list("PLACE_PAGE"), new RegExp(`"${key}"`));
   assert.doesNotMatch(list("REMOTE_SAFE"), /speech/i);
+  assert.doesNotMatch(list("PLACE_PAGE"), /talkShortcut/);
   assert.doesNotMatch(list("HOME_PAGE"), /talkShortcut/);
+  assert.match(preload, /const onPlacePage = !isLocalPage && \(onHomePage \|\| placePage\(\)\);/);
 });
 
-test("every microphone channel answers only this computer's page; dictation and a call work from the home page too", () => {
-  const { guards, handlers } = harness();
-  assert.deepEqual(Object.fromEntries(guards), {
-    "speech:start": "localOrHome", "speech:stop": "localOrHome", "speech:finish": "localOrHome",
-    "talk-shortcut:state": "localOnly", "talk-shortcut:set": "localOnly", "call:active": "localOrHome",
-  });
-  assert.deepEqual([...handlers.keys()], [...guards.keys()]);
+test("main lets the home page and the window's chosen server listen, and says so in their capabilities", () => {
+  assert.match(main, /homeSpeech: homeWindow\.homePage\(event\), placeSpeech: Boolean\(activePageOrigin\(event\)\),/);
+  assert.match(main, /const kind = isLocal \? "local" : homeWindow\.homePage\(page\) \? "home" : activePageOrigin\(page\) \? "place" : "remote";/);
+  assert.match(main, /build\(true, kind === "home", kind === "place"\)/);
+});
+
+test("every microphone channel answers only this computer's page or a place the person chose", () => {
+  const h = harness();
+  const win = h.page("place");
+  const channels = ["speech:start", "speech:stop", "speech:finish", "call:active"];
+  assert.deepEqual(Object.fromEntries(h.guards), { "talk-shortcut:state": "localOnly", "talk-shortcut:set": "localOnly" });
+  for (const channel of channels) h.handle(channel, { sender: win.webContents, place: true });
+  assert.equal(channels.some(channel => h.guards.has(channel)), false, "a chosen place's page never meets the local-only wall");
+  for (const channel of channels) h.handle(channel, { sender: win.webContents });
+  for (const channel of channels) assert.equal(h.guards.get(channel), "localOnly", channel);
+  assert.deepEqual([...h.handlers.keys()], [...channels.slice(0, 3), "talk-shortcut:state", "talk-shortcut:set", "call:active"]);
+  const sync = event => { h.listeners.get("place:page")(event); return event.returnValue; };
+  assert.equal(sync({ place: true }), true);
+  assert.equal(sync({}), false);
+  assert.equal(sync({ place: "throws" }), false);
 });
 
 test("a page's speech stop and finish name that page's own window, so they touch only the session it started", () => {

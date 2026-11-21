@@ -36,6 +36,8 @@ export interface CatalogProfile {
   nativeWeb?: boolean;
   /** The engine has no fetch of its own: read_pages is mounted. Absent means off. */
   pageReader?: boolean;
+  /** The engine has no file tools (an OpenAI-compatible API engine): read_skill is mounted. Absent means off. */
+  skillReader?: boolean;
 }
 
 /** Everything is off unless the harness says "1". */
@@ -57,5 +59,6 @@ export function catalogProfileFromEnv(env: NodeJS.ProcessEnv): CatalogProfile {
     room: env.DUSK_ROOM === "1",
     nativeWeb: env.DUSK_NATIVE_WEB === "1",
     pageReader: env.DUSK_PAGE_READER === "1",
+    skillReader: env.DUSK_SKILL_READER === "1",
   };
 }

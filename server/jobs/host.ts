@@ -97,6 +97,8 @@ export interface JobRouteContext {
   turn: () => JobTurn;
   /** Folders this conversation may work in: a job's folder must be inside one; the first is the default. */
   folders: () => Promise<string[]>;
+  /** A job this turn started at once, without the person's card. */
+  started?: (jobId: string) => void;
 }
 
 const iso = (ms?: number) => (ms ? new Date(ms).toISOString() : "never");
@@ -291,6 +293,7 @@ export function createJobsHost(deps: JobsHostDeps) {
     }
     try {
       const { job, replaced } = supervisor.start(spec);
+      ctx.started?.(job.id);
       const where = deps.cloudHome ? " On this cloud its runs report in a chat of their own named after it." : "";
       const text = [
         `${replaced ? "Replaced and started" : "Started"} background job ${job.label} (id ${job.id}). It keeps running after this turn and starts again by itself if it stops with an error or this computer restarts.`,

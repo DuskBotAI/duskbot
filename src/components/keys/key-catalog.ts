@@ -30,6 +30,8 @@ export interface KeyTarget {
   placeholder: string;
   placeholderKey?: LocaleKey;
   href?: string;
+  /** where the provider's account takes credit, when a key has none */
+  creditHref?: string;
   test?: TestableProvider;
   verifiedOnSave?: boolean;
   analytics: KeyProvider;
@@ -78,17 +80,17 @@ const provider = (driverKind: string, preset?: ProviderIconPreset): KeyMark => (
 export const KEY_CATALOG: readonly KeyEntry[] = [
   { id: "openai", section: "ai", labelKey: "keys.openai.label", purposeKey: "keys.purpose.openai", name: "OpenAI", env: ["DUSK_OPENAI_API_KEY"],
     words: ["openai", "chatgpt", "gpt", "live calls"], mark: provider("openai-compat", "openai"), kind: "key",
-    target: providerKey("openai", { placeholder: "sk-…", href: "https://platform.openai.com/api-keys", test: "openai", analytics: "openai", shape: OPENAI_SHAPE, noteKey: "keys.openai.note" }) },
+    target: providerKey("openai", { placeholder: "sk-…", href: "https://platform.openai.com/api-keys", creditHref: "https://platform.openai.com/settings/organization/billing", test: "openai", analytics: "openai", shape: OPENAI_SHAPE, noteKey: "keys.openai.note" }) },
   { id: "anthropic", section: "ai", labelKey: "keys.anthropic.label", purposeKey: "keys.purpose.anthropic", name: "Anthropic", env: ["DUSK_ANTHROPIC_API_KEY"],
     words: ["anthropic", "claude"], mark: provider("claudeAgent", "anthropic"), kind: "key",
     target: { patch: (value, firstKey) => ({ anthropic: { key: value, ...(firstKey && value ? { everyClaudeBot: false } : {}) } }), saved: (config) => flag(config.anthropic),
-      placeholder: "sk-ant-…", href: "https://console.anthropic.com/settings/keys", test: "anthropic", analytics: "anthropic", shape: /^sk-ant-/ } },
+      placeholder: "sk-ant-…", href: "https://console.anthropic.com/settings/keys", creditHref: "https://console.anthropic.com/settings/billing", test: "anthropic", analytics: "anthropic", shape: /^sk-ant-/ } },
   { id: "xai", section: "ai", labelKey: "keys.xai.label", purposeKey: "keys.purpose.xai", name: "xAI", env: ["XAI_API_KEY"],
     words: ["xai", "grok", "pictures", "images"], mark: provider("grok", "xai"), kind: "key",
     target: providerKey("xai", { slot: "xaiApiKey", placeholder: "xai-…", href: "https://console.x.ai", test: "xai", analytics: "xai", shape: /^xai-/ }) },
   { id: "openrouter", section: "ai", labelKey: "keys.openrouter.label", purposeKey: "keys.purpose.openrouter", name: "OpenRouter", env: ["DUSK_OPENROUTER_API_KEY"],
     words: ["openrouter", "router", "models"], mark: provider("openai-compat", "openrouter"), kind: "key",
-    target: providerKey("openrouter", { placeholder: "sk-or-v1-…", href: "https://openrouter.ai/keys", test: "openrouter", analytics: "openrouter", shape: /^sk-or-/ }) },
+    target: providerKey("openrouter", { placeholder: "sk-or-v1-…", href: "https://openrouter.ai/keys", creditHref: "https://openrouter.ai/settings/credits", test: "openrouter", analytics: "openrouter", shape: /^sk-or-/ }) },
   { id: "mistral", section: "ai", labelKey: "keys.mistral.label", purposeKey: "keys.purpose.mistral", name: "Mistral", env: ["MISTRAL_API_KEY"],
     words: ["mistral"], mark: provider("mistral", "mistral"), kind: "key",
     target: providerKey("mistral", { placeholder: "…", placeholderKey: "keys.mistral.placeholder", href: "https://console.mistral.ai/api-keys", test: "mistral", analytics: "mistral" }) },

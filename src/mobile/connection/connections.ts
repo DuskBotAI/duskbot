@@ -104,13 +104,14 @@ function sameInstallation(a: MobileConnectionRecord, b: MobileConnectionRecord):
   return a.transport === "https" && b.transport === "https" && ownId(a) && ownId(b);
 }
 
-const CONNECTIONS_KEY = "dusk.mobile.connections.v1";
+export const CONNECTIONS_KEY = "dusk.mobile.connections.v1";
 const ACTIVE_KEY = "dusk.mobile.active.v1";
 type ActiveConnection = { record: MobileConnectionRecord; token: string };
 type ConnectionStore = {
   list(): Promise<MobileConnectionRecord[]>;
   active(): Promise<ActiveConnection | null>;
-  save(record: MobileConnectionRecord, token: string): Promise<void>;
+  /** `open: false` keeps the link without making it the place the app opens on */
+  save(record: MobileConnectionRecord, token: string, options?: { open?: boolean }): Promise<void>;
   setActive(id: string): Promise<void>;
   remove(id: string): Promise<void>;
   rename(id: string, label: string): Promise<void>;
@@ -149,14 +150,14 @@ export function createConnectionStore(platform: MobilePlatform): ConnectionStore
       const token = await platform.secrets.get(record.sessionRef);
       return token ? { record, token } : null;
     },
-    save(record, token) {
+    save(record, token, { open = true } = {}) {
       return serialize(async () => {
         const records = await read();
         const replaced = records.filter((entry) => entry.id === record.id || sameInstallation(entry, record));
         const saved = { ...record, sessionRef: `token.${record.id}` };
         await platform.secrets.set(saved.sessionRef, token);
         await write([...records.filter((entry) => !replaced.includes(entry)), saved]);
-        await platform.prefs.set(ACTIVE_KEY, saved.id);
+        if (open) await platform.prefs.set(ACTIVE_KEY, saved.id);
         feature("phone_paired");
         for (const old of replaced) if (old.sessionRef !== saved.sessionRef) {
           await platform.secrets.remove(old.sessionRef);

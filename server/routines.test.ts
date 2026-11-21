@@ -7,6 +7,8 @@ import type { GroupGoalRunStatus } from "../shared/group-goal-run.ts";
 import { isRoutineProblemRun } from "../shared/routines.ts";
 import { ROUTINE_SKIPPED_WHILE_WAITING, ROUTINE_SUPERSEDED } from "./routine-execution.ts";
 import { ranApart, runAnswersInItsChat } from "./routine-run-definition.ts";
+import { schedulerDueOf } from "./routine-due.ts";
+import { QUESTION_WAIT_MS } from "./routine-waits.ts";
 import {
   nextOccurrence,
   RoutineManager,
@@ -384,6 +386,42 @@ describe("a run left waiting for the person", () => {
     expect(h.manager.listRoutines()[0].skippedRuns).toBeUndefined();
     expect(JSON.parse(readFileSync(h.options.file!, "utf8")).runs.find((run: RoutineRun) => run.threadId === "thread-1"))
       .toMatchObject({ status: "cancelled", error: ROUTINE_SUPERSEDED });
+  });
+
+  it("stops waiting on a question once the person answers it in the chat, but not on an approval", () => {
+    const h = harness(monday);
+    const routine = h.manager.create({ ...daily, enabled: false });
+    h.manager.runNow(routine.id);
+    return h.manager.tick().then(() => {
+      h.manager.handleRuntimeEvent({ ...event("thread-1"), type: "request.opened", requestId: "approve", requestType: "permission", tool: "shell", summary: "ls" });
+      ask(h, "thread-1");
+      h.manager.handleRuntimeEvent({ ...event("thread-1"), type: "request.opened", requestId: "q", requestType: "question", tool: "ask", summary: "Which account?" });
+      h.manager.personWrote("thread-1");
+      expect(h.manager.listRuns()[0]).toMatchObject({ status: "waiting", asked: { approval: true }, attention: "Waiting for your approval to run “ls”" });
+      expect(h.manager.listRuns()[0]!.asked?.pending).toBeUndefined();
+      h.manager.handleRuntimeEvent({ ...event("thread-1"), type: "request.resolved", requestId: "approve", behavior: "allow", source: "user" });
+      expect(h.manager.listRuns()[0]).toMatchObject({ status: "running" });
+      ask(h, "thread-1");
+      h.manager.personWrote("thread-1");
+      expect(h.manager.listRuns()[0]).toMatchObject({ status: "running", attention: undefined });
+      expect(h.manager.listRuns()[0]!.asked).toBeUndefined();
+      h.manager.handleRuntimeEvent({ ...event("thread-1"), type: "turn.completed", ok: true });
+      expect(h.manager.listRuns()[0]).toMatchObject({ status: "completed" });
+    });
+  });
+
+  it("stops a run whose question nobody answered for a day, and wakes the scheduler for it", async () => {
+    const h = harness(monday);
+    const routine = h.manager.create({ ...daily, enabled: false });
+    h.manager.runNow(routine.id);
+    await h.manager.tick();
+    h.setNow(monday + minutes(5)); ask(h, "thread-1");
+    expect(schedulerDueOf([], h.manager.listRuns(), monday + minutes(5), 0)).toBe(monday + minutes(5) + QUESTION_WAIT_MS);
+    h.setNow(monday + minutes(5) + QUESTION_WAIT_MS - 1); await h.manager.tick();
+    expect(h.manager.listRuns()[0]).toMatchObject({ status: "waiting" });
+    h.setNow(monday + minutes(5) + QUESTION_WAIT_MS); await h.manager.tick();
+    expect(h.manager.listRuns()[0]).toMatchObject({ status: "failed", error: "Stopped: nobody answered the question “Which account should I use?”" });
+    expect(h.interruptedTurns).toEqual([{ botId: "maus-1", threadId: "thread-1" }]);
   });
 
   it("leaves a question asked shortly before the next occurrence alone, then replaces it at the one after", async () => {

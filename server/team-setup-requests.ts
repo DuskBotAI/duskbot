@@ -9,7 +9,7 @@ import { profileSnapshot } from "./profile-revision.ts";
 import { validateBotCwd } from "./bot-cwd.ts";
 import { UNDO_STALE, type DirectApply } from "./direct-apply.ts";
 import { harnessCapabilityLines, type DriverCapabilities } from "./harness-capabilities.ts";
-import { redactSecretsInText } from "./redact.ts"; import { chiefLevel } from "./chief-level.ts"; import { defaultBotRefusal } from "./default-bot.ts";
+import { redactSecretsInText } from "./redact.ts"; import { chiefLevel } from "./chief-level.ts";
 import type { BotLimit } from "./host/starter-bot-limit.ts";
 import type { BotRecord, OptionCardData } from "./store.ts";
 import type { TeamSetupFields, TeamSetupOperation, TeamSetupRequest, TeamSetupResult, TeamSetupUndo } from "../shared/team-setup.ts";
@@ -203,7 +203,7 @@ export class TeamSetupRequestService {
     if (request.deletion) {
       const target = this.options.store.bot(request.deletion.botId);
       if (!target || target.hidden || target.id === chief.id || !this.options.hasTeamAuthority(chief, target.section) || (Array.isArray(chief.peers) && !chief.peers.includes(target.id))) throw new TeamSetupError("This deletion target is no longer an authorized teammate", 403);
-      if (target.defaultBot) throw new TeamSetupError(defaultBotRefusal(target.name), 409);
+      if (target.defaultBot) throw new TeamSetupError(`${target.name} is the person's helper: only they can delete it, from its menu.`, 409);
       if (teamSetupRevision(target) !== request.deletion.expectedRevision || this.options.targetBusy(target.id)) throw new TeamSetupError("The deletion target changed or is working. Review a new deletion proposal.", 409);
     }
   }

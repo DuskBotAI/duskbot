@@ -60,3 +60,6 @@ export function routinePromptName(text: string | undefined): string | null {
   if (!head) return null;
   try { const name = JSON.parse(head[1]!); return typeof name === "string" ? name : null; } catch { return null; }
 }
+
+/** The exact silence token a routine run answers with when nothing needs the person: a line of its own, never shown. */
+export const SILENT_LINE = /^[\s*_`"'.!-]*nothing new[\s*_`"'.!-]*$/i;

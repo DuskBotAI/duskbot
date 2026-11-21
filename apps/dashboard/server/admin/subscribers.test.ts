@@ -63,6 +63,13 @@ describe("subscriber rows", () => {
     expect(rows[0]).toMatchObject({ accountId: "a", email: "a@x.test", country: "IN", plan: "starter", bucket: "trial", status: "trial day 2 of 3", messages7d: 4, messages: 10,
       turns: 12, failed: 2, bots: 3, routines: 3, apps: 1, engines: ["claude", "codex"], platforms: ["mac", "windows"], places: ["dusk cloud", "own server", "this computer"], cloud: "asleep" });
   });
+  it("marks a person with an open dispute at risk, and clears it once the dispute closes", () => {
+    const row = (type: string, ref: string, accountId = "a") => ({ type, providerRef: ref, accountId }) as never;
+    const rows = (ledger: never[]) => subscriberRows({ now: NOW, accounts: [], sessions: [], billing: { subscriptions: [sub({ accountId: "a" }), sub({ accountId: "b" })] as never, invoices: [], feedback: [], customers: [], ledger },
+      events: [], people: [], snapshots: [], workspaces: [], clouds: [], planOf: () => "starter" });
+    expect(rows([row("dispute.opened", "dsp_1")]).map(r => [r.accountId, r.atRisk]).sort()).toEqual([["a", "dispute"], ["b", null]]);
+    expect(rows([row("dispute.opened", "dsp_1"), row("dispute.won", "dsp_1")]).every(r => r.atRisk === null)).toBe(true);
+  });
   it("leaves out people with only a pending checkout or an operator's grant", () => {
     const rows = subscriberRows({ now: NOW, accounts: [], sessions: [], billing: { subscriptions: [trial("a", { status: "pending" }), sub({ accountId: "b", review: true })] as never, invoices: [], feedback: [], customers: [] },
       events: [], people: [], snapshots: [], workspaces: [], clouds: [], planOf: () => "starter" });

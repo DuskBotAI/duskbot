@@ -35,7 +35,7 @@ import { refusesRequestSize, RequestTooLargeError, sizeChange, smallerResend } f
 import { requestTooLargeMessage } from "../../shared/request-too-large.ts"; import { failureCodeOf, inPlainWords, noReplyError, nudgeOnce, unfinishedReply } from "./openai-chat-final.ts";
 import { toolSchemaProfileFor } from "../tool-schema-profile.ts";
 import { classifyContinuable, writeTurnHandoff } from "../turn-continuation.ts";
-import { repairToolArguments } from "../tool-argument-repair.ts"; import { TurnGates } from "../turn-stop-gates.ts";
+import { repairToolArguments } from "../tool-argument-repair.ts"; import { TurnGates } from "../turn-stop-gates.ts"; import { outboundSendKey } from "../../shared/declined-sends.ts";
 import { KEY_REJECTED_REASON, keyRejected, noteKeyAccepted, noteKeyRejected, rejectsKey } from "../key-rejections.ts";
 import type { Agent } from "undici";
 
@@ -556,7 +556,7 @@ export function createOpenAIChatRuntime<Config>(options: RuntimeOptions<Config>)
       granted: turn.guestConfined ? undefined : granted,
       open: (ask) => emit({
         ...base(turn.threadId, turnId), type: "request.opened", requestType: "permission",
-        requestId: ask.id, tool: ask.tool, summary: ask.summary, allowSession: ask.grant !== undefined,
+        requestId: ask.id, tool: ask.tool, summary: ask.summary, allowSession: ask.grant !== undefined, ...(ask.sendKey ? { sendKey: ask.sendKey } : {}),
       }),
       resolved: (ask, allowed, source) => emit({
         ...base(turn.threadId, turnId), type: "request.resolved", requestId: ask.id,
@@ -830,7 +830,7 @@ export function createOpenAIChatRuntime<Config>(options: RuntimeOptions<Config>)
                 const full = (turn.approvalModeNow?.() ?? turn.approvalMode) === "full";
                 const floored = approval.floored({ full, threadId: turn.threadId, botId: turn.botId, shown, summary: shownPreview });
                 const allowed = !floored && (full || !shown.ask
-                  || await approval.ask(shown.title, shownPreview ?? "This tool has no arguments.", shown.grant));
+                  || await approval.ask(shown.title, shownPreview ?? "This tool has no arguments.", shown.grant, outboundSendKey(call.function.name, args)));
                 abort.signal.throwIfAborted();
                 emit({ ...base(turn.threadId, turnId), type: "item.started", itemType: "tool", itemId: call.id,
                   title: shown.title, ...(shownPreview ? { input: shownPreview } : {}),

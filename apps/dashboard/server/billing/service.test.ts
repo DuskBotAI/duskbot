@@ -380,18 +380,20 @@ describe("billing security regressions", () => {
     deliver([deliveries[1]]); expect(store.state.subscriptions).toHaveLength(1); expect(clouds.activate).toHaveBeenCalledTimes(1);
   });
 
-  it("keeps unpaid destruction scheduled and refuses stale activation or unpaid plan changes", async () => {
+  it("keeps the fix-by date from the first failure and refuses stale activation or unpaid plan changes", async () => {
     const { sub, deliveries } = await buy(); time += 1000;
     deliver(provider.fail(sub.providerSubscriptionId!));
-    const deadline = sub.currentPeriodEnd! + config.graceDays * day;
-    expect(clouds.get(sub.cloudId!)?.destroyAt).toBe(deadline);
+    const deadline = time + config.graceDays * day;
+    expect(sub.paymentProblem).toEqual({ since: time, fixBy: deadline, sent: ["first"] });
+    expect(clouds.get(sub.cloudId!)?.destroyAt).toBeNull();
     await expect(service.keep(owner, sub.id)).rejects.toMatchObject({ code: "not_subscribed" });
     await expect(service.previewChange(owner, sub.id, preset(2))).rejects.toMatchObject({ code: "not_subscribed" });
     deliver([provider.sign("stale_activation", deliveries[1].body)]);
-    expect(sub.status).toBe("payment_problem"); expect(clouds.get(sub.cloudId!)?.destroyAt).toBe(deadline);
+    expect(sub.status).toBe("payment_problem"); expect(sub.paymentProblem?.fixBy).toBe(deadline);
     const updated = JSON.parse(deliveries[1].body.toString()).data;
-    deliver([signed("subscription.updated", { ...updated, next_billing_date: new Date(time + 365 * day).toISOString() })]);
-    expect(sub.currentPeriodEnd! + config.graceDays * day).toBe(deadline); expect(clouds.get(sub.cloudId!)?.destroyAt).toBe(deadline);
+    time += day; deliver([signed("subscription.updated", { ...updated, next_billing_date: new Date(time + 365 * day).toISOString() })]);
+    deliver(provider.fail(sub.providerSubscriptionId!));
+    expect(sub.paymentProblem?.fixBy).toBe(deadline); expect(service.subscriptions(owner.id)[0].fixBy).toBe(deadline);
   });
 
   it("expires active licenses at the paid boundary even when an expiry webhook is missing", async () => {
@@ -851,7 +853,9 @@ describe("free trial", () => {
     const row = store.state.subscriptions[0];
     expect(row.status).toBe("payment_problem");
     expect(clouds.setPaymentProblem).toHaveBeenLastCalledWith(sub.cloudId, true);
-    expect(clouds.scheduleDestroy).toHaveBeenLastCalledWith(sub.cloudId, row.trialEndsAt! + 30 * day);
+    expect(row.paymentProblem).toEqual({ since: time, fixBy: row.trialEndsAt! + 7 * day, sent: ["first"], trial: true });
+    expect(service.subscriptions(owner.id)[0]).toMatchObject({ fixBy: row.trialEndsAt! + 7 * day, trialUnpaid: true });
+    expect(clouds.scheduleDestroy).not.toHaveBeenCalled();
   });
   it("cancelling in the trial ends the plan at the trial's end and charges nothing", async () => {
     const { sub } = await buy(desktopOnly());
@@ -1085,5 +1089,128 @@ describe("a deleted account's email signing up again", () => {
     expect(await service.recoverUnapplied()).toEqual({ recovered: 1 });
     expect(service.subscriptions(owner.id)).toEqual([expect.objectContaining({ status: "active" })]);
     expect(await service.recoverUnapplied()).toEqual({ recovered: 0 });
+  });
+});
+
+describe("payment problems", () => {
+  function withNotices() {
+    const notices: Array<{ kind: string; step?: string; fixBy?: number | null }> = []; service.close();
+    service = createBillingService({ store, provider, clouds, config, publicUrl: "https://dashboard.test", now: () => time, notify: notice => notices.push(notice) });
+    return notices;
+  }
+  const kinds = (notices: Array<{ kind: string; step?: string }>) => notices.map(notice => notice.step ? `${notice.kind}:${notice.step}` : notice.kind);
+
+  it("sends one email per step: the failure, day 14, 3 days before the fix-by date, never twice across retries and restarts", async () => {
+    const { sub } = await buy(); const notices = withNotices();
+    time += day; const since = time;
+    const failed = provider.fail(sub.providerSubscriptionId!);
+    deliver(failed); deliver(failed); deliver(provider.fail(sub.providerSubscriptionId!));
+    expect(notices).toEqual([expect.objectContaining({ kind: "payment_failed", fixBy: since + 30 * day })]);
+    time = since + 13 * day; expect(service.dunning()).toEqual({ ended: 0, reminded: 0 });
+    time = since + 14 * day; service.dunning(); service.dunning();
+    const restarted = withNotices(); restarted.push(...notices);
+    service.dunning();
+    time = since + 27 * day; service.dunning(); service.dunning();
+    expect(kinds(restarted)).toEqual(["payment_failed", "payment_reminder:day_14", "payment_reminder:final"]);
+    expect(restarted.at(-1)).toMatchObject({ fixBy: since + 30 * day });
+    expect(sub.status).toBe("payment_problem");
+  });
+
+  it("a card fixed in time keeps everything: one thank-you, the clock cleared, the cloud kept", async () => {
+    const { sub } = await buy(); time += day;
+    deliver(provider.fail(sub.providerSubscriptionId!)); const notices = withNotices();
+    time += 5 * day; const renewed = provider.renew(sub.providerSubscriptionId!);
+    deliver(renewed); deliver(renewed);
+    expect(kinds(notices).filter(kind => kind !== "receipt")).toEqual(["payment_recovered"]);
+    expect(sub.status).toBe("active"); expect(sub.paymentProblem).toBeUndefined();
+    expect(clouds.setPaymentProblem).toHaveBeenLastCalledWith(sub.cloudId, false);
+    time += 40 * day; expect(service.dunning()).toEqual({ ended: 0, reminded: 0 });
+    expect(service.subscriptions(owner.id)[0].fixBy).toBeUndefined();
+  });
+
+  it("ends the plan at the fix-by date even when the provider never cancels: cancelled there, a managed cloud into retention", async () => {
+    const { sub } = await buy(); time += day;
+    Object.assign(clouds.get(sub.cloudId!)!, { backend: "managed" });
+    deliver(provider.fail(sub.providerSubscriptionId!));
+    const fixBy = sub.paymentProblem!.fixBy;
+    time = fixBy - 1; service.dunning(); expect(sub.status).toBe("payment_problem");
+    time = fixBy; expect(service.dunning()).toEqual({ ended: 1, reminded: 0 });
+    await service.drainProviderCancels();
+    expect(sub.status).toBe("ended"); expect(service.licenseCheck(owner).license).toBeNull();
+    expect(provider.cancelCalls.at(-1)).toEqual({ subscriptionId: sub.providerSubscriptionId, cancel: true });
+    expect(clouds.end).toHaveBeenLastCalledWith(sub.cloudId, fixBy + config.graceDays * day);
+    expect(sub.paymentProblem?.fixBy).toBe(fixBy);
+    expect(store.state.ledger!.filter(row => row.type === "subscription.expired")).toEqual([expect.objectContaining({ reason: "payment_failed", subscriptionId: sub.id })]);
+    deliver(provider.expire(sub.providerSubscriptionId!));
+    expect(store.state.ledger!.filter(row => row.type === "subscription.expired")).toHaveLength(1);
+  });
+
+  it("never deletes a cloud with no archive after a failed payment: it is stopped and kept", async () => {
+    const { sub } = await buy(); time += day;
+    deliver(provider.fail(sub.providerSubscriptionId!));
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    time = sub.paymentProblem!.fixBy; service.dunning();
+    expect(clouds.end).toHaveBeenLastCalledWith(sub.cloudId, Date.UTC(2100, 0, 1));
+  });
+
+  it("a provider that cancels after a failed charge ends the plan then, the cloud already stopped", async () => {
+    const { sub } = await buy(); time += day;
+    Object.assign(clouds.get(sub.cloudId!)!, { backend: "managed" });
+    deliver(provider.fail(sub.providerSubscriptionId!));
+    time += 2 * day; deliver(provider.expire(sub.providerSubscriptionId!));
+    expect(sub.status).toBe("ended"); expect(sub.paymentProblem).toBeDefined();
+    expect(clouds.end).toHaveBeenLastCalledWith(sub.cloudId, time + config.graceDays * day);
+  });
+
+  it("a trial's unpaid first charge gets one email and no reminders, and its plan ends 7 days after the trial", async () => {
+    config.trial = { days: 3 }; const notices = withNotices();
+    const answer = await service.checkout(owner, { kind: "cart", cart: desktopOnly() });
+    const checkout = store.state.checkouts.find(row => row.id === answer.checkoutId)!;
+    deliver(provider.complete(checkout.providerSessionId!));
+    const sub = store.state.subscriptions[0]!; notices.length = 0;
+    expect(sub.trialEndsAt).toBeDefined();
+    time = sub.trialEndsAt! + 60_000; deliver(provider.fail(sub.providerSubscriptionId!));
+    expect(notices).toEqual([expect.objectContaining({ kind: "payment_failed", trial: true, fixBy: sub.trialEndsAt! + 7 * day })]);
+    time = sub.trialEndsAt! + 6 * day; service.dunning(); expect(notices).toHaveLength(1);
+    time = sub.trialEndsAt! + 7 * day; service.dunning(); expect(sub.status).toBe("ended"); expect(notices).toHaveLength(1);
+  });
+
+  it("a trial stored before the clock existed takes the trial path: one email, data kept 7 days from its end, at least 3 days from now", async () => {
+    config.trial = { days: 3 }; withNotices();
+    const answer = await service.checkout(owner, { kind: "cart", cart: desktopOnly() });
+    deliver(provider.complete(store.state.checkouts.find(row => row.id === answer.checkoutId)!.providerSessionId!));
+    const sub = store.state.subscriptions[0]!;
+    time = sub.trialEndsAt! + 60_000; deliver(provider.fail(sub.providerSubscriptionId!));
+    for (const later of [day, 5 * day, 10 * day]) {
+      delete sub.paymentProblem; sub.status = "payment_problem"; store.commit(); service.close(); time = sub.trialEndsAt! + 60_000 + later;
+      const notices: Array<{ kind: string; trial?: boolean }> = [];
+      service = createBillingService({ store, provider, clouds, config, publicUrl: "https://dashboard.test", now: () => time, notify: notice => notices.push(notice) });
+      expect(sub.paymentProblem).toMatchObject({ trial: true, fixBy: Math.max(sub.trialEndsAt! + 7 * day, time + 3 * day) });
+      service.dunning(); service.dunning(); time = sub.paymentProblem!.fixBy; service.dunning();
+      expect(notices.filter(notice => notice.kind !== "receipt").map(notice => [notice.kind, notice.trial])).toEqual([["payment_failed", true]]);
+    }
+  });
+
+  it("a plan already set to end gets no reminders and ends at its period end", async () => {
+    const { sub } = await buy(); const notices = withNotices();
+    await service.cancel(owner, sub.id, { answer: "price" }); notices.length = 0;
+    time += day; deliver(provider.fail(sub.providerSubscriptionId!));
+    expect(notices).toEqual([]); expect(service.subscriptions(owner.id)[0].fixBy).toBeUndefined();
+    time = sub.currentPeriodEnd! + 20 * day; service.dunning();
+    expect(sub.status).toBe("ended"); expect(notices).toEqual([]);
+  });
+
+  it("dates a payment problem stored before the clock existed from its first failure on the ledger and sends the new first email once", async () => {
+    const { sub } = await buy(); time += day;
+    deliver(provider.fail(sub.providerSubscriptionId!));
+    const failedAt = store.state.ledger!.find(row => row.type === "subscription.on_hold")!.at;
+    delete sub.paymentProblem; store.commit(); service.close();
+    time += 3 * day;
+    const notices: Array<{ kind: string }> = [];
+    service = createBillingService({ store, provider, clouds, config, publicUrl: "https://dashboard.test", now: () => time, notify: notice => notices.push(notice) });
+    expect(sub.paymentProblem).toEqual({ since: failedAt, fixBy: failedAt + config.graceDays * day, sent: [] });
+    service.dunning(); service.dunning();
+    expect(notices.map(notice => notice.kind), "the new first email, once").toEqual(["payment_failed"]);
+    expect(sub.paymentProblem).toMatchObject({ sent: ["first"] });
   });
 });

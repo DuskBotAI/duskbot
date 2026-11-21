@@ -145,6 +145,9 @@ export type RuntimeEvent = RuntimeEventBase &
         /** An MCP tool call's target (the title-like value it works on) and HTTP method (api_request), read from its full
          * input, so an approval can say what it does and a GET can be told from a write. */
         callFacts?: { target?: string; single?: boolean; method?: string };
+        /** A tool call that sends something to someone: the hash of what it would send (shared/declined-sends.ts), read
+         * from its full input, so a send the person declined is refused when it is asked for again. */
+        sendKey?: string;
         choices?: string[];
         /** A provider's structured ask (Claude's AskUserQuestion): the whole
          * set of questions, each with its own options, so the card can offer

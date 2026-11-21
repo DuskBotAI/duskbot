@@ -45,7 +45,7 @@ import { useSidebarPhoneStatus } from "./SidebarPhoneButton";
 import { api, useStore, type Action, type ConfigStatus } from "@/state/store";
 import { localDesktopPage } from "./onboarding/WelcomeGate";
 import { serverCheckPhase, serverUpdateRow, type ServerUpdateCheck, type ServerUpdatePhase } from "@/lib/server-update";
-import type { AccountFace, CloudAccountBridge, CloudAccountState } from "../../electron/cloud-account.mjs";
+import type { AccountFace } from "../../electron/cloud-account.mjs";
 import { cloudPlanLabel, trialRunning } from "@/lib/cloud-plan";
 import { cloudColor } from "@/lib/cloud-look";
 import { cn } from "@/lib/cn";
@@ -59,15 +59,11 @@ import { openAccountDashboard } from "@/lib/account-dashboard";
 import { useOtherServerName } from "@/lib/other-server";
 import { profileForSession, readSessionState, type SessionState } from "@/lib/session";
 import {
-  cloudPhoneDestination,
   connectPhoneEntry,
   currentPhonePairingTarget,
   loadPhonePairingAccess,
-  phoneDestinations,
   phonePairingSettingsAction,
-  type CloudPhoneDestination,
   type ConnectPhoneEntry,
-  type PhoneDestination,
   type PhonePairingAccess,
 } from "@/lib/phone-pairing";
 import { phoneAppEnabled } from "@/lib/feature-flags";
@@ -217,13 +213,15 @@ interface UpdateEntry {
   pending: boolean;
   label: string;
   source?: "server";
+  check?: ServerUpdateCheck | null;
+  toggleAutomatic?: () => void;
 }
 
 /** The update a Simple account menu raises to its top row: one waiting to be installed, or one that failed. */
-export function simpleUpdateTop(entry: Pick<UpdateEntry, "phase" | "source"> | null): { label: string; action: string } | null {
+export function simpleUpdateTop(entry: Pick<UpdateEntry, "phase" | "source" | "check"> | null): { label: string; action: string } | null {
   const ready = () => t("sidebar.update.readyShort");
   if (entry?.source === "server") {
-    if (entry.phase === "available") return { label: ready(), action: t("sidebar.update.installAction") };
+    if (entry.phase === "available") return { label: ready(), action: t(entry.check?.install === "docker" && !entry.check.compose?.supported ? "settings.simple.updates.seeRelease" : "sidebar.update.installAction") };
     if (entry.phase === "reload") return { label: ready(), action: t("sidebar.update.restartAction") };
   }
   return null;
@@ -234,38 +232,92 @@ export function useServerUpdateItem(enabled: boolean): UpdateEntry | null {
   const [check, setCheck] = useState<ServerUpdateCheck | null>(null);
   const otherServer = useOtherServerName(enabled);
 
+  const [error, setError] = useState("");
+  const updating = check?.compose?.phase === "updating";
   useEffect(() => {
-    if (phase !== "up-to-date") return;
+    if (phase !== "up-to-date" || check?.compose) return;
     const timer = setTimeout(() => setPhase("idle"), 3000);
     return () => clearTimeout(timer);
-  }, [phase]);
+  }, [phase, check]);
+
+  useEffect(() => {
+    if (!updating || !check) return;
+    const target = check;
+    let active = true;
+    let timer: ReturnType<typeof setTimeout>;
+    const deadline = Date.now() + 25 * 60_000;
+    let disconnected = 0;
+    async function refresh() {
+      try {
+        const status = await api<Pick<ServerUpdateCheck, "current" | "compose">>("/api/updates/compose", { timeoutMs: 15_000 });
+        if (!active) return;
+        if (!status.current || !status.compose || (!status.compose.supported && status.compose.phase !== "failed")) throw new Error("Reconnecting");
+        disconnected = 0;
+        if (status.compose.phase !== "updating") {
+          const next = { ...target, ...status, available: target.latest !== status.current && target.available };
+          setCheck(next);
+          setPhase(serverCheckPhase(next));
+          return;
+        }
+      } catch {
+        if (!active) return;
+        disconnected ||= Date.now();
+      }
+      if (Date.now() >= deadline || (disconnected && Date.now() - disconnected > 120_000)) {
+        setError(t("settings.updates.hostUnreachable"));
+        setPhase("error");
+        setCheck(null);
+        return;
+      }
+      timer = setTimeout(() => void refresh(), 4000);
+    }
+    timer = setTimeout(() => void refresh(), 4000);
+    return () => { active = false; clearTimeout(timer); };
+  }, [updating, check]);
 
   if (!enabled) return null;
+  const fail = (cause: unknown) => {
+    setError(cause instanceof Error ? cause.message : String(cause));
+    setPhase("error");
+  };
+  const mutate = async (path: string, body: object) => {
+    if (!check) return;
+    setPhase("checking");
+    setError("");
+    try {
+      const compose = await api<NonNullable<ServerUpdateCheck["compose"]>>(path, { method: "POST", body: JSON.stringify(body), timeoutMs: 30_000 });
+      setCheck({ ...check, compose });
+      setPhase(serverCheckPhase(check));
+    } catch (cause) { fail(cause); }
+  };
   const row = serverUpdateRow(phase, check, appVersion(), otherServer);
+  const supported = check?.compose?.supported;
+  const install = phase === "available" && supported;
+  const label = updating ? t("settings.updates.updatingServer") : install
+    ? t("settings.updates.installServer", { name: otherServer ?? t("settings.updates.thisServer"), version: check!.latest! }) : row.label;
   return {
-    phase,
-    pending: false,
-    label: row.label,
-    source: "server",
+    phase, check, pending: updating, label, source: "server",
+    toggleAutomatic: supported ? () => void mutate("/api/updates/automatic", { enabled: !check.compose?.automatic }) : undefined,
     item: {
-      key: "update",
-      label: row.label,
-      subtitle: row.subtitle,
-      icon: <UpdateIcon phase={phase} pending={false} />,
-      disabled: phase === "checking",
+      key: "update", label,
+      subtitle: error || [check?.compose?.message, supported ? undefined : row.subtitle].filter(Boolean).join(" ") || undefined,
+      icon: <UpdateIcon phase={phase} pending={updating} />,
+      disabled: phase === "checking" || updating,
       keepOpen: true,
       attention: phase === "available" || phase === "reload" || phase === "error",
-      attentionTone: phase === "error" ? "danger" : "accent",
+      attentionTone: phase === "error" || check?.compose?.phase === "failed" ? "danger" : "accent",
       onSelect: () => {
+        if (install) return void mutate("/api/updates/apply", {});
         if (phase === "available" && check?.releaseUrl) return void openExternalLink(check.releaseUrl);
         if (phase === "reload") return window.location.reload();
         setPhase("checking");
+        setError("");
         void api<ServerUpdateCheck>("/api/updates/check", { timeoutMs: 20_000 })
           .then((next) => {
             setCheck(next);
             setPhase(serverCheckPhase(next));
           })
-          .catch(() => setPhase("error"));
+          .catch(fail);
       },
     },
   };
@@ -288,48 +340,24 @@ function useConnectPhoneEntry(cloudHome: boolean): ConnectPhoneEntry | null {
   return offered ? connectPhoneEntry(target, access) : null;
 }
 
-export function useCloudPhoneDestination(enabled: boolean): { cloud: CloudPhoneDestination; bridge?: CloudAccountBridge } {
-  const bridge = enabled && !window.duskDesktop?.remoteClient?.active ? window.duskDesktop?.cloudAccount : undefined;
-  const [account, setAccount] = useState<CloudAccountState | null>(null);
-  useEffect(() => {
-    if (!bridge) return;
-    let active = true, updated = false;
-    const unsubscribe = bridge.onState((next) => { updated = true; if (active) setAccount(next); });
-    void bridge.state().then((next) => { if (active && !updated) setAccount(next); }).catch(() => {});
-    return () => { active = false; unsubscribe(); };
-  }, [bridge]);
-  return bridge ? { cloud: cloudPhoneDestination(account), bridge } : { cloud: null };
-}
-
-export function selectPhoneDestination(destination: PhoneDestination, { bridge, dispatch }: { bridge?: Pick<CloudAccountBridge, "connectHomeForPhone">; dispatch: (action: Action) => void }): void {
-  if (destination.id !== "cloud" || !bridge) {
-    dispatch(phonePairingSettingsAction());
-    return;
-  }
-  void bridge.connectHomeForPhone().catch(() => dispatch({ type: "toggleAppSettings", open: true, section: "cloudAccount" }));
-}
-
 export function phoneMenuItems({
-  destinations,
+  entry,
   connected,
   onConnect,
 }: {
-  destinations: PhoneDestination[];
+  entry: ConnectPhoneEntry | null;
   connected: boolean;
-  onConnect: (destination: PhoneDestination) => void;
+  onConnect: () => void;
 }): SidebarMenuItem[] {
-  return destinations.map((destination) => ({
-    key: destination.id === "cloud" ? "connect-phone-cloud" : "connect-phone",
+  if (!entry) return [];
+  return [{
+    key: "connect-phone",
     label: t("sidebar.menu.connectPhone"),
-    subtitle: destination.team ? t("sidebar.menu.connectPhone.team", { team: destination.team }) : t(destination.subtitleKey),
-    ...(destination.noteKey ? { note: t(destination.noteKey) } : {}),
+    subtitle: entry.team ? t("sidebar.menu.connectPhone.team", { team: entry.team }) : t(entry.subtitleKey),
     icon: <Smartphone size={18} />,
-    trailing:
-      destination.id === "here" && destination.target === "computer" && connected ? (
-        <span aria-hidden="true" className="size-1.5 shrink-0 rounded-full bg-success" />
-      ) : undefined,
-    onSelect: () => onConnect(destination),
-  } satisfies SidebarMenuItem));
+    trailing: entry.target === "computer" && connected ? <span aria-hidden="true" className="size-1.5 shrink-0 rounded-full bg-success" /> : undefined,
+    onSelect: onConnect,
+  } satisfies SidebarMenuItem];
 }
 
 export function toolMenuItems({ archived }: { archived?: ArchivedBots }): SidebarMenuItem[] {
@@ -624,8 +652,6 @@ export function SidebarProfileMenu({ iconOnly = false, rail = false, circle = fa
   const engineUsage = usePlanUsageSummary(simple && menuOpen && cloudUsage === null && window.duskDesktop?.remoteClient?.active !== true, usageDisplay);
   const phone = useSidebarPhoneStatus();
   const connectPhone = useConnectPhoneEntry(state.config?.cloudHome === true);
-  const cloudPhone = useCloudPhoneDestination(connectPhone?.target === "computer");
-  const destinations = phoneDestinations(connectPhone, cloudPhone.cloud);
   const update = useServerUpdateItem(true);
   const [aboutOpen, setAboutOpen] = useState(false);
   const [phoneAppOpen, setPhoneAppOpen] = useState(false);
@@ -652,17 +678,15 @@ export function SidebarProfileMenu({ iconOnly = false, rail = false, circle = fa
   // grok's footer falls back to the computer's account: its initial in the grey circle, its name beside it
   const computer = useComputerName(simple && !profile?.name?.trim() && !profile?.email?.trim());
   const name = computer ?? profileLabel(profile);
-  const connectTo = (destination: PhoneDestination) => selectPhoneDestination(destination, { bridge: cloudPhone.bridge, dispatch });
   const remote = window.duskDesktop?.remoteClient?.active === true;
   const cloudAccount = !remote && Boolean(window.duskDesktop?.cloudAccount || (window.duskDesktop?.cloudPlan && state.config?.cloudHome === true));
   const openCloudAccount = () => dispatch({ type: "toggleAppSettings", open: true, section: "cloudAccount" });
   const phoneApp = phoneAppEnabled();
   const move = useAccountMove(state.config?.cloudHome === true, { onOpen: openCloudAccount, onPairPhone: phoneApp ? () => dispatch(phonePairingSettingsAction()) : undefined });
 
-  // one place to connect the phone to opens its pairing at once; only a choice of places asks where
+  // a team's place pairs from Settings, where its policy is said; anywhere else the dialog shows the code at once
   const getApp = () => {
-    if (destinations.length > 1) setPhoneAppOpen(true);
-    else if (destinations[0]) connectTo(destinations[0]);
+    if (connectPhone && !connectPhone.team) setPhoneAppOpen(true);
     else dispatch(phonePairingSettingsAction());
   };
   const headerEmail = accounts.view?.active?.email ?? place?.account?.email ?? null;
@@ -696,9 +720,9 @@ export function SidebarProfileMenu({ iconOnly = false, rail = false, circle = fa
       : simple
       ? simplePhoneItems({ connected: phone.kind === "connected", onGetApp: getApp })
       : phoneMenuItems({
-        destinations,
+        entry: connectPhone,
         connected: phone.kind === "connected",
-        onConnect: connectTo,
+        onConnect: getApp,
       }),
     usage: !remote,
     usageSummary: cloudUsage ?? engineUsage,
@@ -807,11 +831,9 @@ export function SidebarProfileMenu({ iconOnly = false, rail = false, circle = fa
         key="phone"
         open
         onClose={() => setPhoneAppOpen(false)}
-        connect={destinations.map((destination) => ({
-          key: destination.id,
-          subtitle: destination.team ? t("sidebar.menu.connectPhone.team", { team: destination.team }) : t(destination.subtitleKey),
-          onSelect: () => connectTo(destination),
-        }))}
+        remote={remote}
+        cloudHome={state.config?.cloudHome === true}
+        email={state.config?.profile?.email}
       />}</AnimatePresence>
     </>
   );

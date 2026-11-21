@@ -5,7 +5,7 @@ import { readSessionState } from "@/lib/session";
 import { resetSessionEnded, useSessionEnded } from "@/lib/session-ended";
 import { THEME_SKINS } from "@/lib/skins";
 import { pairSignIn, parseMobilePairingLink, parseSignInLink, type MobileConnectionRecord, type PairSignIn } from "../../../shared/mobile-link";
-import { usePlatform } from "../platform";
+import { SecretsLocked, usePlatform, waitForFront } from "../platform";
 import { useMobileAccount } from "../account/AccountGate";
 import type { AccountPlaces } from "../account/account-client";
 import { enrollWorkspace } from "../account/enroll-workspace";
@@ -33,7 +33,7 @@ import { sameRoute, watchRoute } from "./route-watch";
 import { learnRoutes } from "./learn-routes";
 
 type GateState = { kind: "loading" } | { kind: "pair"; reason?: "revoked" } | { kind: "ready"; id: string }
-  | { kind: "offline"; record: MobileConnectionRecord; others: MobileConnectionRecord[]; attempts: number; trying: boolean; gone?: true };
+  | { kind: "offline"; record: MobileConnectionRecord; others: MobileConnectionRecord[]; attempts: number; trying: boolean; gone?: true; refused?: true };
 
 /** A first connect that failed after the computer accepted the pairing: only a refused token undoes it. */
 export function pairedButUnreachable(error: unknown): boolean {
@@ -48,6 +48,11 @@ async function cloudOwner(account: { accounts: { id: string; email: string }[]; 
     if (places && [...places.clouds, ...places.teams].some((cloud) => linkedHere(cloud, [record]))) return { id: one.id, email: one.email };
   }
   return null;
+}
+
+/** The saved place to open when the one in use refused this phone: the last used of those not refused yet. */
+export function fallbackPlace(others: readonly MobileConnectionRecord[], refused: ReadonlySet<string>): MobileConnectionRecord | null {
+  return [...others].filter((record) => !refused.has(record.id)).sort((a, b) => (b.lastUsedAt ?? 0) - (a.lastUsedAt ?? 0))[0] ?? null;
 }
 
 export function ConnectionGate({ children, forcePair }: { children: ReactNode; forcePair?: boolean }) {
@@ -81,6 +86,7 @@ export function ConnectionGate({ children, forcePair }: { children: ReactNode; f
   const sequence = useRef(0);
   const uninstall = useRef<(() => void) | null>(null);
   const route = useRef<PhoneTransport | null>(null);
+  const refused = useRef(new Set<string>());
   const [attempt, setAttempt] = useState(0);
   const retry = useCallback(() => setAttempt((n) => n + 1), []);
 
@@ -89,9 +95,16 @@ export function ConnectionGate({ children, forcePair }: { children: ReactNode; f
     const controller = new AbortController();
     // a retry keeps the unreachable screen up while it tries
     setState((s) => s.kind === "offline" ? { ...s, trying: true } : { kind: "loading" });
+    let stopWaiting: (() => void) | undefined;
     const decide = async () => {
       if (forcePair) { setState({ kind: "pair" }); return; }
-      const active = await store.active();
+      let active: Awaited<ReturnType<typeof store.active>>;
+      try { active = await store.active(); } catch (error) {
+        if (!(error instanceof SecretsLocked)) throw error;
+        // the place's token is there but unreadable while the phone is locked: wait, never fall to pairing
+        if (!stopped) stopWaiting = waitForFront(platform, retry);
+        return;
+      }
       if (stopped) return;
       if (active) {
         try {
@@ -106,8 +119,13 @@ export function ConnectionGate({ children, forcePair }: { children: ReactNode; f
         } catch (error) {
           if (stopped) return;
           if (error instanceof PairError && error.code === "refused") {
-            await store.remove(active.record.id);
-            if (!stopped) setState({ kind: "pair", reason: "revoked" });
+            // a refusal is not a removal (a server starting up, a relay that lost its channels): the link stays, the phone
+            // opens another saved place it has not seen refused, and only the person removes a link
+            refused.current.add(active.record.id);
+            const others = (await store.list().catch(() => [])).filter((record) => record.id !== active.record.id);
+            const next = fallbackPlace(others, refused.current);
+            if (next && await store.setActive(next.id).then(() => true, () => false)) { if (!stopped) retry(); return; }
+            if (!stopped) setState((s) => ({ kind: "offline", record: active.record, others, attempts: s.kind === "offline" ? s.attempts + 1 : 1, trying: false, refused: true }));
           } else {
             // offline is not unpaired: keep the link and the other saved installations reachable
             const others = (await store.list().catch(() => [])).filter((record) => record.id !== active.record.id);
@@ -127,7 +145,7 @@ export function ConnectionGate({ children, forcePair }: { children: ReactNode; f
       } else setState({ kind: "pair" });
     };
     void decide().catch(() => { if (!stopped) setState({ kind: "pair" }); });
-    return () => { stopped = true; controller.abort(); uninstall.current?.(); uninstall.current = null; route.current = null; };
+    return () => { stopped = true; stopWaiting?.(); controller.abort(); uninstall.current?.(); uninstall.current = null; route.current = null; };
   }, [forcePair, platform, store, attempt, retry]);
 
   // a place with more than one route: when it goes quiet, the others are tried in the background and a working one
@@ -269,6 +287,7 @@ export function ConnectionGate({ children, forcePair }: { children: ReactNode; f
     setCelebrate({ name, sequence: ++sequence.current });
     setState({ kind: "ready", id: record.id });
   }, [store, platform, retry]);
+  const keep = useCallback((record: MobileConnectionRecord, token: string) => store.save(record, token, { open: false }), [store]);
   const cancel = () => { ++sequence.current; setIncoming(null); };
   const switchTo = useCallback((id: string) => { void store.setActive(id).then(retry, retry); }, [store, retry]);
   const openKept = useCallback((id: string) => { ++sequence.current; setIncoming(null); setAdding(0); switchTo(id); }, [switchTo]);
@@ -284,12 +303,13 @@ export function ConnectionGate({ children, forcePair }: { children: ReactNode; f
   const onboarding = state.kind !== "ready" || (forcePair && !entered);
   if (state.kind === "loading" && !incoming && !forcePair) return <div className="dusk-mobile flex size-full items-center justify-center bg-app"><MascotLoader naps={false} /></div>;
   if (state.kind === "offline" && !forcePair) {
-    if (!incoming && adding === 0) return <>{success}<Unreachable record={state.record} others={state.others} attempts={state.attempts} trying={state.trying} gone={state.gone === true} onRetry={retry} onSwitch={switchTo} onRemove={() => removeGone(state.record.id, state.others[0]?.id)} /></>;
-    return <>{success}<Onboarding key={incoming ? `in-${incoming.sequence}` : `add-${adding}`} initial={incoming?.payload} initialSignIn={incoming?.signIn} startAtLink startAt={incoming ? undefined : addingStep} email={addingStep === "addAccount" ? undefined : signInEmail?.email} signInCode={incoming ? undefined : signInEmail?.code} signInCloud={incoming ? undefined : signInEmail?.cloud} onOpen={openKept} onLinked={linked} onCancel={() => { cancel(); setAdding(0); }} /></>;
+    if (!incoming && adding === 0) return <>{success}<Unreachable record={state.record} others={state.others} attempts={state.attempts} trying={state.trying} gone={state.gone === true} refused={state.refused === true} onRetry={retry} onSwitch={switchTo} onRemove={() => removeGone(state.record.id, state.others[0]?.id)}
+      onLinkAgain={() => { setAddingStep("welcome"); setAdding((n) => n + 1); }} /></>;
+    return <>{success}<Onboarding key={incoming ? `in-${incoming.sequence}` : `add-${adding}`} initial={incoming?.payload} initialSignIn={incoming?.signIn} startAtLink startAt={incoming ? undefined : addingStep} email={addingStep === "addAccount" ? undefined : signInEmail?.email} signInCode={incoming ? undefined : signInEmail?.code} signInCloud={incoming ? undefined : signInEmail?.cloud} onOpen={openKept} onLinked={linked} onKept={keep} onCancel={() => { cancel(); setAdding(0); }} /></>;
   }
   if (onboarding) {
     return <>{success}<Onboarding key={incoming?.sequence ?? signInEmail?.sequence ?? 0} initial={incoming?.payload} initialSignIn={incoming?.signIn} reason={state.kind === "pair" ? state.reason : null}
-      startAt={!incoming && signInEmail ? "signin" : undefined} email={signInEmail?.email} signInCode={incoming ? undefined : signInEmail?.code} signInCloud={incoming ? undefined : signInEmail?.cloud} onOpen={openKept} onLinked={linked} onCancel={cancel} /></>;
+      startAt={!incoming && signInEmail ? "signin" : undefined} email={signInEmail?.email} signInCode={incoming ? undefined : signInEmail?.code} signInCloud={incoming ? undefined : signInEmail?.cloud} onOpen={openKept} onLinked={linked} onKept={keep} onCancel={cancel} /></>;
   }
   return (
     <>
@@ -298,7 +318,7 @@ export function ConnectionGate({ children, forcePair }: { children: ReactNode; f
       {(incoming || adding > 0) && (
         <div className="fixed inset-0 z-50">
           <Onboarding key={incoming ? `in-${incoming.sequence}` : `add-${adding}`} initial={incoming?.payload} initialSignIn={incoming?.signIn} startAtLink startAt={incoming ? undefined : addingStep} email={addingStep === "addAccount" ? undefined : signInEmail?.email} signInCode={incoming ? undefined : signInEmail?.code} signInCloud={incoming ? undefined : signInEmail?.cloud} onOpen={openKept}
-            onLinked={linked} onCancel={() => { cancel(); setAdding(0); }} />
+            onLinked={linked} onKept={keep} onCancel={() => { cancel(); setAdding(0); }} />
         </div>
       )}
       <SignInOffer paused={Boolean(celebrate || incoming || adding > 0)} />

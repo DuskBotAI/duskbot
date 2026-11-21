@@ -33,15 +33,30 @@ export interface StressServer {
   close(keep?: boolean): Promise<void>;
 }
 
-export async function launchServer(repo: string, tmp: string, gateway: Gateway, models: string[], extraConfig: Record<string, unknown> = {}): Promise<StressServer> {
+export type Engine = "openai-compat" | "codex" | "opencode";
+
+/** The one engine instance ("gw") a server's bots run on: the gateway as an OpenAI-compatible endpoint, Codex with the
+ * gateway as its Company endpoint, or OpenCode with Zen's free models (no key; needs the network). */
+function instanceFor(engine: Engine, gateway: Gateway, models: string[], dataDir: string): Record<string, unknown> {
+  if (engine === "codex") {
+    mkdirSync(join(dataDir, "codex-home"), { recursive: true });
+    return { driver: "codex", displayName: "Eval Codex", environment: { DUSK_COMPANY_API_KEY: gateway.key, CODEX_HOME: join(dataDir, "codex-home") }, config: { managed: { url: gateway.url, models } } };
+  }
+  if (engine === "opencode") return { driver: "opencodeGo", displayName: "Eval OpenCode" };
+  return { driver: "openai-compat", displayName: "Eval gateway", config: { url: gateway.url, key: gateway.key, model: models[0] } };
+}
+
+/** `reuseRoot`: start again on the data folder of a server closed with keep, as after a restart. */
+export async function launchServer(repo: string, tmp: string, gateway: Gateway, models: string[], extraConfig: Record<string, unknown> = {}, reuseRoot?: string,
+  options: { engine?: Engine; env?: Record<string, string> } = {}): Promise<StressServer> {
   const port = await freePair();
   mkdirSync(tmp, { recursive: true });
-  const root = mkdtempSync(join(tmp, "srv-"));
+  const root = reuseRoot ?? mkdtempSync(join(tmp, "srv-"));
   const dataDir = join(root, "data");
   mkdirSync(join(dataDir, "tmp"), { recursive: true });
-  writeFileSync(join(dataDir, "config.json"), JSON.stringify({
+  if (!reuseRoot) writeFileSync(join(dataDir, "config.json"), JSON.stringify({
     features: { smartSetupChoices: false },
-    instances: { gw: { driver: "openai-compat", displayName: "Eval gateway", config: { url: gateway.url, key: gateway.key, model: models[0] } } },
+    instances: { gw: instanceFor(options.engine ?? "openai-compat", gateway, models, dataDir) },
     ...extraConfig,
   }, null, 2), { mode: 0o600 });
   const logPath = join(root, "server.log");
@@ -55,7 +70,12 @@ export async function launchServer(repo: string, tmp: string, gateway: Gateway, 
     DUSK_PORT: String(port),
     DUSK_WEBHOOK_PORT: String(port + 1),
     DUSK_NO_TEST_BOTS: "1",
+    // HOME is the data folder here, so the Vault key would land inside it and saving secrets would be refused
+    DUSK_SAVED_SECRETS_KEY_FILE: join(root, "saved-secrets.key"),
     ...(process.env.DUSK_MODEL_DIR ? { DUSK_MODEL_DIR: process.env.DUSK_MODEL_DIR } : {}),
+    ...options.env,
+    // a live eval that means to run Codex or OpenCode: each has its own CODEX_HOME or HOME here, never the person's sign-in
+    ...(options.engine && options.engine !== "openai-compat" ? { DUSK_ALLOW_REAL_ENGINES: "1" } : {}),
   };
   const url = `http://127.0.0.1:${port}`;
   const log = openSync(logPath, "a", 0o600);
@@ -77,7 +97,8 @@ export async function launchServer(repo: string, tmp: string, gateway: Gateway, 
         await new Promise((r) => { child.once("exit", r); setTimeout(r, 8_000); });
       }
       taken.delete(port);
-      if (!keep) rmSync(dataDir, { recursive: true, force: true });
+      // an engine's own child (OpenCode) can still be writing for a moment after the server exits
+      if (!keep) try { rmSync(dataDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 500 }); } catch { /* left for the next tmp clean */ }
     },
   };
 }

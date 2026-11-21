@@ -348,10 +348,16 @@ function ServerUpdatesRow() {
   const entry = useServerUpdateItem(true);
   if (!entry) return null;
   const status = entry.phase === "idle" ? undefined : [entry.label, entry.item.subtitle].filter(Boolean).join(" ");
-  const action = entry.phase === "available" ? t("settings.simple.updates.seeRelease")
+  const action = entry.pending ? t("settings.updates.updatingServer")
+    : entry.phase === "available" ? t(entry.check?.compose?.supported ? "settings.updates.updateNow" : "settings.simple.updates.seeRelease")
     : entry.phase === "reload" ? t("settings.simple.updates.reload")
       : entry.phase === "checking" ? t("common.checking") : t("settings.updates.check");
-  return <NavRow data-settings-open="server-update" title={versionTitle()} hint={status} value={action} drill={false} disabled={entry.item.disabled} onClick={entry.item.onSelect} />;
+  const title = entry.check?.install === "docker" ? t("settings.updates.serverVersion", { version: entry.check.current }) : versionTitle();
+  return <>
+    <NavRow data-settings-open="server-update" title={title} hint={status} value={action} drill={false} disabled={entry.item.disabled} onClick={entry.item.onSelect} />
+    {entry.toggleAutomatic && <SwitchRow title={t("settings.updates.automaticServer")} checked={entry.check?.compose?.automatic === true}
+      disabled={entry.item.disabled} onChange={entry.toggleAutomatic} />}
+  </>;
 }
 
 export function UpdatesPane() {

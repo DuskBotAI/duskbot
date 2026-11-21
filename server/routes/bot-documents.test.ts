@@ -1,4 +1,4 @@
-import { mkdtempSync } from "node:fs";
+import { mkdtempSync, readFileSync } from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -25,6 +25,7 @@ function harness() {
     documents,
     bot: (id) => (id === "bot1" || id === "bot2" ? { id } : null),
     post: (botId, threadId, text, card) => { posted.push({ botId, threadId, text, card }); return `m${posted.length}`; },
+    exportDir: (botId) => join(root, "workspaces", botId, "files"),
   });
   const tool = async (body: unknown, botId = "bot1", threadId = "t1") => {
     let answer: Answer | null = null;
@@ -99,5 +100,28 @@ describe("the panel's document routes", () => {
     expect(await http("DELETE", `/api/bots/bot1/documents/${id}`)).toMatchObject({ status: 200 });
     expect(await http("GET", `/api/bots/bot1/documents/${id}`)).toMatchObject({ status: 404 });
     expect(await http("GET", "/api/bots/bot1/memory")).toBe(PASS);
+  });
+});
+
+describe("a document as a file and the person's manual, through the tools", () => {
+  it("exports a sheet as xlsx and a report as pdf into the bot's files, and refuses a spreadsheet of prose", async () => {
+    const { tool } = harness();
+    const sheet = await tool({ action: "create", title: "Deals", kind: "sheet", content: "brand,stage\nTrailkind,contract" }) as Answer;
+    const made = await tool({ action: "list", id: sheet.body.id, export_as: "xlsx" }) as Answer;
+    expect(made.status).toBe(200);
+    expect(String(made.body.path)).toMatch(/workspaces\/bot1\/files\/Deals\.xlsx$/);
+    expect(readFileSync(String(made.body.path)).subarray(0, 2).toString()).toBe("PK");
+    const report = await tool({ action: "create", title: "Weekly report", kind: "markdown", content: "# Week\n\nAll good." }) as Answer;
+    const pdfMade = await tool({ action: "list", id: report.body.id, export_as: "pdf" }) as Answer;
+    expect(readFileSync(String(pdfMade.body.path)).subarray(0, 5).toString()).toBe("%PDF-");
+    expect(await tool({ action: "list", id: report.body.id, export_as: "xlsx" })).toMatchObject({ status: 400, body: { error: expect.stringContaining("no table") } });
+    expect(await tool({ action: "list", id: report.body.id, export_as: "exe" })).toMatchObject({ status: 400 });
+  });
+
+  it("saves a manual the bot then cannot change, and lists it as one", async () => {
+    const { tool } = harness();
+    const manual = await tool({ action: "create", title: "Manual", kind: "markdown", content: "Never refund.", manual: true }) as Answer;
+    expect(await tool({ action: "update", id: manual.body.id, content: "Refund all." })).toMatchObject({ status: 409, body: { error: expect.stringContaining("only they change it") } });
+    expect(((await tool({ action: "list" })) as Answer).body.text).toContain("the person's manual: read it, never change it");
   });
 });

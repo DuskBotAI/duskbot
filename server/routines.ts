@@ -7,12 +7,12 @@ import type { RuntimeEvent } from "./contracts.ts";
 import { OwnedFile } from "./atomic.ts"; import { saveSoon } from "./save-batch.ts";
 import { redactSecretsInText } from "./redact.ts";
 import { withoutEchoedPrompt } from "../shared/failed-turn.ts";
-import { activeRunsOf, nextDueOf, schedulerDueOf, upcomingOf, wakeHoldOf } from "./routine-due.ts"; import { dropQuietFields, nextTicks, quietPatch, stripOf } from "./routine-quiet.ts";
+import { activeRunsOf, enabledHereOf, nextDueOf, schedulerDueOf, upcomingOf, wakeHoldOf } from "./routine-due.ts"; import { dropQuietFields, nextTicks, quietPatch, stripOf } from "./routine-quiet.ts";
 import { startDueTimer, type DueTimer } from "./due-timer.ts";
 import type { GroupGoalRunStatus } from "../shared/group-goal-run.ts";
 import type { RoutineRequestOperation } from "../shared/routine-request.ts";
 import { intervalAllowsOccurrence, intervalHasRestrictions, isSameLocalDay, latestIntervalOccurrence } from "./routine-intervals.ts";
-import { cloneSchedule, limitResetOccurrence, mergeScheduleUpdate, nextOccurrence, RoutineScheduleError, type RoutineSchedule, type RoutineScheduleInput } from "./routine-schedules.ts";
+import { limitResetOccurrence, mergeScheduleUpdate, nextOccurrence, RoutineScheduleError, type RoutineSchedule, type RoutineScheduleInput } from "./routine-schedules.ts";
 import { runsOnce } from "../shared/limit-reset.ts";
 import {
   isRoutineProblemRun, type RoutineQuietFields, type RoutineQuietInput, type RoutineAccess, type RoutineCheck, type RoutineContextAttachment, type RoutineDelivery, type RoutineIntervalWindow, type RoutineRetryCause,
@@ -26,15 +26,15 @@ import {
 import {
   dispatchRefusal, engineFacts, loadOwnerNotices, recoverRun, requeueOnce, weekRuns, type RoutineAlert, type RoutineFailureFacts, type RoutineOwnerNotice,
 } from "./routine-recovery.ts";
-import { activeMs, matchesAsk, openAsk, settleAsk, waitingFor, type RoutineRunAsk } from "./routine-waits.ts";
+import { answeredInChat, matchesAsk, openAsk, settleAsk, stopDue, waitingFor, type RoutineRunAsk } from "./routine-waits.ts";
 import { failsLikeLastOutcome, outcomesNewestFirst } from "./routine-outcomes.ts";
 import { EVENT_RETRY_WINDOW_MS, loadEventReceipts, MAX_EVENT_RECEIPTS, type EventRunReceipt } from "./routine-event-receipts.ts";
-import { attachmentPathsOf, attachmentsMalformed, cloneAttachments } from "./routine-attachments.ts";
+import { attachmentPathsOf, attachmentsMalformed } from "./routine-attachments.ts";
 import { loadInstalledPackage, loadRequestReceipts, loadRoutine, loadRun } from "./routine-load.ts";
 import { applyHolds, holdCauses, type AppliedHolds } from "./routine-holds.ts";
 import { sanitizeInput } from "./routine-input.ts";
 import { checkHold, CHECK_BOOT_HOLD_MS, type CheckHold, type RoutineCheckContext } from "./routine-check-pacing.ts";
-import { cloneRun, ranApart, resolveRoutineResultsThread, routineRunDefinition, type ResultsThreadAllocation } from "./routine-run-definition.ts";
+import { cloneRoutine, cloneRun, ranApart, routineRequestOwnerKey, resolveRoutineResultsThread, routineRunDefinition, type ResultsThreadAllocation } from "./routine-run-definition.ts";
 
 export type { RoutineContextAttachment, RoutineIntervalWindow, RoutineRunStatus, RoutineRunTrigger };
 export { intervalHasRestrictions } from "./routine-intervals.ts";
@@ -201,10 +201,6 @@ interface RoutineFile {
 
 export type RoutineRequestOwner = Pick<RoutineRequestReceipt, "requestId" | "messageId" | "botId" | "threadId">;
 
-function routineRequestOwnerKey(owner: RoutineRequestOwner): string {
-  return JSON.stringify([owner.requestId, owner.messageId, owner.botId, owner.threadId]);
-}
-
 /** What a routine's checks found: items for one AI run, a sentence while an app cannot be read, and the next time they
  * have something to do on time. */
 export interface RoutineCheckResult { run?: { prompt: string; key: string }; trouble?: string; wakeAt?: number; /** It read nothing: a run holds its last change, or none may start now. */ held?: true }
@@ -280,14 +276,6 @@ export interface RoutineManagerOptions {
 const CATCH_UP_MS = 12 * 60 * 60_000, WAKE_HORIZON_MS = 60 * 60_000;
 export const ROUTINE_RESTARTED = "dusk bot restarted while this routine was running";
 const MAX_RUNS = 2_000;
-function cloneRoutine(routine: Routine): Routine {
-  return {
-    ...routine,
-    schedule: cloneSchedule(routine.schedule),
-    attachments: cloneAttachments(routine.attachments),
-  };
-}
-
 export class RoutineManager {
   private readonly file: string; private readonly disk: OwnedFile;
   private readonly now: () => number;
@@ -413,7 +401,7 @@ export class RoutineManager {
     return true;
   }
 
-  wakeHold(horizonMs = WAKE_HORIZON_MS) { return wakeHoldOf(this.routines, this.runs, this.now(), horizonMs); }
+  wakeHold(horizonMs = WAKE_HORIZON_MS) { return wakeHoldOf(this.routines, this.runs, this.now(), horizonMs); } enabledHere(): number { return enabledHereOf(this.routines); }
   /** A Cloud home's sleep check (server/routine-due.ts). */
   hasActiveRuns(): boolean { return activeRunsOf(this.runs, this.now()); }
   nextDueAt(): number | null { return nextDueOf(this.routines, this.runs, this.now()); } /** The runs due in the next day, for a Cloud home's power report. */ upcoming() { return upcomingOf(this.routines, this.runs, this.now()); }
@@ -999,9 +987,8 @@ export class RoutineManager {
     try {
       const now = this.now();
       for (const run of this.runs) {
-        if (!["running", "waiting"].includes(run.status) || run.startedAt == null || run.timeoutMinutes == null ||
-          activeMs(run, now) < run.timeoutMinutes * 60_000) continue;
-        await this.stopRun(run, `Stopped after reaching the ${run.timeoutMinutes}-minute run limit`, "limit-reached");
+        const stop = stopDue(run, now);
+        if (stop) await this.stopRun(run, stop.detail, stop.status);
       }
       if (this.options.heldAfterWake?.()) return;
       const isDue = (routine: Routine) => !this.closing && routine.enabled && this.targetState(routine) !== "missing" && (!routine.checks
@@ -1265,8 +1252,7 @@ export class RoutineManager {
         void this.stopRun(run, unanswered, "stopped");
         return cloneRun(run);
       }
-      if (run.asked) this.wait(run, waitingFor(run.asked));
-      else { run.status = "running"; run.attention = undefined; }
+      this.waitOrRun(run);
     } else if (event.type === "item.completed" && event.itemType === "assistant_text") {
       run.output = redactSecretsInText(event.text).trim().slice(0, 2_000);
     } else if (event.type === "runtime.error") {
@@ -1297,6 +1283,15 @@ export class RoutineManager {
   rejectResult(id: string, why: string): void {
     const run = this.runs.find((candidate) => candidate.id === id && candidate.status === "completed");
     if (run) this.failRun(run, why);
+  }
+
+  /** The person wrote in this conversation, which answers the question a run there waits on. */
+  personWrote(threadId: string): void {
+    const run = this.runs.find((candidate) => candidate.threadId === threadId && candidate.status === "waiting");
+    if (!run || !answeredInChat(run, this.now())) return;
+    this.waitOrRun(run);
+    this.saveLater();
+    this.emitRun(run);
   }
 
   failThread(threadId: string, message: string, facts: RoutineFailureFacts = {}) {
@@ -1349,6 +1344,10 @@ export class RoutineManager {
     }
     queueMicrotask(() => this.tickInBackground());
     return cloneRun(run);
+  }
+
+  private waitOrRun(run: RoutineRun) {
+    if (run.asked) this.wait(run, waitingFor(run.asked)); else Object.assign(run, { status: "running", attention: undefined });
   }
 
   /** Timed from when it began, so a later occurrence can tell a wait that went unanswered. */

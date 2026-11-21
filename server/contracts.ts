@@ -179,6 +179,8 @@ export interface SendTurnInput {
     phone?: { command: string; args: string[]; env: Record<string, string> };
     /** The built-in browser's MCP proxy: one tab per bot, in its own persistent partition. */
     browser?: { command: string; args: string[]; env: Record<string, string> };
+    /** This computer's shell (run_command, find_files) for an engine with none of its own, on the desktop app's own server. */
+    shell?: { command: string; args: string[]; env: Record<string, string> };
     /** The Data tools' MCP proxy: DuckDB on this bot's own database. */
     data?: { command: string; args: string[]; env: Record<string, string> };
     /** The Email tools' MCP proxy: the harness holds the passwords and the per-bot verdict. */

@@ -10,6 +10,7 @@ import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, expect, it, vi } from "vitest";
 import { cloudPairingSignature, cloudRequestSignature } from "../../server/cloud-home.ts";
 import { removeTempDir, waitForExit } from "../../server/testing/cleanup.ts";
+import { engineFreePath } from "../../server/testing/engine-free-path.ts";
 import { hostTimeout } from "../../server/testing/host-timeout.ts";
 import { freePortBlock } from "../../server/testing/ports.ts";
 import { openSse } from "../../server/testing/sse.ts";
@@ -98,7 +99,7 @@ beforeAll(async () => {
   child = spawn(process.execPath, ["--import", offline, "--import", new URL("../../server/testing/power-clock-hooks.mjs", import.meta.url).href, join(SERVER_DIR, "index.ts")], {
     cwd: join(SERVER_DIR, ".."),
     env: {
-      PATH: process.env.PATH, HOME: home, USERPROFILE: home, DUSK_DATA_DIR: home, DUSK_PORT: String(port), DUSK_WEBHOOK_PORT: String(port + 1),
+      PATH: engineFreePath(home, process.env.PATH), DUSK_TEST_SEALED_PATH: "1", HOME: home, USERPROFILE: home, DUSK_DATA_DIR: home, DUSK_PORT: String(port), DUSK_WEBHOOK_PORT: String(port + 1),
       DUSK_CLOUD_ROLE: "home", DUSK_CLOUD_MACHINE_ID: MACHINE, DUSK_CLOUD_ADMIN_URL: "https://cloud.example.test",
       DUSK_CLOUD_BOOTSTRAP_SECRET: secret, DUSK_PUBLIC_URL: `https://${HOST}`, FAKE_CLAUDE_MODE: "happy",
       DUSK_TEST_POWER_CLOCK: "1", DUSK_SSE_HEARTBEAT_MS: "250",

@@ -31,6 +31,15 @@ goal's weight (up to 3), skips lower it (down to 0.2), and a higher weight means
 never rewrites these lines. Runtime state (next pass, search terms, offers sent, links already seen) is `offers.json` in
 the data folder.
 
+## What to tell me about
+
+The proactive bot's memory also holds `memory/proactive.md` ("What to tell me about" under What it remembers): lines under
+Tell me about, Never tell me about, and one Quiet hours line (`21:30 to 08:00`). Its quiet hours replace the 21:00 to
+09:00 above, and a goal or find that names a Never line is not offered. The day watch makes no proactive check in quiet
+hours, new frequent routines are shaped to the hours outside them, and every routine run reads the file's lines. Bots
+write it with `memory_update` action `notify` (rule tell, never or quiet) from the person's own words; Stop sending me
+these on a routine's message pauses that routine and adds its name under Never (`POST /api/proactive/stop`).
+
 ## The pass
 
 Every 5 minutes a check in plain code; a pass runs only when it is due (10 minutes after start, then every 6 hours, each

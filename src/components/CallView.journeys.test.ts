@@ -32,7 +32,8 @@ const storage = {
 };
 vi.stubGlobal("localStorage", storage);
 
-const { CallButton } = await import("./CallView");
+const { CallButton, CallOverlay } = await import("./CallView");
+const { registerPhoneVoice } = await import("@/lib/voice-input/device");
 const { LiveCallBar } = await import("./LiveCallBar");
 const { BotEditorStore, initialState, reducer } = await import("@/state/store");
 const { callMode, setCallMode } = await import("@/lib/call-mode");
@@ -41,7 +42,7 @@ const { configureLiveMedia, liveMedia, resetLiveMedia } = await import("@/lib/li
 const { cacheDesktopCapabilities, initialDesktopCapabilities } = await import("@/lib/desktop");
 
 const { desktopCapabilities } = createRequire(import.meta.url)("../../electron/capabilities.cjs") as {
-  desktopCapabilities(options: { platform: string; remote?: boolean; env?: Record<string, string>; homeDir?: string }): DesktopCapabilities;
+  desktopCapabilities(options: { platform: string; remote?: boolean; placeSpeech?: boolean; env?: Record<string, string>; homeDir?: string }): DesktopCapabilities;
 };
 const PRELOAD = readFileSync(join(process.cwd(), "electron", "preload.cjs"), "utf8");
 const LOCAL_ORIGIN = "http://127.0.0.1:8799";
@@ -69,6 +70,30 @@ function desktopApp(platform: Platform, page: "this-computer" | "my-cloud"): { b
   });
   const capabilities = desktopCapabilities({ platform, remote: page === "my-cloud", env: {}, homeDir: "/Users/ada" });
   return { bridge: bridge!, desktop: { capabilities, ready: true } };
+}
+/** Another server the person chose, open as the window's server: main answers place:page for it. */
+function chosenServer(platform: Platform) {
+  let bridge: Bridge | undefined;
+  const heard = new Set<(event: unknown, line: unknown) => void>();
+  runInNewContext(PRELOAD, {
+    process: { platform, argv: [`--dusk-local-origin=${LOCAL_ORIGIN}`] },
+    location: { origin: "https://bots.example.test" },
+    TextEncoder,
+    localStorage: { getItem: () => null },
+    require: () => ({
+      webUtils: {},
+      contextBridge: { exposeInMainWorld: (_name: string, value: Bridge) => { bridge = value; } },
+      ipcRenderer: {
+        on: (channel: string, handler: (event: unknown, line: unknown) => void) => { if (channel === "speech:transcript") heard.add(handler); },
+        removeListener: (_channel: string, handler: (event: unknown, line: unknown) => void) => { heard.delete(handler); },
+        send() {},
+        sendSync: (channel: string) => channel === "place:page",
+        invoke: async (channel: string, ...args: unknown[]) => answer(channel, args),
+      },
+    }),
+  });
+  const capabilities = desktopCapabilities({ platform, remote: true, placeSpeech: true, env: {}, homeDir: "/Users/ada" });
+  return { bridge: bridge!, desktop: { capabilities, ready: true }, say: (line: unknown) => { for (const handler of heard) handler({}, line); } };
 }
 async function answer(channel: string, args: unknown[]): Promise<unknown> {
   invoked.push({ channel, args });
@@ -98,8 +123,10 @@ const THIS_COMPUTER = { tts: { configured: true, ready: true, voice: "voice-1" }
 const KEY_NEEDED = "Live calls use your own OpenAI key. Add it in settings → API keys.";
 const APP_REFUSED = "The app didn't let this page use the microphone. Open it in your web browser to make the live call.";
 
+let actions: Array<{ type: string }> = [];
 function Page({ config, children }: { config: AppState["config"]; children: ReactNode }) {
-  const [state, dispatch] = useReducer(reducer, { ...initialState, config, bots: [ada] });
+  const [state, reduce] = useReducer(reducer, { ...initialState, config, bots: [ada] });
+  const dispatch: typeof reduce = (action) => { actions.push(action); reduce(action); };
   const value = { state, dispatch, flushBotPatches: async () => null, refreshInstances: async () => {}, refreshModels: async () => {} };
   return createElement(BotEditorStore, { value, children });
 }
@@ -121,6 +148,7 @@ function chat(config: AppState["config"]) {
     children: [
       createElement(CallButton, { key: "call", bot: ada, placement: "composer" }),
       createElement(LiveCallBar, { key: "bar", bot: ada }),
+      createElement(CallOverlay, { key: "overlay", bot: ada }),
     ],
   })));
 }
@@ -196,6 +224,7 @@ beforeEach(() => {
   cacheDesktopCapabilities(initialDesktopCapabilities());
   requests = [];
   invoked = [];
+  actions = [];
   pageMic = undefined;
   liveKey = "";
   microphone = "allowed";
@@ -226,6 +255,7 @@ afterEach(() => {
   setCallMode("turns");
   fixture.desktop = null;
   delete (window as { duskDesktop?: Bridge }).duskDesktop;
+  registerPhoneVoice(null);
   vi.unstubAllGlobals();
 });
 
@@ -329,5 +359,53 @@ describe("calling a bot off the Mac", () => {
     setCallMode("turns");
     chat(THIS_COMPUTER);
     expect(callButton()?.getAttribute("aria-label")).toBe("Call Ada");
+  });
+});
+
+describe("calling a bot wherever it runs", () => {
+  const sent = () => actions.filter((action) => action.type === "send");
+
+  it.each(["darwin", "win32"] as const)("on another server the person chose, in the %s app, Take turns listens here and each turn goes out as a message", async (platform) => {
+    const server = chosenServer(platform);
+    open(server);
+    chat(SERVER);
+    expect(callButton()?.getAttribute("aria-label")).toBe("Call Ada");
+    press(callButton());
+    expect(text()).not.toContain("Call unavailable");
+    expect(currentCall()).toBe("ada");
+    await vi.waitFor(() => expect(invoked).toContainEqual({ channel: "speech:start", args: [{ endpointMs: 850 }] }));
+    flushSync(() => server.say({ text: "what is on today", partial: false }));
+    expect(sent()).toEqual([expect.objectContaining({ botId: "ada", threadId: "thread-ada", text: "what is on today" })]);
+    expect(requests.filter((request) => request.method !== "GET")).toEqual([]);
+  });
+
+  it("in the phone app, the phone's own recognizer listens and each turn goes out as a message", async () => {
+    let heard: ((line: { partial?: boolean; text?: string }) => void) | undefined;
+    const speechStart = vi.fn(async (_options?: { endpointMs?: number }) => {});
+    registerPhoneVoice({
+      os: "ios",
+      secrets: { get: async () => null, set: async () => {}, remove: async () => {} },
+      speech: {
+        speechStart, speechStop: async () => {}, speechFinish: async () => {},
+        onSpeechTranscript: (cb) => { heard = cb; return () => { heard = undefined; }; },
+        onSpeechEnd: () => () => {},
+      },
+    });
+    chat(SERVER);
+    expect(callButton()?.getAttribute("aria-label")).toBe("Call Ada");
+    press(callButton());
+    expect(text()).not.toContain("Call unavailable");
+    expect(currentCall()).toBe("ada");
+    await vi.waitFor(() => expect(speechStart).toHaveBeenCalledWith({ endpointMs: 850 }));
+    flushSync(() => heard?.({ text: "remind me at five", partial: false }));
+    expect(sent()).toEqual([expect.objectContaining({ botId: "ada", threadId: "thread-ada", text: "remind me at five" })]);
+  });
+
+  it("on a page no one chose, Take turns stays off and nothing listens", () => {
+    open(desktopApp("darwin", "my-cloud"));
+    chat(SERVER);
+    press(callButton());
+    expect(invoked.map(({ channel }) => channel)).not.toContain("speech:start");
+    expect(sent()).toEqual([]);
   });
 });

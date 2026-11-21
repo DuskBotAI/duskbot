@@ -5,7 +5,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { api, ApiError, FIXTURE, type AccountData } from "../lib/api";
 import type { BillingOverview, ChangeOffer, CheckoutRequest, CloudDesktop, DesktopId, IdentityProvider, MachineSpec, NotificationPrefs, PlanCatalog, Selection } from "./contracts";
 import { fixtureCatalog } from "./fixtures";
-import type { CancelAnswer, RetentionInput } from "./wire";
+import type { CancelAnswer, CancelSurvey, RetentionInput } from "./wire";
 
 export interface CloudData {
   catalog: PlanCatalog | null;
@@ -29,7 +29,9 @@ export interface CloudData {
   /** what changing to `selection` does: today's charge, the next one and when; every change is confirmed with it */
   changeCharge(selection: Selection): Promise<ChangeOffer>;
   changePlan(selection: Selection, approvedUsd?: number): Promise<void>;
-  cancel(reason: CancelAnswer | ""): Promise<void>;
+  cancel(survey: CancelSurvey | null): Promise<void>;
+  /** a plan set to end renews again */
+  keep(): Promise<void>;
   /** records a cancel flow step; never throws */
   retentionStep(input: RetentionInput): void;
   takeDiscount(reason: CancelAnswer): Promise<void>;
@@ -201,7 +203,8 @@ export function CloudDataProvider({ children, signedIn }: { children: ReactNode;
     resize: (id, req) => mutate(() => api.resize(id, req)),
     changeCharge: (selection) => api.changeCharge(selection),
     changePlan: (selection, approvedUsd) => mutate(() => api.changePlan(selection, approvedUsd)),
-    cancel: (reason) => mutate(() => api.cancel(reason)),
+    cancel: (survey) => mutate(() => api.cancel(survey)),
+    keep: () => mutate(() => api.keep()),
     retentionStep: (input) => { void api.retention(input).catch(() => {}); },
     takeDiscount: (reason) => mutate(() => api.discount(reason)),
     updateCard: () => mutate(async () => { const answer = await api.updateCard(); if (!FIXTURE) window.location.assign(answer.url); }),

@@ -208,6 +208,7 @@
   "revealInFolder",
   "routines",
   "routines.keepAwake",
+  "routines.keepAwakePluggedIn",
   "routines.wakeState",
   "saveFile",
   "screenFrame",

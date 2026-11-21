@@ -299,6 +299,13 @@ describe("what a beat may promise", () => {
       expect(beatPrompt(kind, input)).toContain("Never say what can't be done or that a step failed: that is Forge's own reply to make.");
     }
   });
+  it("acks every work ask, a correction and a watch setup included", () => {
+    const ack = beatPrompt("ack", input);
+    expect(ack).toContain("Reply exactly SKIP only if the message is a greeting, thanks or small talk");
+    expect(ack).toContain("a correction or a change (\"wait, it's in Rust\") gets one naming the change");
+    expect(ack).not.toContain("outside what");
+    expect(ack).not.toMatch(/name the goal instead[^.]*or reply SKIP/);
+  });
   it("keeps product names as the person wrote them in the ack", () => {
     expect(beatPrompt("ack", input)).toContain("Write names and products exactly as the person did");
   });

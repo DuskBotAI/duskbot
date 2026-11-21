@@ -12,6 +12,7 @@ import { bridgedCallName } from "./agents-bridge-names.ts";
 import { TOOL_BRIDGE_ENV } from "./drivers/agents-bridge.ts";
 import { decodeInjectId } from "./drivers/local-inject.ts";
 import { onThisNetwork } from "./drivers/openai-compat.ts";
+import { isLoopback } from "./provider-key-check.ts";
 import { claudeCliSupports, parseClaudeCliVersion } from "./drivers/claude.ts";
 import { AGENTS_NODE_FLAG, SPAWNED_PROXIES } from "./proxy-paths.ts";
 
@@ -38,10 +39,17 @@ export function agentsToolBridgeEnabled(cfg: BridgeConfig, env: NodeJS.ProcessEn
 /** A model on this machine or network reads the whole list on every turn, out of a small window and at laptop speed:
  * about 15,000 tokens before the person has said anything. DUSK_AGENTS_TOOL_BRIDGE=0 still wins. */
 function runsLocalModel(bot: { modelSelection?: { model?: unknown } } | null | undefined, engine: BridgeEngine | null | undefined): boolean {
+  return modelPlace(bot, engine) !== "hosted";
+}
+
+/** Where a turn's model runs: `loopback` on this machine, `network` on another machine of the home or office network,
+ * `hosted` anywhere else. A Custom local pick always names a server on this machine. */
+export function modelPlace(bot: { modelSelection?: { model?: unknown } } | null | undefined, engine: BridgeEngine | null | undefined): "hosted" | "loopback" | "network" {
   const model = bot?.modelSelection?.model;
-  if (typeof model === "string" && decodeInjectId(model)) return true;
+  if (typeof model === "string" && decodeInjectId(model)) return "loopback";
   const url = (engine?.config as { url?: unknown } | undefined)?.url;
-  return engine?.driverKind === "openai-compat" && typeof url === "string" && onThisNetwork(url);
+  if (engine?.driverKind !== "openai-compat" || typeof url !== "string" || !onThisNetwork(url)) return "hosted";
+  return isLoopback(new URL(url).hostname) ? "loopback" : "network";
 }
 
 /** The engine a turn runs on, as far as the decision reads it. */

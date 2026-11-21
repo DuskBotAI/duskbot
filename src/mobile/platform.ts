@@ -148,6 +148,24 @@ export interface TurnActivityBridge {
   lineKey(): Promise<string | null>;
 }
 
+/** The Keychain could not be read just now (the phone is locked): what it holds is unknown, never "nothing". */
+export class SecretsLocked extends Error {
+  constructor() {
+    super("the keychain is locked");
+    this.name = "SecretsLocked";
+  }
+}
+
+/** Calls `again` once the app comes back in front, or after a few seconds if no resume is heard; returns a stop. */
+export function waitForFront(platform: Pick<MobilePlatform, "onResume">, again: () => void, fallbackMs = 3_000): () => void {
+  let done = false;
+  const fire = () => { if (done) return; done = true; stop(); again(); };
+  const stopResume = platform.onResume?.(fire);
+  const timer = setTimeout(fire, fallbackMs);
+  const stop = () => { clearTimeout(timer); stopResume?.(); };
+  return () => { done = true; stop(); };
+}
+
 export interface MobilePlatform {
   kind: "ios" | "android" | "web";
   native: boolean;
@@ -192,6 +210,13 @@ export interface MobilePlatform {
   secrets: {
     get(key: string): Promise<string | null>;
     set(key: string, value: string): Promise<void>;
+    remove(key: string): Promise<void>;
+  };
+  /** Keychain/Keystore items a build from before the rename to dusk bot kept under its own prefix, by their key past it;
+   * a phone updated from such a build still holds its sign-ins and place tokens there. */
+  legacySecrets?: {
+    keys(): Promise<string[]>;
+    get(key: string): Promise<string | null>;
     remove(key: string): Promise<void>;
   };
   /** The system's pull-down menu (iOS) opened from a control at `anchor` (its frame in the viewport, css px). Resolves the

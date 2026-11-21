@@ -48,8 +48,10 @@ function profiles(): Record<string, Profile> {
   }
   // Research is on only with a treg key or a Cloud plan and the bot's switch; the fullest profile carries it.
   all["skills+voice+x"] = { env: { ...all["skills+voice"]!.env, DUSK_X_RESEARCH: "1", DUSK_RESEARCH: "1" } };
-  // A Team Cloud mounts message_person; the fullest profile carries it.
-  all["skills+voice+x+team"] = { env: { ...all["skills+voice+x"]!.env, DUSK_TEAM_PEOPLE: "1" } };
+  // A Team Cloud mounts message_person, and an engine with no file tools read_skill; the fullest profile carries both.
+  all["skills+voice+x+team"] = { env: { ...all["skills+voice+x"]!.env, DUSK_TEAM_PEOPLE: "1", DUSK_SKILL_READER: "1" } };
+  // An engine with no file tools (an OpenAI-compatible API engine) loads skills with read_skill.
+  all["skills+skill-reader"] = { env: { ...all.skills!.env, DUSK_SKILL_READER: "1" } };
   all["default+legacy-switches"] = {
     env: { ...all.default!.env, DUSK_ROOM_TURN: "1", DUSK_OWN_THREAD_CREATION: "1", DUSK_EXTERNAL_RUNTIME: "1", DUSK_ACTIVE_WAITS: "0" },
   };
@@ -85,11 +87,12 @@ const BUDGET_BASELINE: Record<string, number> = {
   "skills+voice+non-chief": 66816,
   "skills+voice+cloud-home": 73855,
   "skills+voice+non-chief+cloud-home": 65837,
+  "skills+voice+x": 79845,
+  "skills+voice+x+team": 80344,
+  "skills+skill-reader": 74555,
   "default+legacy-switches": 71237,
   "default+dusk": 71888,
   "skills+voice+dusk": 75485,
-  "skills+voice+x": 79845,
-  "skills+voice+x+team": 79845,
   "default+no-computer-pick": 70030,
   "default+room": 60511,
   "non-chief+room": 52493,

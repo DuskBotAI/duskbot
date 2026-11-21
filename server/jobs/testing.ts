@@ -57,10 +57,11 @@ export async function jobsFixture(options: { root?: string; dataDir?: string; wr
     limits: { restartBaseMs: 50 },
     log: () => {},
   });
+  const startedIds: string[] = [];
   const call = async (body: Record<string, unknown>, turn: JobTurn = PERSON_TURN) => {
     let status = 0, answer: Record<string, unknown> = {};
     await host!.internal({
-      method: "POST", path: JOBS_PATH, botId: "bot-a", threadId: "t-1", readBody: async () => body, turn: () => turn, folders: async () => [workspace],
+      method: "POST", path: JOBS_PATH, botId: "bot-a", threadId: "t-1", readBody: async () => body, turn: () => turn, folders: async () => [workspace], started: (id) => startedIds.push(id),
       res: {} as never, json: ((_res: unknown, code: number, payload: Record<string, unknown>) => { status = code; answer = payload; }) as never,
     });
     return { status, body: answer };
@@ -70,5 +71,5 @@ export async function jobsFixture(options: { root?: string; dataDir?: string; wr
     await new Promise<void>((done) => server.close(() => done()));
     if (!options.root) rmSync(root, { recursive: true, force: true });
   };
-  return { root, dataDir, workspace, port, host: host!, runs, lines, cards, call, close };
+  return { root, dataDir, workspace, port, host: host!, runs, lines, cards, call, close, startedIds };
 }

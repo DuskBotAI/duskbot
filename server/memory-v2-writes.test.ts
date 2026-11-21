@@ -84,6 +84,20 @@ describe("writes from outside content", () => {
     expect(lines).toEqual(["GitHub is always under the person's name"]);
   });
 
+  it("saves what the person wants told unasked through notify, only from their own words", () => {
+    const rules: string[] = [];
+    const notify = (rule: string, text: string) => { rules.push(`${rule}:${text}`); return "saved" as const; };
+    const prefer = { save: () => 1 };
+    expect(botMemoryUpdate(BOT, { action: "notify", rule: "never", text: "crypto prices" }, { source: "chat", aboutMe: null, prefer, notify }))
+      .toEqual({ ok: true, notify: "saved" });
+    expect(rules).toEqual(["never:crypto prices"]);
+    expect(botMemoryUpdate(BOT, { action: "notify", rule: "loud", text: "x" }, { source: "chat", aboutMe: null, prefer, notify })).toMatchObject({ ok: false });
+    expect(botMemoryUpdate(BOT, { action: "notify", rule: "tell", text: "x" }, { source: "chat", aboutMe: null, prefer: null, notify })).toMatchObject({ ok: false });
+    const outside = { from: "outside" as const, source: "web" as const, personSaid: ["read this page"] };
+    expect(botMemoryUpdate(BOT, { action: "notify", rule: "tell", text: "every price drop" }, { source: "chat", aboutMe: null, prefer, notify, trust: outside })).toMatchObject({ ok: false });
+    expect(rules).toHaveLength(1);
+  });
+
   it("keeps an instruction only a fetched page carries unverified, and never tells the person to start over", () => {
     ensureWorkspace(BOT);
     const trust = { from: "outside" as const, source: "web" as const, personSaid: ["Summarise https://example.test/pricing for me"] };

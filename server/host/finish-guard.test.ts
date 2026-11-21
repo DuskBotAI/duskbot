@@ -172,3 +172,75 @@ describe("finish guard", () => {
     expect(finishReason({ text: "- [x] a\n- [ ] b", tools: 1, plan: null, effectful: 1, gated: ["checklist"] })).toBeNull();
   });
 });
+
+describe("finish guard: open asks and done claims", () => {
+  function withAsks(open: string[]) {
+    const carried: string[] = [];
+    const lines: FinishReason[] = [];
+    let nudged = false;
+    let failed = 0;
+    const settled: Array<{ said: readonly string[]; scheduled: boolean; handedOff: boolean }> = [];
+    const guard = createFinishGuard({
+      botOf: () => "bot-1", held: () => false, later: (run) => run(),
+      carryOn: async (_botId, _threadId, note) => { carried.push(note); },
+      line: (_threadId, reason) => lines.push(reason),
+      asks: { settle: (_threadId, turn) => { settled.push(turn); return nudged ? [] : open; }, nudged: () => { nudged = true; }, failed: () => { failed += 1; } },
+    });
+    const send = (body: Body) => guard.onEvent({ eventId: "e", provider: "fake", threadId: "t1", createdAt: "", ...body } as RuntimeEvent);
+    const turn = (text: string, tools: string[] = [], stopGates?: string[], end: Body = { type: "turn.completed", ok: true }) => {
+      send({ type: "turn.started" });
+      for (const title of tools) send({ type: "item.started", itemType: "tool", title });
+      send({ type: "item.completed", itemType: "assistant_text", text });
+      send({ ...end, ...(stopGates ? { stopGates } : {}) } as Body);
+    };
+    return { carried, lines, settled, turn, send, failed: () => failed };
+  }
+
+  it("closes the asks of a turn that failed, crashed or was stopped, before or after a tool ran", () => {
+    const h = withAsks(["email the invoice to Priya"]);
+    h.turn("Sending it now.", ["mcp__gmail__send_email"], undefined, { type: "turn.completed", ok: false });
+    h.turn("Sending it now.", ["mcp__gmail__send_email"], undefined, { type: "session.exited" });
+    h.turn("", [], undefined, { type: "turn.completed", ok: false });
+    h.turn("Sending it now.", ["mcp__gmail__send_email"], undefined, { type: "turn.completed", ok: false, stopReason: "interrupted" });
+    expect(h.failed()).toBe(4);
+    expect([...h.carried, ...h.settled]).toEqual([]);
+    h.turn("Sent it to Priya.", ["mcp__gmail__send_email"]);
+    expect(h.failed()).toBe(4);
+  });
+
+  it("sends a turn back once, with no line for the person, for an ask it left open", () => {
+    const h = withAsks(["what's the weather in mumbai in july"]);
+    h.turn("Here is your packing list: shirts, charger, umbrella.");
+    expect(h.carried).toEqual([continueNote({ kind: "asks", items: ["what's the weather in mumbai in july"] })]);
+    expect(h.lines).toEqual([]);
+    h.turn("Still only the list.");
+    expect(h.carried).toHaveLength(1);
+  });
+
+  it("hands the ledger what the turn said and set up, and leaves a question to the person alone", () => {
+    const h = withAsks(["the caption"]);
+    h.turn("Which tone do you want for the caption?", ["mcp__agents__wait_until", "mcp__agents__start_thread"]);
+    expect(h.settled[0]).toEqual({ said: ["Which tone do you want for the caption?"], scheduled: true, handedOff: true });
+    expect(h.carried).toEqual([]);
+  });
+
+  it("skips asks the chat loop already sent back for", () => {
+    const h = withAsks(["the caption"]);
+    h.turn("Here's the list.", [], ["open_items"]);
+    expect(h.carried).toEqual([]);
+  });
+
+  it("sends back a done claim after an app change no lookup followed, not after a read-back or a file edit", () => {
+    expect(finishReason({ text: "Done, the row is updated.", tools: 1, plan: null, unread: "mcp__sheets__update_row" })).toEqual({ kind: "unread", tool: "mcp__sheets__update_row" });
+    expect(finishReason({ text: "Drafted it for you.", tools: 1, plan: null, unread: "mcp__sheets__update_row" })).toBeNull();
+    const h = withAsks([]);
+    h.turn("Done, the row is updated.", ["mcp__sheets__update_row"]);
+    expect(h.carried).toHaveLength(1);
+    expect(h.carried[0]).toContain("changed something");
+    const read = withAsks([]);
+    read.turn("Done, the row is updated.", ["mcp__sheets__update_row", "mcp__sheets__get_row"]);
+    const file = withAsks([]);
+    file.turn("Done, the config is updated.", ["Edit"]);
+    expect([...read.carried, ...file.carried]).toEqual([]);
+  });
+});

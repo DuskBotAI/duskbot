@@ -3,12 +3,13 @@ import { spawn, type ChildProcess } from "node:child_process";
 import { createServer, type Server } from "node:http";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { delimiter, dirname, join } from "node:path";
+import { delimiter, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { writeFileAtomic } from "./atomic.ts";
 import { freePortBlock } from "./testing/ports.ts";
 import { removeTempDir, waitForExit } from "./testing/cleanup.ts";
+import { nodeOnlyFolder } from "./testing/engine-free-path.ts";
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 let child: ChildProcess;
@@ -148,7 +149,7 @@ beforeAll(async () => {
   ], {
     cwd: ROOT,
     env: {
-      PATH: [fakebin, dirname(process.execPath), "/usr/bin", "/bin"].join(delimiter),
+      PATH: [fakebin, nodeOnlyFolder(fixtureHome), "/usr/bin", "/bin"].join(delimiter), DUSK_TEST_SEALED_PATH: "1",
       HOME: fixtureHome, USERPROFILE: fixtureHome, DUSK_DATA_DIR: data,
       DUSK_AGENTS_TOOL_BRIDGE: "0",
       APPDATA: join(fixtureHome, "appdata"), LOCALAPPDATA: join(fixtureHome, "localappdata"),

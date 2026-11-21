@@ -17,7 +17,7 @@ export const NOTIFY_SCRIPT = resolveProxy("jobs/dusk-notify");
 export const TELEGRAM_WATCH_SCRIPT = resolveProxy("jobs/telegram-watch");
 
 /** What a job's environment starts from, taken from the server's own: never a key, a token or a dusk bot setting. */
-const BASE_NAMES = ["PATH", "LANG", "LANGUAGE", "TZ", "TERM", "USER", "LOGNAME", "SHELL", "TMPDIR", "SSL_CERT_FILE", "SSL_CERT_DIR", "NODE_EXTRA_CA_CERTS"];
+const BASE_NAMES = ["PATH", "LANG", "LANGUAGE", "TZ", "TERM", "USER", "LOGNAME", "SHELL", "TMPDIR", "SSL_CERT_FILE", "SSL_CERT_DIR", "NODE_EXTRA_CA_CERTS", "DUSK_TELEGRAM_API_URL"];
 /** Names a job may not set itself: its placement, its network path and dusk bot's own. */
 const RESERVED = new Set(["PATH", "HOME", "PWD", "SHELL", "HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY", "ALL_PROXY", "NODE_OPTIONS", "LD_PRELOAD", "LD_LIBRARY_PATH"]);
 const ENV_NAME = /^[A-Za-z_][A-Za-z0-9_]{0,63}$/;

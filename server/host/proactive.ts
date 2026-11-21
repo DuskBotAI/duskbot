@@ -28,6 +28,9 @@ import { createHelperSuggestion } from "./helper-suggestion.ts";
 import { createInboxTriage } from "./inbox-triage.ts";
 import { mainChief, proactiveOwner } from "./proactive-owner.ts";
 import { createRoutineChecks } from "./routine-checks.ts";
+import { recordMemoryChange } from "../memory-journal.ts";
+import { readMemoryTopic, writeMemoryTopic } from "../workspace.ts";
+import { createProactivePrefs, PROACTIVE_TOPIC } from "./proactive-prefs.ts";
 
 export { WATCH_INSTRUCTIONS, WATCH_NAME } from "./default-watch.ts";
 export const WATCH_FILE = "watch.json";
@@ -112,6 +115,14 @@ export function createProactive(deps: ProactiveDeps) {
   };
   const runs = (): RoutineRun[] => [...(deps.routines()?.listRuns() ?? [])].reverse();
   const owner = () => proactiveOwner(store);
+  const prefs = createProactivePrefs({
+    owner: () => { const bot = deps.team ? null : owner(); return bot && bot.memoryEnabled !== false ? bot : null; },
+    read: (botId) => readMemoryTopic(botId, PROACTIVE_TOPIC),
+    write: (botId, before, after, actor) => {
+      writeMemoryTopic(botId, PROACTIVE_TOPIC, after);
+      recordMemoryChange(botId, { path: `memory/${PROACTIVE_TOPIC}`, actor, via: "proactive", before, after });
+    },
+  });
   /** The owner's briefing routine is on: pausing or deleting it switches the brief off. */
   const watching = (): boolean => {
     const bot = owner();
@@ -143,6 +154,7 @@ export function createProactive(deps: ProactiveDeps) {
     },
     ...(inbox ? { inbox } : {}),
     busy: (botId) => store.bot(botId)?.busy === true,
+    quietHours: () => prefs.get().quiet,
   });
   /** One brief, the main agent's: a briefing routine of any other bot finds nothing to do. */
   const routineChecks: RoutineChecks = {
@@ -266,7 +278,7 @@ export function createProactive(deps: ProactiveDeps) {
 
   let timer: ReturnType<typeof setInterval> | null = null;
   return {
-    checks: routineChecks, fence, brief,
+    checks: routineChecks, fence, brief, prefs,
     /** Only the owner dreams, and only while its brief is on: at most one model call a night, with no switch of its own. */
     dreamer: (): string | undefined => (watching() ? owner()?.id : undefined),
     /** Not now on the add-a-key suggestion; the inbox connected now is remembered with it. */

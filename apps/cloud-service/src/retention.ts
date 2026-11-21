@@ -13,12 +13,25 @@ export const NOTICE_DAYS = [7] as const;
 
 export type NoticeKind = "ended" | "left_30" | "left_7" | "left_1" | "deleted" | "recovered" | "delete_requested" | "delete_scheduled" | "delete_cancelled" | "resumed";
 
-/** what the billing system of record says about one cloud's plan */
-export interface Entitlement { active: boolean; until: number | null; known?: boolean }
+/** days a trial's cloud is kept after the trial ended unpaid; no final backup is owed for it */
+export const TRIAL_DATA_DAYS = 7;
+
+/** what the billing system of record says about one cloud's plan. `unpaid`: it stopped because a charge failed (billing
+ *  sends that story's emails, so the retention notices stay quiet); `trial` too when that charge was a trial's first,
+ *  whose data is kept TRIAL_DATA_DAYS with no final backup */
+export interface Entitlement { active: boolean; until: number | null; known?: boolean; unpaid?: { trial: boolean } }
+
+/** when a failed charge stopped this subscription's cloud: a trial's data is kept TRIAL_DATA_DAYS to billing's date (the
+ *  trial's end, or later when billing gave more warning), a paid plan's counts from the first failure */
+const unpaidFrom = (s: StoredSubscription) => s.paymentProblem ? (s.paymentProblem.trial ? s.paymentProblem.fixBy - TRIAL_DATA_DAYS * DAY_MS : s.paymentProblem.since) : s.currentPeriodEnd ?? s.updatedAt;
+const unpaidOf = (subs: readonly StoredSubscription[]) => {
+  const owing = subs.find(s => !s.cancelAtPeriodEnd && (s.status === "payment_problem" || s.status === "ended" && s.paymentProblem));
+  return owing ? { unpaid: { trial: owing.paymentProblem?.trial === true } } : {};
+};
 
 /**
- * From the billing store: active while a subscription that paid for this cloud is active, has a payment problem, or is
- * cancelled but paid to a later time. Paid to: the cloud's own end when billing ended it (`endsAt`, or `ended` at
+ * From the billing store: active while a subscription that paid for this cloud is active or is cancelled but paid to a later
+ * time. A failed charge stops it at once: paid to the first failure (a trial's end), also once the plan ended. Paid to: the cloud's own end when billing ended it (`endsAt`, or `ended` at
  * `endedAt`: a desktop taken off the plan, an account closed with "stop my desktops now"), else the latest period end. A
  * subscription that will not renew counts only to its period end, whatever its status says later (an account closed
  * before then gets no more webhooks). Event times never count: a late or replayed event cannot move the date.
@@ -32,20 +45,20 @@ export function entitlementOf(subscriptions: readonly StoredSubscription[], clou
   // a plan whose period end passed before its end was recorded (a late expiry) ended at that period end
   if (cloud.ended) {
     const ended = cloud.endedAt ?? cloud.endsAt ?? null;
-    const lapsed = mine.map(s => s.currentPeriodEnd ?? 0).filter(end => end > 0 && end <= now);
+    const lapsed = mine.map(s => s.paymentProblem && !s.cancelAtPeriodEnd ? unpaidFrom(s) : s.currentPeriodEnd ?? 0).filter(end => end > 0 && end <= now);
     const periodEnd = lapsed.length ? Math.max(...lapsed) : null;
-    return { active: false, until: ended === null ? periodEnd : periodEnd === null ? ended : Math.min(ended, periodEnd), known: true };
+    return { active: false, until: ended === null ? periodEnd : periodEnd === null ? ended : Math.min(ended, periodEnd), known: true, ...unpaidOf(mine) };
   }
   if (cloud.endsAt !== undefined && cloud.endsAt <= now) return { active: false, until: cloud.endsAt, known: true };
   let until = 0;
   for (const s of mine) {
     const periodEnd = s.currentPeriodEnd ?? 0;
     if (s.cancelAtPeriodEnd && periodEnd > 0 && periodEnd <= now) { until = Math.max(until, periodEnd); continue; }
-    if (s.status === "active" || s.status === "payment_problem" || (s.status === "cancelled" && periodEnd > now)) return { active: true, until: null, known: true };
+    if (s.status === "active" || (s.status === "cancelled" && periodEnd > now)) return { active: true, until: null, known: true };
     if (s.status === "pending") continue;
-    until = Math.max(until, periodEnd);
+    until = Math.max(until, s.status === "payment_problem" || s.paymentProblem ? unpaidFrom(s) : periodEnd);
   }
-  return { active: false, until: until > 0 ? until : null, known: true };
+  return { active: false, until: until > 0 ? until : null, known: true, ...unpaidOf(mine) };
 }
 
 export interface DeleteRequest { requestedAt: number; confirmedAt: number | null; executeAfter: number | null; cancelledAt: number | null }
@@ -75,10 +88,10 @@ export function deletionVerdict(input: VerdictInput): Verdict {
   if (request?.confirmedAt && request.cancelledAt === null && request.executeAfter !== null && request.executeAfter <= input.now)
     return { delete: true, reason: "owner_request", earliestAt: request.executeAfter };
   if (input.entitlement.until === null) return { delete: false, reason: "no_billing_record", earliestAt: null };
-  const earliestAt = input.entitlement.until + input.retentionDays * DAY_MS;
+  const earliestAt = input.entitlement.until + (input.entitlement.unpaid?.trial ? TRIAL_DATA_DAYS : input.retentionDays) * DAY_MS;
   if (input.now < earliestAt) return { delete: false, reason: "retention", earliestAt };
   const backup = input.finalBackup;
-  if (input.neverSetUp) return { delete: true, reason: "retention_over", earliestAt };
+  if (input.neverSetUp || input.entitlement.unpaid?.trial) return { delete: true, reason: "retention_over", earliestAt };
   if (!backup?.verifiedAt || (input.lastStopAt !== null && backup.at < input.lastStopAt)) return { delete: false, reason: "no_final_backup", earliestAt };
   return { delete: true, reason: "retention_over", earliestAt };
 }
@@ -112,8 +125,9 @@ export function prunableBackups<G extends Generation>(generations: readonly G[],
 }
 
 /** the notice due now for a cloud whose plan ended, if any not yet sent */
-export function dueNotice(input: { now: number; earliestAt: number; sent: readonly NoticeKind[] }): NoticeKind | null {
+export function dueNotice(input: { now: number; earliestAt: number; sent: readonly NoticeKind[]; quiet?: boolean }): NoticeKind | null {
   if (!input.sent.includes("ended")) return "ended";
+  if (input.quiet) return null;
   const left = input.earliestAt - input.now;
   for (const days of [...NOTICE_DAYS].sort((a, b) => a - b)) {
     const kind = `left_${days}` as NoticeKind;

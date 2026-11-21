@@ -348,8 +348,8 @@ type Override = { kind: "started"; from: MorphFrom | null } | { kind: "closed"; 
 
 
 /** A bot's browser on this computer in its Computer tab: the live browser while it runs; otherwise the Start browser pill. */
-export function LocalBrowserSection({ bot, after, askFirst = null }: {
-  bot: Bot; after?: ReactNode;
+export function LocalBrowserSection({ bot, steps, after, askFirst = null }: {
+  bot: Bot; steps?: ReactNode; after?: ReactNode;
   /** this Mac's permissions the bot needs, asked for when the person starts its browser while any is off */
   askFirst?: MacPermissionsBridge | null;
 }) {
@@ -418,7 +418,7 @@ export function LocalBrowserSection({ bot, after, askFirst = null }: {
     <>
       {live ? <LocalBrowserLive key={`${bot.id}\n${bot.threadId ?? ""}`} bot={bot} from={from} started={override?.kind === "started"} onClosed={ended("closed")} onEnded={ended("ended")} />
         : known || late || override ? <LocalBrowserClosed bot={bot} pill={pill} starting={checking} onStart={start} /> : null}
-      <div ref={below} className="mt-3 empty:hidden">{(known || late) && !wide && after}</div>
+      <div ref={below} className="mt-3 empty:hidden">{steps}{(known || late) && !wide && after}</div>
       <AnimatePresence>{asking && askFirst && <MacPermissionsDialog key="mac-permissions-dialog" bridge={askFirst} onClose={() => setAsking(false)} onAllowed={openBrowser}
         relaunch={typeof window.duskDesktop?.relaunch === "function" ? () => void window.duskDesktop!.relaunch!() : null} />}</AnimatePresence>
     </>

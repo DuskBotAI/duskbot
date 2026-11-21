@@ -52,6 +52,19 @@ describe("BoxRunner.wrap", () => {
     expect(wrapped.plan.botId).toBe("b1");
   });
 
+  it("routes a Codex provider's key through the broker: the token in its variable, the broker in its base URL", () => {
+    const revoked: string[] = [];
+    const broker = { port: 18080, mintForProcess: () => ({ token: `dusk_t0_${"c".repeat(48)}` }), revoke: (token: string) => { revoked.push(token); } };
+    const runner = new BoxRunner({ bwrap: "/usr/bin/bwrap", bridge, setup, denyEnv: new Set(), broker });
+    const wrapped = runner.wrap({
+      command: "/usr/local/bin/codex", args: ["app-server", "-c", 'model_providers.dusk_company.base_url="https://models.example.com/v1"', "-c", 'model_providers.dusk_company.env_key="DUSK_COMPANY_API_KEY"'],
+      cwd: "/data/.duskbot/task-workspaces/b1/t1", env: { PATH: "/usr/bin", DUSK_COMPANY_API_KEY: "company-real" },
+    });
+    expect(wrapped.env.DUSK_COMPANY_API_KEY).toBe(wrapped.token);
+    expect(wrapped.args).toContain(`model_providers.dusk_company.base_url="http://127.0.0.1:18080/b/${wrapped.token}/codex-dusk_company"`);
+    expect(JSON.stringify(wrapped)).not.toContain("company-real");
+  });
+
   it("keeps a caller's own NODE_USE_ENV_PROXY in an isolated box", () => {
     const runner = new BoxRunner({ bwrap: "/usr/bin/bwrap", bridge, setup, denyEnv: new Set() });
     const wrapped = runner.wrap({ command: "/usr/bin/node", args: ["gate.js"], cwd: "/data/.duskbot/task-workspaces/b1/t1", env: { PATH: "/usr/bin", NODE_USE_ENV_PROXY: "0" } });

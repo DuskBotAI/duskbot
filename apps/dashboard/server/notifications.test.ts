@@ -112,7 +112,7 @@ describe("account emails follow the settings", () => {
     options.cloudEvent!("deleted", cloud(id));
     options.notify!({ kind: "receipt", accountId: id, invoiceId: "inv_1", amountCents: 1200, currency: "USD", description: "plan", paidAt: Date.now(),
       periodStart: null, periodEnd: null, renews: true, first: true, cloudId: null, revived: false });
-    options.notify!({ kind: "payment_failed", accountId: id, amountCents: 1200, currency: "USD", description: "plan", cloudId: null, fixBy: null });
+    options.notify!({ kind: "payment_failed", accountId: id, amountCents: 1200, currency: "USD", description: "plan", cloudId: null, fixBy: null, trial: false });
     const subjects = sentTo(f, since);
     expect(subjects).not.toContain("your dusk cloud is ready");
     expect(subjects).not.toContain("studio is back");

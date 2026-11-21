@@ -118,6 +118,15 @@ describe("RoutineRequestService", () => {
       schedule: { type: "daily", time: "09:00", weekdays: [1, 3] },
     };
 
+    it("refuses a second check of the same page, pointing at the paused one", async () => {
+      const { service, routines, store } = harness();
+      const probe = { kind: "page" as const, url: "https://shop.example/ipad" };
+      const existing = routines.create({ ...existingInput, name: "iPad page", prompt: "Tell me when the iPad ships", probe, enabled: false });
+      await expect(service.propose({ botId: "bot-a", threadId: "thread-a", proposal: createProposal({ instructions: "Ping me once the iPad is out", probe }) }))
+        .rejects.toMatchObject({ status: 409, message: expect.stringMatching(new RegExp(`${existing.id}; it is paused`)) });
+      expect(store.messagesFor("thread-a")).toHaveLength(0);
+    });
+
     it("refuses a renamed duplicate before creating another approval card", async () => {
       const { service, routines, store } = harness();
       const existing = routines.create(existingInput);
@@ -309,7 +318,7 @@ describe("RoutineRequestService", () => {
     const schedule = { type: "cron" as const, expression: "0 9 1 * *", timeZone: "America/New_York" };
     const proposed = await service.propose({
       botId: "bot-a", threadId: "thread-a",
-      proposal: createProposal({ name: "Monthly report", schedule: { ...schedule, expression: " 0  9 1 * * " } }),
+      proposal: createProposal({ name: "Monthly report", instructions: "Summarize the overnight support queue at 9 sharp.", schedule: { ...schedule, expression: " 0  9 1 * * " } }),
     });
     expect(routines.listRoutines()).toHaveLength(0);
     expect(proposed.timeZone).toBe("America/New_York");
@@ -389,7 +398,7 @@ describe("RoutineRequestService", () => {
 
     expect(routines.listRoutines()).toHaveLength(0);
     expect(proposed.timeZone).toBe("Asia/Kolkata");
-    expect(proposed.summary).toContain("Monday, Wednesday at 9:00 India time");
+    expect(proposed.summary).toMatch(/Monday, Wednesday at 9:0[2-7] India time/);
     expect(proposed.summary).not.toContain("Asia/Kolkata");
     const card = store.messagesFor("thread-a")[0]!.card!;
     expect(card.requestId).toBe(proposed.requestId);
@@ -397,7 +406,7 @@ describe("RoutineRequestService", () => {
     expect(card.options).toEqual(["Confirm", "Cancel"]);
     expect(card.routineRequest?.operation).toMatchObject({
       action: "create",
-      routine: { schedule: { type: "daily", time: "09:00", weekdays: [1, 3] } },
+      routine: { schedule: { type: "daily", time: expect.stringMatching(/^09:0[2-7]$/), weekdays: [1, 3] } },
     });
     expect(JSON.stringify(card)).not.toContain(secret);
     expect(JSON.stringify(card)).toContain("redacted");
@@ -581,6 +590,7 @@ describe("RoutineRequestService", () => {
       botId: "bot-a",
       threadId: "thread-a",
       proposal: createProposal({
+        instructions: "Summarize the overnight support queue every day.",
         schedule: {
           type: "weekly",
           time: "09:00",
@@ -2015,7 +2025,7 @@ describe("a bot's own routine changes", () => {
   it("undoes each kind of change once, and refuses a run or a stale change", async () => {
     const { service, routines, store, clock } = own();
     const submit = (proposal: RoutineProposalInput) => service.submit({ botId: "bot-a", threadId: "ask-thread", proposal });
-    const created = await submit(createProposal());
+    const created = await submit(createProposal({ instructions: "Summarize the overnight support queue at 9 sharp." }));
     const routineId = created.result!.resultId;
 
     const updated = await submit({ action: "update", routineId, changes: { name: "Renamed", schedule: { type: "interval", everyMinutes: 60 } } });
@@ -2050,7 +2060,7 @@ describe("a bot's own routine changes", () => {
     expect(routines.listRoutines()).toHaveLength(0);
     const restored = undo(service, deleted.requestId);
     expect(restored).toMatchObject({ state: "undone", action: "delete", restoredId: expect.any(String) });
-    expect(routines.listRoutines()).toEqual([expect.objectContaining({ name: "Person's name", prompt: "Summarize the overnight support queue.", botId: "bot-a", enabled: true })]);
+    expect(routines.listRoutines()).toEqual([expect.objectContaining({ name: "Person's name", prompt: "Summarize the overnight support queue at 9 sharp.", botId: "bot-a", enabled: true })]);
 
     expect(undo(service, created.requestId)).toMatchObject({ state: "invalid", stale: true });
     expect(routines.listRoutines()).toHaveLength(1);

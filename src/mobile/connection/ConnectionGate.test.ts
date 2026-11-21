@@ -6,7 +6,7 @@ import { setLocale } from "@/lib/i18n";
 import { sessionCheck, sessionEnded } from "@/lib/session-ended";
 import { api } from "@/state/api";
 import type { MobileConnectionRecord } from "../../../shared/mobile-link";
-import { PlatformContext, webPlatform, type MobilePlatform } from "../platform";
+import { PlatformContext, SecretsLocked, webPlatform, type MobilePlatform } from "../platform";
 import { ConnectionGate, pairedButUnreachable } from "./ConnectionGate";
 import { PairError } from "./pair";
 import { AccountGate } from "../account/AccountGate";
@@ -103,26 +103,54 @@ it("switches to another saved installation from the unreachable screen", async (
   expect(host.textContent).toBe("home");
 });
 
-it("a refused token still goes to pairing", async () => {
-  fetcher.mockResolvedValue(new Response("{}", { status: 401 }));
-  await mount(); await settle();
-  expect(host.querySelector("h1")?.textContent).not.toContain("Can't reach");
-  expect(prefs.get("dusk.mobile.active.v1")).toBeUndefined();
+it("a refused place at launch is kept, and the phone opens its other saved place instead of pairing", async () => {
+  fetcher.mockImplementation(async (input) => String(input instanceof Request ? input.url : input).startsWith("https://mac.") ? new Response("{}", { status: 401 }) : new Response("{}"));
+  await mount(); await settle(); await settle();
+  expect(host.textContent).toBe("home");
+  expect(prefs.get("dusk.mobile.active.v1")).toBe("vps");
+  expect(prefs.get("dusk.mobile.connections.v1")).toContain("Studio Mac");
 });
 
-it("a phone removed on the computer while the app is open leaves for pairing at once, with the reason", async () => {
+it("when every saved place refuses, the link stays and the phone keeps trying, with link again and remove as the person's choice", async () => {
+  fetcher.mockResolvedValue(new Response("{}", { status: 401 }));
+  await mount(); await settle(); await settle();
+  expect(host.querySelector("h1")?.textContent).toContain("Can't reach");
+  expect(host.textContent).toContain("didn't take this phone's link");
+  expect(prefs.get("dusk.mobile.connections.v1")).toContain("Studio Mac");
+  expect(prefs.get("dusk.mobile.connections.v1")).toContain("Box");
+  expect(host.querySelector("[data-testid=mobile-refused-link]")).not.toBeNull();
+  await act(async () => { host.querySelector<HTMLButtonElement>("[data-testid=mobile-refused-remove]")!.click(); });
+  await settle();
+  expect(JSON.parse(prefs.get("dusk.mobile.connections.v1")!).map((entry: MobileConnectionRecord) => entry.id), "only the person's remove deletes").toHaveLength(1);
+});
+
+it("a phone removed on the computer while the app is open never loses the link by itself", async () => {
   fetcher.mockResolvedValue(new Response("{}"));
   await mount(); await settle();
   expect(host.textContent).toBe("home");
-
-  fetcher.mockImplementation(async () => new Response('{"error":"unauthorized"}', { status: 401 }));
+  fetcher.mockImplementation(async (input) => String(input instanceof Request ? input.url : input).startsWith("https://mac.") ? new Response('{"error":"unauthorized"}', { status: 401 }) : new Response("{}"));
   await act(async () => { await api("/api/bots").catch(() => {}); await sessionCheck(); });
-  await settle();
-  expect(host.textContent).not.toBe("home");
-  expect(host.textContent).toContain("This phone was unlinked");
-  expect(prefs.get("dusk.mobile.active.v1")).toBeUndefined();
-  expect(prefs.get("dusk.mobile.connections.v1")).not.toContain("Studio Mac");
+  await settle(); await settle();
+  expect(prefs.get("dusk.mobile.connections.v1")).toContain("Studio Mac");
+  expect(prefs.get("dusk.mobile.active.v1")).toBe("vps");
   expect(sessionEnded()).toBe(false);
+});
+
+it("a Keychain it cannot read at launch (a locked phone) never shows pairing: it waits and reads again in front", async () => {
+  let locked = true;
+  const resumed = new Set<() => void>();
+  const read = platform.secrets.get;
+  platform = { ...platform, secrets: { ...platform.secrets, get: async (key) => { if (locked) throw new SecretsLocked(); return read(key); } },
+    onResume: (listener) => { resumed.add(listener); return () => resumed.delete(listener); } };
+  fetcher.mockResolvedValue(new Response("{}"));
+  await mount(); await settle();
+  expect(host.textContent).not.toContain("Link");
+  expect(host.textContent).not.toBe("home");
+  expect(prefs.get("dusk.mobile.active.v1")).toBe("mac");
+  locked = false;
+  await act(async () => { for (const listener of resumed) listener(); });
+  await settle(); await settle();
+  expect(host.textContent).toBe("home");
 });
 
 it("a refused request on a session that still answers changes nothing", async () => {

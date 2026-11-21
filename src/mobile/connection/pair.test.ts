@@ -284,6 +284,18 @@ describe("v2 pairing", () => {
     expect(opened).not.toHaveBeenCalled();
   });
 
+  it("goes on to the relay when a server's https address answers 5xx (a Cloudflare tunnel that is not connected)", async () => {
+    const channel = { request: vi.fn(async () => response(v2Answer())), close: vi.fn() };
+    vi.spyOn(relay, "open").mockReturnValue(channel);
+    for (const status of [502, 530]) {
+      vi.stubGlobal("fetch", vi.fn(async () => new Response("error code: 1033", { status })));
+      const { record } = await redeemPairing(pairingFromPayload(v2Payload()), fakePlatform().platform);
+      expect(record.transport).toBe("relay");
+    }
+    vi.spyOn(relay, "open").mockReturnValue({ request: vi.fn(async () => response({}, 502)), close: vi.fn() });
+    await expect(redeemPairing(pairingFromPayload(v2Payload()), fakePlatform().platform)).rejects.toMatchObject({ code: "unreachable" });
+  });
+
   it("keeps direct pairing available without X25519 and refuses relay-only pairing", async () => {
     vi.spyOn(crypto.subtle, "generateKey").mockRejectedValue(new Error("not supported"));
     const answer = { ...v2Answer(), relay: undefined };

@@ -1,4 +1,4 @@
-import type { RefObject } from "react";
+import { useRef, type RefObject } from "react";
 import { Bug, Users } from "../icons";
 import type { Bot } from "@/state/store";
 import type { TeamPerson } from "@/state/team-people";
@@ -34,6 +34,8 @@ export function MentionMenu({ listRef, motion, choices, highlight, everyoneCount
   onHighlight: (index: number) => void;
   className?: string;
 }) {
+  // the list scrolling under a resting pointer must not steal the keyboard's highlight: only a real move hovers
+  const pointer = useRef<{ x: number; y: number } | null>(null);
   if (!motion.shown) return null;
   return (
     <div
@@ -53,7 +55,12 @@ export function MentionMenu({ listRef, motion, choices, highlight, everyoneCount
             role="option"
             aria-selected={i === highlight}
             onClick={() => onPick(choice)}
-            onMouseEnter={() => onHighlight(i)}
+            onPointerMove={(event) => {
+              const last = pointer.current;
+              pointer.current = { x: event.clientX, y: event.clientY };
+              if (!last || (last.x === event.clientX && last.y === event.clientY)) return;
+              if (i !== highlight) onHighlight(i);
+            }}
             selected={i === highlight}
             icon={choice.bot ? (
               <BotAvatar

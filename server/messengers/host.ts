@@ -11,9 +11,10 @@ import { MESSENGER_TOOL_PATH } from "../drivers/agents-messenger-tool.ts";
 import type { json as sendJson } from "../harness/http.ts";
 import { HELD_SECRET_MASK } from "../redact.ts";
 import { PASS, type RouteHandler } from "../routes/table.ts";
+import type { UsageTrigger } from "../usage-ledger.ts";
 import type { SavedSecretsKey } from "../saved-secrets.ts";
 import { createMessengerBridge, personLetIn, type MessengerBridgeDeps, type MessengerTransport } from "./bridge.ts";
-import { createDiscordApi, createDiscordGateway, createDiscordTransport, discordInviteUrl, discordMe, DiscordError, DISCORD_TOKEN, readDiscordMessage, type DiscordApi } from "./discord.ts";
+import { createDiscordApi, createDiscordGateway, createDiscordTransport, deferDiscordChoice, readDiscordInteraction, discordInviteUrl, discordMe, DiscordError, DISCORD_TOKEN, readDiscordMessage, type DiscordApi } from "./discord.ts";
 import { MessengerSecretStore, MessengerSecretsUnavailable, type MessengerLink } from "./secrets.ts";
 import { MessengerState } from "./state.ts";
 import {
@@ -30,6 +31,7 @@ export interface MessengerHostDeps extends Pick<MessengerBridgeDeps, "createThre
   key: SavedSecretsKey;
   bot(botId: string): { id: string; name: string } | null;
   send: MessengerBridgeDeps["send"];
+  answerCard: MessengerBridgeDeps["answerCard"];
   onStoreChange(listener: (change: { type: string; botId?: string; threadId?: string }) => void): () => void;
   /** https origin Telegram can post to, on a Cloud home whose edge wakes it; null where this process polls instead. */
   hookBase(): string | null;
@@ -68,6 +70,12 @@ function platformError(platform: MessengerPlatform, error: unknown): MessengerEr
   return new MessengerError(502, `${label} refused that. Try again in a moment.`);
 }
 
+/** How a chat-app line enters the conversation. The owner's own direct chat is the owner at the keyboard (full trust,
+ * memory, their own details); anyone else, or any group, is a relayed outsider. */
+export function messengerSendAs(outside: boolean, name: string): { trigger: UsageTrigger; personPresent: boolean } & ({ sender: { name: string }; relayed: true } | Record<never, never>) {
+  return outside ? { sender: { name }, trigger: { kind: "user", label: name }, personPresent: false, relayed: true } : { trigger: { kind: "owner" }, personPresent: true };
+}
+
 export function createMessengerHost(deps: MessengerHostDeps) {
   const log = deps.log ?? ((line: string) => console.warn(`Chat apps: ${line}`));
   const env = deps.env ?? process.env;
@@ -87,7 +95,7 @@ export function createMessengerHost(deps: MessengerHostDeps) {
 
   const bridge = createMessengerBridge({
     state, log, transport: (platform) => transports[platform], link, bot: deps.bot,
-    createThread: deps.createThread, threadExists: deps.threadExists, send: deps.send, messages: deps.messages,
+    createThread: deps.createThread, threadExists: deps.threadExists, send: deps.send, messages: deps.messages, answerCard: deps.answerCard,
     onChange: deps.onStoreChange, saveAttachment: deps.saveAttachment, readAttachment: deps.readAttachment,
     ...(deps.settleMs !== undefined ? { settleMs: deps.settleMs } : {}),
     claim: (botId, platform, owner) => {
@@ -118,6 +126,7 @@ export function createMessengerHost(deps: MessengerHostDeps) {
       },
     });
     if (!read) return;
+    if ("choice" in read) { await bridge.choose(read.choice); return; }
     if ("added" in read) {
       const { chatId, title, by } = read.added;
       if (!personLetIn(one, by.id) || one.allowed.some((entry) => entry.kind === "chat" && entry.id === chatId)) return;
@@ -139,6 +148,14 @@ export function createMessengerHost(deps: MessengerHostDeps) {
       if (name) { channelNames.set(message.chatId, name); message.chatTitle = `#${name}`; }
     }
     await bridge.receive(message);
+  }
+
+  async function discordInteraction(botId: string, data: Record<string, unknown>): Promise<void> {
+    const one = link(botId, "discord");
+    const choice = one ? readDiscordInteraction(data, { botId }) : null;
+    if (!one || !choice) return;
+    await deferDiscordChoice(discord, one.token, choice.ack).catch(() => log("A Discord button press could not be acknowledged."));
+    await bridge.choose(choice);
   }
 
   function stopRunner(botId: string, platform: MessengerPlatform): void {
@@ -197,6 +214,7 @@ export function createMessengerHost(deps: MessengerHostDeps) {
       api: discord, log, ...(deps.WebSocket ? { WebSocket: deps.WebSocket } : {}),
       token: () => link(botId, "discord")?.token ?? null,
       onMessage: (data) => { void discordMessage(botId, data).catch(() => log("A Discord message could not be handled.")); },
+      onInteraction: (data) => { void discordInteraction(botId, data).catch(() => log("A Discord button press could not be handled.")); },
       onState: (value, error) => setRuntime(botId, "discord", { state: value, delivery: "gateway", ...(error ? { error } : {}) }),
     });
     runners.set(runKey(botId, "discord"), gateway);

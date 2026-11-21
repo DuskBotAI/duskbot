@@ -172,6 +172,24 @@ it("reports an outside event's run into the main chat too, from a conversation o
   expect(existsSync(join(s.dataDir, "room-plan.json"))).toBe(true);
 }, 120_000);
 
+it("never shows an outside event's NOTHING NEW, in its own conversation or the chat, and sends no push", async () => {
+  const s = await server();
+  s.script([{ key: "rss", match: ["Post the new titles"], reply: "NOTHING NEW", repeat: true }]);
+  const { credential } = await s.api("POST", "/api/webhooks", { name: "RSS titles", prompt: "Post the new titles from titles or stories.", botId: s.bot.id }, 201);
+  const pushes = async () => (await s.api("GET", "/api/notifications")).notifications.length;
+  const before = await pushes();
+  const response = await fetch(credential.url, { method: "POST", headers: { "content-type": "application/json", "idempotency-key": "rss-1" }, body: JSON.stringify({ items: [{ title: "One" }, { title: "Two" }] }) });
+  expect(response.status).toBe(202);
+  const { runId } = await response.json() as any;
+  await s.settled(runId);
+  await s.reported(runId, "quiet");
+  const done = await s.run(runId);
+  const own = (await s.messages(done.threadId)).filter((message) => message.role === "bot" && message.kind === "text");
+  expect(own.map((message) => [message.text, message.quietRun])).toEqual([["NOTHING NEW", true]]);
+  expect(await s.lines()).toEqual([]);
+  expect(await pushes()).toBe(before);
+}, 120_000);
+
 it("still reports the person's own failed turn in a chat a run once continued", async () => {
   const s = await server();
   s.script([

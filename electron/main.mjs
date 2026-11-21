@@ -537,7 +537,7 @@ import {
   stopCompanion,
 } from "./companion.mjs";
 import { autoStartCompanion } from "./companion-autostart.mjs";
-import { createRoutineWakeHold, rememberRoutineWake, routineWakeSettings } from "./routine-wake.mjs";
+import { createRoutineWakeHold, rememberRoutineWake, routineWakePatch, routineWakeSettings } from "./routine-wake.mjs";
 import { CREDENTIAL_PATCH, credentialSaveError } from "./credential-patch.mjs";
 import { createCappedLog } from "./capped-log.mjs";
 import { TRAIL_CAP_BYTES, configureTrail, createTrailWriter, trail } from "./trail.mjs";
@@ -1881,7 +1881,7 @@ async function switchEnvironment(id) {
 }
 
 async function switchEnvironmentNow(id) {
-  placesChosen.choose();
+  placesChosen.choose(); if (id === LOCAL_ID) oneHome.offer()?.stay();
   const entry = environmentsState.environments.find((candidate) => candidate.id === id);
   if (localRuntimeStarting && (id === LOCAL_ID || entry?.kind === "local")) await waitForLocalStartup(localRuntimeStarting);
   if (entry?.team || entry?.cloud) return void await showHome({ place: entry.team ? { team: entry.team.id, name: entry.name } : { cloud: entry.cloud.id, name: entry.name } });
@@ -2773,7 +2773,7 @@ ipcMain.handle("desktop:relaunch", localOnly("desktop:relaunch", (event) => {
   return true;
 }));
 
-const talk = installTalk({ ipcMain, localOnly, localOrHome, BrowserWindow, appleSpeech: nativeActions.appleSpeech,
+const talk = installTalk({ ipcMain, localOnly, placePage: event => homeWindow.homePage(event) || Boolean(activePageOrigin(event)), BrowserWindow, appleSpeech: nativeActions.appleSpeech,
   speech: { start: startSpeech, stop: stopSpeech, finish: finishSpeech, busy: speechBusy }, packaged: app.isPackaged, devUrl: DEV_URL, nativeImage, iconPath: APP_ICON, openLink: queueChatLink, reveal: revealForLink, log: slog });
 // voice input through a speech service set up in Settings > Voice; the keys stay in credentials.bin
 installVoiceInput({ ipcMain, localOnly, readCredentials: () => secureCredentialState?.read() ?? secureCredentials,
@@ -2798,8 +2798,8 @@ ipcMain.handle("companion:keep-awake", localOnly("companion:keep-awake", async (
   return desktopCompanionState();
 }));
 ipcMain.handle("routines:wake-state", localOnly("routines:wake-state", () => routineWake.poll()));
-ipcMain.handle("routines:keep-awake", localOnly("routines:keep-awake", async (_event, enabled) => {
-  rememberRoutineWake(app.getPath("userData"), Boolean(enabled));
+ipcMain.handle("routines:keep-awake", localOnly("routines:keep-awake", async (_event, patch) => {
+  rememberRoutineWake(app.getPath("userData"), routineWakePatch(patch));
   return routineWake.poll();
 }));
 ipcMain.handle("companion:refresh-tailscale", localOnly("companion:refresh-tailscale", () => refreshDesktopCompanionTailscale()));
@@ -3219,7 +3219,7 @@ ipcMain.handle("workspaces:menu", workspaceOnly(async (_event, from) => {
       ...cloudMenuOptions(from === "howto" ? "app_howto" : "app_menu"),
       kindIcon: placeKindIcon,
       // with My Cloud home, this computer stays one tap away: once its bots moved it opens fresh (its own first bot), never the frozen copy that refuses every send
-      onLocal: () => void workspaceMenuAction(() => (cleanWorkspace.marker().frozen ? workspaceSwitch.around(() => homeWindow.openHere()) : activeEnvironment(environmentsState) ? switchEnvironment(LOCAL_ID) : workspaceSwitch.around(() => (homePlaces.remember(null), persistEnvironments(withActive(environmentsState, LOCAL_ID), "chosen"), navigateMainWindow(rendererOrigin()))))),
+      onLocal: () => void workspaceMenuAction(() => (oneHome.offer()?.stay(), cleanWorkspace.marker().frozen ? workspaceSwitch.around(() => homeWindow.openHere()) : activeEnvironment(environmentsState) ? switchEnvironment(LOCAL_ID) : workspaceSwitch.around(() => (homePlaces.remember(null), persistEnvironments(withActive(environmentsState, LOCAL_ID), "chosen"), navigateMainWindow(rendererOrigin()))))),
       localShown: Boolean(mainWindow && !mainWindow.isDestroyed() && senderIsLocal({ sender: mainWindow.webContents })),
       ...(await placesMenuOptions({ homeOrigin: homeWindow.cloudOrigin(), cloud: cloudHomeEntry(), home: oneHome.away() || ownHome?.away() === true, platform: process.platform, port: SERVER_PORT })),
     });
@@ -3237,7 +3237,7 @@ ipcMain.handle("workspaces:menu", workspaceOnly(async (_event, from) => {
 ipcMain.handle("desktop:capabilities", async (event) =>
   desktopCapabilities({
     remote: !senderIsLocal(event),
-    homeSpeech: homeWindow.homePage(event),
+    homeSpeech: homeWindow.homePage(event), placeSpeech: Boolean(activePageOrigin(event)),
     platform: process.platform,
     env: process.env,
     packaged: app.isPackaged,
@@ -3311,21 +3311,20 @@ ipcMain.handle("approvals:set-trusted-mode", localOnly("approvals:set-trusted-mo
 const windowFrameNow = () => (process.platform === "win32" ? windowFrameMade : null) ?? desktopPrefs?.windowFrame() ?? FRAME_BY_DEFAULT;
 async function broadcastDesktopCapabilities() {
   const localConnection = await cuaReady;
-  const build = (remote, homeSpeech = false) =>
-    desktopCapabilities({ remote, homeSpeech, platform: process.platform, env: process.env, packaged: app.isPackaged, localConnection, frame: windowFrameNow() });
+  const build = (remote, homeSpeech = false, placeSpeech = false) =>
+    desktopCapabilities({ remote, homeSpeech, placeSpeech, platform: process.platform, env: process.env, packaged: app.isPackaged, localConnection, frame: windowFrameNow() });
   const local = build(false);
   chromeRail.send("desktop:capabilities-changed", local);
-  let redacted = null, home = null;
+  const built = {};
   for (const window of appWindows()) {
     if (window.isDestroyed()) continue;
     let isLocal = false;
     try {
       isLocal = new URL(window.webContents.getURL()).origin === confirmedRendererOrigin();
     } catch {}
-    const isHome = !isLocal && homeWindow.homePage({ sender: window.webContents, senderFrame: window.webContents.mainFrame });
-    if (isHome) home ??= build(true, true);
-    else if (!isLocal) redacted ??= build(true);
-    window.webContents.send("desktop:capabilities-changed", isLocal ? local : isHome ? home : redacted);
+    const page = { sender: window.webContents, senderFrame: window.webContents.mainFrame };
+    const kind = isLocal ? "local" : homeWindow.homePage(page) ? "home" : activePageOrigin(page) ? "place" : "remote";
+    window.webContents.send("desktop:capabilities-changed", kind === "local" ? local : (built[kind] ??= build(true, kind === "home", kind === "place")));
   }
 }
 

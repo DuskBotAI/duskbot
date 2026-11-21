@@ -40,7 +40,7 @@ export function providerModelsUrl(provider: ProviderKeyKind, base?: string | nul
   return `${root}/models`;
 }
 
-function modelIds(body: unknown): string[] {
+function modelIds(body: unknown, limit: number): string[] {
   const record = body && typeof body === "object" ? (body as { data?: unknown; models?: unknown }) : null;
   const list = Array.isArray(body) ? body : Array.isArray(record?.data) ? record.data : Array.isArray(record?.models) ? record.models : [];
   const ids: string[] = [];
@@ -48,13 +48,13 @@ function modelIds(body: unknown): string[] {
     const item = entry && typeof entry === "object" ? (entry as { id?: unknown; name?: unknown }) : null;
     const id = typeof item?.id === "string" ? item.id : typeof item?.name === "string" ? item.name : null;
     if (id && id.length <= 120) ids.push(id);
-    if (ids.length === MAX_MODELS) break;
+    if (ids.length === limit) break;
   }
   return ids;
 }
 
 export async function checkProviderKey(
-  input: { provider: ProviderKeyKind; key: string; url?: string | null },
+  input: { provider: ProviderKeyKind; key: string; url?: string | null; modelLimit?: number },
   fetchImpl: typeof fetch = fetch,
   timeoutMs = 10_000,
 ): Promise<ProviderKeyVerdict> {
@@ -90,7 +90,7 @@ export async function checkProviderKey(
       if (typeof freeTier !== "boolean") return { ok: false, reason: "unexpected", status: response.status };
       return { ok: true, check: "authentication", models: [], freeTier };
     }
-    return { ok: true, check: "models", models: modelIds(body) };
+    return { ok: true, check: "models", models: modelIds(body, input.modelLimit ?? MAX_MODELS) };
   } catch {
     return { ok: false, reason: "unreachable" };
   } finally {

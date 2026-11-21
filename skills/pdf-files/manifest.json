@@ -1,0 +1,9 @@
+{
+  "id": "pdf-files",
+  "name": "PDF files",
+  "version": "1.0.0",
+  "description": "Make PDFs whose text renders fully, currency symbols included.",
+  "defaultEnabled": true,
+  "triggerTerms": ["pdf"],
+  "requiredCapabilities": []
+}

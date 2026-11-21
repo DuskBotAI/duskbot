@@ -269,12 +269,20 @@ describe("a read-and-draft run", () => {
 
     // An ordinary turn of the Chief afterwards: its conversation search never finds the run, whose prompt held the mail.
     await api("POST", `/api/bots/${chief.id}/messages`, { threadId: chief.threadId, text: "What do you remember about the Q3 numbers?" }, 202);
+    // the turn's scripted email send waits on the person's review at Full access; they decline it
+    let review: any;
+    await expect.poll(async () => (review = (await api("GET", `/api/threads/${chief.threadId}/messages?limit=200`)).messages
+      .findLast((message: any) => message.card?.outboundRequest && !message.card.answered)), { timeout: 10_000 }).toBeTruthy();
+    expect(review.card.tool).toBe("GMAIL_SEND_EMAIL");
+    await api("POST", `/api/threads/${chief.threadId}/respond`, { requestId: review.card.requestId, behavior: "deny" });
     await expect.poll(async () => (await api("GET", `/api/threads/${chief.threadId}/messages?limit=200`)).messages
       .some((message: any) => message.kind === "activity" && message.tool?.name === "session_search" && message.tool.output !== undefined), { timeout: 30_000 }).toBe(true);
     const searched = (await api("GET", `/api/threads/${chief.threadId}/messages?limit=200`)).messages.findLast((message: any) => message.tool?.name === "session_search");
     expect(String(searched.tool.output)).not.toContain(done.threadId);
     expect(String(searched.tool.output)).toContain("Nothing of yours matches");
     expect(decisions).toContain('"rule":"read-and-draft"');
-    expect((await api("GET", `/api/threads/${chief.threadId}/messages?limit=200`)).messages.some((message: any) => message.card?.outboundRequest)).toBe(false);
+    expect((await api("GET", `/api/threads/${chief.threadId}/messages?limit=200`)).messages.filter((message: any) => message.card?.outboundRequest)
+      .map((message: any) => [message.card.tool, message.card.answered])).toEqual([["GMAIL_SEND_EMAIL", "deny"]]);
+    expect(apps.calls.filter((call) => call.tool === "GMAIL_SEND_EMAIL")).toEqual([]);
   });
 });

@@ -46,6 +46,7 @@ const AGENT_LIVE_MS = 40_000;
  * Wi-Fi alone for good */
 const APPLY_WAIT_MS = 10_000;
 const SYNC_WAIT_MAX_S = 25;
+const ORIGIN_CHECK_MS = 4_000;
 const MAX_DEVICES = 24;
 /** a push the service could not take is tried again after these */
 const PUSH_RETRY_MS = [10_000, 60_000];
@@ -290,6 +291,16 @@ export function createMobileLink(deps: MobileLinkDeps) {
       .map((url) => ({ kind: "https", url, ...(url === relay?.origin && relay.spki ? { spki: relay.spki } : {}) })));
   }
 
+  /** The iPhone app up to 1.2 stops pairing at a route's 5xx instead of trying the relay behind it, and a Cloudflare
+   * tunnel whose cloudflared is not connected answers 530: the agent's address goes in a code only while it answers. */
+  async function answers(origin: string): Promise<boolean> {
+    try {
+      const response = await (deps.fetch ?? fetch)(`${origin}/api/health`, { redirect: "manual", signal: AbortSignal.timeout(ORIGIN_CHECK_MS) });
+      await response.body?.cancel().catch(() => {});
+      return response.status < 500;
+    } catch { return false; }
+  }
+
   async function routes(device: DeviceRecord | null): Promise<MobileRoutesResponse> {
     const companion = deps.companion ? await deps.companion().catch(() => null) : null;
     const isHttps = (route: MobileTransport): route is MobileRoutesResponse["https"][number] => route.kind === "https";
@@ -336,6 +347,7 @@ export function createMobileLink(deps: MobileLinkDeps) {
 
     const opened = deps.sessions.openPairing({ scopes, label, ttlMs: MOBILE_GRANT_TTL_MS });
     const relay = agentLive();
+    const agentOrigin = relay?.origin ? answers(relay.origin) : null;
     const grant: Grant = { pairingId: opened.id, channel: null, expiresAt: opened.expiresAt };
     let relayTransport: MobileTransport | null = null;
     if (relay) {
@@ -346,7 +358,8 @@ export function createMobileLink(deps: MobileLinkDeps) {
       if (await applied_(rev, grant.channel.id)) relayTransport = { kind: "relay", base: relay.base, channel: grant.channel.id, token, key: grant.channel.key };
       else log("mobile: the link agent did not open the pairing's relay channel in time");
     }
-    const via = mobileTransports([...httpsRoutes(), ...(relayTransport ? [relayTransport] : []), ...companion]);
+    const silent = relayTransport && relay?.origin && agentOrigin && !await agentOrigin ? relay.origin : null;
+    const via = mobileTransports([...httpsRoutes().filter((route) => route.kind !== "https" || route.url !== silent), ...(relayTransport ? [relayTransport] : []), ...companion]);
     if (!via.length) {
       grants.delete(opened.id);
       return { status: 409, body: { error: "A phone cannot reach this workspace yet: turn on phone access or give it a public address first.", code: "unreachable" } };

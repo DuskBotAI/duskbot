@@ -1962,15 +1962,12 @@ body {
 }
 /* the bot panel's model pill keeps one look: its 7% hairline at rest and after a pick (the focus reset above would clear
    it), swapped for a 6% fill on hover, open or keyboard focus, never both */
-[data-panel-row="backup-model"] [data-model-pill],
 [data-panel-row="model"] [data-tour="model"] { --tw-inset-ring-color: color-mix(in oklab, var(--color-ink) 7%, transparent) !important; }
-[data-panel-row="backup-model"] [data-model-pill]:is([aria-expanded="true"], :focus-visible),
 [data-panel-row="model"] [data-tour="model"]:is([aria-expanded="true"], :focus-visible) {
   --tw-inset-ring-color: transparent !important;
   background-color: color-mix(in oklab, var(--color-ink) 6%, transparent);
 }
 @media (hover: hover) and (pointer: fine) {
-  [data-panel-row="backup-model"] [data-model-pill]:enabled:hover,
   [data-panel-row="model"] [data-tour="model"]:enabled:hover {
     --tw-inset-ring-color: transparent !important;
     background-color: color-mix(in oklab, var(--color-ink) 6%, transparent);

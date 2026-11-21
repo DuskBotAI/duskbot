@@ -68,6 +68,10 @@ function get(url: string, timeoutMs: number): Promise<{ status: number; body: st
       res.on("end", () => done({ status: res.statusCode ?? 0, body }));
       res.on("error", failed);
     };
+    if (target.protocol === "http:") {
+      httpRequest(target, { method: "GET" }, settle).on("error", failed).end();
+      return;
+    }
     if (!proxy) {
       httpsRequest(target, { method: "GET" }, settle).on("error", failed).end();
       return;
@@ -84,8 +88,14 @@ function get(url: string, timeoutMs: number): Promise<{ status: number; body: st
   });
 }
 
+/** A test Bot API on loopback only (DUSK_TELEGRAM_API_URL, as the chat app host reads it); anything else is Telegram. */
+export function apiBase(env: NodeJS.ProcessEnv = process.env): string {
+  const value = env.DUSK_TELEGRAM_API_URL;
+  return value && /^http:\/\/127\.0\.0\.1:\d{1,5}$/.test(value) ? value : "https://api.telegram.org";
+}
+
 async function call<T>(token: string, method: string, query: Record<string, string> = {}, timeoutMs = 20_000): Promise<{ ok: boolean; result?: T; error_code?: number; description?: string }> {
-  const url = `https://api.telegram.org/bot${token}/${method}?${new URLSearchParams(query)}`;
+  const url = `${apiBase()}/bot${token}/${method}?${new URLSearchParams(query)}`;
   const answer = await get(url, timeoutMs);
   try { return JSON.parse(answer.body); } catch { return { ok: false, error_code: answer.status, description: `Telegram answered ${answer.status}` }; }
 }

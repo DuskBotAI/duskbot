@@ -18,7 +18,9 @@ export interface SubscriberRow {
   started: number; trialEndsAt: number | null; renewsAt: number | null;
   messages7d: number; messages: number; turns: number; turns7d: number; failed: number; engines: string[]; apps: number; routines: number; bots: number;
   lastActive: number | null; platforms: string[]; places: string[]; cloud: string | null;
+  atRisk?: "dispute" | null;
 }
+const atRisk = (row: SubscriberRow) => row.atRisk ? <span data-at-risk={row.atRisk} className="inline-flex h-6 items-center whitespace-nowrap rounded-full bg-wash-pink px-2.5 text-12 text-ink">at risk: dispute</span> : null;
 interface Launch { since: number; label: string; accounts: number; mrrCents: number; atRiskCents?: number; trial: number; paying: number; paymentProblem?: number; cancelling: number; cancelled: number; receivedCents?: number; collectedCents?: number }
 interface Answer { now: number; filter: Filter; counts: Record<Filter, number>; rows: SubscriberRow[]; launch: Launch; partialBefore: number | null }
 interface Count { key: string; count: number }
@@ -29,7 +31,7 @@ interface Detail {
   timeline: Array<{ at: number; kind: string; label: string }>;
   usage: { features: Count[]; engines: Count[]; failures: Count[] };
   reports: Array<{ id: string; source: string; description: string; appVersion: string; platform: string; status: string; fixedIn: string | null; receivedAt: number }>;
-  cancel: Array<{ answer: string; expected: string | null; improve: string | null; at: number }>;
+  cancel: Array<{ answer: string; expected: string | null; improve: string | null; offer: string | null; outcome: string; at: number }>;
 }
 
 const FILTERS: Array<{ value: Filter; label: string }> = [
@@ -111,6 +113,7 @@ function SubscriberSheet({ id, onClose }: { id: string; onClose(): void }) {
             <h2 id={titleId} className="truncate text-20 font-medium tracking-[-0.02em] text-ink">{who(data.account)}</h2>
             <p className="mt-1 flex flex-wrap items-center gap-1.5 text-13 text-ink-3">
               <span className={cx("inline-flex h-6 items-center rounded-full px-2.5 text-12 text-ink", WASH[row.bucket])}>{row.status}</span>
+              {atRisk(row)}
               <span>{row.plan} · {usd(row.monthlyCents)}/mo</span>
               {row.country && <span>· {row.country}</span>}
               <span>· {row.platforms.join(", ") || "no app yet"} · {row.places.join(", ") || "no bots yet"}{row.cloud ? ` (cloud ${row.cloud})` : ""}</span>
@@ -135,7 +138,7 @@ function SubscriberSheet({ id, onClose }: { id: string; onClose(): void }) {
           </div>
           <Section title="their feedback">
             {data.cancel.map((item) => (
-              <p key={item.at} className="mb-2 rounded-[14px] bg-card px-3 py-2 text-13 text-ink">cancel survey, {day(item.at)}: <b className="font-medium">{item.answer}</b>{item.expected ? ` · expected: ${item.expected}` : ""}{item.improve ? ` · improve: ${item.improve}` : ""}</p>
+              <p key={item.at} className="mb-2 rounded-[14px] bg-card px-3 py-2 text-13 text-ink">{item.outcome === "cancelled" ? "cancel survey" : `cancel flow, ${item.outcome}`}, {day(item.at)}: <b className="font-medium">{item.answer}</b>{item.offer ? ` · offered: ${item.offer}` : ""}{item.expected ? ` · expected: ${item.expected}` : ""}{item.improve ? ` · improve: ${item.improve}` : ""}</p>
             ))}
             {data.reports.map((report) => (
               <div key={report.id} className="mb-2 rounded-[14px] bg-card px-3 py-2">
@@ -171,7 +174,7 @@ export function SubscribersPage() {
     switch (key) {
       case "person": return <span className="block max-w-[240px]"><span className="block truncate text-14 text-ink">{who(row)}</span><span className="block truncate text-12 text-ink-3">{row.country ?? "somewhere"}{row.email ? ` · ${row.handle}` : ""}</span></span>;
       case "plan": return <span className="text-13">{row.plan}<span className="block text-12 text-ink-3">{usd(row.monthlyCents)}/mo</span></span>;
-      case "status": return <span><span className={cx("inline-flex h-6 items-center whitespace-nowrap rounded-full px-2.5 text-12 text-ink", WASH[row.bucket])}>{row.status}</span>{row.reason && <span className="mt-0.5 block max-w-[200px] truncate text-12 text-ink-3" title={row.reason}>{row.reason}</span>}</span>;
+      case "status": return <span><span className={cx("inline-flex h-6 items-center whitespace-nowrap rounded-full px-2.5 text-12 text-ink", WASH[row.bucket])}>{row.status}</span>{row.atRisk && <span className="mt-1 block">{atRisk(row)}</span>}{row.reason && <span className="mt-0.5 block max-w-[200px] truncate text-12 text-ink-3" title={row.reason}>{row.reason}</span>}</span>;
       case "started": return <span className="t-id whitespace-nowrap text-ink-2">{day(row.started)}</span>;
       case "ends": return <span className="t-id whitespace-nowrap text-ink-2">{day(row.trialEndsAt ?? row.renewsAt) ?? <Nil />}</span>;
       case "messages": return <span className="font-mono num">{n(row.messages7d)} <span className="text-ink-3">/ {n(row.messages)}</span></span>;

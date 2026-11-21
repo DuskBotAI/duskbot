@@ -309,6 +309,10 @@ function route(method: string, path: string, body: unknown, query: URLSearchPara
     if (!s.billing.subscription) fail("No subscription to cancel.", 404, "not_found");
     s.billing.subscription!.cancelAt = s.billing.subscription!.currentPeriodEnd; return s.billing;
   }
+  if (method === "POST" && path === "/v1/billing/keep") {
+    if (!s.billing.subscription) fail("No subscription to keep.", 404, "not_found");
+    s.billing.subscription!.cancelAt = null; return s.billing;
+  }
   if (method === "GET" && path === "/v1/clouds") return { clouds: s.clouds };
   const slackWakeRoute = path.match(/^\/v1\/clouds\/([^/]+)\/slack-wake$/);
   if ((method === "GET" || method === "PUT") && slackWakeRoute) {

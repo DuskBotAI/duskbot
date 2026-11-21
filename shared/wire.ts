@@ -531,7 +531,7 @@ export interface WireMessage extends HelperIntroField, SetupCardFields, WaitLine
     signIn?: boolean;
     /** error rows: the turn waits for its AI's usage limit to reset and carries on by itself; Stop ends the wait. */
     limitHold?: LimitHoldState;
-    input?: string; output?: string; clipped?: boolean;
+    input?: string; output?: string; clipped?: boolean; ms?: number;
     /** What the call works on, as its live status said it: the chip's and the "Now" card's specific words. `whose`: the person whose own app or MCP server the call used. */
     step?: import("./turn-progress.ts").LiveStep; whose?: { person: string; app: string };
     /** Words the harness wrote for what the call did, shown in place of `name`; `name` stays the tool's own. */
@@ -547,7 +547,7 @@ export interface WireMessage extends HelperIntroField, SetupCardFields, WaitLine
     limitResetsAt?: number;
     /** error rows: the reply came back; only a step the turn ran failed or wasn't allowed (`owned`: and it says so itself, so no card repeats it). */
     partial?: boolean; owned?: boolean;
-    reason?: import("./failed-turn.ts").FailedReplyReason; blocker?: import("./failed-turn.ts").BrowserBlocker; // error rows: what stopped the reply, when the server could tell
+    reason?: import("./failed-turn.ts").FailedReplyReason; blocker?: import("./failed-turn.ts").BrowserBlocker; errorRef?: string; // error rows: what stopped the reply, when the server could tell, and the code it logged beside the real cause
     /** Provider item identity, scoped to the owning turn. */
     itemId?: string;
     /** Whether the harness captured the full redacted result. Private
@@ -590,7 +590,7 @@ export interface WireMessage extends HelperIntroField, SetupCardFields, WaitLine
   /** Provider completion outcome, independent of whether it emitted text. */
   turnSucceeded?: boolean;
   /** An exact request was stopped; a restart must not revive an old result. */
-  requestCancelled?: boolean;
+  requestCancelled?: boolean; /** user messages: one ask of the person's in a one-on-one chat as the open-item ledger keeps it: `open` is not yet delivered, set waiting (a wait, routine, job or handed-off work exists) or said to be blocked; `dropped` the person stopped it; `nudged` the bot was sent back once for it while open. */ ask?: { state: "open" | "delivered" | "waiting" | "blocked" | "dropped"; nudged?: true };
   /** Set before execution and cleared only after the request's verified
    * final turn and dependencies settle. A restart never clears it. */
   requestPending?: boolean;
@@ -694,7 +694,7 @@ export function nextOpenThread<T extends OpenThreadCandidate>(tasks: readonly T[
 
 export interface OptionCardData extends WaitCardField, AccessRequestCardField, OutsideWriteCardField, PurchaseCardField, EmailCardField {
   /** calls: one per outbound call the card covers, in subtitle order. purchase: it buys, books, subscribes or moves money. */
-  outboundRequest?: { tool: string; app: string | null; calls?: Array<{ app: string | null; label: string }>; purchase?: true };
+  outboundRequest?: { tool: string; app: string | null; calls?: Array<{ app: string | null; label: string }>; purchase?: true }; /** A card asking to send: `key` hashes exactly what would go out (shared/declined-sends.ts), never the content; `declined`: the person said no, so the same send is refused in this chat until they ask again. */ send?: { key: string; declined?: true };
   /** @deprecated team memory is retired; only older messages carry this. */
   teamMemoryRequest?: { section: string; entryId: string; kind: string; revision?: string };
   title: string;

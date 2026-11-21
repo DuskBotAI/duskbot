@@ -34,7 +34,7 @@ test("the bridge keeps every function a page of the last two releases calls", ()
 });
 
 test("a Cloud or server page keeps the bridge keys it had, and the home page its own", () => {
-  const remote = new Set(listed("REMOTE_SAFE")), home = new Set([...remote, ...listed("HOME_PAGE")]);
+  const remote = new Set(listed("REMOTE_SAFE")), home = new Set([...remote, ...listed("HOME_PAGE"), ...listed("PLACE_PAGE")]);
   for (const key of contract.remoteSafe) assert.ok(remote.has(key), `${key} left REMOTE_SAFE. ${KEEP}`);
   for (const key of contract.homePage) assert.ok(home.has(key), `${key} left the home page's bridge. ${KEEP}`);
 });

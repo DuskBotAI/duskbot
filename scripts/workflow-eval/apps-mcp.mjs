@@ -1,7 +1,8 @@
 // Fake business apps for the workflow eval: one stdio MCP server per app (`node apps-mcp.mjs <app>`), all reading and
 // writing one JSON state file (BIZ_STATE) seeded per case, so the harness can see what a workflow really did (drafts,
 // sends, sheet rows, events) without any real account. Standard library only; newline-delimited JSON-RPC as MCP stdio.
-import { readFileSync, writeFileSync, renameSync } from "node:fs";
+import { readFileSync, writeFileSync, renameSync, statSync } from "node:fs";
+import { basename } from "node:path";
 import { createInterface } from "node:readline";
 
 const app = process.argv[2];
@@ -35,6 +36,8 @@ function matchMail(m, q) {
     return `${m.from} ${m.subject} ${m.body} ${(m.labels ?? []).join(" ")}`.toLowerCase().includes(t);
   });
 }
+/** A file attached to a draft or a send: its name and size, read from disk as Gmail would upload it. */
+const attach = (paths) => (paths ?? []).map((path) => { const st = statSync(path); if (!st.isFile()) throw new Error(`${path} is not a file`); return { name: basename(path), bytes: st.size, head: readFileSync(path).subarray(0, 5).toString("latin1") }; });
 const brief = (m) => ({ id: m.id, threadId: m.threadId ?? m.id, from: m.from, to: m.to, subject: m.subject, date: m.date, unread: !m.read, labels: m.labels ?? [], snippet: m.body.slice(0, 140), attachments: (m.attachments ?? []).map((a) => a.name) });
 
 const APPS = {
@@ -46,10 +49,10 @@ const APPS = {
       run: (s, x) => s.mail.filter((m) => matchMail(m, x.query)).sort((a, b) => Date.parse(b.date) - Date.parse(a.date)).slice(0, x.max_results ?? 25).map(brief) },
     gmail_read: { d: "Read one email in full, with its attachments' text.", a: read, s: { message_id: str }, req: ["message_id"],
       run: (s, x) => { const m = s.mail.find((m) => m.id === x.message_id); if (!m) throw new Error("no such message"); return { ...brief(m), body: m.body, attachments: m.attachments ?? [] }; } },
-    gmail_create_draft: { d: "Create a draft (optionally a reply in a thread). It is not sent.", a: write, s: { to: str, subject: str, body: str, reply_to_message_id: str }, req: ["to", "subject", "body"],
-      run: (s, x) => { const d = { id: id("draft"), ...x, at: now() }; (s.drafts ??= []).push(d); log(s, "draft", { to: x.to, subject: x.subject }); return { draft_id: d.id, status: "draft saved" }; } },
-    gmail_send: { d: "Send an email now from the connected account (optionally as a reply in a thread).", a: { readOnlyHint: false, destructiveHint: false, openWorldHint: true }, s: { to: str, subject: str, body: str, reply_to_message_id: str, cc: str }, req: ["to", "subject", "body"],
-      run: (s, x) => { const e = { id: id("sent"), ...x, at: now() }; (s.sent ??= []).push(e); log(s, "send", { to: x.to, subject: x.subject }); return { message_id: e.id, status: "sent" }; } },
+    gmail_create_draft: { d: "Create a draft (optionally a reply in a thread). It is not sent. attachments: paths of local files to attach.", a: write, s: { to: str, subject: str, body: str, reply_to_message_id: str, attachments: { type: "array", items: str } }, req: ["to", "subject", "body"],
+      run: (s, x) => { const d = { id: id("draft"), ...x, attachments: attach(x.attachments), at: now() }; (s.drafts ??= []).push(d); log(s, "draft", { to: x.to, subject: x.subject }); return { draft_id: d.id, status: "draft saved" }; } },
+    gmail_send: { d: "Send an email now from the connected account (optionally as a reply in a thread). attachments: paths of local files to attach.", a: { readOnlyHint: false, destructiveHint: false, openWorldHint: true }, s: { to: str, subject: str, body: str, reply_to_message_id: str, cc: str, attachments: { type: "array", items: str } }, req: ["to", "subject", "body"],
+      run: (s, x) => { const e = { id: id("sent"), ...x, attachments: attach(x.attachments), at: now() }; (s.sent ??= []).push(e); log(s, "send", { to: x.to, subject: x.subject }); return { message_id: e.id, status: "sent" }; } },
     gmail_send_draft: { d: "Send a draft that was created earlier.", a: { readOnlyHint: false, openWorldHint: true }, s: { draft_id: str }, req: ["draft_id"],
       run: (s, x) => { const i = (s.drafts ?? []).findIndex((d) => d.id === x.draft_id); if (i < 0) throw new Error("no such draft"); const [d] = s.drafts.splice(i, 1); (s.sent ??= []).push({ ...d, id: id("sent"), at: now() }); log(s, "send", { to: d.to, subject: d.subject }); return { status: "sent" }; } },
     gmail_list_drafts: { d: "List drafts waiting to be sent.", a: read, s: {}, run: (s) => (s.drafts ?? []).map(({ id, to, subject, at }) => ({ id, to, subject, at })) },

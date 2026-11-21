@@ -30,7 +30,7 @@ it("takes cron through the real routine tools, applying the bot's own routine at
     const proposal = async (tool: string, args: unknown, text: string, expectError = false) => {
       const previousTurns = providerEvidence().length;
       writeFileSync(planPath, JSON.stringify({ [bot.id]: {
-        expectSystemIncludes: ["five-field cron expression", "Never replace a calendar rule with daily AI date checking", "including its VPS"],
+        expectSystemIncludes: ["A calendar rule (the last day of each month, the second Monday) is a cron schedule, never a daily AI date check."],
         steps: [{ tool: "list_triggers", arguments: {} }, { tool, arguments: args, expectError }],
         reply: expectError ? "That invalid schedule was refused." : "The routine change is applied.",
       } }));
@@ -49,18 +49,20 @@ it("takes cron through the real routine tools, applying the bot's own routine at
       return { resultId: card.routineRequest.resultId as string };
     };
     const schedule = { type: "cron" as const, expression: "0 9 1 * *", timeZone: "America/New_York" };
+    // a bot's routine on the hour is moved a few minutes off it, by a seed from its instructions
+    const placed = { ...schedule, expression: "6 9 1 * *" };
     const create = await proposal("create_trigger", { when: "schedule",
       name: "Monthly report", instructions: "Summarize last month's fixture activity; no external services.", schedule, overlap: "queue", run_on_startup: true,
     }, "Schedule a report at 9am New York time on the first of each month, and also whenever the app starts.");
-    expect(create.routineRequest).toMatchObject({ version: 1, operation: { action: "create", routine: { schedule } }, undo: { name: "Monthly report", schedule } });
+    expect(create.routineRequest).toMatchObject({ version: 1, operation: { action: "create", routine: { schedule: placed } }, undo: { name: "Monthly report", schedule: placed } });
     expect(create.subtitle).toContain("Next 3 runs (Eastern time)");
-    expect(create.subtitle).toContain("Cron: 0 9 1 * *");
+    expect(create.subtitle).toContain("Cron: 6 9 1 * *");
     const { resultId: routineId } = applied(create);
     const current = async () => (await api("GET", "/api/routines")).routines.find((routine: any) => routine.id === routineId);
-    expect(await current()).toMatchObject({ schedule, enabled: true, runOn: "maus", overlap: "queue", runOnStartup: true });
+    expect(await current()).toMatchObject({ schedule: placed, enabled: true, runOn: "maus", overlap: "queue", runOnStartup: true });
     expect(create.subtitle).toContain("Queue one scheduled run");
     expect(create.subtitle).toContain("On startup: Also runs once each time dusk bot starts");
-    expect((await current()).nextRunAt).toBe(nextCronRuns(schedule, create.routineRequest.createdAt, 1)[0]);
+    expect((await current()).nextRunAt).toBe(nextCronRuns(placed, create.routineRequest.createdAt, 1)[0]);
 
     const cardCount = (await messages()).filter(message => message.card?.routineRequest).length;
     await proposal("create_trigger", { when: "schedule",
@@ -73,6 +75,7 @@ it("takes cron through the real routine tools, applying the bot's own routine at
     expect((await api("GET", "/api/routines")).routines).toHaveLength(1);
 
     const lastDay = { ...schedule, expression: "0 9 L * *" };
+    const placedLastDay = { ...schedule, expression: "6 9 L * *" };
     const update = await proposal("manage_trigger", {
       action: "update", trigger_id: routineId, changes: { schedule: lastDay, overlap: "skip", run_on_startup: false },
     }, "Change that report to the last day of each month at the same time and zone.");
@@ -83,18 +86,18 @@ it("takes cron through the real routine tools, applying the bot's own routine at
     expect(listed).toContain('"runOnStartup": true');
     expect(listed).toContain('"failureStreak": 0');
     applied(update);
-    expect(update.routineRequest.undo.before).toMatchObject({ schedule, overlap: "queue", runOnStartup: true });
+    expect(update.routineRequest.undo.before).toMatchObject({ schedule: placed, overlap: "queue", runOnStartup: true });
     expect(update.subtitle).toContain("On startup: Runs only on its schedule");
-    expect((await current()).schedule).toEqual(lastDay);
+    expect((await current()).schedule).toEqual(placedLastDay);
     expect((await current()).overlap).toBeUndefined();
     expect((await current()).runOnStartup).toBeUndefined();
     const pause = await proposal("manage_trigger", { action: "pause", trigger_id: routineId }, "Pause the monthly report.");
     applied(pause);
-    expect(await current()).toMatchObject({ enabled: false, nextRunAt: null, schedule: lastDay });
+    expect(await current()).toMatchObject({ enabled: false, nextRunAt: null, schedule: placedLastDay });
     const resume = await proposal("manage_trigger", { action: "resume", trigger_id: routineId }, "Resume the monthly report.");
     expect(resume.subtitle).toContain("Next 3 runs (Eastern time)");
     applied(resume);
-    expect(await current()).toMatchObject({ enabled: true, schedule: lastDay });
+    expect(await current()).toMatchObject({ enabled: true, schedule: placedLastDay });
 
     await proposal("create_trigger", { when: "schedule", name: "Impossible date", instructions: "Must not run.", schedule: { ...schedule, expression: "0 9 31 2 *" } }, "Try an invalid calendar rule.", true);
     await proposal("create_trigger", { when: "schedule",
@@ -117,7 +120,7 @@ it("takes cron through the real routine tools, applying the bot's own routine at
     expect(await current()).toEqual(before);
     expect((await api("GET", "/api/routines")).routines).toHaveLength(1);
     const persisted = JSON.parse(readFileSync(join(fixture.info.dataDir, "routines.json"), "utf8"));
-    expect(persisted.routines.find((routine: any) => routine.id === routineId).schedule).toEqual(lastDay);
+    expect(persisted.routines.find((routine: any) => routine.id === routineId).schedule).toEqual(placedLastDay);
     evidence.push({ final: await api("GET", "/api/routines"), persisted });
   } finally {
     const evidencePath = `${fixture.info.logPath}.cron.json`;

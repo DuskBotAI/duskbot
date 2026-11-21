@@ -26,6 +26,7 @@ import { Digits } from "../ui/Digits";
 import { CancelFlow, CONTACT } from "./cancel-flow";
 import { BUSY, cartText, CHECKOUT_PLAN_KEY, IntervalToggle, LicenseSheet, money, OfferLine, offerAction, PlanSheet, planName, planSelection, priceText, sharedRegions, switchedToast, useInterval, Working, type PaidPlan } from "./plan-sheet";
 import { CHECKOUT_SOON, checkoutDone, trialAction } from "./cloud-offer";
+import { PaymentNotice } from "./payment-notice";
 
 export { IntervalToggle, useInterval };
 
@@ -177,8 +178,9 @@ function Row({ k, children, action }: { k: string; children: ReactNode; action?:
 const quiet = "text-link inline-flex h-9 items-center rounded-full px-1 text-14 disabled:opacity-45 max-sm:h-11";
 
 function YourBilling({ catalog, onLicense, onManage }: { catalog: PlanCatalog; onLicense(): void; onManage(): void }) {
-  const { billing, clouds, updateCard, changePlan } = useCloud();
+  const { billing, clouds, updateCard, changePlan, keep } = useCloud();
   const { toast } = useSession();
+  const restart = useRestart(catalog);
   const [keeping, setKeeping] = useState(false);
   const [keepError, setKeepError] = useState<string | null>(null);
   const sub = billing?.subscription ?? null;
@@ -190,16 +192,25 @@ function YourBilling({ catalog, onLicense, onManage }: { catalog: PlanCatalog; o
   const lic = sel ? licenseOf(catalog, sel.license) : null;
   const desk = sel && sel.desktop !== "none" ? desktopOf(catalog, sel.desktop) : null;
   const plan = sel && desk ? catalog.bundles.find((b) => b.desktop === sel.desktop && b.id !== "team")?.name ?? desk.name : "free";
-  const renews = sub ? (sub.cancelAt ? `ends ${longDate(sub.cancelAt)}` : `renews ${longDate(sub.currentPeriodEnd)}`) : null;
+  const renews = sub?.status === "past_due" && sub.fixBy ? null : sub ? (sub.cancelAt ? `ends ${longDate(sub.cancelAt)}` : `renews ${longDate(sub.currentPeriodEnd)}`) : null;
   const applied = billing?.retention?.applied ?? null;
   return (
     <>
       <section className="mt-16" aria-labelledby="billing-title">
         <SectionHead id="billing-title">your billing</SectionHead>
+        <PaymentNotice />
         <dl className="">
-          <Row k="plan" action={sub && !sub.cancelAt ? <button type="button" className={quiet} onClick={onManage}>manage subscription</button> : undefined}>
-            <span className="block truncate max-sm:whitespace-normal">{plan}{desk && sel ? <span className="text-ink-3">, {clouds?.[0]?.name ?? desk.name} in {regionName(catalog, sel.region)}</span> : <span className="text-ink-3">, your bots run on your mac</span>}</span>
-            {sub && <span className="num block truncate text-13 text-ink-3 max-sm:whitespace-normal">{cart ? `${cartText(cart, sub.selection.interval)} · ` : ""}{renews}{applied && !sub.cancelAt ? ` · ${applied.percent}% off for ${applied.cycles} months` : ""}</span>}
+          <Row k="plan" action={sub && !sub.cancelAt ? <button type="button" className={quiet} onClick={onManage}>manage subscription</button>
+            : sub && sub.status === "active" ? <button type="button" className={quiet} disabled={keeping} onClick={() => {
+              setKeeping(true); setKeepError(null);
+              keep().then(() => toast(`your plan renews again on ${longDate(sub.currentPeriodEnd)}`), (e: Error) => setKeepError(e.message)).finally(() => setKeeping(false));
+            }}>{keeping ? "restarting" : "restart plan"}</button>
+            : restart.ended ? <button type="button" className={quiet} disabled={restart.busy} onClick={restart.go}>{restart.busy ? "opening checkout" : "restart plan"}</button> : undefined}>
+            {restart.ended && <span className="num block truncate max-sm:whitespace-normal">{planName(catalog, restart.ended.bundle)}<span className="text-ink-3"> ended {longDate(restart.ended.endedAt)}</span></span>}
+            {restart.error && <span role="alert" className="block text-13 text-bad">{restart.error}</span>}
+            {keepError && sub?.cancelAt && <span role="alert" className="block text-13 text-bad">{keepError}</span>}
+            {!restart.ended && <span className="block truncate max-sm:whitespace-normal">{plan}{desk && sel ? <span className="text-ink-3">, {clouds?.[0]?.name ?? desk.name} in {regionName(catalog, sel.region)}</span> : <span className="text-ink-3">, your bots run on your mac</span>}</span>}
+            {sub && <span className="num block truncate text-13 text-ink-3 max-sm:whitespace-normal">{cart ? `${cartText(cart, sub.selection.interval)}${renews ? " · " : ""}` : ""}{renews}{applied && !sub.cancelAt ? ` · ${applied.percent}% off for ${applied.cycles} months` : ""}</span>}
           </Row>
           {sub?.scheduled && (
             <Row k="next plan" action={<button type="button" className={quiet} disabled={keeping} onClick={() => {
@@ -213,7 +224,7 @@ function YourBilling({ catalog, onLicense, onManage }: { catalog: PlanCatalog; o
           <Row k="license" action={<button type="button" className={quiet} onClick={onLicense}>{lic?.work ? "change" : "add"}</button>}>
             {lic?.work && sel ? <span className="block truncate max-sm:whitespace-normal">{lic.name} license<span className="num text-ink-3">, {members(sel.members)} · {bundleOf(catalog, "pro")?.license === sel.license && bundleOf(catalog, "pro")?.desktop === sel.desktop ? "included with pro" : priceText(licenseMonthly(lic, sel.members), sel.interval, catalog)}</span></span> : <span className="text-ink-3">personal use, free</span>}
           </Row>
-          <Row k="payment method" action={sub && sub.status !== "canceled" ? <button type="button" className={quiet} onClick={() => void updateCard()}>update</button> : undefined}>
+          <Row k="payment method" action={sub && sub.status !== "canceled" && !(sub.status === "past_due" && sub.fixBy) ? <button type="button" className={quiet} onClick={() => void updateCard()}>update</button> : undefined}>
             {pm ? <span className="num">{pm.brand.toLowerCase()} •••• {pm.last4}<span className="text-ink-3">, expires {String(pm.expMonth).padStart(2, "0")}/{String(pm.expYear).slice(-2)}</span></span> : sub ? <span className="text-ink-3">the card you paid with</span> : <span className="text-ink-3">none yet. you add one at checkout.</span>}
           </Row>
         </dl>
@@ -238,6 +249,25 @@ function YourBilling({ catalog, onLicense, onManage }: { catalog: PlanCatalog; o
       </section>
     </>
   );
+}
+
+/** after a plan ended: the same plan checks out again in one tap, and a cloud whose data is still kept comes back with it */
+function useRestart(catalog: PlanCatalog) {
+  const { billing, checkout } = useCloud();
+  const { toast } = useSession();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const ended = billing && !billing.subscription ? billing.ended ?? null : null;
+  const go = () => {
+    if (!ended || busy) return;
+    if (catalog.checkoutOpen === false) { setError(CHECKOUT_SOON); return; }
+    setBusy(true); setError(null);
+    track({ name: "plan_chosen", props: { plan: ended.bundle ?? "custom", period: ended.selection.interval } });
+    checkout({ source: "dash_billing", kind: "plan", selection: ended.selection, bundle: ended.bundle })
+      .then((ok) => { if (ok) { toast(checkoutDone(catalog)); navigate("/cloud"); } else setError("checkout didn't open. try again."); })
+      .finally(() => setBusy(false));
+  };
+  return { ended, busy, error, go };
 }
 
 /** a cloud plan from its card, with no sheet: no plan yet goes straight to checkout; a running plan stops once on the

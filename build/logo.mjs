@@ -56,6 +56,14 @@ export const SCENE = LOGO.map((row) => row.map((c, x) => {
   return c;
 }));
 
+const DUSK = {
+  "#06bafd": "#192830", "#3cd0fd": "#1b2d35", "#43d1fd": "#1b2e36", "#87e2fc": "#1e343d", "#90e4fc": "#1e353e",
+  "#c2ecfc": "#203742", "#c6f43a": "#2b311f", "#c9f63f": "#2b311f", "#ccf746": "#2c3220", "#d0cefb": "#232342",
+};
+
+/** the sunrise after dark, for the macOS dark icon appearance */
+export const SCENE_DARK = SCENE.map((row) => row.map((c) => DUSK[c]));
+
 /** kit alone, the scene left empty */
 export const KIT_ONLY = LOGO.map((row) => row.map((c) => (isKit(c) ? c : null)));
 

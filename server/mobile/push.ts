@@ -13,6 +13,8 @@ export interface PushMessage {
   botName: string;
   threadId: string;
   groupId?: string;
+  environmentId?: string;
+  deviceId?: string;
   /** an approval's or question's ask, so the notification's buttons answer that one */
   requestId?: string;
 }
@@ -89,6 +91,8 @@ function collapseId(threadId: string): string {
 function messageData(message: PushMessage): Record<string, string> {
   return {
     kind: message.kind, botId: message.botId, threadId: message.threadId, id: message.id,
+    ...(message.environmentId ? { environmentId: message.environmentId } : {}),
+    ...(message.deviceId ? { deviceId: message.deviceId } : {}),
     ...(message.groupId !== undefined ? { groupId: message.groupId } : {}),
     ...(message.requestId !== undefined ? { requestId: message.requestId } : {}),
   };

@@ -36,6 +36,8 @@ export const TURN_ACTIVITY_DISMISS_S = 20;
 
 /** Fixed for the activity's life. */
 export interface TurnActivityAttributes {
+  environmentId?: string;
+  deviceId?: string;
   botId: string;
   botName: string;
   threadId: string;

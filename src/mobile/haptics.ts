@@ -3,7 +3,8 @@ import type { HapticKind, MobilePlatform } from "./platform";
 
 const HAPTICS_KEY = "dusk.mobile.haptics";
 let platform: MobilePlatform | null = null;
-let enabled = true;
+let enabled = false;
+let preferenceRevision = 0;
 const listeners = new Set<() => void>();
 const lastAt = new Map<HapticKind, number>();
 
@@ -31,7 +32,10 @@ export const KIND_ACTION: Record<HapticKind, HapticAction> = { light: "tap", sof
 
 export async function installHaptics(next: MobilePlatform): Promise<void> {
   platform = next;
-  enabled = (await next.prefs.get(HAPTICS_KEY)) !== "off";
+  const revision = ++preferenceRevision;
+  const saved = (await next.prefs.get(HAPTICS_KEY)) !== "off";
+  if (revision !== preferenceRevision) return;
+  enabled = saved;
   for (const listener of listeners) listener();
 }
 
@@ -46,6 +50,7 @@ export function haptic(action: HapticAction): void {
 }
 
 export function setHapticsEnabled(on: boolean): void {
+  preferenceRevision++;
   enabled = on;
   void platform?.prefs.set(HAPTICS_KEY, on ? "on" : "off");
   for (const listener of listeners) listener();

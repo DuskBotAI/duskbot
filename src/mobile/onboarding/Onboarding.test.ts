@@ -82,6 +82,20 @@ it("android back steps back through onboarding and leaves the app from the first
   expect(entries().map((button) => button.dataset.entry)).toEqual(["scan", "signin", "code"]);
 });
 
+it("cancels a pending activation when Back is pressed after redemption", async () => {
+  const pending = Promise.withResolvers<void>();
+  const linked = vi.fn<Parameters<typeof Onboarding>[0]["onLinked"]>(() => pending.promise);
+  let back: (() => boolean) | undefined;
+  platform.onBack = (handler) => { back = handler; return () => {}; };
+  await mount(onboarding({ initial: { transport: "https", v: 1, credential: "unused", origin: "https://fixture.test" }, onLinked: linked }));
+  await press("[data-step=confirm] button:not([aria-label])");
+  const signal = linked.mock.calls[0]![3];
+  expect(signal.aborted).toBe(false);
+  await act(async () => { back?.(); pending.resolve(); });
+  expect(signal.aborted).toBe(true);
+  expect(entries()).toHaveLength(3);
+});
+
 it("scan without a camera falls back to the code field", async () => {
   await mount(onboarding());
   await press("[data-entry=scan]");
@@ -164,7 +178,7 @@ describe("a sign-in the Keychain kept through a delete and reinstall", () => {
     await press("[data-testid=mobile-cloud-connect][data-place-kind=cloud]");
     await settle();
     expect(pairs).toBe(1);
-    expect(onLinked).toHaveBeenCalledWith(expect.objectContaining({ id: "linked" }), "session", "Home cloud");
+    expect(onLinked).toHaveBeenCalledWith(expect.objectContaining({ id: "linked" }), "session", "Home cloud", expect.any(AbortSignal));
   });
 
   it("Sign out there ends the session on the service and forgets it on the phone", async () => {
@@ -206,7 +220,7 @@ describe("a sign-in the Keychain kept through a delete and reinstall", () => {
     await press("button[type=submit]");
     await settle();
     expect(pairs).toBe(1);
-    expect(onLinked).toHaveBeenCalledWith(expect.objectContaining({ id: "linked" }), "session", "Home cloud");
+    expect(onLinked).toHaveBeenCalledWith(expect.objectContaining({ id: "linked" }), "session", "Home cloud", expect.any(AbortSignal));
   });
 });
 
@@ -416,7 +430,7 @@ describe("a dusk cloud's QR always ends in that cloud, on its account", () => {
     await press("[data-entry=scan]");
     await settle(() => onLinked.mock.calls.length > 0);
     expect(paired).toEqual(["c2"]);
-    expect(onLinked).toHaveBeenCalledWith(expect.objectContaining({ id: "linked" }), "session", "Work cloud");
+    expect(onLinked).toHaveBeenCalledWith(expect.objectContaining({ id: "linked" }), "session", "Work cloud", expect.any(AbortSignal));
   });
 
   it("from the camera, inside the app on another place, it opens the account's only cloud without a pick", async () => {
@@ -504,7 +518,7 @@ describe("a signed-in desktop's QR signs the phone in as it pairs", () => {
     await settle(() => onLinked.mock.calls.length > 0);
     expect(phoneCalls()).toHaveLength(1);
     expect(secrets.has("dusk.account")).toBe(true);
-    expect(onLinked).toHaveBeenCalledWith(expect.objectContaining({ id: "linked" }), "session", expect.any(String));
+    expect(onLinked).toHaveBeenCalledWith(expect.objectContaining({ id: "linked" }), "session", expect.any(String), expect.any(AbortSignal));
   });
 
   it("a phone on another account is asked first, then switches and pairs", async () => {
@@ -713,7 +727,7 @@ describe("a desktop's QR that signs the phone in asks which place opens", () => 
     expect(choices()).toEqual([["computer", "Studio Mac"], ["cloud", "Home cloud"]]);
     expect(onLinked).not.toHaveBeenCalled();
     await press("[data-place-choice=computer]");
-    expect(onLinked).toHaveBeenCalledWith(expect.objectContaining({ id: "linked" }), "session", "Studio Mac");
+    expect(onLinked).toHaveBeenCalledWith(expect.objectContaining({ id: "linked" }), "session", "Studio Mac", expect.any(AbortSignal));
     expect(onKept).not.toHaveBeenCalled();
   });
 
@@ -727,7 +741,7 @@ describe("a desktop's QR that signs the phone in asks which place opens", () => 
     await settle(() => onLinked.mock.calls.length > 0);
     expect(onKept).toHaveBeenCalledWith(expect.objectContaining({ id: "linked", label: "Studio Mac" }), "session");
     expect(paired).toEqual(["c1"]);
-    expect(onLinked).toHaveBeenCalledWith(expect.anything(), "session", "Home cloud");
+    expect(onLinked).toHaveBeenCalledWith(expect.anything(), "session", "Home cloud", expect.any(AbortSignal));
   });
 
   it("an account with nothing else opens the computer at once, never a picker of one", async () => {
@@ -736,7 +750,7 @@ describe("a desktop's QR that signs the phone in asks which place opens", () => 
     await mount(onboarding({ initial: payload, initialSignIn: { code: "WXYZQRST", email: owner.email }, onLinked }));
     await link();
     await settle(() => onLinked.mock.calls.length > 0);
-    expect(onLinked).toHaveBeenCalledWith(expect.objectContaining({ id: "linked" }), "session", "Studio Mac");
+    expect(onLinked).toHaveBeenCalledWith(expect.objectContaining({ id: "linked" }), "session", "Studio Mac", expect.any(AbortSignal));
     expect(host.querySelector("[data-place-choice]")).toBeNull();
   });
 });

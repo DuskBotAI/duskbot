@@ -88,7 +88,7 @@ export function createTurnActivities(deps: {
     if (startedFor.size > 500) startedFor.delete(startedFor.values().next().value!);
     const state = nextTurnActivity(turnActivityStart(seconds()), { type: "ask", kind, requestId });
     for (const target of deps.startTargets()) {
-      void deps.send(target, { event: "start", state, attributes, timestamp: seconds(), priority: 10 }).catch(() => "failed" as const);
+      void deps.send(target, { event: "start", state, attributes: { ...attributes, deviceId: target.deviceId }, timestamp: seconds(), priority: 10 }).catch(() => "failed" as const);
     }
   }
 

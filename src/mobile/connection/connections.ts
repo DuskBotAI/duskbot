@@ -7,6 +7,8 @@ import { withDirect } from "../transport/direct";
 import { frameGuard, open as openRelay, RelayGoneError } from "../transport/relay";
 import type { PhoneTransport } from "../transport/transport";
 import { forgetTranscriptShelf } from "@/state/transcript-cache";
+import { copyWorkspaceDrafts, forgetWorkspaceDrafts } from "@/lib/drafts";
+import { mergeOutboxes } from "@/state/outbox-queue";
 import { outboxKey } from "./active";
 import { PairError } from "./pair";
 import { RACED_COMPANION_TRY_MS, raceRoutes, routeHeadStart, routeOrder, type RouteOutcome } from "./route-order";
@@ -22,6 +24,18 @@ export class PlaceGoneError extends Error {
     super("this dusk cloud was deleted");
     this.name = "PlaceGoneError";
   }
+}
+
+export async function openPairedRelay(record: MobileConnectionRecord, platform: MobilePlatform, signal: AbortSignal) {
+  const relay = record.relay;
+  if (!relay?.agentPub) return null;
+  const saved = await platform.secrets.get(`relay.${record.id}`);
+  if (!saved) return null;
+  const keys = JSON.parse(saved) as RelaySecrets;
+  const key = await deviceChannelKey(keys.priv, relay.agentPub, relay.channel);
+  signal.throwIfAborted();
+  const guard = frameGuard();
+  return withDirect(openRelay(relay.base, relay.channel, keys.token, key, guard), { channel: relay.channel, key, guard, lifecycle: platform });
 }
 
 export async function connectToWorkspace(record: MobileConnectionRecord, token: string, platform: MobilePlatform, signal: AbortSignal): Promise<WorkspaceTransport> {
@@ -41,15 +55,8 @@ export async function connectToWorkspace(record: MobileConnectionRecord, token: 
       const timed = AbortSignal.any([raced, AbortSignal.timeout(route.kind === "companion" ? RACED_COMPANION_TRY_MS : 15_000)]);
       const headers = { Authorization: `Bearer ${token}` };
       if (route.kind === "relay") {
-        const relay = record.relay;
-        const saved = await platform.secrets.get(`relay.${record.id}`);
-        if (!relay?.agentPub || !saved) return { kind: "failed" };
-        const keys = JSON.parse(saved) as RelaySecrets;
-        const key = await deviceChannelKey(keys.priv, relay.agentPub, relay.channel);
-        raced.throwIfAborted();
-        // direct first: a webrtc link to the server takes requests once it is up, the relay stays underneath
-        const guard = frameGuard();
-        const channel = withDirect(openRelay(relay.base, relay.channel, keys.token, key, guard), { channel: relay.channel, key, guard, lifecycle: platform });
+        const channel = await openPairedRelay(record, platform, timed);
+        if (!channel) return { kind: "failed" };
         transport = { kind: "relay", channel, token };
         response = await channel.request("GET", "/api/auth/session", headers, null, timed);
       } else {
@@ -90,9 +97,9 @@ export async function connectToWorkspace(record: MobileConnectionRecord, token: 
  * installation has never delivered twice. */
 async function moveOutbox(platform: MobilePlatform, from: string, to: string): Promise<void> {
   const held = await platform.prefs.get(outboxKey(from));
-  await platform.prefs.remove(outboxKey(from));
-  if (!held || await platform.prefs.get(outboxKey(to))) return;
-  await platform.prefs.set(outboxKey(to), held);
+  if (!held) return;
+  const destination = await platform.prefs.get(outboxKey(to));
+  await platform.prefs.set(outboxKey(to), destination ? mergeOutboxes(held, destination) : held);
 }
 
 /** The same installation linked again: at the same address, or a dusk cloud (https, with its own environment id) that
@@ -111,7 +118,7 @@ type ConnectionStore = {
   list(): Promise<MobileConnectionRecord[]>;
   active(): Promise<ActiveConnection | null>;
   /** `open: false` keeps the link without making it the place the app opens on */
-  save(record: MobileConnectionRecord, token: string, options?: { open?: boolean }): Promise<void>;
+  save(record: MobileConnectionRecord, token: string, options?: { open?: boolean; signal?: AbortSignal; onActive?: () => void }): Promise<void>;
   setActive(id: string): Promise<void>;
   remove(id: string): Promise<void>;
   rename(id: string, label: string): Promise<void>;
@@ -150,20 +157,41 @@ export function createConnectionStore(platform: MobilePlatform): ConnectionStore
       const token = await platform.secrets.get(record.sessionRef);
       return token ? { record, token } : null;
     },
-    save(record, token, { open = true } = {}) {
+    save(record, token, { open = true, signal, onActive } = {}) {
       return serialize(async () => {
         const records = await read();
         const replaced = records.filter((entry) => entry.id === record.id || sameInstallation(entry, record));
         const saved = { ...record, sessionRef: `token.${record.id}` };
+        signal?.throwIfAborted();
+        const previousActive = await platform.prefs.get(ACTIVE_KEY);
+        const previousToken = await platform.secrets.get(saved.sessionRef);
+        for (const old of replaced) if (old.id !== saved.id) {
+          await moveOutbox(platform, old.id, saved.id);
+          copyWorkspaceDrafts(old.id, saved.id);
+        }
+        signal?.throwIfAborted();
         await platform.secrets.set(saved.sessionRef, token);
-        await write([...records.filter((entry) => !replaced.includes(entry)), saved]);
-        if (open) await platform.prefs.set(ACTIVE_KEY, saved.id);
+        try {
+          await write([...records.filter((entry) => !replaced.includes(entry)), saved]);
+          signal?.throwIfAborted();
+          if (open) await platform.prefs.set(ACTIVE_KEY, saved.id);
+          signal?.throwIfAborted();
+        } catch (error) {
+          await write(records);
+          if (previousActive) await platform.prefs.set(ACTIVE_KEY, previousActive);
+          else await platform.prefs.remove(ACTIVE_KEY);
+          if (previousToken) await platform.secrets.set(saved.sessionRef, previousToken);
+          else await platform.secrets.remove(saved.sessionRef);
+          throw error;
+        }
+        onActive?.();
         feature("phone_paired");
         for (const old of replaced) if (old.sessionRef !== saved.sessionRef) {
+          forgetWorkspaceDrafts(old.id);
           await platform.secrets.remove(old.sessionRef);
           await platform.secrets.remove(`relay.${old.id}`);
           await platform.prefs.remove(`dusk.mobile.push.${old.id}`);
-          await moveOutbox(platform, old.id, saved.id);
+          await platform.prefs.remove(outboxKey(old.id));
           // IndexedDB can stall in WKWebView; the saved list never waits on it
           void forgetTranscriptShelf(old.id).catch(() => {});
         }
@@ -185,6 +213,7 @@ export function createConnectionStore(platform: MobilePlatform): ConnectionStore
         await platform.secrets.remove(`token.${id}`);
         await platform.secrets.remove(`relay.${id}`);
         await platform.prefs.remove(`dusk.mobile.push.${id}`);
+        forgetWorkspaceDrafts(id, platform.native && records.every((record) => record.id === id));
         await platform.prefs.remove(outboxKey(id));
         void forgetTranscriptShelf(id).catch(() => {});
         await write(records.filter((entry) => entry.id !== id));

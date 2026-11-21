@@ -193,8 +193,8 @@ function fakeGlass() {
   let listener: ((event: GlassEvent) => void) | null = null;
   const glass = {
     update: vi.fn<(state: GlassState) => void>(),
-    setText: vi.fn<(text: string, seq: number) => void>(),
-    clearText: vi.fn<(id: number) => void>(),
+    setText: vi.fn<(text: string, seq: number, basedOnEdit: number) => void>(),
+    clearText: vi.fn<(id: number, basedOnEdit: number) => void>(),
     setAvatar: vi.fn(),
     focus: vi.fn(),
     blur: vi.fn(),
@@ -457,12 +457,24 @@ describe("useNativeGlass", () => {
     expect(($("field") as HTMLTextAreaElement).value).toBe("");
     runFrame();
     const id = glass.clearText.mock.calls[0]![0];
-    expect(glass.setText).toHaveBeenLastCalledWith("", id);
+    expect(glass.setText).toHaveBeenLastCalledWith("", id, 0);
     send({ type: "text", text: LONG });
     expect(($("field") as HTMLTextAreaElement).value).toBe("");
     expect(glass.clearText.mock.calls.length).toBeGreaterThan(1);
     send({ type: "text", text: "next one" });
     expect(($("field") as HTMLTextAreaElement).value).toBe("next one");
+  });
+
+  it("accepts another message with the same prefix once an older native bridge acknowledges the clear", () => {
+    const { glass, send, $ } = mount();
+    pageSends($);
+    runFrame();
+    send({ type: "text", text: "OK" });
+    send({ type: "button", index: 0, kind: "send" });
+    runFrame();
+    send({ type: "cleared", id: glass.clearText.mock.calls[0]![0] });
+    send({ type: "text", text: "OK thanks" });
+    expect(($("field") as HTMLTextAreaElement).value).toBe("OK thanks");
   });
 
   it("leaves the native field alone when the page does not take the send", () => {
@@ -486,7 +498,7 @@ describe("useNativeGlass", () => {
     expect(glass.clearText).toHaveBeenCalledTimes(1);
     typeInto($("field") as HTMLTextAreaElement, LONG);
     runFrame();
-    expect(glass.setText).toHaveBeenLastCalledWith(LONG, expect.any(Number));
+    expect(glass.setText).toHaveBeenLastCalledWith(LONG, expect.any(Number), 0);
   });
 
   it("types native text into the composer's current field after the page made it anew", () => {
@@ -518,6 +530,33 @@ describe("useNativeGlass", () => {
     expect(glass.setText).toHaveBeenCalledTimes(3);
     const seqs = glass.setText.mock.calls.map((call) => call[1]);
     expect(seqs[1]! > seqs[0]! && seqs[2]! > seqs[1]!).toBe(true);
+  });
+
+  it("keeps the last iPhone keystroke when an older edit arrives late", () => {
+    const { glass, send, $ } = mount();
+    runFrame();
+    const field = $("field") as HTMLTextAreaElement;
+    send({ type: "text", text: "hel", edit: 3 });
+    send({ type: "text", text: "he", edit: 2 });
+    expect(field.value).toBe("hel");
+
+    typeInto(field, "hello");
+    runFrame();
+    expect(glass.setText).toHaveBeenLastCalledWith("hello", expect.any(Number), 3);
+  });
+
+  it("keeps a new message that starts with the text just sent", () => {
+    const { glass, send, $ } = mount();
+    pageSends($);
+    runFrame();
+    const field = $("field") as HTMLTextAreaElement;
+    send({ type: "text", text: "OK", edit: 1 });
+    send({ type: "button", index: 0, kind: "send" });
+    runFrame();
+    expect(glass.clearText).toHaveBeenCalledWith(expect.any(Number), 1);
+    send({ type: "text", text: "OK thanks", edit: 2 });
+    runFrame();
+    expect(field.value).toBe("OK thanks");
   });
 
   // App Store 1.2: each chat counted from 1 again while the native field kept the highest count it had taken, so after

@@ -289,6 +289,7 @@ export interface MobileConnectionRecord {
 /** A place in a workspace, opened by link in either direction. The desktop's own chat links
  * (duskbot://thread/..., duskbot://bot/...) open chats; this adds views and notification targets. */
 export interface MobileOpenTarget {
+  deviceId?: string;
   environmentId?: string;
   botId?: string;
   groupId?: string;
@@ -361,7 +362,7 @@ export function parseMobilePairingLink(link: string): MobilePairingPayload | nul
 /** `duskbot://open?...`: a view or notification target on the phone. */
 export function mobileOpenLink(target: MobileOpenTarget): string {
   const fields: Array<[string, string | undefined]> = [
-    ["env", target.environmentId], ["bot", target.botId], ["group", target.groupId],
+    ["env", target.environmentId], ["device", target.deviceId], ["bot", target.botId], ["group", target.groupId],
     ["thread", target.threadId], ["message", target.messageId], ["view", target.view],
   ];
   const query = fields.filter(([, value]) => value).map(([key, value]) => `${key}=${encodeURIComponent(value!)}`).join("&");
@@ -461,7 +462,7 @@ export function parseMobileOpenLink(link: string): MobileOpenTarget | null {
   const id = (key: string) => { const value = q.get(key); return value && /^[A-Za-z0-9_.:-]{1,200}$/.test(value) ? value : undefined; };
   const view = q.get("view") as MobileOpenTarget["view"] | null;
   const target: MobileOpenTarget = {
-    environmentId: id("env"), botId: id("bot"), groupId: id("group"), threadId: id("thread"), messageId: id("message"),
+    environmentId: id("env"), deviceId: id("device"), botId: id("bot"), groupId: id("group"), threadId: id("thread"), messageId: id("message"),
     view: view && VIEWS.has(view) ? view : undefined,
   };
   for (const key of Object.keys(target) as (keyof MobileOpenTarget)[]) if (target[key] === undefined) delete target[key];

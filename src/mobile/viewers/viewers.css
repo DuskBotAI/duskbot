@@ -1,4 +1,4 @@
-.code-viewer { counter-reset: line; overscroll-behavior-x: contain; touch-action: pan-x pan-y; -webkit-overflow-scrolling: touch; }
+.code-viewer { counter-reset: line; overscroll-behavior-x: contain; touch-action: manipulation; -webkit-overflow-scrolling: touch; }
 .code-viewer pre { font-family: var(--font-mono); font-size: 13px; line-height: 1.6; padding-inline-end: 20px; }
 .code-viewer .line { display: block; padding-inline-start: 4.5ch; text-indent: -4.5ch; }
 .code-viewer .line::before {
@@ -40,7 +40,7 @@
 
 .dusk-mobile .mobile-sheet { padding-inline: var(--m-safe-left) var(--m-safe-right); }
 
-.table-viewer { touch-action: pan-x pan-y; }
+.table-viewer { touch-action: manipulation; }
 .table-viewer-edge { background: linear-gradient(to right, transparent, var(--m-sheet-page, var(--color-app))); transition: opacity 160ms ease; }
 .table-viewer-edge:dir(rtl) { background: linear-gradient(to left, transparent, var(--m-sheet-page, var(--color-app))); }
 .table-viewer-hint > span { animation: viewer-note-in 200ms cubic-bezier(0.22, 1, 0.36, 1); }

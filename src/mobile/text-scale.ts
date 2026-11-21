@@ -2,9 +2,8 @@ import type { MobilePlatform } from "./platform";
 
 /** the system body size at the default Larger Text setting, in css px */
 const DEFAULT_BODY_PX = 17;
-/** the largest and smallest the app's text follows the setting to: its rows grow with their text, its bars do not */
+/** the minimum scale for the system text setting */
 export const TEXT_SCALE_MIN = 0.9;
-export const TEXT_SCALE_MAX = 1.35;
 
 /** The phone's text size: the phone's own setting, or one picked in the app. */
 export type TextSize = "system" | "small" | "default" | "large" | "larger";
@@ -16,7 +15,7 @@ const listeners = new Set<() => void>();
 /** The app's text zoom for a measured system body size. */
 export function textScaleFor(bodyPx: number): number {
   if (!Number.isFinite(bodyPx) || bodyPx <= 0) return 1;
-  return Math.min(TEXT_SCALE_MAX, Math.max(TEXT_SCALE_MIN, Math.round((bodyPx / DEFAULT_BODY_PX) * 100) / 100));
+  return Math.max(TEXT_SCALE_MIN, Math.round((bodyPx / DEFAULT_BODY_PX) * 100) / 100);
 }
 
 /** The zoom a choice gives: a picked size is fixed; the phone's own setting is read on iOS, where a web view's text does

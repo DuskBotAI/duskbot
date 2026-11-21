@@ -81,6 +81,21 @@ it("a Keychain it cannot read at launch (a locked phone) never shows the sign-in
   await act(async () => { resume?.(); await new Promise((done) => setTimeout(done, 0)); });
   expect(host.textContent).toBe(signedIn);
 });
+it.each([401, 503, 200])("only removes a saved cloud after confirmed account deletion (HTTP %s)", async (status) => {
+  save();
+  const place = { id: "cloud", environmentId: "env", sessionRef: "token.cloud", transport: "https", origin: "https://d0123456789abcdef0123.dusk.bot" };
+  prefs.set("dusk.mobile.connections.v1", JSON.stringify([place]));
+  secrets.set(place.sessionRef, "fixture-session");
+  fetcher.mockResolvedValue(response({}));
+  let context: ReturnType<typeof useMobileAccount>;
+  function DeleteProbe() { context = useMobileAccount(); return null; }
+  await mount(createElement(DeleteProbe));
+  fetcher.mockImplementation(async () => response({ ok: status === 200 }, status));
+  await act(async () => { expect(await context!.deleteAccount()).toBe(status === 200); });
+  expect(secrets.has(place.sessionRef)).toBe(status !== 200);
+  expect(context!.account?.id).toBe(status === 503 ? account.id : undefined);
+});
+
 it("shows the saved sign-in before the service answers, and stays signed in when the check fails", async () => {
   save();
   let answer: (value: Response) => void = () => {};

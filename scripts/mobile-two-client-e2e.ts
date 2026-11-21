@@ -62,13 +62,13 @@ async function waitFor(what: () => Promise<boolean>, ms: number): Promise<boolea
 
 const shows = (page: HeadlessPage, text: string, ms = 20_000) => waitFor(() => page.evaluate(`document.body.innerText.includes(${JSON.stringify(text)})`), ms);
 const gone = (page: HeadlessPage, text: string, ms = 20_000) => waitFor(async () => !(await page.evaluate(`document.body.innerText.includes(${JSON.stringify(text)})`)), ms);
-const clickText = (page: HeadlessPage, text: string, within = "document") => page.evaluate(`(() => {
-  const all = [...${within}.querySelectorAll("button, a, [role=button], [role=option], [role=treeitem]")];
-  const hit = all.filter((el) => el.innerText && el.innerText.includes(${JSON.stringify(text)})).sort((a, b) => a.innerText.length - b.innerText.length)[0];
-  if (!hit) return false;
-  hit.click();
+const openPhoneBot = (page: HeadlessPage, name: string) => waitFor(() => page.evaluate(`(() => {
+  if (document.querySelector("[data-mobile-chat]")) return false;
+  const row = [...document.querySelectorAll("li[data-flip-key] button.mobile-row")].find((el) => el.innerText.includes(${JSON.stringify(name)}));
+  if (!row) return false;
+  row.click();
   return true;
-})()`);
+})()`), 15_000);
 
 /** A real pointer press on the smallest thing showing `text`: the desktop's rows answer the pointer, not a synthetic click. */
 async function press(page: HeadlessPage, text: string): Promise<boolean> {
@@ -97,6 +97,12 @@ async function send(page: HeadlessPage, text: string, scope = "document"): Promi
     return true;
   })()`);
   if (!typed) return false;
+  if (scope !== "document") return waitFor(() => page.evaluate(`(() => {
+    const button = ${scope}?.querySelector("[data-composer-send]:not(:disabled)");
+    if (!button) return false;
+    button.click();
+    return true;
+  })()`), 5000);
   await delay(250);
   await page.send("Input.dispatchKeyEvent", { type: "keyDown", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13, nativeVirtualKeyCode: 13 });
   await page.send("Input.dispatchKeyEvent", { type: "keyUp", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13, nativeVirtualKeyCode: 13 });
@@ -145,8 +151,9 @@ async function main() {
   check("desktop lists the bot", await shows(desktop, "Sync Bot", 90_000));
   check("phone lists the bot", await shows(phone, "Sync Bot", 90_000));
 
+  await phone.evaluate(`[...document.querySelectorAll("[data-ai-consent] button")].find((el) => el.textContent.trim() === "Allow")?.click()`);
   check("desktop opens the chat", await press(desktop, "Sync Bot") && await composerFor(desktop, "Sync Bot"));
-  check("phone opens the chat", await clickText(phone, "Sync Bot") && await waitFor(() => phone.evaluate(`Boolean(document.querySelector("[data-mobile-chat] textarea"))`), 20_000));
+  check("phone opens the chat", await openPhoneBot(phone, "Sync Bot") && await waitFor(() => phone.evaluate(`Boolean(document.querySelector("[data-mobile-chat] textarea"))`), 20_000));
   await delay(1200);
 
   const fromPhone = `from the phone ${randomUUID().slice(0, 8)}`;
@@ -178,7 +185,7 @@ async function main() {
   check("a reply nobody is looking at is unread on the server", await waitFor(async () => (await threadTexts(botId)).bot.unread === true, 20_000));
   check("the phone's list marks the chat unread", await waitFor(() => phone.evaluate(`Boolean([...document.querySelectorAll("button[aria-label]")].find((el) => el.getAttribute("aria-label").includes("Sync Bot") && /unread/i.test(el.getAttribute("aria-label"))))`), 15_000));
   check("the phone's preview is the newest reply", await waitFor(() => phone.evaluate(`[...document.querySelectorAll("button")].some((el) => el.innerText.includes("Sync Bot") && el.innerText.includes("hello from the fixture bot"))`), 15_000));
-  await clickText(phone, "Sync Bot");
+  await openPhoneBot(phone, "Sync Bot");
   check("opening it on the phone reads it for every client", await waitFor(async () => (await threadTexts(botId)).bot.unread === false, 15_000));
   check("the desktop got the message sent while it looked elsewhere", await press(desktop, "Sync Bot") && await composerFor(desktop, "Sync Bot") && await shows(desktop, nudge));
 
@@ -192,7 +199,7 @@ async function main() {
   check("a deleted bot leaves the desktop", await gone(desktop, "Renamed Bot"));
 
   // the outbox: written with no connection, sent once when it returns
-  await clickText(phone, "Sync Bot");
+  await openPhoneBot(phone, "Sync Bot");
   await waitFor(() => phone.evaluate(`Boolean(document.querySelector("[data-mobile-chat] textarea"))`), 15_000);
   await delay(1000);
   await phone.send("Network.enable");

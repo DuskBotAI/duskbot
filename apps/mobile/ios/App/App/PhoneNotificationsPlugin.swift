@@ -40,6 +40,7 @@ public class PhoneNotificationsPlugin: CAPPlugin, CAPBridgedPlugin {
     public let identifier = "PhoneNotificationsPlugin"
     public let jsName = "DuskNotifications"
     public let pluginMethods: [CAPPluginMethod] = [
+        CAPPluginMethod(name: "environment", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "setViewing", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "delivered", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "remove", returnType: CAPPluginReturnPromise),
@@ -47,6 +48,28 @@ public class PhoneNotificationsPlugin: CAPPlugin, CAPBridgedPlugin {
 
     override public func load() {
         DispatchQueue.main.async { ForegroundNotificationDelegate.shared.install() }
+    }
+
+    @objc func environment(_ call: CAPPluginCall) {
+        guard let profile = Bundle.main.url(forResource: "embedded", withExtension: "mobileprovision") else {
+            #if targetEnvironment(simulator)
+            call.resolve(["value": "sandbox"])
+            #else
+            // App Store and TestFlight strip the embedded provisioning profile.
+            call.resolve(["value": "production"])
+            #endif
+            return
+        }
+        guard let data = try? Data(contentsOf: profile),
+              let start = data.range(of: Data("<?xml".utf8)),
+              let end = data.range(of: Data("</plist>".utf8), in: start.lowerBound..<data.endIndex),
+              let plist = try? PropertyListSerialization.propertyList(from: data[start.lowerBound..<end.upperBound], format: nil) as? [String: Any],
+              let entitlements = plist["Entitlements"] as? [String: Any],
+              let value = entitlements["aps-environment"] as? String, ["development", "production"].contains(value) else {
+            call.resolve([:])
+            return
+        }
+        call.resolve(["value": value == "development" ? "sandbox" : "production"])
     }
 
     @objc func setViewing(_ call: CAPPluginCall) {

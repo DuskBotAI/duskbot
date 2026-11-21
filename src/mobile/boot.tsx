@@ -1,5 +1,6 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
+import { activeLocale } from "@/lib/i18n";
 import { productName } from "@/lib/brand";
 import { loadPageLanguage } from "@/lib/language-preference";
 import { applySkinChoice, readSkinChoice, THEME_SKINS, type SkinChoice } from "@/lib/skins";
@@ -49,8 +50,6 @@ export function mountMobile(platform: MobilePlatform): void {
   const showMenu = platform.showMenu;
   if (showMenu) installSystemMenu((anchor, items) => showMenu({ x: anchor.left, y: anchor.top, width: anchor.width, height: anchor.height }, items));
   document.documentElement.dataset.mobileApp = platform.kind;
-  // the app never zooms: webkit's pinch gestures are stopped, a double tap never scales
-  for (const type of ["gesturestart", "gesturechange", "gestureend"]) document.addEventListener(type, (event) => event.preventDefault(), { passive: false });
   if (platform.kind === "ios" || params.has("frame")) document.documentElement.dataset.mobileGlass = "";
   applySkinChoice(phoneSkin(params));
   applyFont(readFont());
@@ -61,8 +60,13 @@ export function mountMobile(platform: MobilePlatform): void {
   // the install is claimed before anything this launch writes a preference, which would make a new install look like an
   // update; what an earlier build kept under its old names moves before anything reads it
   const storage = platform.native ? claimFreshInstall(platform).then(() => moveLegacyStorage(platform)).catch(() => {}) : null;
-  void Promise.all([storage, loadPageLanguage(), installHaptics(platform), installLiveActivitySetting(platform)]).then(() => {
-    createRoot(document.getElementById("root")!).render(
+  void Promise.resolve(storage).then(() => {
+    const language = loadPageLanguage();
+    void installHaptics(platform).catch(() => {});
+    void installLiveActivitySetting(platform).catch(() => {});
+    const initialLocale = activeLocale();
+    const root = createRoot(document.getElementById("root")!);
+    const render = () => root.render(
       <StrictMode>
         <PageBoundary>
           <PlatformContext value={platform}>
@@ -75,5 +79,7 @@ export function mountMobile(platform: MobilePlatform): void {
         </PageBoundary>
       </StrictMode>,
     );
+    render();
+    void language.then(() => { if (activeLocale() !== initialLocale) render(); }).catch(() => {});
   });
 }

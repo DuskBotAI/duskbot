@@ -104,7 +104,7 @@ export function Onboarding({ initial = null, initialSignIn, reason = null, start
   /** Linking another computer from inside the app: a way back out. */
   startAtLink?: boolean;
   reason?: "revoked" | null;
-  onLinked(record: MobileConnectionRecord, token: string, name: string): void | Promise<void>;
+  onLinked(record: MobileConnectionRecord, token: string, name: string, signal: AbortSignal): void | Promise<void>;
   onCancel?: () => void;
 }) {
   const platform = usePlatform();
@@ -135,7 +135,6 @@ export function Onboarding({ initial = null, initialSignIn, reason = null, start
   const [withComputers, setWithComputers] = useState(false);
   const [value, setValue] = useState(() => signInCode ? formatCode(signInCode) : "");
   const [signInEmail, setSignInEmail] = useState(email ?? "");
-  const locked = useRef(false);
   const fieldId = useId();
   const codeField = useRef<HTMLInputElement>(null);
   const caret = useRef<number | null>(null);
@@ -154,20 +153,20 @@ export function Onboarding({ initial = null, initialSignIn, reason = null, start
   }, [platform, step]);
 
   // the link under way: any way out of its screen (Cancel, Back, closing the scanner) stops it, and its answer is dropped
+  const locked = useRef(false);
   const attempt = useRef<AbortController | null>(null);
+  useEffect(() => () => attempt.current?.abort(), []);
   const cancelLink = () => {
     if (!attempt.current) return;
     attempt.current.abort();
     attempt.current = null;
-    locked.current = false;
     setBusy(false);
   };
   const go = (next: Step) => { cancelLink(); setFailure(null); setScanFailed(false); setValue(""); setStep(next); };
   const [cameraDenied, setCameraDenied] = useState(false);
 
   const redeem = async (text: string | TypedPairing, from: Step) => {
-    if (locked.current) return;
-    locked.current = true;
+    if (locked.current || (attempt.current && !attempt.current.signal.aborted)) return;
     const controller = new AbortController();
     attempt.current = controller;
     const live = () => !controller.signal.aborted;
@@ -193,7 +192,7 @@ export function Onboarding({ initial = null, initialSignIn, reason = null, start
       // the code's lookup, the sign-in the QR carries and the pairing share one deadline; its end stops their requests
       const work = new AbortController();
       const result = await linkDeadline((async () => {
-        if (!payload && typedCode) payload = await resolveTypedCode(typedCode);
+        if (!payload && typedCode) payload = await resolveTypedCode(typedCode, undefined, work.signal);
         if (!payload) throw new PairError("invalid");
         if (carried && !(await signInWithPairing(carried, payload))) return null;
         return redeemPairing(payload, platform, work.signal);
@@ -203,7 +202,8 @@ export function Onboarding({ initial = null, initialSignIn, reason = null, start
       const choices = carried && account ? await placesBeside(result.record) : [];
       if (!live()) return;
       if (choices.length) { setPlacePick({ ...result, name, choices }); setPlaceProblem(null); setStep("place"); return; }
-      await linkDeadline(Promise.resolve(onLinked(result.record, result.token, name)), LINK_DEADLINE_MS + 5_000);
+      const signal = AbortSignal.any([controller.signal, AbortSignal.timeout(LINK_DEADLINE_MS + 5_000)]);
+      await linkDeadline(Promise.resolve(onLinked(result.record, result.token, name, signal)), LINK_DEADLINE_MS + 5_000, signal);
     } catch (error) {
       if (!live()) return;
       haptic("error");
@@ -212,7 +212,6 @@ export function Onboarding({ initial = null, initialSignIn, reason = null, start
     } finally {
       if (attempt.current === controller) {
         attempt.current = null;
-        locked.current = false;
         setBusy(false);
       }
     }
@@ -230,7 +229,16 @@ export function Onboarding({ initial = null, initialSignIn, reason = null, start
     setPlaceProblem(null);
     setPlaceBusy(choice?.key ?? "computer");
     try {
-      if (!choice) { await onLinked(pick.record, pick.token, pick.name); return; }
+      if (!choice) {
+        const controller = new AbortController();
+        attempt.current = controller;
+        try {
+          await onLinked(pick.record, pick.token, pick.name, AbortSignal.any([controller.signal, AbortSignal.timeout(LINK_DEADLINE_MS + 5_000)]));
+        } finally {
+          if (attempt.current === controller) attempt.current = null;
+        }
+        return;
+      }
       await onKept?.(pick.record, pick.token);
       if (choice.target.kind === "kept") { onOpen?.(choice.target.id); return; }
       const target = choice.target;
@@ -283,7 +291,7 @@ export function Onboarding({ initial = null, initialSignIn, reason = null, start
   };
   const confirmSwitch = async () => {
     const qr = switchTo;
-    if (!qr || !account || locked.current) return;
+    if (!qr || !account || locked.current || attempt.current) return;
     locked.current = true;
     setBusy(true);
     try {
@@ -313,8 +321,14 @@ export function Onboarding({ initial = null, initialSignIn, reason = null, start
   const linkCode = useRef(signInCode);
   useEffect(() => {
     const code = linkCode.current;
-    linkCode.current = undefined;
-    if (code) void redeem(email ? universalSignInLink(email, code, null, signInCloud) : code, "code");
+    if (!code) return;
+    let mounted = true;
+    queueMicrotask(() => {
+      if (!mounted || linkCode.current !== code) return;
+      linkCode.current = undefined;
+      void redeem(email ? universalSignInLink(email, code, null, signInCloud) : code, "code");
+    });
+    return () => { mounted = false; };
   }, []);
 
   // the system's own camera question comes up over this screen the moment the scanner is asked for; a no stays here, said

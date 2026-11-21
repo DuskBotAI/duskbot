@@ -179,7 +179,11 @@ export function createMobileLink(deps: MobileLinkDeps) {
   }
   const activities = createTurnActivities({
     now,
-    send: (target, message) => push.sendActivity?.({ service: "apns", ...target }, message) ?? Promise.resolve("skipped"),
+    send: (target, message) => {
+      const environmentId = workspace().environmentId;
+      const attributes = message.attributes && { ...message.attributes, ...(environmentId ? { environmentId } : {}) };
+      return push.sendActivity?.({ service: "apns", ...target }, attributes ? { ...message, attributes } : message) ?? Promise.resolve("skipped");
+    },
     startTargets: () => {
       const live = new Set(deps.sessions.list().map((session) => session.id));
       return devices.flatMap((device) => device.activityStart && live.has(device.sessionId) && presence.away(device.id)
@@ -192,7 +196,7 @@ export function createMobileLink(deps: MobileLinkDeps) {
   function deliver(device: DeviceRecord, message: PushMessage, attempt = 0): Promise<void> {
     const registration = device.push;
     if (!registration) return Promise.resolve();
-    return push.send({ service: registration.service, token: registration.token, ...(registration.environment ? { environment: registration.environment } : {}) }, message)
+    return push.send({ service: registration.service, token: registration.token, ...(registration.environment ? { environment: registration.environment } : {}) }, { ...message, deviceId: device.id })
       .catch(() => "failed" as const)
       .then((outcome) => {
         if (outcome === "gone" && device.push === registration) { device.push = null; persist(); }
@@ -464,7 +468,8 @@ export function createMobileLink(deps: MobileLinkDeps) {
     const targets = devices.filter((device) => device.push);
     if (!targets.length) return;
     const sessions = new Map(deps.sessions.list().map((session) => [session.id, session]));
-    const message: PushMessage = { id: notification.id, kind: notification.kind, title: notification.title, botId: notification.botId, botName: notification.botName, threadId: notification.threadId, ...(notification.groupId ? { groupId: notification.groupId } : {}), ...(notification.requestId ? { requestId: notification.requestId } : {}) };
+    const environmentId = workspace().environmentId;
+    const message: PushMessage = { ...(environmentId ? { environmentId } : {}), id: notification.id, kind: notification.kind, title: notification.title, botId: notification.botId, botName: notification.botName, threadId: notification.threadId, ...(notification.groupId ? { groupId: notification.groupId } : {}), ...(notification.requestId ? { requestId: notification.requestId } : {}) };
     await Promise.all(targets.map((device) => {
       const session = sessions.get(device.sessionId);
       if (!session || (options.adminOnly && !session.scopes.includes("admin")) || !device.push) return;

@@ -9822,6 +9822,7 @@
   "mobile.settings.signOutKeepsComputers": "Your dusk clouds leave this phone, with their notifications and the chats saved here. Computers you linked with a QR or code stay.",
   "mobile.settings.removeComputer": "Remove this computer",
   "mobile.settings.removeComputerTitle": "Remove {name} from this phone?",
+  "mobile.settings.removedLocally": "Removed from this phone. The computer could not confirm removal. Open Settings › Phone on the computer to check its paired devices.",
   "mobile.settings.removeComputerBody": "This phone stops reaching {name}, and the chats saved here are cleared. You can link it again with its QR or code.",
   "mobile.settings.removeComputerAction": "Remove",
   "mobile.settings.placeActions": "More options for {name}",

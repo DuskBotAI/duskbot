@@ -200,13 +200,13 @@ export function pairError(error: unknown): PairError {
   return error instanceof PairError ? error : new PairError(error instanceof UnsupportedCryptoError ? "unsupported" : "unreachable");
 }
 
-async function resolveTypedCodeResult(code: string, relayBase = DEFAULT_MOBILE_RELAY): Promise<MobilePairingPayload> {
+async function resolveTypedCodeResult(code: string, relayBase: string, signal: AbortSignal): Promise<MobilePairingPayload> {
   const normalized = code.replace(/[-\s]/g, "").toUpperCase();
   if (!/^[A-Z0-9]{12}$/.test(normalized)) throw new PairError("invalid");
   try {
     const id = hex(await hkdf(utf8(normalized), MOBILE_LOOKUP_SALT, "lookup", 16));
     const key = await hkdf(utf8(normalized), MOBILE_LOOKUP_SALT, "seal", 32);
-    const response = await fetch(`${relayBase.replace(/\/$/, "")}/v1/lookups/${id}`, { credentials: "omit", redirect: "error", signal: AbortSignal.timeout(15_000) });
+    const response = await fetch(`${relayBase.replace(/\/$/, "")}/v1/lookups/${id}`, { credentials: "omit", redirect: "error", signal: AbortSignal.any([signal, AbortSignal.timeout(15_000)]) });
     // the relay forgets a lookup when its code ends, and never had one for a code made elsewhere (a browser's /pair code)
     if (response.status === 404) throw new PairError("unknown");
     if (!response.ok) throw responseError(response.status, await answerOf(response));
@@ -317,6 +317,6 @@ async function redeemPairingResult(payload: MobilePairingPayload, platform: Mobi
   } catch (error) { throw pairError(error); }
 }
 
-export const resolveTypedCode = (code: string, relayBase = DEFAULT_MOBILE_RELAY) => observePairing(() => linkDeadline(resolveTypedCodeResult(code, relayBase)));
+export const resolveTypedCode = (code: string, relayBase = DEFAULT_MOBILE_RELAY, signal = AbortSignal.timeout(LINK_DEADLINE_MS)) => observePairing(() => linkDeadline(resolveTypedCodeResult(code, relayBase, signal), LINK_DEADLINE_MS, signal));
 export const redeemPairing = (payload: MobilePairingPayload, platform: MobilePlatform, signal?: AbortSignal) =>
   observePairing(() => linkDeadline(redeemPairingResult(payload, platform, signal), LINK_DEADLINE_MS, signal));

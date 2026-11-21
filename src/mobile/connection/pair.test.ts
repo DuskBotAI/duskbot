@@ -485,6 +485,41 @@ describe("workspace reconnect", () => {
     expect(deleted).toEqual([`dusk-transcripts.${record.id}`]);
   });
 
+  it("retains the original active connection if Back arrives during the activation write", async () => {
+    const { record, token, platform } = await saved();
+    const store = createConnectionStore(platform);
+    await store.save(record, token);
+    const again = { ...record, id: "canceled", sessionRef: "token.canceled" };
+    const controller = new AbortController(), activated = vi.fn();
+    const write = platform.prefs.set;
+    vi.spyOn(platform.prefs, "set").mockImplementation(async (key, value) => {
+      await write(key, value);
+      if (key === "dusk.mobile.active.v1" && value === again.id) controller.abort();
+    });
+    await expect(store.save(again, "new-token", { signal: controller.signal, onActive: activated })).rejects.toThrow();
+    expect(activated).not.toHaveBeenCalled();
+    expect((await store.active())?.record.id).toBe(record.id);
+    expect(await platform.secrets.get(again.sessionRef)).toBeNull();
+  });
+
+  it("can retry an interrupted re-pair without losing or duplicating either outbox", async () => {
+    const { record, token, platform, preferences } = await saved();
+    const store = createConnectionStore(platform);
+    await store.save(record, token);
+    const again = { ...record, id: "replacement", sessionRef: "token.replacement" };
+    const entry = (sendId: string, at: number) => ({ kind: "bot", ownerId: "b", threadId: "t", text: sendId, sendId, at, tries: 0 });
+    const a = entry("old", 1), b = entry("shared", 2), c = entry("new", 3);
+    preferences.set(outboxKey(record.id), JSON.stringify([a, b]));
+    preferences.set(outboxKey(again.id), JSON.stringify([b, c]));
+    vi.spyOn(platform.prefs, "set").mockRejectedValueOnce(new Error("disk full"));
+    await expect(store.save(again, "replacement-token")).rejects.toThrow("disk full");
+    expect((await store.active())?.record.id).toBe(record.id);
+    expect(preferences.has(outboxKey(record.id))).toBe(true);
+    await store.save(again, "replacement-token");
+    expect(JSON.parse(preferences.get(outboxKey(again.id))!)).toEqual([a, b, c]);
+    expect(preferences.has(outboxKey(record.id))).toBe(false);
+  });
+
   it("replaces a dusk cloud linked again at its new address, and keeps two places that only share an address fallback", async () => {
     const { record, token, platform, preferences } = await saved();
     deletedShelves();
@@ -509,6 +544,7 @@ describe("push registration", () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(response(v2Answer())));
     const { record, token } = await redeemPairing(pairingFromPayload(v2Payload()), platform);
     await createConnectionStore(platform).save(record, token);
+    platform.apnsEnvironment = "sandbox";
     platform.registerPush = vi.fn().mockResolvedValue({ platform: "apns", token: "push-device-token" });
     const registered = { push: "apns" as string | null };
     const fetcher = vi.fn(async (path: string) => response(path === "/api/mobile/device" ? { device: { push: registered.push } } : { ok: true }));
@@ -527,6 +563,7 @@ describe("push registration", () => {
     expect(platform.registerPush).toHaveBeenCalledWith({ prompt: false });
     await registerPushForConnection(platform, { prompt: true });
     expect(platform.registerPush).toHaveBeenLastCalledWith({ prompt: true });
+    platform.apnsEnvironment = "sandbox";
     platform.registerPush = vi.fn().mockResolvedValue({ platform: "fcm", token: "new-token" });
     await registerPushForConnection(platform);
     expect(JSON.parse(puts(fetcher)[1][1].body)).toEqual({ service: "fcm", token: "new-token" });

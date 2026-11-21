@@ -13,7 +13,7 @@ import { closeConnectApps, connectAppsState } from "@/components/connect-apps/op
 import { openChatLink } from "@/components/ThreadRefs";
 import { parseBotRefUrl, parseThreadRefUrl } from "@/lib/thread-refs"; import { completeSlackOAuth } from "@/lib/slack-oauth-link"; import { parseSlackOAuthLink } from "../../shared/slack";
 import { effectiveLanguage, useLanguageChoice, usePageLanguage } from "@/lib/language-preference";
-import { parseMobileOpenLink, type MobileOpenTarget } from "../../shared/mobile-link";
+import { type MobileOpenTarget } from "../../shared/mobile-link";
 import { setChatCovered } from "@/lib/chat-in-front";
 import { readSkinChoice, subscribeSkin, THEME_SKINS } from "@/lib/skins";
 import { AiConsentProvider, AiConsentSheet } from "./consent/AiConsent";
@@ -167,7 +167,7 @@ function Shell() {
   }, [sheetOpen]);
 
   const openTarget = useCallback((target: MobileOpenTarget) => {
-    const id = target.botId ?? target.groupId;
+    const id = target.groupId ?? target.botId;
     const elsewhere = id ? placeForTarget(target.environmentId, saved.current.connections, place) : null;
     if (id && elsewhere) { rememberOpenChat(id, elsewhere); void saved.current.switchTo(elsewhere); return; }
     if (id) {
@@ -186,8 +186,6 @@ function Shell() {
 
   useEffect(() => platform.onAppUrl?.((url) => {
     if (parseSlackOAuthLink(url)) { void completeSlackOAuth(url); return true; }
-    const target = parseMobileOpenLink(url);
-    if (target) { openTarget(target); return true; }
     // the desktop's own chat links open the same chat here
     const bot = parseBotRefUrl(url);
     const thread = parseThreadRefUrl(url);
@@ -198,9 +196,8 @@ function Shell() {
       if (owner) setChatId(owner);
     }
     return true;
-  }), [platform, openTarget, dispatch]);
-  useEffect(() => platform.onNotificationOpen?.(openTarget), [platform, openTarget]);
-  usePhoneActions(platform, state, dispatch, openTarget);
+  }), [platform, dispatch]);
+  usePhoneActions(state, dispatch, openTarget);
   useShortcuts({ platform, state, dispatch, place, connections: places.connections, loaded: places.loaded, switchTo: places.switchTo, openChat });
 
   // registered once, so a layer that opens later (a full screen computer, adding a place) is asked before it

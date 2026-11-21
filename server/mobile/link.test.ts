@@ -262,7 +262,7 @@ describe("mobile link", () => {
     expect((await call(mobile, auth, "PUT", "/api/mobile/push", { service: "apns", token: "abcdef0123456789", environment: "sandbox" })).body).toEqual({ ok: true, delivering: true });
     await mobile.notify({ id: "n1", at: 1, read: false, kind: "mention", botId: "b1", botName: "Nova", threadId: "t1", title: "Nova", body: "secret text" });
     await vi.advanceTimersByTimeAsync(PUSH_GRACE_MS);
-    expect(sent).toEqual([{ target: { service: "apns", token: "abcdef0123456789", environment: "sandbox" }, message: { id: "n1", kind: "mention", title: "Nova", botId: "b1", botName: "Nova", threadId: "t1" } }]);
+    expect(sent).toEqual([{ target: { service: "apns", token: "abcdef0123456789", environment: "sandbox" }, message: { id: "n1", deviceId: phone.device.id, environmentId: "env-1", kind: "mention", title: "Nova", botId: "b1", botName: "Nova", threadId: "t1" } }]);
     await mobile.notify({ id: "n1", at: 1, read: false, kind: "mention", botId: "b1", botName: "Nova", threadId: "t1", title: "Nova", body: "again" });
     await vi.advanceTimersByTimeAsync(PUSH_GRACE_MS);
     expect(sent).toHaveLength(1);

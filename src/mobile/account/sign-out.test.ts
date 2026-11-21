@@ -126,9 +126,16 @@ describe("two accounts, each with its own dusk cloud", () => {
 });
 
 describe("removing this computer", () => {
+  it("revokes through the native phone's saved HTTP companion", async () => {
+    const origin = "http://192.168.1.10:4100";
+    save([{ ...mac, transport: "companion", origin }], mac.id);
+    expect((await removePlace(platform, mac.id, fetcher)).revoked).toBe(true);
+    expect(fetcher).toHaveBeenCalledWith(origin + "/api/mobile/devices/device-mac", expect.objectContaining({ method: "DELETE" }));
+  });
+
   it("ends the pairing there and here, and opens what is left", async () => {
     save([box, mac], "box");
-    expect(await removePlace(platform, "box", fetcher)).toBe("workspace");
+    expect(await removePlace(platform, "box", fetcher)).toEqual({ landing: "workspace", revoked: true });
     expect(fetcher).toHaveBeenCalledWith("https://box.example.org/api/mobile/devices/device-box", expect.objectContaining({ method: "DELETE" }));
     expect(saved()).toEqual(["mac"]);
     expect(prefs.get(ACTIVE)).toBe("mac");
@@ -137,8 +144,8 @@ describe("removing this computer", () => {
 
   it("the last one leaves the phone on its first screen", async () => {
     save([mac], "mac");
-    expect(await removePlace(platform, "mac", fetcher)).toBe("first-screen");
-    expect(fetcher, "a relay-only computer has no address to ask").not.toHaveBeenCalled();
+    expect(await removePlace(platform, "mac", fetcher)).toEqual({ landing: "first-screen", revoked: false });
+    expect(fetcher, "missing relay keys cannot confirm remote removal").not.toHaveBeenCalled();
     expect(saved()).toEqual([]);
   });
 });

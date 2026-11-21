@@ -58,9 +58,9 @@ describe("swipe a message to reply", () => {
     expect(replyRowAt(document.getElementById("pre"), 120)).toBeNull();
   });
 
-  it("slides the row with a transform, taps once at the threshold and opens the reply on release", () => {
+  it("slides the row with a transform, taps once at the threshold and opens the reply on release", async () => {
     const platform = { haptic: vi.fn(), prefs: { get: async () => null, set: async () => {} } } as unknown as MobilePlatform;
-    void installHaptics(platform);
+    await installHaptics(platform);
     const { chat, onReply, row } = chatWith();
     const stop = installSwipeReply(chat);
     fire("text", "touchstart", 100, 300);

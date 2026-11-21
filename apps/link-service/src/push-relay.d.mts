@@ -1,6 +1,6 @@
 import type { TurnActivityAttributes, TurnActivityState } from "../../../shared/phone-activity.ts";
 
-export interface RelayPushMessage { id: string; kind: string; botId: string; botName: string; threadId: string; groupId?: string; requestId?: string }
+export interface RelayPushMessage { id: string; kind: string; botId: string; botName: string; threadId: string; environmentId?: string; deviceId?: string; groupId?: string; requestId?: string }
 export interface RelayActivityPush {
   event: "update" | "end" | "start";
   state: Omit<TurnActivityState, "line">;

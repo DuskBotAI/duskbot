@@ -29,6 +29,8 @@ struct DuskTurnAttributes: ActivityAttributes {
     }
 
     var botId: String
+    var environmentId: String?
+    var deviceId: String?
     var botName: String
     var threadId: String
     var groupId: String?
@@ -138,12 +140,15 @@ struct CloseTurnActivityIntent: LiveActivityIntent {
 
     init() {}
 
-    init(threadId: String) {
+    @Parameter(title: "Device") var deviceId: String?
+
+    init(threadId: String, deviceId: String?) {
+        self.deviceId = deviceId
         self.threadId = threadId
     }
 
     func perform() async throws -> some IntentResult {
-        for activity in Activity<DuskTurnAttributes>.activities where activity.attributes.threadId == threadId {
+        for activity in Activity<DuskTurnAttributes>.activities where activity.attributes.threadId == threadId && activity.attributes.deviceId == deviceId {
             await activity.end(nil, dismissalPolicy: .immediate)
         }
         return .result()
@@ -160,19 +165,25 @@ struct ApproveAskIntent: LiveActivityIntent {
     @Parameter(title: "Ask") var requestId: String
     @Parameter(title: "Conversation") var threadId: String
     @Parameter(title: "Bot") var botId: String
+    @Parameter(title: "Workspace") var environmentId: String?
+    @Parameter(title: "Device") var deviceId: String?
     @Parameter(title: "Room") var groupId: String
 
     init() {}
 
-    init(requestId: String, threadId: String, botId: String, groupId: String?) {
+    init(requestId: String, threadId: String, botId: String, groupId: String?, environmentId: String?, deviceId: String?) {
         self.requestId = requestId
         self.threadId = threadId
         self.botId = botId
         self.groupId = groupId ?? ""
+        self.environmentId = environmentId
+        self.deviceId = deviceId
     }
 
     func perform() async throws -> some IntentResult {
         var data: [String: Any] = ["requestId": requestId, "threadId": threadId, "botId": botId]
+        data["environmentId"] = environmentId
+        data["deviceId"] = deviceId
         if !groupId.isEmpty { data["groupId"] = groupId }
         PhoneActionInbox.post(["actionId": "dusk.approve", "data": data])
         return .result()

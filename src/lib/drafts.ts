@@ -1,5 +1,7 @@
-import { useCallback, useEffect, useState, useSyncExternalStore, type SetStateAction } from "react";
+import { useCallback, useContext, useEffect, useState, useSyncExternalStore, type SetStateAction } from "react";
 import { attachmentUnsent, isAttachment, type Attachment } from "./composer-attachments.js";
+
+import { ActiveConnection } from "../mobile/connection/active.js";
 
 const KEY = "dusk-drafts";
 const ATTACHMENTS_KEY = "dusk-draft-attachments";
@@ -51,6 +53,59 @@ const attachmentDraftsByStore = new WeakMap<object, Map<string, Attachment[]>>()
 const fallbackChannelModes = new Map<string, ChannelMode>();
 const channelModesByStore = new WeakMap<object, Map<string, ChannelMode>>();
 
+export function draftPrefix(connection: string | null): string {
+  return connection && connection !== "same-origin" ? `place/${encodeURIComponent(connection)}/` : "";
+}
+
+export function useDraftPrefix(): string {
+  return draftPrefix(useContext(ActiveConnection));
+}
+
+const retiredPrefixes = new Set<string>();
+
+function retired(id: string): boolean {
+  return id.startsWith("place/") && retiredPrefixes.has(id.slice(0, id.indexOf("/", 6) + 1));
+}
+
+const draftStorageKeys = [KEY, ATTACHMENTS_KEY, SEND_IDS_KEY, CHANNEL_MODES_KEY];
+
+export function copyWorkspaceDrafts(from: string, to: string): void {
+  const source = draftPrefix(from), destination = draftPrefix(to);
+  if (!source || !destination || source === destination) return;
+  const store = getStore();
+  saveDrafts();
+  for (const key of draftStorageKeys) {
+    const values = read(store, key);
+    const owned = Object.keys(values).filter((id) => id.startsWith(source));
+    if (!owned.length) continue;
+    for (const id of owned) values[destination + id.slice(source.length)] ??= values[id];
+    store?.setItem(key, JSON.stringify(values));
+  }
+  for (const cache of [textDraftsByStore, attachmentDraftsByStore, channelModesByStore]) {
+    const entries = store && cache.get(store);
+    if (entries) for (const id of entries.keys()) if (id.startsWith(destination)) entries.delete(id);
+  }
+}
+
+export function forgetWorkspaceDrafts(connection: string, clearLegacy = false): void {
+  const prefix = draftPrefix(connection);
+  if (!prefix) return;
+  const store = getStore();
+  const removed = (id: string) => id.startsWith(prefix) || (clearLegacy && /^(bot|group):/.test(id));
+  saveDrafts();
+  for (const key of draftStorageKeys) {
+    const values = read(store, key);
+    const owned = Object.keys(values).filter(removed);
+    if (!owned.length) continue;
+    for (const id of owned) delete values[id];
+    store?.setItem(key, JSON.stringify(values));
+  }
+  retiredPrefixes.add(prefix);
+  const maps = [memoryFor(store, textDraftsByStore, fallbackTextDrafts), memoryFor(store, attachmentDraftsByStore, fallbackAttachmentDrafts),
+    memoryFor(store, channelModesByStore, fallbackChannelModes), replyDrafts, restoredSends, failedSends, draftRevisions, attachmentPendingCounts];
+  for (const map of maps) for (const id of map.keys()) if (removed(id)) map.delete(id);
+}
+
 function memoryFor<T>(
   store: Store,
   stored: WeakMap<object, Map<string, T>>,
@@ -85,6 +140,7 @@ export function getDraft(store: Store, id: string): string {
 }
 
 export function setDraft(store: Store, id: string, text: string): void {
+  if (retired(id)) return;
   memoryFor(store, textDraftsByStore, fallbackTextDrafts).set(id, text);
   if (store) saveDraftLater(store, id);
 }
@@ -131,6 +187,7 @@ export function getDraftChannelMode(store: Store, id: string): ChannelMode {
 }
 
 export function setDraftChannelMode(store: Store, id: string, mode: ChannelMode): void {
+  if (retired(id)) return;
   memoryFor(store, channelModesByStore, fallbackChannelModes).set(id, mode);
   const modes = read(store, CHANNEL_MODES_KEY);
   if (mode === "goal") modes[id] = mode;
@@ -151,6 +208,7 @@ export function getDraftAttachments(store: Store, id: string): Attachment[] {
 }
 
 export function setDraftAttachments(store: Store, id: string, attachments: Attachment[]): void {
+  if (retired(id)) return;
   memoryFor(store, attachmentDraftsByStore, fallbackAttachmentDrafts).set(id, [...attachments]);
   const drafts = read(store, ATTACHMENTS_KEY);
   // Blob URLs exist only for this document: persist only upload-complete attachments.
@@ -176,7 +234,7 @@ export function setDraftAttachments(store: Store, id: string, attachments: Attac
 }
 
 export function rememberReplyDraft(threadId: string, messageId: string): void {
-  replyDrafts.set(threadId, messageId);
+  if (!retired(threadId)) replyDrafts.set(threadId, messageId);
 }
 
 export function replyDraft(threadId: string): string | undefined {
@@ -203,10 +261,13 @@ function resolveReplyMessage<T extends { id: string }>(threadId: string, message
 }
 
 export function useReplyDraft<T extends { id: string }>(
-  threadId: string,
-  draftId: string,
+  rawThreadId: string,
+  rawDraftId: string,
   messages: T[],
 ) {
+  const prefix = useDraftPrefix();
+  const threadId = prefix + rawThreadId;
+  const draftId = prefix + rawDraftId;
   const [replyState, setReplyState] = useState<{ threadId: string; message: T | null }>(() => ({
     threadId,
     message: resolveReplyMessage(threadId, messages),
@@ -239,6 +300,7 @@ export function useReplyDraft<T extends { id: string }>(
   }, [threadId]);
 
   const restoreReply = useCallback((message: T, targetThreadId: string) => {
+    targetThreadId = prefix + targetThreadId;
     const currentId = replyDraft(targetThreadId);
     if (currentId && currentId !== message.id) return;
     // Persist before touching React state: this view may have unmounted mid-request.
@@ -250,7 +312,7 @@ export function useReplyDraft<T extends { id: string }>(
           : { threadId: targetThreadId, message },
       );
     }
-  }, [threadId]);
+  }, [prefix, threadId]);
 
   return { replyTo, selectReply, clearReply, consumeReply, restoreReply };
 }
@@ -260,6 +322,7 @@ export function draftRevision(draftId: string): number {
 }
 
 export function markDraftEdited(draftId: string): void {
+  if (retired(draftId)) return;
   restoredSends.delete(draftId);
   setStoredSendId(getStore(), draftId, undefined);
   draftRevisions.set(draftId, draftRevision(draftId) + 1);
@@ -286,6 +349,7 @@ function restoredSend(draftId: string): RestoredSend | undefined {
 }
 
 function setStoredSendId(store: Store, draftId: string, send: RestoredSend | undefined): void {
+  if (retired(draftId)) return;
   const ids = read(store, SEND_IDS_KEY);
   if (send) ids[draftId] = send;
   else delete ids[draftId];
@@ -436,6 +500,7 @@ export function rememberFailedComposerSend(
 }
 
 export function recoverFailedComposerSend(sent: ComposerSendSnapshot): "restored" | "outbox" {
+  if (retired(sent.draftId)) return "outbox";
   if (draftRevision(sent.draftId) !== sent.revision) {
     rememberFailedComposerSend(sent.draftId, {
       sendId: sent.sendId,

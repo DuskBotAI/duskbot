@@ -51,12 +51,12 @@ describe("push relay", () => {
 
   it("sends an FCM push with the bot's name and ids only, and reports a dead token", async () => {
     await start(createPushRelay({ env: { DUSK_FCM_SERVICE_ACCOUNT_FILE: "/keys/account.json", DUSK_FCM_HOST: "https://fcm.example" }, fetch: fakeFetch(), readFile }));
-    expect(await (await post({ service: "fcm", token: "fixture-token", message })).json()).toEqual({ outcome: "sent" });
+    expect(await (await post({ service: "fcm", token: "fixture-token", message: { ...message, environmentId: "env", deviceId: "paired" } })).json()).toEqual({ outcome: "sent" });
     const sent = calls.find((one) => one.url.startsWith("https://fcm.example"));
     expect(sent.url).toBe("https://fcm.example/v1/projects/fixture-project/messages:send");
     expect(JSON.parse(sent.body).message).toEqual({
       token: "fixture-token", notification: { title: "Nova", body: "New message" },
-      data: { id: "n1", kind: "mention", botId: "b1", threadId: "t1" }, android: { collapse_key: "t1", priority: "high" },
+      data: { environmentId: "env", deviceId: "paired", id: "n1", kind: "mention", botId: "b1", threadId: "t1" }, android: { collapse_key: "t1", priority: "high" },
     });
     expect(sent.body).not.toContain("should not travel");
     fcmStatus = 404;

@@ -15,11 +15,12 @@ import { routineRunsOn } from "@/lib/routine-display";
 import { fetchForecast, forecastLine, forecastWarning, lessOften, pauseLine, periodLine, useLoaded } from "@/lib/spend";
 import { phoneApp } from "@/lib/store-app";
 import { formatCost } from "@/lib/usage-trace";
-import { isRoutineProblemRun, type Routine, type RoutineRunOn } from "@/lib/routines";
+import { isRoutineProblemRun, type Routine, type RoutineRun, type RoutineRunOn } from "@/lib/routines";
 import { hoursLine, liveStrip, probeLine } from "@/lib/routine-display";
 import { saveWebhookCredential, webhookCredentialStore } from "@/lib/webhook-credentials";
 import { SheetPush } from "@/mobile/SheetPush";
 import { api, useStore, type Bot } from "@/state/store";
+import { ROUTINE_RUNS_WINDOW_MS } from "@/state/routine-runs";
 import { useAllAutomationActions } from "../automations/app-actions";
 import { AppEventEditor } from "../automations/AppEventEditor";
 import { WebhookEditor } from "../WebhookTrigger";
@@ -127,10 +128,15 @@ export function BotRoutines({ bot, defaultRunOn, label = true }: { bot: Bot; def
     </SheetPush>
   ) : null;
 
+  const loadFailed = state.routinesLoadState === "error";
   if (automations.length === 0 && editing !== "new") {
     return (
       <>
-        <PanelEmpty data-panel-empty="routines">{t("botPanel.routines.empty")}</PanelEmpty>
+        {loadFailed
+          ? <RoutinesLoadFailed />
+          : state.routinesLoadState === "ready"
+            ? <PanelEmpty data-panel-empty="routines">{t("botPanel.routines.empty")}</PanelEmpty>
+            : <PanelEmpty data-panel-empty="routines-loading">{t("botPanel.routines.loading")}</PanelEmpty>}
         {phonePush}
       </>
     );
@@ -138,6 +144,7 @@ export function BotRoutines({ bot, defaultRunOn, label = true }: { bot: Bot; def
   return (
     <>
       <Card label={label ? t("botPanel.ui.botSettingsSimpleRoutines") : undefined} anchor="routines">
+        {loadFailed && <RoutinesLoadFailed />}
         {automations.map((automation) => (
           <AutomationRow
             key={automation.id}
@@ -156,6 +163,24 @@ export function BotRoutines({ bot, defaultRunOn, label = true }: { bot: Bot; def
       </Card>
       {phonePush}
     </>
+  );
+}
+
+function RoutinesLoadFailed() {
+  const { dispatch } = useStore();
+  const [trying, setTrying] = useState(false);
+  const retry = () => {
+    const since = Date.now() - ROUTINE_RUNS_WINDOW_MS;
+    setTrying(true);
+    void api<{ routines: Routine[]; runs: RoutineRun[] }>(`/api/routines?since=${since}`)
+      .then(({ routines, runs }) => dispatch({ type: "routinesHydrated", routines, runs, since }), () => {})
+      .finally(() => setTrying(false));
+  };
+  return (
+    <div role="alert" data-panel-empty="routines-error" className="flex flex-col items-center gap-2.5 px-4 py-4">
+      <p className="text-pretty text-center text-[13px] leading-[18px] tracking-[0.015em] text-ink/[0.56]">{t("botPanel.routines.loadError")}</p>
+      <button type="button" className={buttonCls} disabled={trying} onClick={retry}>{t("botPanel.routines.retry")}</button>
+    </div>
   );
 }
 

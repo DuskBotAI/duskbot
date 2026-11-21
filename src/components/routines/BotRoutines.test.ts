@@ -75,7 +75,7 @@ beforeEach(() => {
     if (next.type === "routineDeleted") fixture.state.routines = routines.filter((item) => item.id !== next.routineId);
     if (next.type === "routinePatched" || next.type === "routineDeleted") render();
   });
-  fixture.state = { hydrated: true, bots: [scout], groups: [], routines: [routine], webhooks: [], routineRuns: [], routinesFocus: { nonce: 0 }, config: {} };
+  fixture.state = { hydrated: true, bots: [scout], groups: [], routines: [routine], webhooks: [], routineRuns: [], routinesLoadState: "ready", routinesFocus: { nonce: 0 }, config: {} };
   applyAppTriggerSnapshot({ triggers: [], attempts: [], service: { available: true, plan: "desktop", eventsPerDay: 500, eventsToday: 0 } });
 });
 afterEach(() => { root?.unmount(); root = null; document.body.innerHTML = ""; copied.texts = []; });
@@ -271,5 +271,43 @@ describe("a bot's routines in its panel", () => {
       delete document.documentElement.dataset.mobileApp;
       shell.remove();
     }
+  });
+});
+
+describe("a bot's routines that have not loaded", () => {
+  const panelText = () => container.textContent ?? "";
+  const empty = "Ask it in chat to set one up";
+
+  it("says it has none only once the list has loaded", () => {
+    fixture.state.routines = [];
+    fixture.state.routinesLoadState = "loading";
+    mount();
+    expect(panelText()).not.toContain(empty);
+    expect(panelText()).toContain("Loading routines");
+    fixture.state.routinesLoadState = "ready";
+    render();
+    expect(panelText()).toContain(empty);
+  });
+
+  it("says the list failed, not that there are none, and Try again reloads it", async () => {
+    fixture.state.routines = [];
+    fixture.state.routinesLoadState = "error";
+    fixture.api.mockResolvedValue({ routines: [routine], runs: [] });
+    mount();
+    expect(panelText()).not.toContain(empty);
+    expect(container.querySelector("[role=alert]")!.textContent).toContain("Couldn't load routines");
+    const retry = [...container.querySelectorAll("button")].find((button) => button.textContent === "Try again")!;
+    flushSync(() => retry.click());
+    await vi.waitFor(() => expect(fixture.dispatch).toHaveBeenCalledWith(expect.objectContaining({ type: "routinesHydrated", routines: [routine], runs: [] })));
+    expect(String(fixture.api.mock.calls[0]![0])).toMatch(/^\/api\/routines\?since=\d+$/);
+  });
+
+  it("still says so above the bot's webhooks when its routines failed", () => {
+    fixture.state.routines = [];
+    fixture.state.webhooks = [webhook];
+    fixture.state.routinesLoadState = "error";
+    mount();
+    expect(row("hook-1")).not.toBeNull();
+    expect(container.querySelector("[role=alert]")!.textContent).toContain("Couldn't load routines");
   });
 });

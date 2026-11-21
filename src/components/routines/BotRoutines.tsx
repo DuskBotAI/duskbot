@@ -3,7 +3,7 @@ import { AnimatePresence } from "motion/react";
 import { createPortal } from "react-dom";
 import { Check, Copy } from "../../icons";
 
-import { automationSentence, automationsFrom, automationStatus, AUTOMATION_FIX_LABEL, nextWhen, plainWhen, runLine, type Automation, type AutomationFix } from "@/lib/automations";
+import { automationSentence, automationsFrom, automationStatus, AUTOMATION_FIX_LABEL, lastWhen, nextWhen, plainWhen, runLine, type Automation, type AutomationFix } from "@/lib/automations";
 import { appWhen } from "@/lib/app-automations";
 import { useAppTriggers } from "@/lib/app-triggers";
 import { botAccentScope } from "@/lib/bot-accent";
@@ -18,6 +18,7 @@ import { formatCost } from "@/lib/usage-trace";
 import { isRoutineProblemRun, type Routine, type RoutineRunOn } from "@/lib/routines";
 import { hoursLine, liveStrip, probeLine } from "@/lib/routine-display";
 import { saveWebhookCredential, webhookCredentialStore } from "@/lib/webhook-credentials";
+import { recentDeliveries } from "@/lib/webhooks";
 import { SheetPush } from "@/mobile/SheetPush";
 import { api, useStore, type Bot } from "@/state/store";
 import { useAllAutomationActions } from "../automations/app-actions";
@@ -273,6 +274,7 @@ function AutomationDetail({ id, bot, automation, routine, actions, onEdit }: {
   const addressCopied = actions.copied === automation.id || (automation.addressId !== undefined && actions.copied === automation.addressId);
   const status = automationStatus(automation);
   const runs = automation.runs.filter((run) => run.status !== "queued" || Boolean(run.attention?.trim())).slice(0, RECENT_RUNS);
+  const deliveries = useMemo(() => automation.kind === "webhook" ? recentDeliveries(state.webhookAttempts, automation.id) : null, [automation.kind, automation.id, state.webhookAttempts]);
   const roomGoal = routine?.target === "room-goal";
   const worksOn = routineRunsOn({ roomGoal, runOn: routine?.runOn ?? automation.appTrigger?.runOn, computer: bot.computer, cloudHome: state.config?.cloudHome === true });
   const resultsTo = roomGoal
@@ -378,6 +380,21 @@ function AutomationDetail({ id, bot, automation, routine, actions, onEdit }: {
             </ul>
           )}
         </Fact>
+        {deliveries && (
+          <Fact term={t("automations.panel.deliveries")}>
+            {deliveries.length === 0 ? <span className="text-ink-secondary">{t("automations.panel.noDeliveries")}</span> : (
+              <ul className="m-0 mt-0.5 flex list-none flex-col p-0" data-webhook-deliveries="">
+                {deliveries.map((delivery) => (
+                  <li key={delivery.id} data-webhook-delivery={delivery.ok ? "ok" : "refused"} className="flex items-baseline gap-1.5 py-0.5">
+                    <span className="shrink-0 text-ink-secondary">{lastWhen(delivery.at)}</span>
+                    <span className={cn("shrink-0", delivery.ok ? "text-success" : "text-danger")} aria-hidden="true">{delivery.ok ? "✓" : "✗"}</span>
+                    <span className="min-w-0 truncate">{t(delivery.key)}{delivery.count ? <span className="text-ink-secondary"> · {t("automations.delivery.count", { count: delivery.count })}</span> : null}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Fact>
+        )}
       </dl>
       {notes.map((note) => <p key={note} className="m-0 text-[12px] leading-4 text-warning">{note}</p>)}
       {status.state === "needs-you" && (status.fix === "answer" || status.fix === "sign-in" || status.fix === "usage" || status.fix === "reconnect") && (

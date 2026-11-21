@@ -75,7 +75,7 @@ beforeEach(() => {
     if (next.type === "routineDeleted") fixture.state.routines = routines.filter((item) => item.id !== next.routineId);
     if (next.type === "routinePatched" || next.type === "routineDeleted") render();
   });
-  fixture.state = { hydrated: true, bots: [scout], groups: [], routines: [routine], webhooks: [], routineRuns: [], routinesFocus: { nonce: 0 }, config: {} };
+  fixture.state = { hydrated: true, bots: [scout], groups: [], routines: [routine], webhooks: [], webhookAttempts: [], routineRuns: [], routinesFocus: { nonce: 0 }, config: {} };
   applyAppTriggerSnapshot({ triggers: [], attempts: [], service: { available: true, plan: "desktop", eventsPerDay: 500, eventsToday: 0 } });
 });
 afterEach(() => { root?.unmount(); root = null; document.body.innerHTML = ""; copied.texts = []; });
@@ -211,6 +211,29 @@ describe("a bot's routines in its panel", () => {
     open("acme");
     flushSync(() => action("acme", "run").click());
     await vi.waitFor(() => expect(fixture.api).toHaveBeenCalledWith("/api/app-triggers/acme/test", expect.objectContaining({ method: "POST" })));
+  });
+
+  it("lists a webhook's recent deliveries, refused ones with why, and never a refused delivery's body", () => {
+    fixture.state.webhooks = [webhook];
+    const attempt = (id: string, at: number, extra: Record<string, unknown>) => ({ id, webhookId: "hook-1", receivedAt: now - at, ...extra });
+    fixture.state.webhookAttempts = [
+      attempt("a1", 60_000, { outcome: "accepted", statusCode: 202, preview: "{\"lead\":\"ok\"}" }),
+      attempt("a2", 50_000, { outcome: "rejected", statusCode: 401, reason: "Invalid webhook URL or secret (2 requests)" }),
+      attempt("a3", 40_000, { outcome: "rejected", statusCode: 400, reason: "Invalid JSON webhook body", preview: "PRIVATE-BODY" }),
+      attempt("a4", 30_000, { outcome: "rejected", statusCode: 413, reason: "Webhook body is too large" }),
+      { id: "other", webhookId: "hook-2", receivedAt: now, outcome: "rejected", statusCode: 401 },
+    ];
+    mount();
+    open("hook-1");
+    const lines = [...sheet().querySelectorAll<HTMLElement>("[data-webhook-delivery]")];
+    expect(lines.map((line) => line.dataset.webhookDelivery)).toEqual(["refused", "refused", "refused", "ok"]);
+    const text = lines.map((line) => line.textContent).join("\n");
+    expect(text).toContain("Refused: too large");
+    expect(text).toContain("Refused: not valid JSON");
+    expect(text).toContain("Refused: wrong or missing secret · 2 requests");
+    expect(text).toContain("Accepted");
+    expect(sheet().textContent).not.toContain("PRIVATE-BODY");
+    expect(sheet().textContent).not.toContain("Invalid webhook URL");
   });
 
   it("opens the routine a chat card names, straight into its form when asked", async () => {

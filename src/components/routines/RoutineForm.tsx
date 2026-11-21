@@ -8,6 +8,7 @@ import { probeLine } from "@/lib/routine-display";
 import type { Routine, RoutineInput, RoutineProbe, RoutineRunOn } from "@/lib/routines";
 import { autoRoutineName, newWhenDraft, scheduleFromDraft, whenDraftFor, type WhenDraft, type WhenPreset } from "@/lib/routine-when";
 import { imeComposing } from "@/lib/send-key";
+import { phoneApp } from "@/lib/store-app";
 import { useStore, type Bot } from "@/state/store";
 import { useBotEditor } from "../bot-settings/BotEditorContext";
 import { buttonCls, fieldCls, Segmented } from "../bot-panel/rows";
@@ -143,7 +144,7 @@ export function RoutineForm({ bot, routine, defaultRunOn, onDone }: {
         <label htmlFor={`${id}-name`} className={labelCls}>{upperFirst(t("routines.inline.name"))}</label>
         <input
           id={`${id}-name`}
-          autoFocus={Boolean(routine)}
+          autoFocus={Boolean(routine) && !phoneApp()}
           value={name}
           maxLength={80}
           placeholder={autoRoutineName(prompt) || upperFirst(t("routines.inline.namePlaceholder"))}
@@ -193,7 +194,7 @@ export function RoutineForm({ bot, routine, defaultRunOn, onDone }: {
         <label htmlFor={`${id}-what`} className={labelCls}>{upperFirst(t("routines.inline.what"))}</label>
         <textarea
           id={`${id}-what`}
-          autoFocus={!routine}
+          autoFocus={!routine && !phoneApp()}
           rows={3}
           value={prompt}
           placeholder={upperFirst(t("routines.inline.whatPlaceholder"))}

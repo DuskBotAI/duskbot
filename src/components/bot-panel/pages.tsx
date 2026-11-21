@@ -10,7 +10,7 @@ import { useDesktopCapabilities } from "../DesktopCapabilities";
 import { ServiceIcon } from "../ServiceIcon";
 import { ArtState } from "../ui/Art";
 import { useWorkingFolder } from "../bot-settings/AccessSection";
-import { SkillReviewDialog } from "../bot-settings/SkillsSection";
+import { SkillReviewSheet } from "../bot-settings/SkillsSection";
 import { useBotApps, type BotApp } from "../bot-settings/useBotApps";
 import type { useBotSettingsDerived } from "../bot-settings/useBotSettingsDerived";
 import { BotRoutines } from "../routines/BotRoutines";
@@ -173,16 +173,13 @@ export function SkillsPage({ bot }: PageContext) {
         />
         <LinkRow data-panel-link="browse-skills" onClick={browse}>{t("botPanel.skills.browse")}</LinkRow>
       </Card>
-      {skills.reviewing && (
-        <SkillReviewDialog
-          skill={skills.reviewing.skill}
-          text={skills.reviewing.text}
-          error={skills.error}
-          working={skills.working === skills.reviewing.skill.name}
-          onCancel={() => skills.setReviewing(null)}
-          onEnable={() => void skills.enableReviewed()}
-        />
-      )}
+      <SkillReviewSheet
+        reviewing={skills.reviewing}
+        error={skills.error}
+        working={Boolean(skills.reviewing && skills.working === skills.reviewing.skill.name)}
+        onCancel={() => skills.setReviewing(null)}
+        onEnable={() => void skills.enableReviewed()}
+      />
     </>
   );
 }

@@ -1,14 +1,15 @@
-// Fills the person's bubble with Grok Bot's own colour for the bot's hue, always under white text (grok's #f5f5f5 in dark).
-
 import type { CSSProperties } from "react";
-import { contrastRatio, mixSrgb, toOklch } from "./color-contrast";
-import { MAUS_COLOR_NAMES, MAUS_COLORS, type MausColor } from "./mascot";
+import { contrastRatio, fromOklch, mixSrgb, toneForSurface, toOklch } from "./color-contrast";
+import { MASCOT_INK, MAUS_COLOR_NAMES, MAUS_COLORS, type MausColor } from "./mascot";
 
 const WHITE = "#ffffff";
 const BLACK = "#000000";
 const INK = "#101410";
 const DARK_INK = "#f5f5f5";
-/** Grok's fills do not all reach 4.5:1 under white (orange ~4:1, yellow ~3.6:1), so what we derive holds 3:1. */
+const GROK_LIGHT_APP = "#fdfdfd";
+const GROK_DARK_APP = "#121212";
+const HOVER_LIGHTNESS_STEP = 0.05;
+
 export const BUBBLE_TOKEN_MIN = 3;
 
 export const MENTION_CHIP_MIX = 0.22;
@@ -18,69 +19,75 @@ export type Scheme = "light" | "dark";
 
 export type GrokFill = { bubble: string; button: string; hover: string; ink: string; buttonInk: string };
 
-type Steps = [bubble: string, button: string, hover: string];
+const NEUTRAL_FILL: Record<Scheme, GrokFill> = {
+  light: { bubble: "#1c1c1c", button: "#1c1c1c", hover: "#363636", ink: WHITE, buttonInk: "#fcfcfc" },
+  dark: { bubble: "#3b3b3b", button: "#f5f5f5", hover: "#dbdbdb", ink: DARK_INK, buttonInk: "#121212" },
+};
 
-/** Grok's palette for one hue, measured in its renderer: light /2 bubble, /1 button darkening to /2 on hover; dark /1
- * for both, brightening to /2. Text is white in light and grok's #f5f5f5 in dark. */
-const hue = (light: Steps, dark: Steps, buttonInk = { light: WHITE, dark: DARK_INK }): Record<Scheme, GrokFill> => ({
-  light: { bubble: light[0], button: light[1], hover: light[2], ink: WHITE, buttonInk: buttonInk.light },
-  dark: { bubble: dark[0], button: dark[1], hover: dark[2], ink: DARK_INK, buttonInk: buttonInk.dark },
-});
+const isNeutral = (color: MausColor): boolean => color === "silver" || color === "chrome";
 
-const GROK_HUES = {
-  green: hue(["#0d9655", "#10ab61", "#0d9655"], ["#0e9f5a", "#0e9f5a", "#13bb6b"]),
-  blue: hue(["#126fd4", "#1680f3", "#126fd4"], ["#116dd2", "#116dd2", "#1784fb"]),
-  red: hue(["#c82532", "#e72e3b", "#c82532"], ["#cf2b35", "#cf2b35", "#f73643"]),
-  orange: hue(["#d2550a", "#ee620d", "#d2550a"], ["#cd5309", "#cd5309", "#f4650e"]),
-  purple: hue(["#7442d1", "#8351e4", "#7442d1"], ["#7845d7", "#7845d7", "#8e59f8"]),
-  cyan: hue(["#0d9381", "#10a693", "#0d9381"], ["#0e9886", "#0e9886", "#12b39f"]),
-  magenta: hue(["#c82779", "#e52f8b", "#c82779"], ["#cf297e", "#cf297e", "#f63397"]),
-  yellow: hue(["#c2730b", "#da830e", "#c2730b"], ["#c8770c", "#c8770c", "#ea8c10"]),
-  brown: hue(["#86592e", "#9d6937", "#86592e"], ["#8c5d31", "#8c5d31", "#aa723d"]),
-  // grok's grey bot: a near-black bubble and button in light; in dark an 18% ink bubble and an inverted button
-  neutral: hue(["#1c1c1c", "#1c1c1c", "#363636"], ["#3b3b3b", "#f5f5f5", "#dbdbdb"], { light: "#fcfcfc", dark: "#121212" }),
-} satisfies Record<string, Record<Scheme, GrokFill>>;
-
-/** Each of our colours on grok's nearest hue; coral sits closer to grok's orange than its red in oklab. */
-export const GROK_HUE_OF = {
-  green: "green",
-  blue: "blue",
-  red: "red",
-  orange: "orange",
-  purple: "purple",
-  cyan: "cyan",
-  pink: "magenta",
-  yellow: "yellow",
-  teal: "cyan",
-  coral: "orange",
-  brown: "brown",
-  silver: "neutral",
-  chrome: "neutral",
-} as const satisfies Record<MausColor, keyof typeof GROK_HUES>;
-
-/** Grok's fills and text for the bot's colour in one scheme. */
-export function grokFill(color: MausColor, scheme: Scheme): GrokFill {
-  return GROK_HUES[GROK_HUE_OF[color]][scheme];
+function fillForInk(hex: string, ink: string, min: number): string {
+  if (contrastRatio(ink, hex) >= min) return hex;
+  const { l, c, h } = toOklch(hex);
+  let lo = 0;
+  let hi = l;
+  let best = hex;
+  for (let step = 0; step < 30; step += 1) {
+    const mid = (lo + hi) / 2;
+    const candidate = fromOklch({ l: mid, c, h });
+    if (contrastRatio(ink, candidate) >= min) {
+      best = candidate;
+      lo = mid;
+    } else hi = mid;
+  }
+  return best;
 }
 
-/** One css value for both schemes; grok-dark sets color-scheme, the other skins read the light half. */
+function shiftLightness(hex: string, delta: number): string {
+  const { l, c, h } = toOklch(hex);
+  return fromOklch({ l: Math.max(0, Math.min(1, l + delta)), c, h });
+}
+
+function chromaticFill(color: MausColor, scheme: Scheme): GrokFill {
+  const ink = scheme === "light" ? WHITE : DARK_INK;
+  const bubble = fillForInk(MASCOT_INK[color], ink, BUBBLE_TOKEN_MIN);
+  const hover = shiftLightness(bubble, scheme === "light" ? -HOVER_LIGHTNESS_STEP : HOVER_LIGHTNESS_STEP);
+  return { bubble, button: bubble, hover, ink, buttonInk: ink };
+}
+
+const BOT_FILLS = Object.fromEntries(
+  MAUS_COLOR_NAMES.map((color) => [
+    color,
+    isNeutral(color)
+      ? NEUTRAL_FILL
+      : { light: chromaticFill(color, "light"), dark: chromaticFill(color, "dark") },
+  ]),
+) as Record<MausColor, Record<Scheme, GrokFill>>;
+
+export function grokFill(color: MausColor, scheme: Scheme): GrokFill {
+  return BOT_FILLS[color][scheme];
+}
+
 export function bothSchemes(light: string, dark: string): string {
   return light === dark ? light : `light-dark(${light}, ${dark})`;
 }
 
-/** Grok's text in the bot's colour (sand-text-<hue>-primary, light then dark), as its New line wears; its grey bot's is ink. */
-const GROK_TEXT: Record<Exclude<keyof typeof GROK_HUES, "neutral">, readonly [string, string]> = {
-  green: ["#00854a", "#00ba69"], blue: ["#0b6dd3", "#4d9bff"], red: ["#cd2834", "#ff6463"], orange: ["#c14c00", "#fe6600"],
-  purple: ["#7547d0", "#a582ff"], cyan: ["#008273", "#00b7a2"], magenta: ["#c62378", "#ff55a4"], yellow: ["#aa6300", "#e28600"],
-  brown: ["#996b42", "#c59e7d"],
-};
+const BOT_ACCENT_TEXT = Object.fromEntries(
+  MAUS_COLOR_NAMES.map((color) => [
+    color,
+    isNeutral(color)
+      ? "var(--color-ink)"
+      : bothSchemes(
+          toneForSurface(MASCOT_INK[color], GROK_LIGHT_APP, 4.5),
+          toneForSurface(MASCOT_INK[color], GROK_DARK_APP, 4.5),
+        ),
+  ]),
+) as Record<MausColor, string>;
 
 export function grokAccentText(color: MausColor): string {
-  const hue = GROK_HUE_OF[color];
-  return hue === "neutral" ? "var(--color-ink)" : bothSchemes(...GROK_TEXT[hue]);
+  return BOT_ACCENT_TEXT[color];
 }
 
-/** Grok's fills as css values that follow the color-scheme. */
 export function grokFills(color: MausColor): GrokFill {
   const light = grokFill(color, "light");
   const dark = grokFill(color, "dark");

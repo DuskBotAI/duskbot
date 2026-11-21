@@ -108,6 +108,31 @@ describe("the phone keyboard", () => {
     (host.querySelector("#bubble") as HTMLElement).click();
     expect(document.activeElement).not.toBe(field());
   });
+
+  it("keeps the keyboard open through a sideways swipe even if the finger drifts down or a click follows", () => {
+    flushSync(() => root.render(createElement(Shell, { platform: platform(true) })));
+    field().focus();
+    const bubble = host.querySelector("#bubble") as HTMLElement;
+    touch(bubble, "touchstart", 300, 100);
+    touch(bubble, "touchmove", 302, 160);
+    touch(bubble, "touchmove", 330, 110);
+    touch(bubble, "touchend", 0, 0);
+    bubble.click();
+    expect(document.activeElement).toBe(field());
+    expect(hideKeyboard).not.toHaveBeenCalled();
+
+    // a gesture that claimed touchmove (such as swipe-to-reply) also keeps the keyboard open
+    touch(bubble, "touchstart", 300, 100);
+    const claimed = new Event("touchmove", { bubbles: true, cancelable: true }) as Event & { touches: Array<{ clientX: number; clientY: number }> };
+    Object.defineProperty(claimed, "touches", { value: [{ clientX: 112, clientY: 300 }] });
+    claimed.preventDefault();
+    bubble.dispatchEvent(claimed);
+    touch(bubble, "touchmove", 330, 112);
+    touch(bubble, "touchend", 0, 0);
+    bubble.click();
+    expect(document.activeElement).toBe(field());
+    expect(hideKeyboard).not.toHaveBeenCalled();
+  });
 });
 
 describe("riding the keyboard with the native composer", () => {

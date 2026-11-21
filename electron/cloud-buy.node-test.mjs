@@ -46,7 +46,7 @@ test("the native menu's dot is a filled circle drawn as a PNG (straight RGBA), o
   const iconFor = colorDotIcons({ createEmpty: () => ({ reps: [], addRepresentation(options) { this.reps.push(options); made.push(options); }, isEmpty() { return this.reps.length === 0; } }) });
   assert.equal(iconFor("teal"), iconFor("teal"));
   assert.deepEqual(made.map(rep => [rep.scaleFactor, readPng(rep.dataURL).header.width]), [[1, 14], [2, 28]]);
-  assert.deepEqual(readPng(made[1].dataURL).pixel(14, 14), [0x01, 0xa4, 0x92, 255], "teal");
+  assert.deepEqual(readPng(made[1].dataURL).pixel(14, 14), [0x26, 0xcb, 0x96, 255], "teal");
   assert.equal(iconFor("#ff0000"), null);
   assert.equal(colorDotIcons({ createEmpty: () => { throw new Error("no"); } })("red"), null, "a dot that cannot be drawn is no dot");
   assert.equal(colorDotIcons({ createEmpty: () => ({ addRepresentation() {}, isEmpty: () => true }) })("red"), null);

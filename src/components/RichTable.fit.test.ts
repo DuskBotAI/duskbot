@@ -6,7 +6,7 @@ import { flushSync } from "react-dom";
 import { describe, expect, it, vi } from "vitest";
 import { RichTable } from "./RichTable";
 import { ChatMarkdown } from "./ChatMarkdown";
-import { CHAR_PX, COLUMN_MAX_CHARS, COLUMN_MIN_CHARS, columnMinimums, fitsColumns } from "@/lib/table-fit";
+import { CELL_PADDING_PX, CHAR_PX, COLUMN_MAX_CHARS, COLUMN_MIN_CHARS, columnMinimums, fitsColumns } from "@/lib/table-fit";
 
 
 const header = ["App", "Stars", "License", "Target user", "Strength", "Weakness", "Verdict"];
@@ -32,11 +32,11 @@ describe("a table in a reply", () => {
     expect(doc.querySelectorAll("th")).toHaveLength(7);
     const floors = [...doc.querySelectorAll<HTMLElement>("th > div")].map((cell) => Number.parseFloat(cell.style.minWidth));
     expect(floors).toEqual(columnMinimums(header, [row]));
-    expect(floors.reduce((sum, width) => sum + width, 0) + 7 * 24).toBeLessThan(704);
+    expect(floors.reduce((sum, width) => sum + width, 0) + 7 * CELL_PADDING_PX).toBeLessThan(704);
     for (const cell of doc.querySelectorAll("td > div")) expect(cell.className).toContain("[overflow-wrap:anywhere]");
     const surface = doc.querySelector("[data-table-card]")!;
-    expect(surface.className).toContain("w-full");
-    expect(surface.parentElement!.className).toBe("chat-table");
+    expect(surface.className).toContain("w-fit");
+    expect(surface.parentElement!.parentElement!.className).toBe("chat-table");
   });
 
   it("keeps fixed columns and a scroll box for a very long table, whose rows are drawn as they scroll", () => {
@@ -53,7 +53,7 @@ describe("a table in a reply", () => {
 
   it("keeps roomy columns and scrolls sideways, with no inner scroll box, when even the narrowest columns cannot fit", () => {
     const minimums = columnMinimums(header, [row]);
-    const needed = minimums.reduce((sum, width) => sum + width + 24, 0);
+    const needed = minimums.reduce((sum, width) => sum + width + CELL_PADDING_PX, 0);
     expect(fitsColumns({ wrap: true, virtual: false, minimums, available: needed })).toBe(true);
     expect(fitsColumns({ wrap: true, virtual: false, minimums, available: needed - 1 })).toBe(false);
     let report: () => void = () => undefined;

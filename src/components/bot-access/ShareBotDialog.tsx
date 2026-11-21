@@ -20,12 +20,13 @@ export interface AccessChange { before: BotAccess; after: BotAccess; text: strin
 /** A bot's Share dialog on a team: whether everyone in the team can use it or only the people added, and who those
  * are. A change applies at once; the caller shows it with Undo. `headerMenu` holds what else the opener offers there.
  * A person's stored level (view, chat or edit) stays as it is until they are removed; the dialog does not show it. */
-export function ShareBotDialog({ bot, teamName, onClose, onChanged, headerMenu }: {
+export function ShareBotDialog({ bot, teamName, onClose, onChanged, headerMenu, embedded = false }: {
   bot: Bot;
   teamName: string;
   onClose: () => void;
   onChanged: (change: AccessChange) => void;
   headerMenu?: ReactNode;
+  embedded?: boolean;
 }) {
   const team = useTeamPeople();
   const { dispatch } = useStore();
@@ -40,19 +41,20 @@ export function ShareBotDialog({ bot, teamName, onClose, onChanged, headerMenu }
   const phone = phoneApp();
 
   useEffect(() => {
-    if (!phone) return;
+    if (!phone || embedded) return;
     wakeSystemControls();
     return () => wakeSystemControls();
-  }, [phone]);
+  }, [phone, embedded]);
 
   useEffect(() => {
+    if (embedded) return;
     const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     dialogRef.current?.focus();
     return () => { if (opener?.isConnected) opener.focus(); };
-  }, []);
+  }, [embedded]);
   useEffect(() => {
-    if (document.activeElement === document.body) dialogRef.current?.focus();
-  }, [bot.access, bot.reportsTo, newOwner]);
+    if (!embedded && document.activeElement === document.body) dialogRef.current?.focus();
+  }, [embedded, bot.access, bot.reportsTo, newOwner]);
 
   const run = async (work: () => Promise<void>) => {
     if (busy) return;
@@ -83,6 +85,74 @@ export function ShareBotDialog({ bot, teamName, onClose, onChanged, headerMenu }
 
   const yourRow = !editable && team?.me && bot.yourAccess && bot.yourAccess !== "none"
     ? <PersonRow person={team.me} you data-share-yours trailing={null} /> : null;
+
+  const peopleList = (
+    <ul data-share-people className={cn("flex flex-col", !embedded && "max-h-[min(264px,40vh)] overflow-y-auto")}>
+      {owner && <PersonRow person={owner} you={owner.you === true} trailing={<span className="px-2 text-[13px] text-ink-secondary">{t("lookedAfter.badge")}</span>} />}
+      {yourRow}
+      {editable && Object.keys(access.people).sort((a, b) => nameOf(a, team).localeCompare(nameOf(b, team))).map((entry) => {
+        const person = personOf(entry, team);
+        return (
+          <PersonRow key={entry} entry={entry} person={person} you={team?.me?.email === entry}
+            trailing={<PersonMenu disabled={busy} label={t("botAccess.personMenu", { name: nameOf(entry, team) })}
+              onMakeOwner={handsOver && person ? () => { setError(""); setNewOwner(person); } : undefined}
+              makeOwnerLabel={person ? t("lookedAfter.make", { name: person.name }) : undefined}
+              onRemove={() => void apply(withPerson(access, entry, null), t("botAccess.toast.removed", { name: nameOf(entry, team) }))} />} />
+        );
+      })}
+    </ul>
+  );
+
+  if (embedded) {
+    return (
+      <div
+        ref={dialogRef}
+        tabIndex={-1}
+        data-share-bot={bot.id}
+        className="flex flex-col gap-5 px-4 pb-8 pt-2 text-ink outline-none"
+        onKeyDown={(event) => {
+          if (event.key === "Escape" && !event.defaultPrevented && newOwner) {
+            event.stopPropagation();
+            keepOwner();
+          }
+        }}
+      >
+        {newOwner ? (
+          <div className="rounded-[26px] bg-(--m-ios-card,var(--color-menu))">
+            <MakeOwner person={newOwner} bot={bot} busy={busy} error={error} onCancel={keepOwner} onConfirm={() => void handOver(newOwner)} />
+          </div>
+        ) : (
+          <>
+            {editable && team && (
+              <div className="relative z-10 rounded-[26px] bg-(--m-ios-card,var(--color-menu)) px-3 py-1.5">
+                <AddPerson team={team} access={access} owner={botOwner(bot)} disabled={busy}
+                  onAdd={(person, level) => void apply(withPerson(access, person.email, level), t("botAccess.toast.addedPlain", { name: person.name }))} />
+              </div>
+            )}
+            <section className="flex flex-col gap-2">
+              <h3 className="px-4 text-[13px] font-semibold text-ink-secondary">{t("botAccess.people")}</h3>
+              <div className="rounded-[26px] bg-(--m-ios-card,var(--color-menu)) px-4 py-2">
+                {peopleList}
+              </div>
+              <p className="px-4 text-[13px] leading-[18px] text-ink-secondary">{t("botAccess.admins")}</p>
+            </section>
+            {editable && (
+              <section className="flex flex-col gap-2">
+                <h3 className="px-4 text-[13px] font-semibold text-ink-secondary">{t("botAccess.general")}</h3>
+                <div className="rounded-[26px] bg-(--m-ios-card,var(--color-menu)) px-4 py-3">
+                  <GeneralAccess access={access} teamName={teamName} disabled={busy}
+                    onChange={(everyone) => void apply({ everyone, people: access.people }, everyone === "none"
+                      ? t("botAccess.toast.onlyAdded")
+                      : t("botAccess.toast.everyoneUse", { team: teamName }))} />
+                </div>
+              </section>
+            )}
+            {error && <p role="alert" className="px-4 text-[13px] text-danger">{error}</p>}
+          </>
+        )}
+      </div>
+    );
+  }
 
   const portalRoot = phone ? (document.querySelector?.(".dusk-mobile") ?? document.body) : document.body;
   return createPortal(
@@ -121,20 +191,7 @@ export function ShareBotDialog({ bot, teamName, onClose, onChanged, headerMenu }
           )}
           <div className="min-h-0 flex-1 overflow-y-auto px-5 pb-2 pt-3">
             <h3 className="mb-1 text-[13px] font-semibold">{t("botAccess.people")}</h3>
-            <ul data-share-people className="flex max-h-[min(264px,40vh)] flex-col overflow-y-auto">
-              {owner && <PersonRow person={owner} you={owner.you === true} trailing={<span className="px-2 text-[13px] text-ink-secondary">{t("lookedAfter.badge")}</span>} />}
-              {yourRow}
-              {editable && Object.keys(access.people).sort((a, b) => nameOf(a, team).localeCompare(nameOf(b, team))).map((entry) => {
-                const person = personOf(entry, team);
-                return (
-                  <PersonRow key={entry} entry={entry} person={person} you={team?.me?.email === entry}
-                    trailing={<PersonMenu disabled={busy} label={t("botAccess.personMenu", { name: nameOf(entry, team) })}
-                      onMakeOwner={handsOver && person ? () => { setError(""); setNewOwner(person); } : undefined}
-                      makeOwnerLabel={person ? t("lookedAfter.make", { name: person.name }) : undefined}
-                      onRemove={() => void apply(withPerson(access, entry, null), t("botAccess.toast.removed", { name: nameOf(entry, team) }))} />} />
-                );
-              })}
-            </ul>
+            {peopleList}
             <p className="mt-1.5 text-[12px] leading-relaxed text-ink-secondary">{t("botAccess.admins")}</p>
             {editable && <>
               <h3 className="mb-1.5 mt-4 text-[13px] font-semibold">{t("botAccess.general")}</h3>

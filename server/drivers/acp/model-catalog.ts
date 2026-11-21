@@ -1,5 +1,5 @@
 import type { ModelCatalog } from "../../contracts.ts";
-import { readStartupModelCacheEntry, unconfirmedModelCatalog, writeStartupModelCache } from "../../startup-model-catalog.ts";
+import { clearStartupModelCache, readStartupModelCacheEntry, unconfirmedModelCatalog, writeStartupModelCache } from "../../startup-model-catalog.ts";
 
 export interface AcpModelCatalog {
   models: ModelCatalog;
@@ -9,6 +9,8 @@ export interface AcpModelCatalog {
   readonly unconfirmed: boolean;
   /** A read already under way is shared; a fresh one waits for a cached one under way, then reads again. */
   refresh(fresh?: boolean): Promise<void>;
+  /** Clears any account-specific catalog back to the fixed fallback (e.g. after sign-out). */
+  reset(): void;
 }
 
 export function acpModelCatalog(input: {
@@ -23,17 +25,23 @@ export function acpModelCatalog(input: {
   let readFromEngine = Boolean(saved?.checkedAt);
   let accountModels: ReadonlySet<string> | null = saved?.checkedAt ? idsOf(saved.catalog) : null;
   let current: { fresh: boolean; done: Promise<void> } | null = null;
+  let generation = 0;
 
   const read = async (fresh: boolean) => {
     if (!resolve) return;
+    const started = generation;
     try {
       const resolved = await resolve(fresh);
+      if (generation !== started) return;
       if (resolved.options.length) {
         models = resolved;
         readFromEngine = true;
         accountModels = idsOf(resolved);
       } else unconfirmedModelCatalog(models);
-    } catch { unconfirmedModelCatalog(models); }
+    } catch {
+      if (generation !== started) return;
+      unconfirmedModelCatalog(models);
+    }
     try { writeStartupModelCache(instanceId, models); } catch {}
   };
 
@@ -49,6 +57,13 @@ export function acpModelCatalog(input: {
       current = next;
       void next.done.finally(() => { if (current === next) current = null; });
       return next.done;
+    },
+    reset() {
+      generation += 1;
+      models = input.fixed;
+      readFromEngine = false;
+      accountModels = null;
+      clearStartupModelCache(instanceId);
     },
   };
 }

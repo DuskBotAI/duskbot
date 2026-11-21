@@ -113,6 +113,7 @@ type ConnectionStore = {
   save(record: MobileConnectionRecord, token: string): Promise<void>;
   setActive(id: string): Promise<void>;
   remove(id: string): Promise<void>;
+  rename(id: string, label: string): Promise<void>;
   touch(id: string): Promise<void>;
   /** `relay`: the phone's own relay channel as the place serves it now */
   setRoutes(id: string, via: MobileTransport[], relay?: MobileRelayChannel): Promise<void>;
@@ -188,6 +189,11 @@ export function createConnectionStore(platform: MobilePlatform): ConnectionStore
         await write(records.filter((entry) => entry.id !== id));
       });
     },
+    rename(id, label) {
+      const next = label.trim().slice(0, 60);
+      if (!next) return Promise.resolve();
+      return serialize(async () => write((await read()).map((entry) => entry.id === id ? { ...entry, label: next } : entry)));
+    },
     touch(id) {
       return serialize(async () => write((await read()).map((entry) => entry.id === id ? { ...entry, lastUsedAt: Date.now() } : entry)));
     },
@@ -209,6 +215,7 @@ export type ConnectionsApi = {
   loaded: boolean;
   switchTo(id: string): Promise<void>;
   remove(id: string): Promise<void>;
+  rename(id: string, label: string): Promise<void>;
   refresh(): Promise<void>;
 };
 
@@ -264,5 +271,9 @@ export function useConnections(): ConnectionsApi {
     if (wasActive) window.location.reload();
     else await refresh();
   }, [platform, store, refresh]);
-  return { connections, activeId, loaded, switchTo, remove, refresh };
+  const rename = useCallback(async (id: string, label: string) => {
+    await store.rename(id, label);
+    await refresh();
+  }, [store, refresh]);
+  return { connections, activeId, loaded, switchTo, remove, rename, refresh };
 }

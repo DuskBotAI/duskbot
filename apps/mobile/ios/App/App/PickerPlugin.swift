@@ -61,6 +61,25 @@ enum PickedFiles {
 /// copied photo could never reach the chat. The pictures go to `onPasteImages`; text pastes as before.
 final class PastingTextView: UITextView {
     var onPasteImages: (([[String: Any]]) -> Void)?
+    var onHardwareReturn: (() -> Void)?
+
+    override func pressesBegan(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
+        if let onHardwareReturn, markedTextRange == nil {
+            let unconsumed = presses.filter { press in
+                guard let key = press.key,
+                      key.keyCode == .keyboardReturnOrEnter || key.keyCode == .keypadEnter,
+                      key.modifierFlags.intersection([.shift, .alternate, .control, .command]).isEmpty else {
+                    return true
+                }
+                onHardwareReturn()
+                return false
+            }
+            if unconsumed.isEmpty { return }
+            super.pressesBegan(unconsumed, with: event)
+            return
+        }
+        super.pressesBegan(presses, with: event)
+    }
 
     override func canPerformAction(_ action: Selector, withSender sender: Any?) -> Bool {
         if action == #selector(paste(_:)), onPasteImages != nil, UIPasteboard.general.hasImages { return true }

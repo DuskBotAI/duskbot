@@ -73,7 +73,8 @@ describe("swipe a message to reply", () => {
     fire("text", "touchmove", 100 + REPLY_THRESHOLD.incoming + 40, 302);
     expect(platform.haptic).toHaveBeenCalledTimes(1);
     expect(platform.haptic).toHaveBeenCalledWith("medium");
-    fire("text", "touchend", 0, 0);
+    const end = fire("text", "touchend", 0, 0);
+    expect(end.defaultPrevented).toBe(true);
     expect(row.style.translate).toBe("");
     expect(onReply).toHaveBeenCalledTimes(1);
     stop();

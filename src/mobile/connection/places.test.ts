@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { MobileConnectionRecord } from "../../../shared/mobile-link";
 import type { MobileCloud, MobileComputer, MobileTeamCloud } from "../account/account-client";
-import { mergePlaces, pairingText } from "./places";
+import { mergePlaces, pairingText, placeActions } from "./places";
 
 const record = (id: string, label: string, origin?: string): MobileConnectionRecord => ({ id, environmentId: `env-${id}`, label, transport: "https", origin, sessionRef: `token.${id}`, capabilities: {} as MobileConnectionRecord["capabilities"], addedAt: 1, lastUsedAt: 1 });
 const cloud = (id: string, extra: Partial<MobileCloud> = {}): MobileCloud => ({ id, name: `Cloud ${id}`, status: "ready", origin: `https://${id}.dusk.bot`, primary: false, asleep: false, ...extra });
@@ -48,5 +48,21 @@ describe("places", () => {
 
   it("hands the pairing step the cloud's address and its code", () => {
     expect(pairingText({ origin: "https://c1.dusk.bot", code: "ABCD-EFGH-JKLM", expiresAt: 1 })).toBe("https://c1.dusk.bot ABCDEFGHJKLM");
+  });
+
+  it("tracks linked account computers and offers rename/remove only on linked places and account computers", () => {
+    const places = mergePlaces({
+      records: [record("mac", "MacBook-Pro-Karol-3.local"), record("home", "Home cloud", "https://c1.dusk.bot")],
+      activeId: "mac",
+      connected: true,
+      account: { clouds: [cloud("c1"), cloud("c2")], teams: [team("t1")], computers: [computer("mac"), computer("pc")] },
+    });
+    expect(places.map((place) => [place.key, place.kind, place.synced, place.accountComputer?.id ?? null, placeActions(place)])).toEqual([
+      ["linked:mac", "computer", true, "ws_mac", ["rename", "remove"]],
+      ["linked:home", "cloud", true, null, ["rename", "remove"]],
+      ["cloud:c2", "cloud", true, null, []],
+      ["team:t1", "team", true, null, []],
+      ["computer:ws_pc", "computer", true, "ws_pc", ["rename", "remove"]],
+    ]);
   });
 });

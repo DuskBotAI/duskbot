@@ -5,7 +5,7 @@ import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
 import { useStore, type Bot } from "@/state/store";
 import { OrgSkillsCard } from "../../bot-settings/OrgSkillsCard";
-import { SkillReviewDialog } from "../../bot-settings/SkillsSection";
+import { SkillReviewSheet } from "../../bot-settings/SkillsSection";
 import { Card, FormDialog, FormField, NavRow, NoteRow, rowCls, RowText, SheetPane, useSubPage } from "../../ListRows";
 import { RowIconButton, textFieldCls } from "../../ui/GrokDialog";
 import { Toggle } from "../../ui/Toggle";
@@ -31,67 +31,65 @@ function SkillRows({ bot }: { bot: Bot }) {
   const busy = Boolean(skills.working);
   const on = skills.skills.filter((skill) => skill.enabled).length;
   const errorRow = skills.error && !skills.reviewing && !adding ? <Card><NoteRow tone="warn">{skills.error}</NoteRow></Card> : null;
-  const review = skills.reviewing && (
-    <SkillReviewDialog
-      skill={skills.reviewing.skill}
-      text={skills.reviewing.text}
+  const review = (
+    <SkillReviewSheet
+      reviewing={skills.reviewing}
       error={skills.error}
-      working={skills.working === skills.reviewing.skill.name}
+      working={Boolean(skills.reviewing && skills.working === skills.reviewing.skill.name)}
       onCancel={() => skills.setReviewing(null)}
       onEnable={() => void skills.enableReviewed()}
     />
   );
 
-  if (at === "installed") {
-    return (
-      <>
-        <Card data-sheet-group="installed">
-          {skills.loading ? <NoteRow>{t("botPanel.ui.skillsLoading")}</NoteRow>
-            : skills.skills.length === 0 ? <ArtState data-art-state="skills" art="cap" title={t("empty.skills.title")} className="py-6">{t("empty.skillsSheet.hint", { name: bot.name })}</ArtState>
-              : skills.skills.map((skill) => (
-                <div key={skill.name} data-panel-row={`skill:${skill.name}`} className={cn(rowCls, "group/row")}>
-                  <RowText title={skill.name} hint={skill.description || skill.source} />
-                  <RowIconButton
-                    reveal
-                    icon="trash"
-                    data-modal-action={`remove-skill:${skill.name}`}
-                    label={t("botPanel.skills.remove", { name: skill.name })}
-                    disabled={busy}
-                    onClick={() => void remove(skill)}
-                  />
-                  <Toggle
-                    checked={skill.enabled}
-                    disabled={busy}
-                    aria-label={t("botPanel.ui.botSettingsSimpleSkillToggle", { name: skill.name })}
-                    onClick={() => void skills.toggle(skill)}
-                  />
-                </div>
-              ))}
-        </Card>
-        {errorRow}
-        <OrgSkillsCard bot={bot} onAdded={() => void skills.refresh()} />
-        {review}
-      </>
-    );
-  }
-
   return (
     <>
-      <Card data-sheet-group="skills">
-        <NavRow
-          data-sheet-row="installed"
-          title={t("botPanel.ui.sheetRowsInstalled")}
-          value={skills.loading ? t("botPanel.ui.skillsLoading") : skills.skills.length === 0 ? t("botPanel.sheet.noSkills") : t("botPanel.skills.on", { count: on })}
-          onClick={() => open("installed", t("botPanel.ui.sheetRowsInstalled"))}
-        />
-        <NavRow data-sheet-row="add-skill" title={t("botPanel.ui.sheetRowsAddSkill")} onClick={() => setAdding(true)} />
-      </Card>
-      <Card label={t("botPanel.ui.sheetRowsFindMore")}>
-        <NavRow data-panel-link="browse-skills" title={t("botPanel.skills.browse")} onClick={browse} />
-        <NavRow data-panel-link="connect-apps" title={t("botPanel.ui.sheetRowsConnectApps")} onClick={() => dispatch({ type: "togglePlugins", open: true, surface: "apps" })} />
-      </Card>
-      {errorRow}
-      <AnimatePresence>{adding && <AddSkillDialog key="add-skill-dialog" actions={actions} onClose={() => setAdding(false)} />}</AnimatePresence>
+      {at === "installed" ? (
+        <>
+          <Card data-sheet-group="installed">
+            {skills.loading ? <NoteRow>{t("botPanel.ui.skillsLoading")}</NoteRow>
+              : skills.skills.length === 0 ? <ArtState data-art-state="skills" art="cap" title={t("empty.skills.title")} className="py-6">{t("empty.skillsSheet.hint", { name: bot.name })}</ArtState>
+                : skills.skills.map((skill) => (
+                  <div key={skill.name} data-panel-row={`skill:${skill.name}`} className={cn(rowCls, "group/row")}>
+                    <RowText title={skill.name} hint={skill.description || skill.source} />
+                    <RowIconButton
+                      reveal
+                      icon="trash"
+                      data-modal-action={`remove-skill:${skill.name}`}
+                      label={t("botPanel.skills.remove", { name: skill.name })}
+                      disabled={busy}
+                      onClick={() => void remove(skill)}
+                    />
+                    <Toggle
+                      checked={skill.enabled}
+                      disabled={busy}
+                      aria-label={t("botPanel.ui.botSettingsSimpleSkillToggle", { name: skill.name })}
+                      onClick={() => void skills.toggle(skill)}
+                    />
+                  </div>
+                ))}
+          </Card>
+          {errorRow}
+          <OrgSkillsCard bot={bot} onAdded={() => void skills.refresh()} />
+        </>
+      ) : (
+        <>
+          <Card data-sheet-group="skills">
+            <NavRow
+              data-sheet-row="installed"
+              title={t("botPanel.ui.sheetRowsInstalled")}
+              value={skills.loading ? t("botPanel.ui.skillsLoading") : skills.skills.length === 0 ? t("botPanel.sheet.noSkills") : t("botPanel.skills.on", { count: on })}
+              onClick={() => open("installed", t("botPanel.ui.sheetRowsInstalled"))}
+            />
+            <NavRow data-sheet-row="add-skill" title={t("botPanel.ui.sheetRowsAddSkill")} onClick={() => setAdding(true)} />
+          </Card>
+          <Card label={t("botPanel.ui.sheetRowsFindMore")}>
+            <NavRow data-panel-link="browse-skills" title={t("botPanel.skills.browse")} onClick={browse} />
+            <NavRow data-panel-link="connect-apps" title={t("botPanel.ui.sheetRowsConnectApps")} onClick={() => dispatch({ type: "togglePlugins", open: true, surface: "apps" })} />
+          </Card>
+          {errorRow}
+          <AnimatePresence>{adding && <AddSkillDialog key="add-skill-dialog" actions={actions} onClose={() => setAdding(false)} />}</AnimatePresence>
+        </>
+      )}
       {review}
     </>
   );

@@ -27,6 +27,7 @@ export type MobileComputer = { id: string; name: string; kind: "vps" | "mac" | "
 export type AccountPlaces = { clouds: MobileCloud[]; teams: MobileTeamCloud[]; computers: MobileComputer[] };
 /** `asleep`: the computer is not online to answer; `unavailable`: it answered but made no pairing a phone can use */
 export type ComputerPairResult = { outcome: "paired"; link: string } | { outcome: "asleep" | "unavailable" | "limited" | "signed-out" | "failed" };
+export type ComputerActionResult = { outcome: "ok" | "signed-out" | "not-found" | "invalid" | "failed" };
 export type CloudPairGrant = { origin: string; code: string; expiresAt: number };
 export type CloudPairResult = { outcome: "paired"; grant: CloudPairGrant } | { outcome: "asleep" | "unavailable" | "signed-out" | "failed" };
 type StoredGrant = { origin: string; token: string; expiresAt: number; account: MobileAccount; deviceId: string };
@@ -123,7 +124,7 @@ export function parseComputers(input: unknown): MobileComputer[] {
     if (!object(entry) || typeof entry.id !== "string" || !WORKSPACE_ID.test(entry.id) || seen.has(entry.id)) continue;
     if (typeof entry.kind !== "string" || !COMPUTER_KINDS.includes(entry.kind) || typeof entry.presence !== "string" || !PRESENCE.includes(entry.presence)) continue;
     seen.add(entry.id);
-    const name = typeof entry.name === "string" && entry.name.trim() ? entry.name.trim().slice(0, 40) : entry.kind === "vps" ? "server" : "computer";
+    const name = typeof entry.name === "string" && entry.name.trim() ? entry.name.trim().slice(0, 60) : entry.kind === "vps" ? "server" : "computer";
     const environmentId = typeof entry.environmentId === "string" && /^[A-Za-z0-9_-]{1,80}$/.test(entry.environmentId) ? entry.environmentId : null;
     computers.push({ id: entry.id, name, kind: entry.kind as MobileComputer["kind"], presence: entry.presence as MobileComputer["presence"], environmentId });
   }
@@ -482,6 +483,35 @@ export function createMobileAccount({ platform, origin, fetch: requestFetch = gl
         if (error.status === 429) return { outcome: "limited" };
         if (error.status === 409 && error.code === "computer_offline") return { outcome: "asleep" };
         if (error.status === 409 || error.status === 404) return { outcome: "unavailable" };
+        return { outcome: "failed" };
+      }
+    },
+    async renameComputer(computer: Pick<MobileComputer, "id">, name: string, accountId?: string): Promise<ComputerActionResult> {
+      const token = tokenOf(accountId);
+      if (!token) return { outcome: "signed-out" };
+      const trimmed = name.trim();
+      if (!trimmed || trimmed.length > 60) return { outcome: "invalid" };
+      try {
+        await request(ACCOUNT_ROUTES.appComputer(computer.id), "PATCH", { name: trimmed }, token);
+        return { outcome: "ok" };
+      } catch (error) {
+        if (!(error instanceof AccountRequestError) || error.opaque) return { outcome: "failed" };
+        if (error.status === 401) return { outcome: "signed-out" };
+        if (error.status === 404) return { outcome: "not-found" };
+        if (error.status === 400) return { outcome: "invalid" };
+        return { outcome: "failed" };
+      }
+    },
+    async removeComputer(computer: Pick<MobileComputer, "id">, accountId?: string): Promise<ComputerActionResult> {
+      const token = tokenOf(accountId);
+      if (!token) return { outcome: "signed-out" };
+      try {
+        await request(ACCOUNT_ROUTES.appComputer(computer.id), "DELETE", undefined, token);
+        return { outcome: "ok" };
+      } catch (error) {
+        if (!(error instanceof AccountRequestError) || error.opaque) return { outcome: "failed" };
+        if (error.status === 401) return { outcome: "signed-out" };
+        if (error.status === 404) return { outcome: "not-found" };
         return { outcome: "failed" };
       }
     },

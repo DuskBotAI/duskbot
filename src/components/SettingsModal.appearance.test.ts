@@ -15,6 +15,8 @@ const fixture = vi.hoisted(() => ({
   setShowRunCard: vi.fn(),
   toolsLayout: "rows" as "rows" | "toolbar",
   setSidebarToolsLayout: vi.fn(),
+  feedbackHidden: false,
+  setSidebarFeedbackHidden: vi.fn(),
   notificationSounds: true,
   setNotificationSounds: vi.fn(),
   sendKey: "enter" as SendKey,
@@ -42,6 +44,8 @@ vi.mock("@/lib/sidebar-preferences", async (importOriginal) => ({
   ...await importOriginal<typeof import("@/lib/sidebar-preferences")>(),
   useSidebarToolsLayout: () => fixture.toolsLayout,
   setSidebarToolsLayout: fixture.setSidebarToolsLayout,
+  useSidebarFeedbackHidden: () => fixture.feedbackHidden,
+  setSidebarFeedbackHidden: fixture.setSidebarFeedbackHidden,
 }));
 vi.mock("@/lib/notification-preferences", () => ({
   useNotificationSounds: () => fixture.notificationSounds,
@@ -77,6 +81,7 @@ beforeEach(() => {
   fixture.section = "appearance";
   fixture.showRunCard = true;
   fixture.toolsLayout = "rows";
+  fixture.feedbackHidden = false;
   fixture.notificationSounds = true;
   fixture.sendKey = "enter";
   fixture.colorUserBubbles = false;
@@ -164,6 +169,17 @@ describe("Settings → General → Appearance", () => {
     expect(fixture.setNotificationSounds).toHaveBeenCalledWith(!enabled);
     expect(fixture.api).not.toHaveBeenCalled();
     expect(fixture.dispatch).not.toHaveBeenCalled();
+  });
+
+  it.each([false, true])("shows or brings back the sidebar feedback button when hidden is %s", (hidden) => {
+    fixture.section = "general";
+    fixture.feedbackHidden = hidden;
+    const html = render();
+    expect(html).toContain("Show feedback button in sidebar");
+    const toggle = fixture.switches.find((props) => props["aria-label"] === "Show feedback button in sidebar")!;
+    expect(toggle.checked).toBe(!hidden);
+    toggle.onClick!({} as never);
+    expect(fixture.setSidebarFeedbackHidden).toHaveBeenCalledWith(!hidden);
   });
 
   it("has no choice of sidebar density: the sidebar's edge is dragged instead", () => {

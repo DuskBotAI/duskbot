@@ -65,7 +65,7 @@ import { createSealer, parseSealKey } from "./clouds/seal.ts";
 import { aliasLegacyCookies, aliasLegacyHeaders } from "../../../electron/legacy-names.mjs";
 import { LINK_GRANT_PATH, linkGrantSignerFromEnv, signLinkGrant } from "./link-grant.ts";
 import { screenIceMinterFromEnv } from "./screen-ice.ts";
-import { ACCOUNT_ROUTES, type AppComputersAnswer } from "../../../shared/account-api.ts";
+import { ACCOUNT_ROUTES, type AppComputerAnswer, type AppComputersAnswer } from "../../../shared/account-api.ts";
 
 export interface DashboardAppOptions {
   dataDir: string;
@@ -717,12 +717,12 @@ export function createDashboardApp(options: DashboardAppOptions) {
     }
     const mutation = MUTATIONS.includes(method);
     const appleCallback = method === "POST" && path === "/v1/auth/oauth/apple/callback" && req.headers["content-type"]?.split(";")[0]?.trim().toLowerCase() === "application/x-www-form-urlencoded";
-    const computersRoute = path === ACCOUNT_ROUTES.appComputers || /^\/v1\/app\/computers\/[^/]+\/pair$/.test(path);
+    const computersRoute = path === ACCOUNT_ROUTES.appComputers || /^\/v1\/app\/computers\/[^/]+(?:\/pair)?$/.test(path);
     if (computersRoute) {
       // bearer only, never a cookie: any origin may call it, as the session and enroll-grant routes allow
       res.setHeader("access-control-allow-origin", "*");
       res.setHeader("access-control-allow-headers", "content-type, authorization, x-dusk-version");
-      res.setHeader("access-control-allow-methods", "GET, POST, OPTIONS");
+      res.setHeader("access-control-allow-methods", "GET, POST, PATCH, DELETE, OPTIONS");
       if (method === "OPTIONS") { res.writeHead(204); res.end(); return; }
     }
     // the app sends feedback here itself when its server can't: no cookie is read, and the route keeps its own hourly limits
@@ -772,6 +772,30 @@ export function createDashboardApp(options: DashboardAppOptions) {
       const answer: AppComputersAnswer = { v: 1, computers: state.workspaces.filter(ws => ws.ownerAccountId === found.account.id && !clouds.has(ws.id))
         .map(ws => appComputer(ws, seen.get(ws.id), now())) };
       return json(res, 200, answer);
+    }
+    const computerPath = (method === "PATCH" || method === "DELETE") ? /^\/v1\/app\/computers\/([^/]+)$/.exec(path) : null;
+    if (computerPath) {
+      rate(req, method === "PATCH" ? "computer-rename" : "computer-remove", 120);
+      const found = auth.appSession(req);
+      if (!found) fail(401, "invalid_token", "Session is invalid.");
+      let id: string;
+      try { id = decodeURIComponent(computerPath[1]!); } catch { fail(404, "not_found", "Computer not found."); }
+      // security: another account's computer reads as missing, the same as one that does not exist
+      const ws = COMPUTER_ID.test(id) ? state.workspaces.find(item => item.id === id && item.ownerAccountId === found.account.id) : undefined;
+      if (!ws || billing.clouds.list(found.account.id, true).some(cloud => billing.clouds.view(cloud).workspaceId === ws.id)) fail(404, "not_found", "Computer not found.");
+      if (method === "PATCH") {
+        const data = bodyObject(await readBody(req));
+        const name = typeof data.name === "string" ? data.name.trim() : "";
+        if (!name.length || name.length > 60 || [...name].some(char => char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127)) fail(400, "invalid_name", "Name must be 1 to 60 characters.");
+        ws.name = name;
+        store.changed();
+        return json(res, 200, { v: 1, computer: appComputer(ws, seen.get(ws.id), now()) } satisfies AppComputerAnswer);
+      }
+      forget(ws);
+      void usage.forgetWorkspace(ws.id);
+      state.workspaces = state.workspaces.filter(item => item !== ws);
+      store.changed();
+      return json(res, 200, { ok: true });
     }
     const pairPath = method === "POST" ? /^\/v1\/app\/computers\/([^/]+)\/pair$/.exec(path) : null;
     if (pairPath) {

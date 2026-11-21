@@ -1,7 +1,9 @@
+import { createHash } from "node:crypto";
 import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import * as tar from "tar";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { DATA_DIR, ensureDirs } from "../config.ts";
@@ -13,8 +15,11 @@ import * as envPath from "../env-path.ts";
 import * as managedRuntime from "./antigravity-runtime.ts";
 import {
   ANTIGRAVITY_AUTH_PREFIX,
+  ANTIGRAVITY_CODE_REDIRECT_URI,
   AntigravityAcpClient,
   AntigravityAuthController,
+  antigravityAcpArgs,
+  antigravityLoginResponse,
   antigravityProfileAuthenticated,
   antigravityProfileDirectory,
   authorizationUrlFromLine,
@@ -28,6 +33,9 @@ import {
 } from "./antigravity-acp.ts";
 import {
   ANTIGRAVITY_RELEASE_VERSION,
+  antigravityCliTarget,
+  fetchAntigravityCliRelease,
+  parseAntigravityCliRelease,
   resolveAntigravityReleaseAsset,
   type AntigravityReleaseAsset,
 } from "./antigravity-release.ts";
@@ -44,21 +52,18 @@ import {
 const FAKE_ACP = join(dirname(fileURLToPath(import.meta.url)), "..", "testing", "fake-acp-cli.ts");
 const scratch: string[] = [];
 
-function fakeRuntime(startupDelayMs = 0): { directory: string; executable: string; harness: string } {
+function fakeRuntime(startupDelayMs = 0): { directory: string; executable: string } {
   const directory = mkdtempSync(join(tmpdir(), "dusk-antigravity-acp-"));
   scratch.push(directory);
   const executable = join(directory, "fake-antigravity.ts");
-  const harness = join(directory, process.platform === "win32" ? "localharness_external.exe" : "localharness_external");
   copyFileSync(FAKE_ACP, executable);
   if (startupDelayMs) {
     writeFileSync(executable, `#!/usr/bin/env node\nsetTimeout(() => import(${JSON.stringify(pathToFileURL(FAKE_ACP).href)}), ${startupDelayMs});\n`);
   }
-  copyFileSync(FAKE_ACP, harness);
   if (process.platform !== "win32") {
     chmodSync(executable, 0o755);
-    chmodSync(harness, 0o755);
   }
-  return { directory, executable, harness };
+  return { directory, executable };
 }
 
 afterEach(async () => {
@@ -155,7 +160,7 @@ describe("Antigravity sign-in lifecycle", () => {
       expect(unavailable.reason).not.toContain("fixture failure");
       install.mockRejectedValueOnce(new Error("Antigravity initialization timed out: fixture failure"));
       await expect(instance.installRuntime!()).rejects.toThrow("fixture failure");
-      install.mockResolvedValueOnce({ executablePath: fake.executable, harnessPath: fake.harness, source: "managed", version: "1.1.1" });
+      install.mockResolvedValueOnce({ executablePath: fake.executable, source: "managed", version: "1.5.13" });
       await instance.installRuntime!();
       expect((await instance.snapshot()).reason).not.toContain("fixture failure");
     } finally {
@@ -163,41 +168,96 @@ describe("Antigravity sign-in lifecycle", () => {
     }
   });
 
-  it("signs out by forgetting only this account's stored Google sign-in", async () => {
+  it("signs out through ACP logout, stops active sessions, clears cached models, and leaves other accounts untouched", async () => {
     ensureDirs();
     const fake = fakeRuntime();
+    const rpcDump = join(fake.directory, "logout-rpc.json");
     const instanceId = "antigravity-sign-out";
     const profile = antigravityProfileDirectory(instanceId);
-    const token = join(profile, "antigravity-acp", "acp_token.json");
-    const other = join(antigravityProfileDirectory("antigravity-other"), "antigravity-acp", "acp_token.json");
-    for (const file of [token, other]) {
+    const cliToken = join(profile, "antigravity-acp", "antigravity-oauth-token");
+    const legacyToken = join(profile, "antigravity-acp", "acp_token.json");
+    const other = join(antigravityProfileDirectory("antigravity-other"), "antigravity-acp", "antigravity-oauth-token");
+    for (const file of [cliToken, legacyToken, other]) {
       mkdirSync(dirname(file), { recursive: true });
-      writeFileSync(file, "{}", { mode: 0o600 });
+      writeFileSync(file, JSON.stringify({ token: { access_token: "synthetic-token", expiry: "2099-01-01T00:00:00Z" } }), { mode: 0o600 });
     }
     const instance = await AntigravityDriver.create({
       instanceId, displayName: "Antigravity", enabled: true,
       config: { cli: fake.executable, fullAuto: false },
-      environment: { FAKE_ACP_AUTH_METHOD: "oauth-personal" },
+      environment: {
+        FAKE_ACP_AUTH_METHOD: "oauth-personal",
+        FAKE_ACP_MODELS: "gemini-account-special",
+        FAKE_ACP_RPC_DUMP: rpcDump,
+      },
     });
+    const recorder = recordEvents(instance.adapter);
     try {
+      await instance.refreshModels!();
+      expect(instance.models.options.map((option) => option.id)).toEqual(["gemini-account-special"]);
       expect((await instance.snapshot()).authenticated).toBe(true);
+      expect(instance.authenticationMethod).toBe("paste-code");
       expect(instance.signOut).toBeTypeOf("function");
+
+      // Open a pooled session so signOut proves it stops active/pooled processes before logging out.
+      const { turnId } = await instance.adapter.sendTurn({ threadId: "signout-thread", text: "hi", approvalMode: "ask", cwd: fake.directory });
+      await recorder.until((event) => event.type === "turn.completed" && event.turnId === turnId);
+
       await instance.signOut!();
-      expect(existsSync(token)).toBe(false);
+      expect(JSON.parse(readFileSync(rpcDump, "utf8"))).toEqual(["initialize", "logout"]);
+      expect(existsSync(cliToken)).toBe(false);
+      expect(existsSync(legacyToken)).toBe(false);
       expect(existsSync(join(profile, "antigravity-acp", "settings.json"))).toBe(true);
       expect(existsSync(other)).toBe(true);
       expect((await instance.snapshot()).authenticated).toBe(false);
+      expect(instance.models).toEqual(STATIC_ANTIGRAVITY_MODELS);
+      // Calling signOut again when already signed out still completes cleanly via ACP logout.
       await instance.signOut!();
     } finally {
+      recorder.stop();
       await instance.dispose();
       rmSync(profile, { recursive: true, force: true });
       rmSync(antigravityProfileDirectory("antigravity-other"), { recursive: true, force: true });
     }
   });
 
+  it("refuses sign-out when the runtime does not advertise auth.logout or rejects logout", async () => {
+    ensureDirs();
+    const fake = fakeRuntime();
+    const instanceId = "antigravity-no-logout";
+    const profile = antigravityProfileDirectory(instanceId);
+    const cliToken = join(profile, "antigravity-acp", "antigravity-oauth-token");
+    mkdirSync(dirname(cliToken), { recursive: true });
+    writeFileSync(cliToken, "{}", { mode: 0o600 });
+
+    const noCap = await AntigravityDriver.create({
+      instanceId, displayName: "Antigravity", enabled: true,
+      config: { cli: fake.executable, fullAuto: false },
+      environment: { FAKE_ACP_NO_LOGOUT: "1" },
+    });
+    try {
+      await expect(noCap.signOut!()).rejects.toThrow(/does not support sign-out/u);
+      expect(existsSync(cliToken)).toBe(true);
+    } finally {
+      await noCap.dispose();
+    }
+
+    const rejected = await AntigravityDriver.create({
+      instanceId, displayName: "Antigravity", enabled: true,
+      config: { cli: fake.executable, fullAuto: false },
+      environment: { FAKE_ACP_LOGOUT_ERROR: "logout failed" },
+    });
+    try {
+      await expect(rejected.signOut!()).rejects.toThrow(/logout failed/u);
+      expect(existsSync(cliToken)).toBe(true);
+    } finally {
+      await rejected.dispose();
+      rmSync(profile, { recursive: true, force: true });
+    }
+  });
+
   it("uses the same discovered PATH for readiness and Google sign-in", async () => {
     const fake = fakeRuntime();
-    const executable = join(fake.directory, process.platform === "win32" ? "agy_acp_server.exe" : "agy_acp_server.par");
+    const executable = join(fake.directory, process.platform === "win32" ? "agy.exe" : "antigravity");
     copyFileSync(fake.executable, executable);
     if (process.platform !== "win32") chmodSync(executable, 0o755);
     vi.stubEnv("PATH", "");
@@ -209,7 +269,7 @@ describe("Antigravity sign-in lifecycle", () => {
       instanceId: "path-only-antigravity",
       displayName: "Antigravity fixture",
       enabled: true,
-      config: { cli: "agy_acp_server" + (process.platform === "win32" ? ".exe" : ".par"), fullAuto: false },
+      config: { cli: process.platform === "win32" ? "agy.exe" : "antigravity", fullAuto: false },
       environment: { PATH: "" },
     });
     try {
@@ -224,20 +284,14 @@ describe("Antigravity sign-in lifecycle", () => {
     }
   });
 
-  // Google's server announces the link on stderr, never stdout.
-  it.each(["cancel", "provider failure"])("contains %s after handing the browser a sign-in URL", async (ending) => {
+  it.each(["cancel", "provider failure"])("contains %s after handing the browser a `--login` sign-in URL", async (ending) => {
     const fake = fakeRuntime();
-    const url = "https://accounts.google.com/o/oauth2/v2/auth?response_type=code&state=fixture&redirect_uri=http%3A%2F%2F127.0.0.1%3A54321%2F";
+    const url = `https://accounts.google.com/o/oauth2/auth?response_type=code&state=fixture&redirect_uri=${encodeURIComponent(ANTIGRAVITY_CODE_REDIRECT_URI)}`;
     writeFileSync(fake.executable, `#!/usr/bin/env node
-import { createInterface } from 'node:readline';
-createInterface({ input: process.stdin }).on('line', line => {
-  const message = JSON.parse(line);
-  if (message.method === 'authenticate') {
-    console.error(${JSON.stringify(ANTIGRAVITY_AUTH_PREFIX + url)});
-    ${ending === "provider failure" ? `setTimeout(() => console.log(JSON.stringify({ jsonrpc: '2.0', id: message.id, error: { code: -1, message: 'Sign-in expired' } })), 100);` : ""}
-  } else console.log(JSON.stringify({ jsonrpc: '2.0', id: message.id, result: {} }));
-});
+process.stdout.write("Open this link:\\n\\n  " + ${JSON.stringify(url)} + "\\n");
+${ending === "provider failure" ? "setTimeout(() => process.exit(1), 100);" : "setInterval(() => {}, 10_000);"}
 `);
+    if (process.platform !== "win32") chmodSync(fake.executable, 0o755);
     const runtime = await resolveAntigravityRuntime(fake.executable);
     const profile = await prepareAntigravityProfile({ instanceId: "auth-lifecycle", runtime, baseDir: fake.directory });
     const signedIn = vi.fn();
@@ -245,40 +299,47 @@ createInterface({ input: process.stdin }).on('line', line => {
     try {
       const flow = await controller.start(runtime, profile);
       expect(flow.phase).toBe("waiting");
-      if (ending === "cancel") controller.cancel();
-      // Let rejected pending RPCs settle: Vitest must see no unhandled rejection.
+      expect(flow.authorizationUrl).toBe(url);
+      if (ending === "cancel") await controller.cancelAndWait();
       await new Promise((resolve) => setTimeout(resolve, 300));
-      await expect(controller.complete(flow.flowId!, "http://127.0.0.1:54321/?code=test&state=fixture"))
+      await expect(controller.complete(flow.flowId!, "test-auth-code"))
         .rejects.toThrow(/no longer active/u);
       expect(signedIn).not.toHaveBeenCalled();
     } finally {
-      controller.cancel();
+      await controller.cancelAndWait();
     }
   });
 
-  it("reports a sign-in Google finishes on its own, so the account's models are read", async () => {
+  it.each(["bare-code", "callback-url"] as const)("completes `--login` sign-in with a pasted %s and retries after a 400 invalid paste", async (kind) => {
     const fake = fakeRuntime();
-    const url = "https://accounts.google.com/o/oauth2/v2/auth?response_type=code&state=fixture&redirect_uri=http%3A%2F%2F127.0.0.1%3A54321%2F";
-    writeFileSync(fake.executable, `#!/usr/bin/env node
-import { createInterface } from 'node:readline';
-createInterface({ input: process.stdin }).on('line', line => {
-  const message = JSON.parse(line);
-  if (message.method === 'authenticate') {
-    console.error(${JSON.stringify(ANTIGRAVITY_AUTH_PREFIX + url)});
-    setTimeout(() => console.log(JSON.stringify({ jsonrpc: '2.0', id: message.id, result: {} })), 100);
-  } else console.log(JSON.stringify({ jsonrpc: '2.0', id: message.id, result: {} }));
-});
-`);
     const runtime = await resolveAntigravityRuntime(fake.executable);
-    const profile = await prepareAntigravityProfile({ instanceId: "auth-finishes", runtime, baseDir: fake.directory });
-    let signedIn!: () => void;
-    const reported = new Promise<void>((resolve) => { signedIn = resolve; });
-    const controller = new AntigravityAuthController(() => signedIn());
+    const profile = await prepareAntigravityProfile({
+      instanceId: `auth-code-${kind}`,
+      runtime,
+      baseDir: fake.directory,
+      baseEnv: { PATH: process.env.PATH, FAKE_ACP_LOGIN_STATE: "login-state-1" },
+    });
+    const signedIn = vi.fn();
+    const controller = new AntigravityAuthController(signedIn);
     try {
-      expect((await controller.start(runtime, profile)).phase).toBe("waiting");
-      await expect(reported).resolves.toBeUndefined();
+      const flow = await controller.start(runtime, profile);
+      expect(flow.phase).toBe("waiting");
+      expect(flow.authorizationUrl).toContain(encodeURIComponent(ANTIGRAVITY_CODE_REDIRECT_URI));
+
+      // Bad paste returns 400 without terminating the flow.
+      await expect(controller.complete(flow.flowId!, "https://evil.example/?code=x&state=login-state-1"))
+        .rejects.toMatchObject({ status: 400 });
+      expect(signedIn).not.toHaveBeenCalled();
+
+      const answer = kind === "bare-code"
+        ? "4/0A-synthetic-code"
+        : `${ANTIGRAVITY_CODE_REDIRECT_URI}?code=4%2F0A-synthetic-code&state=login-state-1`;
+      await controller.complete(flow.flowId!, answer);
+      expect(signedIn).toHaveBeenCalledTimes(1);
+      expect(await antigravityProfileAuthenticated(profile)).toBe(true);
+      expect(existsSync(profile.tokenPath)).toBe(true);
     } finally {
-      controller.cancel();
+      await controller.cancelAndWait();
     }
   });
 });
@@ -352,30 +413,85 @@ describe("stopping the runtime before touching its files", () => {
 });
 
 describe("official Antigravity runtime", () => {
-  it("pins Google's release metadata for this supported host", () => {
+  it("pins Google's 1.5.x CLI release metadata for this supported host", () => {
     const asset = resolveAntigravityReleaseAsset();
     if (!asset) return;
-    expect(ANTIGRAVITY_RELEASE_VERSION).toBe("1.4.3");
+    expect(ANTIGRAVITY_RELEASE_VERSION).toBe("1.5.13");
     expect(asset.version).toBe(ANTIGRAVITY_RELEASE_VERSION);
-    expect(asset.url).toMatch(/^https:\/\/dl\.google\.com\/agy-extensions\/releases\//u);
-    expect(asset.sha256).toMatch(/^[a-f0-9]{64}$/u);
-    expect(asset.archiveBytes).toBeGreaterThan(100_000_000);
+    expect(asset.url).toMatch(/^https:\/\/storage\.googleapis\.com\/antigravity-public\/antigravity-cli\/1\.5\.13-/u);
+    expect(asset.sha512).toMatch(/^[a-f0-9]{128}$/u);
+    expect(asset.archiveBytes).toBeGreaterThan(50_000_000);
+    expect(asset.executable.name).toBe(process.platform === "win32" ? "agy.exe" : "antigravity");
+  });
+
+  it.each([
+    ["darwin", "arm64", false, "darwin_arm64", "darwin-arm/cli_mac_arm64.tar.gz"],
+    ["darwin", "x64", false, "darwin_amd64", "darwin-x64/cli_mac_x64.tar.gz"],
+    ["linux", "arm64", false, "linux_arm64", "linux-arm/cli_linux_arm64.tar.gz"],
+    ["linux", "x64", false, "linux_amd64", "linux-x64/cli_linux_x64.tar.gz"],
+    ["linux", "arm64", true, "linux_arm64_musl", "linux-arm-musl/cli_linux_arm64_musl.tar.gz"],
+    ["linux", "x64", true, "linux_amd64_musl", "linux-x64-musl/cli_linux_x64_musl.tar.gz"],
+    ["win32", "arm64", false, "windows_arm64", "windows-arm/cli_windows_arm64.exe"],
+    ["win32", "x64", false, "windows_amd64", "windows-x64/cli_windows_x64.exe"],
+  ] as const)("parses Google's %s-%s CLI manifest (musl %s)", (platform, arch, musl, target, file) => {
+    expect(antigravityCliTarget(platform, arch, musl)).toBe(target);
+    const parsed = parseAntigravityCliRelease({
+      version: "1.5.14",
+      url: `https://storage.googleapis.com/antigravity-public/antigravity-cli/1.5.14-999/${file}`,
+      sha512: "A".repeat(128),
+    }, platform, arch, musl);
+    expect(parsed).toEqual({
+      version: "1.5.14",
+      url: `https://storage.googleapis.com/antigravity-public/antigravity-cli/1.5.14-999/${file}`,
+      sha512: "a".repeat(128),
+      format: platform === "win32" ? "executable" : "tar.gz",
+      executable: { name: platform === "win32" ? "agy.exe" : "antigravity" },
+    });
+  });
+
+  it("rejects untrusted or mismatched CLI manifests and falls back to pinned baseline on network errors", async () => {
+    const valid = {
+      version: "1.5.14",
+      url: "https://storage.googleapis.com/antigravity-public/antigravity-cli/1.5.14-123/darwin-arm/cli_mac_arm64.tar.gz",
+      sha512: "a".repeat(128),
+    };
+    for (const bad of [
+      { ...valid, sha512: "short" },
+      { ...valid, url: valid.url.replace("https:", "http:") },
+      { ...valid, url: valid.url.replace("storage.googleapis.com", "evil.example") },
+      { ...valid, url: valid.url.replace("antigravity-public", "other-bucket") },
+      { ...valid, url: `${valid.url}?foo=bar` },
+      { ...valid, url: valid.url.replace("1.5.14-123", "1.5.13-123") },
+    ]) {
+      expect(parseAntigravityCliRelease(bad, "darwin", "arm64", false)).toBeNull();
+    }
+    const fetched = await fetchAntigravityCliRelease({
+      platform: "darwin", arch: "arm64", musl: false,
+      fetchImpl: async () => Response.json(valid),
+    });
+    expect(fetched?.version).toBe("1.5.14");
+    const fallback = await fetchAntigravityCliRelease({
+      platform: "darwin", arch: "arm64", musl: false,
+      fetchImpl: async () => { throw new Error("offline"); },
+    });
+    expect(fallback?.version).toBe(ANTIGRAVITY_RELEASE_VERSION);
   });
 
   function testValidatesAcpInitializeResults() {
     const basePayload = {
       protocolVersion: 1,
-      agentInfo: { name: "antigravity-acp", version: "1.1.1" },
+      agentInfo: { name: "Antigravity ACP Server", version: "1.5.13" },
       agentCapabilities: {
         loadSession: true,
-        sessionCapabilities: { resume: true },
-        auth: { logout: true },
+        sessionCapabilities: { resume: {} },
+        auth: { logout: {} },
       },
       authMethods: [{ id: "oauth-personal" }],
     };
 
-    expect(isValidAntigravityInitializeResult(basePayload, "agy_acp_server_1.1.1")).toBe(true);
-    expect(isValidAntigravityInitializeResult(basePayload, "1.1.1")).toBe(true);
+    expect(isValidAntigravityInitializeResult(basePayload, "1.5.13")).toBe(true);
+    expect(isValidAntigravityInitializeResult({ ...basePayload, protocolVersion: 2 }, "1.5.13")).toBe(true);
+    expect(isValidAntigravityInitializeResult({ ...basePayload, protocolVersion: 3 }, "1.5.13")).toBe(false);
 
     expect(isValidAntigravityInitializeResult({
       ...basePayload,
@@ -385,52 +501,50 @@ describe("official Antigravity runtime", () => {
     expect(isValidAntigravityInitializeResult({
       ...basePayload,
       agentInfo: { name: "Google Antigravity", version: "1.1.1" },
-    }, "agy_acp_server_1.1.1")).toBe(true);
-
-    expect(isValidAntigravityInitializeResult({ ...basePayload, protocolVersion: 2 }, "1.1.1")).toBe(false);
+    }, "1.1.1")).toBe(true);
 
     expect(isValidAntigravityInitializeResult({
       ...basePayload,
-      agentInfo: { name: "rogue-agent", version: "1.1.1" },
-    }, "1.1.1")).toBe(false);
+      agentInfo: { name: "rogue-agent", version: "1.5.13" },
+    }, "1.5.13")).toBe(false);
 
     expect(isValidAntigravityInitializeResult({
       ...basePayload,
-      agentInfo: { name: "antigravity-acp", version: "2.0.0" },
-    }, "1.1.1")).toBe(false);
+      agentInfo: { name: "Antigravity ACP Server", version: "2.0.0" },
+    }, "1.5.13")).toBe(false);
 
     expect(isValidAntigravityInitializeResult({
       ...basePayload,
-      agentCapabilities: { loadSession: false, sessionCapabilities: { resume: true }, auth: { logout: true } },
-    }, "1.1.1")).toBe(false);
+      agentCapabilities: { loadSession: false, sessionCapabilities: { resume: {} }, auth: { logout: {} } },
+    }, "1.5.13")).toBe(false);
 
     expect(isValidAntigravityInitializeResult({
       ...basePayload,
       authMethods: [{ id: "api-key" }],
-    }, "1.1.1")).toBe(false);
+    }, "1.5.13")).toBe(false);
 
     expect(isValidAntigravityInitializeResult({
       ...basePayload,
-      agentInfo: { name: "antigravity-acp", version: 1 },
-    }, "1.1.1")).toBe(false);
+      agentInfo: { name: "Antigravity ACP Server", version: 1 },
+    }, "1.5.13")).toBe(false);
     expect(isValidAntigravityInitializeResult({
       ...basePayload,
-      agentInfo: { name: "antigravity-acp", version: null },
-    }, "1.1.1")).toBe(false);
+      agentInfo: { name: "Antigravity ACP Server", version: null },
+    }, "1.5.13")).toBe(false);
 
-    expect(isValidAntigravityInitializeResult(null, "1.1.1")).toBe(false);
-    expect(isValidAntigravityInitializeResult(undefined, "1.1.1")).toBe(false);
+    expect(isValidAntigravityInitializeResult(null, "1.5.13")).toBe(false);
+    expect(isValidAntigravityInitializeResult(undefined, "1.5.13")).toBe(false);
   }
 
   it("validates ACP initialize results from official Antigravity releases", testValidatesAcpInitializeResults);
 
-  // Captured from the SHA-256-pinned Google 1.4.3 Windows x64 binary, unauthenticated: optional operations are objects.
+  // Captured from Google's official Antigravity CLI 1.5.13 binary, unauthenticated: optional operations are objects.
   const officialInitialize = {
     protocolVersion: 1,
-    agentInfo: { name: "antigravity-acp", title: "Google Antigravity", version: "1.4.3" },
+    agentInfo: { name: "Antigravity ACP Server", version: "1.5.13" },
     agentCapabilities: {
       loadSession: true,
-      sessionCapabilities: { list: {}, resume: {} },
+      sessionCapabilities: { list: {}, resume: {}, close: {} },
       auth: { logout: {} },
     },
     authMethods: [{ id: "oauth-personal", name: "Log in with Google" }],
@@ -449,17 +563,12 @@ describe("official Antigravity runtime", () => {
     }
   });
 
-  it("requires the official executable and harness as a pair", async () => {
+  it("resolves a single Antigravity CLI executable without requiring a separate harness binary", async () => {
     const fake = fakeRuntime();
-    await expect(resolveAntigravityRuntime(fake.executable)).resolves.toMatchObject({
+    await expect(resolveAntigravityRuntime(fake.executable)).resolves.toEqual({
       executablePath: fake.executable,
-      harnessPath: fake.harness,
       source: "override",
-    });
-    rmSync(fake.harness, { force: true });
-    await expect(resolveAntigravityRuntime(fake.executable)).rejects.toMatchObject({
-      message: expect.stringMatching(/localharness_external/u),
-      status: 409,
+      version: null,
     });
   });
 
@@ -471,9 +580,9 @@ describe("official Antigravity runtime", () => {
     "C:\\Tools\\agy.ps1",
     "/opt/homebrew/bin/agy",
     "/Users/someone/.local/bin/agy",
-  ])("migrates the saved legacy CLI path %s to the official runtime", async (legacyPath) => {
+  ])("migrates the saved legacy CLI path %s to the official runtime on PATH", async (legacyPath) => {
     const fake = fakeRuntime();
-    const officialExecutable = join(fake.directory, process.platform === "win32" ? "agy_acp_server.exe" : "agy_acp_server.par");
+    const officialExecutable = join(fake.directory, process.platform === "win32" ? "agy.exe" : "antigravity");
     copyFileSync(fake.executable, officialExecutable);
     if (process.platform !== "win32") chmodSync(officialExecutable, 0o755);
     const runtime = await resolveAntigravityRuntime(legacyPath, { PATH: fake.directory }, fake.directory);
@@ -499,7 +608,7 @@ describe("official Antigravity runtime", () => {
   it("does not silently replace an unrecognized custom executable", async () => {
     const fake = fakeRuntime();
     await expect(resolveAntigravityRuntime(join(fake.directory, "custom-acp"), { PATH: "" }, fake.directory))
-      .rejects.toThrow(/custom Antigravity ACP executable/);
+      .rejects.toThrow(/custom Antigravity executable/);
   });
 
   it("atomically prepares one complete profile for concurrent callers", async () => {
@@ -573,15 +682,15 @@ describe("official Antigravity runtime", () => {
     const baseDir = mkdtempSync(join(tmpdir(), "dusk-antigravity-insecure-"));
     scratch.push(baseDir);
     const asset: AntigravityReleaseAsset = {
-      version: "insecure-test",
-      url: "https://dl.google.com/test-antigravity.zip",
-      sha256: "00".repeat(32),
+      version: "1.5.13",
+      url: "https://storage.googleapis.com/antigravity-public/antigravity-cli/1.5.13-1/darwin-arm/cli_mac_arm64.tar.gz",
+      sha512: "00".repeat(64),
       archiveBytes: 1,
-      executable: { name: "agy_acp_server.par", bytes: 1 },
-      harness: { name: "localharness_external", bytes: 1 },
+      executable: { name: process.platform === "win32" ? "agy.exe" : "antigravity" },
+      format: process.platform === "win32" ? "executable" : "tar.gz",
     };
     const response = new Response(new Uint8Array([0]), { headers: { "content-length": "1" } });
-    Object.defineProperty(response, "url", { value: "http://dl.google.com/test-antigravity.zip" });
+    Object.defineProperty(response, "url", { value: "http://storage.googleapis.com/test-antigravity.tar.gz" });
     await expect(installAntigravityRuntime({
       baseDir,
       asset,
@@ -589,25 +698,37 @@ describe("official Antigravity runtime", () => {
     })).rejects.toThrow(/redirected outside/u);
   });
 
-  it("coalesces, verifies, extracts, and reuses a pinned download without touching another install", async () => {
+  it("coalesces, verifies SHA-512, extracts, activates, and reuses a managed download without touching another install", async () => {
     const baseDir = mkdtempSync(join(tmpdir(), "dusk-antigravity-install-"));
     scratch.push(baseDir);
     const versions = join(baseDir, "tools", "antigravity-acp", `${process.platform}-${process.arch}`, "versions");
     const otherStaging = join(versions, ".install-other-active", "runtime");
     mkdirSync(otherStaging, { recursive: true });
-    const otherFile = join(otherStaging, "agy_acp_server.exe");
+    const otherFile = join(otherStaging, "antigravity");
     writeFileSync(otherFile, "another app process is still installing");
-    const archive = Buffer.from(
-      "UEsDBBQAAAAIAMaAI13ihkXDEwAAABEAAAASAAAAYWd5X2FjcF9zZXJ2ZXIucGFyU1bUT8rM0y/O4EqtyCxRMOACAFBLAwQUAAAACADGgCNd4oZFwxMAAAARAAAAFQAAAGxvY2FsaGFybmVzc19leHRlcm5hbFNW1E/KzNMvzuBKrcgsUTDgAgBQSwECFAMUAAAACADGgCNd4oZFwxMAAAARAAAAEgAAAAAAAAAAAAAAgAEAAAAAYWd5X2FjcF9zZXJ2ZXIucGFyUEsBAhQDFAAAAAgAxoAjXeKGRcMTAAAAEQAAABUAAAAAAAAAAAAAAIABQwAAAGxvY2FsaGFybmVzc19leHRlcm5hbFBLBQYAAAAAAgACAIMAAACJAAAAAAA=",
-      "base64",
-    );
+
+    const exeName = process.platform === "win32" ? "agy.exe" : "antigravity";
+    const payload = Buffer.from("#!/bin/sh\nexit 0\n");
+    let archive: Buffer;
+    if (process.platform === "win32") {
+      archive = payload;
+    } else {
+      const packDir = join(baseDir, "pack");
+      mkdirSync(packDir, { recursive: true });
+      const binFile = join(packDir, exeName);
+      writeFileSync(binFile, payload, { mode: 0o755 });
+      const tarPath = join(baseDir, "cli.tar.gz");
+      await tar.c({ gzip: true, cwd: packDir, file: tarPath }, [exeName]);
+      archive = readFileSync(tarPath);
+    }
+    const sha512 = createHash("sha512").update(archive).digest("hex");
     const asset: AntigravityReleaseAsset = {
-      version: "test-release",
-      url: "https://dl.google.com/test-antigravity.zip",
-      sha256: "ebefcc10b5101013da6d0cb2a101ca644015377ee0f9ec5cf4efec7d9dfb7442",
+      version: "1.5.13",
+      url: `https://storage.googleapis.com/antigravity-public/antigravity-cli/1.5.13-1/test/${exeName}`,
+      sha512,
       archiveBytes: archive.length,
-      executable: { name: "agy_acp_server.par", bytes: 17 },
-      harness: { name: "localharness_external", bytes: 17 },
+      executable: { name: exeName },
+      format: process.platform === "win32" ? "executable" : "tar.gz",
     };
     let fetches = 0;
     let validations = 0;
@@ -616,7 +737,7 @@ describe("official Antigravity runtime", () => {
       asset,
       fetchImpl: async () => {
         fetches += 1;
-        return new Response(archive, { headers: { "content-length": String(archive.length) } });
+        return new Response(new Uint8Array(archive), { headers: { "content-length": String(archive.length) } });
       },
       validate: async () => { validations += 1; },
     };
@@ -624,7 +745,7 @@ describe("official Antigravity runtime", () => {
     expect(installAntigravityRuntime(options)).toBe(first);
     const installed = await first;
     expect(readFileSync(installed.executablePath, "utf8")).toBe("#!/bin/sh\nexit 0\n");
-    expect(readFileSync(installed.harnessPath, "utf8")).toBe("#!/bin/sh\nexit 0\n");
+    await expect(resolveAntigravityRuntime("agy", { PATH: "" }, baseDir)).resolves.toEqual(installed);
     await installAntigravityRuntime(options);
     expect(fetches).toBe(1);
     expect(validations).toBe(2);
@@ -632,7 +753,7 @@ describe("official Antigravity runtime", () => {
     expect(readdirSync(versions).filter((name) => name.startsWith(".install-"))).toEqual([".install-other-active"]);
   });
 
-  it("isolates profiles by instance and strips ambient Google credentials", async () => {
+  it("isolates profiles by instance, sets SSH_CONNECTION and disables CLI auto-update, and strips ambient Google credentials", async () => {
     const fake = fakeRuntime();
     const runtime = await resolveAntigravityRuntime(fake.executable);
     const first = await prepareAntigravityProfile({
@@ -645,7 +766,9 @@ describe("official Antigravity runtime", () => {
     expect(first.environment.GEMINI_API_KEY).toBeUndefined();
     expect(first.environment.GOOGLE_API_KEY).toBeUndefined();
     expect(first.environment.GEMINI_HOME).toBe(first.directory);
-    expect(first.environment.ANTIGRAVITY_HARNESS_PATH).toBe(fake.harness);
+    expect(first.environment.AGY_CLI_DISABLE_AUTO_UPDATE).toBe("1");
+    expect(first.environment.SSH_CONNECTION).toBe("127.0.0.1 0 127.0.0.1 0");
+    expect(first.environment.ANTIGRAVITY_HARNESS_PATH).toBeUndefined();
   });
 
   it("points TEMP on Windows at one stable folder per instance under DATA_DIR/tmp", async () => {
@@ -762,6 +885,22 @@ describe("Antigravity OAuth validation", () => {
     expect(authorizationUrlFromLine("")).toBeNull();
   });
 
+  it("validates `--login` code authorization URLs and pasted codes or callback URLs", () => {
+    const codeUrl = `https://accounts.google.com/o/oauth2/auth?response_type=code&state=${state}&redirect_uri=${encodeURIComponent(ANTIGRAVITY_CODE_REDIRECT_URI)}`;
+    const parsed = parseAntigravityAuthorizationUrl(codeUrl, "code");
+    expect(parsed).toEqual({ authorizationUrl: codeUrl, redirectUri: ANTIGRAVITY_CODE_REDIRECT_URI, state });
+    expect(() => parseAntigravityAuthorizationUrl(authorizationUrl, "code")).toThrow(/invalid/u);
+
+    expect(antigravityLoginResponse(parsed, "  4/0A-code-value  ")).toBe("4/0A-code-value");
+    expect(antigravityLoginResponse(parsed, `${ANTIGRAVITY_CODE_REDIRECT_URI}?code=secret&state=${state}`)).toBe(
+      `${ANTIGRAVITY_CODE_REDIRECT_URI}?code=secret&state=${state}`,
+    );
+    expect(antigravityLoginResponse(parsed, `${ANTIGRAVITY_CODE_REDIRECT_URI}?code=secret&state=wrong`)).toBeUndefined();
+    expect(antigravityLoginResponse(parsed, "https://evil.example/oauth-callback?code=secret&state=state-123")).toBeUndefined();
+    expect(antigravityLoginResponse(parsed, "code\nwith-newline")).toBeUndefined();
+    expect(antigravityLoginResponse(parsed, "   ")).toBeUndefined();
+  });
+
   it("ties a pasted remote callback to the active state and loopback port", () => {
     expect(validateAntigravityCallbackUrl(
       { redirectUri, state },
@@ -783,9 +922,9 @@ describe("Antigravity driver over shared ACP", () => {
     await instance?.dispose();
   });
 
-  it("uses managed setup and defaults to approval cards", () => {
+  it("uses managed setup and adapts permission modes for both CLI 1.5+ and legacy sessions", () => {
     expect(AntigravityDriver.defaultConfig()).toEqual({ cli: "agy", fullAuto: false, workspace: undefined });
-    expect(AntigravityDriver.install?.docsUrl).toContain("antigravity-acp");
+    expect(AntigravityDriver.install?.docsUrl).toContain("antigravity.google");
     if (resolveAntigravityReleaseAsset()) expect(AntigravityDriver.install?.managed?.downloadBytes).toBeGreaterThan(0);
     expect(antigravityPermissionMode(false)).toBe("default");
     expect(antigravityPermissionMode(false, "ask")).toBe("default");
@@ -794,6 +933,15 @@ describe("Antigravity driver over shared ACP", () => {
     expect(antigravityPermissionMode(false, "full")).toBe("yolo");
     expect(antigravityPermissionMode(true)).toBe("yolo");
     expect(antigravityPermissionMode(true, "edits")).toBe("yolo");
+
+    // Antigravity CLI 1.5+ rejects legacy `yolo` and `auto_edit`.
+    const cliModes = ["default", "accept-edits", "auto", "plan"];
+    expect(antigravityPermissionMode(true, "full", cliModes)).toBe("default");
+    expect(antigravityPermissionMode(false, "edits", cliModes)).toBe("accept-edits");
+    expect(antigravityPermissionMode(false, "edits", ["default", "plan"])).toBe("default");
+    expect(antigravityPermissionMode(false, "auto", cliModes)).toBe("auto");
+    expect(antigravityPermissionMode(false, "auto", ["default", "plan"])).toBe("default");
+    expect(antigravityPermissionMode(false, "ask", cliModes)).toBe("default");
   });
 
   it.each(["ask", "edits", "auto", "full"] as const)("runs an authenticated %s turn with explicit mode and session-scoped MCP", async (approvalMode) => {
@@ -803,7 +951,7 @@ describe("Antigravity driver over shared ACP", () => {
     const instanceId = "antigravity-work";
     const tokenDirectory = join(antigravityProfileDirectory(instanceId), "antigravity-acp");
     mkdirSync(tokenDirectory, { recursive: true });
-    writeFileSync(join(tokenDirectory, "acp_token.json"), "{}", { mode: 0o600 });
+    writeFileSync(join(tokenDirectory, "antigravity-oauth-token"), JSON.stringify({ token: { access_token: "ok" } }), { mode: 0o600 });
     instance = await AntigravityDriver.create({
       instanceId,
       displayName: "Antigravity Work",
@@ -851,8 +999,10 @@ describe("Antigravity driver over shared ACP", () => {
     expect(events.some((event) => event.type === "item.completed" && event.itemType === "assistant_text")).toBe(true);
     expect(events.at(-1)).toMatchObject({ type: "turn.completed", ok: true });
     const dumpState = JSON.parse(readFileSync(dump, "utf8"));
-    expect(dumpState.argv).toEqual(process.platform === "linux" ? ["--uid="] : []);
+    expect(dumpState.argv).toEqual(antigravityAcpArgs(antigravityProfileDirectory(instanceId)));
     expect(dumpState.env.GEMINI_HOME).toBe(antigravityProfileDirectory(instanceId));
+    expect(dumpState.env.AGY_CLI_DISABLE_AUTO_UPDATE).toBe("1");
+    expect(dumpState.env.SSH_CONNECTION).toBe("127.0.0.1 0 127.0.0.1 0");
     expect(dumpState.env.GEMINI_API_KEY).toBeUndefined();
     expect(dumpState.env.GOOGLE_API_KEY).toBeUndefined();
     expect(dumpState.env.AGY_ACP_DEFAULT_MODEL).toBeUndefined();
@@ -874,7 +1024,7 @@ describe("Antigravity driver over shared ACP", () => {
     const dump = join(fake.directory, "dump.json");
     const tokenDirectory = join(antigravityProfileDirectory(instanceId), "antigravity-acp");
     mkdirSync(tokenDirectory, { recursive: true });
-    writeFileSync(join(tokenDirectory, "acp_token.json"), "{}", { mode: 0o600 });
+    writeFileSync(join(tokenDirectory, "antigravity-oauth-token"), JSON.stringify({ token: { access_token: "ok" } }), { mode: 0o600 });
     instance = await AntigravityDriver.create({
       instanceId,
       displayName: "Antigravity",
@@ -951,7 +1101,7 @@ describe("Antigravity driver over shared ACP", () => {
     const instanceId = "antigravity-pooled";
     const tokenDirectory = join(antigravityProfileDirectory(instanceId), "antigravity-acp");
     mkdirSync(tokenDirectory, { recursive: true });
-    writeFileSync(join(tokenDirectory, "acp_token.json"), "{}", { mode: 0o600 });
+    writeFileSync(join(tokenDirectory, "antigravity-oauth-token"), JSON.stringify({ token: { access_token: "ok" } }), { mode: 0o600 });
     instance = await AntigravityDriver.create({
       instanceId,
       displayName: "Antigravity",
@@ -997,7 +1147,7 @@ describe("Antigravity driver over shared ACP", () => {
     const instanceId = "antigravity-unavailable";
     const tokenDirectory = join(antigravityProfileDirectory(instanceId), "antigravity-acp");
     mkdirSync(tokenDirectory, { recursive: true });
-    writeFileSync(join(tokenDirectory, "acp_token.json"), "{}", { mode: 0o600 });
+    writeFileSync(join(tokenDirectory, "antigravity-oauth-token"), JSON.stringify({ token: { access_token: "ok" } }), { mode: 0o600 });
     instance = await AntigravityDriver.create({
       instanceId,
       displayName: "Antigravity",
@@ -1035,7 +1185,7 @@ describe("Antigravity driver over shared ACP", () => {
     const instanceId = "antigravity-unconfirmed-mode";
     const tokenDirectory = join(antigravityProfileDirectory(instanceId), "antigravity-acp");
     mkdirSync(tokenDirectory, { recursive: true });
-    writeFileSync(join(tokenDirectory, "acp_token.json"), "{}", { mode: 0o600 });
+    writeFileSync(join(tokenDirectory, "antigravity-oauth-token"), JSON.stringify({ token: { access_token: "ok" } }), { mode: 0o600 });
     instance = await AntigravityDriver.create({
       instanceId,
       displayName: undefined,
@@ -1068,7 +1218,7 @@ describe("Antigravity driver over shared ACP", () => {
     const instanceId = "antigravity-unadvertised-mode";
     const tokenDirectory = join(antigravityProfileDirectory(instanceId), "antigravity-acp");
     mkdirSync(tokenDirectory, { recursive: true });
-    writeFileSync(join(tokenDirectory, "acp_token.json"), "{}", { mode: 0o600 });
+    writeFileSync(join(tokenDirectory, "antigravity-oauth-token"), JSON.stringify({ token: { access_token: "ok" } }), { mode: 0o600 });
     instance = await AntigravityDriver.create({
       instanceId,
       displayName: undefined,
@@ -1099,7 +1249,7 @@ describe("Antigravity driver over shared ACP", () => {
     const instanceId = "antigravity-mode-per-turn";
     const tokenDirectory = join(antigravityProfileDirectory(instanceId), "antigravity-acp");
     mkdirSync(tokenDirectory, { recursive: true });
-    writeFileSync(join(tokenDirectory, "acp_token.json"), "{}", { mode: 0o600 });
+    writeFileSync(join(tokenDirectory, "antigravity-oauth-token"), JSON.stringify({ token: { access_token: "ok" } }), { mode: 0o600 });
     instance = await AntigravityDriver.create({
       instanceId,
       displayName: "Antigravity",
@@ -1154,7 +1304,7 @@ describe("Antigravity driver over shared ACP", () => {
       const instanceId = `antigravity-unconfirmed-downgrade-${answer}`;
       const tokenDirectory = join(antigravityProfileDirectory(instanceId), "antigravity-acp");
       mkdirSync(tokenDirectory, { recursive: true });
-      writeFileSync(join(tokenDirectory, "acp_token.json"), "{}", { mode: 0o600 });
+      writeFileSync(join(tokenDirectory, "antigravity-oauth-token"), JSON.stringify({ token: { access_token: "ok" } }), { mode: 0o600 });
       instance = await AntigravityDriver.create({
         instanceId,
         displayName: "Antigravity",
@@ -1224,7 +1374,7 @@ describe("Antigravity driver over shared ACP", () => {
     const instanceId = "antigravity-question";
     const tokenDirectory = join(antigravityProfileDirectory(instanceId), "antigravity-acp");
     mkdirSync(tokenDirectory, { recursive: true });
-    writeFileSync(join(tokenDirectory, "acp_token.json"), "{}", { mode: 0o600 });
+    writeFileSync(join(tokenDirectory, "antigravity-oauth-token"), JSON.stringify({ token: { access_token: "ok" } }), { mode: 0o600 });
     instance = await AntigravityDriver.create({
       instanceId,
       displayName: undefined,
@@ -1259,5 +1409,68 @@ describe("Antigravity driver over shared ACP", () => {
       source: "user",
     });
     expect(await recorder.until((event) => event.type === "turn.completed")).toMatchObject({ ok: true });
+  });
+
+  it("treats a legacy 1.4 acp_token.json without antigravity-oauth-token as signed out and clears it after --login", async () => {
+    ensureDirs();
+    const fake = fakeRuntime();
+    const instanceId = "antigravity-legacy-upgrade";
+    const tokenDirectory = join(antigravityProfileDirectory(instanceId), "antigravity-acp");
+    const legacyToken = join(tokenDirectory, "acp_token.json");
+    const cliToken = join(tokenDirectory, "antigravity-oauth-token");
+    mkdirSync(tokenDirectory, { recursive: true });
+    writeFileSync(legacyToken, JSON.stringify({ refresh_token: "legacy-1.4-token" }), { mode: 0o600 });
+    instance = await AntigravityDriver.create({
+      instanceId,
+      displayName: "Antigravity Upgrade",
+      environment: { FAKE_ACP_AUTH_METHOD: "oauth-personal", FAKE_ACP_MODELS: "gemini-3.8-flash" },
+      enabled: true,
+      config: { cli: fake.executable, fullAuto: false },
+    });
+    expect((await instance.snapshot()).authenticated).toBe(false);
+    const started = await instance.startAuthentication!();
+    expect(started.phase).toBe("waiting");
+    await instance.completeAuthentication!(started.flowId!, "synthetic-code-15");
+    expect((await instance.snapshot()).authenticated).toBe(true);
+    expect(existsSync(cliToken)).toBe(true);
+    expect(existsSync(legacyToken)).toBe(false);
+  });
+
+  it("stays in default mode on Antigravity CLI 1.5+ sessions that do not advertise yolo or auto_edit", async () => {
+    ensureDirs();
+    const fake = fakeRuntime();
+    const dump = join(fake.directory, "dump-cli15.json");
+    const instanceId = "antigravity-cli15-modes";
+    const tokenDirectory = join(antigravityProfileDirectory(instanceId), "antigravity-acp");
+    mkdirSync(tokenDirectory, { recursive: true });
+    writeFileSync(join(tokenDirectory, "antigravity-oauth-token"), JSON.stringify({ token: { access_token: "ok" } }), { mode: 0o600 });
+    instance = await AntigravityDriver.create({
+      instanceId,
+      displayName: "Antigravity CLI 1.5",
+      environment: {
+        FAKE_ACP_AUTH_METHOD: "oauth-personal",
+        FAKE_ACP_MODELS: "gemini-3.8-flash",
+        FAKE_ACP_MODES: "default,plan,auto",
+        FAKE_ACP_DUMP: dump,
+      },
+      enabled: true,
+      config: { cli: fake.executable, fullAuto: false },
+    });
+    recorder = recordEvents(instance.adapter);
+    for (const [approvalMode, expected] of [["full", "default"], ["edits", "default"], ["auto", "auto"], ["ask", "default"]] as const) {
+      const { turnId } = await instance.adapter.sendTurn({
+        threadId: "thread-cli15-modes",
+        text: `turn ${approvalMode}`,
+        approvalMode,
+        model: "gemini-3.8-flash",
+        cwd: fake.directory,
+      });
+      expect(await recorder.until((event) => event.type === "turn.completed" && event.turnId === turnId)).toMatchObject({ ok: true });
+      const calls = JSON.parse(readFileSync(`${dump}.config.json`, "utf8"));
+      expect(calls.at(-1)).toEqual({
+        method: "session/set_config_option",
+        params: { sessionId: expect.any(String), configId: "mode", value: expected },
+      });
+    }
   });
 });

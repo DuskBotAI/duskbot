@@ -25,6 +25,13 @@ describe("table data", () => {
     expect(tableRowOrder(rows, " b ", null)).toEqual([1]);
     expect(tableRowOrder(rows, "", null)).toEqual([0, 1, 2, 3, 4]);
   });
+  it("sorts figures written with grouped digits, currency, percents and scales by their value", () => {
+    const column = (cells: string[]) => tableRowOrder(cells.map((cell) => [cell]), "", { column: 0, descending: false }).map((index) => cells[index]);
+    expect(column(["1,204", "29", "4,812", "231"])).toEqual(["29", "231", "1,204", "4,812"]);
+    expect(column(["$120", "$0", "$29.50", "Custom"])).toEqual(["$0", "$29.50", "$120", "Custom"]);
+    expect(column(["48.2%", "−3%", "7.5%"])).toEqual(["−3%", "7.5%", "48.2%"]);
+    expect(column(["1M", "256K", "2bn"])).toEqual(["256K", "1M", "2bn"]);
+  });
   it("exports all results with quoting and spreadsheet formula escaping", () => {
     const rows = Array.from({ length: 2000 }, (_, i) => [String(i), i === 1999 ? '=HYPERLINK("bad")' : "A,B"]);
     const exported = parseTableFile(tableCsv(["ID", "Value"], rows), ",");

@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { AppUpdateState } from "../../electron/app-update.mjs";
 import { closeFeedback, useFeedbackOpen } from "@/lib/feedback-sheet";
+import { SIDEBAR_FEEDBACK_HIDDEN_KEY, setSidebarFeedbackHidden } from "@/lib/sidebar-preferences";
 import { RailSpot, SidebarSpot, UpdatedNote, type SpotCta } from "./SidebarSpot";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -25,13 +26,26 @@ function Probe() { opened = useFeedbackOpen(); return null; }
 
 let host: HTMLDivElement, root: Root;
 beforeEach(() => {
+  const saved = new Map<string, string>();
+  vi.stubGlobal("localStorage", {
+    getItem: (key: string) => saved.get(key) ?? null,
+    setItem: (key: string, value: string) => void saved.set(key, value),
+    removeItem: (key: string) => void saved.delete(key),
+  });
   now = { ready: null, available: null, progress: null, mode: "self" };
   (window as unknown as { duskDesktop: unknown }).duskDesktop = { appUpdate: bridge, openExternal };
   host = document.createElement("div");
   document.body.append(host);
   root = createRoot(host);
 });
-afterEach(() => { act(() => root.unmount()); host.remove(); vi.clearAllMocks(); closeFeedback(); });
+afterEach(() => {
+  act(() => root.unmount());
+  host.remove();
+  vi.clearAllMocks();
+  closeFeedback();
+  setSidebarFeedbackHidden(false);
+  vi.unstubAllGlobals();
+});
 
 const spot = () => host.querySelector<HTMLButtonElement>("[data-sidebar-spot]");
 const mount = async (component: typeof SidebarSpot | typeof RailSpot = SidebarSpot) => {
@@ -194,6 +208,111 @@ describe("the sidebar's feedback and update spot", () => {
       expect(spot()?.dataset.sidebarSpot).toBe("update");
       await hear({ ready: null, available: null, progress: null, mode: "self" });
       expect(spot()?.dataset.sidebarSpot).toBe("cta");
+    });
+
+    it("closing the offer keeps Give feedback hidden once the person hid it", async () => {
+      setSidebarFeedbackHidden(true);
+      await mountOffer();
+      expect(spot()?.dataset.sidebarSpot).toBe("cta");
+      await act(async () => { close()!.click(); });
+      expect(spot()).toBeNull();
+      expect(host.firstElementChild).toBeNull();
+    });
+  });
+
+  describe("hiding Give feedback from its right-click menu", () => {
+    const menu = () => document.body.querySelector<HTMLDivElement>("[data-sidebar-spot-menu]");
+    const hideItem = () => document.body.querySelector<HTMLButtonElement>("[data-sidebar-spot-hide]");
+
+    it("right-clicking opens a menu with Hide, and hiding removes the card and persists across mounts", async () => {
+      await mount();
+      let prevented = false;
+      await act(async () => {
+        const event = new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 80, clientY: 700 });
+        spot()!.dispatchEvent(event);
+        prevented = event.defaultPrevented;
+      });
+      expect(prevented).toBe(true);
+      expect(opened).toBe(false);
+      expect(menu()).not.toBeNull();
+      expect(hideItem()?.textContent).toBe("Hide");
+
+      await act(async () => { hideItem()!.click(); });
+      expect(spot()).toBeNull();
+      expect(menu()).toBeNull();
+      expect(host.firstElementChild).toBeNull();
+      expect(localStorage.getItem(SIDEBAR_FEEDBACK_HIDDEN_KEY)).toBe("1");
+
+      await act(async () => { root.unmount(); });
+      root = createRoot(host);
+      await mount();
+      expect(spot()).toBeNull();
+      expect(host.firstElementChild).toBeNull();
+    });
+
+    it("still shows app updates and the updated note when Give feedback is hidden", async () => {
+      setSidebarFeedbackHidden(true);
+      now = { ready: null, available: null, progress: null, mode: "self", updated: "0.2.25" };
+      await mount();
+      expect(spot()).toBeNull();
+      expect(host.querySelector("[data-app-updated='0.2.25']")).not.toBeNull();
+
+      await hear({ ready: "0.2.26", available: "0.2.26", progress: null, mode: "self" });
+      expect(spot()?.dataset.sidebarSpot).toBe("update");
+      await act(async () => {
+        spot()!.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 80, clientY: 700 }));
+      });
+      expect(menu()).toBeNull();
+
+      await hear({ ready: null, available: null, progress: null, mode: "self", updated: null });
+      expect(spot()).toBeNull();
+      expect(host.firstElementChild).toBeNull();
+    });
+
+    it("opens from the ContextMenu key and Shift+F10, and closes on Escape or outside click without hiding", async () => {
+      await mount();
+      await act(async () => {
+        spot()!.dispatchEvent(new KeyboardEvent("keydown", { key: "ContextMenu", bubbles: true, cancelable: true }));
+      });
+      expect(menu()).not.toBeNull();
+      expect(document.activeElement).toBe(hideItem());
+
+      await act(async () => {
+        hideItem()!.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
+      });
+      expect(spot()?.dataset.sidebarSpot).toBe("feedback");
+      expect(document.activeElement).toBe(spot());
+      expect(localStorage.getItem(SIDEBAR_FEEDBACK_HIDDEN_KEY)).toBeNull();
+
+      await act(async () => {
+        spot()!.dispatchEvent(new KeyboardEvent("keydown", { key: "F10", shiftKey: true, bubbles: true, cancelable: true }));
+      });
+      expect(menu()).not.toBeNull();
+      await act(async () => {
+        menu()!.parentElement!.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+      });
+      expect(spot()?.dataset.sidebarSpot).toBe("feedback");
+      expect(localStorage.getItem(SIDEBAR_FEEDBACK_HIDDEN_KEY)).toBeNull();
+    });
+
+    it("clamps the menu inside the viewport when right-clicked near the bottom-left edge", async () => {
+      const originalWidth = window.innerWidth;
+      const originalHeight = window.innerHeight;
+      Object.defineProperty(window, "innerWidth", { configurable: true, value: 400 });
+      Object.defineProperty(window, "innerHeight", { configurable: true, value: 300 });
+      try {
+        await mount();
+        await act(async () => {
+          spot()!.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 380, clientY: 295 }));
+        });
+        const shown = menu()!;
+        expect(shown).not.toBeNull();
+        expect(parseFloat(shown.style.left)).toBeLessThanOrEqual(window.innerWidth - 8);
+        expect(parseFloat(shown.style.top)).toBeLessThanOrEqual(window.innerHeight - 8);
+      } finally {
+        Object.defineProperty(window, "innerWidth", { configurable: true, value: originalWidth });
+        Object.defineProperty(window, "innerHeight", { configurable: true, value: originalHeight });
+      }
     });
   });
 });

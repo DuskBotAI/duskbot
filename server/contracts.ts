@@ -565,6 +565,8 @@ export interface ProviderInstance {
   readonly quickModelsUsable?: () => boolean;
   /** Refresh a live catalog without recreating the provider instance. */
   readonly refreshModels?: () => Promise<void>;
+  /** Reset an account-scoped catalog back to the driver's fixed fallback after sign-out. */
+  readonly resetModels?: () => void;
   /** Set while the last run's catalog is still refreshing; a turn awaits it, listen does not. */
   readonly startupModelRefresh?: Promise<void>;
   /** Optional first-party runtime installation and account setup. */

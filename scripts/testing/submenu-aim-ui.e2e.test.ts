@@ -78,6 +78,138 @@ if (!enabled) console.info("skipping submenu aim UI e2e: no Chrome at DUSK_CDP_C
     await walk(from, { x: from.x, y: signOut.y }, 10);
     await delay(500);
     expect(await subOpen(), "a straight path down closes it").toBe(false);
+
+    // grok-styled SidebarPopoverMenu anchored on the right edge: submenu flips LEFT, clamped above bottom
+    const openRightSupport = async () => {
+      await mouse(5, 5);
+      await send("Input.dispatchMouseEvent", { type: "mousePressed", x: 5, y: 5, button: "left", clickCount: 1 });
+      await send("Input.dispatchMouseEvent", { type: "mouseReleased", x: 5, y: 5, button: "left", clickCount: 1 });
+      await until(`!document.querySelector('[data-sidebar-popover-menu]')`);
+      const trigger = await box('[data-right-popover] button[aria-haspopup="menu"]');
+      await send("Input.dispatchMouseEvent", { type: "mousePressed", x: trigger.x, y: trigger.y, button: "left", clickCount: 1 });
+      await send("Input.dispatchMouseEvent", { type: "mouseReleased", x: trigger.x, y: trigger.y, button: "left", clickCount: 1 });
+      await until(`document.querySelector('${row("support")}')`);
+      await delay(250);
+      const support = await box(row("support"));
+      const start = { x: support.right - 30, y: support.y };
+      await walk({ x: support.right + 20, y: support.y }, start, 4);
+      await until(`document.querySelector('[data-sidebar-popover-submenu]')`);
+      await delay(200);
+      return { support, from: start };
+    };
+    const rightStart = (await openRightSupport()).from;
+    const rightMenu = await box("[data-sidebar-popover-menu]");
+    const leftSub = await box("[data-sidebar-popover-submenu]");
+    expect(leftSub.right, "submenu flipped to the left side of the right-edge menu").toBeLessThan(rightMenu.left);
+    // diagonal down-left across Settings into About
+    const about = await box(`[data-sidebar-popover-submenu] [data-menu-key="about"]`);
+    await walk(rightStart, { x: leftSub.right - 25, y: about.y }, 18, 25);
+    await delay(400);
+    expect(await subOpen(), "diagonal glide down-left across Settings keeps flipped submenu open").toBe(true);
+    // resting in the left-side 4px gap keeps it open
+    const rightStart2 = (await openRightSupport()).from;
+    const leftGapX = (leftSub.right + rightMenu.left) / 2;
+    await walk(rightStart2, { x: leftGapX, y: rightStart2.y }, 8, 20);
+    await delay(500);
+    expect(await subOpen(), "resting in the left-side gap keeps flipped submenu open").toBe(true);
+    // diagonal up-left across Usage into Help center (submenu clamped upward above Support)
+    const rightStart3 = (await openRightSupport()).from;
+    const helpCenter = await box(`[data-sidebar-popover-submenu] [data-menu-key="help"]`);
+    await walk(rightStart3, { x: leftSub.right - 25, y: helpCenter.y }, 14, 25);
+    await delay(300);
+    expect(await subOpen(), "diagonal glide up-left keeps clamped submenu open").toBe(true);
+
+    // BotContextMenu ("Move to" flyout): the same safe corridor and gap bridge
+    const botMenu = () => `[data-bot-menu][aria-label="Actions for Scout"]`;
+    const moveOpen = () => evaluate(`Boolean(document.querySelector('[data-bot-menu-flyout="move"]'))`) as Promise<boolean>;
+    const botRowBox = (label: string) => evaluate(`(() => {
+      const b = [...document.querySelectorAll('[data-bot-menu] [role^="menuitem"]')].find((node) => node.textContent?.includes(${JSON.stringify(label)})).getBoundingClientRect();
+      return { left: b.left, right: b.right, top: b.top, bottom: b.bottom, x: b.left + b.width / 2, y: b.top + b.height / 2 };
+    })()`) as Promise<{ left: number; right: number; top: number; bottom: number; x: number; y: number }>;
+    const openMove = async (byClick = false) => {
+      await mouse(5, 5);
+      await send("Input.dispatchMouseEvent", { type: "mousePressed", x: 5, y: 5, button: "left", clickCount: 1 });
+      await send("Input.dispatchMouseEvent", { type: "mouseReleased", x: 5, y: 5, button: "left", clickCount: 1 });
+      await until(`!document.querySelector(${JSON.stringify(botMenu())})`);
+      const trigger = await box("[data-open-bot-menu]");
+      await send("Input.dispatchMouseEvent", { type: "mousePressed", x: trigger.x, y: trigger.y, button: "left", clickCount: 1 });
+      await send("Input.dispatchMouseEvent", { type: "mouseReleased", x: trigger.x, y: trigger.y, button: "left", clickCount: 1 });
+      await until(`document.querySelector('[data-bot-menu-move]')`);
+      await delay(200);
+      const move = await box("[data-bot-menu-move]");
+      const start = { x: move.left + 40, y: move.y };
+      if (byClick) {
+        await mouse(start.x, start.y);
+        await send("Input.dispatchMouseEvent", { type: "mousePressed", x: start.x, y: start.y, button: "left", clickCount: 1 });
+        await send("Input.dispatchMouseEvent", { type: "mouseReleased", x: start.x, y: start.y, button: "left", clickCount: 1 });
+      } else {
+        await walk({ x: move.left - 30, y: move.y }, start, 4);
+      }
+      await until(`document.querySelector('[data-bot-menu-flyout="move"]')`);
+      await delay(150);
+      return { move, from: start };
+    };
+
+    // 1. Dwell open without moving again, then glide diagonally across Mark as unread & Rename bot into Create section
+    let botFrom = (await openMove(false)).from;
+    const flyoutBox = await box('[data-bot-menu-flyout="move"]');
+    const createSection = await botRowBox("Create section");
+    const markUnread = await botRowBox("Mark as unread");
+    const renameBot = await botRowBox("Rename bot");
+    expect(createSection.y, "path crosses Mark as unread's height").toBeGreaterThan(markUnread.top);
+    const midPoint = { x: (botFrom.x + flyoutBox.left) / 2, y: (botFrom.y + createSection.y) / 2 };
+    await walk(botFrom, midPoint, 10, 20);
+    expect(await evaluate(`document.querySelector(${JSON.stringify(botMenu())}).hasAttribute("data-submenu-aiming")`), "aiming suppresses sibling hover while crossing").toBe(true);
+    await walk(midPoint, { x: flyoutBox.left + 30, y: createSection.y }, 10, 20);
+    await delay(400);
+    expect(await moveOpen(), "diagonal path across Mark as unread and Rename bot keeps Move to open").toBe(true);
+    expect(await evaluate(`document.querySelector(${JSON.stringify(botMenu())}).hasAttribute("data-submenu-aiming")`), "aiming clears once inside the submenu").toBe(false);
+
+    // 2. Returning from the submenu onto Rename bot closes Move to immediately
+    await walk({ x: flyoutBox.left + 30, y: createSection.y }, { x: renameBot.x, y: renameBot.y }, 8, 20);
+    await delay(100);
+    expect(await moveOpen(), "returning from submenu onto sibling row closes it").toBe(false);
+
+    // 3. Click open, then diagonal glide into Create section
+    botFrom = (await openMove(true)).from;
+    await walk(botFrom, { x: flyoutBox.left + 30, y: createSection.y }, 18, 25);
+    await delay(400);
+    expect(await moveOpen(), "click-opened Move to stays open on diagonal path").toBe(true);
+
+    // 4. Straight across into the 4px gap between menu and flyout, resting there, then into Grok Bot
+    botFrom = (await openMove(false)).from;
+    const botSheet = await box(botMenu());
+    const moveGapX = (botSheet.right + flyoutBox.left) / 2;
+    await walk(botFrom, { x: moveGapX, y: botFrom.y }, 8, 20);
+    await delay(500);
+    expect(await moveOpen(), "resting in the 4px gap keeps Move to open").toBe(true);
+    await walk({ x: moveGapX, y: botFrom.y }, { x: flyoutBox.left + 25, y: botFrom.y }, 4, 20);
+    await delay(300);
+    expect(await moveOpen(), "entering Grok Bot after the gap keeps it open").toBe(true);
+
+    // 5. Grazing slightly up into Pin while heading right toward Grok Bot keeps Move to open
+    const { move: moveBox } = await openMove(false);
+    const pin = await botRowBox("Pin");
+    const grokBot = await botRowBox("Grok Bot");
+    await mouse(moveBox.left + 50, moveBox.top + 3);
+    await walk({ x: moveBox.left + 50, y: moveBox.top + 3 }, { x: moveBox.right - 20, y: pin.bottom - 2 }, 6, 20);
+    await walk({ x: moveBox.right - 20, y: pin.bottom - 2 }, { x: flyoutBox.left + 30, y: grokBot.y }, 6, 20);
+    await delay(300);
+    expect(await moveOpen(), "grazing Pin on the way right into Grok Bot keeps Move to open").toBe(true);
+
+    // 6. Clicking a sibling row mid-aim still triggers it immediately
+    botFrom = (await openMove(false)).from;
+    const aimClick = { x: botFrom.x + 30, y: markUnread.y };
+    await walk(botFrom, aimClick, 6, 15);
+    await send("Input.dispatchMouseEvent", { type: "mousePressed", x: aimClick.x, y: aimClick.y, button: "left", clickCount: 1 });
+    await send("Input.dispatchMouseEvent", { type: "mouseReleased", x: aimClick.x, y: aimClick.y, button: "left", clickCount: 1 });
+    await until(`!document.querySelector(${JSON.stringify(botMenu())})`);
+
+    // 7. Straight down onto Mark as unread and Rename bot closes Move to
+    botFrom = (await openMove(false)).from;
+    await walk(botFrom, { x: botFrom.x, y: renameBot.y }, 10, 20);
+    await delay(200);
+    expect(await moveOpen(), "straight down onto sibling rows closes Move to").toBe(false);
   } finally {
     page?.close();
     await ui?.close();

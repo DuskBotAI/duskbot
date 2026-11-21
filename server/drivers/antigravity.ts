@@ -1,7 +1,7 @@
-// Google Antigravity through its official ACP server: managed runtime, isolated Google profile,
-// model/mode configuration and OAuth.
+// Google Antigravity through its official CLI ACP server (`agy acp`): managed runtime,
+// isolated Google profile, model/mode configuration, `--login` OAuth, and ACP `logout`.
 import type { ApprovalMode } from "../../shared/approval-mode.ts";
-import { antigravityAccount } from "./antigravity-account.ts";
+import { antigravityAccount, clearAntigravityAccountCache } from "./antigravity-account.ts";
 import type {
   DriverCreateInput,
   ModelCatalog,
@@ -13,10 +13,11 @@ import type {
 import { createAcpDriver, type AcpConfig, type AcpSupport } from "./acp/core.ts";
 import {
   AntigravityAuthController,
+  antigravityAcpArgs,
   antigravityProfileAuthenticated,
+  logoutAntigravity,
   prepareAntigravityProfile,
   probeAntigravityModels,
-  removeAntigravitySignIn,
   validateAntigravityRuntime,
 } from "./antigravity-acp.ts";
 import {
@@ -54,10 +55,38 @@ export function normalizeAntigravityTurn(turn: SendTurnInput, offeredModels: rea
     : turn;
 }
 
-/** Antigravity's session modes: `yolo` for Full, `auto_edit` for auto-accept edits, `default` otherwise (it has no reviewer for Auto). */
-export function antigravityPermissionMode(fullAuto: boolean, approvalMode?: ApprovalMode): "yolo" | "auto_edit" | "default" {
-  if (fullAuto || approvalMode === "full") return "yolo";
-  return approvalMode === "edits" ? "auto_edit" : "default";
+function advertisedModeValues(configOptions: readonly any[]): string[] | undefined {
+  const modeOption = configOptions.find((option) => option?.id === "mode");
+  if (!Array.isArray(modeOption?.options)) return undefined;
+  const values: string[] = [];
+  const visit = (entry: any) => {
+    if (Array.isArray(entry?.options)) entry.options.forEach(visit);
+    else if (typeof entry?.value === "string" && entry.value) values.push(entry.value);
+  };
+  modeOption.options.forEach(visit);
+  return values.length ? values : undefined;
+}
+
+/** Antigravity CLI 1.5+ rejects legacy `yolo` and `auto_edit` modes, staying in `default` while the
+ * harness answers permission requests; when the session advertises `auto` or `accept-edits` (or legacy
+ * `yolo` / `auto_edit`), select the matching offered mode. */
+export function antigravityPermissionMode(
+  fullAuto: boolean,
+  approvalMode?: ApprovalMode,
+  offeredModes?: readonly string[],
+): string {
+  if (fullAuto || approvalMode === "full") {
+    return !offeredModes || offeredModes.includes("yolo") ? "yolo" : "default";
+  }
+  if (approvalMode === "edits") {
+    if (!offeredModes || offeredModes.includes("auto_edit")) return "auto_edit";
+    if (offeredModes.includes("accept-edits")) return "accept-edits";
+    return "default";
+  }
+  if (approvalMode === "auto") {
+    return offeredModes?.includes("auto") ? "auto" : "default";
+  }
+  return "default";
 }
 
 const managedAsset = resolveAntigravityReleaseAsset();
@@ -67,13 +96,13 @@ const support: AcpSupport = {
   // Named for what people look for: Google moved personal Gemini subscriptions (free, AI Pro, AI Ultra) from Gemini CLI to Antigravity on 2026-06-18.
   displayName: "Google Gemini (Antigravity)",
   models: STATIC_ANTIGRAVITY_MODELS,
-  defaultCli: "agy", // migration alias: resolveAntigravityRuntime treats it as managed
+  defaultCli: "agy",
   nativeSource: "antigravity.acp",
   loginNote: "Antigravity needs a Google account: choose Sign in with Google in engine setup",
   install: {
-    docsUrl: "https://github.com/agentclientprotocol/registry/tree/main/antigravity-acp",
+    docsUrl: "https://antigravity.google/docs/getting-started",
     ...(managedAsset
-      ? { managed: { label: "Install official Antigravity", downloadBytes: managedAsset.archiveBytes } }
+      ? { managed: { label: "Install official Antigravity", downloadBytes: managedAsset.archiveBytes ?? 90_000_000 } }
       : {}),
   },
   images: true,
@@ -81,8 +110,7 @@ const support: AcpSupport = {
   selectModel: { configId: "model" },
   modelVariants: true,
   normalizeSessionSelection: normalizeAntigravityTurn,
-  // Google's server reads its new-session default from this variable (agy_acp_server 1.4.3
-  // model_selection.get_default_model_id); a later switch re-fetches the model list (1.3-1.8 s).
+  // Google's server reads its new-session default from this variable when present; a later switch re-fetches models.
   sessionModelEnv: "AGY_ACP_DEFAULT_MODEL",
   sessionScopedApproval: true,
   resumeMethod: "resume",
@@ -95,7 +123,7 @@ const support: AcpSupport = {
     if (profile.tempDirectory) scheduleAntigravityTempSweep(instanceId);
     return {
       command: runtime.executablePath,
-      args: process.platform === "linux" ? ["--uid="] : [],
+      args: antigravityAcpArgs(profile.directory),
       env: profile.environment,
     };
   },
@@ -116,6 +144,16 @@ const support: AcpSupport = {
     : null,
   authFailure: "fail",
   requireAuthenticationBeforeSpawn: true,
+  classifyError: (error) => {
+    const code = typeof error === "object" && error !== null ? Reflect.get(error, "code") : undefined;
+    const message = error instanceof Error ? error.message : String(error ?? "");
+    // Antigravity CLI 1.5+ answers `authenticate` with -32603 "No browser is available here" when signed out without a display.
+    if (code === -32000 || (code === -32603 && message.startsWith("No browser is available here"))) {
+      return "invalid_credentials";
+    }
+    return undefined;
+  },
+  describeAccountError: (code) => (code === "invalid_credentials" ? support.loginNote : undefined),
   isAuthenticated: async (env, config, instanceId) => {
     try {
       const runtime = await resolveAntigravityRuntime(config.cli, env);
@@ -141,10 +179,11 @@ const support: AcpSupport = {
   },
 
   configureSession: async ({ request, sessionId, config, turn, configOptions }) => {
-    if (!Array.isArray(configOptions) || !configOptions.some(option => option?.id === "mode")) {
+    if (!Array.isArray(configOptions) || !configOptions.some((option) => option?.id === "mode")) {
       return;
     }
-    const wanted = antigravityPermissionMode(config.fullAuto, turn.approvalMode);
+    const offered = advertisedModeValues(configOptions);
+    const wanted = antigravityPermissionMode(config.fullAuto, turn.approvalMode, offered);
     const result = await request("session/set_config_option", {
       sessionId,
       configId: "mode",
@@ -165,8 +204,13 @@ export const AntigravityDriver: ProviderDriver<AcpConfig> = {
     const base = await AcpAntigravityDriver.create(input);
     scheduleAntigravityTempSweep(input.instanceId);
     scheduleAntigravityTempSweep(VERIFICATION_TEMP_KEY);
-    const auth = new AntigravityAuthController(() => void base.refreshModels?.());
+    let lastProfilePaths: { tokenPath: string; legacyTokenPath: string } | null = null;
+    const auth = new AntigravityAuthController(() => {
+      if (lastProfilePaths) clearAntigravityAccountCache(lastProfilePaths.tokenPath, lastProfilePaths.legacyTokenPath);
+      void base.refreshModels?.();
+    });
     let installFailure: string | undefined;
+    let signingOut = false;
     const runtimeAndProfile = async () => {
       // A GUI launch's raw PATH may omit the official runtime the model picker found.
       const environment = { ...process.env, ...input.environment, PATH: augmentedPath() };
@@ -176,10 +220,12 @@ export const AntigravityDriver: ProviderDriver<AcpConfig> = {
         runtime,
         baseEnv: environment,
       });
+      lastProfilePaths = { tokenPath: profile.tokenPath, legacyTokenPath: profile.legacyTokenPath };
       return { runtime, profile };
     };
     return {
       ...base,
+      authenticationMethod: "paste-code",
       get models() {
         return base.models;
       },
@@ -207,17 +253,33 @@ export const AntigravityDriver: ProviderDriver<AcpConfig> = {
           }
         : {}),
       startAuthentication: async () => {
+        if (signingOut) {
+          throw Object.assign(new Error("Antigravity sign-out is already in progress."), { status: 409 });
+        }
+        await base.adapter.stopAll();
         const { runtime, profile } = await runtimeAndProfile();
         return auth.start(runtime, profile);
       },
-      completeAuthentication: async (flowId, callbackUrl) => auth.complete(flowId, callbackUrl),
-      cancelAuthentication: async () => auth.cancel(),
+      completeAuthentication: async (flowId, response) => auth.complete(flowId, response),
+      cancelAuthentication: async () => auth.cancelAndWait(),
       signOut: async () => {
-        auth.cancel();
-        await removeAntigravitySignIn(input.instanceId);
+        if (signingOut) {
+          throw Object.assign(new Error("Antigravity sign-out is already in progress."), { status: 409 });
+        }
+        signingOut = true;
+        try {
+          await auth.cancelAndWait();
+          await base.adapter.stopAll();
+          const { runtime, profile } = await runtimeAndProfile();
+          await logoutAntigravity(runtime, profile);
+          clearAntigravityAccountCache(profile.tokenPath, profile.legacyTokenPath);
+          base.resetModels?.();
+        } finally {
+          signingOut = false;
+        }
       },
       dispose: async () => {
-        auth.cancel();
+        await auth.cancelAndWait();
         await base.dispose();
       },
     };

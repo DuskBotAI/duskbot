@@ -1,9 +1,13 @@
-import { createContext, useContext, useEffect, useId, useLayoutEffect, useRef, useState, type FormEvent, type MouseEventHandler, type ReactElement, type ReactNode, type Ref } from "react";
+import { createContext, useCallback, useContext, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type FormEvent, type MouseEventHandler, type ReactElement, type ReactNode, type Ref } from "react";
 import { Check, ChevronRight, Copy, type GlyphIcon } from "../icons";
 
 import { cn } from "@/lib/cn";
 import { useCopyFeedback } from "@/lib/copy-text";
 import { t } from "@/lib/i18n";
+import { flushSystemControls, wakeSystemControls } from "@/lib/system-control";
+import { BAR_RANK, frames, sheetStep, sheetsUp, useChrome, useNativeBar, useSheetPushDepth } from "@/mobile/chrome";
+import type { MobileChrome } from "@/mobile/platform";
+import { createPushToken, registerNativePop } from "@/mobile/SheetPush";
 import { Icon } from "./Icon";
 import { DialogPane, GrokDialog, mdPrimaryCls, mdSecondaryCls, rowButtonCls } from "./ui/GrokDialog";
 import { SelectPill, type SelectPillOption } from "./ui/SelectPill";
@@ -472,6 +476,141 @@ export function SheetPane({ title, footer, children, ...rest }: { title: string;
 }
 
 function OwnSheetPane({ title, footer, children, ...rest }: { title: string; footer?: ReactNode; children: ReactNode; "data-panel-modal"?: string }) {
+  const chrome = useChrome();
+  if (chrome?.beginPush && chrome.commitPush && chrome.popPage) {
+    return <NativeOwnSheetPane chrome={chrome} title={title} footer={footer} {...rest}>{children}</NativeOwnSheetPane>;
+  }
+  return <WebOwnSheetPane title={title} footer={footer} {...rest}>{children}</WebOwnSheetPane>;
+}
+
+function NativeOwnSheetPane({ chrome, title, footer, children, ...rest }: {
+  chrome: MobileChrome;
+  title: string;
+  footer?: ReactNode;
+  children: ReactNode;
+  "data-panel-modal"?: string;
+}) {
+  const pushDepth = useSheetPushDepth();
+  const [committed, setCommitted] = useState<SubPage[]>([]);
+  const entriesRef = useRef<Array<{ page: SubPage; token: string; unreg: () => void }>>([]);
+  const mountedRef = useRef(true);
+  const scrollerRef = useRef<HTMLDivElement>(null);
+  const titleId = useId();
+
+  const open = useCallback((id: string, pageTitle: string) => {
+    sheetStep(async () => {
+      if (!mountedRef.current) return;
+      const ok = await chrome.beginPush!();
+      if (!mountedRef.current) {
+        if (ok) await chrome.cancelPush?.();
+        return;
+      }
+      const nextPage: SubPage = { id, title: pageTitle };
+      if (!ok) {
+        setCommitted((current) => [...current, nextPage]);
+        scrollerRef.current?.scrollTo({ top: 0 });
+        await frames(1);
+        await flushSystemControls();
+        return;
+      }
+      const token = createPushToken();
+      const entry = { page: nextPage, token, unreg: () => {} };
+      entry.unreg = registerNativePop(chrome, token, () => {
+        const at = entriesRef.current.findIndex((item) => item.token === token);
+        if (at < 0) return;
+        for (const removed of entriesRef.current.splice(at)) removed.unreg();
+        setCommitted(entriesRef.current.map((item) => item.page));
+      });
+      entriesRef.current.push(entry);
+      setCommitted(entriesRef.current.map((item) => item.page));
+      scrollerRef.current?.scrollTo({ top: 0 });
+      await frames(1);
+      await flushSystemControls();
+      await frames(2);
+      if (!mountedRef.current) {
+        const at = entriesRef.current.findIndex((item) => item.token === token);
+        if (at >= 0) {
+          for (const removed of entriesRef.current.splice(at)) removed.unreg();
+        }
+        await chrome.cancelPush?.();
+        return;
+      }
+      const okCommit = await chrome.commitPush!(token);
+      if (!okCommit) {
+        const at = entriesRef.current.findIndex((item) => item.token === token);
+        if (at >= 0) {
+          for (const removed of entriesRef.current.splice(at)) removed.unreg();
+          if (mountedRef.current) setCommitted(entriesRef.current.map((item) => item.page));
+        }
+      }
+    });
+  }, [chrome]);
+
+  const back = useCallback(() => {
+    const top = entriesRef.current.at(-1);
+    if (!top) {
+      setCommitted((current) => current.slice(0, -1));
+      return;
+    }
+    entriesRef.current.pop();
+    top.unreg();
+    sheetStep(async () => {
+      const popped = await chrome.popPage!(top.token);
+      if (mountedRef.current) setCommitted(entriesRef.current.map((item) => item.page));
+      await frames(1);
+      await flushSystemControls();
+      await frames(1);
+      if (popped) await chrome.finishPop?.();
+    });
+  }, [chrome]);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      const remaining = entriesRef.current.splice(0);
+      for (const entry of remaining) entry.unreg();
+      const oldest = remaining[0];
+      if (oldest && sheetsUp.system) {
+        sheetStep(async () => {
+          await chrome.popPage?.(oldest.token, { animated: false });
+          wakeSystemControls();
+        });
+      }
+    };
+  }, [chrome]);
+
+  const top = committed.at(-1);
+  const rank = BAR_RANK.sheetPushed + (pushDepth + committed.length) * 0.01;
+  useNativeBar(rank, top ? {
+    title: top.title,
+    leading: [{ id: "back", symbol: "chevron.backward", label: t("mobile.sheet.back") }],
+    trailing: [],
+  } : null, { back });
+
+  const nav = useMemo<SubPageNav>(() => ({
+    at: top?.id,
+    open,
+    back,
+    stack: committed,
+  }), [top?.id, open, back, committed]);
+
+  return (
+    <section {...rest} aria-labelledby={titleId} className="flex min-h-0 flex-1 flex-col">
+      <PaneHeader title={top?.title ?? title} headingId={titleId} />
+      <div ref={scrollerRef} data-wipe-scroll="" className="settings-scroll">
+        <div className="settings-pane">
+          <SubPageContext.Provider value={nav}>
+            <PanelSections>{children}</PanelSections>
+          </SubPageContext.Provider>
+          {footer && !top && <div className="flex shrink-0 items-center justify-end gap-2">{footer}</div>}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function WebOwnSheetPane({ title, footer, children, ...rest }: { title: string; footer?: ReactNode; children: ReactNode; "data-panel-modal"?: string }) {
   const [stack, setStack] = useState<SubPage[]>([]);
   const titleId = useId();
   const at = JSON.stringify(stack);

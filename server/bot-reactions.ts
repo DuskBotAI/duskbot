@@ -30,7 +30,7 @@ export function reactAsBot(store: BotReactionStore, input: { botId: string; thre
   const by = botReactor(bot.id);
   if (target.reactions?.some((reaction) => reaction.by === by && reaction.emoji === emoji)) return { ok: true, text: `You had already reacted ${emoji}.` };
   store.setReaction(input.threadId, target.id, by, { emoji, name: bot.name, at: Date.now() });
-  return { ok: true, text: `Reacted ${emoji} to the person's message. Still reply in words if it needs a reply.` };
+  return { ok: true, text: `Reacted ${emoji} to the person's message. Reply in words if it needs a reply, or end with just (pass) if the reaction is enough.` };
 }
 
 export interface BotReactionContext {

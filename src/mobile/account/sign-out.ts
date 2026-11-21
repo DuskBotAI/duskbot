@@ -94,8 +94,9 @@ export async function forgetCloudPlaces(platform: MobilePlatform, request: typeo
 /** "Remove this computer": the phone's pairing with one computer ends, there and here. */
 export async function removePlace(platform: MobilePlatform, id: string, request: typeof fetch = globalThis.fetch): Promise<Landing> {
   const store = createConnectionStore(platform);
+  const wasActive = (await store.active())?.record.id === id;
   const record = (await store.list()).find((entry) => entry.id === id);
   if (record) await forgetPlace(platform, store, record, request);
-  rememberOpenChat(null);
+  if (wasActive) rememberOpenChat(null);
   return landAfterRemoval(store);
 }

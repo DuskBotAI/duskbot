@@ -1154,6 +1154,6 @@ describe("the panel's switches", () => {
     const html = capture(() => PageBody({ page: "apps", bot: makeBot({ color: "blue" }), derived: derived() }) as ReactNode).html;
     expect(html.match(/role="switch"/g)).toHaveLength(1);
     expect(html).toContain("data-ui-toggle");
-    expect(html).not.toContain("background-color:#377FE6");
+    expect(html).not.toContain("background-color:#286ef9");
   });
 });

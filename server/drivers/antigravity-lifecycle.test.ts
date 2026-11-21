@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { DATA_DIR } from "../config.ts";
 import { killCliTree, spawnCli } from "../procs.ts";
-import { AntigravityAcpClient, AntigravityAuthController, validateAntigravityRuntime } from "./antigravity-acp.ts";
+import { AntigravityAcpClient, AntigravityAuthController, logoutAntigravity, validateAntigravityRuntime } from "./antigravity-acp.ts";
 import type { AntigravityRuntime } from "./antigravity-runtime.ts";
 import { VERIFICATION_TEMP_KEY, antigravityTempDir, folderBytes } from "./antigravity-temp.ts";
 
@@ -34,13 +34,12 @@ const realRm = (await vi.importActual<typeof import("node:fs/promises")>("node:f
 
 const runtime: AntigravityRuntime = {
   executablePath: "/fixture/antigravity",
-  harnessPath: "/fixture/harness",
   source: "managed",
-  version: "1.1.1",
+  version: "1.5.13",
 };
 const initialized = {
   protocolVersion: 1,
-  agentInfo: { name: "antigravity-acp", version: "1.1.1" },
+  agentInfo: { name: "Antigravity ACP Server", version: "1.5.13" },
   agentCapabilities: { loadSession: true, sessionCapabilities: { resume: {} }, auth: { logout: {} } },
   authMethods: [{ id: "oauth-personal" }],
 };
@@ -71,7 +70,7 @@ async function afterExitGrace(child: ReturnType<typeof fakeChild>) {
 function client(tempDirectory?: string) {
   return new AntigravityAcpClient(
     runtime,
-    { directory: "/fixture", tokenPath: "/fixture/token", environment: {}, ...(tempDirectory ? { tempDirectory } : {}) },
+    { directory: "/fixture", environment: {}, ...(tempDirectory ? { tempDirectory } : {}) },
     "/fixture",
   );
 }
@@ -239,7 +238,7 @@ describe("Antigravity validation shutdown", () => {
   it("does not release a verification profile when root close leaves an uncertain tree", async () => {
     const child = fakeChild();
     vi.mocked(killCliTree).mockImplementation(async () => { child.emit("close", 0); return false; });
-    await expect(validateAntigravityRuntime(runtime, "1.1.1")).rejects.toThrow("did not shut down");
+    await expect(validateAntigravityRuntime(runtime, "1.5.13")).rejects.toThrow("did not shut down");
     expect(rm).not.toHaveBeenCalled();
     expect(existsSync(scratch[0])).toBe(true);
   });
@@ -255,7 +254,7 @@ describe("Antigravity validation shutdown", () => {
     const platform = Object.getOwnPropertyDescriptor(process, "platform")!;
     Object.defineProperty(process, "platform", { ...platform, value: "win32" });
     try {
-      await validateAntigravityRuntime(runtime, "1.1.1");
+      await validateAntigravityRuntime(runtime, "1.5.13");
     } finally {
       Object.defineProperty(process, "platform", platform);
     }
@@ -326,7 +325,7 @@ describe("Antigravity validation shutdown", () => {
     let killed!: () => void;
     const stopping = new Promise<void>((resolve) => { killed = resolve; });
     vi.mocked(killCliTree).mockImplementation(async () => { killed(); return false; });
-    const validation = validateAntigravityRuntime(runtime, "1.1.1");
+    const validation = validateAntigravityRuntime(runtime, "1.5.13");
     const rejected = expect(validation).rejects.toThrow("did not shut down");
     await afterExitGrace(child);
     await stopping;
@@ -344,7 +343,7 @@ describe("Antigravity validation shutdown", () => {
     let killed!: () => void;
     const stopping = new Promise<void>((resolve) => { killed = resolve; });
     vi.mocked(killCliTree).mockImplementation(async () => { killed(); return false; });
-    const rejected = expect(validateAntigravityRuntime(runtime, "1.1.1")).rejects.toThrow(error);
+    const rejected = expect(validateAntigravityRuntime(runtime, "1.5.13")).rejects.toThrow(error);
     await afterExitGrace(child);
     await stopping;
     await vi.advanceTimersByTimeAsync(5_000);
@@ -360,7 +359,7 @@ describe("Antigravity validation shutdown", () => {
     const child = fakeChild(reply);
     vi.mocked(killCliTree).mockImplementation(async () => { child.emit("close", 0); return true; });
     vi.mocked(rm).mockRejectedValueOnce(Object.assign(new Error("cleanup EPERM"), { code: "EPERM" }));
-    await expect(validateAntigravityRuntime(runtime, "1.1.1")).rejects.toThrow(error);
+    await expect(validateAntigravityRuntime(runtime, "1.5.13")).rejects.toThrow(error);
     expect(rm).toHaveBeenCalledWith(scratch[0], { recursive: true, force: true, maxRetries: 4, retryDelay: 250 });
     expect(console.warn).toHaveBeenCalledWith(expect.stringContaining("cleanup EPERM"));
   });
@@ -369,24 +368,76 @@ describe("Antigravity validation shutdown", () => {
     const child = fakeChild();
     vi.mocked(killCliTree).mockImplementation(async () => { child.emit("close", 0); return true; });
     vi.mocked(rm).mockRejectedValueOnce(Object.assign(new Error("cleanup EPERM"), { code: "EPERM" }));
-    await expect(validateAntigravityRuntime(runtime, "1.1.1")).resolves.toBeUndefined();
+    await expect(validateAntigravityRuntime(runtime, "1.5.13")).resolves.toBeUndefined();
     expect(rm).toHaveBeenCalledWith(scratch[0], { recursive: true, force: true, maxRetries: 4, retryDelay: 250 });
     expect(console.warn).toHaveBeenCalledWith(expect.stringContaining(`verification files ${scratch[0]}: cleanup EPERM`));
   });
 });
 
-describe("Antigravity sign-in network", () => {
-  it("starts the sign-in on this host's network so Google's redirect and a pasted address reach its 127.0.0.1 listener, while other runs keep the box's own", async () => {
-    fakeChild();
-    const profile = { directory: "/fixture", tokenPath: "/fixture/token", environment: {} };
-    await expect(new AntigravityAuthController().start(runtime, profile)).resolves.toMatchObject({ phase: "succeeded" });
+describe("Antigravity sign-in and logout network", () => {
+  it("starts `--login` and `logout` on the host network with display vars stripped for login, while turns keep the box's own", async () => {
+    const loginChild = fakeChild(null);
+    const loginUrl = "https://accounts.google.com/o/oauth2/auth?response_type=code&state=s1&redirect_uri=https%3A%2F%2Fantigravity.google%2Foauth-callback";
+    const profile = {
+      directory: "/fixture",
+      tokenPath: "/fixture/antigravity-acp/antigravity-oauth-token",
+      legacyTokenPath: "/fixture/antigravity-acp/acp_token.json",
+      environment: { DISPLAY: ":0", WAYLAND_DISPLAY: "wayland-0", GEMINI_HOME: "/fixture" },
+    };
+    const controller = new AntigravityAuthController();
+    const starting = controller.start(runtime, profile);
+    loginChild.stdout.write(`Open this link:\n\n  ${loginUrl}\n`);
+    const started = await starting;
+    expect(started).toMatchObject({ phase: "waiting", authorizationUrl: loginUrl });
+    expect(vi.mocked(spawnCli).mock.calls[0]![1]).toEqual([
+      "acp", "--gemini-dir", "/fixture", "--app-data-dir", "antigravity-acp", "--login",
+    ]);
     expect(vi.mocked(spawnCli).mock.calls[0]![2]).toMatchObject({ box: { net: "shared" } });
+    expect(vi.mocked(spawnCli).mock.calls[0]![2].env).not.toHaveProperty("DISPLAY");
+    expect(vi.mocked(spawnCli).mock.calls[0]![2].env).not.toHaveProperty("WAYLAND_DISPLAY");
     expect(vi.mocked(spawnCli).mock.calls[0]![3]).toBe("bot");
+    await controller.cancelAndWait();
+
+    vi.mocked(spawnCli).mockReset();
+    fakeChild();
+    await logoutAntigravity(runtime, profile);
+    expect(vi.mocked(spawnCli).mock.calls[0]![1]).toEqual([
+      "acp", "--gemini-dir", "/fixture", "--app-data-dir", "antigravity-acp",
+    ]);
+    expect(vi.mocked(spawnCli).mock.calls[0]![2]).toMatchObject({ box: { net: "shared" } });
 
     vi.mocked(spawnCli).mockReset();
     fakeChild();
     const turn = client();
     expect(vi.mocked(spawnCli).mock.calls[0]![2]).not.toHaveProperty("box");
     turn.close();
+  });
+
+  it("rejects logout when the runtime does not advertise auth.logout", async () => {
+    fakeChild({ result: { ...initialized, agentCapabilities: { loadSession: true, sessionCapabilities: { resume: {} } } } });
+    const profile = {
+      directory: "/fixture",
+      tokenPath: "/fixture/antigravity-acp/antigravity-oauth-token",
+      legacyTokenPath: "/fixture/antigravity-acp/acp_token.json",
+      environment: {},
+    };
+    await expect(logoutAntigravity(runtime, profile)).rejects.toThrow(/does not support sign-out/u);
+  });
+
+  it("times out logout after 90 seconds if the runtime hangs", async () => {
+    const child = fakeChild(null, { exitsOnEof: false });
+    vi.mocked(killCliTree).mockImplementation(async () => { child.emit("close", 0); return true; });
+    const profile = {
+      directory: "/fixture",
+      tokenPath: "/fixture/antigravity-acp/antigravity-oauth-token",
+      legacyTokenPath: "/fixture/antigravity-acp/acp_token.json",
+      environment: {},
+    };
+    const pending = logoutAntigravity(runtime, profile).catch((error: Error) => error);
+    await vi.advanceTimersByTimeAsync(90_000);
+    await afterExitGrace(child);
+    const error = await pending;
+    expect(error).toBeInstanceOf(Error);
+    expect((error as Error).message).toContain("timed out");
   });
 });

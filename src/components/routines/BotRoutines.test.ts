@@ -254,4 +254,22 @@ describe("a bot's routines in its panel", () => {
     expect(writes()).toContainEqual(["/api/webhooks", "POST", { name: "Morning summary", prompt: "", botId: "bot-a", routineId: "routine-1" }]);
     expect(copied.texts).toEqual(["https://home.example/hooks/wh_r/whsec_r"]);
   });
+
+  it("pushes routine detail and edit pages natively on the phone instead of opening a desktop dialog", () => {
+    document.documentElement.dataset.mobileApp = "ios";
+    const shell = document.createElement("div");
+    shell.className = "dusk-mobile";
+    document.body.append(shell);
+    try {
+      mount();
+      open("routine-1");
+      expect(document.querySelector('[data-phone-pushed-page="routine"]')).not.toBeNull();
+      expect(document.querySelector("[data-phone-modal-layer]")).toBeNull();
+      flushSync(() => document.querySelector<HTMLButtonElement>('[data-phone-pushed-page="routine"] [data-routine-action="edit"]')!.click());
+      expect(document.querySelector('[data-phone-pushed-page="routine-edit"] form')).not.toBeNull();
+    } finally {
+      delete document.documentElement.dataset.mobileApp;
+      shell.remove();
+    }
+  });
 });

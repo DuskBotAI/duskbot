@@ -109,6 +109,20 @@ export interface MobileChrome {
   dismissSheet(): Promise<void>;
   /** The person swiped the sheet away. */
   onSheetDismissed(listener: () => void): () => void;
+  /** Snapshots the current sheet page and covers it so the pushed view can paint before `commitPush`. */
+  beginPush?(): Promise<boolean>;
+  /** Pushes the rendered view onto the sheet's UINavigationController under `token`. */
+  commitPush?(token: string): Promise<boolean>;
+  /** Aborts a prepared push and removes its cover. */
+  cancelPush?(): Promise<void>;
+  /** Pops back to the page below `token` on the sheet's UINavigationController. */
+  popPage?(token: string, options?: { animated?: boolean }): Promise<boolean>;
+  /** Reveals the underlying page after a pop once the page has unmounted the popped view. */
+  finishPop?(): Promise<void>;
+  /** Collapses any pushed snapshot controllers on the sheet's navigation stack without animation. */
+  resetPushStack?(): Promise<void>;
+  /** Fired when a native Back tap, swipe-back or back-menu jump pops one or more pushed tokens (topmost first). */
+  onPagePopped?(listener: (tokens: string[]) => void): () => void;
 }
 
 /** Everything the phone layer asks of the device. The native app supplies Capacitor plugins; the web preview and a

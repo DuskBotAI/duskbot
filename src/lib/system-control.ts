@@ -98,6 +98,7 @@ function safeTop(): number {
 
 const waiters = new Set<() => void>();
 const pokers = new Set<() => void>();
+const flushers = new Set<() => Promise<void>>();
 const triggers = new WeakMap<HTMLElement, () => Promise<boolean>>();
 let domObserver: MutationObserver | null = null;
 let pokeQueued = false;
@@ -119,7 +120,7 @@ function syncDomObserver(): void {
       childList: true,
       subtree: true,
       attributes: true,
-      attributeFilter: ["data-leaving", "inert", "hidden", "aria-hidden", "open"],
+      attributeFilter: ["data-leaving", "data-moving", "inert", "hidden", "aria-hidden", "open"],
     });
   } else if (pokers.size === 0 && domObserver) {
     domObserver.disconnect();
@@ -130,6 +131,23 @@ function syncDomObserver(): void {
 /** Tells mounted system controls to track frame-by-frame while a view transition (such as a tab swap) runs. */
 export function wakeSystemControls(): void {
   for (const wake of waiters) wake();
+}
+
+/** Syncs every mounted system control immediately and resolves once their native placements commit (or `timeoutMs` passes). */
+export function flushSystemControls(timeoutMs = 150): Promise<void> {
+  if (flushers.size === 0) return Promise.resolve();
+  const pending = [...flushers].map((flush) => flush().catch(() => {}));
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(timer);
+      resolve();
+    };
+    const timer = window.setTimeout(finish, timeoutMs);
+    void Promise.all(pending).then(finish, finish);
+  });
 }
 
 /** Triggers a mounted native control's primary action (e.g. opening a pop-up button's menu from a row tap). */
@@ -156,16 +174,40 @@ const OVERLAY_SEL = [
   '.ui-toast',
 ].join(", ");
 
+const ACTIVE_SLIDE_SEL = [
+  "[data-phone-pushed-page][data-leaving]",
+  "[data-phone-pushed-page][data-moving]",
+  ".mobile-page[data-leaving]",
+  ".mobile-page[data-moving]",
+].join(", ");
+
+const ROW_SEL = "[data-panel-row], [data-panel-routine], [data-select-row], [data-simple-app], [data-settings-row], .mobile-row, [role='switch'], [role='group'], label";
+
+function coveredByForeignLayer(el: HTMLElement, hit: Element | null): boolean {
+  if (!hit) return false;
+  const overlay = hit.closest(OVERLAY_SEL);
+  if (overlay && !overlay.contains(el)) return true;
+  const page = hit.closest(".mobile-page");
+  if (page && !page.contains(el)) return true;
+  return false;
+}
+
 function ownHit(el: HTMLElement, hit: Element | null): boolean {
+  if (el.closest(".mobile-nav > [inert]")) {
+    return !coveredByForeignLayer(el, hit);
+  }
   if (!hit) return false;
   const overlay = hit.closest(OVERLAY_SEL);
   if (overlay && !overlay.contains(el)) return false;
   if (el.contains(hit) || hit.contains(el)) return true;
-  const row = el.closest("[data-panel-row], [data-select-row], .mobile-row, [role='switch'], [role='group'], label");
+  const row = el.parentElement?.closest(ROW_SEL);
   return Boolean(row && row.contains(hit));
 }
 
 function areaUncovered(area: HTMLElement, hit: Element | null): boolean {
+  if (area.closest(".mobile-nav > [inert]")) {
+    return !coveredByForeignLayer(area, hit);
+  }
   if (!hit || !area.contains(hit)) return false;
   const overlay = hit.closest(OVERLAY_SEL);
   return !overlay || overlay.contains(area);
@@ -187,8 +229,15 @@ function coveringLeft(el: HTMLElement): number | null {
   const inModal = Boolean(el.closest("[data-phone-modal-layer]"));
   let left = Infinity;
   if (!inModal) {
+    const ownPushed = el.closest<HTMLElement>("[data-phone-pushed-page], [data-phone-bot-page]");
+    const ownZ = ownPushed ? Number.parseInt(getComputedStyle(ownPushed).zIndex, 10) || 0 : -Infinity;
     for (const pushed of document.querySelectorAll<HTMLElement>("[data-phone-pushed-page]:not([data-preparing]), [data-phone-bot-page]:not([data-preparing])")) {
-      if (pushed.contains(el)) continue;
+      if (pushed === ownPushed || pushed.contains(el)) continue;
+      if (ownPushed) {
+        const z = Number.parseInt(getComputedStyle(pushed).zIndex, 10) || 0;
+        if (z < ownZ) continue;
+        if (z === ownZ && (ownPushed.compareDocumentPosition(pushed) & Node.DOCUMENT_POSITION_PRECEDING) !== 0) continue;
+      }
       left = Math.min(left, pushed.getBoundingClientRect().left);
     }
   }
@@ -285,6 +334,7 @@ export function useSystemControl(ref: RefObject<HTMLElement | null>, control: Sy
     let frame = 0;
     let steady = 0;
     let syncing = false;
+    let inFlight: Promise<unknown> = Promise.resolve();
     let lastPos: { x: number; y: number; clipX: number; maskRight?: number; alpha: number } | null = null;
     // the device learns of a scrolling area a moment after the page draws it: only an area it still cannot follow after
     // sustained retries (never a burst of microtask/frame checks during a transition) is given up on
@@ -317,7 +367,8 @@ export function useSystemControl(ref: RefObject<HTMLElement | null>, control: Sy
           || Math.abs(place.alpha - lastPos.alpha) > 0.005
         );
         lastPos = { x: place.room.x, y: place.room.y, clipX: place.clip.x, maskRight: place.maskRight, alpha: place.alpha };
-        if (place.alpha < 0.995 || moved || place.maskRight !== undefined || place.hidden !== prevHidden) {
+        const activeSlide = document.querySelector(ACTIVE_SLIDE_SEL) !== null;
+        if (activeSlide || place.alpha < 0.995 || moved || place.maskRight !== undefined || place.hidden !== prevHidden) {
           steady = 0;
           needNext = true;
         } else if (fromFrame) {
@@ -330,7 +381,7 @@ export function useSystemControl(ref: RefObject<HTMLElement | null>, control: Sy
         const next = JSON.stringify([shown, place]);
         if (next === sent) return;
         sent = next;
-        void controls.place(id, shown, place).then((tracked) => {
+        const placing = controls.place(id, shown, place).then((tracked) => {
           if (stopped) return;
           if (tracked) { misses = 0; lastMissAt = 0; return; }
           if (place.alpha < 0.99 || place.maskRight !== undefined || place.hidden) { sent = ""; return; }
@@ -341,7 +392,8 @@ export function useSystemControl(ref: RefObject<HTMLElement | null>, control: Sy
           }
           sent = "";
           if (misses >= 6) setRefused(true);
-        });
+        }, () => {});
+        inFlight = placing;
       } finally {
         syncing = false;
       }
@@ -352,10 +404,17 @@ export function useSystemControl(ref: RefObject<HTMLElement | null>, control: Sy
       sync(true);
       schedule();
     };
+    const flush = (): Promise<void> => {
+      steady = 0;
+      sync(true);
+      schedule();
+      return inFlight.then(() => {}, () => {});
+    };
     const poke = () => sync(false);
     syncRef.current = poke;
     waiters.add(wake);
     pokers.add(poke);
+    flushers.add(flush);
     syncDomObserver();
     sync(false);
     const timer = window.setInterval(() => sync(false), 250);
@@ -369,6 +428,7 @@ export function useSystemControl(ref: RefObject<HTMLElement | null>, control: Sy
       syncRef.current = null;
       waiters.delete(wake);
       pokers.delete(poke);
+      flushers.delete(flush);
       syncDomObserver();
       if (ref.current) triggers.delete(ref.current);
       if (frame) window.cancelAnimationFrame(frame);

@@ -82,7 +82,7 @@ const DuskPulldown = registerPlugin<{ show(options: { x: number; y: number; widt
 /** The app's own bar and sheet (ios/App/App/Chrome.swift): the web view's controller in the system's navigation bar and
  * sheet presentation. */
 interface ChromePlugin {
-  info(): Promise<{ native?: boolean }>;
+  info(): Promise<{ native?: boolean; push?: boolean }>;
   reset(): Promise<void>;
   setBar(options: Partial<BarConfig> & { hidden: boolean }): Promise<void>;
   freeze(): Promise<void>;
@@ -90,13 +90,20 @@ interface ChromePlugin {
   presentSheet(options: { height?: number }): Promise<void>;
   resizeSheet(options: { height: number }): Promise<void>;
   dismissSheet(): Promise<void>;
+  beginPush(): Promise<{ ok?: boolean }>;
+  commitPush(options: { token: string }): Promise<{ ok?: boolean }>;
+  cancelPush(): Promise<void>;
+  popPage(options: { token: string; animated?: boolean }): Promise<{ popped?: boolean }>;
+  finishPop(): Promise<void>;
+  resetPushStack(): Promise<void>;
   addListener(event: "barPress", listener: (event: { id?: string }) => void): Promise<PluginListenerHandle>;
   addListener(event: "pictureTaken", listener: (event: { key?: string }) => void): Promise<PluginListenerHandle>;
   addListener(event: "sheetDismissed", listener: () => void): Promise<PluginListenerHandle>;
+  addListener(event: "pagePopped", listener: (event: { tokens?: string[] }) => void): Promise<PluginListenerHandle>;
 }
 const DuskChrome = registerPlugin<ChromePlugin>("DuskChrome");
 
-function nativeChrome(plugin: ChromePlugin): MobileChrome {
+function nativeChrome(plugin: ChromePlugin, push = false): MobileChrome {
   const quiet = (work: Promise<unknown>) => work.then(() => {}, () => {});
   return {
     setBar: (config) => { void quiet(plugin.setBar(config ? { ...config, hidden: false } : { hidden: true, leading: [], trailing: [] })); },
@@ -108,6 +115,15 @@ function nativeChrome(plugin: ChromePlugin): MobileChrome {
     resizeSheet: (height) => { void quiet(plugin.resizeSheet({ height })); },
     dismissSheet: () => quiet(plugin.dismissSheet()),
     onSheetDismissed: (listener) => unsubscribe([plugin.addListener("sheetDismissed", listener)]),
+    ...(push ? {
+      beginPush: () => plugin.beginPush().then((result) => result.ok === true, () => false),
+      commitPush: (token) => plugin.commitPush({ token }).then((result) => result.ok === true, () => false),
+      cancelPush: () => quiet(plugin.cancelPush()),
+      popPage: (token, options) => plugin.popPage({ token, ...(options?.animated === false ? { animated: false } : {}) }).then((result) => result.popped === true, () => false),
+      finishPop: () => quiet(plugin.finishPop()),
+      resetPushStack: () => quiet(plugin.resetPushStack()),
+      onPagePopped: (listener) => unsubscribe([plugin.addListener("pagePopped", ({ tokens }) => { if (Array.isArray(tokens) && tokens.length > 0) listener(tokens); })]),
+    } : {}),
   };
 }
 
@@ -141,7 +157,7 @@ const DuskSpeech = registerPlugin<SpeechPlugin>("DuskSpeech");
 
 /** The app's own Liquid Glass chat chrome (ios/App/App/GlassChromePlugin.swift), iOS 26 and later. */
 interface GlassPlugin {
-  supported(): Promise<{ supported: boolean; acks?: boolean }>;
+  supported(): Promise<{ supported: boolean; acks?: boolean; jump?: boolean; reply?: boolean }>;
   update(state: GlassState): Promise<void>;
   setText(options: { text: string; seq: number }): Promise<void>;
   clearText(options: { id: number }): Promise<void>;
@@ -177,10 +193,12 @@ export async function nativeFiles(list: readonly NativeFile[], read: typeof fetc
   return files.filter((file): file is File => file !== null);
 }
 
-export function glassBridge(plugin: GlassPlugin, acks = false): GlassBridge {
+export function glassBridge(plugin: GlassPlugin, acks = false, jump = false, reply = false): GlassBridge {
   const quiet = (work: Promise<unknown>) => { void work.catch(() => {}); };
   return {
     acks,
+    jump,
+    reply,
     update: (state) => quiet(plugin.update(state)),
     setText: (text, seq) => quiet(plugin.setText({ text, seq })),
     clearText: (id) => quiet(plugin.clearText({ id })),
@@ -655,7 +673,7 @@ export async function nativePlatform(): Promise<MobilePlatform> {
     native: true,
     appVersion: info?.version || __APP_VERSION__,
     deviceName: () => kind === "ios" ? "iPhone" : "Android phone",
-    glass: glass?.supported ? glassBridge(DuskGlass, glass.acks === true) : undefined,
+    glass: glass?.supported ? glassBridge(DuskGlass, glass.acks === true, glass.jump === true, glass.reply === true) : undefined,
     menu: menu?.supported ? menuBridge(DuskMenu) : undefined,
     orientation: Capacitor.isPluginAvailable("DuskOrientation") ? orientationBridge(DuskOrientation) : undefined,
     haptic(type) {
@@ -764,7 +782,7 @@ export async function nativePlatform(): Promise<MobilePlatform> {
       keys: async () => (await Preferences.keys()).keys,
     },
     secrets,
-    chrome: chrome?.native ? nativeChrome(DuskChrome) : undefined,
+    chrome: chrome?.native ? nativeChrome(DuskChrome, chrome.push === true) : undefined,
     controls: chrome?.native && Capacitor.isPluginAvailable("DuskControls") ? {
       place: async (id, control, place) => { try { return (await DuskControls.place({ id, ...control, ...place })).tracked === true; } catch { return false; } },
       trigger: async (id) => { try { return (await DuskControls.trigger({ id })).triggered === true; } catch { return false; } },

@@ -6,7 +6,7 @@ import { t } from "@/lib/i18n";
 import type { CloudSignInStart } from "../../../electron/cloud-account.mjs";
 import type { OAuthProvider } from "../../../shared/account-api";
 import { usePlatform, type MobilePlatform } from "../platform";
-import { createMobileAccount, isAccountAuthUrl, keptSignInOrigin, type AppleProblem, type AccountPlaces, type AuthResult, type CloudPairResult, type ComputerPairResult, type MobileAccount, type MobileComputer, type MobileCloud, type MobileTeamCloud, type PhoneCodeResult } from "./account-client";
+import { createMobileAccount, isAccountAuthUrl, keptSignInOrigin, type AppleProblem, type AccountPlaces, type AuthResult, type CloudPairResult, type ComputerActionResult, type ComputerPairResult, type MobileAccount, type MobileComputer, type MobileCloud, type MobileTeamCloud, type PhoneCodeResult } from "./account-client";
 import { setTurnSource } from "../transport/direct-rtc";
 import { chooseAccountOrigin, chosenAccountOrigin, PREVIEW_ORIGIN, PRODUCTION_ORIGIN } from "./environment";
 import { claimFreshInstall } from "./install";
@@ -33,6 +33,8 @@ type AccountContextValue = { account: MobileAccount | null; origin: string;
   /** `accountId`: another account signed in on the phone; the one in use without it */
   places(accountId?: string): Promise<AccountPlaces | null>; pairTeamCloud(cloud: MobileTeamCloud, accountId?: string): Promise<CloudPairResult>;
   pairComputer(computer: MobileComputer, accountId?: string): Promise<ComputerPairResult>;
+  renameComputer(computer: Pick<MobileComputer, "id">, name: string, accountId?: string): Promise<ComputerActionResult>;
+  removeComputer(computer: Pick<MobileComputer, "id">, accountId?: string): Promise<ComputerActionResult>;
   /** what the sign-in screen asks of the account service */
   signIn: {
     providers(): Promise<OAuthProvider[]>; emailStart(email: string): Promise<CloudSignInStart>; emailVerify(code: string): Promise<SignInVerify>;
@@ -190,6 +192,7 @@ export function AccountGate({ children }: { children: ReactNode }) {
       enrollGrant: () => client.enrollGrant(),
       clouds: () => client.clouds(), pairCloud: (cloud, id) => client.pairCloud(cloud, id), wakeCloud: id => client.wakeCloud(id),
       places: id => client.places(id), pairTeamCloud: (cloud, id) => client.pairTeamCloud(cloud, id), pairComputer: (computer, id) => client.pairComputer(computer, id),
+      renameComputer: (computer, name, id) => client.renameComputer(computer, name, id), removeComputer: (computer, id) => client.removeComputer(computer, id),
       signIn: {
         providers: async () => providersFor(platform.kind, await client.providers()),
         emailStart: email => client.emailStart(email), emailVerify: code => client.emailVerify(code), cancelEmail: () => client.cancelEmail(),

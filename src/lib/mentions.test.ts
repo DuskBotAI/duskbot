@@ -39,7 +39,7 @@ describe("mention display ranges", () => {
 describe("the @devs tag in display ranges", () => {
   it("is drawn like a tag, in any chat, unless a bot has that name", () => {
     expect(matches("@devs the page froze, @Devs! but not ops@devs.test or @devsite")).toEqual(["@devs", "@Devs"]);
-    expect(mentionRanges("@devs hi", [{ name: "Devs", color: "blue" }]).map((range) => range.color)).toEqual(["#377FE6"]);
+    expect(mentionRanges("@devs hi", [{ name: "Devs", color: "blue" }]).map((range) => range.color)).toEqual(["#286ef9"]);
   });
 });
 

@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { GROK_HOVER_TINT } from "./SidebarSimpleTop";
 import { Check } from "lucide-react";
 import { X } from "../icons";
@@ -8,10 +9,15 @@ import { productName } from "@/lib/brand";
 import { cn } from "@/lib/cn";
 import { openFeedback } from "@/lib/feedback-sheet";
 import { t } from "@/lib/i18n";
+import { setSidebarFeedbackHidden, useSidebarFeedbackHidden } from "@/lib/sidebar-preferences";
 
 import type { AppUpdateBridge, AppUpdateState } from "../../electron/app-update.mjs";
 import { Art, type ArtName } from "./ui/Art";
 import { MausAvatar } from "./Avatar";
+import { navigateThreadMenu } from "./BotProjects";
+import { Icon } from "./Icon";
+import { useHeldMenuMotion } from "./MenuMotion";
+import { GROK_LABEL, GROK_MENU_ITEM, GROK_ROW_FILL, MENU_SHEET } from "./menu-recipe";
 import { mdPrimaryCls } from "./ui/GrokDialog";
 
 const DOWNLOAD_PAGE = "https://dusk.bot/download";
@@ -160,18 +166,132 @@ export function SidebarSpot({ className, bridge, cta = null }: { className?: str
 
 export function SpotView({ className, state, cta = null }: { className?: string; state: ReturnType<typeof useSidebarSpot>; cta?: SpotCta | null }) {
   const { spot, act, updated, seen } = state;
+  const feedbackHidden = useSidebarFeedbackHidden();
+  const showFeedback = spot.kind === "feedback" && !cta && !feedbackHidden;
+  if (spot.kind === "feedback" && !cta && feedbackHidden && !updated) return null;
   return (
     <div className={className}>
       {updated && spot.kind === "feedback" && <UpdatedNote version={updated} seen={seen} />}
       {spot.kind !== "feedback" ? <UpdateCard spot={spot} act={act} className={CARD} />
         : cta ? (cta.card ? <SpotCloudCard cta={cta} card={cta.card} /> : <SpotCtaCard cta={cta} />)
-        : (
-          <button type="button" data-sidebar-spot="feedback" data-art-hover="" onClick={act} className={cn(CARD, TONAL)}>
-            <Art name="bubbles" className="h-[18px] w-[18px] shrink-0 object-contain" />
-            <span className="min-w-0 flex-1 truncate text-[13px] font-medium leading-5 text-ink">{t("giveFeedback.card")}</span>
-          </button>
-        )}
+        : showFeedback ? <FeedbackCard onOpen={act} /> : null}
     </div>
+  );
+}
+
+function FeedbackCard({ onOpen }: { onOpen: () => void }) {
+  const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const motion = useHeldMenuMotion(menu);
+  const shown = motion.value;
+  const close = () => setMenu(null);
+
+  useLayoutEffect(() => {
+    const element = menuRef.current;
+    if (!element || !shown) return;
+    const place = () => {
+      const { width, height } = element.getBoundingClientRect();
+      element.style.left = `${Math.max(8, Math.min(shown.x, window.innerWidth - width - 8))}px`;
+      element.style.top = `${Math.max(8, Math.min(shown.y, window.innerHeight - height - 8))}px`;
+    };
+    place();
+    window.addEventListener("resize", place);
+    return () => window.removeEventListener("resize", place);
+  }, [shown, motion.shown]);
+
+  useEffect(() => {
+    if (!menu) return;
+    menuRef.current?.querySelector<HTMLButtonElement>("button:not([disabled])")?.focus();
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      setMenu(null);
+      triggerRef.current?.focus();
+    };
+    const onBlur = () => setMenu(null);
+    window.addEventListener("keydown", onKey);
+    window.addEventListener("blur", onBlur);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("blur", onBlur);
+    };
+  }, [menu]);
+
+  return (
+    <>
+      <button
+        ref={triggerRef}
+        type="button"
+        data-sidebar-spot="feedback"
+        data-art-hover=""
+        onClick={onOpen}
+        onContextMenu={(event) => {
+          event.preventDefault();
+          setMenu({ x: event.clientX, y: event.clientY + 4 });
+        }}
+        onKeyDown={(event) => {
+          if (event.key !== "ContextMenu" && !(event.shiftKey && event.key === "F10")) return;
+          event.preventDefault();
+          const rect = event.currentTarget.getBoundingClientRect();
+          setMenu({ x: rect.left + Math.min(40, rect.width / 2), y: rect.top + rect.height / 2 });
+        }}
+        className={cn(CARD, TONAL)}
+      >
+        <Art name="bubbles" className="h-[18px] w-[18px] shrink-0 object-contain" />
+        <span className="min-w-0 flex-1 truncate text-[13px] font-medium leading-5 text-ink">{t("giveFeedback.card")}</span>
+      </button>
+      {motion.shown && shown && createPortal(
+        <div
+          className={cn("fixed inset-0 z-40", motion.closing && "pointer-events-none")}
+          onMouseDown={close}
+          onContextMenu={(event) => { event.preventDefault(); close(); }}
+        >
+          <div
+            ref={menuRef}
+            role="menu"
+            aria-label={t("giveFeedback.card")}
+            data-sidebar-spot-menu=""
+            style={{ left: Math.max(8, shown.x), top: Math.max(8, shown.y) }}
+            className={cn("absolute w-max min-w-[160px] max-w-[min(280px,calc(100vw-16px))] origin-top-left text-ink rtl:origin-top-right", MENU_SHEET, motion.className)}
+            {...motion.exitProps}
+            onMouseDown={(event) => event.stopPropagation()}
+            onContextMenu={(event) => { event.preventDefault(); event.stopPropagation(); }}
+            onKeyDown={(event) => {
+              if (event.key === "Escape") {
+                event.preventDefault();
+                event.stopPropagation();
+                close();
+                triggerRef.current?.focus();
+                return;
+              }
+              if (event.key === "Tab") {
+                event.preventDefault();
+                event.stopPropagation();
+                close();
+                return;
+              }
+              navigateThreadMenu(event);
+            }}
+          >
+            <button
+              type="button"
+              role="menuitem"
+              data-sidebar-spot-hide=""
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => { close(); setSidebarFeedbackHidden(true); }}
+              className={cn(GROK_MENU_ITEM, GROK_ROW_FILL, "text-ink")}
+            >
+              <span aria-hidden="true" className="flex size-[18px] shrink-0 items-center justify-center text-ink/[0.66]">
+                <Icon name="eye-slash" size={14} />
+              </span>
+              <span className={GROK_LABEL}>{t("giveFeedback.hide")}</span>
+            </button>
+          </div>
+        </div>,
+        document.body,
+      )}
+    </>
   );
 }
 

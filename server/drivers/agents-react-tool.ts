@@ -16,7 +16,7 @@ export async function callReactTool(args: Record<string, unknown>, context: Tool
 export const REACT_TOOL_DEFINITION = {
   name: REACT_TOOL,
   description:
-    "React with one emoji to the person's latest message, as a person would. Sparingly, only when it fits (thanks, good news, a joke), never instead of a reply, at most once per message; a new emoji replaces yours.",
+    "React with one emoji to the person's latest message, as a person would. Sparingly, when it fits (thanks, good news, a joke, a quick ack); it can stand on its own if you then end with (pass), at most once per message; a new emoji replaces yours.",
   inputSchema: {
     type: "object",
     additionalProperties: false,

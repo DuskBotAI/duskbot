@@ -42,9 +42,10 @@ describe("stateForBot", () => {
 });
 
 describe("silver", () => {
-  it("is a colour every picker offers, drawn at #A8ADB4 and named Silver", () => {
+  it("is a colour every picker offers, drawn at #a3aab3 and named Silver", () => {
     expect(MAUS_COLOR_NAMES).toContain("silver");
-    expect(MAUS_COLORS.silver).toBe("#A8ADB4");
+    expect(MAUS_COLORS.silver).toBe("#a3aab3");
+    expect(MAUS_COLORS).toEqual(MASCOT_INK);
     expect(t(MAUS_COLOR_LABEL.silver)).toBe("Silver");
   });
 });

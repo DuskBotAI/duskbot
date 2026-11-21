@@ -2,27 +2,18 @@ import { useMemo, useRef, useState, type RefObject } from "react";
 import { track } from "@/lib/analytics";
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
-import { footnoteCls, GrokDialog, mdPrimaryCls, mdSecondaryCls } from "./ui/GrokDialog";
+import { Card } from "./ListRows";
+import { dialogPrimaryCls, footnoteCls, GrokDialog, mdPrimaryCls, mdSecondaryCls } from "./ui/GrokDialog";
 import { useStore, type Group } from "@/state/store";
 import { BotPickerList } from "./BotPickerList";
 import { nextMemberIds } from "@/lib/room-members";
 
-/** Who is in the room, in Grok's form dialog: the room's name under the title, its bots as check rows. Focus goes back
- * to the control that opened it, which `triggerRef` names for callers. */
-export function ManageMembersPanel({
-  group,
-  onClose,
-}: {
-  group: Group;
-  onClose: () => void;
-  triggerRef?: RefObject<HTMLButtonElement | null>;
-}) {
+function useManageMembers(group: Group, onClose: () => void) {
   const { state, dispatch } = useStore();
   const [picked, setPicked] = useState<Set<string>>(() => new Set(group.memberIds));
   const [saveError, setSaveError] = useState<string | null>(null);
   const openedMemberIds = useRef([...group.memberIds]);
 
-  // Archived bots stay listed while still members, or a room could keep a member you cannot remove.
   const bots = useMemo(
     () => state.bots.filter((b) => !b.hidden || group.memberIds.includes(b.id)),
     [state.bots, group.memberIds],
@@ -63,6 +54,21 @@ export function ManageMembersPanel({
     onClose();
   };
 
+  return { bots, picked, toggle, memberIds, saveError, save };
+}
+
+/** Who is in the room, in Grok's form dialog: the room's name under the title, its bots as check rows. Focus goes back
+ * to the control that opened it, which `triggerRef` names for callers. */
+export function ManageMembersPanel({
+  group,
+  onClose,
+}: {
+  group: Group;
+  onClose: () => void;
+  triggerRef?: RefObject<HTMLButtonElement | null>;
+}) {
+  const { bots, picked, toggle, memberIds, saveError, save } = useManageMembers(group, onClose);
+
   return (
     <GrokDialog
       data-panel-modal="members"
@@ -84,5 +90,26 @@ export function ManageMembersPanel({
         </p>
       )}
     </GrokDialog>
+  );
+}
+
+/** Phone pushed-page version of ManageMembersPanel, rendered inside a native SheetPush. */
+export function ManageMembersPage({ group, onClose }: { group: Group; onClose: () => void }) {
+  const { bots, picked, toggle, memberIds, saveError, save } = useManageMembers(group, onClose);
+  const note = !memberIds.length || saveError ? (
+    <span role={saveError ? "alert" : undefined} className={cn(saveError && "text-danger")}>
+      {saveError ?? t("sheet.rows.members.needOne")}
+    </span>
+  ) : undefined;
+
+  return (
+    <div data-panel-modal="members" className="flex flex-col gap-5 px-4 pb-8 pt-2">
+      <Card label={group.name} footnote={note}>
+        <BotPickerList inline bots={bots} picked={picked} onToggle={toggle} emptyHint={t("sheet.rows.members.empty")} />
+      </Card>
+      <button type="button" onClick={save} disabled={!memberIds.length} className={cn(dialogPrimaryCls, "h-12 w-full text-[16px] font-medium")}>
+        {t("sheet.rows.members.save")}
+      </button>
+    </div>
   );
 }

@@ -24,6 +24,13 @@ export type GlassButtonKind = "stop" | "mic" | "micSend" | "send" | "waits" | "f
 /** `fill` and `ink` are the page's own colours for the button (#rrggbb or #rrggbbaa), so Send wears the bot's button as on the desktop. */
 export interface GlassButton { kind: GlassButtonKind; disabled: boolean; label: string; fill?: string; ink?: string }
 
+export interface GlassReply {
+  text: string;
+  label: string;
+  clearLabel: string;
+  thumbnail?: string;
+}
+
 export interface GlassComposer {
   frame: GlassFrame;
   /** from the composer's bottom to the line it rests on (the home indicator's edge, or the keyboard's top) */
@@ -37,12 +44,21 @@ export interface GlassComposer {
   voice: string | null;
   /** `voice` is words heard, not the waiting words (apps before 1.3 ignore it) */
   voiceHeard?: boolean;
+  /** the message being replied to, shown as a compact strip inside the capsule (apps before reply support ignore it) */
+  reply?: GlassReply | null;
   buttons: GlassButton[];
   returnSends: boolean;
   /** the page's text zoom, so the native field's text matches the page's (apps before 1.3 ignore it) */
   fontScale: number;
   /** the empty space under the transcript's last row: a keyboard opening over a short chat lifts the page that much less */
   room: number;
+}
+
+export interface GlassJump {
+  frame: GlassFrame;
+  /** from the button's bottom to the line the composer dock rests on (the home indicator's edge, or the keyboard's top) */
+  gap: number;
+  label: string;
 }
 
 export interface GlassState {
@@ -56,6 +72,10 @@ export interface GlassState {
   ground: string;
   header: GlassHeader | null;
   composer: GlassComposer | null;
+  /** the floating scroll-to-bottom button above the composer (apps before jump support ignore it) */
+  jump?: GlassJump | null;
+  /** the button is mounted but covered by a sheet or menu, so the page's own stands in at once */
+  jumpHandoff?: boolean;
   /** a call's bar has the composer's place: the composer fades out under it as it comes, and back in as it goes, instead
    * of swapping at once (apps before 1.4 ignore it) */
   call?: boolean;
@@ -68,7 +88,7 @@ export function callHoldsComposer(chat: Element | null): boolean {
 }
 
 export type GlassEvent =
-  | { type: "tap"; target: "back" | "title" | "right" | "plus" | "search" | "newBot" }
+  | { type: "tap"; target: "back" | "title" | "right" | "plus" | "jump" | "clearReply" | "search" | "newBot" }
   | { type: "button"; index: number; kind?: GlassButtonKind }
   | { type: "text"; text: string }
   | { type: "submit" }
@@ -88,6 +108,10 @@ export type GlassEvent =
 export interface GlassBridge {
   /** the native side answers each composer it is asked for with a `composer` event (apps before 1.3.1 never do) */
   acks?: boolean;
+  /** the native side draws the floating jump-to-latest button in Liquid Glass */
+  jump?: boolean;
+  /** the native side draws the composer's reply strip inside the capsule */
+  reply?: boolean;
   update(state: GlassState): void;
   setText(text: string, seq: number): void;
   /** Empties the native field for a send the page took, whatever it holds or the sequence it last took, and answers with
@@ -109,7 +133,7 @@ export interface GlassBridge {
 
 /** A symbol as a black-on-clear png data url, and its size in points (css px). */
 export interface GlassGlyph { data: string; w: number; h: number }
-export type GlassGlyphs = Partial<Record<"back" | "right", GlassGlyph>>;
+export type GlassGlyphs = Partial<Record<"back" | "right" | "jump", GlassGlyph>>;
 
 /** The page's back and computer buttons wear the native header's symbols, so a sheet that hands the header to the page
  * (the glass cannot be drawn under it) changes nothing a person sees in them. */
@@ -156,6 +180,22 @@ export function covered(el: Element, chat: Element): boolean {
   if (x < 0 || y < 0 || x > doc.documentElement.clientWidth || y > doc.documentElement.clientHeight) return false;
   const hit = doc.elementFromPoint(x, y);
   return Boolean(hit) && !chat.contains(hit);
+}
+
+const JUMP_COVER = '[role="menu"], [role="listbox"], [data-sidebar-popover-menu], [data-composer-menu], [data-call-popover], [data-glass-nav], [data-testid="message-actions"]';
+
+/** Covered by something outside the chat (a sheet, a dialog) or a floating menu/popover inside it. */
+export function jumpCovered(el: Element, chat: Element): boolean {
+  const doc = el.ownerDocument;
+  const box = el.getBoundingClientRect();
+  if (box.width === 0 || box.height === 0) return true;
+  const x = box.left + box.width / 2;
+  const y = box.top + box.height / 2;
+  if (x < 0 || y < 0 || x > doc.documentElement.clientWidth || y > doc.documentElement.clientHeight) return false;
+  const hit = doc.elementFromPoint(x, y);
+  if (!hit) return false;
+  if (!chat.contains(hit)) return true;
+  return hit !== el && !el.contains(hit) && Boolean(hit.closest(JUMP_COVER));
 }
 
 /** Which native control stands in for a button in the composer's actions, or null when it has no native twin. */
@@ -258,11 +298,62 @@ export function restingColors(el: HTMLElement): { fill?: string; ink?: string } 
   return { fill: cssColor(fill) ?? undefined, ink: cssColor(ink) ?? undefined };
 }
 
-/** A strip inside the pill above its row (a reply, attachments): only the page draws those. */
-function hasStrips(shell: Element): boolean {
+/** A strip inside the pill above its row (attachments, selection quote, or reply without native support): only the page draws those. */
+function hasStrips(shell: Element, allowReply = false): boolean {
   const row = shell.querySelector("[data-composer-row]");
   const content = row?.parentElement;
-  return Boolean(content && [...content.children].some((child) => child !== row && child.getBoundingClientRect().height > 0));
+  return Boolean(content && [...content.children].some((child) =>
+    child !== row &&
+    !(allowReply && child.matches("[data-composer-reply]")) &&
+    child.getBoundingClientRect().height > 0,
+  ));
+}
+
+type ReplyThumbCache = { src: string; data: string | null };
+
+function rasterReplyThumbnail(img: HTMLImageElement, cache: ReplyThumbCache): { data: string | null; pending: boolean } {
+  const src = img.currentSrc || img.src;
+  if (!src) return { data: null, pending: false };
+  if (cache.src === src && cache.data !== null) return { data: cache.data, pending: false };
+  if (!img.complete || !img.naturalWidth || !img.naturalHeight) return { data: null, pending: true };
+  const size = 72;
+  const canvas = document.createElement("canvas");
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return { data: null, pending: false };
+  const side = Math.min(img.naturalWidth, img.naturalHeight);
+  const sx = (img.naturalWidth - side) / 2;
+  const sy = (img.naturalHeight - side) / 2;
+  try {
+    ctx.drawImage(img, sx, sy, side, side, 0, 0, size, size);
+    const data = canvas.toDataURL("image/png");
+    cache.src = src;
+    cache.data = data;
+    return { data, pending: false };
+  } catch {
+    cache.src = src;
+    cache.data = null;
+    return { data: null, pending: false };
+  }
+}
+
+function readReply(shell: Element, thumbCache: ReplyThumbCache): { reply: GlassReply; pending: boolean } | null {
+  const strip = shell.querySelector<HTMLElement>("[data-composer-reply]");
+  if (!strip || strip.getBoundingClientRect().height === 0) return null;
+  const excerpt = strip.querySelector<HTMLElement>("[data-reply-excerpt], [dir='auto']")?.textContent?.trim() ?? "";
+  const clear = strip.querySelector("button");
+  const img = strip.querySelector<HTMLImageElement>("[data-reply-thumbnail]");
+  const thumb = img ? rasterReplyThumbnail(img, thumbCache) : { data: null, pending: false };
+  return {
+    reply: {
+      text: excerpt,
+      label: strip.getAttribute("aria-label") ?? "",
+      clearLabel: clear?.getAttribute("aria-label") ?? "",
+      ...(thumb.data ? { thumbnail: thumb.data } : {}),
+    },
+    pending: thumb.pending,
+  };
 }
 
 export function sameState(a: GlassState | null, b: GlassState | null): boolean {
@@ -326,14 +417,27 @@ function readHeader(nav: Element, dx: number): GlassHeader | null {
   };
 }
 
-/** How far the keyboard ride lifts the composer's dock right now (negative is up), mid-transition too. */
-export function keyboardRide(shell: Element): number {
-  const dock = shell.closest("[data-grok-inset]");
-  if (!dock) return 0;
-  const matrix = /^matrix(3d)?\((.*)\)$/.exec(getComputedStyle(dock).transform);
+function translateY(el: Element): number {
+  const matrix = /^matrix(3d)?\((.*)\)$/.exec(getComputedStyle(el).transform);
   if (!matrix) return 0;
   const parts = matrix[2]!.split(",").map(Number);
   return (matrix[1] ? parts[13] : parts[5]) || 0;
+}
+
+/** How far the keyboard ride lifts the composer's dock right now (negative is up), mid-transition too. */
+export function keyboardRide(shell: Element): number {
+  const dock = shell.closest("[data-grok-inset]");
+  return dock ? translateY(dock) : 0;
+}
+
+function readJump(el: HTMLElement, baseline: number, dx: number): GlassJump {
+  const raw = restingFrame(el, dx);
+  const frame: GlassFrame = { ...raw, y: round(raw.y - translateY(el)) };
+  return {
+    frame,
+    gap: Math.round(baseline - (frame.y + frame.h - keyboardRide(el))),
+    label: el.getAttribute("aria-label") ?? "",
+  };
 }
 
 /** The empty space between the transcript's last row and the bottom of its scroller, in whole px. */
@@ -351,8 +455,15 @@ export function transcriptRoom(chat: Element | null): number {
   return Math.max(0, Math.round(list.clientHeight - end));
 }
 
-function readComposer(shell: HTMLElement, baseline: number, dx: number, room: number): { composer: GlassComposer; elements: HTMLElement[]; field: HTMLTextAreaElement | null } | null {
-  if (hasStrips(shell)) return null;
+function readComposer(
+  shell: HTMLElement,
+  baseline: number,
+  dx: number,
+  room: number,
+  allowReply: boolean,
+  thumbCache: ReplyThumbCache,
+): { composer: GlassComposer; elements: HTMLElement[]; field: HTMLTextAreaElement | null; pending: boolean } | null {
+  if (hasStrips(shell, allowReply)) return null;
   const field = shell.querySelector<HTMLTextAreaElement>("textarea");
   const actions = composerButtons(shell.querySelector("[data-composer-actions]"));
   if (!actions) return null;
@@ -361,6 +472,7 @@ function readComposer(shell: HTMLElement, baseline: number, dx: number, room: nu
   if (!field && !recording) return null;
   const frame = restingFrame(shell, dx);
   const plus = shell.querySelector("[data-composer-plus]");
+  const reply = allowReply ? readReply(shell, thumbCache) : null;
   return {
     composer: {
       frame,
@@ -372,6 +484,7 @@ function readComposer(shell: HTMLElement, baseline: number, dx: number, room: nu
       disabled: Boolean(field?.disabled),
       voice: recording ? spoken(voiceStrip) : null,
       voiceHeard: recording && Boolean(voiceStrip?.querySelector("[data-voice-heard]")),
+      ...(reply ? { reply: reply.reply } : {}),
       buttons: actions.buttons,
       returnSends: field?.getAttribute("enterkeyhint") === "send",
       fontScale: appliedTextScale(),
@@ -379,15 +492,16 @@ function readComposer(shell: HTMLElement, baseline: number, dx: number, room: nu
     },
     elements: actions.elements,
     field,
+    pending: Boolean(reply?.pending),
   };
 }
 
 /** Why the page keeps its own composer instead of the native one, for the trace. */
-function handoffReason(shell: HTMLElement | null, chat: HTMLElement): string {
+function handoffReason(shell: HTMLElement | null, chat: HTMLElement, allowReply: boolean): string {
   if (callHoldsComposer(chat)) return "call";
   if (!shell) return "no composer";
   if (covered(shell, chat)) return "covered";
-  if (hasStrips(shell)) return "strip";
+  if (hasStrips(shell, allowReply)) return "strip";
   if (!composerButtons(shell.querySelector("[data-composer-actions]"))) return "button without a twin";
   return "no field";
 }
@@ -513,12 +627,15 @@ export function useNativeGlass(platform: MobilePlatform, rootRef: RefObject<HTML
     let composerShown = false;
     const handoff = composerHandoff();
     const sends = sendClearing();
+    const thumbCache: ReplyThumbCache = { src: "", data: null };
+    const allowReply = glass.reply === true;
     const liveField = () => (field?.isConnected ? field : shell()?.querySelector("textarea") ?? null);
     let safeBottom = cssPx(root, "var(--m-safe-bottom)");
 
     const chat = () => root.querySelector<HTMLElement>("[data-mobile-chat]");
     const nav = () => chat()?.querySelector<HTMLElement>("[data-glass-nav]") ?? null;
     const shell = () => chat()?.querySelector<HTMLElement>('[data-tour="composer"]') ?? null;
+    const jump = () => chat()?.querySelector<HTMLElement>(".chat-jump") ?? null;
 
     // the page is measured each frame only while something outside the transcript changed in the last half second or a
     // page slides; otherwise four times a second, so a resting or streaming chat does not restyle every frame for it
@@ -536,7 +653,7 @@ export function useNativeGlass(platform: MobilePlatform, rootRef: RefObject<HTML
       handoff.recheck();
     };
     skinChanged.observe(html, { attributes: true, attributeFilter: ["data-skin", "class", "style"] });
-    const flag = (name: "nativeGlassHeader" | "nativeGlassComposer", on: boolean) => {
+    const flag = (name: "nativeGlassHeader" | "nativeGlassComposer" | "nativeGlassJump", on: boolean) => {
       if (on && html.dataset[name] === undefined) html.dataset[name] = "";
       else if (!on && html.dataset[name] !== undefined) delete html.dataset[name];
     };
@@ -577,22 +694,26 @@ export function useNativeGlass(platform: MobilePlatform, rootRef: RefObject<HTML
       const kb = parseFloat(root.style.getPropertyValue("--m-kb")) || 0;
       const baseline = window.innerHeight - Math.max(safeBottom, kb);
       const calling = callHoldsComposer(chatEl);
-      const read = chatEl && shellEl && !calling && !covered(shellEl, chatEl) ? readComposer(shellEl, baseline, left, transcriptRoom(chatEl)) : null;
+      const read = chatEl && shellEl && !calling && !covered(shellEl, chatEl) ? readComposer(shellEl, baseline, left, transcriptRoom(chatEl), allowReply, thumbCache) : null;
+      const jumpEl = glass.jump ? jump() : null;
+      const jumpHidden = Boolean(chatEl && jumpEl && jumpCovered(jumpEl, chatEl));
+      const nativeJump = chatEl && jumpEl && !jumpHidden ? readJump(jumpEl, baseline, left) : null;
       handoff.want(Boolean(read));
       const nativeComposer = read && (!glass.acks || handoff.native()) ? read.composer : null;
-      if (glass.acks && handoff.pending()) fresh = Math.max(fresh, 1);
+      if ((glass.acks && handoff.pending()) || read?.pending) fresh = Math.max(fresh, 1);
       elements = read?.elements ?? [];
       field = read?.field ?? null;
       const styles = getComputedStyle(root);
       const next: GlassState = {
         dark: darkGround(cssHex(styles.getPropertyValue("--color-app"))) ?? (html.dataset.skin === "grok-dark" || root.dataset.scheme === "dark"),
         // with nothing drawn natively (a sheet over the chat, scaling the page back) the offset has nothing to move
-        offset: slide ? slide.to : header || read ? round(left) : last?.offset ?? round(left),
+        offset: slide ? slide.to : header || read || nativeJump ? round(left) : last?.offset ?? round(left),
         accent: styles.getPropertyValue("--color-accent").trim(),
         ground: cssHex(styles.getPropertyValue("--color-app")) ?? "",
         header,
         composer: nativeComposer,
         handoff: Boolean(chatEl) && (!header || !nativeComposer),
+        ...(glass.jump ? { jump: nativeJump, ...(jumpHidden ? { jumpHandoff: true } : {}) } : {}),
         ...(calling ? { call: true } : {}),
       };
       // the pill's picture goes before the update that shows it: a chat's header never arrives with the last chat's
@@ -609,9 +730,10 @@ export function useNativeGlass(platform: MobilePlatform, rootRef: RefObject<HTML
       flag("nativeGlassHeader", Boolean(header));
       const nativeOwns = glass.acks ? handoff.pageHidden() : Boolean(next.composer);
       flag("nativeGlassComposer", nativeOwns);
+      flag("nativeGlassJump", Boolean(nativeJump));
       if (nativeOwns !== composerShown) {
         composerShown = nativeOwns;
-        kbTrace(composerShown ? "native composer" : "page composer", { why: composerShown ? "shown" : handoff.refusal() ?? (chatEl ? handoffReason(shellEl, chatEl) : "chat closed") });
+        kbTrace(composerShown ? "native composer" : "page composer", { why: composerShown ? "shown" : handoff.refusal() ?? (chatEl ? handoffReason(shellEl, chatEl, allowReply) : "chat closed") });
         // the page's field kept the keyboard while it had the composer (a reply, a popover): the native one takes it back
         if (composerShown && field && document.activeElement === field) glass.focus();
       }
@@ -631,6 +753,8 @@ export function useNativeGlass(platform: MobilePlatform, rootRef: RefObject<HTML
       switch (event.type) {
         case "tap": {
           if (event.target === "plus") click(shell()?.querySelector("[data-composer-plus]")?.closest("button") ?? shell()?.querySelector("[data-composer-plus]"));
+          else if (event.target === "clearReply") click(shell()?.querySelector("[data-composer-reply] button"));
+          else if (event.target === "jump") click(jump());
           else click(nav()?.querySelector(`[data-glass=${event.target}]`));
           break;
         }
@@ -663,7 +787,9 @@ export function useNativeGlass(platform: MobilePlatform, rootRef: RefObject<HTML
         case "submit": {
           const target = liveField();
           sends.tapped(target?.value ?? "", performance.now());
-          target?.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", code: "Enter", bubbles: true, cancelable: true }));
+          const sendButton = elements.find((el) => buttonKind(el) === "send" || buttonKind(el) === "micSend");
+          if (sendButton) click(sendButton);
+          else target?.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", code: "Enter", bubbles: true, cancelable: true }));
           break;
         }
         case "focus": {
@@ -688,7 +814,7 @@ export function useNativeGlass(platform: MobilePlatform, rootRef: RefObject<HTML
       target.blur();
       glass.focus();
     };
-    const onResize = () => { safeBottom = cssPx(root, "var(--m-safe-bottom)"); };
+    const onResize = () => { safeBottom = cssPx(root, "var(--m-safe-bottom)"); fresh = FRESH_FRAMES; };
     document.addEventListener("focus", onFocus, true);
     document.addEventListener("visibilitychange", onVisible);
     window.addEventListener("resize", onResize);
@@ -705,6 +831,7 @@ export function useNativeGlass(platform: MobilePlatform, rootRef: RefObject<HTML
       delete root.dataset.glassFocused;
       delete html.dataset.nativeGlassHeader;
       delete html.dataset.nativeGlassComposer;
+      delete html.dataset.nativeGlassJump;
       slideRef.current = null;
       glass.clear();
     };

@@ -4,7 +4,7 @@ import { ChevronRight } from "../icons";
 import { cn } from "@/lib/cn";
 import { useMenuMotion } from "./MenuMotion";
 import { popoverClosesOnKey, usePopoverDismiss } from "@/hooks/use-popover-dismiss";
-import { submenuIntent, type Point, type SubmenuIntent } from "@/lib/submenu-intent";
+import { attachSubmenuAim, submenuBridgeBox, submenuIntent, type Point, type SubmenuIntent } from "@/lib/submenu-intent";
 import { GROK_LABEL, GROK_ROW_FILL, MENU_HEADING, MENU_ITEM_SEPARATOR, MENU_SHEET } from "./menu-recipe";
 import { Icon } from "./Icon";
 
@@ -118,7 +118,7 @@ function MenuRows({
   items: SidebarMenuItem[];
   openSubmenu?: string | null;
   engaged?: boolean;
-  onItem: (item: SidebarMenuItem, element: HTMLElement, keyboard: boolean) => void;
+  onItem: (item: SidebarMenuItem, element: HTMLElement, keyboard: boolean, point?: Point) => void;
   onRowEnter?: (item: SidebarMenuItem, element: HTMLElement, point: Point) => void;
   onRowLeave?: (item: SidebarMenuItem) => void;
 }) {
@@ -140,7 +140,12 @@ function MenuRows({
             disabled={item.disabled}
             aria-haspopup={item.submenu ? "menu" : undefined}
             aria-expanded={item.submenu ? openSubmenu === item.key : undefined}
-            onClick={(event) => onItem(item, event.currentTarget, event.detail === 0)}
+            onClick={(event) => onItem(
+              item,
+              event.currentTarget,
+              event.detail === 0,
+              event.detail !== 0 && typeof event.clientX === "number" && typeof event.clientY === "number" ? { x: event.clientX, y: event.clientY } : undefined,
+            )}
             onPointerEnter={(event) => onRowEnter?.(item, event.currentTarget, { x: event.clientX, y: event.clientY })}
             onPointerLeave={() => onRowLeave?.(item)}
             className={cn(
@@ -228,6 +233,7 @@ export function SidebarPopoverMenu({
   const triggerRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const subRef = useRef<HTMLDivElement>(null);
+  const bridgeRef = useRef<HTMLDivElement>(null);
   const subRowRef = useRef<HTMLElement | null>(null);
   const rowsByKey = useRef(new Map<string, HTMLElement>());
   const [engaged, setEngaged] = useState(false);
@@ -240,6 +246,11 @@ export function SidebarPopoverMenu({
     },
     close: () => { setSubmenu(null); setEngaged(false); },
     submenuBox: () => subRef.current?.getBoundingClientRect() ?? null,
+    onAimingChange: attachSubmenuAim(() => intentRef.current, {
+      menu: () => menuRef.current,
+      submenu: () => subRef.current,
+      bridge: () => bridgeRef.current,
+    }),
   });
   const intent = intentRef.current;
   const focusFirst = useRef(false);
@@ -318,9 +329,9 @@ export function SidebarPopoverMenu({
     menuItems(menuRef.current)[0]?.focus();
   }, [open, anchored, position]);
 
-  const openSub = (item: SidebarMenuItem, row: HTMLElement, focus = false) => {
+  const openSub = (item: SidebarMenuItem, row: HTMLElement, focus = false, point?: Point) => {
     rowsByKey.current.set(item.key, row);
-    intent.openNow(item.key);
+    intent.openNow(item.key, point);
     if (focus) requestAnimationFrame(() => menuItems(subRef.current)[0]?.focus());
   };
   const closeSub = (focusRow = false) => {
@@ -328,10 +339,10 @@ export function SidebarPopoverMenu({
     if (focusRow) subRowRef.current?.focus();
   };
 
-  const selectItem = (item: SidebarMenuItem, row: HTMLElement, keyboard: boolean) => {
+  const selectItem = (item: SidebarMenuItem, row: HTMLElement, keyboard: boolean, point?: Point) => {
     if (item.submenu) {
       if (submenu === item.key) closeSub();
-      else openSub(item, row, keyboard);
+      else openSub(item, row, keyboard, point);
       return;
     }
     item.onSelect();
@@ -386,7 +397,11 @@ export function SidebarPopoverMenu({
       {...motion.exitProps}
       onKeyDown={(event) => onMenuKey(event, false)}
       onPointerMove={(event) => intent.move({ x: event.clientX, y: event.clientY }, Boolean(submenu && subRowRef.current?.contains(event.target as Node)))}
-      onPointerLeave={() => intent.leaveMenu()}
+      onPointerLeave={(event) => {
+        const to = event.relatedTarget;
+        if (to instanceof Node && (subRef.current?.contains(to) || bridgeRef.current?.contains(to))) return;
+        intent.leaveMenu({ x: event.clientX, y: event.clientY });
+      }}
       style={anchored ? { ...position?.origin, position: "fixed", left: position?.left ?? 0, top: position?.top ?? 0, minWidth: grok ? 200 : MENU_MIN_WIDTH, width: "max-content", maxWidth: `min(${MENU_MAX_WIDTH}px, calc(100vw - ${EDGE_MARGIN * 2}px))`, maxHeight: `calc(100vh - ${EDGE_MARGIN * 2}px)`, visibility: position ? undefined : "hidden" } : undefined}
       className={cn(
         sheetClass,
@@ -410,26 +425,29 @@ export function SidebarPopoverMenu({
     </div>
   );
 
-  // the 4px between the menu and its submenu belongs to the submenu, so crossing it (or resting in it) keeps it open
   const menuBox = subPosition ? menuRef.current?.getBoundingClientRect() : undefined;
   const subHeight = subRef.current?.offsetHeight ?? 0;
-  const bridge = menuBox && subPosition && subHeight > 0 && (() => {
-    const subLeft = subPosition.left, subRight = subLeft + (subRef.current?.offsetWidth ?? 0);
-    const left = subLeft >= menuBox.right ? menuBox.right : subRight, right = subLeft >= menuBox.right ? subLeft : menuBox.left;
-    if (right <= left) return null;
-    return (
-      <div
-        aria-hidden="true"
-        data-submenu-bridge=""
-        onPointerEnter={() => intent.enterSubmenu()}
-        onPointerLeave={(event) => {
-          const to = event.relatedTarget;
-          if (!(to instanceof Node && (subRef.current?.contains(to) || menuRef.current?.contains(to)))) intent.leaveMenu();
-        }}
-        style={{ position: "fixed", left, top: subPosition.top, width: right - left, height: subHeight, zIndex: 61 }}
-      />
-    );
-  })();
+  const subWidth = subRef.current?.offsetWidth ?? 0;
+  const bridgeBox = menuBox && subPosition && subHeight > 0
+    ? submenuBridgeBox(
+      menuBox,
+      subRowRef.current?.getBoundingClientRect() ?? { left: 0, right: 0, top: 0, bottom: 0 },
+      { left: subPosition.left, right: subPosition.left + subWidth, top: subPosition.top, bottom: subPosition.top + subHeight },
+    )
+    : null;
+  const bridge = bridgeBox && (
+    <div
+      ref={bridgeRef}
+      aria-hidden="true"
+      data-submenu-bridge=""
+      onPointerEnter={() => intent.enterSubmenu()}
+      onPointerLeave={(event) => {
+        const to = event.relatedTarget;
+        if (!(to instanceof Node && (subRef.current?.contains(to) || menuRef.current?.contains(to)))) intent.leaveMenu();
+      }}
+      style={{ position: "fixed", left: bridgeBox.left, top: bridgeBox.top, width: bridgeBox.width, height: bridgeBox.height, zIndex: 60 }}
+    />
+  );
 
   const subSheet = motion.shown && openItem?.submenu && (
     <>
@@ -444,7 +462,7 @@ export function SidebarPopoverMenu({
       onPointerLeave={() => setEngaged(false)}
       onFocus={() => setEngaged(true)}
       onBlur={(event) => { if (!(event.relatedTarget instanceof Node && event.currentTarget.contains(event.relatedTarget))) setEngaged(false); }}
-      style={{ ["--sub-shift" as string]: subPosition && position && subPosition.left < position.left ? "4px" : "-4px", position: "fixed", left: subPosition?.left ?? 0, top: subPosition?.top ?? 0, minWidth: grok ? 160 : 200, width: "max-content", maxWidth: `min(${MENU_MAX_WIDTH}px, calc(100vw - ${EDGE_MARGIN * 2}px))`, maxHeight: `calc(100vh - ${EDGE_MARGIN * 2}px)`, visibility: subPosition ? undefined : "hidden" }}
+      style={{ ["--sub-shift" as string]: subPosition && menuBox && subPosition.left < menuBox.left ? "4px" : "-4px", position: "fixed", left: subPosition?.left ?? 0, top: subPosition?.top ?? 0, minWidth: grok ? 160 : 200, width: "max-content", maxWidth: `min(${MENU_MAX_WIDTH}px, calc(100vw - ${EDGE_MARGIN * 2}px))`, maxHeight: `calc(100vh - ${EDGE_MARGIN * 2}px)`, visibility: subPosition ? undefined : "hidden" }}
       className={cn(sheetClass, "z-[61] overflow-y-auto")}
     >
       <MenuRows

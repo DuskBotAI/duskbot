@@ -1,7 +1,9 @@
 // @vitest-environment happy-dom
-import { act, createElement } from "react";
+import { act, createElement, useRef } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { installSystemControls, useSystemControl } from "@/lib/system-control";
+import { PlatformContext, webPlatform, type BarConfig, type MobileChrome } from "./platform";
 import { SheetPush } from "./SheetPush";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -49,6 +51,7 @@ beforeEach(() => {
 
 afterEach(() => {
   act(() => root.unmount());
+  installSystemControls(null);
   host.remove();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
@@ -64,6 +67,7 @@ describe("SheetPush", () => {
     expect(frameX(push, 0)).toBe(WIDTH);
     expect(frameX(push, -1)).toBe(0);
     expect(frameX(push, 0) - frameX(push, 1)).toBeGreaterThan(frameX(push, 1) - frameX(push, 2));
+    expect(push.frames.length).toBeLessThanOrEqual(34);
     const parallax = baseRuns()[0]!;
     expect(frameX(parallax, 0)).toBeCloseTo(0, 1);
     expect(frameX(parallax, -1)).toBeCloseTo(-WIDTH * 0.3, 1);
@@ -78,5 +82,200 @@ describe("SheetPush", () => {
     land();
     expect(host.querySelector("[data-phone-pushed-page]")).toBeNull();
     expect(baseSheet.style.transform).toBe("");
+  });
+});
+
+function mockNativeChrome() {
+  const calls: string[] = [];
+  const committedTokens: string[] = [];
+  const bars: Array<BarConfig | null> = [];
+  let pagePopped: ((tokens: string[]) => void) | null = null;
+  const chrome: MobileChrome = {
+    setBar: (config) => { bars.push(config); },
+    onBarPress: () => () => {},
+    onPictureTaken: () => () => {},
+    freeze: async () => {},
+    thaw: async () => {},
+    presentSheet: async () => {},
+    resizeSheet: () => {},
+    dismissSheet: async () => {},
+    onSheetDismissed: () => () => {},
+    beginPush: async () => { calls.push("beginPush"); return true; },
+    commitPush: async (token) => { calls.push(`commitPush:${token}`); committedTokens.push(token); return true; },
+    cancelPush: async () => { calls.push("cancelPush"); },
+    popPage: async (token) => { calls.push(`popPage:${token}`); return true; },
+    finishPop: async () => { calls.push("finishPop"); },
+    resetPushStack: async () => { calls.push("resetPushStack"); },
+    onPagePopped: (listener) => { pagePopped = listener; return () => { pagePopped = null; }; },
+  };
+  return {
+    chrome,
+    calls,
+    committedTokens,
+    bars,
+    firePop: (tokens: string[]) => pagePopped?.(tokens),
+  };
+}
+
+async function flushMicrotasks() {
+  await act(async () => {
+    for (let i = 0; i < 6; i += 1) await Promise.resolve();
+  });
+}
+
+async function pumpFrames(count: number) {
+  for (let i = 0; i < count; i += 1) {
+    nextFrame();
+    await flushMicrotasks();
+  }
+}
+
+describe("NativeSheetPush", () => {
+  it("runs beginPush -> paint -> commitPush and pops natively via onPagePopped", async () => {
+    const mock = mockNativeChrome();
+    const platform = { ...webPlatform(), kind: "ios" as const, native: true, chrome: mock.chrome };
+    const onClose = vi.fn();
+    act(() => root.render(createElement(
+      PlatformContext.Provider,
+      { value: platform },
+      createElement(SheetPush, { open: true, onClose, title: "Vault", children: createElement("p", null, "logins") }),
+    )));
+    await flushMicrotasks();
+    expect(mock.calls).toEqual(["beginPush"]);
+    expect(host.querySelector("[data-phone-pushed-page]")).not.toBeNull();
+    await pumpFrames(3);
+    expect(mock.committedTokens).toHaveLength(1);
+    expect(mock.calls).toEqual(["beginPush", `commitPush:${mock.committedTokens[0]}`]);
+    expect(mock.bars.at(-1)?.title).toBe("Vault");
+    expect(mock.bars.at(-1)?.leading[0]?.id).toBe("back");
+
+    act(() => mock.firePop([mock.committedTokens[0]!]));
+    expect(onClose).toHaveBeenCalledOnce();
+    expect(host.querySelector("[data-phone-pushed-page]")).toBeNull();
+    await pumpFrames(2);
+    expect(mock.calls.at(-1)).toBe("finishPop");
+  });
+
+  it("handles nested pushes, depth-ordered z-index, and multi-level native pop in one pass", async () => {
+    const mock = mockNativeChrome();
+    const platform = { ...webPlatform(), kind: "ios" as const, native: true, chrome: mock.chrome };
+    const closeOuter = vi.fn();
+    const closeInner = vi.fn();
+    const renderNested = (outerOpen: boolean, innerOpen: boolean) => act(() => root.render(createElement(
+      PlatformContext.Provider,
+      { value: platform },
+      createElement(
+        SheetPush,
+        {
+          open: outerOpen,
+          onClose: closeOuter,
+          title: "Vault",
+          pageId: "vault",
+          children: [
+            createElement("p", { key: "list" }, "list"),
+            createElement(SheetPush, { key: "inner", open: innerOpen, onClose: closeInner, title: "GitHub", pageId: "detail", children: createElement("p", null, "entry") }),
+          ],
+        },
+      ),
+    )));
+
+    renderNested(true, false);
+    await flushMicrotasks();
+    await pumpFrames(3);
+    expect(mock.committedTokens).toHaveLength(1);
+
+    renderNested(true, true);
+    await flushMicrotasks();
+    await pumpFrames(3);
+    expect(mock.committedTokens).toHaveLength(2);
+    const pages = [...host.querySelectorAll<HTMLElement>("[data-phone-pushed-page]")];
+    expect(pages).toHaveLength(2);
+    expect(Number(pages[1]!.style.zIndex)).toBeGreaterThan(Number(pages[0]!.style.zIndex));
+    expect(mock.bars.at(-1)?.title).toBe("GitHub");
+
+    // Long-press back menu popping both levels at once
+    act(() => mock.firePop([mock.committedTokens[1]!, mock.committedTokens[0]!]));
+    expect(closeInner).toHaveBeenCalledOnce();
+    expect(closeOuter).toHaveBeenCalledOnce();
+    expect(host.querySelectorAll("[data-phone-pushed-page]")).toHaveLength(0);
+    await pumpFrames(2);
+    expect(mock.calls.filter((call) => call === "finishPop")).toHaveLength(1);
+  });
+
+  it("pops programmatically via popPage -> unmount -> finishPop when open turns false", async () => {
+    const mock = mockNativeChrome();
+    const platform = { ...webPlatform(), kind: "ios" as const, native: true, chrome: mock.chrome };
+    const draw = (open: boolean) => act(() => root.render(createElement(
+      PlatformContext.Provider,
+      { value: platform },
+      createElement(SheetPush, { open, onClose: () => {}, title: "Routines", children: createElement("p", null, "rows") }),
+    )));
+
+    draw(true);
+    await flushMicrotasks();
+    await pumpFrames(3);
+    const token = mock.committedTokens[0]!;
+
+    draw(false);
+    await flushMicrotasks();
+    expect(mock.calls).toContain(`popPage:${token}`);
+    expect(host.querySelector("[data-phone-pushed-page]")).toBeNull();
+    await pumpFrames(2);
+    expect(mock.calls.at(-1)).toBe("finishPop");
+  });
+
+  it("waits for native control placement to commit before commitPush and finishPop", async () => {
+    const mock = mockNativeChrome();
+    const platform = { ...webPlatform(), kind: "ios" as const, native: true, chrome: mock.chrome };
+    const pendingPlaces: Array<() => void> = [];
+    installSystemControls({
+      place: () => new Promise<boolean>((resolve) => { pendingPlaces.push(() => resolve(true)); }),
+      remove: () => {},
+      onChange: () => () => {},
+    });
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue(new DOMRect(16, 120, 358, 36));
+    Object.defineProperty(document, "elementFromPoint", {
+      configurable: true,
+      value: () => host.querySelector("[data-control-slot]"),
+    });
+
+    function BaseControl() {
+      const ref = useRef<HTMLDivElement>(null);
+      useSystemControl(ref, { kind: "segmented", items: ["System", "Light", "Dark"], selected: 0 }, () => {});
+      return createElement("div", { ref, "data-control-slot": "" });
+    }
+
+    const draw = (open: boolean) => act(() => root.render(createElement(
+      PlatformContext.Provider,
+      { value: platform },
+      createElement("div", null,
+        createElement(BaseControl),
+        createElement(SheetPush, { open, onClose: () => {}, title: "Language", children: createElement("p", null, "langs") }),
+      ),
+    )));
+
+    draw(true);
+    await flushMicrotasks();
+    await pumpFrames(1);
+    expect(pendingPlaces.length).toBeGreaterThan(0);
+    // commitPush must not fire while system control placement is still in flight
+    expect(mock.committedTokens).toHaveLength(0);
+
+    await act(async () => { for (const resolve of pendingPlaces.splice(0)) resolve(); });
+    await flushMicrotasks();
+    await pumpFrames(2);
+    expect(mock.committedTokens).toHaveLength(1);
+
+    const token = mock.committedTokens[0]!;
+    act(() => mock.firePop([token]));
+    await pumpFrames(1);
+    expect(pendingPlaces.length).toBeGreaterThan(0);
+    // finishPop must wait for the underlying control to unhide natively before lifting the pop cover
+    expect(mock.calls).not.toContain("finishPop");
+
+    await act(async () => { for (const resolve of pendingPlaces.splice(0)) resolve(); });
+    await flushMicrotasks();
+    await pumpFrames(1);
+    expect(mock.calls.at(-1)).toBe("finishPop");
   });
 });

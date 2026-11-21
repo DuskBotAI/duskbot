@@ -1,17 +1,21 @@
-import { useCallback, useEffect, useId, useMemo, useRef, useState, useSyncExternalStore, type ComponentType, type CSSProperties } from "react";
+import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type ComponentType, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import { createPortal } from "react-dom";
 import { motion, useReducedMotion } from "motion/react";
-import { Bell, CalendarClock, Check, FileText, Globe, KeyRound, LayoutDashboard, LifeBuoy, Lock, LogOut, Mail, Mic, MonitorX, Palette, Plug, Plus, ShieldCheck, UserPlus, UserRound, Hand, Server, ZoomIn } from "../../icons";
+import { Bell, CalendarClock, Check, FileText, Globe, KeyRound, LayoutDashboard, LifeBuoy, Lock, LogOut, Mail, Mic, MonitorX, MoreHorizontal, Palette, Pencil, Plug, Plus, ShieldCheck, Trash2, UserPlus, UserRound, Hand, Server, X, ZoomIn } from "../../icons";
 import { accountDashboardUrl } from "@/lib/account-dashboard";
+import { cn } from "@/lib/cn";
+import { useMenuMotion } from "@/components/MenuMotion";
 import { useGroupYou } from "@/components/GroupAvatar";
 import { UserFace } from "@/components/UserAvatar";
 import { trackUpsell, watchUpsell } from "@/lib/cloud-upsell";
 import { t } from "@/lib/i18n";
 import { effectiveLanguage, setLanguageChoice, useLanguageChoice, usePageLanguage } from "@/lib/language-preference";
 import { applySkinChoice, readSkinChoice, subscribeSkin, THEME_SKINS } from "@/lib/skins";
+import { systemMenu } from "@/lib/system-menu";
 import { localeChoices } from "@/locales";
 import { useStore } from "@/state/store";
 import { useConnections } from "../connection/connections";
-import { usePlaces, type Place, type PlaceStatus } from "../connection/places";
+import { placeActions, usePlaces, type Place, type PlacesState, type PlaceStatus } from "../connection/places";
 import { haptic, setHapticsEnabled, useHapticsEnabled } from "../haptics";
 import { readTextSize, setTextSize, subscribeTextSize, TEXT_SIZES } from "../text-scale";
 import { dur, ease, spring } from "../motion";
@@ -23,7 +27,9 @@ import { WorkingDots } from "@/components/WorkingIndicator";
 import { SIMPLE_BUTTONS } from "@/components/SettingsPrimitives";
 import { VoiceInputSettings } from "@/components/VoiceInputSettings";
 import { usePlatform } from "../platform";
-import { Sheet, SheetStack, StackPage } from "../Sheet";
+import { useNativePush } from "../chrome";
+import { closesOnBack, Sheet, SheetStack, StackPage } from "../Sheet";
+import { SheetPush, useSheetPushSettled } from "../SheetPush";
 import { NavStack } from "../NavStack";
 import { useSystemControl } from "@/lib/system-control";
 import { NotificationsSheet } from "./NotificationsSheet";
@@ -93,7 +99,24 @@ function CloudCard({ onOpen }: { onOpen: () => void }) {
   );
 }
 
-type SettingsPage = "language" | "textSize" | "voice" | "notifications" | "routines" | "connectors" | "vault" | "delete" | "signOut" | "removeComputer";
+type SettingsPage =
+  | "language" | "textSize" | "voice" | "notifications" | "routines" | "connectors" | "vault" | "delete" | "signOut" | "removeComputer"
+  | { kind: "renamePlace"; place: Place }
+  | { kind: "removePlace"; place: Place };
+
+export function removePlaceCopy(place: Pick<Place, "name" | "target" | "kind" | "synced" | "accountComputer">): { heading: string; body: string } {
+  const name = place.name.trim() || t("mobile.connection.yourComputer");
+  if (place.target.kind === "computer") {
+    return { heading: t("mobile.settings.removePlaceTitle", { name }), body: t("mobile.settings.removePlaceSyncedBody", { name }) };
+  }
+  if (place.accountComputer) {
+    return { heading: t("mobile.settings.removePlaceTitle", { name }), body: t("mobile.settings.removePlaceAccountBody", { name }) };
+  }
+  if (place.kind !== "computer" && place.synced) {
+    return { heading: t("mobile.settings.removeComputerTitle", { name }), body: t("mobile.settings.removeCloudBody", { name }) };
+  }
+  return { heading: t("mobile.settings.removeComputerTitle", { name }), body: t("mobile.settings.removeComputerBody", { name }) };
+}
 
 /** the computer on screen when it was paired with its own QR or code, which the account's sign-out never removes */
 export function shownComputer(connections: readonly MobileConnectionRecord[], activeId: string | null): MobileConnectionRecord | null {
@@ -106,47 +129,84 @@ const SETTINGS_PAGES: readonly string[] = ["language", "textSize", "voice", "not
  * system's slide and edge swipe back. Notifications, routines, apps and the vault are the same pages the rest of the
  * app opens as sheets, drawn here as pages, so nothing in Settings leaves it. */
 export const SettingsSheet: ComponentType<SheetPageProps<"settings">> = ({ sheet, open, onClose, onOpenSheet, onOpenChat }) => {
+  const { state } = useStore();
   const account = useMobileAccount();
   const platform = usePlatform();
   const { connections, activeId } = useConnections();
+  const placesState = usePlaces(state.connected === true);
   const computer = shownComputer(connections, activeId);
   const computerName = readableWorkspace(computer?.label) ?? t("mobile.connection.yourComputer");
   const keepsComputers = connections.some((connection) => placeKind(connection) === "computer");
   const identity = phoneIdentity({ account: account?.account, connections, activeId });
   const signsOut = identity.kind === "account" || identity.kind === "cloud";
   const [page, setPage] = useState<SettingsPage | null>(SETTINGS_PAGES.includes(sheet.page ?? "") ? sheet.page as SettingsPage : null);
+  const wasOpen = useRef(open);
+  useEffect(() => {
+    if (open && !wasOpen.current) setPage(SETTINGS_PAGES.includes(sheet.page ?? "") ? sheet.page as SettingsPage : null);
+    wasOpen.current = open;
+  }, [open, sheet.page]);
+  const nativePush = useNativePush();
+  const lastPage = useRef<SettingsPage | null>(null);
+  if (page) lastPage.current = page;
+  const shownPage = nativePush ? (page ?? lastPage.current) : page;
   const pop = useCallback(() => setPage(null), []);
   const stack = useMemo(() => ({ back: pop }), [pop]);
   const pageProps = { open: true, onClose: pop, onOpenSheet, onOpenChat };
-  const shown = page === "notifications" ? <NotificationsSheet sheet={{ kind: "notifications" }} {...pageProps} />
-    : page === "routines" ? <RoutinesSheet sheet={{ kind: "routines" }} {...pageProps} />
-    : page === "connectors" ? <ConnectorsSheet sheet={{ kind: "connectors" }} {...pageProps} />
-    : page === "vault" ? <VaultSheet sheet={{ kind: "vault" }} {...pageProps} />
-    : page === "language" ? <LanguagePage />
-    : page === "textSize" ? <TextSizePage />
-    : page === "delete" && account?.account ? <DeleteAccountPage email={account.account.email} onDelete={account.deleteAccount} onCancel={pop} onDone={() => window.location.reload()} />
-    : page === "signOut" && account && signsOut ? <ConfirmPage title={t("accountGate.signOut")}
+  const removeTarget = shownPage && typeof shownPage === "object" && shownPage.kind === "removePlace" ? shownPage.place : null;
+  const removeCopy = removeTarget ? removePlaceCopy(removeTarget) : null;
+  const shown = shownPage === "notifications" ? <NotificationsSheet sheet={{ kind: "notifications" }} {...pageProps} />
+    : shownPage === "routines" ? <RoutinesSheet sheet={{ kind: "routines" }} {...pageProps} />
+    : shownPage === "connectors" ? <ConnectorsSheet sheet={{ kind: "connectors" }} {...pageProps} />
+    : shownPage === "vault" ? <VaultSheet sheet={{ kind: "vault" }} {...pageProps} />
+    : shownPage === "language" ? <LanguagePage />
+    : shownPage === "textSize" ? <TextSizePage />
+    : shownPage === "delete" && account?.account ? <DeleteAccountPage email={account.account.email} onDelete={account.deleteAccount} onCancel={pop} onDone={() => window.location.reload()} />
+    : shownPage === "signOut" && account && signsOut ? <ConfirmPage title={t("accountGate.signOut")}
       heading={account.accounts.length > 1 && account.account ? t("mobile.settings.signOutAccountTitle", { email: account.account.email }) : t("mobile.settings.signOutTitle")}
       body={t(account.accounts.length > 1 ? "mobile.settings.signOutAccountBody" : keepsComputers ? "mobile.settings.signOutKeepsComputers" : "mobile.settings.signOutBody")}
       action={t("accountGate.signOut")} onConfirm={account.signOutOfPhone} onCancel={pop} />
-    : page === "removeComputer" && computer ? <ConfirmPage title={t("mobile.settings.removeComputer")} heading={t("mobile.settings.removeComputerTitle", { name: computerName })}
+    : shownPage === "removeComputer" && computer ? <ConfirmPage title={t("mobile.settings.removeComputer")} heading={t("mobile.settings.removeComputerTitle", { name: computerName })}
       body={t("mobile.settings.removeComputerBody", { name: computerName })} action={t("mobile.settings.removeComputerAction")}
       onConfirm={async () => { await removePlace(platform, computer.id); window.location.reload(); }} onCancel={pop} />
-    : page === "voice" ? <Sheet open onClose={pop} title={t("settings.voice.title")}><div data-settings-look="simple" className={`flex flex-col gap-6 px-4 pt-2 ${SIMPLE_BUTTONS}`}><VoiceInputSettings /></div></Sheet>
+    : shownPage && typeof shownPage === "object" && shownPage.kind === "renamePlace" ? <RenamePlacePage key={shownPage.place.key} place={shownPage.place}
+      onSave={async (name) => { const ok = await placesState.rename(shownPage.place, name); if (ok) pop(); return ok; }} onCancel={pop} />
+    : removeTarget && removeCopy ? <ConfirmPage key={removeTarget.key} title={t("mobile.settings.removePlace")} heading={removeCopy.heading}
+      body={removeCopy.body} action={t("mobile.settings.removeComputerAction")} errorMessage={t("mobile.settings.removePlaceError", { name: removeTarget.name })}
+      onConfirm={async () => {
+        const outcome = await placesState.remove(removeTarget);
+        if (!outcome.ok) return false;
+        if (outcome.reload) { window.location.reload(); return true; }
+        pop();
+        return true;
+      }} onCancel={pop} />
+    : shownPage === "voice" ? <Sheet open onClose={pop} title={t("settings.voice.title")}><div data-settings-look="simple" className={`flex flex-col gap-6 px-4 pt-2 ${SIMPLE_BUTTONS}`}><VoiceInputSettings /></div></Sheet>
     : null;
+  const pageKey = typeof page === "string" ? page : page ? `${page.kind}:${page.place.key}` : null;
+  const base = <StackPage open title={t("mobile.settings.title")} onClose={onClose}><SettingsList onClose={onClose} push={setPage} placesState={placesState} /></StackPage>;
+  if (nativePush) {
+    return (
+      <Sheet open={open} onClose={onClose} full flush label={t("mobile.settings.title")} bodyClassName="overflow-hidden pt-0! pb-0">
+        {base}
+        <SheetPush open={Boolean(page && shown)} onClose={pop} bare>
+          {shown && <SheetStack value={stack}>{shown}</SheetStack>}
+        </SheetPush>
+      </Sheet>
+    );
+  }
   return (
     <Sheet open={open} onClose={onClose} full flush label={t("mobile.settings.title")} bodyClassName="overflow-hidden pt-0! pb-0">
       <NavStack
-        base={<StackPage open title={t("mobile.settings.title")} onClose={onClose}><SettingsList onClose={onClose} push={setPage} /></StackPage>}
+        snappy
+        base={base}
         page={shown && <SheetStack value={stack}>{shown}</SheetStack>}
-        pageKey={page}
+        pageKey={pageKey}
         onBack={pop}
       />
     </Sheet>
   );
 };
 
-function SettingsList({ onClose, push }: { onClose: () => void; push: (page: SettingsPage) => void }) {
+function SettingsList({ onClose, push, placesState }: { onClose: () => void; push: (page: SettingsPage) => void; placesState: PlacesState }) {
   const { state } = useStore();
   const { connections, activeId, switchTo } = useConnections();
   const you = useGroupYou();
@@ -157,7 +217,7 @@ function SettingsList({ onClose, push }: { onClose: () => void; push: (page: Set
   const skin = useSyncExternalStore(subscribeSkin, readSkinChoice, () => "system");
   const language = effectiveLanguage(useLanguageChoice(), state.config?.language);
   usePageLanguage(language);
-  const { places, expected, open: openPlace } = usePlaces(state.connected === true);
+  const { places, expected, open: openPlace } = placesState;
   const [opening, setOpening] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const appearanceId = useId();
@@ -240,7 +300,16 @@ function SettingsList({ onClose, push }: { onClose: () => void; push: (page: Set
       </SettingsSection>
 
       <SettingsSection card title={t("mobile.settings.workspaces")} hint={error ? <span role="alert" className="text-danger">{error}</span> : email ? t("mobile.settings.workspacesHint") : undefined}>
-        {(places === null || places.length > 0) && <PlacesList places={places} expected={expected} opening={opening} onChoose={(place) => { void choosePlace(place); }} />}
+        {(places === null || places.length > 0) && (
+          <PlacesList
+            places={places}
+            expected={expected}
+            opening={opening}
+            onChoose={(place) => { void choosePlace(place); }}
+            onRename={(place) => push({ kind: "renamePlace", place })}
+            onRemove={(place) => push({ kind: "removePlace", place })}
+          />
+        )}
         <SettingsRow icon={<Plus />} label={t("mobile.settings.addPlace")} onClick={() => { haptic("pick"); onClose(); window.dispatchEvent(new Event("dusk:add-place")); }} />
       </SettingsSection>
 
@@ -349,19 +418,105 @@ function LanguagePage() {
   );
 }
 
-const DOT: Record<PlaceStatus, string> = { online: "bg-success", asleep: "bg-ink/[0.32]", offline: "border-[1.5px] border-ink/[0.4] bg-transparent" };
+function RenamePlacePage({ place, onSave, onCancel }: { place: Place; onSave: (name: string) => Promise<boolean>; onCancel: () => void }) {
+  const [name, setName] = useState(place.name);
+  const [working, setWorking] = useState(false);
+  const [failed, setFailed] = useState(false);
+  const nameId = useId();
+  const inputRef = useRef<HTMLInputElement>(null);
+  const settled = useSheetPushSettled();
+  const trimmed = name.trim();
+  useEffect(() => {
+    if (!settled) return;
+    inputRef.current?.focus({ preventScroll: true });
+  }, [settled]);
+  const cancel = () => {
+    inputRef.current?.blur();
+    onCancel();
+  };
+  const save = async () => {
+    if (working || !trimmed) return;
+    if (trimmed === place.name) { cancel(); return; }
+    setWorking(true);
+    setFailed(false);
+    haptic("tap");
+    const ok = await onSave(trimmed).catch(() => false);
+    if (!ok) { haptic("error"); setFailed(true); setWorking(false); return; }
+    inputRef.current?.blur();
+    haptic("success");
+  };
+  return (
+    <Sheet open onClose={working ? () => {} : cancel} title={t("mobile.settings.renamePlace")}>
+      <form onSubmit={(event) => { event.preventDefault(); void save(); }}>
+        <SettingsSection card title={t("mobile.settings.placeName")}>
+          <div className="flex min-h-[52px] items-center gap-2 px-4 py-2">
+            <input
+              ref={inputRef}
+              id={nameId}
+              type="text"
+              data-rename-place-input=""
+              aria-label={t("mobile.settings.placeName")}
+              autoComplete="off"
+              enterKeyHint="done"
+              maxLength={60}
+              disabled={working}
+              value={name}
+              placeholder={t("mobile.settings.placeNamePlaceholder")}
+              onChange={(event) => { setName(event.target.value); setFailed(false); }}
+              className="min-h-9 min-w-0 flex-1 border-0 bg-transparent text-[17px] font-medium text-ink outline-none placeholder:text-ink-tertiary"
+            />
+            {name.length > 0 && !working && (
+              <button
+                type="button"
+                data-no-press=""
+                aria-label={t("mobile.settings.clearName")}
+                onClick={() => { setName(""); setFailed(false); inputRef.current?.focus(); }}
+                className="mobile-press flex size-7 shrink-0 items-center justify-center rounded-full bg-ink/[0.08] text-ink-secondary"
+              >
+                <X size={14} aria-hidden />
+              </button>
+            )}
+          </div>
+        </SettingsSection>
+        <div className="px-4 pt-4" aria-busy={working}>
+          {failed && <p role="alert" className="mb-3 px-1 text-[14px] leading-5 text-danger">{t("mobile.settings.renamePlaceError", { name: place.name })}</p>}
+          <div className="flex gap-2">
+            <button type="button" disabled={working} onClick={cancel} className="mobile-press flex min-h-11 flex-1 items-center justify-center rounded-full bg-ink/[0.06] px-4 text-[15px] font-semibold text-ink">{t("mobile.settings.cancel")}</button>
+            <button type="submit" data-rename-place-save="" disabled={working || !trimmed} className="mobile-press flex min-h-11 flex-1 items-center justify-center rounded-full bg-ink px-4 text-[15px] font-semibold text-app disabled:opacity-40">
+              {working ? <WorkingDots size={4} /> : t("mobile.settings.save")}
+            </button>
+          </div>
+        </div>
+      </form>
+    </Sheet>
+  );
+}
+
+const DOT: Record<PlaceStatus, string> = {
+  online: "bg-[var(--m-status-online,#34c759)] ring-[3px] ring-[var(--m-status-online-ring,rgb(52_199_89/0.18))]",
+  asleep: "bg-ink/[0.28]",
+  offline: "border-[1.5px] border-ink/[0.34] bg-transparent",
+};
 const ROW = "flex min-h-[52px] w-full items-center gap-3 px-4 py-2 text-left";
+const ROW_WITH_MENU = "flex min-h-[52px] min-w-0 flex-1 items-center gap-3 py-2 pl-4 pr-1 text-left";
 
 /** Every place on the account, each a status dot and its name. Until the list is in, skeleton rows of the same height
  * hold its place; the rows then fade in over them, so nothing below moves. */
-function PlacesList({ places, expected, opening, onChoose }: { places: Place[] | null; expected: number; opening: string | null; onChoose: (place: Place) => void }) {
+function PlacesList({ places, expected, opening, onChoose, onRename, onRemove }: {
+  places: Place[] | null;
+  expected: number;
+  opening: string | null;
+  onChoose: (place: Place) => void;
+  onRename: (place: Place) => void;
+  onRemove: (place: Place) => void;
+}) {
   const reduced = useReducedMotion();
   const drawnAtOnce = useRef(places !== null);
   if (!places) return (
     <div role="status" aria-label={t("mobile.settings.placesLoading")}>
       {Array.from({ length: Math.max(expected, 1) }, (_, index) => (
         <div key={index} aria-hidden className={ROW}>
-          <span className="size-2.5 shrink-0 rounded-full bg-ink/[0.08]" />
+          <span className="flex size-5 shrink-0 items-center justify-center"><span className="size-2 rounded-full bg-ink/[0.08]" /></span>
           <span className="h-4 rounded-full bg-ink/[0.06]" style={{ width: `${[46, 34, 40][index % 3]}%` }} />
         </div>
       ))}
@@ -369,19 +524,183 @@ function PlacesList({ places, expected, opening, onChoose }: { places: Place[] |
   );
   return (
     <motion.ul initial={drawnAtOnce.current ? false : { opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: reduced ? 0 : dur.base, ease: ease.out }}>
-      {places.map((place) => <li key={place.key}><PlaceRow place={place} working={opening === place.key} disabled={Boolean(opening)} onChoose={() => onChoose(place)} /></li>)}
+      {places.map((place) => (
+        <li key={place.key} className="flex min-h-[52px] items-center">
+          <PlaceRow
+            place={place}
+            working={opening === place.key}
+            disabled={Boolean(opening)}
+            onChoose={() => onChoose(place)}
+            onRename={() => onRename(place)}
+            onRemove={() => onRemove(place)}
+          />
+        </li>
+      ))}
     </motion.ul>
   );
 }
 
 const STATUS_LABEL = { online: "mobile.settings.placeOnline", asleep: "mobile.settings.placeAsleep", offline: "mobile.settings.placeOffline" } as const;
+const PLACE_MENU_W = 220;
+const PLACE_MENU_H = 108;
+const PLACE_MENU_MARGIN = 12;
+const PLACE_MENU_GAP = 6;
 
-function PlaceRow({ place, working, disabled, onChoose }: { place: Place; working: boolean; disabled: boolean; onChoose: () => void }) {
+function PlaceMenuButton({ place, disabled, onRename, onRemove }: { place: Place; disabled: boolean; onRename: () => void; onRemove: () => void }) {
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const nativeBusy = useRef(false);
+  const [open, setOpen] = useState(false);
+  const [coords, setCoords] = useState<{ top: number; left: number; above: boolean } | null>(null);
+  const menuMotion = useMenuMotion(open);
+  const label = t("mobile.settings.placeActions", { name: place.name });
+
+  const close = useCallback((refocus = false) => {
+    setOpen(false);
+    if (refocus) triggerRef.current?.focus();
+  }, []);
+
+  const show = () => {
+    if (disabled) return;
+    haptic("tap");
+    const native = systemMenu();
+    if (native && triggerRef.current) {
+      if (nativeBusy.current) return;
+      nativeBusy.current = true;
+      void native(triggerRef.current.getBoundingClientRect(), [
+        { key: "rename", label: t("mobile.settings.renamePlace"), symbol: "pencil" },
+        { key: "remove", label: t("mobile.settings.removePlace"), symbol: "trash", danger: true, separated: true },
+      ]).then((picked) => {
+        if (picked === "rename") { haptic("pick"); onRename(); }
+        else if (picked === "remove") { haptic("pick"); onRemove(); }
+      }).finally(() => { nativeBusy.current = false; });
+      return;
+    }
+    setOpen((was) => !was);
+  };
+
+  useLayoutEffect(() => {
+    if (!open || !triggerRef.current) return;
+    const box = triggerRef.current.getBoundingClientRect();
+    const left = Math.min(Math.max(PLACE_MENU_MARGIN, box.right - PLACE_MENU_W), window.innerWidth - PLACE_MENU_W - PLACE_MENU_MARGIN);
+    const below = box.bottom + PLACE_MENU_GAP;
+    const aboveTop = box.top - PLACE_MENU_GAP - PLACE_MENU_H;
+    const above = below + PLACE_MENU_H > window.innerHeight - PLACE_MENU_MARGIN && aboveTop >= PLACE_MENU_MARGIN;
+    setCoords({ top: above ? aboveTop : Math.min(below, window.innerHeight - PLACE_MENU_H - PLACE_MENU_MARGIN), left, above });
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    menuRef.current?.querySelector<HTMLButtonElement>("[role='menuitem']:not(:disabled)")?.focus({ preventScroll: true });
+    const dismiss = () => close(false);
+    const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); close(true); } };
+    window.addEventListener("keydown", onKey, true);
+    window.addEventListener("resize", dismiss);
+    window.addEventListener("scroll", dismiss, true);
+    const unback = closesOnBack(() => close(false));
+    return () => {
+      window.removeEventListener("keydown", onKey, true);
+      window.removeEventListener("resize", dismiss);
+      window.removeEventListener("scroll", dismiss, true);
+      unback();
+    };
+  }, [open, coords, close]);
+
+  const onMenuKey = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (event.key === "Tab") { event.preventDefault(); close(true); return; }
+    const rows = [...(menuRef.current?.querySelectorAll<HTMLButtonElement>("[role='menuitem']:not(:disabled)") ?? [])];
+    const at = rows.indexOf(document.activeElement as HTMLButtonElement);
+    const next = event.key === "ArrowDown" ? (at + 1) % rows.length
+      : event.key === "ArrowUp" ? (at - 1 + rows.length) % rows.length
+      : event.key === "Home" ? 0
+      : event.key === "End" ? rows.length - 1
+      : null;
+    if (next === null || rows.length === 0) return;
+    event.preventDefault();
+    rows[next]?.focus();
+  };
+
+  return (
+    <>
+      <button
+        ref={triggerRef}
+        type="button"
+        data-place-menu=""
+        data-no-press=""
+        disabled={disabled}
+        aria-label={label}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        onClick={show}
+        className="mobile-press -ml-1 mr-0.5 flex size-11 shrink-0 items-center justify-center rounded-full text-ink-secondary disabled:opacity-40"
+      >
+        <MoreHorizontal size={18} aria-hidden />
+      </button>
+      {typeof document !== "undefined" && menuMotion.shown && coords && createPortal(
+        <div className={cn("dusk-mobile-overlay fixed inset-0 z-[75]", menuMotion.closing && "pointer-events-none")}>
+          <div aria-hidden className="absolute inset-0" onClick={() => close(false)} />
+          <div
+            ref={menuRef}
+            role="menu"
+            aria-label={label}
+            data-place-menu-popover=""
+            {...menuMotion.exitProps}
+            onKeyDown={onMenuKey}
+            className={cn(menuMotion.className, "mobile-glass absolute overflow-hidden rounded-[16px] bg-menu py-1.5 shadow-[0_12px_40px_-8px_rgb(10_10_12/0.30)]")}
+            style={{ left: coords.left, top: coords.top, width: PLACE_MENU_W, transformOrigin: `right ${coords.above ? "bottom" : "top"}` }}
+          >
+            <button
+              type="button"
+              role="menuitem"
+              data-place-menu-item="rename"
+              onClick={() => { haptic("pick"); close(false); onRename(); }}
+              className="mobile-row flex h-[46px] w-full items-center gap-3 px-4 text-left text-[16px] text-ink"
+            >
+              <span className="min-w-0 flex-1 truncate">{t("mobile.settings.renamePlace")}</span>
+              <Pencil size={16} aria-hidden className="shrink-0 opacity-80" />
+            </button>
+            <div role="separator" className="mx-3 my-1 h-px bg-ink/[0.08]" />
+            <button
+              type="button"
+              role="menuitem"
+              data-place-menu-item="remove"
+              onClick={() => { haptic("pick"); close(false); onRemove(); }}
+              className="mobile-row flex h-[46px] w-full items-center gap-3 px-4 text-left text-[16px] text-danger"
+            >
+              <span className="min-w-0 flex-1 truncate">{t("mobile.settings.removePlace")}</span>
+              <Trash2 size={16} aria-hidden className="shrink-0 opacity-80" />
+            </button>
+          </div>
+        </div>,
+        document.querySelector(".dusk-mobile") ?? document.body,
+      )}
+    </>
+  );
+}
+
+function PlaceRow({ place, working, disabled, onChoose, onRename, onRemove }: {
+  place: Place;
+  working: boolean;
+  disabled: boolean;
+  onChoose: () => void;
+  onRename: () => void;
+  onRemove: () => void;
+}) {
+  const hasMenu = placeActions(place).length > 0;
+  const rowClass = hasMenu ? ROW_WITH_MENU : ROW;
   const content = <>
-    <span aria-hidden data-place-status={place.status} className={`size-2.5 shrink-0 rounded-full transition-colors duration-200 ${DOT[place.status]}`} />
+    <span aria-hidden className="flex size-5 shrink-0 items-center justify-center">
+      <span data-place-status={place.status} className={`size-2 rounded-full transition-colors duration-200 ${DOT[place.status]}`} />
+    </span>
     <span className={`min-w-0 flex-1 truncate text-[16px] text-ink ${place.active ? "font-semibold" : "font-medium"}`}>{place.name}</span>
     {working ? <WorkingDots size={3} /> : <span className="shrink-0 text-[15px] text-ink-secondary">{t(STATUS_LABEL[place.status])}</span>}
   </>;
-  if (place.active) return <div data-testid="mobile-place" aria-current="true" className={ROW}>{content}</div>;
-  return <button type="button" data-testid="mobile-place" disabled={disabled} aria-busy={working || undefined} onClick={onChoose} className={`mobile-row ${ROW} disabled:opacity-100`}>{content}</button>;
+  return (
+    <>
+      {place.active
+        ? <div data-testid="mobile-place" aria-current="true" className={rowClass}>{content}</div>
+        : <button type="button" data-testid="mobile-place" disabled={disabled} aria-busy={working || undefined} onClick={onChoose} className={`mobile-row ${rowClass} disabled:opacity-100`}>{content}</button>}
+      {hasMenu && <PlaceMenuButton place={place} disabled={disabled} onRename={onRename} onRemove={onRemove} />}
+    </>
+  );
 }

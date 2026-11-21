@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createDashboardApp } from "./app.ts";
 import { COMPUTER_PAIR_LIMITS, presenceOf } from "./app-computers.ts";
-import { ACCOUNT_ROUTES, type AppComputersAnswer, type AppGrant, type EmailStartAnswer, type EnrollGrantAnswer } from "../../../shared/account-api.ts";
+import { ACCOUNT_ROUTES, type AppComputerAnswer, type AppComputersAnswer, type AppGrant, type EmailStartAnswer, type EnrollGrantAnswer } from "../../../shared/account-api.ts";
 import { APP_COMMAND_ONLINE_MS, SIGNATURE_HEADERS, signedPayload, type EnrollAnswer, type ReportAnswer, type WorkspaceReport } from "../../../shared/dashboard-protocol.ts";
 import { mobileLinkUrl, MOBILE_GRANT_TTL_MS } from "../../../shared/mobile-link.ts";
 import { memoryMailer } from "./auth/mail.ts";
@@ -136,5 +136,39 @@ describe("the phone's computers", () => {
     expect(presenceOf(0, APP_COMMAND_ONLINE_MS)).toBe("online");
     expect(presenceOf(0, APP_COMMAND_ONLINE_MS + 1)).toBe("asleep");
     expect(presenceOf(0, 24 * 60 * 60_000 + 1)).toBe("offline");
+  });
+
+  it("renames and removes only the account's own computers, with CORS for the phone", async () => {
+    const owner = await appLogin("owner@example.test"), other = await appLogin("other@example.test");
+    const mac = await computer(owner, "MacBook-Pro-Karol-3.local");
+    const preflight = await fetch(url + ACCOUNT_ROUTES.appComputer(mac.id), {
+      method: "OPTIONS",
+      headers: { origin: "capacitor://localhost", "access-control-request-method": "PATCH" },
+    });
+    expect(preflight.status).toBe(204);
+    expect(preflight.headers.get("access-control-allow-origin")).toBe("*");
+    expect(preflight.headers.get("access-control-allow-methods")).toContain("PATCH");
+    expect(preflight.headers.get("access-control-allow-methods")).toContain("DELETE");
+
+    expect((await call(ACCOUNT_ROUTES.appComputer(mac.id), { name: "Home Mac" }, {}, "PATCH")).status).toBe(401);
+    expect((await call(ACCOUNT_ROUTES.appComputer(mac.id), { name: "Home Mac" }, bearer(other), "PATCH")).status).toBe(404);
+    expect((await call(ACCOUNT_ROUTES.appComputer(mac.id), { name: "   " }, bearer(owner), "PATCH")).status).toBe(400);
+    expect((await call(ACCOUNT_ROUTES.appComputer(mac.id), { name: "a".repeat(61) }, bearer(owner), "PATCH")).status).toBe(400);
+    expect((await call(ACCOUNT_ROUTES.appComputer(mac.id), { name: "bad\nname" }, bearer(owner), "PATCH")).status).toBe(400);
+
+    const renamed = await call(ACCOUNT_ROUTES.appComputer(mac.id), { name: "  Karol's MacBook  " }, bearer(owner), "PATCH");
+    expect(renamed.status).toBe(200);
+    expect(renamed.headers.get("access-control-allow-origin")).toBe("*");
+    expect(await body<AppComputerAnswer>(renamed)).toMatchObject({ v: 1, computer: { id: mac.id, name: "Karol's MacBook" } });
+    expect((await body<AppComputersAnswer>(call(ACCOUNT_ROUTES.appComputers, undefined, bearer(owner)))).computers.map(item => item.name)).toEqual(["Karol's MacBook"]);
+
+    expect((await call(ACCOUNT_ROUTES.appComputer(mac.id), undefined, {}, "DELETE")).status).toBe(401);
+    expect((await call(ACCOUNT_ROUTES.appComputer(mac.id), undefined, bearer(other), "DELETE")).status).toBe(404);
+    const removed = await call(ACCOUNT_ROUTES.appComputer(mac.id), undefined, bearer(owner), "DELETE");
+    expect(removed.status).toBe(200);
+    expect(removed.headers.get("access-control-allow-origin")).toBe("*");
+    expect(await body(removed)).toEqual({ ok: true });
+    expect((await body<AppComputersAnswer>(call(ACCOUNT_ROUTES.appComputers, undefined, bearer(owner)))).computers).toEqual([]);
+    expect((await call(ACCOUNT_ROUTES.appComputer(mac.id), undefined, bearer(owner), "DELETE")).status).toBe(404);
   });
 });

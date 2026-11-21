@@ -101,14 +101,14 @@ export function ComposerReplyStrip({
       <Reply size={15} strokeWidth={1.5} aria-hidden="true" className="shrink-0 rtl:-scale-x-100" />
       <ReplyThumbnail message={message} />
       <span className="sr-only">{who}: </span>
-      <span dir="auto" className="min-w-0 flex-1 truncate">{excerpt}</span>
+      <span dir="auto" data-reply-excerpt="" className="min-w-0 flex-1 truncate">{excerpt}</span>
       {onClear && (
         <button
           type="button"
           onClick={onClear}
           aria-label={t("chat.reply.cancel")}
           title={t("chat.reply.cancel")}
-          className="inline-flex size-6 shrink-0 items-center justify-center rounded-full text-ink-tertiary hover:bg-ink/10 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+          className="-my-0.5 inline-flex size-6 shrink-0 items-center justify-center rounded-full text-ink-tertiary hover:bg-ink/10 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
         >
           <X size={14} strokeWidth={1.5} aria-hidden="true" />
         </button>

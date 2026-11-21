@@ -17,39 +17,6 @@ export const MAUS_STATES = [
 
 export type MausState = MarkState;
 
-/** Each bot colour as names, mentions and chat tones paint it; the skins' --identity-* tokens are tuned from these. */
-export const MAUS_COLORS: Record<MausColor, string> = {
-  green: "#009957",
-  blue: "#377FE6",
-  red: "#D94B52",
-  orange: "#E78531",
-  purple: "#8057C8",
-  cyan: "#0EA5C6",
-  pink: "#D84F8B",
-  yellow: "#D8A729",
-  teal: "#01A492",
-  coral: "#E5634E",
-  brown: "#a06b39",
-  silver: "#A8ADB4",
-  chrome: "#B3BAC4",
-};
-
-export const MAUS_COLOR_LABEL: Record<MausColor, LocaleKey> = {
-  green: "mascotColor.green",
-  blue: "mascotColor.blue",
-  red: "mascotColor.red",
-  orange: "mascotColor.orange",
-  purple: "mascotColor.purple",
-  cyan: "mascotColor.cyan",
-  pink: "mascotColor.pink",
-  yellow: "mascotColor.yellow",
-  teal: "mascotColor.teal",
-  coral: "mascotColor.coral",
-  brown: "mascotColor.brown",
-  silver: "mascotColor.silver",
-  chrome: "mascotColor.chrome",
-};
-
 /** The paint of a mascot's body in each bot colour: the electric palette, so a pixel bot reads at 16 px. */
 export const MASCOT_INK: Record<MausColor, string> = {
   green: ELECTRIC.emerald,
@@ -65,6 +32,25 @@ export const MASCOT_INK: Record<MausColor, string> = {
   brown: "#a8672f",
   silver: "#a3aab3",
   chrome: "#b3bac4",
+};
+
+/** Each bot colour's base paint for avatars, messages, mentions, and identity tokens. */
+export const MAUS_COLORS: Record<MausColor, string> = MASCOT_INK;
+
+export const MAUS_COLOR_LABEL: Record<MausColor, LocaleKey> = {
+  green: "mascotColor.green",
+  blue: "mascotColor.blue",
+  red: "mascotColor.red",
+  orange: "mascotColor.orange",
+  purple: "mascotColor.purple",
+  cyan: "mascotColor.cyan",
+  pink: "mascotColor.pink",
+  yellow: "mascotColor.yellow",
+  teal: "mascotColor.teal",
+  coral: "mascotColor.coral",
+  brown: "mascotColor.brown",
+  silver: "mascotColor.silver",
+  chrome: "mascotColor.chrome",
 };
 
 /** The bot colours a picker offers: the ones the electric palette paints. Older greys and brown still draw. */

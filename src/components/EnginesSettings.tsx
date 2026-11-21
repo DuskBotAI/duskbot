@@ -261,7 +261,7 @@ function AntigravityAccountAction({ instance, action }: { instance: InstanceInfo
     </ItemRow>
     {error && <NoteRow tone="danger">{error}</NoteRow>}
     <ConfirmDialog open={confirming} art={<PixelIcon name="key" size={28} />} title={t(remove ? "accounts.removeTitle" : "accounts.signOutTitle", { name: instance.displayName })}
-      body={t(remove ? "confirm.accountRemove" : "confirm.signOut")}
+      body={t(remove ? "confirm.accountRemove" : "confirm.signOutStopsWork")}
       confirmLabel={label} tone="neutral" pending={running} onCancel={() => { if (!running) setConfirming(false); }} onConfirm={() => void run()} />
   </>;
 }

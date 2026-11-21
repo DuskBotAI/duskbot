@@ -1,7 +1,7 @@
-import { Children, isValidElement, useMemo, type ReactElement, type ReactNode } from "react";
-import { RichTable, type TableCell, type TableColumn } from "./RichTable";
+import { Children, isValidElement, useMemo, type CSSProperties, type ReactElement, type ReactNode } from "react";
+import { RichTable, type TableAlign, type TableCell, type TableColumn } from "./RichTable";
 
-type Element = ReactElement<{ children?: ReactNode; align?: string; alt?: string }>;
+type Element = ReactElement<{ children?: ReactNode; align?: string; alt?: string; style?: CSSProperties }>;
 const elements = (children: ReactNode): Element[] => Children.toArray(children).filter(isValidElement) as Element[];
 function plain(node: ReactNode): string {
   if (typeof node === "string" || typeof node === "number") return String(node);
@@ -12,16 +12,20 @@ function plain(node: ReactNode): string {
   return plain(element.props.children) || element.props.alt || "";
 }
 
+/** react-markdown (9 and later) hands a GFM column's alignment over as style.textAlign, not the align attribute. */
+function authoredAlign(element: Element): TableAlign | undefined {
+  const align = element.props.align ?? element.props.style?.textAlign;
+  return align === "left" || align === "right" || align === "center" ? align : undefined;
+}
+
 /** Security: keeps react-markdown's already-sanitized cell children; never renders model-authored raw HTML. */
 export function MarkdownTable({ children, direction }: { children?: ReactNode; direction?: "rtl" | "ltr" }) {
   const data = useMemo(() => {
     const sections = elements(children);
     const head = sections.find((section) => section.type === "thead");
     const body = sections.find((section) => section.type === "tbody");
-    const cell = (element: Element): TableCell => ({ text: plain(element.props.children), content: element.props.children });
-    const columns: TableColumn[] = elements(elements(head?.props.children)[0]?.props.children).map((element) => ({
-      ...cell(element), align: element.props.align === "left" || element.props.align === "right" || element.props.align === "center" ? element.props.align : undefined,
-    }));
+    const cell = (element: Element): TableCell => ({ text: plain(element.props.children), content: element.props.children, align: authoredAlign(element) });
+    const columns: TableColumn[] = elements(elements(head?.props.children)[0]?.props.children).map(cell);
     const rows = elements(body?.props.children).map((row) => elements(row.props.children).map(cell));
     return { columns, rows };
   }, [children]);

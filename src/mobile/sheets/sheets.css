@@ -36,12 +36,12 @@
 .dusk-mobile .mobile-panel-sheet [data-panel-card-surface] [data-row-hint] { font-size: 14px; line-height: 20px; }
 
 /* a card's empty slot (a usage meter with nothing to report) takes no room */
-.dusk-mobile .mobile-panel-sheet [data-panel-card-surface] > :empty { display: none; }
+.dusk-mobile :is(.mobile-panel-sheet, [data-phone-bot-page]) [data-panel-card-surface] > :empty { display: none; }
 
 /* explanatory lines in the panel at the phone's body size and a readable grey */
-.dusk-mobile .mobile-panel-sheet [data-panel-empty] > p,
+.dusk-mobile :is(.mobile-panel-sheet, [data-phone-bot-page]) [data-panel-empty] > p,
 .dusk-mobile .mobile-panel-sheet [data-panel-tabpanel] > p,
-.dusk-mobile .mobile-panel-sheet [data-panel-page-view] > p,
+.dusk-mobile :is(.mobile-panel-sheet, [data-phone-bot-page]) [data-panel-page-view] > p,
 .dusk-mobile .mobile-panel-sheet [data-settings-footnote] { font-size: 15px; line-height: 22px; color: color-mix(in srgb, var(--color-ink) 64%, transparent); }
 
 /* in a light skin the computer tab's 6%-ink fills (the browser's frame, its closed note) are the page's own grey: they
@@ -84,7 +84,7 @@ html[data-mobile-glass] .dusk-mobile [data-service-tile-bare] { background-color
 }
 
 /* a row's dropdown is a tonal pill, no hairline, as every other control on the phone */
-.dusk-mobile .mobile-panel-sheet [data-panel-select] { border-color: transparent; background-color: color-mix(in srgb, var(--color-ink) 6%, transparent); }
+.dusk-mobile :is(.mobile-panel-sheet, [data-phone-bot-page]) [data-panel-select] { border-color: transparent; background-color: color-mix(in srgb, var(--color-ink) 6%, transparent); }
 
 /* inside a bot's own sheets a switch that is on wears the bot's colour (src/lib/bot-accent.ts keeps it readable); the
    rest of the sheet keeps ink */
@@ -162,6 +162,9 @@ html[data-native-chrome] .dusk-mobile [data-phone-bot-page] .settings-pane {
 }
 .dusk-mobile [data-phone-bot-page] [data-panel-sections] { gap: 24px; }
 
+.dusk-mobile :is([data-phone-bot-page], [data-settings-look="simple"]) [data-settings-block] {
+  gap: 0;
+}
 .dusk-mobile :is([data-phone-bot-page], [data-settings-look="simple"]) [data-settings-group-head] {
   padding-inline: 16px;
   margin-bottom: 8px;
@@ -189,13 +192,22 @@ html[data-native-chrome] .dusk-mobile [data-phone-bot-page] .settings-pane {
   box-shadow: none;
   overflow: visible;
 }
-.dusk-mobile :is([data-phone-bot-page], [data-settings-look="simple"]) :is([data-panel-card-surface], [data-settings-rows]) > :is(button, a, div, label):not(.contents, [hidden], [data-settings-rows]),
-.dusk-mobile :is([data-phone-bot-page], [data-settings-look="simple"]) [data-panel-card-surface] > .contents > :is(button, a, div, label):not([hidden]),
+.dusk-mobile :is([data-phone-bot-page], [data-settings-look="simple"]) :is([data-panel-card-surface], [data-settings-rows]) > :is(button, a, div, label, p):not(.contents, [hidden], [data-settings-rows]),
+.dusk-mobile :is([data-phone-bot-page], [data-settings-look="simple"]) [data-panel-card-surface] > .contents > :is(button, a, div, label, p):not([hidden]),
 .dusk-mobile :is([data-phone-bot-page], [data-settings-look="simple"]) [data-panel-card-surface] > ol > li {
   min-height: 52px;
   padding: 12px 16px;
   border-radius: 4px;
   background-color: var(--color-menu);
+}
+.dusk-mobile :is(.mobile-panel-sheet, [data-phone-bot-page], [data-settings-look="simple"]) :is([data-panel-card-surface], [data-settings-rows]) > :is([data-setting-row], p):not([hidden]) {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+.dusk-mobile :is(.mobile-panel-sheet, [data-phone-bot-page], [data-settings-look="simple"]) [data-setting-row] > div:first-child {
+  width: 100%;
+  column-gap: 12px;
 }
 .dusk-mobile :is([data-phone-bot-page], [data-settings-look="simple"]) [data-panel-card-surface] > ol { gap: 2px; }
 .dusk-mobile :is([data-phone-bot-page], [data-settings-look="simple"]) [data-panel-card-surface] > :is(button, a, div, label):not(.contents, [hidden]):first-child,
@@ -258,6 +270,8 @@ html[data-mobile-glass] {
   --m-ios-separator: rgb(60 60 67 / .12);
   --m-ios-row-active: #e5e5ea;
   --m-ios-chevron: rgb(60 60 67 / .30);
+  --m-status-online: #34c759;
+  --m-status-online-ring: rgb(52 199 89 / .18);
 }
 html[data-mobile-glass][data-skin="grok-dark"],
 html[data-mobile-glass][data-skin="midnight"],
@@ -271,6 +285,8 @@ html[data-mobile-glass] .dusk-mobile[data-scheme="dark"] {
   --m-ios-separator: rgb(84 84 88 / .45);
   --m-ios-row-active: #3a3a3c;
   --m-ios-chevron: rgb(235 235 245 / .30);
+  --m-status-online: #30d158;
+  --m-status-online-ring: rgb(48 209 88 / .22);
 }
 
 html[data-mobile-glass] .dusk-mobile .side-panel {
@@ -331,6 +347,11 @@ html[data-mobile-glass] .dusk-mobile [data-phone-bot-page] [data-panel-card-surf
 html[data-mobile-glass] .dusk-mobile [data-phone-bot-page] [data-panel-card-surface] > .contents > :is(button, a):enabled:active,
 html[data-mobile-glass] .dusk-mobile [data-settings-look="simple"] :is([data-panel-card-surface], [data-settings-rows]) > :is(button, a):enabled:active {
   background-color: transparent;
+}
+.dusk-mobile :is(.mobile-panel-sheet, [data-phone-bot-page], [data-settings-look="simple"]) :is([data-panel-card-surface], [data-settings-rows]) :is(button, a, [role="button"], [role="radio"], [role="checkbox"], [role="option"]):not(:disabled, [aria-disabled="true"]):active,
+.dusk-mobile [data-settings-card] :is(button, a):not(:disabled, [aria-disabled="true"]):active,
+.dusk-mobile .ca-row-open:not(:disabled, [aria-disabled="true"]):active {
+  opacity: 1;
 }
 
 html[data-mobile-glass] .dusk-mobile .mobile-panel-sheet [data-panel-card-surface] > [data-row-highlighted],
@@ -474,7 +495,8 @@ html[data-mobile-glass] .dusk-mobile [data-settings-card] > ul > :is(*:dir(rtl))
   background-position: right var(--m-sep-start, 16px) top;
 }
 html[data-mobile-glass] .dusk-mobile [data-settings-card] > :is(button, a, div):has(> span[aria-hidden]:first-child > svg),
-html[data-mobile-glass] .dusk-mobile [data-settings-card] > :is(button, a, div):has(> svg:first-child) {
+html[data-mobile-glass] .dusk-mobile [data-settings-card] > :is(button, a, div):has(> svg:first-child),
+html[data-mobile-glass] .dusk-mobile [data-settings-card] > ul > li:has([data-place-status]) {
   --m-sep-start: 48px;
 }
 html[data-mobile-glass] .dusk-mobile [data-settings-card] > li:has([data-app-face]),
@@ -500,12 +522,19 @@ html[data-mobile-glass] .dusk-mobile [data-settings-card] > ul > li:has(> [data-
 html[data-mobile-glass] .dusk-mobile [data-settings-card] > ul > li:has(> [data-row-highlighted]) + * {
   background-image: none;
 }
+html[data-mobile-glass] .dusk-mobile [data-settings-card] > ul > li:has(> [data-row-highlighted]) {
+  background-color: var(--m-ios-row-active);
+}
 html[data-mobile-glass] .dusk-mobile [data-settings-card] .mobile-row > span.flex-1 > span:first-child,
+html[data-mobile-glass] .dusk-mobile [data-settings-card] [data-testid="mobile-place"] > span.flex-1,
 html[data-mobile-glass] .dusk-mobile [data-settings-card] [data-phone-thinking-option] > span:first-child {
   font-size: 17px;
   line-height: 22px;
   font-weight: 400;
   letter-spacing: -0.024em;
+}
+html[data-mobile-glass] .dusk-mobile [data-settings-card] [data-testid="mobile-place"][aria-current="true"] > span.flex-1 {
+  font-weight: 600;
 }
 html[data-mobile-glass] .dusk-mobile [data-settings-card] .mobile-row > span.truncate:not(.flex-1) {
   font-size: 17px;
@@ -604,10 +633,10 @@ html[data-mobile-glass] .dusk-mobile [data-phone-bot-page] [data-instructions-ca
   font-size: 15px;
   font-weight: 600;
 }
-html[data-mobile-glass] .dusk-mobile .mobile-panel-sheet [data-panel-page-view="instructions"] [data-panel-card-surface] label {
+html[data-mobile-glass] .dusk-mobile :is(.mobile-panel-sheet, [data-phone-bot-page]) [data-panel-page-view="instructions"] [data-panel-card-surface] label {
   display: none;
 }
-html[data-mobile-glass] .dusk-mobile .mobile-panel-sheet [data-panel-page-view="instructions"] [data-panel-card-surface] textarea {
+html[data-mobile-glass] .dusk-mobile :is(.mobile-panel-sheet, [data-phone-bot-page]) [data-panel-page-view="instructions"] [data-panel-card-surface] textarea {
   border: 0;
   background-color: transparent;
   padding: 4px 0;
@@ -694,4 +723,65 @@ html[data-mobile-glass] .dusk-mobile .mobile-panel-sheet [data-panel-avatar-edit
   border-radius: 26px;
   background-color: var(--m-ios-card);
   box-shadow: 0 20px 50px rgb(0 0 0 / .20);
+}
+
+html[data-mobile-glass] .dusk-mobile [data-phone-bot-page="routine"] [data-routine-detail] {
+  gap: 16px;
+}
+html[data-mobile-glass] .dusk-mobile [data-phone-bot-page="routine"] [data-routine-detail] > dl {
+  gap: 0;
+  border-radius: 26px;
+  background-color: var(--m-ios-card);
+  overflow: hidden;
+}
+html[data-mobile-glass] .dusk-mobile [data-phone-bot-page="routine"] [data-routine-detail] > dl > div {
+  padding: 12px 16px;
+}
+html[data-mobile-glass] .dusk-mobile [data-phone-bot-page="routine"] [data-routine-detail] > dl > div + div {
+  background-image: linear-gradient(var(--m-ios-separator), var(--m-ios-separator));
+  background-size: calc(100% - 32px) 0.5px;
+  background-position: 16px top;
+  background-repeat: no-repeat;
+}
+html[data-mobile-glass] .dusk-mobile [data-phone-bot-page="routine"] [data-routine-detail] dt {
+  font-size: 13px;
+  line-height: 18px;
+}
+html[data-mobile-glass] .dusk-mobile [data-phone-bot-page="routine"] [data-routine-detail] dd {
+  margin-top: 2px;
+  font-size: 16px;
+  line-height: 22px;
+}
+html[data-mobile-glass] .dusk-mobile [data-phone-bot-page="routine"] [data-routine-detail] > div:last-child {
+  gap: 8px;
+}
+html[data-mobile-glass] .dusk-mobile [data-phone-bot-page="routine"] [data-routine-detail] > div:last-child button {
+  min-height: 40px;
+  padding-inline: 16px;
+  border-radius: 9999px;
+  font-size: 15px;
+  font-weight: 500;
+}
+
+html[data-mobile-glass] .dusk-mobile [data-phone-bot-page="routine-edit"] [data-routine-form] {
+  gap: 16px;
+  padding: 16px;
+  border-radius: 26px;
+  background-color: var(--m-ios-card);
+}
+html[data-mobile-glass] .dusk-mobile [data-phone-bot-page="routine-edit"] [data-routine-form] input:not([type="checkbox"]),
+html[data-mobile-glass] .dusk-mobile [data-phone-bot-page="routine-edit"] [data-routine-form] textarea {
+  min-height: 42px;
+  border-radius: 12px;
+  background-color: color-mix(in srgb, var(--color-ink) 6%, transparent);
+  padding: 10px 12px;
+  font-size: 16px;
+  line-height: 22px;
+}
+html[data-mobile-glass] .dusk-mobile [data-phone-bot-page="routine-edit"] [data-routine-form] > div:last-child button {
+  min-height: 40px;
+  padding-inline: 18px;
+  border-radius: 9999px;
+  font-size: 15px;
+  font-weight: 500;
 }

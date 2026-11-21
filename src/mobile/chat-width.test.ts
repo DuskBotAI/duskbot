@@ -154,6 +154,20 @@ describe("the composer on the phone", () => {
     expect(phone(dock.querySelector("[data-tour=composer] button")!, "min-width")).toBe("44px");
     tile.remove();
   });
+
+  it("keeps the reply and selection quote cancel buttons compact instead of stretching the strip to 44px", () => {
+    const dock = document.querySelector("[data-mobile-chat] [data-grok-inset]")!;
+    for (const attr of ["data-composer-reply", "data-composer-selection-quote"]) {
+      const strip = document.createElement("div");
+      strip.setAttribute(attr, "");
+      strip.innerHTML = "<button type=button>x</button>";
+      dock.append(strip);
+      const button = strip.querySelector("button")!;
+      expect(phone(button, "min-width")).toBe("0");
+      expect(phone(button, "min-height")).toBe("0");
+      strip.remove();
+    }
+  });
 });
 
 describe("bubbles that are not plain text, on the phone", () => {

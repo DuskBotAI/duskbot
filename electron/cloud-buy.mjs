@@ -11,7 +11,7 @@ export const CLOUD_COLORS = environments.ENTRY_COLORS;
 export const DEFAULT_CLOUD_COLOR = "blue";
 export const CLOUD_NAME_MAX = 28;
 /** Each colour in the default skin (src/lib/mascot.ts MAUS_COLORS), for the native menu's dot; the page uses the skin's own. */
-export const CLOUD_COLOR_HEX = Object.freeze({ blue: "#377FE6", teal: "#01A492", purple: "#8057C8", orange: "#E78531", red: "#D94B52", yellow: "#D8A729" });
+export const CLOUD_COLOR_HEX = Object.freeze({ blue: "#286ef9", teal: "#26cb96", purple: "#894ef0", orange: "#fb7c01", red: "#ef3a3f", yellow: "#e5a915" });
 // oxlint-disable-next-line no-control-regex
 const CONTROL = /[\x00-\x1f\x7f]/;
 

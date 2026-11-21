@@ -1,18 +1,60 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { motion, useMotionValue, useReducedMotion, type MotionValue } from "motion/react";
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
-import { wakeSystemControls } from "@/lib/system-control";
-import { BAR_RANK, useNativeBar } from "./chrome";
+import { flushSystemControls, wakeSystemControls } from "@/lib/system-control";
+import { BAR_RANK, frames, PushDepthContext, sheetStep, sheetsUp, useChrome, useNativeBar, useSheetPushDepth } from "./chrome";
 import { canScroll, ownsDrag, useDrag } from "./gesture";
-import { dur, ease, prefersReducedMotion, projectRelease, settleTo, springPath, system } from "./motion";
+import { dur, ease, prefersReducedMotion, projectRelease, settleTo, sheetNav, springPath } from "./motion";
+import type { MobileChrome } from "./platform";
 import { BackGlyph, RoundButton } from "./RoundButton";
-import { closesOnBack } from "./Sheet";
+import { closesOnBack, type SheetAction } from "./Sheet";
 
 /** Matches UIKit UINavigationController's 30% horizontal parallax on the receding view controller. */
 const UNDER_SHIFT = 0.3;
-const NAV = { stiffness: system.stiffness, damping: system.damping };
+const NAV = { stiffness: sheetNav.stiffness, damping: sheetNav.damping };
+/** Matches UIKit's default UINavigationController push animation duration (0.35s) plus a frame margin. */
+const NATIVE_PUSH_SETTLE_MS = 380;
+
+const PushSettledContext = createContext(true);
+
+export function useSheetPushSettled(): boolean {
+  return useContext(PushSettledContext);
+}
+
+let nextTokenId = 0;
+export function createPushToken(): string {
+  nextTokenId += 1;
+  return `push-${nextTokenId}`;
+}
+
+const popHandlers = new Map<string, () => void>();
+const watchedChromes = new WeakSet<MobileChrome>();
+
+export function registerNativePop(chrome: MobileChrome, token: string, onPop: () => void): () => void {
+  if (!watchedChromes.has(chrome) && chrome.onPagePopped) {
+    watchedChromes.add(chrome);
+    chrome.onPagePopped((tokens) => {
+      let handled = false;
+      for (const id of tokens) {
+        const handler = popHandlers.get(id);
+        if (handler) {
+          popHandlers.delete(id);
+          handled = true;
+          handler();
+        }
+      }
+      if (!handled) return;
+      void frames(1)
+        .then(() => flushSystemControls())
+        .then(() => frames(1))
+        .then(() => chrome.finishPop?.());
+    });
+  }
+  popHandlers.set(token, onPop);
+  return () => { popHandlers.delete(token); };
+}
 
 type Run = { stop: () => number };
 
@@ -72,19 +114,7 @@ function underlyingSheet(pageEl: HTMLElement | null): HTMLElement | null {
   return null;
 }
 
-export function SheetPush({
-  open,
-  onClose,
-  title,
-  label,
-  children,
-  pageId,
-  bodyClassName,
-  flush = false,
-  swipeBack = true,
-  onBack,
-  contentRef,
-}: {
+export interface SheetPushProps {
   open: boolean;
   onClose: () => void;
   title?: string;
@@ -93,15 +123,244 @@ export function SheetPush({
   pageId?: string;
   bodyClassName?: string;
   flush?: boolean;
+  /** Children draw their own bar and scroller (e.g. StackPage or ConnectAppsWindow). */
+  bare?: boolean;
+  actions?: SheetAction[];
   swipeBack?: boolean;
   onBack?: () => void;
   contentRef?: (el: HTMLDivElement | null) => void;
-}) {
+}
+
+export function SheetPush(props: SheetPushProps) {
+  const chrome = useChrome();
+  if (chrome?.beginPush && chrome.commitPush && chrome.popPage) {
+    return <NativeSheetPush chrome={chrome} {...props} />;
+  }
+  return <WebSheetPush {...props} />;
+}
+
+function NativeSheetPush({
+  chrome,
+  open,
+  onClose,
+  title,
+  label,
+  children,
+  pageId,
+  bodyClassName,
+  flush = false,
+  bare = false,
+  actions,
+  swipeBack = true,
+  onBack,
+  contentRef,
+}: SheetPushProps & { chrome: MobileChrome }) {
+  const parentDepth = useSheetPushDepth();
+  const nextDepth = parentDepth + 1;
+  const [shown, setShown] = useState(false);
+  const [settled, setSettled] = useState(false);
+  const [scrolled, setScrolled] = useState(false);
+  const tokenRef = useRef<string | null>(null);
+  const unregRef = useRef<(() => void) | null>(null);
+  const settleTimerRef = useRef<number | null>(null);
+  const closeRef = useRef(onClose);
+  closeRef.current = onClose;
+  const backRef = useRef(onBack ?? onClose);
+  backRef.current = onBack ?? onClose;
+
+  useEffect(() => {
+    const clearSettleTimer = () => {
+      if (settleTimerRef.current !== null) {
+        window.clearTimeout(settleTimerRef.current);
+        settleTimerRef.current = null;
+      }
+    };
+    clearSettleTimer();
+    if (!open) {
+      setSettled(false);
+      const active = document.activeElement;
+      if (active instanceof HTMLElement && (active.tagName === "INPUT" || active.tagName === "TEXTAREA" || active.isContentEditable)) {
+        active.blur();
+      }
+      const token = tokenRef.current;
+      if (!token) {
+        setShown(false);
+        wakeSystemControls();
+        return;
+      }
+      unregRef.current?.();
+      unregRef.current = null;
+      tokenRef.current = null;
+      sheetStep(async () => {
+        const popped = await chrome.popPage!(token);
+        setShown(false);
+        await frames(1);
+        await flushSystemControls();
+        await frames(1);
+        if (popped) await chrome.finishPop?.();
+      });
+      return;
+    }
+
+    let live = true;
+    setSettled(false);
+    sheetStep(async () => {
+      if (!live || tokenRef.current) return;
+      const ok = await chrome.beginPush!();
+      if (!live) {
+        if (ok) await chrome.cancelPush?.();
+        return;
+      }
+      if (!ok) {
+        setShown(true);
+        await frames(1);
+        await flushSystemControls();
+        if (live) setSettled(true);
+        return;
+      }
+      const token = createPushToken();
+      tokenRef.current = token;
+      unregRef.current = registerNativePop(chrome, token, () => {
+        clearSettleTimer();
+        tokenRef.current = null;
+        unregRef.current = null;
+        setSettled(false);
+        setShown(false);
+        closeRef.current();
+      });
+      setShown(true);
+      await frames(1);
+      await flushSystemControls();
+      await frames(2);
+      if (!live) {
+        unregRef.current?.();
+        unregRef.current = null;
+        tokenRef.current = null;
+        setShown(false);
+        await chrome.cancelPush?.();
+        return;
+      }
+      const committed = await chrome.commitPush!(token);
+      if (!committed && tokenRef.current === token) {
+        unregRef.current?.();
+        unregRef.current = null;
+        tokenRef.current = null;
+        setShown(false);
+        wakeSystemControls();
+        return;
+      }
+      if (live) {
+        if (prefersReducedMotion()) {
+          setSettled(true);
+        } else {
+          settleTimerRef.current = window.setTimeout(() => {
+            settleTimerRef.current = null;
+            if (live) setSettled(true);
+          }, NATIVE_PUSH_SETTLE_MS);
+        }
+      }
+    });
+    return () => { live = false; clearSettleTimer(); };
+  }, [open, chrome]);
+
+  useEffect(() => () => {
+    const token = tokenRef.current;
+    unregRef.current?.();
+    unregRef.current = null;
+    tokenRef.current = null;
+    if (token && sheetsUp.system) {
+      sheetStep(async () => {
+        await chrome.popPage?.(token, { animated: false });
+        wakeSystemControls();
+      });
+    }
+  }, [chrome]);
+
+  useEffect(() => { setScrolled(false); }, [open, shown, title]);
+
+  useEffect(() => {
+    if (!open) return;
+    return closesOnBack(() => backRef.current());
+  }, [open]);
+
+  const handleBack = useCallback(() => backRef.current(), []);
+  const leadingId = onBack && !swipeBack ? "stepBack" : "back";
+  const rank = BAR_RANK.sheetPushed + nextDepth * 0.01;
+  useNativeBar(rank, !bare && shown ? {
+    title: title || undefined,
+    leading: [{ id: leadingId, symbol: "chevron.backward", label: t("mobile.sheet.back") }],
+    trailing: (actions ?? []).map((action) => ({ id: `action:${action.key}`, symbol: action.symbol, label: action.label, disabled: action.disabled })),
+  } : null, {
+    back: handleBack,
+    stepBack: handleBack,
+    ...Object.fromEntries((actions ?? []).map((action) => [`action:${action.key}`, action.onPress])),
+  });
+
+  if (!shown) return null;
+
+  return createPortal(
+    <PushDepthContext.Provider value={nextDepth}>
+      <PushSettledContext.Provider value={settled}>
+        <div
+          ref={contentRef}
+          role="dialog"
+          aria-modal="true"
+          aria-label={label ?? title}
+          data-phone-pushed-page={pageId ?? ""}
+          data-phone-bot-page={pageId || undefined}
+          style={{ zIndex: 60 + nextDepth * 2 }}
+          onKeyDown={(event) => { if (event.key === "Escape") { event.stopPropagation(); handleBack(); } }}
+          onScrollCapture={(event) => {
+            const area = event.target as HTMLElement;
+            if (area.scrollHeight > area.clientHeight + 1) setScrolled(area.scrollTop > 2);
+          }}
+          className="fixed inset-0 flex flex-col bg-(--m-sheet-page) outline-none"
+        >
+          {bare ? (
+            children
+          ) : (
+            <>
+              <div aria-hidden className={cn("mobile-edge mobile-sheet-edge pointer-events-none absolute inset-x-0 top-0 z-50 h-[calc(var(--m-safe-top)+20px)] transition-opacity duration-150", scrolled ? "opacity-100" : "opacity-0")} />
+              {flush ? (
+                <div className={cn("relative flex min-h-0 flex-1 flex-col overflow-hidden pb-[var(--m-safe-bottom)] pt-[max(var(--m-safe-top),16px)]", bodyClassName)}>
+                  {children}
+                </div>
+              ) : (
+                <div className={cn("mobile-sheet-body relative min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain pb-[max(var(--m-safe-bottom),16px)] pt-[max(var(--m-safe-top),16px)]", bodyClassName)}>
+                  {children}
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      </PushSettledContext.Provider>
+    </PushDepthContext.Provider>,
+    document.querySelector(".dusk-mobile") ?? document.body,
+  );
+}
+
+function WebSheetPush({
+  open,
+  onClose,
+  title,
+  label,
+  children,
+  pageId,
+  bodyClassName,
+  flush = false,
+  bare = false,
+  actions,
+  swipeBack = true,
+  onBack,
+  contentRef,
+}: SheetPushProps) {
+  const parentDepth = useSheetPushDepth();
+  const nextDepth = parentDepth + 1;
   const [mounted, setMounted] = useState(open);
+  const [settled, setSettled] = useState(false);
   const [leaving, setLeaving] = useState(false);
   const [moving, setMoving] = useState(false);
   const [scrolled, setScrolled] = useState(false);
-  const [nested, setNested] = useState(false);
   const widthRef = useRef(typeof window === "undefined" ? 390 : window.innerWidth);
   const x = useMotionValue(widthRef.current);
   const pageOpacity = useMotionValue(1);
@@ -159,7 +418,7 @@ export function SheetPush({
       const fade = settleTo(pageOpacity, target === 0 ? 1 : 0, 0, () => {
         x.set(target);
         finish();
-      }, { stiffness: 600, damping: 54 });
+      }, NAV);
       runRef.current = { stop: () => { fade.stop(); return 0; } };
       return;
     }
@@ -171,7 +430,7 @@ export function SheetPush({
       return;
     }
     const toward = Math.sign(target - from);
-    const speed = velocity ?? (carried !== 0 ? carried : toward * width * system.push);
+    const speed = velocity ?? (carried !== 0 ? carried : toward * width * sheetNav.push);
     if (!page || typeof page.animate !== "function") {
       const controls = settleTo(x, target, speed, () => { syncBaseFor(target); finish(); }, NAV);
       runRef.current = { stop: () => { controls.stop(); return 0; } };
@@ -189,13 +448,13 @@ export function SheetPush({
     widthRef.current = width;
     if (open) {
       setLeaving(false);
+      setSettled(false);
       if (poppingRef.current) {
         poppingRef.current = false;
-        go(0, null);
+        go(0, null, () => setSettled(true));
         return;
       }
       baseRef.current = underlyingSheet(pageRef.current);
-      setNested(Boolean(baseRef.current?.hasAttribute("data-phone-pushed-page")));
       const reduced = isReduced();
       x.set(reduced ? 0 : width);
       pageOpacity.set(reduced ? 0 : 1);
@@ -205,32 +464,28 @@ export function SheetPush({
       }
       if (dimRef.current) dimRef.current.style.opacity = "0";
       setMoving(true);
-      let frame2 = 0;
-      const frame1 = requestAnimationFrame(() => {
-        frame2 = requestAnimationFrame(() => {
-          if (pageRef.current) delete pageRef.current.dataset.preparing;
-          if (reduced) {
-            const el = pageRef.current;
-            if (el && typeof el.animate === "function") {
-              const anim = el.animate([{ opacity: 0 }, { opacity: 1 }], { duration: dur.fast * 1000, easing: `cubic-bezier(${ease.out.join(",")})`, fill: "forwards" });
-              if (dimRef.current) dimRef.current.style.opacity = "1";
-              anim.onfinish = () => { pageOpacity.set(1); anim.cancel(); setMoving(false); wakeSystemControls(); };
-              runRef.current = { stop: () => { anim.cancel(); return 0; } };
-            } else {
-              pageOpacity.set(1);
-              setMoving(false);
-              wakeSystemControls();
-            }
-            return;
+      const frame = requestAnimationFrame(() => {
+        if (pageRef.current) delete pageRef.current.dataset.preparing;
+        if (reduced) {
+          const el = pageRef.current;
+          if (el && typeof el.animate === "function") {
+            const anim = el.animate([{ opacity: 0 }, { opacity: 1 }], { duration: dur.fast * 1000, easing: `cubic-bezier(${ease.out.join(",")})`, fill: "forwards" });
+            if (dimRef.current) dimRef.current.style.opacity = "1";
+            anim.onfinish = () => { pageOpacity.set(1); anim.cancel(); setMoving(false); setSettled(true); wakeSystemControls(); };
+            runRef.current = { stop: () => { anim.cancel(); return 0; } };
+          } else {
+            pageOpacity.set(1);
+            setMoving(false);
+            setSettled(true);
+            wakeSystemControls();
           }
-          go(0, null);
-        });
+          return;
+        }
+        go(0, null, () => setSettled(true));
       });
-      return () => {
-        cancelAnimationFrame(frame1);
-        if (frame2) cancelAnimationFrame(frame2);
-      };
+      return () => { cancelAnimationFrame(frame); };
     }
+    setSettled(false);
     setLeaving(true);
     if (poppingRef.current) return;
     poppingRef.current = true;
@@ -272,12 +527,15 @@ export function SheetPush({
   }, [open]);
 
   const handleBack = useCallback(() => backRef.current(), []);
-
-  const systemBar = useNativeBar(BAR_RANK.sheetPushed, mounted && open && !leaving ? {
+  const rank = BAR_RANK.sheetPushed + nextDepth * 0.01;
+  const systemBar = useNativeBar(rank, !bare && mounted && open && !leaving ? {
     title: title || undefined,
     leading: [{ id: "back", symbol: "chevron.backward", label: t("mobile.sheet.back") }],
-    trailing: [],
-  } : null, { back: handleBack });
+    trailing: (actions ?? []).map((action) => ({ id: `action:${action.key}`, symbol: action.symbol, label: action.label, disabled: action.disabled })),
+  } : null, {
+    back: handleBack,
+    ...Object.fromEntries((actions ?? []).map((action) => [`action:${action.key}`, action.onPress])),
+  });
 
   useDrag(pageRef, {
     axis: "x",
@@ -323,51 +581,61 @@ export function SheetPush({
 
   if (!mounted) return null;
 
+  const zBase = 60 + nextDepth * 2;
   return createPortal(
-    <>
-      <div
-        ref={dimRef}
-        aria-hidden
-        className={cn("pointer-events-none fixed inset-0 bg-[rgb(10_10_12/0.14)]", nested ? "z-[61]" : "z-[59]")}
-        style={{ opacity: 0 }}
-      />
-      <motion.div
-        ref={setRefs}
-        role="dialog"
-        aria-modal="true"
-        aria-label={label ?? title}
-        data-phone-pushed-page={pageId ?? ""}
-        data-phone-bot-page={pageId || undefined}
-        data-leaving={leaving ? "" : undefined}
-        inert={leaving || undefined}
-        style={{ x, opacity: pageOpacity, willChange: moving ? "transform" : undefined }}
-        onKeyDown={(event) => { if (event.key === "Escape") { event.stopPropagation(); handleBack(); } }}
-        onScrollCapture={(event) => {
-          const area = event.target as HTMLElement;
-          if (area.scrollHeight > area.clientHeight + 1) setScrolled(area.scrollTop > 2);
-        }}
-        className={cn("fixed inset-0 flex flex-col bg-(--m-sheet-page) shadow-[-12px_0_32px_rgb(10_10_12/0.14)] outline-none", nested ? "z-[62]" : "z-[60]")}
-      >
-        {systemBar && (
-          <div aria-hidden className={cn("mobile-edge mobile-sheet-edge pointer-events-none absolute inset-x-0 top-0 z-50 h-[calc(var(--m-safe-top)+20px)] transition-opacity duration-150", scrolled ? "opacity-100" : "opacity-0")} />
-        )}
-        {!systemBar && (
-          <div className="flex min-h-[52px] shrink-0 items-center gap-3 px-4 pb-2 pt-[max(var(--m-safe-top),16px)]">
-            <RoundButton label={t("mobile.sheet.back")} onClick={handleBack} size={44}><BackGlyph /></RoundButton>
-            {title && <div className="min-w-0 flex-1 truncate text-[17px] font-semibold text-ink">{title}</div>}
-          </div>
-        )}
-        {flush ? (
-          <div className={cn("relative flex min-h-0 flex-1 flex-col overflow-hidden pb-[var(--m-safe-bottom)]", systemBar && "pt-[max(var(--m-safe-top),16px)]", bodyClassName)}>
-            {children}
-          </div>
-        ) : (
-          <div className={cn("mobile-sheet-body relative min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain pb-[max(var(--m-safe-bottom),16px)]", systemBar && "pt-[max(var(--m-safe-top),16px)]", bodyClassName)}>
-            {children}
-          </div>
-        )}
-      </motion.div>
-    </>,
+    <PushDepthContext.Provider value={nextDepth}>
+      <PushSettledContext.Provider value={settled}>
+        <div
+          ref={dimRef}
+          aria-hidden
+          className="pointer-events-none fixed inset-0 bg-[rgb(10_10_12/0.14)]"
+          style={{ opacity: 0, zIndex: zBase - 1 }}
+        />
+        <motion.div
+          ref={setRefs}
+          role="dialog"
+          aria-modal="true"
+          aria-label={label ?? title}
+          data-phone-pushed-page={pageId ?? ""}
+          data-phone-bot-page={pageId || undefined}
+          data-moving={moving ? "" : undefined}
+          data-leaving={leaving ? "" : undefined}
+          inert={leaving || undefined}
+          style={{ x, opacity: pageOpacity, zIndex: zBase, willChange: moving ? "transform" : undefined }}
+          onKeyDown={(event) => { if (event.key === "Escape") { event.stopPropagation(); handleBack(); } }}
+          onScrollCapture={(event) => {
+            const area = event.target as HTMLElement;
+            if (area.scrollHeight > area.clientHeight + 1) setScrolled(area.scrollTop > 2);
+          }}
+          className="fixed inset-0 flex flex-col bg-(--m-sheet-page) shadow-[-12px_0_32px_rgb(10_10_12/0.14)] outline-none"
+        >
+          {bare ? (
+            children
+          ) : (
+            <>
+              {systemBar && (
+                <div aria-hidden className={cn("mobile-edge mobile-sheet-edge pointer-events-none absolute inset-x-0 top-0 z-50 h-[calc(var(--m-safe-top)+20px)] transition-opacity duration-150", scrolled ? "opacity-100" : "opacity-0")} />
+              )}
+              {!systemBar && (
+                <div className="flex min-h-[52px] shrink-0 items-center gap-3 px-4 pb-2 pt-[max(var(--m-safe-top),16px)]">
+                  <RoundButton label={t("mobile.sheet.back")} onClick={handleBack} size={44}><BackGlyph /></RoundButton>
+                  {title && <div className="min-w-0 flex-1 truncate text-[17px] font-semibold text-ink">{title}</div>}
+                </div>
+              )}
+              {flush ? (
+                <div className={cn("relative flex min-h-0 flex-1 flex-col overflow-hidden pb-[var(--m-safe-bottom)]", systemBar && "pt-[max(var(--m-safe-top),16px)]", bodyClassName)}>
+                  {children}
+                </div>
+              ) : (
+                <div className={cn("mobile-sheet-body relative min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain pb-[max(var(--m-safe-bottom),16px)]", systemBar && "pt-[max(var(--m-safe-top),16px)]", bodyClassName)}>
+                  {children}
+                </div>
+              )}
+            </>
+          )}
+        </motion.div>
+      </PushSettledContext.Provider>
+    </PushDepthContext.Provider>,
     document.querySelector(".dusk-mobile") ?? document.body,
   );
 }

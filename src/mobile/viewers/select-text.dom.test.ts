@@ -66,7 +66,7 @@ describe("viewer text selects on the phone while its chrome stays tappable", () 
       createElement(CodeViewer, { code: "let a = 1", lang: "js", open: true, onClose: () => {} }),
       createElement(TableViewer, { columns: [{ text: "a" }], rows: [[{ text: "1" }]], name: "t", open: true, onClose: () => {} })));
     expect(root.querySelector("[data-code-viewer]")!.hasAttribute("data-selectable")).toBe(true);
-    expect(root.querySelector("[data-table-viewer] table")!.hasAttribute("data-selectable")).toBe(true);
+    expect(root.querySelector("[data-table-viewer] tbody")!.hasAttribute("data-selectable")).toBe(true);
     for (const button of root.querySelectorAll("button")) expect(button.closest("[data-selectable]")).toBeNull();
   });
 

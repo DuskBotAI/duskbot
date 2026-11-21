@@ -105,8 +105,9 @@ export function installSwipeReply(chat: HTMLElement): () => void {
     if (progress >= 1 && !armed) haptic("swipeReply");
     armed = progress >= 1;
   };
-  const onEnd = () => {
+  const onEnd = (event?: TouchEvent) => {
     if (start && mode === "reply") {
+      if (event?.cancelable) event.preventDefault();
       const { row } = start;
       const from = row.style.translate;
       row.style.translate = "";

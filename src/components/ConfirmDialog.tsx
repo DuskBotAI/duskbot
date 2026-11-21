@@ -4,9 +4,10 @@ import { createRoot } from "react-dom/client";
 import { AnimatePresence, useIsPresent, type HTMLMotionProps } from "motion/react";
 
 import { t } from "@/lib/i18n";
-import { dialogMotion } from "@/lib/motion-presets";
+import { dialogMotion, phoneDialogMotion } from "@/lib/motion-presets";
 import { phoneApp } from "@/lib/store-app";
-import { wakeSystemControls } from "@/lib/system-control";
+import { flushSystemControls, wakeSystemControls } from "@/lib/system-control";
+import { closesOnBack } from "@/mobile/Sheet";
 import { confirmCancelCls, mdDangerCls, mdPrimaryCls } from "./ui/GrokDialog";
 import { ScrimMotion, SheetMotion, useMotionReduced } from "./ui/SheetMotion";
 
@@ -84,14 +85,16 @@ export function ConfirmDialog(props: ConfirmDialogProps) {
     else confirmRef.current?.focus();
   }, [open, props.pending]);
 
-  const motion = dialogMotion(useMotionReduced());
+  const reduced = useMotionReduced();
+  const phone = phoneApp();
+  const motion = phone ? phoneDialogMotion(reduced) : dialogMotion(reduced);
   const [opened, setOpened] = useState(open);
   useEffect(() => { if (open) setOpened(true); }, [open]);
-  const phone = phoneApp();
+  useEffect(() => (phone && open ? closesOnBack(() => cancelAction.current()) : undefined), [phone, open]);
   if ((!open && !opened) || typeof document === "undefined" || !document.body) return null;
   const portalRoot = phone ? (document.querySelector(".dusk-mobile") ?? document.body) : document.body;
   return createPortal(
-    <AnimatePresence onExitComplete={() => { setOpened(false); wakeSystemControls(); props.onClosed?.(); }}>
+    <AnimatePresence onExitComplete={() => { setOpened(false); if (phone) void flushSystemControls(); else wakeSystemControls(); props.onClosed?.(); }}>
       {open && (
         <ConfirmLayer key="confirm" phone={phone} layer={props.layer} onCancel={onCancel} scrim={motion.scrim}>
           <ConfirmDialogCard ref={dialogRef} confirmRef={confirmRef} animated enter={motion.sheet} {...props} />
@@ -108,8 +111,11 @@ function ConfirmLayer({ phone, layer, onCancel, scrim, children }: { phone: bool
   useEffect(() => {
     if (!phone) return;
     wakeSystemControls();
-    return () => wakeSystemControls();
+    return () => { void flushSystemControls(); };
   }, [phone]);
+  useEffect(() => {
+    if (phone && leaving) wakeSystemControls();
+  }, [phone, leaving]);
   return (
     <div
       data-phone-modal-layer={phone ? "" : undefined}

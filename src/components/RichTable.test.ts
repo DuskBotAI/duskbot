@@ -18,6 +18,11 @@ describe("rich table rendering", () => {
     expect(html).not.toContain("<script>");
     expect(html).toContain('scope="col"');
   });
+  it("lines up a column the way its Markdown delimiter row says, even when its cells are words", () => {
+    const html = renderToStaticMarkup(createElement(ChatMarkdown, { text: "| Plan | Price | SSO |\n| :--- | ---: | :---: |\n| Team | Custom | yes |" }));
+    const cells = [...html.matchAll(/<td[^>]*style="text-align:(\w+)/g)].map((match) => match[1]);
+    expect(cells).toEqual(["left", "right", "center"]);
+  });
   it("gives a short table outside a card its actions without the search box and row count a long one needs", () => {
     const table = (length: number) => renderToStaticMarkup(createElement(RichTable, { columns: [{ text: "ID" }], rows: Array.from({ length }, (_, i) => [{ text: String(i) }]), card: false }));
     const short = table(8);
@@ -56,18 +61,18 @@ describe("a reply's table card", () => {
     rows: Array.from({ length: rows }, (_, index) => [{ text: `Sender ${index}` }, { text: String(index) }]),
   }));
 
-  it("draws a short table as a card with a hover plate, plain header names as grok has, and no footer", () => {
+  it("draws a short table as a content-sized card with a header band, row hairlines and its tools in a gutter beside it", () => {
     const html = card(3);
     const surface = html.match(/<div data-table-card="[^"]*" class="([^"]*)"/)?.[1] ?? "";
-    expect(surface.split(" ")).toEqual(expect.arrayContaining(["rounded-[20px]", "bg-(--chat-card)", "pt-1", "touch:pt-11"]));
-    // grok keeps 24px above the header row, where the plate floats on hover.
+    expect(surface.split(" ")).toEqual(expect.arrayContaining(["w-fit", "max-w-full", "rounded-2xl", "bg-(--chat-card)"]));
     const plate = html.match(/<div class="(table-plate [^"]*)"/)?.[1] ?? "";
-    expect(plate.split(" ")).toEqual(expect.arrayContaining(["absolute", "top-1.5", "end-1.5", "opacity-0", "group-hover/table:opacity-100", "focus-within:opacity-100", "touch:opacity-100"]));
+    expect(plate.split(" ")).toEqual(expect.arrayContaining(["absolute", "end-0", "opacity-0", "group-hover/table:opacity-100", "focus-within:opacity-100", "touch:opacity-100"]));
+    expect(html).toMatch(/class="group\/table relative w-fit max-w-full pe-9/);
     expect(html).toContain('aria-label="Copy table"');
-    // download and expand sit behind grok's Copy options chevron
-    expect(html).toContain('aria-label="Copy options"');
+    expect(html).toContain('aria-label="Expand table"');
     expect(html).not.toContain('aria-label="sort by Sender"');
-    expect(html).toContain("border-t border-transparent");
+    expect(html).toContain("bg-(--table-head)");
+    expect(html).toContain("border-t border-(--table-line)");
     expect(html).not.toContain("<footer");
     expect(html).not.toContain(`aria-label="${"Search all rows…"}"`);
     expect(html).toContain('data-fit="true"');

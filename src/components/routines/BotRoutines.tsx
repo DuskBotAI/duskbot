@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { AnimatePresence } from "motion/react";
 import { createPortal } from "react-dom";
 import { Check, Copy } from "../../icons";
@@ -6,16 +6,19 @@ import { Check, Copy } from "../../icons";
 import { automationSentence, automationsFrom, automationStatus, AUTOMATION_FIX_LABEL, nextWhen, plainWhen, runLine, type Automation, type AutomationFix } from "@/lib/automations";
 import { appWhen } from "@/lib/app-automations";
 import { useAppTriggers } from "@/lib/app-triggers";
+import { botAccentScope } from "@/lib/bot-accent";
 import { cn } from "@/lib/cn";
 import { friendlyError } from "@/lib/plain-error";
 import { t } from "@/lib/i18n";
 import { lowerFirst, upperFirst } from "@/lib/lower-first";
 import { routineRunsOn } from "@/lib/routine-display";
 import { fetchForecast, forecastLine, forecastWarning, lessOften, pauseLine, periodLine, useLoaded } from "@/lib/spend";
+import { phoneApp } from "@/lib/store-app";
 import { formatCost } from "@/lib/usage-trace";
 import { isRoutineProblemRun, type Routine, type RoutineRunOn } from "@/lib/routines";
 import { hoursLine, liveStrip, probeLine } from "@/lib/routine-display";
 import { saveWebhookCredential, webhookCredentialStore } from "@/lib/webhook-credentials";
+import { SheetPush } from "@/mobile/SheetPush";
 import { api, useStore, type Bot } from "@/state/store";
 import { useAllAutomationActions } from "../automations/app-actions";
 import { AppEventEditor } from "../automations/AppEventEditor";
@@ -75,41 +78,94 @@ export function BotRoutines({ bot, defaultRunOn, label = true }: { bot: Bot; def
     requestAnimationFrame(() => document.querySelector(`[data-panel-routine="${CSS.escape(focus.routineId!)}"]`)?.scrollIntoView({ block: "nearest" }));
   }, [focus, automations]);
 
+  const phone = phoneApp();
+  const actions = useAllAutomationActions();
+  const openAutomation = openId ? automations.find((automation) => automation.id === openId) ?? null : null;
+  const openRoutine = openAutomation?.kind === "schedule" ? state.routines.find((routine) => routine.id === openAutomation.id) : undefined;
+  const lastOpen = useRef<{ automation: Automation; routine?: Routine } | null>(null);
+  if (openAutomation) lastOpen.current = { automation: openAutomation, routine: openRoutine };
+  const shown = openAutomation ? { automation: openAutomation, routine: openRoutine } : lastOpen.current;
+  const shownName = shown ? shown.automation.name.trim() || automationSentence(shown.automation, bot.name) : undefined;
+  const closePhoneRoutine = () => { setOpenId(null); setEditing(null); };
+
   const add = editing === "new"
     ? <RoutineForm bot={bot} defaultRunOn={defaultRunOn} onDone={(saved) => { setEditing(null); if (saved) setOpenId(saved.id); }} />
     : null;
 
+  const phonePush = phone && shown ? (
+    <SheetPush
+      open={Boolean(openAutomation)}
+      onClose={closePhoneRoutine}
+      title={shownName}
+      pageId="routine"
+    >
+      <div {...botAccentScope(bot.color)} data-panel-modal="routine" className="px-4 pb-8 pt-2">
+        <AutomationDetail
+          id={`routine-detail-${shown.automation.id}`}
+          bot={bot}
+          automation={shown.automation}
+          routine={shown.routine}
+          actions={actions}
+          onEdit={() => setEditing(shown.automation.id)}
+        />
+      </div>
+      {shown.routine && (
+        <SheetPush
+          open={Boolean(openAutomation && editing === openAutomation.id && openRoutine)}
+          onClose={() => setEditing(null)}
+          title={t("automations.edit")}
+          pageId="routine-edit"
+        >
+          <div {...botAccentScope(bot.color)} className="px-4 pb-8 pt-2">
+            <RoutineForm bot={bot} routine={shown.routine} onDone={() => setEditing(null)} />
+          </div>
+        </SheetPush>
+      )}
+      {openAutomation && editing === openAutomation.id && openAutomation.kind !== "schedule" && (
+        <ForeignEditor automation={openAutomation} onClose={() => setEditing(null)} />
+      )}
+    </SheetPush>
+  ) : null;
+
   if (automations.length === 0 && editing !== "new") {
     return (
-      <PanelEmpty data-panel-empty="routines">{t("botPanel.routines.empty")}</PanelEmpty>
+      <>
+        <PanelEmpty data-panel-empty="routines">{t("botPanel.routines.empty")}</PanelEmpty>
+        {phonePush}
+      </>
     );
   }
   return (
-    <Card label={label ? t("botPanel.ui.botSettingsSimpleRoutines") : undefined} anchor="routines">
-      {automations.map((automation) => (
-        <AutomationRow
-          key={automation.id}
-          bot={bot}
-          automation={automation}
-          routine={automation.kind === "schedule" ? state.routines.find((routine) => routine.id === automation.id) : undefined}
-          open={openId === automation.id}
-          editing={editing === automation.id}
-          onOpen={() => { setOpenId(automation.id); setEditing(null); }}
-          onClose={() => { setOpenId(null); setEditing(null); }}
-          onEdit={(on) => setEditing(on ? automation.id : null)}
-        />
-      ))}
-      {add}
-    </Card>
+    <>
+      <Card label={label ? t("botPanel.ui.botSettingsSimpleRoutines") : undefined} anchor="routines">
+        {automations.map((automation) => (
+          <AutomationRow
+            key={automation.id}
+            bot={bot}
+            automation={automation}
+            routine={automation.kind === "schedule" ? state.routines.find((routine) => routine.id === automation.id) : undefined}
+            open={openId === automation.id}
+            editing={editing === automation.id}
+            phone={phone}
+            onOpen={() => { setOpenId(automation.id); setEditing(null); }}
+            onClose={() => { setOpenId(null); setEditing(null); }}
+            onEdit={(on) => setEditing(on ? automation.id : null)}
+          />
+        ))}
+        {add}
+      </Card>
+      {phonePush}
+    </>
   );
 }
 
-function AutomationRow({ bot, automation, routine, open, editing, onOpen, onClose, onEdit }: {
+function AutomationRow({ bot, automation, routine, open, editing, phone, onOpen, onClose, onEdit }: {
   bot: Bot;
   automation: Automation;
   routine?: Routine;
   open: boolean;
   editing: boolean;
+  phone: boolean;
   onOpen: () => void;
   onClose: () => void;
   onEdit: (on: boolean) => void;
@@ -157,14 +213,18 @@ function AutomationRow({ bot, automation, routine, open, editing, onOpen, onClos
         )}
       </div>
       {!open && actions.error && <p role="alert" className="m-0 px-2 pb-1.5 text-[12px] leading-4 text-danger">{actions.error}</p>}
-      <AnimatePresence>{open && !(editing && automation.kind !== "schedule") && (
-        <GrokDialog key="routine" data-panel-modal="routine" title={name} onClose={onClose}>
-          {editing && routine
-            ? <RoutineForm bot={bot} routine={routine} onDone={() => onEdit(false)} />
-            : <AutomationDetail id={detailId} bot={bot} automation={automation} routine={routine} actions={actions} onEdit={() => onEdit(true)} />}
-        </GrokDialog>
-      )}</AnimatePresence>
-      {editing && automation.kind !== "schedule" && <ForeignEditor automation={automation} onClose={() => onEdit(false)} />}
+      {!phone && (
+        <>
+          <AnimatePresence>{open && !(editing && automation.kind !== "schedule") && (
+            <GrokDialog key="routine" data-panel-modal="routine" title={name} onClose={onClose}>
+              {editing && routine
+                ? <RoutineForm bot={bot} routine={routine} onDone={() => onEdit(false)} />
+                : <AutomationDetail id={detailId} bot={bot} automation={automation} routine={routine} actions={actions} onEdit={() => onEdit(true)} />}
+            </GrokDialog>
+          )}</AnimatePresence>
+          {editing && automation.kind !== "schedule" && <ForeignEditor automation={automation} onClose={() => onEdit(false)} />}
+        </>
+      )}
     </div>
   );
 }

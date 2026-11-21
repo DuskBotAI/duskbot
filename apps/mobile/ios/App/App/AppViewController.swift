@@ -47,6 +47,12 @@ class AppViewController: CAPBridgeViewController {
             if !landscapeAllowed { rotate(to: .portrait) }
         }
     }
+    var onSafeAreaChange: (() -> Void)?
+
+    override open func viewSafeAreaInsetsDidChange() {
+        super.viewSafeAreaInsetsDidChange()
+        onSafeAreaChange?()
+    }
 
     override var supportedInterfaceOrientations: UIInterfaceOrientationMask {
         landscapeAllowed ? .allButUpsideDown : .portrait

@@ -1,9 +1,22 @@
-import { useContext, useEffect, useRef, useSyncExternalStore } from "react";
+import { createContext, useContext, useEffect, useRef, useSyncExternalStore } from "react";
 import { PlatformContext, type BarConfig, type MobileChrome } from "./platform";
 
 /** The system's bar and sheet, where the device has them. Null too for a sheet drawn outside the phone's shell. */
 export function useChrome(): MobileChrome | null {
   return useContext(PlatformContext)?.chrome ?? null;
+}
+
+/** True when the device supports native UIKit navigation pushes inside a sheet. */
+export function useNativePush(): boolean {
+  const target = useChrome();
+  return Boolean(target?.beginPush && target?.commitPush && target?.popPage);
+}
+
+/** Depth of pushed views inside a sheet (0 at the sheet's root). */
+export const PushDepthContext = createContext(0);
+
+export function useSheetPushDepth(): number {
+  return useContext(PushDepthContext);
 }
 
 /** Who draws the bar, lowest first: the list, a chat over it, a sheet over both (then a page stacked inside the sheet,

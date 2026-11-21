@@ -3,7 +3,7 @@ import { createElement, useRef } from "react";
 import { flushSync } from "react-dom";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { applyGlassGlyphs, buttonKind, composerButtons, covered, cssColor, cssHex, darkGround, frameOf, REASSERT_MS, restingFrame, transcriptRoom, typeInto, useNativeGlass, type GlassBridge, type GlassEvent, type GlassState } from "./native-glass";
+import { applyGlassGlyphs, buttonKind, composerButtons, covered, cssColor, cssHex, darkGround, frameOf, jumpCovered, REASSERT_MS, restingFrame, transcriptRoom, typeInto, useNativeGlass, type GlassBridge, type GlassEvent, type GlassState } from "./native-glass";
 import type { SlidePath } from "./NavStack";
 import type { MobilePlatform } from "./platform";
 
@@ -69,6 +69,27 @@ describe("rects", () => {
     place(pill, 500, 60, 120, 44);
     document.elementFromPoint = () => document.body;
     expect(covered(pill, chat)).toBe(false);
+  });
+
+  it("treats the jump button as covered when a sheet outside the chat or a menu inside it sits on top", () => {
+    const chat = document.createElement("div");
+    const jump = document.createElement("button");
+    const icon = document.createElement("span");
+    const menu = document.createElement("div");
+    menu.setAttribute("data-composer-menu", "");
+    const item = document.createElement("button");
+    menu.appendChild(item);
+    jump.appendChild(icon);
+    chat.append(jump, menu);
+    const sheet = document.createElement("div");
+    document.body.append(chat, sheet);
+    place(jump, 173, 700, 44, 44);
+    document.elementFromPoint = () => icon;
+    expect(jumpCovered(jump, chat)).toBe(false);
+    document.elementFromPoint = () => item;
+    expect(jumpCovered(jump, chat)).toBe(true);
+    document.elementFromPoint = () => sheet;
+    expect(jumpCovered(jump, chat)).toBe(true);
   });
 });
 
@@ -210,9 +231,12 @@ describe("useNativeGlass", () => {
   let root: Root;
   let host: HTMLDivElement;
 
-  function mount(acks = false) {
+  function mount(options: boolean | { acks?: boolean; jump?: boolean; reply?: boolean } = false) {
+    const opts = typeof options === "boolean" ? { acks: options } : options;
     const { glass, send } = fakeGlass();
-    if (acks) Object.assign(glass, { acks: true });
+    if (opts.acks) Object.assign(glass, { acks: true });
+    if (opts.jump) Object.assign(glass, { jump: true });
+    if (opts.reply) Object.assign(glass, { reply: true });
     const platform = { kind: "ios", native: true, glass } as unknown as MobilePlatform;
     host = document.createElement("div");
     document.body.appendChild(host);
@@ -593,6 +617,103 @@ describe("useNativeGlass", () => {
     runFrame();
     expect(glass.update).toHaveBeenCalledTimes(sent + 1);
   });
+
+  it("measures and hides the jump button when the native side supports it, subtracts its entrance offset, and forwards taps", () => {
+    const { glass, send, $ } = mount({ jump: true });
+    const jump = document.createElement("button");
+    jump.className = "chat-jump";
+    jump.setAttribute("aria-label", "Jump to latest");
+    jump.style.transform = "matrix(1, 0, 0, 1, 0, 6)";
+    $("dock").prepend(jump);
+    place(jump, 173, 714, 44, 44);
+    document.elementFromPoint = (_x, y) => (y >= 700 && y <= 758 ? jump : y > 758 ? $("field") : $("title"));
+
+    runFrame();
+    expect(glass.update.mock.lastCall![0].jump).toEqual({
+      frame: { x: 173, y: 708, w: 44, h: 44 },
+      gap: 92,
+      label: "Jump to latest",
+    });
+    expect(glass.update.mock.lastCall![0].jumpHandoff).toBeUndefined();
+    expect(document.documentElement.dataset.nativeGlassJump).toBe("");
+
+    const clicked = vi.fn();
+    jump.addEventListener("click", clicked);
+    send({ type: "tap", target: "jump" });
+    expect(clicked).toHaveBeenCalledTimes(1);
+
+    // a composer menu covering the jump button hands it back to the page immediately without hiding the composer
+    const menu = document.createElement("div");
+    menu.setAttribute("data-composer-menu", "");
+    $("chat").appendChild(menu);
+    document.elementFromPoint = (_x, y) => (y >= 700 && y <= 758 ? menu : y > 758 ? $("field") : $("title"));
+    runFrame();
+    expect(glass.update.mock.lastCall![0]).toMatchObject({ jump: null, jumpHandoff: true });
+    expect(glass.update.mock.lastCall![0].composer).not.toBeNull();
+    expect(document.documentElement.dataset.nativeGlassJump).toBeUndefined();
+
+    // unmounting the button clears jump without a handoff flag
+    jump.remove();
+    menu.remove();
+    runFrame();
+    expect(glass.update.mock.lastCall![0].jump).toBeNull();
+    expect(glass.update.mock.lastCall![0].jumpHandoff).toBeUndefined();
+  });
+
+  it("leaves the page's jump button visible when the native binary does not support native jump", () => {
+    const { glass, $ } = mount();
+    const jump = document.createElement("button");
+    jump.className = "chat-jump";
+    $("dock").prepend(jump);
+    place(jump, 173, 708, 44, 44);
+    runFrame();
+    expect(glass.update.mock.lastCall![0].jump).toBeUndefined();
+    expect(document.documentElement.dataset.nativeGlassJump).toBeUndefined();
+  });
+
+  it("keeps the native composer active for a reply strip when supported and forwards its clear tap", () => {
+    const { glass, send, $ } = mount({ reply: true });
+    runFrame();
+    const strip = document.createElement("div");
+    strip.setAttribute("data-composer-reply", "");
+    strip.setAttribute("aria-label", "Replying to Manager");
+    strip.innerHTML = `<span data-reply-excerpt="">For agentic coding</span><button type="button" aria-label="Cancel reply">x</button>`;
+    place(strip, 18, 728, 354, 32);
+    const parent = $("field").closest("[data-composer-row]")!.parentElement!;
+    parent.prepend(strip);
+    for (let i = 0; i < 15; i += 1) runFrame();
+    expect(glass.update.mock.lastCall![0].composer).toMatchObject({
+      reply: { text: "For agentic coding", label: "Replying to Manager", clearLabel: "Cancel reply" },
+    });
+    expect(document.documentElement.dataset.nativeGlassComposer).toBe("");
+
+    const cleared = vi.fn();
+    strip.querySelector("button")!.addEventListener("click", cleared);
+    send({ type: "tap", target: "clearReply" });
+    expect(cleared).toHaveBeenCalledTimes(1);
+
+    // another strip alongside the reply still hands off to the page composer
+    const attachment = document.createElement("div");
+    attachment.setAttribute("data-composer-attachment", "");
+    place(attachment, 18, 660, 354, 60);
+    parent.prepend(attachment);
+    for (let i = 0; i < 15; i += 1) runFrame();
+    expect(glass.update.mock.lastCall![0].composer).toBeNull();
+    attachment.remove();
+    strip.remove();
+  });
+
+  it("still hands off to the page composer for a reply strip when native reply support is absent", () => {
+    const { glass, $ } = mount();
+    runFrame();
+    const strip = document.createElement("div");
+    strip.setAttribute("data-composer-reply", "");
+    place(strip, 18, 728, 354, 32);
+    $("field").closest("[data-composer-row]")!.parentElement!.prepend(strip);
+    for (let i = 0; i < 15; i += 1) runFrame();
+    expect(glass.update.mock.lastCall![0].composer).toBeNull();
+    strip.remove();
+  });
 });
 
 describe("the header's symbols for the page", () => {
@@ -600,15 +721,16 @@ describe("the header's symbols for the page", () => {
   afterEach(() => {
     const html = document.documentElement;
     delete html.dataset.nativeGlyphs;
-    for (const name of ["back", "right"]) for (const end of ["", "-w", "-h"]) html.style.removeProperty(`--native-glyph-${name}${end}`);
+    for (const name of ["back", "right", "jump"]) for (const end of ["", "-w", "-h"]) html.style.removeProperty(`--native-glyph-${name}${end}`);
   });
 
-  it("dresses the page's back and computer buttons in the glass's own glyphs, at their size", () => {
+  it("dresses the page's back, computer and jump buttons in the glass's own glyphs, at their size", () => {
     const html = document.documentElement;
-    expect(applyGlassGlyphs(html, { back: { data: png("QkFDSw=="), w: 11.5, h: 19 }, right: { data: png("RElTUA=="), w: 24, h: 17.5 } })).toBe(true);
-    expect(html.dataset.nativeGlyphs).toBe("back right");
+    expect(applyGlassGlyphs(html, { back: { data: png("QkFDSw=="), w: 11.5, h: 19 }, right: { data: png("RElTUA=="), w: 24, h: 17.5 }, jump: { data: png("SlVNUA=="), w: 15, h: 17 } })).toBe(true);
+    expect(html.dataset.nativeGlyphs).toBe("back right jump");
     expect(html.style.getPropertyValue("--native-glyph-right")).toBe(`url("${png("RElTUA==")}")`);
     expect(html.style.getPropertyValue("--native-glyph-back-w")).toBe("11.5px");
+    expect(html.style.getPropertyValue("--native-glyph-jump-h")).toBe("17px");
   });
 
   it("leaves the page's own glyphs when the native side sends nothing usable", () => {

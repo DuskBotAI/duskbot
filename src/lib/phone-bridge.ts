@@ -15,7 +15,7 @@ export type PhoneView =
   | { kind: "code"; code: string; lang: string }
   | { kind: "images"; images: PhoneImage[]; index: number }
   | { kind: "text"; text: string }
-  | { kind: "table"; columns: TableColumn[]; rows: TableCell[][]; name: string }
+  | { kind: "table"; columns: TableColumn[]; rows: TableCell[][]; name: string; direction?: "rtl" | "ltr" }
   | { kind: "page"; title: string; body: ReactNode; actions?: ReactNode };
 
 /** The phone shell's answers to what a shared chat component asks of the device. Registered by the phone app only, so

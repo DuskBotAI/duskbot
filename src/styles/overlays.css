@@ -73,6 +73,8 @@
   [role="menu"][data-sidebar-popover-submenu] { animation: overlay-fade-in 120ms ease-out; }
 }
 :root[data-reduced-motion="true"] [role="menu"][data-sidebar-popover-submenu] { animation: overlay-fade-in 120ms ease-out; }
+[role="menu"][data-submenu-aiming] [role^="menuitem"]:not([aria-expanded="true"], [aria-checked="true"]):hover { background-color: transparent; }
+[role="menu"][data-submenu-aiming] [role^="menuitem"]:not([aria-expanded="true"], [aria-checked="true"]):hover::before { background-color: transparent; }
 /* less movement, not less feedback: the same surfaces fade without scaling or travel */
 @media (prefers-reduced-motion: reduce) {
   :is([role="menu"], [role="listbox"], .popover-surface, .menu-surface, [role="dialog"]:not([aria-modal="true"], .ui-modal, .ui-dialog)):is(.animate-pop-in, .animate-pop-out) {

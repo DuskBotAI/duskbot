@@ -12,9 +12,15 @@ import { isClientCancellation, isStoppedTurnName } from "../../shared/client-can
 import { roomWorkingPreview } from "@/lib/room-threads";
 import { openPersonWait } from "../../shared/person-wait";
 
-/** The newest message a preview can show. A receipt or a screen frame says nothing about the conversation on its own. */
-export function lastPreviewable<T extends { kind: string }>(messages: readonly T[] | undefined): T | undefined {
-  return messages?.findLast((message) => !isReceipt(message) && message.kind !== "screen");
+const AUTO_APPROVAL_CHIP = /^approved \S+ \((?:full access|saved command|always allowed|its own files|reads only|web search)\)(?::|$)/;
+
+function isAutoApprovalReceipt(message: { kind: string; tool?: { name?: string } }): boolean {
+  return message.kind === "activity" && typeof message.tool?.name === "string" && AUTO_APPROVAL_CHIP.test(message.tool.name);
+}
+
+/** The newest message a preview can show. A receipt, auto-approval audit chip, or screen frame says nothing about the conversation on its own. */
+export function lastPreviewable<T extends { kind: string; tool?: { name?: string } }>(messages: readonly T[] | undefined): T | undefined {
+  return messages?.findLast((message) => !isReceipt(message) && message.kind !== "screen" && !isAutoApprovalReceipt(message));
 }
 
 export function sidebarPreviewMessages(owner: { messages: Message[]; previewMessages?: Message[]; transcriptLoaded?: boolean; transcriptStale?: boolean }): Message[] {

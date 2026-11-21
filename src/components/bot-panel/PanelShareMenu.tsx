@@ -3,7 +3,9 @@ import { createPortal } from "react-dom";
 
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
+import { phoneApp } from "@/lib/store-app";
 import { systemMenu } from "@/lib/system-menu";
+import { SheetPush } from "@/mobile/SheetPush";
 import { useStore, type Bot } from "@/state/store";
 import { BotAvatar } from "../Avatar";
 import { useChatMoreItems } from "../ChatMoreMenu";
@@ -258,7 +260,20 @@ function ShareMenu({ bot }: { bot: Bot }) {
         ),
         document.body,
       )}
-      {sharing && team && <ShareBotDialog bot={bot} teamName={team} onClose={() => setSharing(false)} onChanged={setChange} />}
+      {phoneApp() ? (
+        team && (
+          <SheetPush
+            open={sharing}
+            onClose={() => setSharing(false)}
+            title={t("botAccess.title", { bot: bot.name })}
+            pageId="share-bot"
+          >
+            <ShareBotDialog embedded bot={bot} teamName={team} onClose={() => setSharing(false)} onChanged={setChange} />
+          </SheetPush>
+        )
+      ) : (
+        sharing && team && <ShareBotDialog bot={bot} teamName={team} onClose={() => setSharing(false)} onChanged={setChange} />
+      )}
       {change && <UndoToast key={`${change.text}:${JSON.stringify(change.after)}`} text={change.text}
         onUndo={() => saveAccess(bot.id, change.before)} onDone={settled} />}
     </>

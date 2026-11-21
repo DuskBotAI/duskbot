@@ -53,20 +53,36 @@ export function useKeyboardDismiss(platform: MobilePlatform, rootRef: RefObject<
     const root = rootRef.current;
     if (!root) return;
     let start: { x: number; y: number } | null = null;
+    let dragged = false;
+    let clearDragTimer = 0;
     const inTranscript = (target: EventTarget | null) => target instanceof Element && Boolean(target.closest("[data-mobile-chat] .glass-scroller"));
     const dismiss = () => dismissKeyboard(platform, root, root.dataset.glassFocused !== undefined ? null : composerField(root));
     const down = (event: TouchEvent) => {
+      window.clearTimeout(clearDragTimer);
+      clearDragTimer = 0;
+      dragged = false;
       const touch = event.touches[0];
       start = touch && event.touches.length === 1 && inTranscript(event.target) ? { x: touch.clientX, y: touch.clientY } : null;
     };
     const move = (event: TouchEvent) => {
       const touch = event.touches[0];
       if (!start || !touch) return;
+      if (event.defaultPrevented) { dragged = true; start = null; return; }
+      const dx = touch.clientX - start.x;
       const dy = touch.clientY - start.y;
-      if (dy > 16 && dy > Math.abs(touch.clientX - start.x) * 1.5) { start = null; dismiss(); }
+      if (Math.hypot(dx, dy) > 10) dragged = true;
+      if (Math.abs(dx) > 16 && Math.abs(dx) > Math.abs(dy) * 1.5) { start = null; return; }
+      if (dy > 16 && dy > Math.abs(dx) * 1.5) { start = null; dismiss(); }
     };
-    const up = () => { start = null; };
+    const up = () => {
+      start = null;
+      if (dragged) {
+        window.clearTimeout(clearDragTimer);
+        clearDragTimer = window.setTimeout(() => { dragged = false; clearDragTimer = 0; }, 400);
+      }
+    };
     const tap = (event: MouseEvent) => {
+      if (dragged) { dragged = false; return; }
       if (!inTranscript(event.target) || (event.target as Element).closest(INTERACTIVE)) return;
       if (window.getSelection()?.toString()) return;
       dismiss();
@@ -77,6 +93,7 @@ export function useKeyboardDismiss(platform: MobilePlatform, rootRef: RefObject<
     root.addEventListener("touchcancel", up, { passive: true });
     root.addEventListener("click", tap);
     return () => {
+      window.clearTimeout(clearDragTimer);
       root.removeEventListener("touchstart", down);
       root.removeEventListener("touchmove", move);
       root.removeEventListener("touchend", up);

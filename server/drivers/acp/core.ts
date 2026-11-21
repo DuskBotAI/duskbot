@@ -235,7 +235,7 @@ export interface AcpSupport {
   classifyError?(error: unknown): ProviderErrorCode | undefined;
   /** Plain words for an account failure (bad key, no credit, a used-up
    * quota, no subscription) in place of the provider's raw RPC text. */
-  describeAccountError?(code: AccountErrorCode, model?: string): string;
+  describeAccountError?(code: AccountErrorCode, model?: string): string | undefined;
   /** Compose the session/prompt text. Default prepends the persona. */
   buildPromptText?(turn: SendTurnInput): string;
   /** Rewrite a picker id (`omlx::model`) into the CLI-native id before spawn and session/select. */
@@ -1839,6 +1839,7 @@ export function createAcpDriver(support: AcpSupport): ProviderDriver<AcpConfig> 
           return catalog.unconfirmed;
         },
         refreshModels: support.resolveModels ? () => refreshModels(true) : undefined,
+        resetModels: support.resolveModels ? () => catalog.reset() : undefined,
         ...(startupModelRefresh ? { startupModelRefresh } : {}),
         ...(deviceSignIn ? {
           startAuthentication: (options?: ProviderAuthenticationOptions) => deviceSignIn.start(options),
@@ -1877,10 +1878,28 @@ export function createAcpDriver(support: AcpSupport): ProviderDriver<AcpConfig> 
           enginePid: (threadId) => (active.has(threadId) ? sessions.get(threadId)?.child.pid : undefined),
           stopAll: async () => {
             for (const { stop } of active.values()) stop();
+            const children = new Set<ReturnType<typeof spawnCli>>();
+            for (const session of sessions.values()) children.add(session.child);
             for (const threadId of Array.from(sessions.keys())) closeSession(threadId, "stopAll");
-            for (const [threadId, children] of retiring) {
-              for (const child of children) void retireChild(threadId, child);
+            for (const [threadId, set] of retiring) {
+              for (const child of set) {
+                children.add(child);
+                void retireChild(threadId, child);
+              }
             }
+            await Promise.allSettled([...children].map((child) => (
+              child.exitCode !== null || child.signalCode !== null
+                ? Promise.resolve(true)
+                : new Promise<boolean>((resolveStop) => {
+                    const done = () => { clearTimeout(timer); resolveStop(true); };
+                    child.once("close", done);
+                    const timer = setTimeout(() => {
+                      child.off("close", done);
+                      void killCliTree(child).then(resolveStop, () => resolveStop(false));
+                    }, 5_000);
+                    timer.unref?.();
+                  })
+            )));
           },
           onEvent: (listener) => {
             listeners.add(listener);

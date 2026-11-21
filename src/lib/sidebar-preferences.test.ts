@@ -8,6 +8,7 @@ import {
   UNIVERSAL_PINS_KEY,
   SIDEBAR_COLLAPSED_SECTIONS_KEY,
   SIDEBAR_DENSITY_KEY,
+  SIDEBAR_FEEDBACK_HIDDEN_KEY,
   SIDEBAR_WIDTH_KEY,
   SIDEBAR_SECTION_ORDER_KEY,
   SIMPLE_SIDEBAR_WIDTH_KEY,
@@ -18,6 +19,7 @@ import {
   loadCollapsedSections,
   loadSectionOrder,
   loadSidebarDensity,
+  loadSidebarFeedbackHidden,
   loadSidebarWidth,
   parsePinnedCircles,
   parseUniversalPins,
@@ -25,6 +27,7 @@ import {
   saveCollapsedSections,
   savePinnedCircles,
   setPinnedCircleOrder,
+  setSidebarFeedbackHidden,
   saveUniversalPins,
   saveSectionOrder,
   saveSidebarDensity,
@@ -205,6 +208,19 @@ describe("universal pins preference", () => {
     expect(loadUniversalPins(null)).toBe(false);
     expect(() => saveUniversalPins(true, { setItem: () => { throw new Error("blocked"); } })).not.toThrow();
     expect(() => saveUniversalPins(true, null)).not.toThrow();
+  });
+});
+
+describe("sidebar feedback hidden preference", () => {
+  it("defaults visible, reads the stored flag, and survives blocked storage", () => {
+    expect(loadSidebarFeedbackHidden({ getItem: () => null })).toBe(false);
+    expect(loadSidebarFeedbackHidden({ getItem: (key) => key === SIDEBAR_FEEDBACK_HIDDEN_KEY ? "1" : null })).toBe(true);
+    expect(loadSidebarFeedbackHidden({ getItem: () => "0" })).toBe(false);
+    expect(loadSidebarFeedbackHidden({ getItem: () => { throw new Error("blocked"); } })).toBe(false);
+    setSidebarFeedbackHidden(true);
+    expect(loadSidebarFeedbackHidden({ getItem: () => { throw new Error("blocked"); } })).toBe(true);
+    setSidebarFeedbackHidden(false);
+    expect(loadSidebarFeedbackHidden({ getItem: () => { throw new Error("blocked"); } })).toBe(false);
   });
 });
 

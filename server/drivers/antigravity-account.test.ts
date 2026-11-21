@@ -2,7 +2,7 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { antigravityAccount } from "./antigravity-account.ts";
+import { antigravityAccount, clearAntigravityAccountCache } from "./antigravity-account.ts";
 
 let home: string;
 let path: string;
@@ -62,4 +62,32 @@ it.each(["offline", "denied", "bad-token", "bad-email"])("keeps lookup failure n
   const calls = fetcher.mock.calls.length;
   expect(await antigravityAccount(path)).toBeUndefined();
   expect(fetcher).toHaveBeenCalledTimes(calls);
+});
+
+it("resolves display email directly from Antigravity CLI 1.5 antigravity-oauth-token, skips expired tokens, falls back to legacy tokens, and clears cache", async () => {
+  const cliPath = join(home, "antigravity-oauth-token");
+  await writeFile(cliPath, JSON.stringify({
+    token: { access_token: "cli-access", refresh_token: "cli-refresh", expiry: "2099-01-01T00:00:00Z" },
+  }));
+  const fetcher = vi.fn().mockImplementation(async () => Response.json({ email: "cli@example.test" }));
+  vi.stubGlobal("fetch", fetcher);
+  expect(await antigravityAccount(cliPath, path)).toEqual({ email: "cli@example.test", method: "login" });
+  expect(fetcher).toHaveBeenCalledTimes(1);
+  expect(fetcher.mock.calls[0][0]).toBe("https://www.googleapis.com/oauth2/v3/userinfo");
+  expect(fetcher.mock.calls[0][1].headers).toEqual({ Authorization: "Bearer cli-access" });
+
+  clearAntigravityAccountCache(cliPath);
+  expect(await antigravityAccount(cliPath, path)).toEqual({ email: "cli@example.test", method: "login" });
+  expect(fetcher).toHaveBeenCalledTimes(2);
+
+  // Expired CLI token makes no network request and falls back to legacy acp_token.json if present.
+  fetcher.mockReset()
+    .mockResolvedValueOnce(Response.json({ access_token: "legacy-access" }))
+    .mockResolvedValueOnce(Response.json({ email: "legacy@example.test" }));
+  await writeFile(cliPath, JSON.stringify({
+    token: { access_token: "expired-access", expiry: "2020-01-01T00:00:00Z" },
+  }));
+  expect(await antigravityAccount(cliPath)).toBeUndefined();
+  expect(fetcher).not.toHaveBeenCalled();
+  expect(await antigravityAccount(cliPath, path)).toEqual({ email: "legacy@example.test", method: "login" });
 });

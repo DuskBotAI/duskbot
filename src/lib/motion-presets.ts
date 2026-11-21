@@ -127,6 +127,32 @@ export function dialogMotion(reduced: boolean, picked: DesktopMotion = desktopMo
   } as const;
 }
 
+/** Unscaled iOS spring for compact centered dialogs and confirmation alerts on the phone. */
+export function phoneDialogMotion(reduced: boolean) {
+  const leave = { duration: 0.14, ease: EASE_OUT } as const;
+  return {
+    sheet: {
+      initial: { opacity: 0, transform: reduced ? "none" : "scale(0.92)" },
+      animate: {
+        opacity: 1,
+        transform: reduced ? "none" : "scale(1)",
+        transition: reduced
+          ? REDUCED
+          : {
+              default: { type: "spring" as const, stiffness: 520, damping: 36, mass: 0.85 },
+              opacity: { duration: 0.16, ease: EASE_OUT },
+            },
+      },
+      exit: { opacity: 0, transform: reduced ? "none" : "scale(0.94)", transition: reduced ? REDUCED : leave },
+    },
+    scrim: {
+      initial: { opacity: 0 },
+      animate: { opacity: 1, transition: reduced ? REDUCED : { duration: 0.18, ease: EASE_OUT } },
+      exit: { opacity: 0, transition: reduced ? REDUCED : leave },
+    },
+  } as const;
+}
+
 function pickedDialogMotion({ dialog: { enter, leave: away, scrimMs } }: DesktopMotion) {
   const ease = pacedOut(EASE_OUT);
   const curve = enter.curve;

@@ -249,6 +249,8 @@ const dumpEnv = Object.fromEntries(
     "VENICE_API_KEY",
     "GEMINI_HOME",
     "AGY_ACP_FORCE_FILE_STORAGE",
+    "AGY_CLI_DISABLE_AUTO_UPDATE",
+    "SSH_CONNECTION",
     "ANTIGRAVITY_HARNESS_PATH",
     "AGY_ACP_DEFAULT_MODEL",
     "OPENCODE_DISABLE_PROJECT_CONFIG",
@@ -296,6 +298,45 @@ if (process.env.FAKE_ACP_LAUNCH_COUNT_FILE) {
 if (argv.includes("--version")) {
   console.log("fake-acp 1.0.0");
   process.exit(0);
+}
+const flagValue = (name: string): string | undefined => {
+  const index = argv.indexOf(name);
+  return index >= 0 && typeof argv[index + 1] === "string" ? argv[index + 1] : undefined;
+};
+const antigravityProfileDir = () => {
+  const geminiDir = flagValue("--gemini-dir") ?? process.env.GEMINI_HOME;
+  const appDataDir = flagValue("--app-data-dir") ?? "antigravity-acp";
+  return geminiDir ? join(geminiDir, appDataDir) : null;
+};
+if (argv.includes("--login")) {
+  const state = process.env.FAKE_ACP_LOGIN_STATE ?? "fake-login-state";
+  const url = `https://accounts.google.com/o/oauth2/auth?response_type=code&redirect_uri=${encodeURIComponent("https://antigravity.google/oauth-callback")}&state=${encodeURIComponent(state)}`;
+  process.stdout.write(`Open this link in a browser to log in with Google:\n\n  ${url}\n\nThen paste the authorization code, or the full URL of the page you land on, and press Enter:\n`);
+  let input = "";
+  process.stdin.setEncoding("utf8");
+  process.stdin.on("data", (chunk: string) => {
+    input += chunk;
+    const nl = input.indexOf("\n");
+    if (nl === -1) return;
+    const answer = input.slice(0, nl).trim();
+    if (!answer || (process.env.FAKE_ACP_LOGIN_REJECT && answer === process.env.FAKE_ACP_LOGIN_REJECT)) {
+      process.stderr.write("Invalid authorization code\n");
+      process.exit(1);
+    }
+    const dir = antigravityProfileDir();
+    if (dir) {
+      mkdirSync(dir, { recursive: true });
+      writeFileSync(
+        join(dir, "antigravity-oauth-token"),
+        `${JSON.stringify({ token: { access_token: `fake-access-${answer}`, refresh_token: "fake-refresh", expiry: "2099-01-01T00:00:00Z" } })}\n`,
+        { mode: 0o600 },
+      );
+    }
+    process.exit(0);
+  });
+  process.stdin.on("end", () => process.exit(1));
+  // Keep alive waiting for pasted code; do not enter JSON-RPC loop.
+  await new Promise(() => {});
 }
 // Cursor's driver probes `agent status` / `agent models` on the binary it spawns for ACP.
 if (argv[0] === "status" || argv[0] === "whoami") {
@@ -673,6 +714,8 @@ function handle(msg: any) {
       }
       const authMethods = mode === "no-auth" ? [] : [{ id: process.env.FAKE_ACP_AUTH_METHOD ?? "cached_token" }];
       const agentName = process.env.FAKE_ACP_AGENT_NAME;
+      const isAntigravityCli = argv[0] === "acp" && argv.includes("--gemini-dir");
+      const supportsLogout = process.env.FAKE_ACP_NO_LOGOUT !== "1";
       const acceptsImages = process.env.FAKE_ACP_IMAGE_CAPABILITY === "1";
       const mcpTransports = (process.env.FAKE_ACP_MCP_TRANSPORTS ?? "").split(",").map((entry) => entry.trim()).filter(Boolean);
       const closesSessions = ["1", "error"].includes(process.env.FAKE_ACP_SESSION_CLOSE ?? "");
@@ -684,10 +727,16 @@ function handle(msg: any) {
         authMethods,
         agentInfo: agentName
           ? { name: agentName, version: process.env.FAKE_ACP_AGENT_VERSION ?? "test" }
-          : undefined,
-        agentCapabilities: agentName || acceptsImages || mcpTransports.length || closesSessions
+          : isAntigravityCli
+            ? { name: "Antigravity ACP Server", version: process.env.FAKE_ACP_AGENT_VERSION ?? "1.5.13" }
+            : undefined,
+        agentCapabilities: agentName || isAntigravityCli || acceptsImages || mcpTransports.length || closesSessions
           ? {
-              ...(agentName ? { loadSession: true, sessionCapabilities: { resume: true }, auth: { logout: true } } : {}),
+              ...(agentName || isAntigravityCli ? {
+                loadSession: true,
+                sessionCapabilities: { resume: {} },
+                ...(supportsLogout ? { auth: { logout: {} } } : {}),
+              } : {}),
               ...(closesSessions ? { sessionCapabilities: { close: {} } } : {}),
               ...(acceptsImages ? { promptCapabilities: { image: true } } : {}),
               ...(mcpTransports.length ? { mcpCapabilities: { http: mcpTransports.includes("http"), sse: mcpTransports.includes("sse") } } : {}),
@@ -698,6 +747,19 @@ function handle(msg: any) {
           ...(process.env.FAKE_ACP_GROK_VERSION ? { grokShell: true, agentVersion: process.env.FAKE_ACP_GROK_VERSION } : {}),
         },
       });
+      break;
+    }
+    case "logout": {
+      if (process.env.FAKE_ACP_LOGOUT_ERROR) {
+        out({ jsonrpc: "2.0", id: msg.id, error: { code: -32603, message: process.env.FAKE_ACP_LOGOUT_ERROR } });
+        break;
+      }
+      const dir = antigravityProfileDir();
+      if (dir) {
+        try { unlinkSync(join(dir, "antigravity-oauth-token")); } catch {}
+        try { unlinkSync(join(dir, "acp_token.json")); } catch {}
+      }
+      result(msg.id, {});
       break;
     }
     case "authenticate":

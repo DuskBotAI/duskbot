@@ -1,4 +1,4 @@
-import { mkdirSync, readFileSync } from "node:fs";
+import { mkdirSync, readFileSync, rmSync } from "node:fs";
 import { dirname, join } from "node:path";
 
 import { writeFileAtomic } from "./atomic.ts";
@@ -116,6 +116,14 @@ export function writeStartupModelCache(instanceId: string, catalog: ModelCatalog
   if (!stored) return;
   mkdirSync(dirname(path), { recursive: true });
   writeFileAtomic(path, JSON.stringify({ ...stored, checkedAt: read.checkedAt ?? (unconfirmed.has(catalog) ? 0 : Date.now()), build: read.build ?? buildStamp() }), { durable: false });
+}
+
+export function clearStartupModelCache(instanceId: string): void {
+  const path = startupModelCachePath(instanceId);
+  if (!path) return;
+  try {
+    rmSync(path, { force: true });
+  } catch {}
 }
 
 /** An object, not a promise: an async function cannot hand back a promise without `await` following it. */

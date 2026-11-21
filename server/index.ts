@@ -84,7 +84,7 @@ import { RoomTurnDeadline, RoomTurnStallRegistry, effectiveRoomTurnTimeoutMinute
 import { roomTurnEnd, type RoomClaimEnd } from "./room-turn-end.ts";
 import { applyHoldDirective, classifyHoldDirective, heldMemberLine, rememberHeldMessage, stopWordPlacement } from "./room-holds.ts";
 import { createPersonStop } from "./host/person-stop.ts"; import { createTurnOrder } from "./host/turn-order.ts"; import { createQueuedNotes, createWaitWords } from "./host/wait-words.ts"; import { settleParkedFiles, type ParkedTurnAttachment } from "./host/turn-attachments.ts"; import type { DirectSendInput, DirectSendReceipt } from "./direct-send.ts";
-import { finishedWithoutSummaryLine, isPassText, ROOM_SUMMARY_REASK, roomTurnNarrationIds, roomTurnReply } from "./room-reply.ts"; import { answeredAboveNote, cleanBotVoice, mentionCueNote, roomTalkRules, roomTurnVoiceNote } from "./group-voice.ts"; import { asksFor, MentionChain } from "./room-mention-chain.ts"; import { teammatesNote, workInProgressNote, type InHand } from "./room-team-context.ts"; import { createRoomEarlier, ROOM_EARLIER_LABEL } from "./host/room-earlier.ts"; import { replyBubbles } from "./reply-bubbles.ts";
+import { finishedWithoutSummaryLine, isPassText, ROOM_SUMMARY_REASK, roomTurnNarrationIds, roomTurnReply } from "./room-reply.ts"; import { isDirectPassText, PassStreamGate } from "./silent-reply.ts"; import { answeredAboveNote, cleanBotVoice, mentionCueNote, roomTalkRules, roomTurnVoiceNote } from "./group-voice.ts"; import { asksFor, MentionChain } from "./room-mention-chain.ts"; import { teammatesNote, workInProgressNote, type InHand } from "./room-team-context.ts"; import { createRoomEarlier, ROOM_EARLIER_LABEL } from "./host/room-earlier.ts"; import { replyBubbles } from "./reply-bubbles.ts";
 import { pickComputer } from "./computer-selection.ts";
 import { keyHint, keyStatus, nestedKeyStatus, withoutKeyHints } from "./key-hint.ts";
 import { chartRenderer, compileChart, dataEngine, validateVegaLite } from "./data/deps.ts";
@@ -5233,6 +5233,7 @@ const stoppedTurns = new Map<string, string | undefined>(), personStops = new Pe
 // A person's Stop keeps the words already streamed and nothing after: each thread's reply text since its last finished
 // item, and that text frozen at the first frame after the Stop (landed as the turn's last bubble, then cleared).
 const streamedReply = new Map<string, string>(), replyAtStop = new Map<string, string>();
+const passStreamGate = new PassStreamGate(), silentPassTurns = new Set<string>();
 /** The streaming reply's words the person's app showed when they pressed Stop: what is kept ends there. */
 const replySaidAtStop = new Map<string, string>();
 const flatWords = (text: string) => text.replace(/\s+/g, " ").trim();
@@ -7168,16 +7169,34 @@ bus.subscribe((event: RuntimeEvent) => {
   const privateImageEvent = event.type === "item.completed" && event.itemType === "assistant_image";
   // words the engine still had in flight when the person pressed Stop: what streamed before it stays, the rest never lands
   const replyText = (event.type === "content.delta" && event.streamKind === "assistant_text") || (event.type === "item.completed" && event.itemType === "assistant_text");
-  if (event.type === "turn.started") { streamedReply.delete(event.threadId); replyAtStop.delete(event.threadId); replySaidAtStop.delete(event.threadId); }
+  if (event.type === "turn.started") { streamedReply.delete(event.threadId); replyAtStop.delete(event.threadId); replySaidAtStop.delete(event.threadId); passStreamGate.reset(event.threadId); silentPassTurns.delete(event.threadId); }
   const afterPersonStop = replyText && personStops.stopped(event.threadId, event.turnId);
-  if (afterPersonStop && !replyAtStop.has(event.threadId)) replyAtStop.set(event.threadId, keptAtStop(event.threadId, event.turnId, streamedReply.get(event.threadId) ?? ""));
-  else if (replyText && !afterPersonStop) {
-    if (event.type === "content.delta") streamedReply.set(event.threadId, (streamedReply.get(event.threadId) ?? "") + event.delta);
-    else streamedReply.delete(event.threadId);
+  const directPassAllowed = (threadId: string) =>
+    Boolean(store.botByThread(threadId)) && !activeRoutineRunForThread(threadId) && !isInternalTurn(threadId) && !botApiThread(threadId) && !coordinator.assignerOf(threadId);
+  let broadcastedDelta: string | null | undefined;
+  let suppressedPassItem = false;
+  if (afterPersonStop && !replyAtStop.has(event.threadId)) {
+    passStreamGate.reset(event.threadId);
+    replyAtStop.set(event.threadId, keptAtStop(event.threadId, event.turnId, streamedReply.get(event.threadId) ?? ""));
+  } else if (replyText && !afterPersonStop) {
+    if (event.type === "content.delta") {
+      broadcastedDelta = passStreamGate.delta(event.threadId, event.delta);
+      if (broadcastedDelta !== null) streamedReply.set(event.threadId, (streamedReply.get(event.threadId) ?? "") + broadcastedDelta);
+    } else {
+      passStreamGate.reset(event.threadId);
+      streamedReply.delete(event.threadId);
+      const spoken = assistantTranscript(event.text);
+      if (spoken.kind !== "stopped") {
+        const targetGroup = store.botByThread(event.threadId) ? undefined : store.groupByThread(event.threadId);
+        suppressedPassItem = targetGroup ? Boolean(spoken.text.trim()) && isPassText(spoken.text) : directPassAllowed(event.threadId) && isDirectPassText(spoken.text);
+      }
+    }
   }
-  if (!privateImageEvent && !afterPersonStop) {
+  if (!privateImageEvent && !afterPersonStop && broadcastedDelta !== null && !suppressedPassItem) {
     // Exact executable input is internal; the bus's persistence redactor does not scrub the live event.
-    const publicEvent = event.type === "request.opened" ? { ...event, command: undefined, commandLine: undefined, reads: undefined } : event;
+    const publicEvent = event.type === "request.opened" ? { ...event, command: undefined, commandLine: undefined, reads: undefined }
+      : broadcastedDelta !== undefined && event.type === "content.delta" ? { ...event, delta: broadcastedDelta }
+      : event;
     broadcast({ kind: "runtime", event: publicEvent });
   }
   const routineRun = privateImageEvent ? null : (routines?.handleRuntimeEvent(event) ?? null);
@@ -7213,12 +7232,16 @@ bus.subscribe((event: RuntimeEvent) => {
       pushStoppedTurn(turnId);
       return;
     }
-    // a room member's "(pass)" is its choice to stay quiet, never a line in the room
     if (group && isPassText(spoken.text) && spoken.text.trim()) return;
+    if (bot && directPassAllowed(event.threadId) && isDirectPassText(spoken.text)) {
+      silentPassTurns.add(event.threadId);
+      return;
+    }
     const voiced = cleanBotVoice(spoken.text, (speaker ?? bot)?.name); if (voiced.taggedLine && turnId && group && !personTaggedTurns.has(`${event.threadId}:${turnId}`)) personTaggedTurns.set(`${event.threadId}:${turnId}`, voiced.taggedLine);
     // while a human-check card waits, it is the only ask: lines that only say it again never reach the chat
     const shown = pendingCheckCard(store.activePath(event.threadId), speaker?.botId ?? bot?.id) ? withoutCheckAsk(voiced.text) : voiced.text;
     if (!shown.trim()) return;
+    silentPassTurns.delete(event.threadId);
     for (const bubble of replyBubbles(shown)) pushMessage({ role: "bot", kind: "text", text: bubble, turnId });
     lastReply.set(event.threadId, shown);
   };
@@ -7555,7 +7578,7 @@ bus.subscribe((event: RuntimeEvent) => {
         const kept = replyAtStop.get(event.threadId) ?? keptAtStop(event.threadId, completedTurnId, streamedReply.get(event.threadId) ?? "");
         if (kept.trim()) pushAssistantText(kept, completedTurnId);
       }
-      streamedReply.delete(event.threadId); replyAtStop.delete(event.threadId); replySaidAtStop.delete(event.threadId);
+      streamedReply.delete(event.threadId); replyAtStop.delete(event.threadId); replySaidAtStop.delete(event.threadId); passStreamGate.reset(event.threadId);
       askCards.settleWaitingOnPersonChips(event.threadId);
       const internal = isInternalTurn(event.threadId);
       clearInternalTurn(event.threadId);
@@ -7573,7 +7596,13 @@ bus.subscribe((event: RuntimeEvent) => {
           .map((message) => message.text ?? "").join("\n"));
       }
       const reply = lastReply.get(event.threadId) ?? "";
-      if (!internal) turnActivityToPhones(event.threadId, event.ok && !stopped ? { type: "done" } : { type: "stopped" }, { reply });
+      const turnStart = turnStartedAt.get(event.threadId);
+      const hasTurnOutput = Boolean(reply) || store.activePath(event.threadId).some((message) =>
+        message.role === "bot" &&
+        ((completedTurnId && message.turnId === completedTurnId) || (turnStart !== undefined && message.at >= turnStart)) &&
+        (message.kind === "text" || message.kind === "widget" || message.kind === "app" || message.kind === "options" || message.kind === "screen"));
+      const passedQuietly = silentPassTurns.delete(event.threadId) && event.ok && !stopped && !hasTurnOutput;
+      if (!internal) turnActivityToPhones(event.threadId, event.ok && !stopped && !passedQuietly ? { type: "done" } : { type: "stopped" }, { reply });
       if (personStops.stopped(event.threadId, completedTurnId)) pushStoppedTurn(completedTurnId);
       personStops.turnEnded(event.threadId, completedTurnId);
       lastReply.delete(event.threadId);
@@ -7679,9 +7708,9 @@ bus.subscribe((event: RuntimeEvent) => {
         settlingTurns.add(event.threadId);
         liveTurnByThread.delete(event.threadId);
         const routineReportThread = routineRun ? routineSourceThread(routineRun) : null;
-        if (!routineReportThread && (!internal || reviewAnswer)) store.patchTask(bot.id, event.threadId, { unread: true });
+        if (!routineReportThread && (!internal || reviewAnswer) && !passedQuietly) store.patchTask(bot.id, event.threadId, { unread: true });
         if (routineRun && routineReportThread !== event.threadId) automationReports.runSettled(routineRun, completedTurnId);
-        else if ((!routineRun || (routineRun.status === "completed" && !automationReports.quietInItsChat(routineRun, completedTurnId))) && (!internal || reviewAnswer) && !computerSelectionTurns.get(event.threadId)?.selected && doneNotice.atTurnEnd({ botId: bot.id, threadId: event.threadId, review: reviewAnswer, ok: event.ok, routine: Boolean(routineRun) }) === "notify" && !personWaits.atTurnEnd(event.threadId, reply)) {
+        else if ((!routineRun || (routineRun.status === "completed" && !automationReports.quietInItsChat(routineRun, completedTurnId))) && (!internal || reviewAnswer) && !computerSelectionTurns.get(event.threadId)?.selected && doneNotice.atTurnEnd({ botId: bot.id, threadId: event.threadId, review: reviewAnswer, ok: event.ok, routine: Boolean(routineRun) }) === "notify" && !passedQuietly && !personWaits.atTurnEnd(event.threadId, reply)) {
           notify(buildNotification("done", bot, event.threadId, routineRun ? reply || routineRun.output || routineRun.routineName : reply, { avatarUrl: bot.avatarUrl }), routineRun ? { routine: true } : undefined);
         }
         if (screenPollers.has(event.threadId)) {

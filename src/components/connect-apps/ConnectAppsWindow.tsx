@@ -4,6 +4,9 @@ import { api, useStore, type Action } from "@/state/store";
 import type { LocaleKey } from "@/locales";
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
+import { flushSystemControls, wakeSystemControls } from "@/lib/system-control";
+import { frames, sheetStep, sheetsUp, useChrome } from "@/mobile/chrome";
+import { createPushToken, registerNativePop } from "@/mobile/SheetPush";
 import { useConnectAppsPhoneBar } from "./use-phone-bar";
 import { connectorDescription } from "@/lib/app-catalog";
 import { closeExternalPage } from "@/lib/app-links";
@@ -165,8 +168,14 @@ export function ConnectAppsWindow({ page: requested, nonce, onClose, onTemplates
     needsPanel: () => window.duskDesktop?.remoteClient?.active === true,
     openPanel: () => go({ kind: "detail", id: MCP_PAGE }),
   });
+  const chrome = useChrome();
+  const nativePush = Boolean(chrome?.beginPush && chrome.commitPush && chrome.popPage);
   const [page, setPage] = useState<ConnectAppsPage>(requested);
   const [trail, setTrail] = useState<ConnectAppsPage[]>([]);
+  const pageRef = useRef(page);
+  pageRef.current = page;
+  const nativeTrailRef = useRef<Array<{ prev: ConnectAppsPage; token: string; unreg: () => void }>>([]);
+  const mountedRef = useRef(true);
   const mcpServers = useMcpServers().servers;
   const [query, setQuery] = useState("");
   const [resultsOpen, setResultsOpen] = useState(false);
@@ -196,8 +205,29 @@ export function ConnectAppsWindow({ page: requested, nonce, onClose, onTemplates
   const browsing = page.kind === "home" || page.kind === "category";
   const pageKey = browsing ? "browse" : `${page.kind}:${"id" in page ? page.id : ""}`;
 
+  const clearNativeTrail = useCallback(() => {
+    const remaining = nativeTrailRef.current.splice(0);
+    for (const entry of remaining) entry.unreg();
+    const oldest = remaining[0];
+    if (oldest && chrome?.popPage && sheetsUp.system) {
+      sheetStep(async () => {
+        await chrome.popPage?.(oldest.token, { animated: false });
+        wakeSystemControls();
+      });
+    }
+  }, [chrome]);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      clearNativeTrail();
+    };
+  }, [clearNativeTrail]);
+
   const opened = useRef({ requested, nonce });
   useEffect(() => {
+    clearNativeTrail();
     setPage(requested);
     setTrail([]);
     setNav(null);
@@ -205,7 +235,7 @@ export function ConnectAppsWindow({ page: requested, nonce, onClose, onTemplates
     if (opened.current.requested === requested && opened.current.nonce === nonce) return;
     opened.current = { requested, nonce };
     setView((count) => count + 1);
-  }, [requested, nonce]);
+  }, [requested, nonce, clearNativeTrail]);
   useEffect(() => {
     const timer = setTimeout(() => setWaited(true), READY_WAIT_MS);
     return () => clearTimeout(timer);
@@ -344,13 +374,96 @@ export function ConnectAppsWindow({ page: requested, nonce, onClose, onTemplates
   const go = (next: ConnectAppsPage) => {
     setResultsOpen(false);
     setActive(-1);
-    setTrail((past) => next.kind === "detail" || next.kind === "yours" ? [...past, page] : []);
+    const isPush = next.kind === "detail" || next.kind === "yours";
+    if (isPush && nativePush && chrome) {
+      sheetStep(async () => {
+        if (!mountedRef.current) return;
+        const ok = await chrome.beginPush!();
+        if (!mountedRef.current) {
+          if (ok) await chrome.cancelPush?.();
+          return;
+        }
+        const prev = pageRef.current;
+        if (!ok) {
+          setTrail((past) => [...past, prev]);
+          setNav(null);
+          setPage(next);
+          setView((count) => count + 1);
+          await frames(1);
+          await flushSystemControls();
+          return;
+        }
+        const token = createPushToken();
+        const entry = { prev, token, unreg: () => {} };
+        entry.unreg = registerNativePop(chrome, token, () => {
+          const at = nativeTrailRef.current.findIndex((item) => item.token === token);
+          if (at < 0) return;
+          const removed = nativeTrailRef.current.splice(at);
+          for (const item of removed) item.unreg();
+          if (!mountedRef.current) return;
+          setPage(removed[0]!.prev);
+          setTrail(nativeTrailRef.current.map((item) => item.prev));
+          setNav(null);
+          setView((count) => count + 1);
+        });
+        nativeTrailRef.current.push(entry);
+        setTrail(nativeTrailRef.current.map((item) => item.prev));
+        setNav(null);
+        setPage(next);
+        setView((count) => count + 1);
+        await frames(1);
+        await flushSystemControls();
+        await frames(2);
+        if (!mountedRef.current) {
+          const at = nativeTrailRef.current.findIndex((item) => item.token === token);
+          if (at >= 0) {
+            for (const item of nativeTrailRef.current.splice(at)) item.unreg();
+          }
+          await chrome.cancelPush?.();
+          return;
+        }
+        const committed = await chrome.commitPush!(token);
+        if (!committed) {
+          const at = nativeTrailRef.current.findIndex((item) => item.token === token);
+          if (at >= 0) {
+            const removed = nativeTrailRef.current.splice(at);
+            for (const item of removed) item.unreg();
+            if (mountedRef.current) {
+              setPage(removed[0]!.prev);
+              setTrail(nativeTrailRef.current.map((item) => item.prev));
+              setView((count) => count + 1);
+            }
+          }
+        }
+      });
+      return;
+    }
+    if (!isPush && nativeTrailRef.current.length > 0) clearNativeTrail();
+    setTrail((past) => isPush ? [...past, page] : []);
     const staysBrowsing = browsing && (next.kind === "home" || next.kind === "category");
-    setNav(next.kind === "detail" || next.kind === "yours" ? "push" : staysBrowsing ? null : "swap");
+    setNav(isPush ? "push" : staysBrowsing ? null : "swap");
     setPage(next);
     setView((count) => count + 1);
   };
   const back = () => {
+    if (nativePush && chrome && nativeTrailRef.current.length > 0) {
+      const top = nativeTrailRef.current.pop()!;
+      top.unreg();
+      sheetStep(async () => {
+        const popped = await chrome.popPage!(top.token);
+        if (mountedRef.current) {
+          setPage(top.prev);
+          setTrail(nativeTrailRef.current.map((item) => item.prev));
+          setNav(null);
+          setView((count) => count + 1);
+        }
+        await frames(1);
+        await flushSystemControls();
+        await frames(1);
+        if (popped) await chrome.finishPop?.();
+      });
+      return;
+    }
     setPage(trail.at(-1) ?? { kind: "home" });
     setTrail((past) => past.slice(0, -1));
     setNav("pop");
@@ -603,7 +716,7 @@ export function ConnectAppsWindow({ page: requested, nonce, onClose, onTemplates
   const phoneBarTitle = page.kind === "yours" ? t("connectApps.manage")
     : page.kind === "detail" ? (page.id === MCP_PAGE ? t("connectApps.mcp") : page.id === CUSTOM_MCP ? t("connectApps.customMcp") : detailEntry?.label ?? t("connectApps.title"))
       : t("connectApps.title");
-  const { phone, nativeBar } = useConnectAppsPhoneBar(phoneBarTitle, trail.length > 0, back, onClose);
+  const { phone, nativeBar, handleBack } = useConnectAppsPhoneBar(phoneBarTitle, trail.length, back, onClose);
 
   const body = (() => {
     if (page.kind === "detail" && (page.id === MCP_PAGE || page.id === CUSTOM_MCP)) {
@@ -746,7 +859,6 @@ export function ConnectAppsWindow({ page: requested, nonce, onClose, onTemplates
     <div
       className="ca-scrim"
       data-connect-apps=""
-      data-phone-modal-layer={phone ? "" : undefined}
       data-native-bar={nativeBar ? "" : undefined}
       onMouseDown={(event) => event.target === event.currentTarget && onClose()}
     >
@@ -760,7 +872,7 @@ export function ConnectAppsWindow({ page: requested, nonce, onClose, onTemplates
           </button>
           <div className="ca-bar" data-sub={sub ? "" : undefined}>
             {page.kind === "detail" && (
-              <button type="button" className="ca-icon-button" aria-label={t("connectApps.back")} onClick={back}>
+              <button type="button" className="ca-icon-button" aria-label={t("connectApps.back")} onClick={phone ? handleBack : back}>
                 <Icon name="chevron-left" size={16} />
               </button>
             )}

@@ -21,11 +21,11 @@ private enum Palette {
 
     static func bot(_ name: String) -> Color {
         let colors: [String: UInt32] = [
-            "green": 0x009957, "blue": 0x377FE6, "red": 0xD94B52, "orange": 0xE78531, "purple": 0x8057C8, "cyan": 0x0EA5C6,
-            "pink": 0xD84F8B, "yellow": 0xD8A729, "teal": 0x01A492, "coral": 0xE5634E, "brown": 0xA06B39, "silver": 0xA8ADB4,
+            "green": 0x10A760, "blue": 0x286EF9, "red": 0xEF3A3F, "orange": 0xFB7C01, "purple": 0x894EF0, "cyan": 0x04A2ED,
+            "pink": 0xF12B93, "yellow": 0xE5A915, "teal": 0x26CB96, "coral": 0xF75E51, "brown": 0xA8672F, "silver": 0xA3AAB3,
             "chrome": 0xB3BAC4,
         ]
-        return Color(hex: colors[name] ?? 0x8057C8)
+        return Color(hex: colors[name] ?? 0x894EF0)
     }
 }
 

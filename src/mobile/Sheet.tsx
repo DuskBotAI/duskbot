@@ -4,11 +4,13 @@ import { animate, motion, useMotionValue, useMotionValueEvent, useReducedMotion,
 import { X } from "../icons";
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
+import { flushSystemControls } from "@/lib/system-control";
 import { canScroll, ownsDrag, useDrag } from "./gesture";
 import { haptic } from "./haptics";
 import { dur, ease, projectRelease, rubberband, settleTo, springPath, system } from "./motion";
 import { BackGlyph, RoundButton } from "./RoundButton";
-import { BAR_RANK, frames, sheetStep, sheetsUp, useChrome, useNativeBar } from "./chrome";
+import { BAR_RANK, frames, sheetStep, sheetsUp, useChrome, useNativeBar, useSheetPushDepth } from "./chrome";
+import { useNavLeaving } from "./NavStack";
 import type { MobileChrome } from "./platform";
 
 const SYSTEM = { stiffness: system.stiffness, damping: system.damping };
@@ -151,6 +153,26 @@ function useSheetBar(rank: number, show: "bar" | "none" | null, { title, back, a
   });
 }
 
+/** Inner content height of a fit sheet body without its safe-area padding. Measures children as well as
+ * scrollHeight because WebKit omits padding-bottom from scrollHeight once an overflow-y container overflows. */
+export function measureSheetContentHeight(body: HTMLElement): number {
+  const style = getComputedStyle(body);
+  const padTop = Number.parseFloat(style.paddingTop) || 0;
+  const padBottom = Number.parseFloat(style.paddingBottom) || 0;
+  const fromScroll = body.scrollHeight - padTop - padBottom;
+  let minTop = Infinity;
+  let maxBottom = -Infinity;
+  for (const child of Array.from(body.children)) {
+    const rect = child.getBoundingClientRect();
+    if (rect.height <= 0 && rect.width <= 0) continue;
+    const childStyle = getComputedStyle(child);
+    minTop = Math.min(minTop, rect.top - (Number.parseFloat(childStyle.marginTop) || 0));
+    maxBottom = Math.max(maxBottom, rect.bottom + (Number.parseFloat(childStyle.marginBottom) || 0));
+  }
+  const fromChildren = maxBottom > minTop ? maxBottom - minTop : 0;
+  return Math.ceil(Math.max(0, fromScroll, fromChildren));
+}
+
 /** The system's sheet. The page draws only the sheet's content, filling the web view, and the system presents the web
  * view itself as the sheet: its detents, grabber, bar and swipe are the system's. */
 function SystemSheet({ chrome, open, onClose, title, label, children, full = false, back, actions, bodyClassName, flush = false, systemBar = false }: SheetProps & { chrome: MobileChrome }) {
@@ -168,8 +190,7 @@ function SystemSheet({ chrome, open, onClose, title, label, children, full = fal
   const contentHeight = useCallback(() => {
     const sheet = sheetRef.current, body = bodyRef.current;
     if (!sheet || !body) return 320;
-    const style = getComputedStyle(body);
-    return Math.ceil(body.scrollHeight - Number.parseFloat(style.paddingTop) - Number.parseFloat(style.paddingBottom));
+    return measureSheetContentHeight(body);
   }, []);
 
   useEffect(() => {
@@ -180,15 +201,23 @@ function SystemSheet({ chrome, open, onClose, title, label, children, full = fal
       sheetsUp.opening -= 1;
       if (!live) return;
       if (!sheetsUp.system) await chrome.freeze();
+      else if (sheetsUp.count === 0) await chrome.resetPushStack?.();
       if (!live) return;
       setShown(true);
-      if (!sheetsUp.system) await frames(3);
+      if (!sheetsUp.system) {
+        await frames(2);
+        await flushSystemControls();
+        await frames(1);
+      }
       if (!live) return;
       up.current = true;
       sheetsUp.count += 1;
       if (sheetsUp.system) return;
       sheetsUp.system = true;
       await chrome.presentSheet(fullRef.current ? null : contentHeight());
+      if (!live || fullRef.current) return;
+      await frames(1);
+      if (live && up.current) chrome.resizeSheet(contentHeight());
     });
     return () => {
       live = false;
@@ -197,7 +226,9 @@ function SystemSheet({ chrome, open, onClose, title, label, children, full = fal
         if (sheetsUp.count > 0 || sheetsUp.opening > 0) { setShown(false); return; }
         if (sheetsUp.system) { sheetsUp.system = false; await chrome.dismissSheet(); }
         setShown(false);
-        await frames(2);
+        await frames(1);
+        await flushSystemControls();
+        await frames(1);
         await chrome.thaw();
       });
     };
@@ -253,8 +284,15 @@ function SystemSheet({ chrome, open, onClose, title, label, children, full = fal
  * has a bar of its own, the page's title and buttons are in it instead. */
 export function StackPage({ title, label, children, back, onClose, trailing, actions, bodyClassName, flush = false }: SheetProps) {
   const pushed = useContext(SheetStack) !== null;
+  const pushDepth = useSheetPushDepth();
+  const leaving = useNavLeaving();
   const [scrolled, setScrolled] = useState(false);
-  const systemBar = useSheetBar(pushed ? BAR_RANK.sheetPushed : BAR_RANK.sheetPage, flush ? null : "bar", { title, back, actions, onClose }, false);
+  const rank = pushDepth > 0
+    ? BAR_RANK.sheetPushed + pushDepth * 0.01
+    : pushed
+      ? BAR_RANK.sheetPushed
+      : BAR_RANK.sheetPage;
+  const systemBar = useSheetBar(rank, flush || leaving ? null : "bar", { title, back, actions, onClose }, false);
   return (
     <section
       aria-label={label ?? (typeof title === "string" ? title : undefined)}

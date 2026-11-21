@@ -150,14 +150,14 @@ linuxBox("a required box runs engines in their own home", () => {
       setup: { dataDir: data, home: serverHome, codeRoots: ["/app"], engineRoots: engineInstallRoots(data), fence: requiredFence(serverHome, data), bridges: [] },
     });
     const profile = antigravityProfileDirectory("antigravity", data);
-    const executable = join(data, "tools", "antigravity-acp", "linux-x64", "versions", "abc", "agy");
-    const wrapped = runner.wrap({ command: executable, args: ["--uid="], cwd: profile, env: { HOME: serverHome, GEMINI_HOME: profile } });
+    const executable = join(data, "tools", "antigravity-acp", "linux-x64", "versions", "abc", "antigravity");
+    const wrapped = runner.wrap({ command: executable, args: ["acp", "--gemini-dir", profile, "--app-data-dir", "antigravity-acp"], cwd: profile, env: { HOME: serverHome, GEMINI_HOME: profile } });
     expect(wrapped.env.GEMINI_HOME).toBe(profile);
-    expect(visibleInBox(wrapped.plan, join(profile, "antigravity-acp", "acp_token.json"))).toBe("rw");
+    expect(visibleInBox(wrapped.plan, join(profile, "antigravity-acp", "antigravity-oauth-token"))).toBe("rw");
     expect(visibleInBox(wrapped.plan, executable)).toBe("ro");
     for (const hidden of [antigravityProfileDirectory("antigravity-2", data), join(data, "providers", "claude-2"), join(data, "config.json"), join(data, "workspaces", "bot-a")]) {
       expect(visibleInBox(wrapped.plan, hidden), hidden).toBe("none");
     }
-    expect(() => runner.wrap({ command: executable, args: ["--uid="], cwd: profile, env: { HOME: serverHome } })).toThrow(BoxFenceError);
+    expect(() => runner.wrap({ command: executable, args: ["acp", "--gemini-dir", profile, "--app-data-dir", "antigravity-acp"], cwd: profile, env: { HOME: serverHome } })).toThrow(BoxFenceError);
   });
 });

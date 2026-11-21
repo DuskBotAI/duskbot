@@ -19,6 +19,7 @@ public class TurnActivityPlugin: CAPPlugin, CAPBridgedPlugin {
 
     /// how long a finished activity stays on the lock screen
     private static let dismissAfter: TimeInterval = 20
+    private let stateLock = NSLock()
     private var watched = Set<String>()
     private var tasks: [Task<Void, Never>] = []
 
@@ -26,11 +27,11 @@ public class TurnActivityPlugin: CAPPlugin, CAPBridgedPlugin {
         NotificationCenter.default.addObserver(self, selector: #selector(flushActions), name: PhoneActionInbox.posted, object: nil)
         flushActions()
         for activity in Activity<DuskTurnAttributes>.activities { watch(activity) }
-        tasks.append(Task { [weak self] in
+        addTask(Task { [weak self] in
             for await activity in Activity<DuskTurnAttributes>.activityUpdates { self?.watch(activity) }
         })
         if #available(iOS 17.2, *) {
-            tasks.append(Task { [weak self] in
+            addTask(Task { [weak self] in
                 for await token in Activity<DuskTurnAttributes>.pushToStartTokenUpdates {
                     self?.notifyListeners("startToken", data: ["token": Self.hex(token)], retainUntilConsumed: true)
                 }
@@ -39,7 +40,11 @@ public class TurnActivityPlugin: CAPPlugin, CAPBridgedPlugin {
     }
 
     deinit {
-        for task in tasks { task.cancel() }
+        stateLock.lock()
+        let activeTasks = tasks
+        tasks.removeAll()
+        stateLock.unlock()
+        for task in activeTasks { task.cancel() }
         NotificationCenter.default.removeObserver(self)
     }
 
@@ -47,10 +52,18 @@ public class TurnActivityPlugin: CAPPlugin, CAPBridgedPlugin {
         for action in PhoneActionInbox.take() { notifyListeners("action", data: action, retainUntilConsumed: true) }
     }
 
+    private func addTask(_ task: Task<Void, Never>) {
+        stateLock.lock()
+        tasks.append(task)
+        stateLock.unlock()
+    }
+
     private func watch(_ activity: Activity<DuskTurnAttributes>) {
-        guard !watched.contains(activity.id) else { return }
-        watched.insert(activity.id)
-        tasks.append(Task { [weak self] in
+        stateLock.lock()
+        let inserted = watched.insert(activity.id).inserted
+        stateLock.unlock()
+        guard inserted else { return }
+        addTask(Task { [weak self] in
             for await token in activity.pushTokenUpdates {
                 self?.notifyListeners("token", data: [
                     "id": activity.id, "threadId": activity.attributes.threadId, "token": Self.hex(token),

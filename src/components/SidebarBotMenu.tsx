@@ -11,21 +11,15 @@ import { HideDefaultBotItem } from "./DefaultBotControls";
 import { navigateThreadMenu } from "./BotProjects";
 import { useOwnerOrAdmin } from "@/lib/use-owner-or-admin";
 import { botUnreadThreadIds, markBotRead } from "@/lib/folder-read";
-import { GROK_DANGER, GROK_DANGER_ICON, GROK_LABEL, GROK_ROW_FILL, MENU_ITEM, MENU_ITEM_SEPARATOR, MENU_SHEET } from "./menu-recipe";
-export { GROK_LABEL, GROK_ROW_FILL };
+import { GROK_DANGER, GROK_DANGER_ICON, GROK_LABEL, GROK_MENU_ITEM, GROK_ROW_FILL, MENU_ITEM_SEPARATOR, MENU_SHEET } from "./menu-recipe";
+export { GROK_LABEL, GROK_MENU_ITEM, GROK_ROW_FILL };
 import { submenuPosition } from "./SidebarPopoverMenu";
-import { submenuIntent, type SubmenuIntent } from "@/lib/submenu-intent";
+import { attachSubmenuAim, submenuBridgeBox, submenuIntent, type Point, type SubmenuIntent } from "@/lib/submenu-intent";
 import { openBotSettingsPage } from "./bot-panel/panel-link";
 import type { MenuState } from "./Sidebar";
 import { departmentNames, moveBotsToSection, useMayMoveBots } from "./bot-sections";
 
 type Flyout = "more" | "move";
-
-/** Grok's menu row: an 18px slot holding a 14px glyph, 6px before the label. */
-// the recipe's own focus and press fills would stack on GROK_ROW_FILL's
-export const GROK_MENU_ITEM = cn(MENU_ITEM.replace("focus-visible:bg-menu-hover ", "").replace("active:bg-menu-active ", ""), "gap-1.5");
-
-
 
 export function GrokMenuIcon({ name, danger = false }: { name: IconName; danger?: boolean }) {
   return (
@@ -52,9 +46,11 @@ export function BotContextMenu({
   onNewSection?: (botId: string) => void;
 }) {
   const motion = useHeldMenuMotion(menu);
+  const menuRef = useRef<HTMLDivElement>(null);
   const moreRef = useRef<HTMLButtonElement>(null);
   const moveRef = useRef<HTMLButtonElement>(null);
   const flyoutRef = useRef<HTMLDivElement>(null);
+  const bridgeRef = useRef<HTMLDivElement>(null);
   const hoveredRow = useRef<Element | null>(null);
   const [flyout, setFlyout] = useState<Flyout | null>(null);
   const [, setMoreEngaged] = useState(false);
@@ -63,6 +59,11 @@ export function BotContextMenu({
     open: (key) => setFlyout(key as Flyout),
     close: () => { setFlyout(null); setMoreEngaged(false); },
     submenuBox: () => flyoutRef.current?.getBoundingClientRect() ?? null,
+    onAimingChange: attachSubmenuAim(() => moreIntent.current, {
+      menu: () => menuRef.current,
+      submenu: () => flyoutRef.current,
+      bridge: () => bridgeRef.current,
+    }),
   });
   const flyoutRow = (key: Flyout | null) => (key === "more" ? moreRef.current : key === "move" ? moveRef.current : null);
   const rowFlyout = (row: Element | null): Flyout | null => (row && row === moreRef.current ? "more" : row && row === moveRef.current ? "move" : null);
@@ -74,7 +75,6 @@ export function BotContextMenu({
   const mayMove = useMayMoveBots();
   const remoteClient = window.duskDesktop?.remoteClient?.active === true;
   const bot = shown ? state.bots.find((b) => b.id === shown.botId) : undefined;
-  const menuRef = useRef<HTMLDivElement>(null);
   const latestMenu = useRef(menu);
   useLayoutEffect(() => { latestMenu.current = menu; }, [menu]);
   const readInFlight = useRef(false);
@@ -143,9 +143,34 @@ export function BotContextMenu({
   useLayoutEffect(() => {
     const sheetOut = flyoutRef.current, row = flyoutRow(flyout), sheet = menuRef.current;
     if (!sheetOut || !row || !sheet) return;
-    const place = submenuPosition(sheet.getBoundingClientRect(), row.getBoundingClientRect(), { width: sheetOut.offsetWidth, height: sheetOut.offsetHeight }, { width: window.innerWidth, height: window.innerHeight });
-    sheetOut.style.left = `${place.left}px`;
-    sheetOut.style.top = `${place.top}px`;
+    const place = () => {
+      const sheetRect = sheet.getBoundingClientRect();
+      const rowRect = row.getBoundingClientRect();
+      const subSize = { width: sheetOut.offsetWidth, height: sheetOut.offsetHeight };
+      const rtl = typeof getComputedStyle === "function" && getComputedStyle(sheet).direction === "rtl";
+      const pos = submenuPosition(sheetRect, rowRect, subSize, { width: window.innerWidth, height: window.innerHeight }, rtl);
+      sheetOut.style.left = `${pos.left}px`;
+      sheetOut.style.top = `${pos.top}px`;
+      const bridge = bridgeRef.current;
+      if (!bridge) return;
+      const box = submenuBridgeBox(sheetRect, rowRect, { left: pos.left, right: pos.left + subSize.width, top: pos.top, bottom: pos.top + subSize.height });
+      if (!box) {
+        bridge.style.display = "none";
+        return;
+      }
+      bridge.style.display = "";
+      bridge.style.left = `${box.left}px`;
+      bridge.style.top = `${box.top}px`;
+      bridge.style.width = `${box.width}px`;
+      bridge.style.height = `${box.height}px`;
+    };
+    place();
+    window.addEventListener("resize", place);
+    sheet.addEventListener("scroll", place);
+    return () => {
+      window.removeEventListener("resize", place);
+      sheet.removeEventListener("scroll", place);
+    };
   });
 
   if (!motion.shown || !bot || !shown) return null;
@@ -159,8 +184,8 @@ export function BotContextMenu({
       : undefined;
   const divider = (key: string) => <div key={key} role="separator" className={MENU_ITEM_SEPARATOR} />;
 
-  const showFlyout = (key: Flyout, focus: boolean) => {
-    more.openNow(key);
+  const showFlyout = (key: Flyout, focus: boolean, point?: Point) => {
+    more.openNow(key, point);
     if (focus) requestAnimationFrame(() => flyoutRef.current?.querySelector<HTMLButtonElement>("button:not([disabled])")?.focus());
   };
   const grokItem = (icon: IconName, label: string, onClick?: () => void, opts?: { danger?: boolean; disabled?: boolean; hint?: string; keepOpen?: boolean; checked?: boolean }) => (
@@ -201,7 +226,13 @@ export function BotContextMenu({
       data-bot-menu-move={key === "move" ? "" : undefined}
       aria-haspopup="menu"
       aria-expanded={flyout === key}
-      onClick={(event) => (flyout === key ? more.closeNow() : showFlyout(key, event.detail === 0))}
+      onClick={(event) => {
+        if (flyout === key) { more.closeNow(); return; }
+        const point = event.detail !== 0 && typeof event.clientX === "number" && typeof event.clientY === "number"
+          ? { x: event.clientX, y: event.clientY }
+          : undefined;
+        showFlyout(key, event.detail === 0, point);
+      }}
       onKeyDown={(event) => {
         if (event.key !== "ArrowRight") return;
         event.preventDefault();
@@ -243,20 +274,23 @@ export function BotContextMenu({
       aria-label={t("sidebar.bot.actions", { name: bot.name })}
       onKeyDown={navigateThreadMenu}
       onPointerOver={(event) => {
-        const row = event.target instanceof Element ? event.target.closest('[role="menuitem"]') : null;
-        if (!row || row === hoveredRow.current) return;
+        const row = event.target instanceof Element ? event.target.closest('[role^="menuitem"]') : null;
+        if (row === hoveredRow.current) return;
         const left = rowFlyout(hoveredRow.current);
         if (left) more.leaveRow(left);
         hoveredRow.current = row;
+        if (!row) return;
         const key = rowFlyout(row);
         more.enterRow(key ?? "row", key !== null, { x: event.clientX, y: event.clientY });
       }}
       onPointerMove={(event) => more.move({ x: event.clientX, y: event.clientY }, flyoutRow(flyout)?.contains(event.target as Node) === true)}
-      onPointerLeave={() => {
+      onPointerLeave={(event) => {
         const left = rowFlyout(hoveredRow.current);
         if (left) more.leaveRow(left);
         hoveredRow.current = null;
-        more.leaveMenu();
+        const to = event.relatedTarget;
+        if (to instanceof Node && (flyoutRef.current?.contains(to) || bridgeRef.current?.contains(to))) return;
+        more.leaveMenu({ x: event.clientX, y: event.clientY });
       }}
       style={{ top: shown.y, left: shown.x }}
       className={cn("fixed z-40 origin-top-left rtl:origin-top-right max-h-[calc(100dvh-16px)] w-max min-w-[200px] max-w-[min(320px,calc(100vw-16px))] overflow-y-auto overscroll-contain", MENU_SHEET, motion.className)} {...motion.exitProps}
@@ -266,33 +300,47 @@ export function BotContextMenu({
     </div>,
     document.body,
   )}{flyout === "move" && createPortal(
-    <div
-      ref={flyoutRef}
-      data-bot-menu
-      data-bot-menu-flyout={flyout}
-      data-sidebar
-      role="menu"
-      aria-label={t("sidebar.grok.moveTo")}
-      onPointerEnter={() => { more.enterSubmenu(); setMoreEngaged(true); }}
-      onPointerLeave={() => setMoreEngaged(false)}
-      onFocus={() => setMoreEngaged(true)}
-      onBlur={(event) => { if (!(event.relatedTarget instanceof Node && event.currentTarget.contains(event.relatedTarget))) setMoreEngaged(false); }}
-      onKeyDown={(event) => {
-        if (event.key === "ArrowLeft" || event.key === "Escape") {
-          event.preventDefault();
-          event.stopPropagation();
-          const row = flyoutRow(flyout);
-          more.closeNow();
-          row?.focus();
-          return;
-        }
-        navigateThreadMenu(event);
-      }}
-      style={{ top: shown.y, left: shown.x }}
-      className={cn("fixed z-40 max-h-[calc(100dvh-16px)] w-max min-w-[180px] max-w-[min(320px,calc(100vw-16px))] overflow-y-auto overscroll-contain", MENU_SHEET)}
-    >
-      {moveItems}
-    </div>,
+    <>
+      <div
+        ref={bridgeRef}
+        aria-hidden="true"
+        data-submenu-bridge=""
+        onPointerEnter={() => more.enterSubmenu()}
+        onPointerLeave={(event) => {
+          const to = event.relatedTarget;
+          if (!(to instanceof Node && (flyoutRef.current?.contains(to) || menuRef.current?.contains(to)))) more.leaveMenu();
+        }}
+        style={{ position: "fixed" }}
+        className="z-40"
+      />
+      <div
+        ref={flyoutRef}
+        data-bot-menu
+        data-bot-menu-flyout={flyout}
+        data-sidebar
+        role="menu"
+        aria-label={t("sidebar.grok.moveTo")}
+        onPointerEnter={() => { more.enterSubmenu(); setMoreEngaged(true); }}
+        onPointerLeave={() => setMoreEngaged(false)}
+        onFocus={() => setMoreEngaged(true)}
+        onBlur={(event) => { if (!(event.relatedTarget instanceof Node && event.currentTarget.contains(event.relatedTarget))) setMoreEngaged(false); }}
+        onKeyDown={(event) => {
+          if (event.key === "ArrowLeft" || event.key === "Escape") {
+            event.preventDefault();
+            event.stopPropagation();
+            const row = flyoutRow(flyout);
+            more.closeNow();
+            row?.focus();
+            return;
+          }
+          navigateThreadMenu(event);
+        }}
+        style={{ top: shown.y, left: shown.x }}
+        className={cn("fixed z-40 max-h-[calc(100dvh-16px)] w-max min-w-[180px] max-w-[min(320px,calc(100vw-16px))] overflow-y-auto overscroll-contain", MENU_SHEET)}
+      >
+        {moveItems}
+      </div>
+    </>,
     document.body,
   )}</>;
 

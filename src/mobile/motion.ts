@@ -42,6 +42,8 @@ export const feel = {
 /** UIKit's own transitions (push, pop, sheet), measured off an iOS 26 recording: they leave at full speed and decelerate
  * with no overshoot. `push` is the start velocity in distances per second, for a push, a tapped pop and a rising sheet. */
 export const system = { ...pacedSpring({ stiffness: 600, damping: 54 }), push: 10 / MOTION.scale } as const;
+/** Unscaled UIKit navigation push spring for non-native sheet sub-pages (t90 ~167ms, settles ~500ms). */
+export const sheetNav = { stiffness: 600, damping: 54, push: 10 } as const;
 /** Content moving to a new place (rows reordering, a list making room): the vertical curve iOS, Telegram iOS and both
  * Telegram web clients use for a sent message's flight. */
 export const contentMove = { ms: 250, css: "cubic-bezier(0.1992, 0.0106, 0.2792, 0.9103)" } as const;

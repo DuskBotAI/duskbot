@@ -14,7 +14,9 @@ import { effectiveLanguage, setLanguageChoice, useLanguageChoice } from "@/lib/l
 import { SettingsSelect } from "./SettingsSelect";
 import { TALKING_STYLES, talkingStyleOf } from "../../shared/talking-style";
 import { friendlyError } from "@/lib/plain-error";
-import { parseSidebarBotOrder, setSidebarBotOrder, useSidebarBotOrder } from "@/lib/sidebar-preferences";
+import {
+  parseSidebarBotOrder, setSidebarBotOrder, setSidebarFeedbackHidden, useSidebarBotOrder, useSidebarFeedbackHidden,
+} from "@/lib/sidebar-preferences";
 
 export function NewBotEffortRow() {
   const { state, dispatch } = useStore();
@@ -218,6 +220,20 @@ export function BotOrderRow() {
         <option value="recent">{t("settings.botOrder.recent")}</option>
         <option value="custom">{t("settings.botOrder.custom")}</option>
       </SettingsSelect>
+    </SettingRow>
+  );
+}
+
+export function SidebarFeedbackRow() {
+  const hidden = useSidebarFeedbackHidden();
+  const title = t("settings.sidebarFeedback.title");
+  return (
+    <SettingRow icon="bubble" title={title} subtitle={t("settings.sidebarFeedback.hint")}>
+      <Switch
+        checked={!hidden}
+        aria-label={title}
+        onClick={() => setSidebarFeedbackHidden(!hidden)}
+      />
     </SettingRow>
   );
 }

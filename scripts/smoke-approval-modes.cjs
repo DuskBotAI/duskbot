@@ -43,13 +43,11 @@ app.whenReady().then(async () => {
   while (webhookPort === port) webhookPort = await freePort();
   const agy = join(home, "fake-antigravity.ts");
   copyFileSync(join(root, "server/testing/fake-acp-cli.ts"), agy);
-  const harness = join(home, process.platform === "win32" ? "localharness_external.exe" : "localharness_external");
-  writeFileSync(harness, "fake harness");
-  if (process.platform !== "win32") { chmodSync(agy, 0o755); chmodSync(harness, 0o755); }
+  if (process.platform !== "win32") chmodSync(agy, 0o755);
   for (const instanceId of ["agy", "agy-question"]) {
     const auth = join(home, "providers/antigravity", createHash("sha256").update(instanceId).digest("hex"), "antigravity-acp");
     mkdirSync(auth, { recursive: true });
-    writeFileSync(join(auth, "acp_token.json"), "{}");
+    writeFileSync(join(auth, "antigravity-oauth-token"), JSON.stringify({ token: { access_token: "ok" } }));
   }
   const agyDump = join(home, "agy.json");
   const agyRpc = join(home, "agy-rpc.json");

@@ -446,3 +446,29 @@ describe("Escape", () => {
     expect(document.activeElement).toBe(opener);
   });
 });
+
+describe("on the phone", () => {
+  it("pushes room settings pages and Manage members instead of opening desktop Settings or dialogs", async () => {
+    document.documentElement.dataset.mobileApp = "ios";
+    const shell = document.createElement("div");
+    shell.className = "dusk-mobile";
+    document.body.append(shell);
+    try {
+      render(room());
+      for (const row of ["responder", "folder", "instructions"] as const) {
+        fixture.dispatch.mockClear();
+        click($(`[data-panel-page="${row}"]`));
+        await settle();
+        expect($(`[data-phone-pushed-page="room:${row}"]`)).not.toBeNull();
+        expect(fixture.dispatch).not.toHaveBeenCalledWith(expect.objectContaining({ type: "toggleAppSettings" }));
+      }
+      click($('[data-panel-row="members"]'));
+      await settle();
+      expect($('[data-phone-pushed-page="room:members"]')).not.toBeNull();
+      expect($('[data-phone-modal-layer]')).toBeNull();
+    } finally {
+      delete document.documentElement.dataset.mobileApp;
+      shell.remove();
+    }
+  });
+});

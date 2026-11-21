@@ -52,7 +52,7 @@ describe("bot-colored user bubbles", () => {
     const html = renderToStaticMarkup(createElement(ChatView, { bot }));
     expect(html).toContain("user-bubble-colored");
     expect(html).toContain(`background-color:var(--grok-bubble, ${tone.background})`);
-    expect(html).toContain("--grok-bubble-fill:light-dark(#c2730b, #c8770c)");
+    expect(html).toContain(`--grok-bubble-fill:${tone.background}`);
     expect(html).not.toContain(tone.gradient);
     expect(html).toContain(`--color-ink:${tone.ink}`);
     expect(html).toContain("hello from me");

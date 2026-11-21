@@ -1,6 +1,6 @@
 // Real server and provider registry; only synthetic Google profiles and ACP.
 import { spawn, type ChildProcess } from "node:child_process";
-import { closeSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, openSync, readFileSync, writeFileSync } from "node:fs";
+import { closeSync, existsSync, mkdirSync, mkdtempSync, openSync, readFileSync, writeFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -14,6 +14,7 @@ const ROOT = fileURLToPath(new URL("..", import.meta.url));
 let child: ChildProcess | undefined;
 let home: string, base: string, cli: string, logPath: string;
 const evidence: unknown[] = [];
+function cliTokenPath(id: string) { return join(home, "providers", "antigravity", createHash("sha256").update(id).digest("hex"), "antigravity-acp", "antigravity-oauth-token"); }
 function tokenPath(id: string) { return join(home, "providers", "antigravity", createHash("sha256").update(id).digest("hex"), "antigravity-acp", "acp_token.json"); }
 async function api(method: string, path: string, body?: unknown, headers: Record<string, string> = {}) {
   const response = await fetch(`${base}${path}`, { method, headers: { "content-type": "application/json", ...headers },
@@ -42,12 +43,12 @@ beforeAll(async () => {
   writeFileSync(cli, `#!/usr/bin/env node
 process.env.FAKE_ACP_AUTH_METHOD = "oauth-personal";
 process.env.FAKE_ACP_MODELS = "gemini-fixture";
-process.env.FAKE_ACP_AGENT_NAME = "Google Antigravity";
+process.env.FAKE_ACP_AGENT_NAME = "Antigravity ACP Server";
+process.env.FAKE_ACP_AGENT_VERSION = "1.5.13";
 await import(${JSON.stringify(pathToFileURL(join(ROOT, "server/testing/fake-acp-cli.ts")).href)});
 `, { mode: 0o755 });
-  copyFileSync(cli, join(home, process.platform === "win32" ? "localharness_external.exe" : "localharness_external"));
-  mkdirSync(join(tokenPath("google-original"), ".."), { recursive: true });
-  writeFileSync(tokenPath("google-original"), "{}");
+  mkdirSync(join(cliTokenPath("google-original"), ".."), { recursive: true });
+  writeFileSync(cliTokenPath("google-original"), JSON.stringify({ token: { access_token: "synthetic-original", expiry: "2099-01-01T00:00:00Z" } }));
   writeFileSync(join(home, "config.json"), JSON.stringify({ instances: {
     fixture: { driver: "claudeAgent", config: { cli: join(ROOT, "server/testing/fake-claude-cli.ts") } },
     "google-original": { driver: "antigravityAgent", displayName: "Original Google", config: { cli, fullAuto: true }, environment: { GOOGLE_API_KEY: "synthetic-do-not-copy" } },
@@ -84,7 +85,8 @@ it("adds independent accounts, switches a bot between their models, and preserve
     expect(created.status, JSON.stringify(created.body)).toBe(201);
     const id = created.body.instanceId as string; ids.push(id);
     const instance = created.body.instances.find((row: any) => row.instanceId === id);
-    expect(instance).toMatchObject({ displayName: displayName.trim(), driverKind: "antigravityAgent", cli, snapshot: { authenticated: false } });
+    expect(instance).toMatchObject({ displayName: displayName.trim(), driverKind: "antigravityAgent", cli, authentication: { method: "paste-code", signOut: true }, snapshot: { authenticated: false } });
+    expect(existsSync(cliTokenPath(id))).toBe(false);
     expect(existsSync(tokenPath(id))).toBe(false);
     expect(JSON.stringify(instance)).not.toMatch(/synthetic-do-not-copy|refresh_token|client_secret/);
   }
@@ -93,14 +95,14 @@ it("adds independent accounts, switches a bot between their models, and preserve
   for (const id of ids) {
     expect(saved.instances[id].config).toEqual({ cli });
     expect(saved.instances[id]).not.toHaveProperty("environment");
-    writeFileSync(tokenPath(id), "{}"); // Synthetic sign-in, never a Google token.
+    writeFileSync(cliTokenPath(id), JSON.stringify({ token: { access_token: "synthetic", expiry: "2099-01-01T00:00:00Z" } }));
     expect((await api("POST", `/api/instances/${id}/refresh-models`, {})).status).toBe(200);
   }
   const created = await api("POST", "/api/bots", { name: "Google switch fixture", modelSelection: { instanceId: ids[0], model: "gemini-fixture" }, requireAvailableModel: true });
   expect(created.status, JSON.stringify(created.body)).toBe(201);
   const changed = await api("PATCH", `/api/bots/${created.body.bot.id}/model`, { instanceId: ids[1], model: "gemini-fixture" });
   expect(changed.status, JSON.stringify(changed.body)).toBe(200);
-  expect(readFileSync(tokenPath("google-original"), "utf8")).toBe("{}");
+  expect(existsSync(cliTokenPath("google-original"))).toBe(true);
   await waitForExit(child, { signal: "SIGTERM" });
   await launch(Number(new URL(base).port));
   // Until the start-up read reaches an engine, the list answers from the last run's recorded status, which kill() on
@@ -128,5 +130,36 @@ it("removes an unused added account but never the original Antigravity account",
   expect(saved.instances).toHaveProperty("google-original");
   // The removed account's Google sign-in goes with it; the original account's stays.
   expect(existsSync(join(tokenPath(id), "..", ".."))).toBe(false);
-  expect(existsSync(tokenPath("google-original"))).toBe(true);
+  expect(existsSync(cliTokenPath("google-original"))).toBe(true);
+});
+
+it("signs in via `--login` pasted code and signs out via ACP logout over HTTP without affecting other accounts", async () => {
+  const created = await api("POST", "/api/instances/antigravity-accounts", { displayName: "Login Cycle", sourceInstanceId: "google-original" });
+  expect(created.status, JSON.stringify(created.body)).toBe(201);
+  const id = created.body.instanceId as string;
+
+  const started = await api("POST", `/api/instances/${id}/auth/start`, {});
+  expect(started.status, JSON.stringify(started.body)).toBe(200);
+  expect(started.body.auth).toMatchObject({ phase: "waiting", flowId: expect.any(String) });
+  expect(started.body.auth.authorizationUrl).toContain("https://accounts.google.com/o/oauth2/auth");
+  expect(started.body.auth.authorizationUrl).toContain(encodeURIComponent("https://antigravity.google/oauth-callback"));
+
+  // Invalid paste returns 400 and keeps the flow open for retry.
+  const bad = await api("POST", `/api/instances/${id}/auth/complete`, { flowId: started.body.auth.flowId, code: "https://evil.example/?code=no&state=bad" });
+  expect(bad.status).toBe(400);
+
+  const completed = await api("POST", `/api/instances/${id}/auth/complete`, { flowId: started.body.auth.flowId, code: "synthetic-auth-code" });
+  expect(completed.status, JSON.stringify(completed.body)).toBe(200);
+  expect(existsSync(cliTokenPath(id))).toBe(true);
+
+  const signedInList = await api("GET", "/api/instances?fresh=1");
+  expect(signedInList.body.instances.find((row: any) => row.instanceId === id).snapshot.authenticated).toBe(true);
+
+  const signedOut = await api("POST", `/api/instances/${id}/auth/sign-out`, {});
+  expect(signedOut.status, JSON.stringify(signedOut.body)).toBe(200);
+  expect(signedOut.body.instances.find((row: any) => row.instanceId === id).snapshot.authenticated).toBe(false);
+  expect(existsSync(cliTokenPath(id))).toBe(false);
+  expect(existsSync(cliTokenPath("google-original"))).toBe(true);
+
+  expect((await api("DELETE", `/api/instances/${id}`)).status).toBe(200);
 });

@@ -330,19 +330,19 @@ a.link-pill:focus-visible {
   --radius-2xl: 14px;
   --radius-3xl: 16px;
   --radius-4xl: 18px;
-  --identity-green: #009957;
-  --identity-blue: #377FE6;
-  --identity-red: #D94B52;
-  --identity-orange: #E78531;
-  --identity-purple: #8d69ce;
-  --identity-cyan: #0EA5C6;
-  --identity-pink: #D84F8B;
-  --identity-yellow: #D8A729;
-  --identity-teal: #01A492;
-  --identity-coral: #E5634E;
-  --identity-brown: #a8703c;
-  --identity-silver: #A8ADB4;
-  --identity-chrome: #B3BAC4;
+  --identity-green: #10a760;
+  --identity-blue: #3275f9;
+  --identity-red: #ef3a3f;
+  --identity-orange: #fb7c01;
+  --identity-purple: #935df1;
+  --identity-cyan: #04a2ed;
+  --identity-pink: #f12b93;
+  --identity-yellow: #e5a915;
+  --identity-teal: #26cb96;
+  --identity-coral: #f75e51;
+  --identity-brown: #b16c31;
+  --identity-silver: #a3aab3;
+  --identity-chrome: #b3bac4;
 }
 
 /* ── Atelier ───────────────────────────────────────────────────────────────
@@ -402,18 +402,18 @@ a.link-pill:focus-visible {
   --radius-xs: 2px; --radius-sm: 4px; --radius-md: 6px;
   --radius-2xl: 16px; --radius-3xl: 24px; --radius-4xl: 32px;
   --color-edge: color-mix(in srgb, var(--color-ink) 8%, transparent);
-  --identity-green: #007f48;
-  --identity-blue: #1b6adc;
-  --identity-red: #d12c34;
-  --identity-orange: #a95914;
-  --identity-purple: #8057C8;
-  --identity-cyan: #0a7891;
-  --identity-pink: #ca2d72;
-  --identity-yellow: #896a19;
-  --identity-teal: #017c6f;
-  --identity-coral: #cd361e;
-  --identity-brown: #956335;
-  --identity-silver: #686f79;
+  --identity-green: #0c7f49;
+  --identity-blue: #1662f8;
+  --identity-red: #dc1218;
+  --identity-orange: #ae5601;
+  --identity-purple: #8547ef;
+  --identity-cyan: #0375ac;
+  --identity-pink: #d40e76;
+  --identity-yellow: #8e680d;
+  --identity-teal: #177d5d;
+  --identity-coral: #da1a0a;
+  --identity-brown: #9d602c;
+  --identity-silver: #666f7c;
   --identity-chrome: #646f80;
 }
 
@@ -478,19 +478,19 @@ a.link-pill:focus-visible {
   --radius-xs: 2px; --radius-sm: 4px; --radius-md: 6px;
   --radius-2xl: 16px; --radius-3xl: 24px; --radius-4xl: 32px;
   --color-edge: color-mix(in srgb, var(--color-ink) 8%, transparent);
-  --identity-green: #009957;
-  --identity-blue: #377FE6;
-  --identity-red: #D94B52;
-  --identity-orange: #E78531;
-  --identity-purple: #8c67cd;
-  --identity-cyan: #0EA5C6;
-  --identity-pink: #D84F8B;
-  --identity-yellow: #D8A729;
-  --identity-teal: #01A492;
-  --identity-coral: #E5634E;
-  --identity-brown: #a56f3b;
-  --identity-silver: #A8ADB4;
-  --identity-chrome: #B3BAC4;
+  --identity-green: #10a760;
+  --identity-blue: #2f73f9;
+  --identity-red: #ef3a3f;
+  --identity-orange: #fb7c01;
+  --identity-purple: #915af1;
+  --identity-cyan: #04a2ed;
+  --identity-pink: #f12b93;
+  --identity-yellow: #e5a915;
+  --identity-teal: #26cb96;
+  --identity-coral: #f75e51;
+  --identity-brown: #ae6a31;
+  --identity-silver: #a3aab3;
+  --identity-chrome: #b3bac4;
 }
 
 /* ── Lagoon ────────────────────────────────────────────────────────────────
@@ -562,18 +562,18 @@ a.link-pill:focus-visible {
   --radius-xs: 2px; --radius-sm: 4px; --radius-md: 6px;
   --radius-2xl: 16px; --radius-3xl: 24px; --radius-4xl: 32px;
   --color-edge: color-mix(in srgb, var(--color-ink) 8%, transparent);
-  --identity-green: #007945;
-  --identity-blue: #1a65d1;
-  --identity-red: #c82a32;
-  --identity-orange: #a25513;
-  --identity-purple: #7c51c6;
-  --identity-cyan: #0a738b;
-  --identity-pink: #c12b6d;
-  --identity-yellow: #836518;
-  --identity-teal: #01776a;
-  --identity-coral: #c3341d;
-  --identity-brown: #8e5f33;
-  --identity-silver: #646a73;
+  --identity-green: #0c7946;
+  --identity-blue: #0b5af8;
+  --identity-red: #d21116;
+  --identity-orange: #a75201;
+  --identity-purple: #7f3eef;
+  --identity-cyan: #0370a3;
+  --identity-pink: #cb0d71;
+  --identity-yellow: #87630c;
+  --identity-teal: #167758;
+  --identity-coral: #d0190a;
+  --identity-brown: #955c2a;
+  --identity-silver: #626a76;
   --identity-chrome: #5f6a7b;
 }
 
@@ -625,19 +625,19 @@ a.link-pill:focus-visible {
   --radius-xs: 2px; --radius-sm: 4px; --radius-md: 6px;
   --radius-2xl: 16px; --radius-3xl: 24px; --radius-4xl: 32px;
   --color-edge: color-mix(in srgb, var(--color-ink) 8%, transparent);
-  --identity-green: #009957;
-  --identity-blue: #377FE6;
-  --identity-red: #D94B52;
-  --identity-orange: #E78531;
-  --identity-purple: #8d69ce;
-  --identity-cyan: #0EA5C6;
-  --identity-pink: #D84F8B;
-  --identity-yellow: #D8A729;
-  --identity-teal: #01A492;
-  --identity-coral: #E5634E;
-  --identity-brown: #a8703c;
-  --identity-silver: #A8ADB4;
-  --identity-chrome: #B3BAC4;
+  --identity-green: #10a760;
+  --identity-blue: #3275f9;
+  --identity-red: #ef3a3f;
+  --identity-orange: #fb7c01;
+  --identity-purple: #935df1;
+  --identity-cyan: #04a2ed;
+  --identity-pink: #f12b93;
+  --identity-yellow: #e5a915;
+  --identity-teal: #26cb96;
+  --identity-coral: #f75e51;
+  --identity-brown: #b16c31;
+  --identity-silver: #a3aab3;
+  --identity-chrome: #b3bac4;
 }
 
 /* ── Linen ────────────────────────────────────────────────────────────────
@@ -689,18 +689,18 @@ a.link-pill:focus-visible {
   --radius-xs: 2px; --radius-sm: 4px; --radius-md: 6px;
   --radius-2xl: 16px; --radius-3xl: 24px; --radius-4xl: 32px;
   --color-edge: color-mix(in srgb, var(--color-ink) 8%, transparent);
-  --identity-green: #007d47;
-  --identity-blue: #1b68d7;
-  --identity-red: #ce2c34;
-  --identity-orange: #a75713;
-  --identity-purple: #7f55c8;
-  --identity-cyan: #0a778e;
-  --identity-pink: #c72c70;
-  --identity-yellow: #886819;
-  --identity-teal: #017a6d;
-  --identity-coral: #c9361e;
-  --identity-brown: #936234;
-  --identity-silver: #676d77;
+  --identity-green: #0c7d48;
+  --identity-blue: #125ff8;
+  --identity-red: #d81217;
+  --identity-orange: #ab5501;
+  --identity-purple: #8344ef;
+  --identity-cyan: #0373a9;
+  --identity-pink: #d10e75;
+  --identity-yellow: #8b670d;
+  --identity-teal: #177b5b;
+  --identity-coral: #d71a0a;
+  --identity-brown: #9a5f2b;
+  --identity-silver: #646d79;
   --identity-chrome: #626d7e;
 }
 
@@ -751,19 +751,19 @@ a.link-pill:focus-visible {
   --radius-xs: 2px; --radius-sm: 4px; --radius-md: 6px;
   --radius-2xl: 16px; --radius-3xl: 24px; --radius-4xl: 32px;
   --color-edge: color-mix(in srgb, var(--color-ink) 8%, transparent);
-  --identity-green: #009957;
-  --identity-blue: #377FE6;
-  --identity-red: #D94B52;
-  --identity-orange: #E78531;
-  --identity-purple: #8d68ce;
-  --identity-cyan: #0EA5C6;
-  --identity-pink: #D84F8B;
-  --identity-yellow: #D8A729;
-  --identity-teal: #01A492;
-  --identity-coral: #E5634E;
-  --identity-brown: #a7703b;
-  --identity-silver: #A8ADB4;
-  --identity-chrome: #B3BAC4;
+  --identity-green: #10a760;
+  --identity-blue: #3174f9;
+  --identity-red: #ef3a3f;
+  --identity-orange: #fb7c01;
+  --identity-purple: #925cf1;
+  --identity-cyan: #04a2ed;
+  --identity-pink: #f12b93;
+  --identity-yellow: #e5a915;
+  --identity-teal: #26cb96;
+  --identity-coral: #f75e51;
+  --identity-brown: #af6c31;
+  --identity-silver: #a3aab3;
+  --identity-chrome: #b3bac4;
 }
 
 /* ── Daylight ─────────────────────────────────────────────────────────────
@@ -833,18 +833,18 @@ a.link-pill:focus-visible {
   --radius-2xl: 14px;
   --radius-3xl: 16px;
   --radius-4xl: 18px;
-  --identity-green: #00874d;
-  --identity-blue: #2372e3;
-  --identity-red: #d63c43;
-  --identity-orange: #b45e15;
-  --identity-purple: #8057C8;
-  --identity-cyan: #0b809a;
-  --identity-pink: #d3367b;
-  --identity-yellow: #92701b;
-  --identity-teal: #018476;
-  --identity-coral: #d93a20;
-  --identity-brown: #9e6a38;
-  --identity-silver: #6f7681;
+  --identity-green: #0d864d;
+  --identity-blue: #246bf9;
+  --identity-red: #e91319;
+  --identity-orange: #b95b01;
+  --identity-purple: #894ef0;
+  --identity-cyan: #037cb6;
+  --identity-pink: #e10f7e;
+  --identity-yellow: #966f0e;
+  --identity-teal: #198563;
+  --identity-coral: #e71c0b;
+  --identity-brown: #a7662f;
+  --identity-silver: #6d7683;
   --identity-chrome: #6a7688;
   --shadow-float: 0 4px 12px -1px rgb(28 28 28 / 0.08), 0 2px 4px -2px rgb(28 28 28 / 0.06);
 }
@@ -909,18 +909,18 @@ a.link-pill:focus-visible {
   --radius-2xl: 14px;
   --radius-3xl: 16px;
   --radius-4xl: 18px;
-  --identity-green: #00874d;
-  --identity-blue: #2372e3;
-  --identity-red: #d63c43;
-  --identity-orange: #b45e15;
-  --identity-purple: #8057C8;
-  --identity-cyan: #0b809a;
-  --identity-pink: #d3367b;
-  --identity-yellow: #92701b;
-  --identity-teal: #018476;
-  --identity-coral: #d93a20;
-  --identity-brown: #9e6a38;
-  --identity-silver: #6f7681;
+  --identity-green: #0d864d;
+  --identity-blue: #246bf9;
+  --identity-red: #e91319;
+  --identity-orange: #b95b01;
+  --identity-purple: #894ef0;
+  --identity-cyan: #037cb6;
+  --identity-pink: #e10f7e;
+  --identity-yellow: #966f0e;
+  --identity-teal: #198563;
+  --identity-coral: #e71c0b;
+  --identity-brown: #a7662f;
+  --identity-silver: #6d7683;
   --identity-chrome: #6a7688;
   --shadow-float: 0 4px 12px -1px rgb(28 28 28 / 0.08), 0 2px 4px -2px rgb(28 28 28 / 0.06);
 }
@@ -981,19 +981,19 @@ a.link-pill:focus-visible {
   --radius-2xl: 14px;
   --radius-3xl: 16px;
   --radius-4xl: 18px;
-  --identity-green: #009957;
-  --identity-blue: #377FE6;
-  --identity-red: #D94B52;
-  --identity-orange: #E78531;
-  --identity-purple: #8d69ce;
-  --identity-cyan: #0EA5C6;
-  --identity-pink: #D84F8B;
-  --identity-yellow: #D8A729;
-  --identity-teal: #01A492;
-  --identity-coral: #E5634E;
-  --identity-brown: #a8703c;
-  --identity-silver: #A8ADB4;
-  --identity-chrome: #B3BAC4;
+  --identity-green: #10a760;
+  --identity-blue: #3275f9;
+  --identity-red: #ef3a3f;
+  --identity-orange: #fb7c01;
+  --identity-purple: #935df1;
+  --identity-cyan: #04a2ed;
+  --identity-pink: #f12b93;
+  --identity-yellow: #e5a915;
+  --identity-teal: #26cb96;
+  --identity-coral: #f75e51;
+  --identity-brown: #b16c31;
+  --identity-silver: #a3aab3;
+  --identity-chrome: #b3bac4;
 }
 
 /* ── Meadow ───────────────────────────────────────────────────────────────
@@ -1046,18 +1046,18 @@ a.link-pill:focus-visible {
   --radius-xs: 2px; --radius-sm: 4px; --radius-md: 6px;
   --radius-2xl: 16px; --radius-3xl: 24px; --radius-4xl: 32px;
   --color-edge: color-mix(in srgb, var(--color-ink) 8%, transparent);
-  --identity-green: #00884e;
-  --identity-blue: #2573e4;
-  --identity-red: #d63f47;
-  --identity-orange: #b65f15;
-  --identity-purple: #8057C8;
-  --identity-cyan: #0b819b;
-  --identity-pink: #d3397d;
-  --identity-yellow: #93721b;
-  --identity-teal: #018577;
-  --identity-coral: #db3a20;
-  --identity-brown: #a06b39;
-  --identity-silver: #707782;
+  --identity-green: #0d884e;
+  --identity-blue: #276df9;
+  --identity-red: #eb1319;
+  --identity-orange: #bb5c01;
+  --identity-purple: #894ef0;
+  --identity-cyan: #037db8;
+  --identity-pink: #e30f7f;
+  --identity-yellow: #98700e;
+  --identity-teal: #198663;
+  --identity-coral: #e91c0b;
+  --identity-brown: #a8672f;
+  --identity-silver: #6d7784;
   --identity-chrome: #6b778a;
 }
 
@@ -1112,18 +1112,18 @@ a.link-pill:focus-visible {
   --radius-xs: 2px; --radius-sm: 4px; --radius-md: 6px;
   --radius-2xl: 16px; --radius-3xl: 24px; --radius-4xl: 32px;
   --color-edge: color-mix(in srgb, var(--color-ink) 8%, transparent);
-  --identity-green: #00824a;
-  --identity-blue: #1c6de0;
-  --identity-red: #d4323a;
-  --identity-orange: #ae5b14;
-  --identity-purple: #8057C8;
-  --identity-cyan: #0a7b94;
-  --identity-pink: #cf2e75;
-  --identity-yellow: #8d6c1a;
-  --identity-teal: #017f72;
-  --identity-coral: #d1381f;
-  --identity-brown: #996637;
-  --identity-silver: #6a727c;
+  --identity-green: #0d824b;
+  --identity-blue: #1b66f9;
+  --identity-red: #e11218;
+  --identity-orange: #b35801;
+  --identity-purple: #874bf0;
+  --identity-cyan: #0378af;
+  --identity-pink: #d90e79;
+  --identity-yellow: #916b0d;
+  --identity-teal: #18805f;
+  --identity-coral: #df1b0a;
+  --identity-brown: #a1622d;
+  --identity-silver: #69727f;
   --identity-chrome: #667284;
 }
 
@@ -1170,19 +1170,19 @@ a.link-pill:focus-visible {
   --radius-xs: 2px; --radius-sm: 4px; --radius-md: 6px;
   --radius-2xl: 16px; --radius-3xl: 24px; --radius-4xl: 32px;
   --color-edge: color-mix(in srgb, var(--color-ink) 8%, transparent);
-  --identity-green: #009957;
-  --identity-blue: #377FE6;
-  --identity-red: #D94B52;
-  --identity-orange: #E78531;
-  --identity-purple: #8c67cd;
-  --identity-cyan: #0EA5C6;
-  --identity-pink: #D84F8B;
-  --identity-yellow: #D8A729;
-  --identity-teal: #01A492;
-  --identity-coral: #E5634E;
-  --identity-brown: #a56f3b;
-  --identity-silver: #A8ADB4;
-  --identity-chrome: #B3BAC4;
+  --identity-green: #10a760;
+  --identity-blue: #2f73f9;
+  --identity-red: #ef3a3f;
+  --identity-orange: #fb7c01;
+  --identity-purple: #915af1;
+  --identity-cyan: #04a2ed;
+  --identity-pink: #f12b93;
+  --identity-yellow: #e5a915;
+  --identity-teal: #26cb96;
+  --identity-coral: #f75e51;
+  --identity-brown: #ae6b31;
+  --identity-silver: #a3aab3;
+  --identity-chrome: #b3bac4;
 }
 
 /* Every popover and menu in the menu tone, flat in Midnight and on a soft lift in Daylight. A popover's rim is its
@@ -1304,6 +1304,9 @@ a.link-pill:focus-visible {
 [data-chat-bubble="simple"] :is(.chat-md, .chat-text),
 [data-chat-bubble="simple"].chat-text {
   line-height: 22px;
+}
+[data-chat-bubble="simple"][data-emoji-only] :is(.chat-md, .chat-text) {
+  line-height: inherit;
 }
 [data-chat-bubble="simple"] .chat-md > :where(:not(:first-child)) {
   margin-top: 10px;
@@ -1934,6 +1937,11 @@ body {
 :root[data-skin="pop"] {
   --chat-card: var(--color-composer);
   --card-lift: color-mix(in srgb, var(--color-ink) 3.5%, transparent);
+}
+/* A table's header band is opaque, so a sticky first column's header cell covers the cells scrolling under it. */
+:root {
+  --table-head: color-mix(in srgb, var(--color-ink) 5%, var(--chat-card));
+  --table-line: color-mix(in srgb, var(--color-ink) 7%, transparent);
 }
 
 /* The brand draws no lines, so keyboard focus is a tint, never a ring: the focused control darkens (or, on a dark

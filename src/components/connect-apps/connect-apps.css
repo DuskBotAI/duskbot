@@ -1068,7 +1068,36 @@ a.ca-pill { color: inherit; text-decoration: none; }
 /* what it can do is reading, not a control: a faint tint, lighter than the cards around it */
 .ca-pane .ca-card[data-toolkit-group="actions"] { background: color-mix(in srgb, var(--color-ink) 3%, transparent); }
 
-/* phone native sheet presentation: fills the sheet/screen cleanly under the system Liquid Glass bar */
+/* phone sheet / pushed-page presentation: fills its sheet container seamlessly */
+.dusk-mobile :is([data-phone-pushed-page], .mobile-sheet) .ca-scrim {
+  position: relative;
+  inset: auto;
+  z-index: auto;
+  flex: 1 1 auto;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  align-items: stretch;
+  background: var(--m-sheet-page, var(--color-app));
+}
+.dusk-mobile :is([data-phone-pushed-page], .mobile-sheet) .ca-dialog {
+  width: 100%;
+  height: 100%;
+  max-height: none;
+  border: 0;
+  border-radius: 0;
+  background: var(--m-sheet-page, var(--color-app));
+}
+.dusk-mobile :is([data-phone-pushed-page], .mobile-sheet) .ca-layout {
+  height: 100%;
+  max-height: none;
+}
+.dusk-mobile [data-phone-pushed-page] .ca-scrim:not([data-native-bar]) .ca-bar {
+  padding-top: max(var(--m-safe-top, 0px), 10px);
+}
+.dusk-mobile [data-phone-pushed-page] .ca-scrim:not([data-native-bar]) .ca-close {
+  top: max(var(--m-safe-top, 0px), 10px);
+}
 .dusk-mobile .ca-scrim[data-native-bar] {
   z-index: 70;
   align-items: stretch;

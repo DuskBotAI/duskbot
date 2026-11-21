@@ -172,6 +172,7 @@ public class ControlsPlugin: CAPPlugin, CAPBridgedPlugin {
             if let toggle = entry.control as? UISwitch { toggle.onTintColor = tint }
             entry.control.isEnabled = !disabled
             entry.control.accessibilityLabel = label
+            let wasHidden = entry.window.isHidden
             let rightEdge = maskRight.map { min(clip.maxX, $0) } ?? clip.maxX
             let windowFrame = CGRect(x: clip.minX, y: clip.minY + inset, width: max(0, rightEdge - clip.minX), height: max(0, clip.height - inset))
             let effectivelyHidden = hidden || windowFrame.width <= 0.5
@@ -192,7 +193,8 @@ public class ControlsPlugin: CAPPlugin, CAPBridgedPlugin {
                 entry.watching = nil
                 entry.scrollHeight = 0
             } else {
-                let needsSearch = entry.scroller == nil || entry.scroller?.superview == nil || (clipChanged && maskRight == nil) || abs(entry.scrollHeight - scrollHeight) >= 3
+                let scrollerDetached = entry.scroller == nil || entry.scroller?.superview == nil || entry.scroller?.window == nil
+                let needsSearch = scrollerDetached || (wasHidden && !effectivelyHidden) || (clipChanged && maskRight == nil) || abs(entry.scrollHeight - scrollHeight) >= 3
                 if needsSearch {
                     let scroller = self.scroller(in: webView, showing: clip, tall: scrollHeight, at: scrollTop)
                     if let scroller = scroller {
@@ -201,13 +203,16 @@ public class ControlsPlugin: CAPPlugin, CAPBridgedPlugin {
                             entry.scroller = scroller
                             entry.watching = scroller.observe(\.contentOffset) { [weak entry] _, _ in entry?.settle() }
                         }
-                    } else if entry.scroller?.superview == nil {
+                    } else if entry.scroller?.superview == nil || entry.scroller?.window == nil {
                         entry.scroller = nil
                         entry.watching = nil
                     }
                 }
             }
             entry.settle()
+            if wasHidden && !effectivelyHidden {
+                entry.window.layoutIfNeeded()
+            }
             call.resolve(["tracked": !scrollable || entry.scroller != nil])
         }
     }

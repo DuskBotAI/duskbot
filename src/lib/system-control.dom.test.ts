@@ -2,7 +2,7 @@
 import { act, createElement, useRef } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { installSystemControls, useSystemControl, type ControlPlace, type SystemControl, type SystemControls } from "./system-control";
+import { flushSystemControls, installSystemControls, useSystemControl, type ControlPlace, type SystemControl, type SystemControls } from "./system-control";
 import { SlidingPills } from "@/components/ui/SlidingPills";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -150,5 +150,97 @@ describe("system-control occlusion detection", () => {
       selected: -1,
       label: "Thinking",
     });
+  });
+
+  it("keeps controls visible inside a deeper pushed page above a shallower pushed page", async () => {
+    function SwitchInPage({ label }: { label: string }) {
+      const ref = useRef<HTMLDivElement>(null);
+      useSystemControl(ref, { kind: "switch", on: true, label }, () => {});
+      return createElement("div", { ref, "data-segmented-room": "", "data-switch-label": label });
+    }
+    hitTarget = () => host.querySelector('[data-switch-label="Inner"]');
+    await act(async () => {
+      root.render(createElement(
+        "div",
+        null,
+        createElement("div", { "data-phone-pushed-page": "outer", style: { position: "fixed", zIndex: 62 } }, createElement(SwitchInPage, { label: "Outer" })),
+        createElement("div", { "data-phone-pushed-page": "inner", style: { position: "fixed", zIndex: 64 } }, createElement(SwitchInPage, { label: "Inner" })),
+      ));
+      await Promise.resolve();
+    });
+    const outerPlace = placedControls.find((entry) => entry.control.label === "Outer")?.place;
+    const innerPlace = placedControls.find((entry) => entry.control.label === "Inner")?.place;
+    expect(outerPlace?.hidden).toBe(true);
+    expect(innerPlace?.hidden).toBe(false);
+  });
+
+  it("keeps controls visible inside an inert NavStack base once the leaving page slides past them", async () => {
+    let pageLeft = 220;
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+      if (this.hasAttribute("data-segmented-room")) return new DOMRect(16, 220, 358, 36);
+      if (this.classList.contains("mobile-page")) return new DOMRect(pageLeft, 0, 390, 844);
+      return new DOMRect(0, 0, 390, 844);
+    });
+    function NavBaseControl() {
+      const ref = useRef<HTMLDivElement>(null);
+      useSystemControl(ref, { kind: "segmented", items: ["System", "Light", "Dark"], selected: 0, label: "Appearance" }, () => {});
+      return createElement("div", { className: "mobile-nav" },
+        createElement("div", { inert: true },
+          createElement("div", { className: "scroller", style: { overflowY: "auto" } },
+            createElement("div", { ref, "data-segmented-room": "" }),
+          ),
+        ),
+        createElement("div", { className: "mobile-page", "data-leaving": "" }, "Language"),
+      );
+    }
+    // WebKit skips inert subtrees in elementFromPoint, returning document.body once the sliding page uncovers the control
+    hitTarget = () => document.body;
+    await act(async () => {
+      root.render(createElement(NavBaseControl));
+      await Promise.resolve();
+    });
+    expect(places.at(-1)?.hidden).toBe(false);
+    expect(places.at(-1)?.maskRight).toBe(220);
+
+    // While the foreign mobile-page still covers the probe point, the control stays hidden
+    pageLeft = 0;
+    hitTarget = () => host.querySelector(".mobile-page");
+    await act(async () => {
+      await flushSystemControls();
+    });
+    expect(places.at(-1)?.hidden).toBe(true);
+  });
+
+  it("keeps BotRoutines switches visible when the sibling open button catches hit testing", () => {
+    function RoutineRowSwitch() {
+      const ref = useRef<HTMLButtonElement>(null);
+      useSystemControl(ref, { kind: "switch", on: true, label: "Morning digest" }, () => {});
+      return createElement("div", { "data-panel-routine": "r1" },
+        createElement("button", { type: "button", className: "routine-open" }, "Morning digest"),
+        createElement("button", { ref, type: "button", role: "switch", "data-segmented-room": "" }),
+      );
+    }
+    hitTarget = () => host.querySelector(".routine-open");
+    act(() => root.render(createElement(RoutineRowSwitch)));
+    expect(places.at(-1)?.hidden).toBe(false);
+  });
+
+  it("flushSystemControls waits for async native place promises before resolving", async () => {
+    let resolvePlace!: (tracked: boolean) => void;
+    let settled = false;
+    installSystemControls({
+      place: () => new Promise<boolean>((resolve) => { resolvePlace = resolve; }),
+      remove: () => {},
+      onChange: () => () => {},
+    });
+    hitTarget = () => host.querySelector("[data-segmented-room]");
+    act(() => root.render(createElement(SegmentedHarness, { overlay: "none" })));
+    const flushed = flushSystemControls(500).then(() => { settled = true; });
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(settled).toBe(false);
+    resolvePlace(true);
+    await flushed;
+    expect(settled).toBe(true);
   });
 });

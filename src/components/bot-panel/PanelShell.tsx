@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 
+import { botAccentScope } from "@/lib/bot-accent";
 import { EASE_OUT, PANEL_PUSH, SWAP } from "@/lib/motion-presets";
 import { MotionDiv, MotionSpan } from "../ui/SheetMotion";
 import { t } from "@/lib/i18n";
@@ -13,6 +14,8 @@ import { TabBoundary } from "./TabBoundary";
 import { panelTabs, phoneApp, screenViewAllowed } from "@/lib/store-app";
 import { wakeSystemControls } from "@/lib/system-control";
 import { feel, phoneTabFade, phoneTabSlide } from "@/mobile/motion";
+import { closesOnBack } from "@/mobile/Sheet";
+import { SheetPush } from "@/mobile/SheetPush";
 import { PAGES, resolveTarget, TAB_LABEL, type PanelTab, type PanelTarget, type SimplePageId } from "./page-registry";
 import { lazyScreen } from "../lazy-screen";
 import { linkTarget, usePanelLink, type PanelLink } from "./panel-link";
@@ -79,12 +82,14 @@ export function BotPanel({ bot, derived, linkedSection, computerRequest = 0, onC
     setEditingInstructions(false);
     scrollTop();
   };
-  const closeEditor = () => {
+  const closeEditor = useCallback(() => {
     setEditorOpen(false);
     wakeSystemControls();
     // The card held focus: hand it back to the avatar that opened it, before the card goes, not to the page body.
     editorRef.current?.querySelector<HTMLElement>("[data-panel-avatar]")?.focus();
-  };
+  }, []);
+  const phone = phoneApp();
+  useEffect(() => (phone && editorOpen ? closesOnBack(closeEditor) : undefined), [phone, editorOpen, closeEditor]);
   const back = () => {
     wakeSystemControls();
     setTabSwapped(false);
@@ -140,7 +145,6 @@ export function BotPanel({ bot, derived, linkedSection, computerRequest = 0, onC
     const delta = order.indexOf(tab) - order.indexOf(tabMove.current.tab);
     tabMove.current = { tab, direction: delta >= 0 ? 1 : -1, span: Math.max(1, Math.abs(delta)) };
   }
-  const phone = phoneApp();
 
   const tabContent = (
     <>
@@ -161,11 +165,40 @@ export function BotPanel({ bot, derived, linkedSection, computerRequest = 0, onC
             editorOpen={editorOpen}
             onToggleEditor={() => { wakeSystemControls(); setEditorOpen((open) => !open); }}
           />
-          {editorOpen && (
-            <>
-              <div className="fixed inset-0 z-20" aria-hidden="true" data-panel-scrim onClick={closeEditor} />
-              <PanelAvatarEditor bot={bot} activeState={derived.activeState} onPatch={derived.patch} onClose={closeEditor} />
-            </>
+          {reduced ? (
+            editorOpen && (
+              <>
+                <div className="fixed inset-0 z-20" aria-hidden="true" data-panel-scrim onClick={closeEditor} />
+                <PanelAvatarEditor bot={bot} activeState={derived.activeState} onPatch={derived.patch} onClose={closeEditor} />
+              </>
+            )
+          ) : (
+            <AnimatePresence onExitComplete={wakeSystemControls}>
+              {editorOpen && (
+                <motion.div
+                  key="avatar-scrim"
+                  className="fixed inset-0 z-20"
+                  aria-hidden="true"
+                  data-panel-scrim
+                  onClick={closeEditor}
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1, transition: AVATAR_SCRIM_IN }}
+                  exit={{ opacity: 0, pointerEvents: "none", transition: AVATAR_POP_OUT }}
+                />
+              )}
+              {editorOpen && (
+                <motion.div
+                  key="avatar-editor"
+                  className="absolute inset-x-0 top-0 z-30"
+                  style={{ transformOrigin: "50% 84px" }}
+                  initial={{ opacity: 0, scale: 0.94, y: -8 }}
+                  animate={{ opacity: 1, scale: 1, y: 0, transition: AVATAR_POP_IN }}
+                  exit={{ opacity: 0, scale: 0.96, y: -6, pointerEvents: "none", transition: AVATAR_POP_OUT }}
+                >
+                  <PanelAvatarEditor bot={bot} activeState={derived.activeState} onPatch={derived.patch} onClose={closeEditor} />
+                </motion.div>
+              )}
+            </AnimatePresence>
           )}
         </div>
         <div
@@ -245,49 +278,73 @@ export function BotPanel({ bot, derived, linkedSection, computerRequest = 0, onC
     </motion.div>
   );
 
+  const popTo = useCallback((depth: number) => {
+    wakeSystemControls();
+    setTabSwapped(false);
+    setStack((current) => current.slice(0, depth));
+  }, []);
+
   return (
     <div className="relative flex min-h-0 flex-1 flex-col" onKeyDown={onKeyDown}>
       <span id="bot-settings-title" className="sr-only">{bot.name}</span>
       <PanelResizeEdge />
       <div {...dragProps} data-panel-bar className="relative ms-2 flex h-[60px] shrink-0 items-center gap-2 p-3 ps-1">
-        {page === null && (
+        {(phone || page === null) && (
           <span className="ms-auto flex items-center gap-2">
             <PanelShareMenu bot={bot} />
           </span>
         )}
         {/* the back button fades in with a page and out without one; the title crossfades between pages */}
-        <AnimatePresence initial={false}>
-          {page !== null && (
-            <MotionSpan key="back" className="flex shrink-0" initial={{ opacity: 0 }} animate={{ opacity: 1, transition: HEAD_IN }} exit={{ opacity: 0, transition: HEAD_OUT }}>
-              <button
-                type="button"
-                data-panel-back
-                aria-label={t("botPanel.backTo", { place: backLabel })}
-                title={backLabel}
-                onClick={back}
-                className="flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-md text-ink/[0.66] transition-[background-color,color] duration-[120ms] ease-[ease-out] hover:bg-ink/[0.06] hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
-              >
-                <Icon name="chevron-left" size={14} />
-              </button>
-            </MotionSpan>
-          )}
-        </AnimatePresence>
-        <AnimatePresence initial={false}>
-          {page !== null && (
-            <MotionSpan key={page} data-panel-page-title className="pointer-events-none absolute left-1/2 top-1/2 max-w-[60%] -translate-x-1/2 -translate-y-1/2 truncate text-[13px] font-medium leading-[18px]"
-              initial={{ opacity: 0 }} animate={{ opacity: 1, transition: HEAD_IN }} exit={{ opacity: 0, transition: HEAD_OUT }}>
-              {t(PAGES[page].title, { name: bot.name })}
-            </MotionSpan>
-          )}
-        </AnimatePresence>
-        {page !== null && <span className="ms-auto" />}
+        {!phone && (
+          <>
+            <AnimatePresence initial={false}>
+              {page !== null && (
+                <MotionSpan key="back" className="flex shrink-0" initial={{ opacity: 0 }} animate={{ opacity: 1, transition: HEAD_IN }} exit={{ opacity: 0, transition: HEAD_OUT }}>
+                  <button
+                    type="button"
+                    data-panel-back
+                    aria-label={t("botPanel.backTo", { place: backLabel })}
+                    title={backLabel}
+                    onClick={back}
+                    className="flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-md text-ink/[0.66] transition-[background-color,color] duration-[120ms] ease-[ease-out] hover:bg-ink/[0.06] hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+                  >
+                    <Icon name="chevron-left" size={14} />
+                  </button>
+                </MotionSpan>
+              )}
+            </AnimatePresence>
+            <AnimatePresence initial={false}>
+              {page !== null && (
+                <MotionSpan key={page} data-panel-page-title className="pointer-events-none absolute left-1/2 top-1/2 max-w-[60%] -translate-x-1/2 -translate-y-1/2 truncate text-[13px] font-medium leading-[18px]"
+                  initial={{ opacity: 0 }} animate={{ opacity: 1, transition: HEAD_IN }} exit={{ opacity: 0, transition: HEAD_OUT }}>
+                  {t(PAGES[page].title, { name: bot.name })}
+                </MotionSpan>
+              )}
+            </AnimatePresence>
+            {page !== null && <span className="ms-auto" />}
+          </>
+        )}
         <button type="button" onClick={onClose} aria-label={t("botPanel.closePanel")} title={t("botPanel.closePanel")} className={roundButtonCls}>
           <Icon name="close" size={16} />
         </button>
       </div>
 
       <div className="relative min-h-0 flex-1 overflow-hidden">
-        {reduced ? view(page === null ? tabsView : pageView) : (
+        {phone ? (
+          <>
+            <div ref={setBody} className={viewCls}>{tabsView}</div>
+            <PhonePanelStack
+              stack={stack}
+              index={0}
+              bot={bot}
+              derived={derived}
+              onOpen={openPage}
+              onPopTo={popTo}
+              editingInstructions={editingInstructions}
+              onEditInstructions={setEditingInstructions}
+            />
+          </>
+        ) : reduced ? view(page === null ? tabsView : pageView) : (
           <AnimatePresence initial={false} custom={direction}>
             {view(page === null ? tabsView : pageView)}
           </AnimatePresence>
@@ -297,8 +354,63 @@ export function BotPanel({ bot, derived, linkedSection, computerRequest = 0, onC
   );
 }
 
+function PhonePanelStack({ stack, index, bot, derived, onOpen, onPopTo, editingInstructions, onEditInstructions }: {
+  stack: readonly SimplePageId[];
+  index: number;
+  bot: Bot;
+  derived: ReturnType<typeof useBotSettingsDerived>;
+  onOpen: (next: SimplePageId) => void;
+  onPopTo: (depth: number) => void;
+  editingInstructions: boolean;
+  onEditInstructions: (open: boolean) => void;
+}) {
+  const current = stack[index] ?? null;
+  const lastRef = useRef<SimplePageId | null>(null);
+  if (current) lastRef.current = current;
+  const shown = current ?? lastRef.current;
+  const close = useCallback(() => onPopTo(index), [onPopTo, index]);
+  if (!shown) return null;
+  return (
+    <SheetPush
+      open={current !== null}
+      onClose={close}
+      title={t(PAGES[shown].title, { name: bot.name })}
+      pageId={`panel:${shown}`}
+    >
+      <div {...botAccentScope(bot.color)} className="contents">
+        <div data-panel-page-view={shown} className="px-4 pb-8 pt-2">
+          {PAGES[shown].intro && <p className="mx-3 mb-2.5 text-[13px] leading-[18px] tracking-[0.015em] text-ink-secondary">{t(PAGES[shown].intro, { name: bot.name })}</p>}
+          <div className="flex flex-col gap-3">
+            <PanelPageBody
+              page={shown}
+              bot={bot}
+              derived={derived}
+              onOpen={onOpen}
+              editingInstructions={editingInstructions}
+              onEditInstructions={onEditInstructions}
+            />
+          </div>
+        </div>
+      </div>
+      <PhonePanelStack
+        stack={stack}
+        index={index + 1}
+        bot={bot}
+        derived={derived}
+        onOpen={onOpen}
+        onPopTo={onPopTo}
+        editingInstructions={editingInstructions}
+        onEditInstructions={onEditInstructions}
+      />
+    </SheetPush>
+  );
+}
+
 const HEAD_IN = { duration: 0.15, ease: EASE_OUT } as const;
 const HEAD_OUT = { duration: 0.12, ease: EASE_OUT } as const;
+const AVATAR_SCRIM_IN = { duration: 0.16, ease: EASE_OUT } as const;
+const AVATAR_POP_IN = { type: "spring", stiffness: 520, damping: 36, mass: 0.85, opacity: { duration: 0.15, ease: EASE_OUT } } as const;
+const AVATAR_POP_OUT = { duration: 0.13, ease: EASE_OUT } as const;
 
 const WIPE_VARIANTS = {
   enter: (direction: number) => ({ x: direction > 0 ? PANEL_PUSH.pushFrom : PANEL_PUSH.under, opacity: 1, zIndex: direction > 0 ? 1 : 0 }),

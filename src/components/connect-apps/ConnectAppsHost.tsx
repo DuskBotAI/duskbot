@@ -1,11 +1,14 @@
-import { useEffect, useRef, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 import { lazyScreen, TeamLibraryPanel } from "../lazy-screens";
 import { phoneApp } from "@/lib/store-app";
 import { warmTeamCatalog } from "@/lib/team-catalog-cache";
+import { sheetsUp } from "@/mobile/chrome";
+import { Sheet } from "@/mobile/Sheet";
+import { SheetPush } from "@/mobile/SheetPush";
 import { markTemplatesHandoff, openTemplates } from "../SidebarTemplates";
-import { closeConnectApps, useConnectApps } from "./open";
+import { closeConnectApps, useConnectApps, type ConnectAppsPage } from "./open";
 
 const FIRST_FRAME_WAIT_MS = 600;
 const IDLE_PREFETCH_MS = 4_000;
@@ -25,6 +28,18 @@ export function ConnectAppsHost() {
   const [first, setFirst] = useState(false);
   const [templates, setTemplates] = useState(false);
   const back = useRef<HTMLButtonElement>(null);
+  const lastOpen = useRef<{ page: ConnectAppsPage; nonce: number } | null>(null);
+  const prevOpen = useRef(false);
+  const phoneMode = useRef<"push" | "sheet">("sheet");
+  const phone = phoneApp();
+  if (open) {
+    lastOpen.current = { page, nonce };
+    if (phone && !prevOpen.current) {
+      const sheetVisible = sheetsUp.count > 0 || sheetsUp.system || Boolean(document.querySelector(".mobile-sheet-layer"));
+      phoneMode.current = sheetVisible ? "push" : "sheet";
+    }
+  }
+  prevOpen.current = open;
   useEffect(() => {
     hosts.push(setFirst);
     settle();
@@ -44,12 +59,31 @@ export function ConnectAppsHost() {
     return () => clearTimeout(timer);
   }, [first]);
   if (!first) return null;
-  const portalRoot = phoneApp() ? (document.querySelector?.(".dusk-mobile") ?? document.body) : document.body;
+  const openTemplatesWindow = () => {
+    closeConnectApps();
+    if (!openTemplates(true)) { markTemplatesHandoff(); setTemplates(true); }
+  };
+  const shown = open ? { page, nonce } : lastOpen.current;
+  const phoneWindow = shown && (
+    <Suspense fallback={<div className="h-full w-full bg-(--m-sheet-page)" />}>
+      <ConnectAppsWindow page={shown.page} nonce={shown.nonce} onClose={closeConnectApps} onTemplates={openTemplatesWindow} />
+    </Suspense>
+  );
   return (
     <>
-      {open && createPortal(
-        <ConnectAppsWindow page={page} nonce={nonce} onClose={closeConnectApps} onTemplates={() => { closeConnectApps(); if (!openTemplates(true)) { markTemplatesHandoff(); setTemplates(true); } }} />,
-        portalRoot,
+      {phone ? (
+        shown && (phoneMode.current === "push" ? (
+          <SheetPush open={open} onClose={closeConnectApps} bare flush>
+            {phoneWindow}
+          </SheetPush>
+        ) : (
+          <Sheet open={open} onClose={closeConnectApps} full flush bodyClassName="overflow-hidden pt-0! pb-0">
+            {phoneWindow}
+          </Sheet>
+        ))
+      ) : open && createPortal(
+        <ConnectAppsWindow page={page} nonce={nonce} onClose={closeConnectApps} onTemplates={openTemplatesWindow} />,
+        document.body,
       )}
       {templates && (
         <TeamLibraryPanel returnFocusRef={back} onClose={() => setTemplates(false)} onImported={() => setTemplates(false)} />

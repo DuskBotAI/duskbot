@@ -41,7 +41,7 @@ public class GlassChromePlugin: CAPPlugin, CAPBridgedPlugin {
                 chrome.applyHome(nil)
                 chrome.resetText()
             }
-            call.resolve(["supported": true, "acks": true])
+            call.resolve(["supported": true, "acks": true, "jump": true, "reply": true])
         } else {
             call.resolve(["supported": false])
         }
@@ -170,6 +170,93 @@ private class DiscButton: UIButton {
     }
 }
 
+private final class ReplyBarView: UIView {
+    let label = UILabel()
+    let clear = DiscButton(configuration: .plain())
+    var onClear: (() -> Void)?
+
+    private let icon = UIImageView()
+    private let thumb = UIImageView()
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        backgroundColor = UIColor.label.withAlphaComponent(0.06)
+        layer.cornerCurve = .continuous
+
+        icon.image = UIImage(
+            systemName: "arrowshape.turn.up.left",
+            withConfiguration: UIImage.SymbolConfiguration(pointSize: 13, weight: .medium)
+        )
+        icon.tintColor = .secondaryLabel
+        icon.contentMode = .center
+        icon.isUserInteractionEnabled = false
+        icon.isAccessibilityElement = false
+
+        thumb.contentMode = .scaleAspectFill
+        thumb.clipsToBounds = true
+        thumb.layer.cornerRadius = 6
+        thumb.layer.cornerCurve = .continuous
+        thumb.isUserInteractionEnabled = false
+        thumb.isAccessibilityElement = false
+        thumb.isHidden = true
+
+        label.font = UIFont.systemFont(ofSize: 13)
+        label.textColor = .secondaryLabel
+        label.lineBreakMode = .byTruncatingTail
+        label.numberOfLines = 1
+        label.isUserInteractionEnabled = false
+
+        var config = UIButton.Configuration.plain()
+        config.cornerStyle = .capsule
+        config.contentInsets = .zero
+        config.preferredSymbolConfigurationForImage = UIImage.SymbolConfiguration(pointSize: 12, weight: .semibold)
+        config.image = UIImage(systemName: "xmark")
+        config.baseForegroundColor = .tertiaryLabel
+        clear.configuration = config
+        clear.accessibilityLabel = "Cancel reply"
+        clear.addAction(UIAction { [weak self] _ in self?.onClear?() }, for: .touchUpInside)
+
+        [icon, thumb, label, clear].forEach(addSubview)
+    }
+
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    func setThumbnail(_ image: UIImage?) {
+        thumb.image = image
+        let hide = image == nil
+        if thumb.isHidden != hide {
+            thumb.isHidden = hide
+            setNeedsLayout()
+        }
+    }
+
+    func applyFont(size: CGFloat) {
+        label.font = UIFont.systemFont(ofSize: size)
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        let w = bounds.width
+        let h = bounds.height
+        layer.cornerRadius = h / 2
+        icon.frame = CGRect(x: 12, y: (h - 15) / 2, width: 15, height: 15)
+        let clearSize: CGFloat = 24
+        let clearX = max(0, w - 4 - clearSize)
+        clear.frame = CGRect(x: clearX, y: (h - clearSize) / 2, width: clearSize, height: clearSize)
+        var textX: CGFloat = 12 + 15 + 8
+        if !thumb.isHidden {
+            thumb.frame = CGRect(x: textX, y: (h - 24) / 2, width: 24, height: 24)
+            textX += 24 + 8
+        }
+        label.frame = CGRect(x: textX, y: 0, width: max(0, clearX - 6 - textX), height: h)
+    }
+
+    override func point(inside point: CGPoint, with event: UIEvent?) -> Bool {
+        if super.point(inside: point, with: event) { return true }
+        return !clear.isHidden && clear.point(inside: convert(point, to: clear), with: event)
+    }
+}
+
 /// The round button at the end of the composer: a solid disc in the page's own colours for it, not glass. A prominent
 /// glass button (iOS 26) lays its tint over what is behind it and adapts its glyph to that backdrop, so a near-black or
 /// near-white fill read washed out or inverted; this one is exactly the page's fill and ink. Fill and glyph change in
@@ -269,6 +356,8 @@ final class ChatGlassChrome: NSObject, UITextViewDelegate {
     /// The reference composer's metrics (the page's mobile.css draws the same): 48 high, 32pt controls 8 in from the
     /// capsule's edge and 8 apart, the field 10 after the +.
     private static let capsuleHeight: CGFloat = 48
+    private static let replyHeight: CGFloat = 32
+    private static let replyGap: CGFloat = 4
     private static let inset: CGFloat = 8
     private static let disc: CGFloat = 32
     private static let between: CGFloat = 8
@@ -284,6 +373,9 @@ final class ChatGlassChrome: NSObject, UITextViewDelegate {
     private let liveDot = UIView()
 
     private let composer = PassthroughView()
+    private let jump = PassthroughView()
+    private let jumpMotion = PassthroughView()
+    private let jumpButton = UIButton(configuration: .glass())
     private var home: GlassHomeBar!
     private let capsule = UIVisualEffectView(effect: ChatGlassChrome.interactiveGlass())
     private let plus = DiscButton(configuration: .plain())
@@ -291,6 +383,10 @@ final class ChatGlassChrome: NSObject, UITextViewDelegate {
     private let placeholder = UILabel()
     private let voice = UILabel()
     private let wave = GlassVoiceWave()
+    private let replyBar = ReplyBarView()
+    private var hasReply = false
+    private var replyTarget = false
+    private var replyThumbData: String?
     private var listening = false
     private var actions: [UIButton] = []
     private var actionKinds: [String] = []
@@ -311,10 +407,16 @@ final class ChatGlassChrome: NSObject, UITextViewDelegate {
     private var width: NSLayoutConstraint!
     private var height: NSLayoutConstraint!
     private var bottom: NSLayoutConstraint!
+    private var jumpCenterX: NSLayoutConstraint!
+    private var jumpWidth: NSLayoutConstraint!
+    private var jumpHeight: NSLayoutConstraint!
+    private var jumpBottom: NSLayoutConstraint!
 
     private var headerShown = false
     private var headerPopping = false
     private var composerShown = false
+    private var jumpShown = false
+    private var jumpHandoff = false
     /// the page draws its own chrome in the same place (a sheet over the chat), or did until now: the two swap at once,
     /// never crossfade, or both show (or neither) for the length of the fade
     private var handoff = false
@@ -324,6 +426,7 @@ final class ChatGlassChrome: NSObject, UITextViewDelegate {
     private var returnSends = true
     private var textSeq = 0
     private var reportedHeight: CGFloat = 0
+    private var composerDomHeight: CGFloat = 0
     private var accent = UIColor.systemBlue
     private var avatar: UIImage?
     private var avatarData: String?
@@ -338,6 +441,7 @@ final class ChatGlassChrome: NSObject, UITextViewDelegate {
 
     /// from the composer's bottom to the line it rests on: the home indicator's edge, or the keyboard's top
     private var gap: CGFloat = 8
+    private var jumpGap: CGFloat = 68
     private var keyboardOverlap: CGFloat = 0
     /// where the page rests the composer; with the keyboard up it widens to `typingInset` from each edge
     private var restingFrame: CGRect = .zero
@@ -408,6 +512,7 @@ final class ChatGlassChrome: NSObject, UITextViewDelegate {
         text.isScrollEnabled = false
         if let font = text.font { text.typingAttributes = fieldAttributes(font) }
         text.returnKeyType = .send
+        text.onHardwareReturn = { [weak self] in self?.emit(["type": "submit"]) }
         text.delegate = self
         text.onPasteImages = { [weak self] files in self?.emit(["type": "paste", "files": files]) }
         placeholder.font = text.font
@@ -421,7 +526,11 @@ final class ChatGlassChrome: NSObject, UITextViewDelegate {
         voice.alpha = 0
         wave.alpha = 0
         wave.tintColor = .secondaryLabel
-        [plus, text, placeholder, voice, wave].forEach(capsule.contentView.addSubview)
+        replyBar.alpha = 0
+        replyBar.isHidden = true
+        replyBar.accessibilityElementsHidden = true
+        replyBar.onClear = { [weak self] in self?.emit(["type": "tap", "target": "clearReply"]) }
+        [plus, text, placeholder, voice, wave, replyBar].forEach(capsule.contentView.addSubview)
         capsule.addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(capsuleTapped)))
 
         leading = composer.leadingAnchor.constraint(equalTo: host.leadingAnchor)
@@ -429,6 +538,34 @@ final class ChatGlassChrome: NSObject, UITextViewDelegate {
         height = composer.heightAnchor.constraint(equalToConstant: Self.capsuleHeight)
         bottom = composer.bottomAnchor.constraint(equalTo: host.bottomAnchor, constant: -gap)
         NSLayoutConstraint.activate([leading, width, height, bottom])
+
+        jump.translatesAutoresizingMaskIntoConstraints = false
+        jump.alpha = 0
+        jump.isHidden = true
+        host.insertSubview(jump, belowSubview: header)
+        jumpMotion.translatesAutoresizingMaskIntoConstraints = false
+        jump.addSubview(jumpMotion)
+        round(jumpButton, symbol: Self.headerSymbols["jump"]!, label: "Jump to latest") { [weak self] in
+            self?.emit(["type": "tap", "target": "jump"])
+        }
+        jumpButton.translatesAutoresizingMaskIntoConstraints = false
+        jumpMotion.addSubview(jumpButton)
+
+        jumpCenterX = jump.centerXAnchor.constraint(equalTo: host.leadingAnchor, constant: 195)
+        jumpWidth = jump.widthAnchor.constraint(equalToConstant: 44)
+        jumpHeight = jump.heightAnchor.constraint(equalToConstant: 44)
+        jumpBottom = jump.bottomAnchor.constraint(equalTo: host.bottomAnchor, constant: -jumpGap)
+        NSLayoutConstraint.activate([
+            jumpCenterX, jumpWidth, jumpHeight, jumpBottom,
+            jumpMotion.leadingAnchor.constraint(equalTo: jump.leadingAnchor),
+            jumpMotion.trailingAnchor.constraint(equalTo: jump.trailingAnchor),
+            jumpMotion.topAnchor.constraint(equalTo: jump.topAnchor),
+            jumpMotion.bottomAnchor.constraint(equalTo: jump.bottomAnchor),
+            jumpButton.leadingAnchor.constraint(equalTo: jumpMotion.leadingAnchor),
+            jumpButton.trailingAnchor.constraint(equalTo: jumpMotion.trailingAnchor),
+            jumpButton.topAnchor.constraint(equalTo: jumpMotion.topAnchor),
+            jumpButton.bottomAnchor.constraint(equalTo: jumpMotion.bottomAnchor),
+        ])
 
         NotificationCenter.default.addObserver(self, selector: #selector(contentSizeChanged), name: UIContentSizeCategory.didChangeNotification, object: nil)
         NotificationCenter.default.addObserver(self, selector: #selector(keyboardWillChangeFrame(_:)), name: UIResponder.keyboardWillChangeFrameNotification, object: nil)
@@ -447,6 +584,11 @@ final class ChatGlassChrome: NSObject, UITextViewDelegate {
         -(max(host?.safeAreaInsets.bottom ?? 0, keyboardOverlap) + gap)
     }
 
+    private func restingJumpBottom() -> CGFloat {
+        let growth = composerShown && composerDomHeight > 0 ? height.constant - composerDomHeight : 0
+        return -(max(host?.safeAreaInsets.bottom ?? 0, keyboardOverlap) + jumpGap + growth)
+    }
+
     /// The composer rides the keyboard in the keyboard's own animation: the duration and curve its notification carries.
     /// With the composer's own field focused the page rides in the same animation, lifted whole by a transform: one
     /// clock for the keyboard, composer and transcript, and no page layout until the keyboard has stopped.
@@ -462,6 +604,7 @@ final class ChatGlassChrome: NSObject, UITextViewDelegate {
         let covering = max(0, overlap - safe)
         keyboardOverlap = overlap
         bottom.constant = restingBottom()
+        if jumpShown { jumpBottom.constant = restingJumpBottom() }
         if restingFrame.width > 0 { applyComposerWidth() }
         if covering > 0 && (text.isFirstResponder || fieldEditing) && page != nil { keyboardRide = true }
         let newLift: CGFloat? = keyboardRide
@@ -485,7 +628,7 @@ final class ChatGlassChrome: NSObject, UITextViewDelegate {
             guard let self, move == self.keyboardMove, let newLift else { return }
             self.keyboardSettled(height: overlap, lift: newLift)
         }
-        guard composerShown || newLift != nil, duration > 0 else {
+        guard composerShown || jumpShown || newLift != nil, duration > 0 else {
             UIView.performWithoutAnimation(change)
             settled()
             return
@@ -515,6 +658,7 @@ final class ChatGlassChrome: NSObject, UITextViewDelegate {
         keyboardMove += 1
         keyboardOverlap = 0
         bottom.constant = restingBottom()
+        if jumpShown { jumpBottom.constant = restingJumpBottom() }
         if restingFrame.width > 0 { applyComposerWidth() }
         UIView.performWithoutAnimation {
             host?.layoutIfNeeded()
@@ -558,7 +702,7 @@ final class ChatGlassChrome: NSObject, UITextViewDelegate {
     private func setOffset(_ x: CGFloat, homeFollows: Bool = true) {
         offset = x
         let moved = CGAffineTransform(translationX: x, y: 0)
-        for view in [header, composer] where view.transform != moved { view.transform = moved }
+        for view in [header, composer, jump] where view.transform != moved { view.transform = moved }
         if homeFollows { home.follow(page: x) }
     }
 
@@ -588,7 +732,7 @@ final class ChatGlassChrome: NSObject, UITextViewDelegate {
         let now = CACurrentMediaTime()
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        for view in [header, composer] {
+        for view in [header, composer, jump] {
             view.layer.removeAnimation(forKey: Self.slideKey)
             let animation = CAKeyframeAnimation(keyPath: "transform.translation.x")
             animation.values = points.map { NSNumber(value: Double($0)) }
@@ -629,7 +773,7 @@ final class ChatGlassChrome: NSObject, UITextViewDelegate {
     func stopSlide() {
         guard sliding else { return }
         let drawn = (header.layer.presentation()?.value(forKeyPath: "transform.translation.x") as? NSNumber).map { CGFloat($0.doubleValue) }
-        for view in [header, composer] { view.layer.removeAnimation(forKey: Self.slideKey) }
+        for view in [header, composer, jump] { view.layer.removeAnimation(forKey: Self.slideKey) }
         slideEnd = 0
         if headerPopping {
             headerPopping = false
@@ -654,6 +798,7 @@ final class ChatGlassChrome: NSObject, UITextViewDelegate {
             let style: UIUserInterfaceStyle = dark ? .dark : .light
             header.overrideUserInterfaceStyle = style
             composer.overrideUserInterfaceStyle = style
+            jump.overrideUserInterfaceStyle = style
         }
         if let hex = state["accent"] as? String, let color = UIColor(cssHex: hex) { accent = color }
         if let hex = state["ground"] as? String, let color = UIColor(cssHex: hex) {
@@ -663,14 +808,19 @@ final class ChatGlassChrome: NSObject, UITextViewDelegate {
         if let x = (state["offset"] as? NSNumber).map({ CGFloat($0.doubleValue) }), !sliding { setOffset(x) }
         let handing = state["handoff"] as? Bool ?? false
         let calling = state["call"] as? Bool ?? false
+        let jumpHanding = state["jumpHandoff"] as? Bool ?? false
+        let headerData = state["header"] as? [String: Any]
+        let wanted = state["composer"] as? [String: Any]
         // off its resting place the chrome is riding a page in or out: it comes and goes with the page, never fades. A
         // call's bar coming into the composer's place, or leaving it, crossfades with the composer instead
         instant = ((handing || handoff) && !calling && !inCall) || sliding || abs(offset) > 0.5
+        let jumpInstant = jumpHanding || jumpHandoff || sliding || abs(offset) > 0.5 || (headerData == nil && wanted == nil)
         handoff = handing
         inCall = calling
-        applyHeader(state["header"] as? [String: Any])
-        let wanted = state["composer"] as? [String: Any]
+        jumpHandoff = jumpHanding
+        applyHeader(headerData)
         applyComposer(wanted)
+        applyJump(state["jump"] as? [String: Any], instant: jumpInstant)
         keepOnTop()
         if wanted != nil { ackComposer() }
     }
@@ -691,12 +841,11 @@ final class ChatGlassChrome: NSObject, UITextViewDelegate {
 
     /// views the system adds to the host later must not land over the chrome and take its taps
     private func keepOnTop() {
-        guard let host, headerShown || composerShown || !home.view.isHidden else { return }
-        let tail = Array(host.subviews.suffix(3))
-        if tail.count < 3 || tail[0] !== home.view || tail[1] !== header || tail[2] !== composer {
-            host.bringSubviewToFront(home.view)
-            host.bringSubviewToFront(header)
-            host.bringSubviewToFront(composer)
+        guard let host, headerShown || composerShown || jumpShown || !home.view.isHidden else { return }
+        let views: [UIView] = [home.view, jump, header, composer]
+        let tail = Array(host.subviews.suffix(views.count))
+        if tail.count < views.count || zip(tail, views).contains(where: { $0 !== $1 }) {
+            for view in views { host.bringSubviewToFront(view) }
         }
     }
 
@@ -756,6 +905,15 @@ final class ChatGlassChrome: NSObject, UITextViewDelegate {
 
     private func applyComposer(_ data: [String: Any]?) {
         guard let data, let frame = Frame(data["frame"]), host != nil else {
+            composerDomHeight = 0
+            hasReply = false
+            replyTarget = false
+            replyThumbData = nil
+            replyBar.alpha = 0
+            replyBar.isHidden = true
+            replyBar.accessibilityElementsHidden = true
+            replyBar.label.text = nil
+            replyBar.setThumbnail(nil)
             if text.isFirstResponder {
                 KeyboardTrace.log("resign (page composer)", [:])
                 text.resignFirstResponder()
@@ -764,6 +922,7 @@ final class ChatGlassChrome: NSObject, UITextViewDelegate {
             return
         }
         restingFrame = frame.rect
+        composerDomHeight = frame.rect.height
         applyComposerWidth()
         if let gap = (data["gap"] as? NSNumber)?.doubleValue { self.gap = CGFloat(max(0, gap)) }
         if let room = (data["room"] as? NSNumber)?.doubleValue { transcriptRoom = CGFloat(max(0, room)) }
@@ -777,10 +936,96 @@ final class ChatGlassChrome: NSObject, UITextViewDelegate {
         returnSends = data["returnSends"] as? Bool ?? true
         text.returnKeyType = returnSends ? .send : .default
         setListening(data["voice"] as? String, spoken: data["voiceHeard"] as? Bool ?? true)
+        applyReply(data["reply"] as? [String: Any])
         applyActions(data["buttons"] as? [[String: Any]] ?? [])
         updatePlaceholder()
         layoutComposer()
         show(composer, true, &composerShown)
+    }
+
+    private func applyReply(_ data: [String: Any]?) {
+        if let data {
+            let excerpt = data["text"] as? String ?? ""
+            if replyBar.label.text != excerpt { replyBar.label.text = excerpt }
+            if let who = data["label"] as? String, !who.isEmpty { replyBar.accessibilityLabel = who }
+            if let clear = data["clearLabel"] as? String, !clear.isEmpty { replyBar.clear.accessibilityLabel = clear }
+            let thumb = data["thumbnail"] as? String
+            if thumb != replyThumbData {
+                replyThumbData = thumb
+                replyBar.setThumbnail(thumb.flatMap(Self.image(fromDataURL:)))
+            }
+            hasReply = true
+        } else {
+            replyThumbData = nil
+            hasReply = false
+        }
+    }
+
+    private func applyJump(_ data: [String: Any]?, instant jumpInstant: Bool) {
+        guard let data, let frame = Frame(data["frame"]), let host else {
+            showJump(false, instant: jumpInstant)
+            return
+        }
+        jumpCenterX.constant = frame.rect.midX
+        jumpWidth.constant = frame.rect.width
+        jumpHeight.constant = frame.rect.height
+        if let gap = (data["gap"] as? NSNumber)?.doubleValue { jumpGap = CGFloat(max(0, gap)) }
+        let resting = restingJumpBottom()
+        if abs(jumpBottom.constant - resting) >= 1 { jumpBottom.constant = resting }
+        if let label = data["label"] as? String, !label.isEmpty { jumpButton.accessibilityLabel = label }
+        if !jumpShown { UIView.performWithoutAnimation { host.layoutIfNeeded() } }
+        showJump(true, instant: jumpInstant)
+    }
+
+    private func showJump(_ visible: Bool, instant jumpInstant: Bool) {
+        guard visible != jumpShown else {
+            if visible { reassert(jump) }
+            return
+        }
+        if !visible && sliding { return }
+        jumpShown = visible
+        let hiddenTransform: CGAffineTransform = UIAccessibility.isReduceMotionEnabled
+            ? .identity
+            : CGAffineTransform(translationX: 0, y: 6).scaledBy(x: 0.88, y: 0.88)
+        if jumpInstant {
+            stopFades(jump)
+            jumpMotion.layer.removeAllAnimations()
+            jumpMotion.transform = .identity
+            jump.alpha = visible ? 1 : 0
+            jump.isHidden = !visible
+            return
+        }
+        if visible {
+            let wasHidden = jump.isHidden || jump.alpha == 0
+            UIView.performWithoutAnimation {
+                jump.isHidden = false
+                if wasHidden {
+                    jump.alpha = 0
+                    jumpMotion.transform = hiddenTransform
+                }
+            }
+            if UIAccessibility.isReduceMotionEnabled {
+                UIView.animate(withDuration: 0.15, delay: 0, options: [.beginFromCurrentState, .allowUserInteraction]) {
+                    self.jump.alpha = 1
+                    self.jumpMotion.transform = .identity
+                }
+            } else {
+                UIView.animate(springDuration: 0.28, bounce: 0.12, initialSpringVelocity: 0, delay: 0, options: [.beginFromCurrentState, .allowUserInteraction]) {
+                    self.jump.alpha = 1
+                    self.jumpMotion.transform = .identity
+                }
+            }
+        } else {
+            UIView.animate(withDuration: 0.16, delay: 0, options: [.curveEaseOut, .beginFromCurrentState, .allowUserInteraction]) {
+                self.jump.alpha = 0
+                self.jumpMotion.transform = hiddenTransform
+            } completion: { _ in
+                if !self.jumpShown && self.jump.alpha == 0 {
+                    self.jump.isHidden = true
+                    self.jumpMotion.transform = .identity
+                }
+            }
+        }
     }
 
     /// Dictation shows in the capsule itself: the waveform and what it has heard take the field's place in one crossfade,
@@ -955,8 +1200,13 @@ final class ChatGlassChrome: NSObject, UITextViewDelegate {
         if view.superview !== host {
             host.addSubview(view)
             if view === composer { NSLayoutConstraint.activate([leading, width, height, bottom]) }
+            else if view === jump { NSLayoutConstraint.activate([jumpCenterX, jumpWidth, jumpHeight, jumpBottom]) }
         }
         stopFades(view)
+        if view === jump {
+            jumpMotion.layer.removeAllAnimations()
+            jumpMotion.transform = .identity
+        }
         view.isHidden = false
         view.alpha = 1
         keepOnTop()
@@ -983,18 +1233,31 @@ final class ChatGlassChrome: NSObject, UITextViewDelegate {
         let textHeight = min(max(line, ceil(fitted)), maxText)
         text.isScrollEnabled = fitted > maxText
         let pad = (Self.capsuleHeight - line) / 2
-        let h = max(Self.capsuleHeight, textHeight + pad * 2)
+        let topExtra: CGFloat = hasReply ? Self.replyHeight + Self.replyGap : 0
+        let baseH = max(Self.capsuleHeight, textHeight + pad * 2)
+        let h = baseH + topExtra
+        let replyRect = CGRect(x: Self.inset, y: Self.inset, width: max(0, w - Self.inset * 2), height: Self.replyHeight)
+        if hasReply && replyBar.isHidden {
+            UIView.performWithoutAnimation {
+                replyBar.frame = replyRect
+                replyBar.layoutIfNeeded()
+                replyBar.isHidden = false
+                replyBar.accessibilityElementsHidden = false
+                replyBar.alpha = 0
+            }
+        }
         // the discs sit on the capsule's bottom edge and the field fills it: they move in the capsule's own animation, or
         // a wrapping line drops them to the new bottom at once while the capsule is still growing toward it
         let place = { [self] in
+            replyBar.frame = replyRect
             let discY = h - Self.inset - Self.disc
             plus.frame = CGRect(x: Self.inset, y: discY, width: Self.disc, height: Self.disc)
-            text.frame = CGRect(x: leadingX, y: pad, width: fieldWidth, height: h - pad * 2)
-            placeholder.frame = CGRect(x: leadingX, y: pad, width: fieldWidth, height: line)
+            text.frame = CGRect(x: leadingX, y: topExtra + pad, width: fieldWidth, height: baseH - pad * 2)
+            placeholder.frame = CGRect(x: leadingX, y: topExtra + pad, width: fieldWidth, height: line)
             let waveHeight: CGFloat = 20
-            wave.frame = CGRect(x: leadingX, y: (h - waveHeight) / 2, width: GlassVoiceWave.width, height: waveHeight)
+            wave.frame = CGRect(x: leadingX, y: topExtra + (baseH - waveHeight) / 2, width: GlassVoiceWave.width, height: waveHeight)
             let afterWave = GlassVoiceWave.width + 10
-            voice.frame = CGRect(x: leadingX + afterWave, y: (h - line) / 2, width: max(0, fieldWidth - afterWave), height: line)
+            voice.frame = CGRect(x: leadingX + afterWave, y: topExtra + (baseH - line) / 2, width: max(0, fieldWidth - afterWave), height: line)
             var x = w - Self.inset
             for (button, kind) in zip(actions, actionKinds).reversed() {
                 let bw = Self.actionWidth(kind)
@@ -1005,19 +1268,45 @@ final class ChatGlassChrome: NSObject, UITextViewDelegate {
         }
         if height.constant != h {
             height.constant = h
+            replyTarget = hasReply
+            replyBar.accessibilityElementsHidden = !hasReply
+            if jumpShown { jumpBottom.constant = restingJumpBottom() }
             if animated && composerShown && host?.window != nil {
                 UIView.animate(springDuration: 0.3, bounce: 0, initialSpringVelocity: 0, delay: 0, options: [.beginFromCurrentState, .allowUserInteraction]) {
                     self.host?.layoutIfNeeded()
                     place()
+                    self.replyBar.alpha = self.hasReply ? 1 : 0
+                } completion: { _ in
+                    if !self.hasReply && self.replyBar.alpha == 0 {
+                        self.replyBar.isHidden = true
+                        self.replyBar.label.text = nil
+                        self.replyBar.setThumbnail(nil)
+                    }
                 }
             } else {
                 UIView.performWithoutAnimation {
                     host?.layoutIfNeeded()
                     place()
+                    replyBar.alpha = hasReply ? 1 : 0
+                    replyBar.isHidden = !hasReply
+                    if !hasReply {
+                        replyBar.label.text = nil
+                        replyBar.setThumbnail(nil)
+                    }
                 }
             }
         } else {
             place()
+            if replyTarget != hasReply || replyBar.layer.animationKeys()?.isEmpty != false {
+                replyTarget = hasReply
+                replyBar.accessibilityElementsHidden = !hasReply
+                replyBar.alpha = hasReply ? 1 : 0
+                replyBar.isHidden = !hasReply
+                if !hasReply {
+                    replyBar.label.text = nil
+                    replyBar.setThumbnail(nil)
+                }
+            }
         }
         if h != reportedHeight {
             reportedHeight = h
@@ -1036,6 +1325,7 @@ final class ChatGlassChrome: NSObject, UITextViewDelegate {
     /// The chat is gone (or the page reloaded): the next one's text comes with a fresh sequence, and the field starts empty.
     func resetText() {
         textSeq = 0
+        reportedHeight = 0
         if !(text.text ?? "").isEmpty {
             text.text = ""
             updatePlaceholder()
@@ -1088,6 +1378,7 @@ final class ChatGlassChrome: NSObject, UITextViewDelegate {
         for label in [placeholder, voice] { label.adjustsFontForContentSizeCategory = false; label.font = font }
         text.adjustsFontForContentSizeCategory = false
         text.font = font
+        replyBar.applyFont(size: (13 * scale).rounded())
         applyFieldAttributes(font)
         layoutComposer(animated: false)
     }
@@ -1147,7 +1438,7 @@ final class ChatGlassChrome: NSObject, UITextViewDelegate {
 
     // MARK: images
 
-    static let headerSymbols = ["back": "chevron.left", "right": "display"]
+    static let headerSymbols = ["back": "chevron.left", "right": "display", "jump": "arrow.down"]
     static let headerGlyph = UIImage.SymbolConfiguration(pointSize: 17, weight: .semibold)
 
     /// Each header symbol as a black-on-clear png the page uses as a mask, with its size in points.

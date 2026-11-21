@@ -19,6 +19,7 @@ import { loadConnectorCatalog } from "@/components/connect-apps/use-connectors";
 import { loadComposioSnapshot, mergeCatalog } from "@/components/connect-apps/composio-snapshot";
 import { remoteConnection, sameEndpoint } from "@/components/connect-apps/use-remote-apps";
 import { connectAppsState, openConnectApps, subscribeConnectApps } from "@/components/connect-apps/open";
+import { preloadConnectApps } from "@/components/connect-apps/ConnectAppsHost";
 import { managedConnectorUnavailableReason } from "../../../shared/connector-availability";
 import type { DirectoryAnswer } from "../../../shared/connector-directory";
 import { Sheet } from "../Sheet";
@@ -152,7 +153,7 @@ export function ConnectorsSheet({ open, onClose }: SheetPageProps<"connectors">)
     } catch { if (version === requestVersion.current) { setError(true); haptic("error"); } }
     finally { if (version === requestVersion.current) setLoading(false); }
   }, []);
-  useEffect(() => { if (open) void load(); return () => { requestVersion.current++; }; }, [open, load]);
+  useEffect(() => { if (open) { preloadConnectApps(); void load(); } return () => { requestVersion.current++; }; }, [open, load]);
   // what was connected or disconnected on an app's page shows here when it closes
   useEffect(() => {
     if (!open) return;

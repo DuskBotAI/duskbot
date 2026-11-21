@@ -2,8 +2,9 @@ import { useRef, type KeyboardEvent, type ReactNode } from "react";
 import { Check, ChevronRight, Trash2, type GlyphIcon } from "../../icons";
 
 import { cn } from "@/lib/cn";
-import type { MausColor } from "@/lib/mascot";
+import { MAUS_COLOR_NAMES, type MausColor } from "@/lib/mascot";
 import { useSystemControl } from "@/lib/system-control";
+import { GROK_BOT_FILLS } from "@/lib/user-bubble-tone";
 import { rowCls, RowText, SwitchRow as ListSwitchRow } from "../ListRows";
 import { Toggle } from "../ui/Toggle";
 
@@ -18,20 +19,14 @@ export const buttonCls =
 export const fieldCls =
   "h-7 min-w-0 flex-1 rounded-lg border-[0.5px] border-ink/12 bg-transparent px-2 text-[13px] leading-[18px] text-ink outline-none placeholder:text-ink/40 disabled:opacity-50";
 
-/** Grok's per-hue switch colours (`bg/<hue>-primary`, `-primary-hover`); a colour Grok has no hue for keeps the accent. */
-const SWITCH_TONE: Partial<Record<MausColor, { on: string; hover: string }>> = {
-  green: { on: "#10ab61", hover: "#0d9655" },
-  blue: { on: "#1680f3", hover: "#126fd4" },
-  red: { on: "#e72e3b", hover: "#c82532" },
-  coral: { on: "#e72e3b", hover: "#c82532" },
-  orange: { on: "#ee620d", hover: "#d2550a" },
-  purple: { on: "#8351e4", hover: "#7442d1" },
-  cyan: { on: "#10a693", hover: "#0d9381" },
-  teal: { on: "#10a693", hover: "#0d9381" },
-  pink: { on: "#e52f8b", hover: "#c82779" },
-  yellow: { on: "#da830e", hover: "#c2730b" },
-  ["brown" as MausColor]: { on: "#9d6937", hover: "#86592e" },
-};
+const SWITCH_TONE: Partial<Record<MausColor, { on: string; hover: string }>> = Object.fromEntries(
+  MAUS_COLOR_NAMES
+    .filter((color) => color !== "silver" && color !== "chrome")
+    .map((color) => {
+      const fill = GROK_BOT_FILLS[color]!;
+      return [color, { on: fill.button, hover: fill.hover }];
+    }),
+);
 
 export function BotSwitch({ color, ...props }: Parameters<typeof Toggle>[0] & { color: MausColor }) {
   return <Toggle {...props} tone={SWITCH_TONE[color]} />;

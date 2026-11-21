@@ -90,7 +90,7 @@ export function ViewerHost({ rootRef }: { rootRef: RefObject<HTMLElement | null>
   const { view, key } = shown;
   if (view.kind === "images") return <ImageViewer key={key} images={view.images} initialIndex={view.index} bridge={bridge} onClose={close} />;
   if (view.kind === "code") return <CodeViewer key={key} code={view.code} lang={view.lang} open={open} onClose={close} />;
-  if (view.kind === "table") return <TableViewer key={key} columns={view.columns} rows={view.rows} name={view.name} open={open} onClose={close} />;
+  if (view.kind === "table") return <TableViewer key={key} columns={view.columns} rows={view.rows} name={view.name} direction={view.direction} open={open} onClose={close} />;
   if (view.kind === "text") return <TextViewer key={key} text={view.text} open={open} onClose={close} />;
   return (
     <Sheet key={key} open={open} onClose={close} full title={view.title} trailing={view.actions}>

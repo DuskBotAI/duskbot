@@ -146,7 +146,7 @@ function promptWithApp(text: string, target: ReplyTarget): string {
 }
 
 const REACTION_MEANS = {
-  yes: "👍 means yes, go ahead. If that message asked them something, this is their answer: continue without asking again. If it asked nothing, reply in a few words at most.",
+  yes: "👍 means yes, go ahead. If that message asked them something, this is their answer: continue without asking again. If it asked nothing and nothing else is needed, reply with just (pass) so no message is sent.",
   no: "👎 means no, not that. If that message asked them something, this is their answer: act on it without asking again. If it asked nothing, ask in one short sentence what to change.",
 } as const;
 

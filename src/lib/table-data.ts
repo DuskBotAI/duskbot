@@ -35,6 +35,39 @@ const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: "bas
 const NUMBER = /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?$/i;
 export function isTableNumber(text: string): boolean { return NUMBER.test(text.trim()); }
 
+/** A table with more rows than this can be searched. */
+export const SEARCHABLE_TABLE_ROWS = 8;
+
+/** A figure as a reply writes one: grouped digits, a currency sign, a percent, a unit like "pt", a scale like "1M". */
+const FIGURE = /^([+−-]?)[$€£¥]?(\d[\d,]*(?:\.\d+)?)\s?(%|pt|pp|x|×|k|m|bn)?$/i;
+const SCALE: Record<string, number> = { k: 1e3, m: 1e6, bn: 1e9 };
+
+function figure(text: string): number | null {
+  const match = FIGURE.exec(text.trim());
+  if (!match) return null;
+  const value = Number(match[2]!.replace(/,/g, "")) * (SCALE[match[3]?.toLowerCase() ?? ""] ?? 1);
+  return match[1] && match[1] !== "+" ? -value : value;
+}
+
+/** Which of a table's columns hold only figures, judged by its first 200 rows; those line up on the right. */
+export function numericColumns(count: number, rows: readonly (readonly string[])[]): boolean[] {
+  const sample = rows.slice(0, 200);
+  return Array.from({ length: count }, (_, index) => {
+    const filled = sample.map((row) => row[index]?.trim() ?? "").filter(Boolean);
+    return filled.length > 0 && filled.every((text) => isTableNumber(text) || figure(text) !== null);
+  });
+}
+
+/** Saves a table as a .csv named after it, with a byte order mark so Excel reads it as UTF-8. */
+export function downloadTableCsv(name: string, csv: string): void {
+  const url = URL.createObjectURL(new Blob(["﻿", csv], { type: "text/csv;charset=utf-8" }));
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `${name.replace(/\.(csv|tsv)$/i, "").replace(/[\\/:*?"<>|]/g, "_").slice(0, 150) || "table"}.csv`;
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
 export function tableRowOrder(rows: readonly (readonly string[])[], query: string, sort: TableSort): number[] {
   const needle = query.trim().toLocaleLowerCase();
   const order = rows.flatMap((row, index) => !needle || row.some((cell) => cell.toLocaleLowerCase().includes(needle)) ? [index] : []);
@@ -46,7 +79,11 @@ export function tableRowOrder(rows: readonly (readonly string[])[], query: strin
     if (numeric && /^[+-]?\d+$/.test(left.trim()) && /^[+-]?\d+$/.test(right.trim())) {
       const l = BigInt(left.trim()), r = BigInt(right.trim());
       difference = l < r ? -1 : l > r ? 1 : 0;
-    } else difference = numeric ? Number(left) - Number(right) : collator.compare(left, right);
+    } else if (numeric) difference = Number(left) - Number(right);
+    else {
+      const l = figure(left), r = figure(right);
+      difference = l !== null && r !== null ? l - r : collator.compare(left, right);
+    }
     return (Number.isFinite(difference) ? difference : collator.compare(left, right)) * (sort.descending ? -1 : 1) || a - b;
   });
   return order;

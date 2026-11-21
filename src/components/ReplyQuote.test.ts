@@ -16,6 +16,8 @@ describe("composer reply strip", () => {
     expect(html).toContain("bg-ink/[0.06]");
     expect(html).not.toMatch(/border-s|border-accent/);
     expect(html).toContain("truncate");
+    expect(html).toContain("data-reply-excerpt");
+    expect(html).toContain("-my-0.5");
     expect(html).toContain("The user answered your questions.");
     expect(html).toContain('aria-label="Cancel reply"');
   });

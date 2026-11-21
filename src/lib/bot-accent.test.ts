@@ -31,9 +31,9 @@ describe("a bot's accent in its own sheet", () => {
   });
 
   it("hands both schemes to css", () => {
-    const style = botAccentStyle("purple") as Record<string, string>;
+    const style = botAccentStyle("green") as Record<string, string>;
     expect(style["--bot-accent"]).toMatch(/^light-dark\(#[0-9a-f]{6}, #[0-9a-f]{6}\)$/i);
-    expect(style["--bot-accent-text"]).toBeTruthy();
+    expect(style["--bot-accent-text"]).toMatch(/^light-dark\(#[0-9a-f]{6}, #[0-9a-f]{6}\)$/i);
   });
 
   it("leaves a colour it does not know on ink", () => {

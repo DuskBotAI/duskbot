@@ -76,8 +76,8 @@ describe("NewMessagesDivider", () => {
   it("wears grok's text colour for the bot's hue on the grok skins, over the chat's own tint", () => {
     const html = renderToStaticMarkup(createElement(NewMessagesDivider, { fading: false, tint: "var(--identity-purple)", grokTint: grokAccentText("purple") }));
     expect(html).toContain("--new-ink:var(--grok-new, var(--identity-purple))");
-    expect(html).toContain("--grok-new-fill:light-dark(#7547d0, #a582ff)");
-    expect(grokAccentText("coral")).toBe("light-dark(#c14c00, #fe6600)");
+    expect(html).toContain("--grok-new-fill:light-dark(#894ef0, #935df1)");
+    expect(grokAccentText("coral")).toBe("light-dark(#e71c0b, #f75e51)");
     expect(grokAccentText("silver")).toBe("var(--color-ink)");
   });
 

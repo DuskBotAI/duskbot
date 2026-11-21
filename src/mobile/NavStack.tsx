@@ -4,7 +4,7 @@ import { TranscriptStaging } from "@/components/transcript-staging";
 import { wakeSystemControls } from "@/lib/system-control";
 import { canScroll, ownsDrag, useDrag } from "./gesture";
 import { replyRowAt } from "./swipe-reply";
-import { prefersReducedMotion, projectRelease, settleTo, springPath, system } from "./motion";
+import { prefersReducedMotion, projectRelease, settleTo, sheetNav, springPath, system } from "./motion";
 import { PlatformContext } from "./platform";
 
 const NavLeavingContext = createContext(false);
@@ -25,6 +25,7 @@ function readSafeTop(el: HTMLElement): number {
 /** Parallax of the page underneath, as a share of the width: UIKit's navigation push moves it a third as far. */
 const UNDER_SHIFT = 0.3;
 const NAV = { stiffness: system.stiffness, damping: system.damping };
+const SNAPPY_NAV = { stiffness: sheetNav.stiffness, damping: sheetNav.damping };
 /** A chat still loading its transcript slides in once it has it, or after this long with its loading rows. */
 const LOAD_WAIT_MS = 150;
 
@@ -91,7 +92,7 @@ function slideLayers(layers: { page: HTMLElement; base: HTMLElement | null; dim:
 
 /** Two layers: the list, and a page pushed over it. The page follows the finger back to the list from anywhere on it
  * (a horizontal scroller inside keeps its own drag), and a release finishes or returns by where the flick would land. */
-export function NavStack({ base, page, pageKey, onBack, onSettled, onSlide, onLeave }: {
+export function NavStack({ base, page, pageKey, onBack, onSettled, onSlide, onLeave, snappy = false }: {
   base: ReactNode;
   /** The pushed page, or null for the list alone. */
   page: ReactNode | null;
@@ -104,6 +105,8 @@ export function NavStack({ base, page, pageKey, onBack, onSettled, onSlide, onLe
   onSlide?: (path: SlidePath | null) => void;
   /** The page starts back to the list (a back tap, or a finger taking it), before the slide's first frame. */
   onLeave?: () => void;
+  /** Use UIKit's unscaled navigation push spring (for sheet sub-pages on non-native platforms). */
+  snappy?: boolean;
 }) {
   const width = useWidth();
   const x = useMotionValue(width);
@@ -164,17 +167,19 @@ export function NavStack({ base, page, pageKey, onBack, onSettled, onSlide, onLe
       return;
     }
     const page = pageRef.current;
+    const springConfig = snappy ? SNAPPY_NAV : NAV;
+    const pushSpeed = snappy ? sheetNav.push : system.push;
     const toward = Math.sign(target - x.get());
-    const speed = velocity ?? (carried !== 0 ? carried : toward * width * system.push);
+    const speed = velocity ?? (carried !== 0 ? carried : toward * width * pushSpeed);
     if (!page || typeof page.animate !== "function") {
       run.current = { stop: () => { controls.stop(); return 0; } };
-      const controls = settleTo(x, target, speed, finish, NAV);
+      const controls = settleTo(x, target, speed, finish, springConfig);
       return;
     }
-    const path = springPath(x.get(), target, speed, NAV);
+    const path = springPath(x.get(), target, speed, springConfig);
     run.current = slideLayers({ page, base: baseRef.current, dim: dimRef.current }, x, width, path, finish, () => slid.current?.(null));
     slid.current?.(path);
-  }, [x, pageOpacity, width]);
+  }, [x, pageOpacity, width, snappy]);
 
   const lockSafeTop = useCallback(() => {
     const el = pageRef.current;

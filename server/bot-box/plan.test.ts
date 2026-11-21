@@ -128,11 +128,16 @@ linuxBox("the box plan", () => {
     }
   });
 
-  it("Antigravity's own profile (GEMINI_HOME) goes back read-write, and no other account's", () => {
+  it("Antigravity's own profile (GEMINI_HOME and --gemini-dir) goes back read-write, and no other account's", () => {
     const profile = join(dataDir, "providers", "antigravity", "a".repeat(64));
-    const plan = planBox(setup(), { command: join(dataDir, "tools", "antigravity-acp", "linux-x64", "versions", "abc", "agy_acp_server"), args: ["--uid="], cwd, env: { HOME: home, GEMINI_HOME: profile } });
-    expect(visibleInBox(plan, join(profile, "antigravity-acp", "acp_token.json"))).toBe("rw");
-    expect(visibleInBox(plan, join(dataDir, "providers", "antigravity", "b".repeat(64), "antigravity-acp", "acp_token.json"))).toBe("none");
+    const plan = planBox(setup(), {
+      command: join(dataDir, "tools", "antigravity-acp", "linux-x64", "versions", "abc", "antigravity"),
+      args: ["acp", "--gemini-dir", profile, "--app-data-dir", "antigravity-acp"],
+      cwd,
+      env: { HOME: home, GEMINI_HOME: profile },
+    });
+    expect(visibleInBox(plan, join(profile, "antigravity-acp", "antigravity-oauth-token"))).toBe("rw");
+    expect(visibleInBox(plan, join(dataDir, "providers", "antigravity", "b".repeat(64), "antigravity-acp", "antigravity-oauth-token"))).toBe("none");
     expect(visibleInBox(plan, join(dataDir, "providers", "key"))).toBe("none");
   });
 

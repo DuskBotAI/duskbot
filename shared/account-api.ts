@@ -119,6 +119,9 @@ export const ACCOUNT_ROUTES = {
   /** bearer app session: every computer and server this account holds (its dusk clouds' own workspaces left out), with
    * presence. never another account's. */
   appComputers: "/v1/app/computers", //         GET -> AppComputersAnswer
+  /** bearer app session: renames (PATCH { name } -> AppComputerAnswer) or unlinks (DELETE -> { ok: true }) one of the
+   * account's computers. 404 for another account's computer or a dusk cloud's workspace; 400 invalid_name. */
+  appComputer: (id: string) => `/v1/app/computers/${encodeURIComponent(id)}`,
   /** bearer app session: asks one of the account's computers, while it is online, for a one-time phone pairing link, so the
    * phone links to it without anyone at the computer. 404 for a computer that is not this account's; 409 { code }:
    * computer_offline (not seen lately, or did not answer in time), computer_unreachable (no route a phone can use, e.g.
@@ -160,6 +163,7 @@ export const COMPUTER_ASLEEP_MS = 24 * 60 * 60_000;
  * `lastSeenAt` is the last time it spoke to the service, null when never */
 export interface AppComputer { id: string; name: string; kind: "vps" | "mac" | "linux" | "windows"; presence: ComputerPresence; lastSeenAt: number | null; environmentId: string | null }
 export interface AppComputersAnswer { v: 1; computers: AppComputer[] }
+export interface AppComputerAnswer { v: 1; computer: AppComputer }
 /** `link` is the computer's one-time phone pairing link (shared/mobile-link.ts mobileLinkUrl), dead at `expiresAt` */
 export interface AppComputerPairAnswer { v: 1; link: string; expiresAt: number }
 

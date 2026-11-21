@@ -12,11 +12,13 @@ export function BotPickerList({
   picked,
   onToggle,
   emptyHint,
+  inline = false,
 }: {
   bots: Bot[];
   picked: Set<string>;
   onToggle: (id: string) => void;
   emptyHint: string;
+  inline?: boolean;
 }) {
   const team = useTeamPeople();
   const list = useRef<HTMLDivElement>(null);
@@ -28,18 +30,9 @@ export function BotPickerList({
     const below = element.scrollTop + element.clientHeight < element.scrollHeight - 1;
     setMore((current) => (current.above === above && current.below === below ? current : { above, below }));
   };
-  useLayoutEffect(measure, [bots.length]);
-  return (
-    <div
-      ref={list}
-      onScroll={measure}
-      className={cn(
-        "flex max-h-64 flex-col overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
-        more.below && !more.above && "[mask-image:linear-gradient(to_bottom,black_calc(100%-32px),transparent)]",
-        more.above && !more.below && "[mask-image:linear-gradient(to_top,black_calc(100%-32px),transparent)]",
-        more.above && more.below && "[mask-image:linear-gradient(to_bottom,transparent,black_32px,black_calc(100%-32px),transparent)]",
-      )}
-    >
+  useLayoutEffect(measure, [bots.length, inline]);
+  const rows = (
+    <>
       {bots.length === 0 && <div className="px-2 py-4 text-center text-[13px] leading-[18px] text-ink/68">{emptyHint}</div>}
       {bots.map((b) => (
         <CheckRow
@@ -52,6 +45,21 @@ export function BotPickerList({
           onClick={() => onToggle(b.id)}
         />
       ))}
+    </>
+  );
+  if (inline) return rows;
+  return (
+    <div
+      ref={list}
+      onScroll={measure}
+      className={cn(
+        "flex max-h-64 flex-col overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
+        more.below && !more.above && "[mask-image:linear-gradient(to_bottom,black_calc(100%-32px),transparent)]",
+        more.above && !more.below && "[mask-image:linear-gradient(to_top,black_calc(100%-32px),transparent)]",
+        more.above && more.below && "[mask-image:linear-gradient(to_bottom,transparent,black_32px,black_calc(100%-32px),transparent)]",
+      )}
+    >
+      {rows}
     </div>
   );
 }

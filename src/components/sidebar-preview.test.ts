@@ -94,4 +94,13 @@ describe("sidebar previews", () => {
     const group = { id: "g", name: "Room", messages: [message({ text: "Done.", from: { botId: "ada", name: "Ada", color: "green" } }), screen()] } as unknown as Group;
     expect(groupPreview(group, [bot], [])).toBe("Ada: Done.");
   });
+
+  it("skips auto-approval audit chips in bot and group previews", () => {
+    const approved = step("approved other (full access): Run mcp_agents_search");
+    const visible = [message({ role: "user", text: "Check my inbox" }), approved];
+    expect(botPreview(bot, visible, [])).toBe("Check my inbox");
+    expect(lastPreviewable([approved])).toBeUndefined();
+    const withRealStep = [message({ role: "user", text: "Check my inbox" }), step("Read"), approved];
+    expect(botPreview(bot, withRealStep, [])).toBe("Read a file");
+  });
 });

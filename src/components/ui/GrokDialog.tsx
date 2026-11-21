@@ -4,10 +4,11 @@ import { createPortal } from "react-dom";
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
 import { phoneApp } from "@/lib/store-app";
-import { wakeSystemControls } from "@/lib/system-control";
+import { flushSystemControls, wakeSystemControls } from "@/lib/system-control";
+import { closesOnBack } from "@/mobile/Sheet";
 import { Icon, type IconName } from "../Icon";
 import { useIsPresent } from "motion/react";
-import { dialogMotion } from "@/lib/motion-presets";
+import { dialogMotion, phoneDialogMotion } from "@/lib/motion-presets";
 import { ScrimMotion, SheetMotion, useMotionReduced } from "./SheetMotion";
 
 const buttonBase = "dusk-press inline-flex shrink-0 cursor-pointer items-center justify-center gap-1 whitespace-nowrap rounded-[9999px] font-normal outline-none focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-focus disabled:cursor-default";
@@ -147,17 +148,21 @@ function SheetView({ title, description, art, width = 440, onClose, footer, chil
   const descriptionId = useId();
   const close = useDialogKeys(sheet, onClose);
   const reduced = useMotionReduced();
-  const motion = animated ? dialogMotion(reduced) : null;
+  const phone = phoneApp();
+  const motion = animated ? (phone ? phoneDialogMotion(reduced) : dialogMotion(reduced)) : null;
   // motion animates it, so the css keyframe on [aria-modal] and the scrim's fade stand down
   const raw = motion ? "" : undefined;
   // on its way out (inside its parent's AnimatePresence) it takes no more presses or focus
   const leaving = !useIsPresent();
-  const phone = phoneApp();
+  useEffect(() => (phone && !leaving ? closesOnBack(() => close.current()) : undefined), [phone, leaving, close]);
   useEffect(() => {
     if (!phone) return;
     wakeSystemControls();
-    return () => wakeSystemControls();
+    return () => { void flushSystemControls(); };
   }, [phone]);
+  useEffect(() => {
+    if (phone && leaving) wakeSystemControls();
+  }, [phone, leaving]);
 
   const portalRoot = phone ? (document.querySelector(".dusk-mobile") ?? document.body) : document.body;
 

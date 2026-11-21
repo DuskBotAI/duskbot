@@ -4,6 +4,8 @@ export const MENU_SHEET = "popover-surface flex flex-col gap-0.5 rounded-[var(--
 
 export const MENU_ITEM = "flex min-h-8 w-full shrink-0 items-center gap-2 whitespace-nowrap rounded-[10px] px-2 py-1.5 text-left text-[14px] leading-5 tracking-[0.01em] focus-visible:bg-menu-hover active:bg-menu-active touch:min-h-10";
 
+export const GROK_MENU_ITEM = "flex min-h-8 w-full shrink-0 items-center gap-1.5 whitespace-nowrap rounded-[10px] px-2 py-1.5 text-left text-[14px] leading-5 tracking-[0.01em] touch:min-h-10";
+
 /** Grok paints a row's highlight on a ::before inset in the row, 10px round, and leaves the row itself square. */
 export const GROK_ROW_FILL = "isolate rounded-none before:pointer-events-none before:absolute before:inset-0 before:-z-10 before:rounded-[10px] before:content-[''] hover:before:bg-menu-hover focus-visible:bg-transparent! focus-visible:before:bg-menu-hover active:bg-transparent active:before:bg-menu-active relative";
 

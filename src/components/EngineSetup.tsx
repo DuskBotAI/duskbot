@@ -350,13 +350,16 @@ function ManagedEngineSetup({ instance, signInOnly }: { instance: InstanceInfo; 
     else window.open(auth.authorizationUrl, "_blank", "noopener,noreferrer");
   });
 
+  const pasteCode = instance.authentication?.method === "paste-code";
+
   const complete = () => run("complete", async () => {
     if (!flow) return;
     await api(`/api/instances/${encodeURIComponent(instance.instanceId)}/auth/complete`, {
       method: "POST",
-      body: JSON.stringify({ flowId: flow.flowId, callbackUrl }),
+      body: JSON.stringify(pasteCode ? { flowId: flow.flowId, code: callbackUrl } : { flowId: flow.flowId, callbackUrl }),
     });
     setCallbackUrl("");
+    setFlow(null);
     await refreshInstances();
     await refreshModels(instance.instanceId);
   });
@@ -402,7 +405,32 @@ function ManagedEngineSetup({ instance, signInOnly }: { instance: InstanceInfo; 
             : t("engineSetup.signInGoogle")}
       </button>
       {busy === "signin" && <p role="status" className="text-[12px] text-ink-secondary">{t("engineSetup.antigravitySlow")}</p>}
-      {flow && (
+      {flow && pasteCode && (
+        <form
+          className="rounded-lg border border-transparent bg-app px-2.5 py-2 text-[12px] text-ink-secondary"
+          onSubmit={(event) => { event.preventDefault(); if (callbackUrl.trim() && busy === null) void complete(); }}
+        >
+          <p className="leading-relaxed">{t("onboarding.meet.pasteHint", { name: "Google" })}</p>
+          <input
+            value={callbackUrl}
+            onChange={(event) => setCallbackUrl(event.target.value)}
+            aria-label={t("onboarding.meet.paste", { name: "Google" })}
+            placeholder={t("onboarding.meet.paste", { name: "Google" })}
+            spellCheck={false}
+            autoCorrect="off"
+            autoCapitalize="off"
+            className="mt-2 w-full rounded-md border border-transparent bg-inset px-2 py-1.5 text-[11px] text-ink outline-none focus:border-accent"
+          />
+          <button
+            type="submit"
+            disabled={!callbackUrl.trim() || busy !== null}
+            className="mt-2 w-full rounded-md bg-control px-2 py-1.5 font-medium text-ink disabled:opacity-50"
+          >
+            {busy === "complete" ? t("engineSetup.sending") : t("onboarding.meet.pasteSubmit")}
+          </button>
+        </form>
+      )}
+      {flow && !pasteCode && (
         <>
           <button type="button" onClick={() => void check()} className="w-full rounded-lg bg-control px-3 py-2 text-[12px] font-semibold text-ink hover:bg-raised-hover">
             {busy === "check" ? t("common.checking") : t("engineSetup.finishedSignIn")}

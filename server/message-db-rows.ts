@@ -38,7 +38,17 @@ const PREVIEW_SQL = `WITH RECURSIVE
   ),
   picked AS (
     SELECT 'newest' AS pick, ord, pos FROM (
-      SELECT ord, pos FROM branch WHERE kind NOT IN ('screen', 'digest', 'compaction', 'call') ORDER BY pos DESC LIMIT 1
+      SELECT b.ord, b.pos FROM branch b JOIN messages m ON m.rowid = b.ord
+      WHERE b.kind NOT IN ('screen', 'digest', 'compaction', 'call')
+        AND NOT (b.kind = 'activity' AND (
+          json_extract(m.json, '$.tool.name') LIKE 'approved % (full access)%'
+          OR json_extract(m.json, '$.tool.name') LIKE 'approved % (saved command)%'
+          OR json_extract(m.json, '$.tool.name') LIKE 'approved % (always allowed)%'
+          OR json_extract(m.json, '$.tool.name') LIKE 'approved % (its own files)%'
+          OR json_extract(m.json, '$.tool.name') LIKE 'approved % (reads only)%'
+          OR json_extract(m.json, '$.tool.name') LIKE 'approved % (web search)%'
+        ))
+      ORDER BY b.pos DESC LIMIT 1
     )
     UNION ALL SELECT 'person', ord, pos FROM (
       SELECT ord, pos FROM branch WHERE role = 'user' ORDER BY pos DESC LIMIT 1

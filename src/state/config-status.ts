@@ -10,6 +10,9 @@ export type NestedKeyName = "ttsKey" | "fishAudioKey" | "geminiTtsKey" | "deepgr
 
 /** GET /api/config, configured flags only; secrets are never echoed. */
 export interface ConfigStatus {
+  /** config.json could not be read: `lastGood` says its last good copy is in use, otherwise the defaults are. Absent or
+   * null while it reads fine. */
+  configFile?: { file: string; reason: string; lastGood: boolean } | null;
   /** The workspace's banner picture (GET /api/workspace/banner), by a version that changes with it; null without one. */
   workspaceBanner?: import("@/lib/place-banner").BannerSummary | null;
   xai?: SavedKey;

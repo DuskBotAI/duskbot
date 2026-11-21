@@ -192,7 +192,7 @@ import {
   DATA_DIR, EVENTS_DIR,
   onConfigSaved,
   CLAUDE_API_INSTANCE,
-  openCodeProviderKeys,
+  openCodeProviderKeys, configFileProblem,
 } from "./config.ts";
 import { serveStatic } from "./static-files.ts";
 import { startUpkeep } from "./host/start-upkeep.ts";
@@ -12914,7 +12914,7 @@ function configStatus() {
   const eventLogMaxBytes = threadEventLogMaxBytes(cfg);
   const eventLogRetentionDays = threadEventLogRetentionDays(cfg);
   return {
-    cloudStarter: cloudPlanTier.starter(), botLimit: botLimit.limit(), waitingForRoom: engineMemory.waiting(), xai: keyStatus(cfg.xai?.key),
+    configFile: configFileProblem(), cloudStarter: cloudPlanTier.starter(), botLimit: botLimit.limit(), waitingForRoom: engineMemory.waiting(), xai: keyStatus(cfg.xai?.key),
     mistral: keyStatus(cfg.mistral?.key),
     cerebras: keyStatus(cfg.cerebras?.key),
     groq: keyStatus(cfg.groq?.key), greenference: keyStatus(cfg.greenference?.key),

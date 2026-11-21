@@ -6981,6 +6981,8 @@
   "team.sharedHeaderPeople": "Geteilt · nur hinzugefügte Personen und Admins können es sehen",
   "liveConnection.reconnecting": "Verbindung wird wiederhergestellt… Neue Antworten erscheinen, sobald die Verbindung wieder steht.",
   "liveConnection.offline": "Du bist offline. Neue Antworten erscheinen, sobald du wieder online bist.",
+  "liveConnection.configLastGood": "{app} konnte seine Einstellungsdatei config.json nicht lesen ({reason}) und verwendet deshalb deine letzten funktionierenden Einstellungen. Die Datei bleibt unverändert: Korrigiere sie im Datenordner von {app}.",
+  "liveConnection.configDefaults": "{app} konnte seine Einstellungsdatei config.json nicht lesen ({reason}) und hat keine frühere Kopie, deshalb wurde mit den Standardeinstellungen gestartet. Die Datei bleibt unverändert: Korrigiere sie im Datenordner von {app}.",
   "team.ownHelperHeader": "Eigener Helfer · andere Mitglieder sehen ihn nicht",
   "chat.page.usage": "{pages} von {limit} Seiten",
   "chat.page.copyLink": "Link kopieren",

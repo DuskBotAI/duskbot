@@ -45,6 +45,7 @@ import { BotLimitPopup } from "@/components/BotLimitPopup";
 import { CloudAsleepStrip } from "@/components/CloudAsleepStrip";
 import { useCloudLastSeen, useHeldSend } from "@/lib/cloud-last-seen";
 import { LiveConnectionStrip } from "@/components/LiveConnectionStrip";
+import { ConfigFileStrip } from "@/components/ConfigFileStrip";
 import { CloudSendStrip } from "@/components/CloudSendStrip";
 import { CloudMoveOffer } from "@/components/CloudMoveOffer";
 import { HomeLine } from "@/components/HomeLine";
@@ -310,6 +311,7 @@ function Shell({ viewer }: { viewer: WelcomeViewer | null }) {
   const strips = <>
     <CloudAsleepStrip />
     <LiveConnectionStrip connected={state.connected} hydrated={state.hydrated === true} />
+    <ConfigFileStrip />
     <CloudSendStrip cloudHome={state.config?.cloudHome === true} />
     <HomeLine />
     <AppNotices quiet={paletteOpen || drawerOpen} viewer={viewer} />

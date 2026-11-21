@@ -7103,6 +7103,8 @@
   "team.sharedHeaderPeople": "Shared · only people added and admins can see",
   "liveConnection.reconnecting": "Reconnecting… new replies show up once the connection is back.",
   "liveConnection.offline": "You're offline. New replies show up once you're back online.",
+  "liveConnection.configLastGood": "{app} couldn't read its settings file, config.json ({reason}), so it is using your last good settings. The file is left as it was: fix it in {app}'s data folder.",
+  "liveConnection.configDefaults": "{app} couldn't read its settings file, config.json ({reason}), and has no earlier copy, so it started with default settings. The file is left as it was: fix it in {app}'s data folder.",
   "team.ownHelperHeader": "Own helper · other members can't see it",
   "chat.page.usage": "{pages} of {limit} pages",
   "chat.page.copyLink": "Copy link",

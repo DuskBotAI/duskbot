@@ -8,7 +8,7 @@ export const lastGoodPath = (file: string) => `${file}.last-good`;
 
 /** These copies hold the whole list (a team member's private bots) or the raw config (keys): no backup carries them. */
 export const isSafetyCopy = (name: string) =>
-  /^(?:bots|groups)\.json\.(?:last-good|unreadable-\d+)$/.test(name) || /^config\.json\.unreadable-\d+$/.test(name);
+  /^(?:bots|groups)\.json\.(?:last-good|unreadable-\d+)$/.test(name) || /^config\.json\.(?:last-good|unreadable-\d+)$/.test(name);
 
 /** Copies a file that could not be read beside itself before anything writes over it; where it went, or undefined. */
 export function setAsideUnreadable(file: string, now = Date.now): string | undefined {

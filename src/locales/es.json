@@ -6966,6 +6966,8 @@
   "team.sharedHeaderPeople": "Compartido · solo las personas añadidas y los administradores pueden verlo",
   "liveConnection.reconnecting": "Reconectando… las respuestas nuevas aparecerán cuando vuelva la conexión.",
   "liveConnection.offline": "No tienes conexión. Las respuestas nuevas aparecerán cuando vuelvas a estar en línea.",
+  "liveConnection.configLastGood": "{app} no pudo leer su archivo de ajustes, config.json ({reason}), así que usa tus últimos ajustes válidos. El archivo queda como estaba: corrígelo en la carpeta de datos de {app}.",
+  "liveConnection.configDefaults": "{app} no pudo leer su archivo de ajustes, config.json ({reason}), y no tiene una copia anterior, así que empezó con los ajustes predeterminados. El archivo queda como estaba: corrígelo en la carpeta de datos de {app}.",
   "team.ownHelperHeader": "Asistente propio · los demás miembros no pueden verlo",
   "chat.page.usage": "{pages} de {limit} páginas",
   "chat.page.copyLink": "Copiar enlace",

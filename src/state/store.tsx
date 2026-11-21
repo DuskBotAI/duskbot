@@ -430,7 +430,7 @@ export type { BrowserEngineSummary, BrowserProfile, ConfigStatus, ManagedPolicyS
 // A section left out here is wiped from state.config whenever a config frame lands.
 export type ConfigStatusFrame = Pick<
   ConfigStatus,
-  "xai" | "mistral" | "cerebras" | "groq" | "greenference" | "meta" | "deepseek" | "xResearch" | "treg" | "anthropic" | "openai" | "openrouter" | "openaiCompat" | "composio" | "box" | "vps" | "rooms" | "mcp" | "threads" | "automaticRecovery" | "cacheKeepWarm" | "localVm" | "opencodeGo" | "tts" | "decider" | "helpers" | "imageGen" | "live" | "savedKeys" | "profile" | "language" | "talkingStyle" | "computerName" | "newBots" | "features" | "onboarding" | "browserEngine" | "browserProfiles" | "managedPolicy" | "cloudHome" | "team" | "workspaceBanner"
+  "configFile" | "xai" | "mistral" | "cerebras" | "groq" | "greenference" | "meta" | "deepseek" | "xResearch" | "treg" | "anthropic" | "openai" | "openrouter" | "openaiCompat" | "composio" | "box" | "vps" | "rooms" | "mcp" | "threads" | "automaticRecovery" | "cacheKeepWarm" | "localVm" | "opencodeGo" | "tts" | "decider" | "helpers" | "imageGen" | "live" | "savedKeys" | "profile" | "language" | "talkingStyle" | "computerName" | "newBots" | "features" | "onboarding" | "browserEngine" | "browserProfiles" | "managedPolicy" | "cloudHome" | "team" | "workspaceBanner"
 >;
 
 export function configStatusFromFrame(frame: ConfigStatusFrame): ConfigStatus {
@@ -466,7 +466,7 @@ export function configStatusFromFrame(frame: ConfigStatusFrame): ConfigStatus {
     browserEngine: frame.browserEngine,
     browserProfiles: frame.browserProfiles,
     managedPolicy: frame.managedPolicy,
-    ...(frame.cloudHome ? { cloudHome: true } : {}), ...(frame.team ? { team: frame.team } : {}), ...(frame.workspaceBanner ? { workspaceBanner: frame.workspaceBanner } : {}),
+    ...(frame.configFile ? { configFile: frame.configFile } : {}), ...(frame.cloudHome ? { cloudHome: true } : {}), ...(frame.team ? { team: frame.team } : {}), ...(frame.workspaceBanner ? { workspaceBanner: frame.workspaceBanner } : {}),
   };
 }
 

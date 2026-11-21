@@ -1073,6 +1073,12 @@ describe("config status frames", () => {
     expect(status.newBots).toEqual({ effort: "high" });
   });
 
+  it("keeps an unreadable config.json's notice through a live config update, and drops it once the file reads", () => {
+    const problem = { file: "config.json", reason: "invalid JSON at line 8, column 15", lastGood: true };
+    expect(configStatusFromFrame({ configFile: problem } as ConfigStatusFrame).configFile).toEqual(problem);
+    expect(configStatusFromFrame({ configFile: null } as ConfigStatusFrame).configFile).toBeUndefined();
+  });
+
   it("keeps thread capacity and room timeout with the existing config fields", () => {
     expect(
       configStatusFromFrame({

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Loader2, Maximize2, Monitor } from "../icons";
 
 import { t } from "@/lib/i18n";
@@ -16,10 +16,10 @@ export function CloudScreenPreview({ src, name, error, starting, opening, disabl
   onRetry: (discardFrame: boolean) => void;
 }) {
   const [loaded, setLoaded] = useState<string | null>(null);
-  const [failed, setFailed] = useState<string | null>(null);
-  useEffect(() => { setFailed(null); }, [retry]);
-  const visible = Boolean(src && loaded === src && failed !== src);
-  const problem = error ?? (src && failed === src ? t("computer.preview.imageFailed") : null);
+  const [failed, setFailed] = useState<{ src: string; retry: number } | null>(null);
+  const failedNow = Boolean(src && failed?.src === src && failed.retry === retry);
+  const visible = Boolean(src && loaded === src && !failedNow);
+  const problem = error ?? (failedNow ? t("computer.preview.imageFailed") : null);
 
   return (
     <div className="relative h-full w-full" aria-busy={!problem && (!visible || opening || refreshing)}>
@@ -37,7 +37,7 @@ export function CloudScreenPreview({ src, name, error, starting, opening, disabl
             src={src}
             alt={t("computer.screenOf", { name })}
             onLoad={() => { setLoaded(src); setFailed(null); }}
-            onError={() => setFailed(src)}
+            onError={() => setFailed({ src, retry })}
             className={`h-full w-full object-contain transition group-hover:brightness-75 ${visible ? "" : "invisible"}`}
           />
           {visible && (

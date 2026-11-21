@@ -12,6 +12,16 @@ two different saved model choices, an optional Email folder, and a Launch team
 group with separate histories. New turns deliberately remain running so that
 switching and Stop can be exercised without a real provider or account.
 
+## Where a bot's conversations are
+
+The sidebar shows one row per bot and never a thread tree; there is no
+**Show threads** setting. A bot's conversations are listed, searched, opened,
+renamed, archived and started in its profile panel: click the bot's name pill
+in the chat header, then **Details → Conversations** (the row's hint counts
+them, routine runs left out). **New conversation** sits at the top of that page.
+Steps below that expand a bot or use a thread row's menu predate this; do the
+same through Conversations.
+
 ## Check the real UI
 
 1. Expand Pepper and open Triage Gmail. Confirm its conversation and model.
@@ -57,29 +67,26 @@ switching and Stop can be exercised without a real provider or account.
     expanding the thread tree. Its separate chevron controls the tree. Repeat
     in Comfortable, Compact, and the Icons view (history is in the header in
     Icons view).
-12. In **Settings → Appearance**, turn **Show threads** off. Bot trees, folder
-    creation, the bot context menu's new-thread actions, and **All threads**
-    disappear; the selected transcript, model, queues, and running jobs remain.
-    Group/channel histories are unchanged. Background working, queued, unread,
-    and waiting conversations remain reachable through activity-only controls.
-    The header stays uncluttered; **Other activity** appears below it only when
-    there is sibling activity, including when the sidebar is closed. Open a
-    sibling from its activity entry, then click the bot's row: it returns to
-    the conversation you last wrote in (the bot's main thread). Open another
-    bot, let a reply land in the sibling it was left on, and check that the
-    sibling has its own activity entry under that bot. Follow a notification,
-    a thread chip or a search hit to a third thread of that bot: the sibling
-    keeps its unread entry, and the third thread is read once open. A
-    `duskbot://bot/<id>` link opens the main thread. A row or tile with a
-    mark on it opens the thread the mark is about (waiting on you, then unread,
-    then work under way, a thread another bot opened included); a second click
-    returns to the main thread.
+12. With Pepper on its main conversation, open **Details → Conversations**
+    and open a sibling; the transcript, model, queues and running jobs of
+    each stay its own. Group/channel histories are unchanged. Background
+    working, queued, unread and waiting conversations stay reachable through
+    activity-only controls: **Other activity** appears below the header only
+    when there is sibling activity, including when the sidebar is closed.
+    Click the bot's row: it returns to the conversation you last wrote in (the
+    bot's main thread). Open another bot, let a reply land in the sibling it
+    was left on, and check that the sibling has its own activity entry under
+    that bot. Follow a notification, a thread chip or a search hit to a third
+    thread of that bot: the sibling keeps its unread entry, and the third
+    thread is read once open. A `duskbot://bot/<id>` link opens the main
+    thread. A row or tile with a mark on it opens the thread the mark is about
+    (waiting on you, then unread, then work under way, a thread another bot
+    opened included); a second click returns to the main thread.
 13. Stop a running job through its activity entry while a sibling is queued;
     verify only the chosen job stops and the queued message starts normally.
-    Reload and confirm Show threads remains off. Turn it back on to recover
-    all histories/folders. Also toggle off/on without reloading and check that
-    folder disclosure state survives. Check the Appearance switch in a narrow
-    window and keyboard navigation through bot rows and activity controls.
+    Reload and confirm **Details → Conversations** still lists every
+    conversation. Check that row and the page in a narrow window and with the
+    keyboard, through bot rows and activity controls.
 14. In a bot with only one completed thread, use its row menu → **Delete
     thread** and confirm. The old transcript must disappear immediately and
     one empty **New thread** must replace it, with the bot still selected.
@@ -119,16 +126,15 @@ For approval verification, new fake-provider launches also write fixture-only
 `<thread-id>.launch.json` receipts inside the printed disposable data directory.
 The live broker in their `mcpConfig.mcpServers.dusk` entry can be exercised using
 the same `permission` recipe in `server/thread-capacity-api.test.ts`. Request a
-synthetic approval, switch away, and navigate back using an activity control
-with Show threads off. Answer **Allow once** and verify that broker receives
+synthetic approval, switch away, and navigate back using an activity control. Answer **Allow once** and verify that broker receives
 the matching answer. This proves the app's approval routing, not a real model
 or command execution. Never publish the raw launch receipt: it contains
 short-lived fixture capabilities.
 
 ### Optional-thread display walkthrough
 
-The isolated renderer was exercised with Show threads on/off, direct bot
-selection, an unread sibling, a real pending permission broker, and thread-scoped
+The isolated renderer was exercised with the thread tree shown and hidden
+(before thread display became always hidden), direct bot selection, an unread sibling, a real pending permission broker, and thread-scoped
 Stop. These screenshots show the actual offline fixture, not mockups:
 
 The offline CLI may report an interrupted subprocess when stopped; the checks

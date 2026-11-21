@@ -10,6 +10,7 @@ import { SelectPill } from "../ui/SelectPill";
 import type { SimplePageId } from "./page-registry";
 import { BotRoutines } from "../routines/BotRoutines";
 import { Card, PanelSections, rowCls, RowText } from "./rows";
+import { NavRow } from "../ListRows";
 import { ModelSelectRow } from "../native/ModelSelectRow";
 import { ModelRowSlot } from "./model-row-slot";
 import { UsageMeterRow } from "../native/UsageMeter";
@@ -131,15 +132,20 @@ export function VoiceChatCard({ bot, patch }: { bot: Bot; patch: Derived["patch"
 
 /** Grok's Details tab (routines or the line saying what one is, then Voice chat), with the few native rows Grok has no
  * home for: the bot's conversations, Work until done, its model and how much it asks first. */
-export function DetailsTab({ bot }: {
+export function DetailsTab({ bot, onOpen }: {
   bot: Bot;
   derived: Derived;
   onOpen: (page: SimplePageId) => void;
 }) {
+  const conversations = Math.max(1, (bot.tasks ?? []).filter((task) => !task.routineRunId).length);
   return (
     <PanelSections data-panel-tabpanel="details">
       <BotRoutines bot={bot} />
 
+      <Card anchor="conversations">
+        <NavRow data-panel-page="threads" title={t("botPanel.conversations.title")}
+          hint={conversations === 1 ? t("botPanel.threads.one") : t("botPanel.threads.count", { count: conversations })} onClick={() => onOpen("threads")} />
+      </Card>
       <ModelCard bot={bot} />
       <PackageProvenance bot={bot} />
     </PanelSections>

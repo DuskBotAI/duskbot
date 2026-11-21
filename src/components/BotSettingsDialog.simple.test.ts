@@ -553,9 +553,9 @@ describe("the avatar editor", () => {
 
 
 describe("the Details tab", () => {
-  it("holds routines (or what they are), then the Model card, and no Voice chat", () => {
+  it("holds routines (or what they are), then Conversations, then the Model card, and no Voice chat", () => {
     const rendered = botTab(makeBot());
-    const order = ['data-panel-empty="routines"', 'data-panel-card="model"', 'data-panel-row="model"'].map((marker) => rendered.html.indexOf(marker));
+    const order = ['data-panel-empty="routines"', 'data-panel-page="threads"', 'data-panel-card="model"', 'data-panel-row="model"'].map((marker) => rendered.html.indexOf(marker));
     expect(order.every((index) => index > -1)).toBe(true);
     expect([...order].sort((a, b) => a - b)).toEqual(order);
     expect(rendered.html).toContain('data-panel-sections=""');
@@ -564,6 +564,19 @@ describe("the Details tab", () => {
     }
     expect(rendered.html).not.toContain(">routines<");
     expect(switches(rendered.html)).toBe(0);
+  });
+
+  it("opens the bot's conversations, counting them without routine runs, so another can be listed, opened or started", () => {
+    onOpen.mockClear();
+    const one = botTab(makeBot({ tasks: undefined }));
+    expect(find(one, "data-panel-page", "threads").props.hint).toBe("1 conversation");
+    const tasks = [{ threadId: "a", title: "Main" }, { threadId: "b", title: "Launch" }, { threadId: "c", title: "Daily run", routineRunId: "r1" }] as Bot["tasks"];
+    const rendered = botTab(makeBot({ tasks }));
+    const row = find(rendered, "data-panel-page", "threads");
+    expect(row.props.title).toBe("Conversations");
+    expect(row.props.hint).toBe("2 conversations");
+    click(row);
+    expect(onOpen).toHaveBeenCalledWith("threads");
   });
 
   it("says what routines are while the bot has none, in Grok's words, and lists them once it has some", () => {

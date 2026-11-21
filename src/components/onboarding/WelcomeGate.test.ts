@@ -124,36 +124,18 @@ describe("who gets the welcome flow", () => {
     expect(store.dispatch).not.toHaveBeenCalledWith(expect.objectContaining({ type: "select" }));
   });
 
-  it("opens the bot panel once beside the intro chat where it docks, but not on a replay, over a phone's chat or over a narrow window's chat", () => {
-    const openPanel = { type: "toggleSettings", open: true };
+  it("lands in the intro chat with the bot panel closed at every width, so nothing slides in while the person reads", () => {
     const panelOpens = () => store.dispatch.mock.calls.filter(([action]) => action.type === "toggleSettings");
     const wide = (phone: boolean, docks = !phone) => ({ ...LOCAL_PAGE, matchMedia: (query: string) => ({ matches: query.includes("max-width") ? phone : docks }) });
-    vi.stubGlobal("window", wide(false));
     store.state = { ...store.state, bots: [{ id: "maus", chiefOfStaff: true }] };
-    gate(LOCAL_VIEWER).tree!.props.onDone!("maus");
-    expect(panelOpens()).toEqual([[openPanel]]);
-    expect(store.dispatch.mock.calls.map(([action]) => action.type)).toEqual(["toggleWelcome", "select", "toggleSettings"]);
-
-    fixture.values = [];
-    store.dispatch.mockReset();
-    vi.stubGlobal("window", wide(false, false));
-    gate(LOCAL_VIEWER).tree!.props.onDone!("maus");
-    expect(store.dispatch, "1040 px: the chat, clean").toHaveBeenCalledWith({ type: "select", id: "maus" });
-    expect(panelOpens()).toEqual([]);
-
-    fixture.values = [];
-    store.dispatch.mockReset();
-    vi.stubGlobal("window", wide(true));
-    gate(LOCAL_VIEWER).tree!.props.onDone!("maus");
-    expect(store.dispatch).toHaveBeenCalledWith({ type: "select", id: "maus" });
-    expect(panelOpens()).toEqual([]);
-
-    fixture.values = [];
-    store.dispatch.mockReset();
-    vi.stubGlobal("window", wide(false));
-    store.state = { ...store.state, welcomeOpen: true, config: { onboarding: { ...EMPTY_ONBOARDING, completedAt: "2026-10-23T00:00:00.000Z", version: WELCOME_VERSION } } };
-    gate(LOCAL_VIEWER).tree!.props.onDone!("maus");
-    expect(panelOpens()).toEqual([]);
+    for (const [phone, docks] of [[false, true], [false, false], [true, false]] as const) {
+      fixture.values = [];
+      store.dispatch.mockReset();
+      vi.stubGlobal("window", wide(phone, docks));
+      gate(LOCAL_VIEWER).tree!.props.onDone!("maus");
+      expect(store.dispatch.mock.calls.map(([action]) => action.type)).toEqual(["toggleWelcome", "select"]);
+      expect(panelOpens()).toEqual([]);
+    }
   });
 
   it("leaves a dusk bot Cloud home's first run to its engine sign-in", () => {

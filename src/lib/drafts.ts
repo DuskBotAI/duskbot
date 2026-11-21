@@ -5,6 +5,7 @@ const KEY = "dusk-drafts";
 const ATTACHMENTS_KEY = "dusk-draft-attachments";
 const SEND_IDS_KEY = "dusk-draft-send-ids";
 const CHANNEL_MODES_KEY = "dusk-draft-channel-modes";
+const FAILED_SENDS_KEY = "dusk-draft-failed-sends";
 // Outside React, so a late failure from an unmounted composer cannot overwrite a newer draft.
 const draftRevisions = new Map<string, number>();
 const replyDrafts = new Map<string, string>();
@@ -153,8 +154,18 @@ export function getDraftAttachments(store: Store, id: string): Attachment[] {
 export function setDraftAttachments(store: Store, id: string, attachments: Attachment[]): void {
   memoryFor(store, attachmentDraftsByStore, fallbackAttachmentDrafts).set(id, [...attachments]);
   const drafts = read(store, ATTACHMENTS_KEY);
-  // Blob URLs exist only for this document: persist only upload-complete attachments.
-  const durable = attachments.flatMap((attachment): Attachment[] => {
+  const durable = durableAttachments(attachments);
+  if (durable.length) drafts[id] = durable;
+  else delete drafts[id];
+  try {
+    store?.setItem(ATTACHMENTS_KEY, JSON.stringify(drafts));
+  } catch {
+  }
+}
+
+// Blob URLs exist only for this document: persist only upload-complete attachments.
+function durableAttachments(attachments: readonly Attachment[]): Attachment[] {
+  return attachments.flatMap((attachment): Attachment[] => {
     if (attachment.kind === "paste") return [attachment];
     if (!attachment.path || attachmentUnsent(attachment)) return [];
     if (attachment.kind === "file") return [attachment];
@@ -167,12 +178,41 @@ export function setDraftAttachments(store: Store, id: string, attachments: Attac
       mime: attachment.mime,
     }];
   });
-  if (durable.length) drafts[id] = durable;
-  else delete drafts[id];
+}
+
+const optionalString = (value: unknown) => value === undefined || typeof value === "string";
+
+function storedFailedSend(value: unknown): FailedComposerSend | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const send = value as Record<string, unknown>;
+  if (![send.id, send.sendId, send.text, send.requestText, send.threadId].every((field) => typeof field === "string")) return null;
+  if (!optionalString(send.replyToId)) return null;
+  if (send.channelMode !== undefined && send.channelMode !== "chat" && send.channelMode !== "goal") return null;
+  if (send.mentions !== undefined && !(Array.isArray(send.mentions) && send.mentions.every((id) => typeof id === "string"))) return null;
+  return {
+    id: send.id as string,
+    sendId: send.sendId as string,
+    text: send.text as string,
+    requestText: send.requestText as string,
+    threadId: send.threadId as string,
+    ...(send.replyToId !== undefined ? { replyToId: send.replyToId as string } : {}),
+    ...(send.channelMode !== undefined ? { channelMode: send.channelMode as ChannelMode } : {}),
+    ...(send.mentions !== undefined ? { mentions: send.mentions as string[] } : {}),
+    ...(Array.isArray(send.attachments) ? { attachments: send.attachments.filter(isAttachment) } : {}),
+  };
+}
+
+function setFailedSends(id: string, sends: FailedComposerSend[]): void {
+  failedSends.set(id, sends);
+  const store = getStore();
+  const stored = read(store, FAILED_SENDS_KEY);
+  if (sends.length) stored[id] = sends.map((send) => send.attachments ? { ...send, attachments: durableAttachments(send.attachments) } : send);
+  else delete stored[id];
   try {
-    store?.setItem(ATTACHMENTS_KEY, JSON.stringify(drafts));
+    store?.setItem(FAILED_SENDS_KEY, JSON.stringify(stored));
   } catch {
   }
+  publishFailedSends(id);
 }
 
 export function rememberReplyDraft(threadId: string, messageId: string): void {
@@ -417,12 +457,17 @@ function subscribeToDraftRestores(id: string, listener: DraftRestoreListener): (
 }
 
 function publishFailedSends(id: string): void {
-  const sends = failedSends.get(id) ?? [];
+  const sends = failedComposerSends(id);
   for (const listener of failedSendListeners.get(id) ?? []) listener(sends);
 }
 
 export function failedComposerSends(id: string): FailedComposerSend[] {
-  return failedSends.get(id) ?? [];
+  const known = failedSends.get(id);
+  if (known) return known;
+  const stored = read(getStore(), FAILED_SENDS_KEY)[id];
+  const sends = Array.isArray(stored) ? stored.flatMap((value) => storedFailedSend(value) ?? []) : [];
+  failedSends.set(id, sends);
+  return sends;
 }
 
 export function rememberFailedComposerSend(
@@ -430,8 +475,7 @@ export function rememberFailedComposerSend(
   input: FailedComposerSendInput,
 ): FailedComposerSend {
   const failed = { ...input, id: `${Date.now().toString(36)}-${++failedSendSequence}` };
-  failedSends.set(id, [...failedComposerSends(id), failed]);
-  publishFailedSends(id);
+  setFailedSends(id, [...failedComposerSends(id), failed]);
   return failed;
 }
 
@@ -483,10 +527,7 @@ export function editFailedComposerSend(id: string, failed: FailedComposerSend): 
 }
 
 export function forgetFailedComposerSend(id: string, failedId: string): void {
-  const remaining = failedComposerSends(id).filter((failed) => failed.id !== failedId);
-  if (remaining.length > 0) failedSends.set(id, remaining);
-  else failedSends.delete(id);
-  publishFailedSends(id);
+  setFailedSends(id, failedComposerSends(id).filter((failed) => failed.id !== failedId));
 }
 
 export function useFailedComposerSends(id: string): FailedComposerSend[] {

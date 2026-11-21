@@ -229,7 +229,7 @@ export function ConnectAppsWindow({ page: requested, nonce, onClose, onTemplates
     ? t("policy.managedBy", { organization: policy.organizationName }) : null, [policy]);
 
   const cards = useMemo(() => new Map((connectors.cards ?? []).map((card) => [card.slug, card])), [connectors.cards]);
-  const ready = (connectors.ready && remote.settled) || waited;
+  const ready = (connectors.ready && remote.settled && mcpServers !== null) || waited;
   const entries = useMemo<AppEntry[]>(() => {
     const own = nativeEntries();
     const catalog = (connectors.cards ?? [])

@@ -22,6 +22,7 @@ const fixture = vi.hoisted(() => ({
     ],
   },
   actions: { attio: { actions: ["Create record", "Find person"] } } as Record<string, { actions: string[]; triggers?: string[] }>,
+  mcpServers: [] as Array<{ name: string; enabled: boolean }> | null,
 }));
 
 vi.mock("@/state/store", async (original) => {
@@ -48,7 +49,7 @@ vi.mock("@/lib/connector-poll", () => ({ pollConnector: (_before: unknown, _read
 // sealing has its own tests (src/lib/sealed-send.test.ts): here the patch the key step asked to save is what the server gets
 vi.mock("@/lib/sealed-send", () => ({ putConfig: (patch: unknown) => fixture.api("/api/config", { method: "PUT", body: JSON.stringify(patch) }) }));
 vi.mock("@/lib/logins", () => ({ listLogins: async () => ({ logins: [], onePassword: { connected: false } }) }));
-vi.mock("@/lib/mcp-servers", () => ({ useMcpServers: () => ({ servers: [], error: false, refresh: async () => [] }) }));
+vi.mock("@/lib/mcp-servers", () => ({ useMcpServers: () => ({ servers: fixture.mcpServers, error: false, refresh: async () => fixture.mcpServers ?? [] }) }));
 vi.mock("../McpServersPanel", () => ({ McpServersPanel: () => null }));
 vi.mock("../XCard", () => ({ XCard: () => null }));
 vi.mock("../EmailCard", () => ({ EmailCard: () => null }));
@@ -95,6 +96,7 @@ beforeEach(async () => {
 });
 
 afterEach(() => {
+  fixture.mcpServers = [];
   fixture.memory = null;
   fixture.inventory = null;
   act(() => root.unmount());
@@ -849,6 +851,23 @@ describe("the Connect Apps window", () => {
     expect(rows(), "no row moves or appears").toEqual(first);
     expect(titles()).toEqual(sections);
     expect(dialog().querySelector('[data-app-row="asana"]')?.textContent, "the badge updates in place").toContain("Connected");
+  });
+
+  it("waits for the MCP server list before it draws home, so connected servers lead from the first frame", async () => {
+    act(() => root.unmount());
+    fixture.mcpServers = null;
+    fixture.memory = { services: {}, authoritative: true };
+    fixture.inventory = Promise.resolve({ services: {}, authoritative: true });
+    const props = { page: { kind: "home" } as const, nonce: 8, onClose, onTemplates: vi.fn() };
+    const render = () => root.render(createElement(ConnectAppsWindow, props));
+    root = createRoot(document.body.appendChild(document.createElement("div")));
+    await act(async () => { render(); });
+    await flush();
+    fixture.mcpServers = [{ name: "notes", enabled: true }];
+    await act(async () => { render(); });
+    await flush();
+    expect(titles()[0]).toBe("Connected");
+    expect(dialog().querySelector("#ca-section-connected")?.closest("section")?.querySelector('[data-app-row="mcp:notes"]')).not.toBeNull();
   });
 
   it("adds any MCP server from the Custom MCP row", async () => {

@@ -1851,6 +1851,8 @@
   "sidebar.searchAria": "Buscar bots y mensajes",
   "sidebar.searchClose": "Cerrar búsqueda",
   "sidebar.noMatch": "Nada coincide con «{query}»",
+  "sidebar.empty.title": "No hay bots en la barra lateral.",
+  "sidebar.empty.show": "Mostrar a {name}",
   "sidebar.preview.waiting": "Te necesita",
   "sidebar.preview.waitingOnTeammate": "Esperando a un compañero…",
   "sidebar.preview.working": "Trabajando",

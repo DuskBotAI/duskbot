@@ -1866,6 +1866,8 @@
   "sidebar.searchAria": "Bots und Nachrichten durchsuchen",
   "sidebar.searchClose": "Suche schließen",
   "sidebar.noMatch": "Nichts passt zu „{query}“",
+  "sidebar.empty.title": "Keine Bots in der Seitenleiste.",
+  "sidebar.empty.show": "{name} anzeigen",
   "sidebar.preview.waiting": "Braucht dich",
   "sidebar.preview.waitingOnTeammate": "Wartet auf einen Kollegen…",
   "sidebar.preview.working": "Arbeitet",

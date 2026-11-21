@@ -77,6 +77,7 @@ import { usePopoverDismiss } from "@/hooks/use-popover-dismiss";
 import { myDefaultBot, useViewerEmail, useWelcomingBot } from "@/lib/default-bot";
 import { PinnedBotRoster, PinnedCircleThreadSection } from "./PinnedCircleThreads";
 import { archiveBotWithNotice, onArchiveNotice } from "./bot-archive";
+import { SidebarEmpty } from "./SidebarEmpty";
 import { ArchivedBotsPanel, botConfirmProps, type BotConfirmKind } from "./ArchivedBotsPanel"; import { MovedBotRows } from "./MoveToTeam";
 import { NewRoomPanel } from "./SidebarNewRoomPanel";
 import { SectionPicker } from "./SidebarSectionPicker";
@@ -968,6 +969,8 @@ export function Sidebar({ open, onClose, collapseToIcons = false }: {
   const { interactive: layoutInteractive, collapsed: sectionCollapsed, toggle: toggleSection } = sections;
   // grok's header menu: Rename, Move up, Move down and Delete for a section; Unassigned only moves
   const sectionMenuFor = (id: string): boolean => layoutInteractive && !remoteClient && (userSectionName(id) !== null || (id === BOTS_SECTION_ID && sectionIds.length > 1));
+  const nothingListed = !q && !rail && !primary && !unsectionedChief
+    && pinnedBots.length + sectionChiefs.length + sectionedBots.length + unsectionedBots.length + visibleGroups.length === 0;
   const archivedBots = state.bots.filter((bot) => bot.hidden && !bot.movedTo);
   const archivedEntry = remoteClient ? undefined : { count: archivedBots.length, open: () => setArchivedBotsOpen(true) };
   const pendingBotUndo = teamFeedback?.restoreBot;
@@ -1247,6 +1250,7 @@ export function Sidebar({ open, onClose, collapseToIcons = false }: {
               </div>
             );
           })}
+          {nothingListed && <SidebarEmpty canAdd={teamSettingsAllowed !== false} />}
           {simpleDesk && !q && <SidebarArchivedSection bots={state.bots} />}
           <MovedBotRows bots={state.bots} /><SearchResults query={query} onLanded={() => { setQuery(""); setSearchOpen(false); }} />
           {showPinnedCircleThreads && (

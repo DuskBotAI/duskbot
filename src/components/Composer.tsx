@@ -88,7 +88,7 @@ import { VoiceFirstRunSheet } from "./VoiceFirstRunSheet";
 import { voiceShortcut, voiceShortcutLabel } from "@/lib/voice-input/shortcut";
 import { openSettings } from "@/lib/open-settings";
 import { NotesWaitingLine, useNotesIntake } from "./NotesWaiting"; import { looksLikeNotes, notesInFiles } from "@/lib/assistant-notes";
-import { escapeCancelsReply } from "@/lib/replies";
+import { escapeCancelsReply, escapeStopsTurn } from "@/lib/replies";
 import { useStopPress } from "@/lib/stop-turn";
 import { useThreadRefs } from "./ThreadRefs";
 import {
@@ -1082,6 +1082,11 @@ export function Composer({
             if (onClearReply && escapeCancelsReply(e.nativeEvent, { replying: Boolean(replyTo), recording })) {
               e.preventDefault();
               onClearReply();
+              return;
+            }
+            if (escapeStopsTurn(e.nativeEvent, { stoppable, empty: !hasContent, replying: Boolean(replyTo), recording })) {
+              e.preventDefault();
+              interruptTurn();
               return;
             }
             if (e.key === "ArrowUp" && !hasContent && onEditLast) {

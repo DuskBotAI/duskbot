@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { escapeCancelsReply, replyAuthor, replySnippet } from "./replies";
+import { escapeCancelsReply, escapeStopsTurn, replyAuthor, replySnippet } from "./replies";
 import type { Message } from "@/state/store";
 
 const base: Message = { id: "m1", at: 1, role: "bot", kind: "text", text: "hello" };
@@ -36,6 +36,21 @@ describe("escapeCancelsReply", () => {
     expect(escapeCancelsReply({ key: "Escape" }, { replying: false, recording: false })).toBe(false);
     expect(escapeCancelsReply({ key: "Escape" }, { replying: true, recording: true })).toBe(false);
     expect(escapeCancelsReply({ key: "Escape", isComposing: true }, { replying: true, recording: false })).toBe(false);
+  });
+});
+
+describe("escapeStopsTurn", () => {
+  const working = { stoppable: true, empty: true, replying: false, recording: false };
+  it("stops a working bot on Escape in an empty composer", () => {
+    expect(escapeStopsTurn({ key: "Escape" }, working)).toBe(true);
+  });
+  it("leaves typed words, a reply target, dictation, IME composition and an idle bot alone", () => {
+    expect(escapeStopsTurn({ key: "Enter" }, working)).toBe(false);
+    expect(escapeStopsTurn({ key: "Escape" }, { ...working, stoppable: false })).toBe(false);
+    expect(escapeStopsTurn({ key: "Escape" }, { ...working, empty: false })).toBe(false);
+    expect(escapeStopsTurn({ key: "Escape" }, { ...working, replying: true })).toBe(false);
+    expect(escapeStopsTurn({ key: "Escape" }, { ...working, recording: true })).toBe(false);
+    expect(escapeStopsTurn({ key: "Escape", isComposing: true }, working)).toBe(false);
   });
 });
 

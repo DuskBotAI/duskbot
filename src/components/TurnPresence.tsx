@@ -1,5 +1,5 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
-import { ChevronDown } from "../icons";
+import { ChevronDown, Square } from "../icons";
 import { cn } from "@/lib/cn";
 import { pacedMs } from "@/lib/motion-speed";
 import { usePrefersReducedMotion } from "@/components/mascot-clock";
@@ -236,6 +236,7 @@ export function TurnPresence({
   card,
   cardLabel,
   wordsAtOnce,
+  onStop,
   className,
 }: {
   /** a mark before the words; without one the line is the words alone, from its first frame */
@@ -260,6 +261,8 @@ export function TurnPresence({
   quiet?: StepQuiet;
   card?: ReactNode;
   cardLabel?: string;
+  /** Ends the running turn; with it, the working line carries a Stop button for as long as it shows the work. */
+  onStop?: () => void;
   className?: string;
 }) {
   const [mounted, setMounted] = useState(visible);
@@ -376,6 +379,12 @@ export function TurnPresence({
             <ChevronDown aria-hidden="true" size={12} strokeWidth={2} className={cn("turn-now-chevron", open && "rotate-180")} />
           </button>
         ) : status}
+        {onStop && showWorking && (
+          <button type="button" data-turn-stop onClick={onStop} title={t("chat.stopTurn")} aria-label={t("chat.stopTurn")} className="turn-stop">
+            <Square aria-hidden="true" size={10} className="fill-current" />
+            <span>{t("chat.stop")}</span>
+          </button>
+        )}
       </div>
       {expandable && (!simple || step) && open && (
         <div id={cardId} role="region" aria-label={cardLabel} className="turn-now-card">

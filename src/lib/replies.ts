@@ -37,3 +37,10 @@ export function escapeCancelsReply(
 ): boolean {
   return event.key === "Escape" && replying && !recording && !event.isComposing;
 }
+
+export function escapeStopsTurn(
+  event: { key: string; isComposing?: boolean },
+  { stoppable, empty, replying, recording }: { stoppable: boolean; empty: boolean; replying: boolean; recording: boolean },
+): boolean {
+  return event.key === "Escape" && stoppable && empty && !replying && !recording && !event.isComposing;
+}

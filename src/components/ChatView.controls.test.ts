@@ -98,17 +98,21 @@ describe("the header's right side", () => {
     }
   });
 
-  it("shows no Stop in the header or the composer while a turn runs: only send and voice", () => {
+  it("shows no Stop in the header or the composer while a turn runs: only send and voice; Stop rides the working line", () => {
     vi.stubEnv("VITE_DUSK_VOICE_CALL", "0");
     {
       const busy = { ...bot, busy: true, tasks: (bot.tasks ?? []).map((task) => ({ ...task, busy: true })) };
       const { markup, controls } = header(busy);
       expect(controls).not.toContain("Stop this turn");
+      const composer = markup.slice(markup.indexOf('data-tour="composer"'));
       expect(markup).not.toContain("data-composer-stop");
-      expect(markup).not.toContain('aria-label="Stop this turn"');
+      expect(composer).not.toContain("Stop this turn");
       expect(markup).not.toContain('data-call-button="composer"');
-      expect(header({ ...busy, waitingForTeammates: true, busy: false, tasks: (bot.tasks ?? []).map((task) => ({ ...task, busy: false, waitingForTeammates: true })) }).markup)
-        .not.toContain("data-composer-stop");
+      expect(markup).toMatch(/<button[^>]*data-turn-stop="true"[^>]*aria-label="Stop this turn"/);
+      const waiting = header({ ...busy, waitingForTeammates: true, busy: false, tasks: (bot.tasks ?? []).map((task) => ({ ...task, busy: false, waitingForTeammates: true })) }).markup;
+      expect(waiting).not.toContain("data-composer-stop");
+      expect(waiting).toContain("data-turn-stop");
+      expect(header({ ...bot, busy: false }).markup).not.toContain("data-turn-stop");
     }
     vi.unstubAllEnvs();
   });
@@ -198,8 +202,9 @@ describe("header name", () => {
       expect(pillOf(busyMarkup)).toBe(pillOf(idleMarkup));
       expect(busyMarkup).toMatch(/<span role="status" class="sr-only" data-chathead-status="true">Working<\/span>/);
       expect(idleMarkup).toMatch(/<span role="status" class="sr-only" data-chathead-status="true"><\/span>/);
-      if (remote) expect(busyMarkup).toContain('title="Stop this turn"');
-      else expect(busyMarkup).not.toContain("Stop this turn");
+      const controls = busyMarkup.slice(busyMarkup.indexOf("data-chathead-controls"), busyMarkup.indexOf('role="log"'));
+      if (remote) expect(controls).toContain('title="Stop this turn"');
+      else expect(controls).not.toContain("Stop this turn");
     }
   });
 

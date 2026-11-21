@@ -1463,6 +1463,7 @@ export function ChatView({ bot: profile }: { bot: Bot }) {
             phase={writing ? TYPING_PHASE : turnLabel ? `label:${turnLabel}` : now.phase}
             seed={presenceSeed}
             since={busySince ?? (turnBusy ? turnStartedAt ?? null : null)}
+            onStop={(bot.busy || bot.waitingForTeammates) && !stopCut ? () => dispatch({ type: "interrupt", botId: bot.id, threadId: bot.threadId }) : undefined}
           />}
           {stoppedShown && !presenceShown && (
             <div data-turn-stopped role="status" className={cn("turn-stopped flex h-9 items-center ps-3 text-[13px] text-ink-tertiary", !statusSlot && presenceUnderBubble && SIMPLE_STACKED)}>

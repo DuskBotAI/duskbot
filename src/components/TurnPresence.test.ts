@@ -413,3 +413,22 @@ describe("thinking shimmer box", () => {
     expect(phrase.querySelector(".thinking-sheen")?.getAttribute("aria-hidden")).toBe("true");
   });
 });
+
+describe("the working line's Stop", () => {
+  it("offers Stop while the work shows and calls onStop on a press", () => {
+    const onStop = vi.fn();
+    render({ simple: true, wordsAtOnce: true, onStop });
+    const stop = host.querySelector<HTMLButtonElement>("button[data-turn-stop]");
+    expect(stop?.getAttribute("aria-label")).toBe("Stop this turn");
+    expect(stop?.textContent).toBe("Stop");
+    act(() => stop!.click());
+    expect(onStop).toHaveBeenCalledOnce();
+  });
+
+  it("shows no Stop without onStop, or once the line has gone", () => {
+    render({ simple: true, wordsAtOnce: true });
+    expect(host.querySelector("[data-turn-stop]")).toBeNull();
+    render({ simple: true, wordsAtOnce: true, onStop: () => {}, visible: false });
+    expect(host.querySelector("[data-turn-stop]")).toBeNull();
+  });
+});

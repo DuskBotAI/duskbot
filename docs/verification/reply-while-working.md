@@ -23,6 +23,10 @@
     turn has taken on.
   - **stop**: the reply, then the person's own Stop.
   - **redirect**: the reply, the new ask queued first, then Stop, so it runs next.
+- Whatever the quick reply decides, the working line under the transcript
+  carries a **Stop** button (`Stop this turn`) for as long as the bot works,
+  on every client and at phone width, and Esc in an empty composer stops the
+  turn too. Both use the same stop path as a bare "stop".
 - No quick reply (no writer, an error, a timeout after 12 s, an unreadable
   answer): the message takes its old path, steered or queued, with person-first.
 - Never in rooms: room messages keep queueing for the room's next turn and room

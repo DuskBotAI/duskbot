@@ -1633,6 +1633,7 @@ const MAX_CREATED_BOT_INSTRUCTIONS = 4_000;
 // Only an orphan backstop: normal terminal paths revoke a capability synchronously.
 const INTERNAL_CAPABILITY_ORPHAN_MS = 30 * 24 * 60 * 60_000;
 const internalCapabilities = new Map<string, InternalCapability>();
+const internalCapabilityBearers = new Map<string, Buffer>();
 const activeInternalGenerationByThread = new Map<string, string>();
 const internalGenerationByProviderTurn = new ProviderTurnGenerationRegistry();
 const computerSelectionTurns = new Map<string, {
@@ -1714,6 +1715,7 @@ function mintInternalCapability(capability: Omit<InternalCapability, "orphanExpi
       orphanExpiresAt: Date.now() + INTERNAL_CAPABILITY_ORPHAN_MS,
       turnStartedAt: Date.now(),
     });
+    internalCapabilityBearers.set(token, Buffer.from(`Bearer ${token}`));
   }
   return token;
 }
@@ -1725,6 +1727,7 @@ function revokeInternalCapabilityGeneration(threadId: string, generation: string
   for (const [token, capability] of internalCapabilities) {
     if (capability.threadId === threadId && capability.generation === generation) {
       internalCapabilities.delete(token);
+      internalCapabilityBearers.delete(token);
     }
   }
   if (activeInternalGenerationByThread.get(threadId) === generation) {
@@ -1740,6 +1743,7 @@ function revokeEarlierTurnCapabilities(threadId: string): void {
   if (generation) revokeInternalCapabilityGeneration(threadId, generation);
   for (const [token, capability] of internalCapabilities) {
     if (capability.threadId === threadId) internalCapabilities.delete(token);
+    internalCapabilityBearers.delete(token);
   }
 }
 
@@ -1752,6 +1756,7 @@ function revokeInternalCapabilitiesForThread(threadId: string): void {
 function revokeAllInternalCapabilities(): void {
   computerSelectionTurns.clear();
   internalCapabilities.clear();
+  internalCapabilityBearers.clear();
   sessionCredentials.clear();
   activeInternalGenerationByThread.clear();
   internalGenerationByProviderTurn.clear();
@@ -1776,9 +1781,11 @@ function authorizedInternalCapability(header: string | string[] | undefined): In
   for (const [token, capability] of internalCapabilities) {
     if (!internalCapabilityIsActive(capability)) {
       internalCapabilities.delete(token);
+      internalCapabilityBearers.delete(token);
       continue;
     }
-    const expected = Buffer.from(`Bearer ${token}`);
+    let expected = internalCapabilityBearers.get(token);
+    if (!expected) internalCapabilityBearers.set(token, expected = Buffer.from(`Bearer ${token}`));
     if (got.length === expected.length && timingSafeEqual(got, expected)) return capability;
   }
   return externalRuntimeCapability(header);

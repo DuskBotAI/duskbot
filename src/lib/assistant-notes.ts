@@ -65,7 +65,7 @@ export async function copyNotesPrompt(now = Date.now()): Promise<boolean> {
   if (copied) {
     const watch = notesWatch();
     const live = watch && now <= watch.until;
-    setWatch({ since: live ? watch.since : now, until: now + WATCH_FOR_MS, taken: watch?.taken ?? [] });
+    setWatch({ since: live ? watch.since : now, until: now + WATCH_FOR_MS, taken: watch?.taken ?? [], ...(live && watch.lookedBack ? { lookedBack: true } : {}) });
   }
   return copied;
 }
@@ -76,14 +76,16 @@ export const WATCH_FOR_MS = 3 * 60 * 60_000;
 export const WATCH_AFTER_FILE_MS = 30 * 60_000;
 export const WATCH_EVERY_MS = 4_000;
 
-/** `since`: the first copy; only files saved after it are read. `taken`: files already brought in, by name and time. */
-export interface NotesWatch { since: number; until: number; taken: string[] }
+/** `since`: the first copy; files saved after it are read by themselves. `taken`: files already brought in or turned
+ * down, by name and time. `lookedBack`: the files saved before the copy were looked for, to offer them. */
+export interface NotesWatch { since: number; until: number; taken: string[]; lookedBack?: boolean }
 
 export function notesWatch(): NotesWatch | null {
   try {
     const parsed = JSON.parse(storage()?.getItem(WATCH_KEY) ?? "null") as Partial<NotesWatch> | null;
     return parsed && typeof parsed.since === "number" && typeof parsed.until === "number"
-      ? { since: parsed.since, until: parsed.until, taken: Array.isArray(parsed.taken) ? parsed.taken.filter((one): one is string => typeof one === "string") : [] }
+      ? { since: parsed.since, until: parsed.until, taken: Array.isArray(parsed.taken) ? parsed.taken.filter((one): one is string => typeof one === "string") : [],
+        ...(parsed.lookedBack === true ? { lookedBack: true } : {}) }
       : null;
   } catch {
     return null;
@@ -94,19 +96,88 @@ function setWatch(next: NotesWatch) {
   try { storage()?.setItem(WATCH_KEY, JSON.stringify(next)); } catch {}
 }
 
+interface NotesFile { name: string; modifiedAt: number; text: string }
+
+const fileKey = (file: Pick<NotesFile, "name" | "modifiedAt">) => `${file.name}:${file.modifiedAt}`;
+const isNotesFile = (file: NotesFile) => looksLikeNotes(file.text) && !isNotesPrompt(file.text);
+
+function markTaken(files: readonly NotesFile[], patch: Partial<NotesWatch> = {}) {
+  const latest = notesWatch();
+  if (latest) setWatch({ ...latest, ...patch, taken: [...latest.taken, ...files.map(fileKey)].slice(-50) });
+}
+
+/** A notes file that was in Downloads before the prompt was copied: offered in the first bot's chat, brought in only
+ * when the person says so. The newest one names it; the parts of a split one come in together. */
+export interface NotesOffer { name: string; modifiedAt: number; files: NotesFile[] }
+
+let offer: NotesOffer | null = null;
+const offerListeners = new Set<() => void>();
+
+function setOffer(next: NotesOffer | null) {
+  offer = next;
+  for (const listener of offerListeners) listener();
+}
+
+export const notesOffer = (): NotesOffer | null => offer;
+
+export function useNotesOffer(): NotesOffer | null {
+  return useSyncExternalStore((listener) => { offerListeners.add(listener); return () => offerListeners.delete(listener); }, notesOffer, () => null);
+}
+
+/** "Found dusk-bot-notes.md from Tuesday. Bring it in?": the day's name within a week, else its date. */
+export function notesOfferLine(found: Pick<NotesOffer, "name" | "modifiedAt">, now = Date.now()): string {
+  const saved = new Date(found.modifiedAt);
+  const today = new Date(now);
+  if (saved.toDateString() === today.toDateString()) return t("composer.notes.offerToday", { name: found.name });
+  const when = now - found.modifiedAt < 6 * 86_400_000
+    ? new Intl.DateTimeFormat(activeLocale(), { weekday: "long" }).format(saved)
+    : new Intl.DateTimeFormat(activeLocale(), { month: "short", day: "numeric" }).format(saved);
+  return t("composer.notes.offer", { name: found.name, when });
+}
+
+/** Turned down: never offered again. */
+export function dismissNotesOffer() {
+  if (!offer) return;
+  markTaken(offer.files);
+  setOffer(null);
+}
+
+export async function bringOfferedNotesIn(context: NotesContext): Promise<NotesOutcome | null> {
+  const taking = offer;
+  if (!taking) return null;
+  markTaken(taking.files);
+  setOffer(null);
+  noteArrival("downloads", context.firstBotId);
+  try {
+    return await importNotes(taking.files.map((file) => file.text).join("\n\n"), context, { via: "downloads" });
+  } catch (cause) {
+    arrivalFailed(notesErrorLine(cause));
+    return null;
+  }
+}
+
 /** The notes file another AI saved to Downloads since the prompt was copied, brought in once: each file (or the parts
- * of a split one, together) by its name and time. Null when nothing new is there, or the watch is over. */
+ * of a split one, together) by its name and time. The first look also finds one saved before the copy, and offers it.
+ * Null when nothing new came in, or the watch is over. */
 export async function takeNotesFromDownloads(context: NotesContext, now = Date.now()): Promise<NotesOutcome | null> {
   const watch = notesWatch();
   if (!watch || now > watch.until) return null;
-  const answer = await api<{ files?: Array<{ name: string; modifiedAt: number; text: string }> }>(
-    `/api/setup-import/notes?since=${Math.floor(watch.since)}`, { timeoutMs: 10_000 },
+  const answer = await api<{ files?: NotesFile[] }>(
+    `/api/setup-import/notes?since=${watch.lookedBack ? Math.floor(watch.since) : 1}`, { timeoutMs: 10_000 },
   ).catch(() => null);
-  const fresh = (answer?.files ?? []).filter((file) => !watch.taken.includes(`${file.name}:${file.modifiedAt}`));
+  if (!answer) return null;
+  const unseen = (answer.files ?? []).filter((file) => !watch.taken.includes(fileKey(file)));
+  if (!watch.lookedBack) {
+    const earlier = unseen.filter((file) => file.modifiedAt <= watch.since && isNotesFile(file));
+    const newest = earlier.at(-1);
+    if (newest && !offer) setOffer({ name: newest.name, modifiedAt: newest.modifiedAt, files: earlier });
+    markTaken([], { lookedBack: true });
+  }
+  const fresh = unseen.filter((file) => file.modifiedAt > watch.since);
   if (!fresh.length) return null;
   const latest = notesWatch() ?? watch;
-  setWatch({ ...latest, until: Math.max(latest.until, now + WATCH_AFTER_FILE_MS), taken: [...latest.taken, ...fresh.map((file) => `${file.name}:${file.modifiedAt}`)].slice(-50) });
-  const notes = fresh.filter((file) => looksLikeNotes(file.text) && !isNotesPrompt(file.text));
+  markTaken(fresh, { until: Math.max(latest.until, now + WATCH_AFTER_FILE_MS) });
+  const notes = fresh.filter(isNotesFile);
   if (!notes.length) return null;
   noteArrival("downloads", context.firstBotId);
   try {

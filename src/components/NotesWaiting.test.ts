@@ -12,7 +12,7 @@ vi.mock("@/lib/copy-text", () => ({ copyText: f.copy }));
 vi.mock("@/lib/default-bot", async (original) => ({ ...(await original<typeof import("@/lib/default-bot")>()), useViewerEmail: () => null }));
 
 import { setLocale } from "@/lib/i18n";
-import { copyNotesPrompt, stopWaiting } from "@/lib/assistant-notes";
+import { copyNotesPrompt, dismissNotesOffer, notesOffer, stopWaiting, takeNotesFromDownloads } from "@/lib/assistant-notes";
 import { ARRIVAL_SHOWN_MS, noteArrival, notesWork, resetNotesArrivalForTests } from "@/lib/notes-arrival";
 import { NotesWaitingLine, useNotesIntake } from "./NotesWaiting";
 
@@ -49,11 +49,37 @@ afterEach(async () => {
   await act(async () => root.unmount());
   host.remove();
   stopWaiting();
+  dismissNotesOffer();
   vi.useRealTimers();
   vi.unstubAllGlobals();
 });
 
 describe("the notes card above the message box", () => {
+  it("offers a notes file saved to Downloads before the prompt was copied, and brings it in when asked", async () => {
+    vi.setSystemTime(new Date(2026, 10, 20, 12));
+    await copyNotesPrompt();
+    const saved = new Date(2026, 10, 17, 9).getTime();
+    f.api.mockImplementation(async (path: string, init?: { body?: string }) => {
+      if (path.startsWith("/api/setup-import/notes?")) return { files: [{ name: "dusk-bot-notes.md", modifiedAt: saved, text: NOTES }] };
+      if (path === "/api/config") return { profile: JSON.parse(init!.body!).profile };
+      if (path.includes("/memory/file?")) return { text: "" };
+      return { ok: true };
+    });
+    await takeNotesFromDownloads({ bots: [maus as never], aboutMe: "", team: false, firstBotId: "maus", dispatch: vi.fn() });
+    await show();
+    const offer = host.querySelector<HTMLElement>("[data-notes-offer]");
+    expect(offer?.textContent).toBe("Found dusk-bot-notes.md from Tuesday. Bring it in?Bring it in");
+    expect(offer?.querySelector("[data-notes-dismiss]")?.getAttribute("aria-label")).toBe("Not this file");
+    await show("atlas");
+    expect(host.querySelector("[data-notes-offer]"), "only in the first bot's chat").toBeNull();
+    await show();
+    await act(async () => host.querySelector<HTMLElement>("[data-notes-bring]")!.click());
+    await settle();
+    expect(notesOffer()).toBeNull();
+    expect(f.api).toHaveBeenCalledWith("/api/bots/maus/memory/file", expect.objectContaining({ method: "PUT" }));
+  });
+
+
   it("while waiting: one short line, Copy the prompt and a close, in the first bot's chat only", async () => {
     await copyNotesPrompt();
     await show();

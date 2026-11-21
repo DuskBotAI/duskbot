@@ -377,7 +377,7 @@ describe("a computer where nothing can listen", () => {
     expect(note()).not.toBeNull();
     fixture.settings = { appSettingsOpen: true, appSettingsSection: "voice" };
     try {
-      await act(async () => root.render(createElement(Composer, { bot })));
+      await act(async () => root.render(createElement(Composer, { bot: { ...bot } })));
       expect(note()).toBeNull();
     } finally {
       fixture.settings = { appSettingsOpen: false, appSettingsSection: "general" };

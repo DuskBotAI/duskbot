@@ -311,7 +311,7 @@ function SettingsList({ onClose, push, placesState }: { onClose: () => void; pus
               <span className="flex size-full items-center justify-center overflow-hidden rounded-full">
                 {face ? <UserFace account={face} size={56} className="size-full" /> : you?.initials ?? <UserRound aria-hidden size={24} />}
               </span>
-              <span aria-hidden className="absolute -bottom-0.5 -end-0.5 flex size-5 items-center justify-center rounded-full bg-menu text-ink-secondary shadow-sm ring-2 ring-surface">
+              <span aria-hidden className="absolute -bottom-0.5 -end-0.5 flex size-5 items-center justify-center rounded-full bg-menu text-ink-secondary shadow-sm ring-2 ring-card">
                 <Pencil size={11} />
               </span>
             </button>

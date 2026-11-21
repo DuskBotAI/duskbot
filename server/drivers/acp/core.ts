@@ -68,7 +68,7 @@ import { AcpHost } from "./host.ts";
 import { exitDetail } from "./exit-report.ts";
 import { endTurn, lookupResultArrived, trackRunningTool, type AcpAskFinish, type AcpSession, type AcpTurn } from "./turn-state.ts";
 import { recoveryPromptFor } from "../../resume-recovery.ts";
-import { armIdleClose, engineIdleMs, sessionIdlePolicy, stopIdleClose } from "../session-idle.ts";
+import { engineIdleMs, keepWarm, sessionIdlePolicy, stopIdleClose } from "../session-idle.ts";
 import { classifyError } from "../retry.ts";
 import { engineFailureKind, engineFailureMessage, stopCause } from "../engine-errors.ts";
 import { cliExitCode, failureCode, rpcCode } from "../../../shared/usage-signals.ts";
@@ -410,7 +410,7 @@ export function createAcpDriver(support: AcpSupport): ProviderDriver<AcpConfig> 
         const session = sessions.get(threadId);
         if (!session || session.closing) return;
         session.closing = true;
-        stopIdleClose(`${instanceId}\0${threadId}`, session.idleTimer);
+        if (session.idleTimer) { clearTimeout(session.idleTimer); session.idleTimer = null; }
         appendNative(threadId, { dir: "out", source: SOURCE, msg: { close: why } });
         sessions.delete(threadId);
         const { host, sessionId } = session;
@@ -425,17 +425,12 @@ export function createAcpDriver(support: AcpSupport): ProviderDriver<AcpConfig> 
           return;
         }
         host.draining = true;
+        stopIdleClose(hostIdleKey(host), host.recycle);
+        host.recycle = null;
       // EOF is no guaranteed exit: Qwen is tracked before another turn can resume its history.
-        try {
-          session.child.stdin.end();
-        } catch {}
+        try { session.child.stdin.end(); } catch {}
         if (support.restartOnMcpChange) void retireChild(threadId, session.child);
-        else {
-          const kill = setTimeout(() => {
-            void killCliTree(session.child);
-          }, 5_000);
-          kill.unref?.();
-        }
+        else setTimeout(() => { void killCliTree(session.child); }, 5_000).unref?.();
       };
       // A session that ignores session/cancel goes on working, and EOF on stdin does not stop it either. Only a confirmed
       // session/close or the end of its process stops it, and ending a shared process ends the other sessions' turns too.
@@ -462,23 +457,22 @@ export function createAcpDriver(support: AcpSupport): ProviderDriver<AcpConfig> 
       // A shared process holding closed sessions gives their memory back only by exiting: once none of its sessions has
       // run a turn for a while, it ends and each thread's next turn loads its session in a new one.
       const hostBusy = (host: AcpHost) => [...host.links].some((link) => sessions.get(link.threadId)?.current);
+      const hostIdleKey = (host: AcpHost) => `${instanceId}\0host\0${host.id}`;
+      const closeHost = (host: AcpHost, why: string) => { host.draining = true; for (const link of host.links) closeSession(link.threadId, why); };
+      const keepHostWarm = (host: AcpHost) => {
+        if (!host.dead && host.links.size && !hostBusy(host)) keepWarm(hostIdleKey(host), { idle: () => !host.dead && host.links.size > 0 && !hostBusy(host), close: () => closeHost(host, "idle") });
+      };
       const recycleWhenIdle = (host: AcpHost) => {
         if (!host.retired || host.recycle || hostBusy(host)) return;
-        host.recycle = setTimeout(() => {
-          if (!hostBusy(host)) {
-            host.draining = true;
-            for (const link of host.links) closeSession(link.threadId, "recycle");
-          }
-          host.recycle = null;
-        }, envOr("DUSK_ACP_SHARED_RECYCLE_MS", 60_000));
+        host.recycle = setTimeout(() => { if (!hostBusy(host)) closeHost(host, "recycle"); host.recycle = null; }, envOr("DUSK_ACP_SHARED_RECYCLE_MS", 60_000));
         host.recycle.unref?.();
       };
       const armIdle = (threadId: string) => {
         const session = sessions.get(threadId);
-        if (!session) return;
+        if (!session || session.current) return;
         if (session.idleTimer) clearTimeout(session.idleTimer);
-        session.idleTimer = armIdleClose(`${instanceId}\0${threadId}`, engineIdleMs(threadId, sessionIdle), { close: () => closeSession(threadId, "idle"),
-          idle: () => sessions.get(threadId) === session && !session.closing && !session.current });
+        (session.idleTimer = setTimeout(() => closeSession(threadId, "idle"), engineIdleMs(threadId, sessionIdle))).unref?.();
+        keepHostWarm(session.host);
       };
     // Session allows the driver keeps when the agent offered no `allow_always`: exact operations per
     // thread, for the native session's life. A generic title with no input is never remembered.
@@ -633,8 +627,9 @@ export function createAcpDriver(support: AcpSupport): ProviderDriver<AcpConfig> 
         if (session.child.exitCode === null && !session.closing && !session.dead) {
           armIdle(threadId);
           recycleWhenIdle(session.host);
-        } else if (session.dead && sessions.get(threadId) === session) {
-          sessions.delete(threadId);
+        } else {
+          if (session.dead && sessions.get(threadId) === session) sessions.delete(threadId);
+          keepHostWarm(session.host);
         }
       };
 
@@ -656,12 +651,13 @@ export function createAcpDriver(support: AcpSupport): ProviderDriver<AcpConfig> 
       const hostFor = (launch: { command: string }, argv: string[], env: Record<string, string | undefined>, cwd: string,
         hostKey: string | null): AcpHost => {
         const running = sharedHost(hostKey);
-        if (running) return running;
+        if (running) { stopIdleClose(hostIdleKey(running), null); return running; }
         const child = spawnCli(launch.command, argv, { cwd, env, stdio: ["pipe", "pipe", "pipe"], box: { allowEnv: instanceEnvNames(input.environment, env) } }, "bot");
         const host = new AcpHost(child, hostKey, { source: SOURCE, logMessage: nativeLogMessage, unrouted: refuse });
+        const dropHost = () => { hosts.delete(host); stopIdleClose(hostIdleKey(host), host.recycle); host.recycle = null; };
         hosts.add(host);
-        child.once("close", () => hosts.delete(host));
-        child.once("error", () => hosts.delete(host));
+        child.once("close", dropHost);
+        child.once("error", dropHost);
         return host;
       };
 
@@ -1158,7 +1154,7 @@ export function createAcpDriver(support: AcpSupport): ProviderDriver<AcpConfig> 
         if (pooled && !pooled.dead && !pooled.closing && pooled.contractKey === contractKey
             && (!support.restartOnMcpChange || pooled.sessionKey === sessionKey)) {
           if (pooled.idleTimer) clearTimeout(pooled.idleTimer);
-          pooled.idleTimer = null;
+          pooled.idleTimer = null; stopIdleClose(hostIdleKey(pooled.host), null);
           session = pooled;
         } else {
           if (pooled) {

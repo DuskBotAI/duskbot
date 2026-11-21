@@ -500,81 +500,6 @@ function RowGazeAvatar(props: Omit<React.ComponentProps<typeof BotAvatar>, "gaze
 // grok's rows stay still while pressed: no squeeze, the row just opens on release
 export const ROW_PRESS = "[--row-ease:cubic-bezier(.22,1,.36,1)] [transition:transform_200ms_var(--row-ease),width_200ms_var(--row-ease),padding_200ms_var(--row-ease)]";
 
-type SectionHeaderCallbacks = {
-  openSectionMenu: (id: string, x: number, y: number, returnTo: HTMLElement) => void;
-  toggleSection: (id: string) => void;
-  header: (id: string) => {
-    reorderable: boolean;
-    dragging: boolean;
-    onDragStart?: (event: React.DragEvent<HTMLElement>) => void;
-    onDragEnd?: () => void;
-    onMove?: (direction: -1 | 1) => void;
-  };
-};
-
-const MemoSidebarSectionHeader = memo(function MemoSidebarSectionHeader({
-  id,
-  name,
-  count,
-  hasMenu,
-  menuOpen,
-  collapsed,
-  attention,
-  interactive,
-  reorderable,
-  dragging,
-  naming,
-  dropInto,
-  callbacksRef,
-}: {
-  id: string;
-  name: string;
-  count: number;
-  hasMenu: boolean;
-  menuOpen: boolean;
-  collapsed: boolean;
-  attention?: ReturnType<typeof sidebarSectionAttention>;
-  interactive: boolean;
-  reorderable: boolean;
-  dragging: boolean;
-  naming?: ReturnType<ReturnType<typeof useSidebarBotDrag>["arrange"]>["naming"] extends (name: string | null) => infer R ? R : never;
-  dropInto?: boolean;
-  callbacksRef: React.RefObject<SectionHeaderCallbacks>;
-}) {
-  const onMenu = useMemo(() => hasMenu ? (button: HTMLButtonElement) => {
-    const rect = button.getBoundingClientRect();
-    callbacksRef.current.openSectionMenu(id, rect.left, rect.bottom + 4, button);
-  } : undefined, [hasMenu, id, callbacksRef]);
-  const onContextMenu = useMemo(() => hasMenu ? (event: React.MouseEvent<HTMLDivElement>) => {
-    event.preventDefault();
-    callbacksRef.current.openSectionMenu(id, event.clientX, event.clientY + 4, event.currentTarget.querySelector<HTMLElement>("button") ?? event.currentTarget);
-  } : undefined, [hasMenu, id, callbacksRef]);
-  const onToggle = useMemo(() => interactive ? () => callbacksRef.current.toggleSection(id) : undefined, [interactive, id, callbacksRef]);
-  const onDragStart = useMemo(() => reorderable ? (event: React.DragEvent<HTMLElement>) => callbacksRef.current.header(id).onDragStart?.(event) : undefined, [reorderable, id, callbacksRef]);
-  const onDragEnd = useMemo(() => reorderable ? () => callbacksRef.current.header(id).onDragEnd?.() : undefined, [reorderable, id, callbacksRef]);
-  const onMove = useMemo(() => reorderable ? (direction: -1 | 1) => callbacksRef.current.header(id).onMove?.(direction) : undefined, [reorderable, id, callbacksRef]);
-  return (
-    <SidebarSectionHeader
-      name={name}
-      line
-      count={count}
-      onMenu={onMenu}
-      menuOpen={menuOpen}
-      onContextMenu={onContextMenu}
-      collapsed={collapsed}
-      attention={attention}
-      onToggle={onToggle}
-      reorderable={reorderable}
-      dragging={dragging}
-      onDragStart={onDragStart}
-      onDragEnd={onDragEnd}
-      onMove={onMove}
-      naming={naming}
-      dropInto={dropInto}
-    />
-  );
-});
-
 export const BotListItem = memo(function BotListItem(props: BotRowProps) {
   const { bot, selected, deleting, mascotMotion, pendingQueued, instances, liveCall, density, dispatch, onMenu, renameRequest, botDrag: drag, botDragging: dragging, main = false, tabStop } = props;
   const liveMedia = useLiveMedia();
@@ -1035,8 +960,6 @@ export function Sidebar({ open, onClose, collapseToIcons = false }: {
   const tiles = simpleDesk && pinnedBots.length > 0;
   const primaryHeadless = primary !== null && simple && sectionIds[0] === BOTS_SECTION_ID;
   const { interactive: layoutInteractive, collapsed: sectionCollapsed, toggle: toggleSection } = sections;
-  const sectionCallbacksRef = useRef<SectionHeaderCallbacks>(null!);
-  sectionCallbacksRef.current = { openSectionMenu, toggleSection, header: layout.header };
   // grok's header menu: Rename, Move up, Move down and Delete for a section; Unassigned only moves
   const sectionMenuFor = (id: string): boolean => layoutInteractive && !remoteClient && (userSectionName(id) !== null || (id === BOTS_SECTION_ID && sectionIds.length > 1));
   const archivedBots = state.bots.filter((bot) => bot.hidden && !bot.movedTo);
@@ -1269,26 +1192,26 @@ export function Sidebar({ open, onClose, collapseToIcons = false }: {
               >
                 {rail && index > 0 && <SidebarRailSeparator />}
                 {layout.dropLine(id, "before")}
-                {density !== "icons" && !headless && (() => {
-                  const headerState = layout.header(id);
-                  return (
-                    <MemoSidebarSectionHeader
-                      id={id}
-                      name={sectionLabel(id, true)}
-                      count={sectionChiefItems.length + sectionBotItems.length + sectionGroupItems.length}
-                      hasMenu={sectionMenuFor(id)}
-                      menuOpen={sectionMenu?.id === id}
-                      collapsed={collapsed}
-                      attention={attention}
-                      interactive={layoutInteractive}
-                      reorderable={headerState.reorderable}
-                      dragging={headerState.dragging}
-                      naming={drops.naming(sectionName)}
-                      dropInto={drops.into(sectionName)}
-                      callbacksRef={sectionCallbacksRef}
-                    />
-                  );
-                })()}
+                {density !== "icons" && !headless && (
+                  <SidebarSectionHeader
+                    name={sectionLabel(id, true)}
+                    line
+                    count={sectionChiefItems.length + sectionBotItems.length + sectionGroupItems.length}
+                    onMenu={sectionMenuFor(id) ? (button) => {
+                      const rect = button.getBoundingClientRect();
+                      openSectionMenu(id, rect.left, rect.bottom + 4, button);
+                    } : undefined}
+                    menuOpen={sectionMenu?.id === id}
+                    onContextMenu={sectionMenuFor(id) ? (event) => {
+                      event.preventDefault();
+                      openSectionMenu(id, event.clientX, event.clientY + 4, event.currentTarget.querySelector<HTMLElement>("button") ?? event.currentTarget);
+                    } : undefined}
+                    collapsed={collapsed}
+                    attention={attention}
+                    onToggle={layoutInteractive ? () => toggleSection(id) : undefined}
+                    {...layout.header(id)} naming={drops.naming(sectionName)} dropInto={drops.into(sectionName)}
+                  />
+                )}
                 {collapsed && queued.length > 0 && <button type="button" onClick={() => toggleSection(id)}
                   title={`${t("task.queued")} · ${queued.join(", ")}`} aria-label={`${t("sidebar.section.expand", { name: sectionLabel(id) })} · ${t("task.queued")} · ${queued.join(", ")}`}
                   className="mx-3 mb-1 inline-flex h-7 items-center self-start rounded-full bg-raised/50 px-3 text-[13px] font-medium leading-4 text-ink-secondary hover:text-ink">{t("task.queued")} · {queued.length}</button>}

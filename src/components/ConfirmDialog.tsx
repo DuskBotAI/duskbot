@@ -43,7 +43,7 @@ export interface ConfirmDialogProps {
 export const ConfirmDialog = memo(function ConfirmDialog(props: ConfirmDialogProps) {
   const [mounted, setMounted] = useState(props.open);
   if (props.open && !mounted) setMounted(true);
-  if (!mounted) return null;
+  if (!mounted && !props.open) return null;
   return <ConfirmDialogInner {...props} />;
 }, (prev, next) => !prev.open && !next.open);
 

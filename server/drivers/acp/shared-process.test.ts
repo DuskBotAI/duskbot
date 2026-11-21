@@ -239,6 +239,26 @@ describe("ACP threads sharing one agent process", () => {
     expect(f.spawned).toHaveLength(2);
   });
 
+  it("counts a shared process as one warm engine and evicts the whole idle process when the cap is exceeded", async () => {
+    const previous = process.env.DUSK_MAX_IDLE_ENGINES;
+    process.env.DUSK_MAX_IDLE_ENGINES = "1";
+    try {
+      const f = await fixture();
+      await f.run("thread-a");
+      await f.run("thread-b");
+      expect(f.spawned).toHaveLength(1);
+      expect(f.spawned[0]!.exitCode).toBeNull();
+      // A second process with a different spawn contract pushes the first shared process over the cap.
+      await f.run("thread-c", { approvalMode: "ask" });
+      expect(f.spawned).toHaveLength(2);
+      await exited(f.spawned[0]!);
+      expect(f.spawned[1]!.exitCode).toBeNull();
+    } finally {
+      if (previous === undefined) delete process.env.DUSK_MAX_IDLE_ENGINES;
+      else process.env.DUSK_MAX_IDLE_ENGINES = previous;
+    }
+  });
+
   it("retires a process whose session stalled: later threads start a new one", async () => {
     const f = await fixture({}, { FAKE_ACP_HANG_ON: "HANG" });
     const previous = process.env.DUSK_ACP_PROMPT_IDLE_TIMEOUT_MS;

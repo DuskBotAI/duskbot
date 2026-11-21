@@ -103,7 +103,10 @@ export class AcpLink implements AcpConnection {
   }
 }
 
+let nextHostId = 0;
+
 export class AcpHost {
+  readonly id = ++nextHostId;
   readonly links = new Set<AcpLink>();
   /** The last thread to leave still hears the process end: its stopped turn settles on it. */
   #lastOut: AcpLink | null = null;

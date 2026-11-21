@@ -1,4 +1,5 @@
-// Chromium matches :focus-visible on a pointer click, so styles.css drops the outline on text fields only (WCAG 2.4.7).
+// Chromium matches :focus-visible on a pointer click, so styles.css shows the keyboard ring only while lib/focus-nav sets
+// data-focus-nav (WCAG 2.4.7, 1.4.11).
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
@@ -40,9 +41,20 @@ const outlineRemovers = [...withoutComments.matchAll(/([^{}]+)\{([^}]*)\}/g)]
 const CONTROLS = ["checkbox", "radio", "range", "color", "file"];
 
 describe("keyboard focus on form controls", () => {
-  it("shows keyboard focus as a tint, never a ring", () => {
+  it("draws no ring for the mouse", () => {
     expect(withoutComments).toMatch(/:focus-visible,[^{]*\{[^}]*outline-color:\s*transparent !important;[^}]*--tw-ring-color:\s*transparent !important/);
-    expect(withoutComments).toMatch(/\[data-focus-nav\] :focus-visible[^{]*\{[^}]*background-image:/);
+  });
+
+  it("draws a focus-coloured ring on every control while someone moves with the keyboard", () => {
+    const rule = /:root\[data-focus-nav\] :focus-visible\s*\{([^}]*)\}/.exec(withoutComments);
+    expect(rule).not.toBeNull();
+    expect(rule![1]).toMatch(/outline:\s*2px solid var\(--color-focus\) !important;/);
+  });
+
+  it("lets nothing else take the keyboard ring off with an important outline", () => {
+    const important = [...withoutComments.matchAll(/([^{}]+)\{([^}]*)\}/g)]
+      .filter(([, , body]) => /outline(?:-style)?\s*:\s*(?:none|0)[^;]*!important/.test(body));
+    expect(important.map(([, selector]) => selector.trim())).toEqual([]);
   });
 
   it("still takes the outline off text fields, so the composer pill stays clean", () => {
@@ -57,12 +69,5 @@ describe("keyboard focus on form controls", () => {
         expect(compound, selector).toContain(`[type="${type}"]`);
       }
     }
-  });
-
-  it.each(CONTROLS)("gives a keyboard-focused %s input a halo, since the global rule clears its outline and it paints no tint", (type) => {
-    const rule = /:root\[data-focus-nav\] input:is\(([^)]*)\):focus-visible\s*\{([^}]*)\}/.exec(unlayered(css));
-    expect(rule).not.toBeNull();
-    expect(rule![1]).toContain(`[type="${type}"]`);
-    expect(rule![2]).toMatch(/box-shadow:\s*0 0 0 \d+px/);
   });
 });

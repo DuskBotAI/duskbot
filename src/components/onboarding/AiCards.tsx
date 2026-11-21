@@ -63,12 +63,10 @@ export function AiConnect({ tile, flow }: { tile: AiTile<InstanceInfo>; flow: Co
   );
 }
 
-function AiCard({ tile, connected, arrived, picked, suggested, staysHere, onPick }: { tile: AiTile<InstanceInfo>; connected: boolean; arrived: boolean; picked: boolean; suggested: boolean; staysHere: boolean; onPick: () => void }) {
+function AiCard({ tile, connected, arrived, picked, suggested, staysHere, onPick, onManage }: { tile: AiTile<InstanceInfo>; connected: boolean; arrived: boolean; picked: boolean; suggested: boolean; staysHere: boolean; onPick: () => void; onManage?: () => void }) {
   if (connected) {
-    return (
-      <div data-funnel-ai={tile.id} data-connected="" data-stays-here={staysHere ? "" : undefined} role="listitem"
-        aria-label={t(staysHere ? "funnel.ai.connectedHereOnly" : "funnel.ai.connectedName", { name: label(tile) })}
-        className={cn("ai-connected relative flex h-[96px] flex-col items-center justify-center gap-1.5 rounded-2xl bg-ink/[0.035] px-2", arrived && "place-reveal")}>
+    const name = t(staysHere ? "funnel.ai.connectedHereOnly" : "funnel.ai.connectedName", { name: label(tile) });
+    const body = <>
         <span className="grid size-7 place-items-center"><TileMark tile={tile} size={26} /></span>
         <span className="flex max-w-full flex-col items-center">
           <span className="max-w-full truncate text-[13px] leading-[18px] text-ink">{label(tile)}</span>
@@ -78,8 +76,15 @@ function AiCard({ tile, connected, arrived, picked, suggested, staysHere, onPick
                 <Check size={12} strokeWidth={2.5} aria-hidden="true" className="shrink-0" />{t("funnel.ai.ready")}
               </span>}
         </span>
+    </>;
+    const look = "ai-connected relative flex h-[96px] flex-col items-center justify-center gap-1.5 rounded-2xl bg-ink/[0.035] px-2";
+    return onManage
+      ? <div role="listitem" className="flex">
+        <button type="button" data-funnel-ai={tile.id} data-connected="" data-stays-here={staysHere ? "" : undefined} aria-label={name} onClick={onManage}
+          className={cn(look, "w-full transition-colors hover:bg-ink/[0.06] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus", arrived && "place-reveal")}>{body}</button>
       </div>
-    );
+      : <div data-funnel-ai={tile.id} data-connected="" data-stays-here={staysHere ? "" : undefined} role="listitem" aria-label={name}
+        className={cn(look, arrived && "place-reveal")}>{body}</div>;
   }
   return (
     <div role="listitem" className="flex">
@@ -115,8 +120,10 @@ export function connectedAiCards(instances: readonly InstanceInfo[]): AiTileId[]
 /** The grid of popular AIs and, under it, the pressed one's way in. `onMore`: the small link to every other provider and
  * API keys (the model directory). Nothing runs until a card is pressed. `onConnected`: called once when the AI pressed
  * here becomes connected. */
-export function AiCards({ onMore, className, onConnected, suggested = [], staysHere = [] }: { tested: WelcomeAiNow | null; onMore?: () => void; className?: string;
+export function AiCards({ onMore, className, onConnected, onManage, suggested = [], staysHere = [] }: { tested: WelcomeAiNow | null; onMore?: () => void; className?: string;
   onConnected?: (tile: AiTileId) => void;
+  /** makes a connected card a button that opens its AI's accounts */
+  onManage?: (instance: InstanceInfo) => void;
   /** cards marked as used on the person's computer */
   suggested?: readonly AiTileId[];
   /** connected cards whose sign-in stays on this computer when the person's dusk cloud is made */
@@ -155,7 +162,8 @@ export function AiCards({ onMore, className, onConnected, suggested = [], staysH
       <div role="list" aria-label={t("funnel.ai.title")} className="grid w-full grid-cols-2 gap-2.5 @min-[400px]:grid-cols-4">
         {tiles.map((tile) => (
           <AiCard key={tile.id} tile={tile} connected={shown.has(tile.id)} arrived={!firstShown.has(tile.id)} picked={picked === tile.id}
-            suggested={suggested.includes(tile.id)} staysHere={staysHere.includes(tile.id)} onPick={() => pick(tile)} />
+            suggested={suggested.includes(tile.id)} staysHere={staysHere.includes(tile.id)} onPick={() => pick(tile)}
+            onManage={onManage && (() => onManage(tile.instance))} />
         ))}
       </div>
       <Reveal className="pt-5">

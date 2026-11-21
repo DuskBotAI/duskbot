@@ -4675,6 +4675,7 @@
   "accounts.rename": "Rename",
   "accounts.remove": "Remove",
   "accounts.inUse": "{count} bot(s) use this account. Pick another model for them first.",
+  "accounts.newBotModel": "New bots start on this account. Pick another model for new bots first.",
   "accounts.signOutTitle": "Sign out of {name}?",
   "accounts.removeTitle": "Remove {name}?",
   "accounts.addClaude": "Add another Claude account",

@@ -33,7 +33,7 @@ import { CloudUsageDetails, CloudUsageSummaryView, useCloudUsageSettings } from 
 import { CompanyBackupSettings } from "./CompanyBackupSettings";
 import { DiagnosticsRow } from "./DiagnosticsRow";
 import { UsageLogRow } from "./UsageLogRow";
-import { EnginesSettings } from "./EnginesSettings";
+import { EnginesSettings, enginePageOf } from "./EnginesSettings";
 import { ImportSettings } from "./ImportSettings";
 import { KeyboardShortcutsModal } from "./KeyboardShortcutsModal";
 import { LocalComputerSection } from "./LocalComputerSection";
@@ -517,8 +517,10 @@ function DataPage({ has }: { has: Has }) {
 }
 
 /** Models' top: the same grid of popular AIs as the first run and the Connect an AI dialog; its link goes to the
- * directory just under it. */
+ * directory just under it, and a connected AI's card to its accounts. */
 function ConnectAiCards() {
+  const { state } = useStore();
+  const { open } = useSubPage();
   const toDirectory = () => {
     const search = document.querySelector<HTMLInputElement>("[data-model-directory-search]");
     search?.scrollIntoView({ block: "center" });
@@ -526,7 +528,8 @@ function ConnectAiCards() {
   };
   return (
     <RowsCard label={t("onboarding.meet.connectAi")} data-settings-block="connect-ai">
-      <div className="p-2"><AiCards tested={null} onMore={toDirectory} /></div>
+      <div className="p-2"><AiCards tested={null} onMore={toDirectory}
+        onManage={(instance) => { const { page, title } = enginePageOf(state.instances, instance); open(page, title); }} /></div>
     </RowsCard>
   );
 }

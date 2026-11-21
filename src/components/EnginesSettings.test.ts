@@ -2,8 +2,8 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Bot, InstanceInfo } from "@/state/store";
-import { EnginesSettings } from "./EnginesSettings";
-import { accountActions } from "./EngineAccounts";
+import { EnginesSettings, enginePageOf } from "./EnginesSettings";
+import { accountActions, accountInUse } from "./EngineAccounts";
 import { AntigravityFreeSpace, formatDiskSize } from "./AntigravityFreeSpace";
 
 const fixture = vi.hoisted(() => ({ instances: [] as InstanceInfo[], bots: [] as Bot[], config: undefined as Record<string, unknown> | undefined }));
@@ -388,6 +388,24 @@ describe("Settings → Engines → Claude accounts", () => {
     expect(accountActions("claude", claude("claude-work", "Work", false))).toEqual({ signOut: false, remove: true });
     expect(accountActions("claude", claude("claude-work", "Work", true, { authentication: { method: "paste-code", signOut: false } }))).toEqual({ signOut: false, remove: true });
     expect(renderClaude(claude("claude-work", "Work", true))).toContain(">Remove<");
+  });
+
+  it("keeps Remove off, with the reason, for the account new bots start on, before anyone confirms", () => {
+    fixture.config = { defaultModelSelection: { instanceId: "claude-work", model: "sonnet" } };
+    try {
+      const html = renderClaude(claude("claude", "Personal", true), claude("claude-work", "Work", true));
+      expect(html).toMatch(/<button[^>]*disabled=""[^>]*title="New bots start on this account\. Pick another model for new bots first\."[^>]*>Remove<\/button>/);
+    } finally {
+      fixture.config = undefined;
+    }
+    expect(accountInUse({ instanceId: "claude-work" }, [{ modelSelection: { instanceId: "claude-work" } }], { instanceId: "claude-work" }))
+      .toBe("1 bot(s) use this account. Pick another model for them first.");
+    expect(accountInUse({ instanceId: "claude-work" }, [], { instanceId: "claude" })).toBeNull();
+  });
+
+  it("opens a Claude account's page by the Claude card it is listed on", () => {
+    const instances = [claude("claude", "Personal", true), claude("claude-work", "Work", true)];
+    expect(enginePageOf(instances, instances[1]!)).toEqual({ page: "engine:claude", title: "Personal" });
   });
 
   it("shows Claude Code's setup instead of accounts while it is missing", () => {

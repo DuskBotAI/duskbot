@@ -471,11 +471,22 @@ export function HiddenEngines() {
   );
 }
 
+function listedEngines(instances: readonly InstanceInfo[]): InstanceInfo[] {
+  return instances.filter((i) => i.readOnly || i.cli !== undefined || i.cliDefault !== undefined || i.snapshot.state === "unavailable" || isApiKeyEngine(i));
+}
+
+/** The Settings page that shows `instance`: its account group's page (named after the group's first account), or its own. */
+export function enginePageOf(instances: readonly InstanceInfo[], instance: InstanceInfo): { page: string; title: string } {
+  const group = accountGroupOf(instance);
+  const row = (group && listedEngines(instances).find((each) => accountGroupOf(each) === group)) || instance;
+  return { page: `engine:${row.instanceId}`, title: row.displayName };
+}
+
 export function EnginesSettings({ simple = false, more }: { simple?: boolean; more?: { id: string; open: boolean; onToggle: () => void } }) {
   const { state } = useStore();
   // Leaving Settings ends the "now uses the copy dusk bot installed" lines.
   useEffect(() => forgetAppCopySwitches, []);
-  const listed = state.instances.filter((i) => i.readOnly || i.cli !== undefined || i.cliDefault !== undefined || i.snapshot.state === "unavailable" || isApiKeyEngine(i));
+  const listed = listedEngines(state.instances);
   // A provider's accounts share one card, which takes the place of its first account.
   const groups = new Map<AccountGroup, InstanceInfo[]>();
   for (const instance of listed) {

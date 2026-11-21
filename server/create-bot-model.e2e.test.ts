@@ -24,6 +24,7 @@ it("Chief creation uses the workspace default or a validated explicit model with
     const codex = instances.find((item: any) => item.instanceId === "codex");
     const defaultModel = { instanceId: "codex", model: codex.models.default, effort: "low" };
     await api("PATCH", "/api/config", { defaultModelSelection: defaultModel });
+    expect((await api("GET", "/api/config")).defaultModelSelection, "Settings reads the default to keep its account from removal").toEqual(defaultModel);
     const chiefModel = { instanceId: "claude", model: claude.models.default };
     const chief = (await api("POST", "/api/bots", { name: "Chief", section: "Design", modelSelection: chiefModel }, 201)).bot;
     // At Ask too, each creation applies at once: dusk bot adds no card of its own.

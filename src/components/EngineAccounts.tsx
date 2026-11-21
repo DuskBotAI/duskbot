@@ -49,6 +49,17 @@ export function accountActions(group: AccountGroup, instance: InstanceInfo): { s
   };
 }
 
+/** Why the account can't be removed yet: bots run on it, or new bots start on it. Null when nothing does. */
+export function accountInUse(
+  instance: Pick<InstanceInfo, "instanceId">,
+  bots: ReadonlyArray<{ modelSelection: { instanceId: string } }>,
+  defaultModel: { instanceId: string } | undefined,
+): string | null {
+  const usedBy = bots.filter((bot) => bot.modelSelection.instanceId === instance.instanceId).length;
+  if (usedBy > 0) return t("accounts.inUse", { count: String(usedBy) });
+  return defaultModel?.instanceId === instance.instanceId ? t("accounts.newBotModel") : null;
+}
+
 /** Ready while any account can run a turn: the same rule a single provider card uses. */
 export function accountsReady(accounts: InstanceInfo[]): boolean {
   return accounts.some(engineReady);
@@ -79,7 +90,7 @@ function AccountMenu({ group, instance, onRename }: { group: AccountGroup; insta
   const [error, setError] = useState<string | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const { signOut: canSignOut, remove: canRemove } = accountActions(group, instance);
-  const usedBy = state.bots.filter((bot) => bot.modelSelection.instanceId === instance.instanceId).length;
+  const inUse = accountInUse(instance, state.bots, state.config?.defaultModelSelection);
 
   useEffect(() => {
     if (!open) return;
@@ -115,8 +126,8 @@ function AccountMenu({ group, instance, onRename }: { group: AccountGroup; insta
   const item = "ui-menu-row w-full text-left disabled:cursor-not-allowed disabled:opacity-50";
   return (
     <div ref={menuRef} className="relative flex items-center gap-1">
-      {canRemove && <button type="button" disabled={busy || usedBy > 0} onClick={() => setConfirm("remove")}
-        title={usedBy > 0 ? t("accounts.inUse", { count: String(usedBy) }) : undefined}
+      {canRemove && <button type="button" disabled={busy || inUse !== null} onClick={() => setConfirm("remove")}
+        title={inUse ?? undefined}
         className="rounded-lg px-2.5 py-1.5 text-[12px] font-medium text-danger hover:bg-danger/10 disabled:cursor-not-allowed disabled:opacity-50">
         {t("accounts.remove")}
       </button>}
@@ -129,7 +140,7 @@ function AccountMenu({ group, instance, onRename }: { group: AccountGroup; insta
         <div role="menu" {...menu.exitProps} className={cn("absolute right-0 top-full z-40 mt-1 w-[220px] origin-top-right overflow-hidden text-[13px]", MENU_SHEET, menu.className)}>
           <button type="button" role="menuitem" className={cn(item, "text-ink")} onClick={() => { setOpen(false); onRename(); }}>{t("accounts.rename")}</button>
           {canSignOut && <button type="button" role="menuitem" className={cn(item, "text-ink")} onClick={() => { setOpen(false); setConfirm("signOut"); }}>{t("accounts.signOut")}</button>}
-          {canRemove && usedBy > 0 && <p className="px-3 pb-1 pt-0.5 text-[11px] leading-snug text-ink-secondary">{t("accounts.inUse", { count: String(usedBy) })}</p>}
+          {canRemove && inUse && <p className="px-3 pb-1 pt-0.5 text-[11px] leading-snug text-ink-secondary">{inUse}</p>}
         </div>
       )}
       {error && <p role="alert" className="absolute right-0 top-full z-30 mt-1 w-[260px] rounded-lg bg-card p-2 text-[12px] text-danger shadow-lg">{error}</p>}

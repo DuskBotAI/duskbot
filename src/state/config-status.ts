@@ -52,6 +52,8 @@ export interface ConfigStatus {
   mcp?: { callTimeoutMinutes: number };
   /** Workspace defaults for new bots; absent effort = no level is sent. */
   newBots?: { effort?: EffortLevel };
+  /** The model new bots start on, when one was chosen. The provider it names can't be removed while it is. */
+  defaultModelSelection?: ModelSelection;
   /** This Cloud is on the Starter plan, as the Admin last said; absent or false otherwise. */
   cloudStarter?: boolean;
   /** The most bots this Cloud's plan makes, its Dusk aside; absent when its plan has no such limit. */

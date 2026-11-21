@@ -134,11 +134,11 @@ self.addEventListener("message", (event: MessageEvent<ShikiWorkerRequest>) => {
         defaultColor: "light-dark()",
       });
       self.postMessage({ id, ok: true, html } satisfies ShikiWorkerReply);
-    } catch (error: unknown) {
+    } catch {
       self.postMessage({
         id,
         ok: false,
-        error: error instanceof Error ? error.message : String(error),
+        error: "shiki worker highlight failed",
       } satisfies ShikiWorkerReply);
     }
   })();

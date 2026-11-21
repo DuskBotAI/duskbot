@@ -21,7 +21,7 @@ import { isNotificationFeedAction, reduceNotificationFeed, type NotificationFeed
 import { bumpThreadUpdatedAt, mergeTaskStamps, rewindThreadUpdatedAt } from "./thread-stamps";
 import { botOpensTo, openBot, openThread, visibleNotificationThread } from "./thread-navigation";
 import { patchGroupTask } from "./thread-edits";
-import { optimisticMessageId, optimisticUserMessage, sendAnswerLost, sendArrived, sendReconciled } from "./optimistic-send";
+import { optimisticMessageId, optimisticUserMessage, sendAnswerLost, sendArrived, sendNotDelivered, sendReconciled } from "./optimistic-send";
 import { dropSentTurn, followSendReceipt, noteSentTurn } from "./sent-turn";
 import { applySendReceipt } from "./send-receipt";
 import { foldSnapshotOntoStreamed, patchedGroups, roomAnswers, snapshotPatch } from "./room-frames";
@@ -2496,7 +2496,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             .then(() => sendReconciled((signal) => api(`/api/bots/${action.botId}/messages`, {
                 method: "POST", signal,
                 body: JSON.stringify({ text: action.text, replyToId: action.replyToId, threadId, sendId, ...(action.dataContext ? { dataContext: action.dataContext } : {}), ...(action.pointed?.length ? { pointed: action.pointed } : {}), ...(action.mode === "goal" ? { mode: "goal" } : {}), ...(action.followUp ? { followUp: action.followUp } : {}), ...(action.mentions?.length ? { mentions: action.mentions } : {}), ...(action.voiceCall ? { voiceCall: action.voiceCall } : {}) }),
-              }), arrived, undefined, threadId ? { threadId, sendId, text: action.text, replyToId: action.replyToId, channelMode: action.mode } : undefined)))
+              }).catch((error: unknown) => { if (threadId && sendNotDelivered(error)) dropSentTurn(threadId, sendId); throw error; }), arrived, undefined, threadId ? { threadId, sendId, text: action.text, replyToId: action.replyToId, channelMode: action.mode } : undefined)))
             .then((sent) => {
               outbox?.release(sendId);
               if (threadId) followSendReceipt(sent, threadId, sendId);

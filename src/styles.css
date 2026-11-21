@@ -1323,6 +1323,25 @@ a.link-pill:focus-visible {
 [data-chat-bubble="simple"] .chat-md [dir="rtl"] {
   line-height: 1.75;
 }
+/* a message still on its way: after a beat (a send that lands at once never shows it) it dims and says so, under the
+   bubble and outside its box, so the bubble keeps one size from the composer to the server's copy */
+@keyframes m-sending { to { opacity: 1; } }
+@keyframes m-sending-dim { to { opacity: .6; } }
+[data-chat-bubble][data-sending] { position: relative; animation: m-sending-dim .2s ease-out 1.2s forwards; }
+[data-chat-bubble][data-sending]::after {
+  content: attr(data-sending);
+  position: absolute;
+  top: 100%;
+  inset-inline-end: 4px;
+  white-space: nowrap;
+  margin-top: 2px;
+  color: var(--color-ink-secondary);
+  font-size: 12px;
+  line-height: 16px;
+  text-align: end;
+  opacity: 0;
+  animation: m-sending .2s ease-out 1.2s forwards;
+}
 
 .chat-code-actions > button:focus-visible {
   outline: none;

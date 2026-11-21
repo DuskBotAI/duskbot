@@ -63,3 +63,14 @@ it("leaves a turn already running alone: a follow-up is not a new turn", () => {
   sendWith(later(50, started), { ...idle, busy: true } as Bot);
   expect(sentTurn("thread")).toBeNull();
 });
+
+it("shows no turn while the server is out of reach, only the bubble on its way", async () => {
+  let calls = 0;
+  sendWith(() => { calls++; return Promise.reject(new TypeError("Failed to fetch")); });
+  await flush();
+  expect(calls).toBe(1);
+  expect(sentTurn("thread"), "the server never got the message: the bot is not at it").toBeNull();
+  await vi.advanceTimersByTimeAsync(3_100);
+  expect(calls, "the send is still being retried").toBeGreaterThan(1);
+  expect(sentTurn("thread")).toBeNull();
+});

@@ -42,6 +42,11 @@ export function sendAnswerLost(error: unknown): boolean {
   return (error as { name?: unknown } | null)?.name !== "AbortError";
 }
 
+/** The send did not reach the server: it is unreachable, not just slow to answer an attempt that was cut short. */
+export function sendNotDelivered(error: unknown): boolean {
+  return sendAnswerLost(error) && !(error instanceof SendAttemptCutError);
+}
+
 let attemptLimitMs: number | null = null;
 
 /** An attempt older than this when the live stream opens again is asked again at once: it went out while the place

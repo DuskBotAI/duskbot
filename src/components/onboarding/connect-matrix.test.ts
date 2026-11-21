@@ -260,4 +260,20 @@ describe("More providers or use an API key", () => {
     expect(document.querySelector('[data-connect-sign-in-flow] [data-connect-stage="installing"]')).not.toBeNull();
     expect(installs).toEqual(["/api/instances/claude/install"]);
   });
+
+  it("opens a connected provider on how it is connected, with Disconnect, and its form only on asking for a key instead", async () => {
+    const claude = { ...engine(TILES.find((tile) => tile.tile === "claude")!, "signedOut"), snapshot: { state: "available", authenticated: true, account: { email: "ada@example.test" } } } as InstanceInfo;
+    const store = { state: { ...initialState, config: {}, instances: [claude] }, dispatch, refreshInstances: vi.fn(async () => {}), refreshModels: vi.fn(async () => {}) } as unknown as ReturnType<typeof useStore>;
+    const anthropic = { id: "anthropic", label: "Anthropic", section: "major", wire: "anthropic", baseUrl: "https://api.anthropic.com", listModels: "anthropic",
+      offered: true, modelCount: 3, connected: ["claude"], signIn: { label: "Sign in with Claude", driverKinds: ["claudeAgent"] } } as unknown as ProviderInfo;
+    act(() => root.render(createElement(BotEditorStore, { value: store, children: createElement(ConnectProviderDialog, { provider: anthropic, place: "computer", onClose: vi.fn() }) })));
+    const sheet = () => document.querySelector<HTMLElement>("[data-panel-modal=connect-provider]")!;
+    expect(sheet().textContent).toContain("Connected with your Claude sign-in as ada@example.test");
+    expect(sheet().textContent).not.toContain("Connect Anthropic");
+    expect(sheet().querySelector("[data-disconnect-engine=claude]")).not.toBeNull();
+    expect(sheet().querySelector("[data-connect-key]")).toBeNull();
+    await act(async () => { sheet().querySelector<HTMLElement>("[data-connect-another]")!.click(); });
+    expect(sheet().textContent).toContain("Connect Anthropic");
+    expect(sheet().querySelector("[data-connect-key]")).not.toBeNull();
+  });
 });

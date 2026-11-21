@@ -84,8 +84,8 @@ export function LiveBrowser({ bot, signIn, page }: { bot: Bot; signIn?: BrowserS
   const signInOpen = state.computerControl?.[bot.id]?.help?.place === "browser";
   const scopedThread = browserScope(state.config?.team, bot.threadId).threadId;
   keepNow.current = kept || signInOpen;
-  const profileName = bot.browserProfile === "guest" ? "temporary browser"
-    : state.config?.browserProfiles?.find((profile) => profile.id === bot.browserProfile)?.name ?? `${bot.name}’s own browser`;
+  const profileName = bot.browserProfile === "guest" ? t("browser.panel.profileTemporary")
+    : state.config?.browserProfiles?.find((profile) => profile.id === bot.browserProfile)?.name ?? t("browser.panel.profileOwn", { name: bot.name });
   useEffect(() => { if (showProfiles) profilesDialog.current?.showModal(); else profilesDialog.current?.close(); }, [showProfiles]);
   useEffect(() => {
     browserControl.current?.hold(showTyping);
@@ -228,7 +228,7 @@ export function LiveBrowser({ bot, signIn, page }: { bot: Bot; signIn?: BrowserS
       setMaximized(false);
     }
     const request = leaving ? document.exitFullscreen() : panel.current?.requestFullscreen();
-    void request?.catch(() => setError(leaving ? "Could not leave full screen. Press Esc instead." : "Full screen is unavailable in this browser."));
+    void request?.catch(() => setError(t(leaving ? "browser.panel.exitFullscreenFailed" : "browser.panel.fullscreenUnavailable")));
   };
   const toggleMaximize = () => {
     if (fullscreen && document.fullscreenElement === panel.current) {
@@ -255,7 +255,7 @@ export function LiveBrowser({ bot, signIn, page }: { bot: Bot; signIn?: BrowserS
   const restart = async () => {
     if (!(await askConfirm({ title: t("confirm.browserRestartTitle"), body: t("confirm.browserRestartBody"), confirmLabel: t("confirm.restart"), tone: "neutral" }))) return;
     setError("");
-    if (!clientRef.current?.send({ type: "restart" })) setError("The browser view is not connected. Reconnect it, then try again.");
+    if (!clientRef.current?.send({ type: "restart" })) setError(t("browser.panel.viewNotConnected"));
   };
   const wake = () => {
     if (connected && clientRef.current?.send({ type: "wake" })) setAsleep("waking");
@@ -263,7 +263,7 @@ export function LiveBrowser({ bot, signIn, page }: { bot: Bot; signIn?: BrowserS
   };
   const togglePip = () => {
     if (floating === bot.id) { closeBrowserPictureInPicture(); return; }
-    void openBrowserPictureInPicture({ botId: bot.id, seed: surface.current?.canvas() ?? null }).catch(() => setError("Picture in picture is unavailable here."));
+    void openBrowserPictureInPicture({ botId: bot.id, seed: surface.current?.canvas() ?? null }).catch(() => setError(t("browser.panel.pipUnavailable")));
   };
 
   const heldElsewhere = control?.controller === "another-viewer";

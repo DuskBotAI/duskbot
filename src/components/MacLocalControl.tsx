@@ -64,7 +64,7 @@ export function MacLocalControl() {
       <div className="flex items-start gap-3">
         <Shield size={15} className="mt-0.5 shrink-0 text-ink/[0.56]" />
         <div className="min-w-0 flex-1">
-          <div className="text-[13px] font-medium leading-[18px] text-ink">Allow control of this computer</div>
+          <div className="text-[13px] font-medium leading-[18px] text-ink">{t("computer.mac.permission.title")}</div>
           <p className="mt-0.5 text-[12px] leading-4 text-ink/[0.56]">
             {permissionMessage ?? t("computer.mac.permission.generic")}
           </p>
@@ -84,7 +84,7 @@ export function MacLocalControl() {
                 disabled={pending}
                 className="ui-button ui-button-primary h-6! min-h-6! px-2.5! text-[12px]! leading-4!"
               >
-                Open System Settings
+                {t("computer.mac.permission.openSettings")}
               </button>
             )}
             <button
@@ -94,7 +94,7 @@ export function MacLocalControl() {
               className="ui-button h-6! min-h-6! px-2.5! text-[12px]! leading-4!"
             >
               {pending && <Loader2 size={13} className="animate-spin" />}
-              Retry
+              {t("computer.mac.permission.retry")}
             </button>
           </div>
         </div>

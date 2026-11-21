@@ -87,6 +87,7 @@ export function scriptExtensionOf(name: string): string | null {
 /** No archives, binaries, HTML or SVG; scripts only as plain text. The claimed mime picks the extension; an attacker's
  * filename never does, except a script's own extension on a text/plain download. */
 const FILE_MIMES: Readonly<Record<string, string>> = {
+  ...IMAGE_MIMES,
   "video/mp4": ".mp4",
   "video/webm": ".webm",
   "video/quicktime": ".mov",
@@ -120,6 +121,8 @@ const FILE_MIMES: Readonly<Record<string, string>> = {
   "application/vnd.oasis.opendocument.spreadsheet": ".ods",
   "application/vnd.oasis.opendocument.presentation": ".odp",
 };
+
+const IMAGE_HEAD_BYTES = 12;
 
 /** The image type the bytes themselves say they are, by their magic bytes; null: not an image we take. */
 export function imageMimeOf(bytes: Buffer): string | null {
@@ -508,6 +511,12 @@ export async function saveFile(
     activePartials.add(partialPath);
     let file: Awaited<ReturnType<typeof open>> | undefined;
     let bytes = 0;
+    let head = Buffer.alloc(0);
+    let headChecked = !IMAGE_MIMES[normalized];
+    const requireClaimedImage = () => {
+      if (imageMimeOf(head) !== normalized) throw statusError(400, `file bytes are not ${normalized}`);
+      headChecked = true;
+    };
     let closed = false;
     let partialCleanupFailed = false;
 
@@ -522,6 +531,10 @@ export async function saveFile(
           throw statusError(413, `file exceeds ${FILE_MAX_BYTES} bytes`);
         }
         reservation.ensure(bytes + chunk.byteLength);
+        if (!headChecked) {
+          head = Buffer.concat([head, chunk.subarray(0, IMAGE_HEAD_BYTES - head.byteLength)]);
+          if (head.byteLength === IMAGE_HEAD_BYTES) requireClaimedImage();
+        }
         let offset = 0;
         while (offset < chunk.byteLength) {
           const result = await file.write(chunk, offset, chunk.byteLength - offset, null);
@@ -531,6 +544,7 @@ export async function saveFile(
         bytes += chunk.byteLength;
       }
       if (bytes === 0) throw statusError(400, "empty file");
+      if (!headChecked) requireClaimedImage();
       await file.close();
       closed = true;
       try {

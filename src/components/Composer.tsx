@@ -47,6 +47,7 @@ import { useOnCall } from "@/lib/call";
 import { isLiveCallRunning, useLiveMedia } from "@/lib/live-call-media";
 import {
   appendPastedText,
+  AttachmentTooLargeError,
   attachmentUnsent,
   clipboardHasImages,
   clipboardImageFiles,
@@ -54,9 +55,8 @@ import {
   discardUnsentUpload,
   composerShouldRefocus,
   composerTakesFocusOnOpen,
-  imageBytesLeft, imageSlotsLeft, imagesThatFit,
+  imageBytesLeft, imageSentAsFile, imageSlotsLeft,
   replyTargetTakesFocus,
-  intakeFiles,
   isLongPaste,
   optimisticImageAttachment,
   pasteAttachment,
@@ -67,6 +67,7 @@ import {
   type FileAttachment,
   type PasteAttachment,
 } from "@/lib/composer-attachments";
+import { imagesAsFilesNotice, imagesThatFit, intakeFiles, uploadFailure } from "@/lib/intake-files";
 import { retryPlacedUpload, sendPlacedUpload } from "@/lib/placed-upload";
 import { cancelUpload } from "@/lib/upload-progress";
 import { goalCoordinatorForComposer, openTaskWorking, roomRouteForComposer } from "@/lib/group-routing";
@@ -816,16 +817,20 @@ export function Composer({
         dispatch({ type: "error", message: t("composer.error.clipboardImage") });
         return;
       }
-      const kept = imagesThatFit(imageFiles, imageSlotsLeft(attachments), setAttachmentNotice, imageBytesLeft(attachments));
+      const notices: string[] = [];
+      const kept = imagesThatFit(imageFiles, imageSlotsLeft(attachments), (notice) => notices.push(notice), imageBytesLeft(attachments));
+      const asFiles = kept.filter(imageSentAsFile);
+      if (asFiles.length) notices.push(imagesAsFilesNotice(asFiles.map((file) => file.name)));
+      if (notices.length) setAttachmentNotice(notices.join(" "));
       changeDraftAttachmentPending(draftId, true);
       void (async () => {
         try {
-          const results = await Promise.allSettled(kept.map(uploadImage));
-          for (const result of results) {
+          const results = await Promise.allSettled(kept.map((file) => imageSentAsFile(file) ? uploadFile(file) : uploadImage(file)));
+          for (const [index, result] of results.entries()) {
             if (result.status === "rejected") {
               dispatch({
                 type: "error",
-                message: friendlyError(result.reason, "image upload failed"),
+                message: result.reason instanceof AttachmentTooLargeError ? uploadFailure(kept[index]!.name, result.reason) : friendlyError(result.reason, "image upload failed"),
               });
             }
           }

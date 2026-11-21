@@ -3,9 +3,9 @@ import { createPortal } from "react-dom";
 import { ClipboardPaste, MessageSquareText, RotateCcw, X } from "../icons";
 import { Icon } from "./Icon";
 import { cn } from "@/lib/cn";
+import { intakeFiles } from "@/lib/intake-files";
 import {
   attachmentImageUrl,
-  intakeFiles,
   formatSize,
   imageBytesLeft,
   imageSlotsLeft,

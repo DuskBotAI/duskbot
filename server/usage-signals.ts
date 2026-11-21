@@ -49,7 +49,7 @@ export function turnRecord(facts: TurnFacts, place: UsagePlace, now: number): Us
   // the trace books the guard's "Stopped because the tool call ... failed" as interrupted; that is a failure, not the person's stop
   const toolStop = facts.status === "interrupted" && isToolFailureStop(facts.reason);
   const outcome: UsageOutcome = toolStop ? "failed" : facts.status === "interrupted" ? "cancelled" : facts.status === "error" ? "failed" : "ok";
-  const from: UsageFrom = facts.trigger.kind === "routine" ? "routine" : facts.trigger.kind === "bot" ? "bot" : facts.trigger.kind === "helper" ? "helper"
+  const from: UsageFrom = facts.trigger.kind === "routine" ? "routine" : facts.trigger.kind === "bot" ? "bot" : facts.trigger.kind === "helper" || facts.trigger.kind === "upkeep" ? "helper"
     : facts.trigger.kind === "user" ? "remote" : "app";
   const end = facts.endedAt ?? now, start = facts.startedAt ?? end;
   // a call the model sent bad arguments for is the model's mistake, not the tool breaking

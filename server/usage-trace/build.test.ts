@@ -68,6 +68,8 @@ describe("trace tree", () => {
     const flat = roots.find((root) => !root.turnId)!;
     expect(summarizeRoot(flat, "", T0)).toMatchObject({ timed: false, durationMs: 0, usageStatus: "complete" });
     expect(traceTurn(flat, new Map()).children).toEqual([]);
+    const upkeep = linkTurns([row({ threadId: "memory-1", botId: "bot", at: iso(5_000), trigger: { kind: "upkeep", botId: "bot", job: "memory" } })], [], noBot)[0]!;
+    expect(summarizeRoot(upkeep, "", T0)).toMatchObject({ source: "upkeep", job: "memory" });
     expect(traceTurn(roots.find((root) => root.turnId)!, new Map()).children).toMatchObject([{ kind: "step", startedAt: T0 + 7_000, endedAt: T0 + 9_000 }]);
   });
 

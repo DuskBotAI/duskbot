@@ -4,7 +4,7 @@ import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
 import { formatTokens, hasFiniteCost } from "@/lib/usage";
 import {
-  formatCost, formatDuration, formatTick, groupLabel, timeAxis, toolLabel, traceBadges, traceRows, type TraceRow,
+  formatCost, formatDuration, formatTick, groupLabel, timeAxis, toolLabel, traceBadges, traceRootTitle, traceRows, type TraceRow,
 } from "@/lib/usage-trace";
 import { useStore, type InstanceInfo } from "@/state/store";
 import type { TraceDetail, TraceNode, TraceRootSummary, TraceTotals } from "../../../shared/usage-trace";
@@ -206,7 +206,7 @@ export function TraceWaterfall({ detail, now, actions }: { detail: TraceDetail; 
     if (next.has(id)) next.delete(id); else next.add(id);
     return next;
   });
-  const title = root.title || t(`trace.source.${root.source}`, { bot: root.bots[0]?.name ?? "" });
+  const title = traceRootTitle(root);
 
   return (
     <section className="overflow-hidden rounded-2xl border border-transparent bg-card" data-testid="trace-waterfall" aria-label={t("trace.title")}>

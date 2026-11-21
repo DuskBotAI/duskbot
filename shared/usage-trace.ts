@@ -3,7 +3,7 @@ import { TOOL_NAMESPACE, toolSurfaceKind } from "./tool-surface.ts";
 import { isConnectedAppsServer, OWN_APPS_SERVER } from "./own-apps.ts";
 
 /** Who or what started a root. */
-export type TraceSource = "person" | "owner" | "routine" | "bot" | "helper";
+export type TraceSource = "person" | "owner" | "routine" | "bot" | "helper" | "upkeep";
 
 /** `ended`: the tool was still open when its turn ended. */
 export type TraceStatus = "ok" | "error" | "interrupted" | "ended";
@@ -122,6 +122,8 @@ export interface TraceRootSummary extends TraceTotals {
   id: string;
   title: string;
   source: TraceSource;
+  /** The background job a "helper" or "upkeep" root was, such as "memory" or "skill-review". */
+  job?: string;
   startedAt: number;
   endedAt: number;
   running: boolean;

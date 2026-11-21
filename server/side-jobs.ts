@@ -205,10 +205,10 @@ export function createSideJobs(deps: SideJobsDeps): SideJobs {
         if (job === "compaction") return { via: "engine", generateText: call };
         if (job === "setup-suggestions" || job === "skill-review" || job === "room-routing" || job === "turn-beat" || job === "frustration-summary" || job === "side-reply") {
           const quick = quickModel(bot, own);
-          const write = booked(job, bot, own, call, { kind: "bot", botId: bot.id }, () => ({ fallback: ownFallback(bot, own), ...quick }));
+          const write = booked(job, bot, own, call, { kind: "upkeep", botId: bot.id, job }, () => ({ fallback: ownFallback(bot, own), ...quick }));
           return { via: "engine", generateText: quick.model ? rememberRefusal(write, own, quick.model) : write };
         }
-        return { via: "engine", generateText: booked(job, bot, own, call, { kind: "bot", botId: bot.id }, () => ({ fallback: ownFallback(bot, own) })) };
+        return { via: "engine", generateText: booked(job, bot, own, call, { kind: "upkeep", botId: bot.id, job }, () => ({ fallback: ownFallback(bot, own) })) };
       }
       if (!helperModelAllowed(bot)) return null;
       const helper = usableHelper();

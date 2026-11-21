@@ -475,13 +475,18 @@ const bridge = {
   },
   /** Brings this window back to the front, after a sign-in finished in the browser. */
   focusWindow: () => ipcRenderer.invoke("desktop:focus-window"),
-  applySkin: (skin) => ipcRenderer.invoke("desktop:skin", skin),
+  applySkin: (skin) => isLocalPage || navigator.userActivation?.isActive === true
+    ? ipcRenderer.invoke("desktop:skin", skin) : Promise.reject(new Error("Only the person's click may change this window's skin.")),
   windowControls: {
-    minimize: () => ipcRenderer.invoke("window:minimize"),
-    toggleMaximize: () => ipcRenderer.invoke("window:toggle-maximize"),
-    close: () => ipcRenderer.invoke("window:close"),
+    minimize: () => isLocalPage || navigator.userActivation?.isActive === true
+      ? ipcRenderer.invoke("window:minimize") : Promise.reject(new Error("Only the person's click may move this window.")),
+    toggleMaximize: () => isLocalPage || navigator.userActivation?.isActive === true
+      ? ipcRenderer.invoke("window:toggle-maximize") : Promise.reject(new Error("Only the person's click may move this window.")),
+    close: () => isLocalPage || navigator.userActivation?.isActive === true
+      ? ipcRenderer.invoke("window:close") : Promise.reject(new Error("Only the person's click may move this window.")),
     state: () => ipcRenderer.invoke("window:state"),
-    resizeWidthBy: (deltaWidth) => ipcRenderer.invoke("window:resize-width-by", deltaWidth),
+    resizeWidthBy: (deltaWidth) => isLocalPage || navigator.userActivation?.isActive === true
+      ? ipcRenderer.invoke("window:resize-width-by", deltaWidth) : Promise.reject(new Error("Only the person's click may move this window.")),
     onMaximizedChanged: (cb) => {
       const handler = (_event, maximized) => cb(maximized);
       ipcRenderer.on("window:maximized-changed", handler);

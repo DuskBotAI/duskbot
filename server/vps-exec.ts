@@ -100,3 +100,21 @@ export async function withVpsGuestFile<T>(desktop: () => Promise<{ alias: string
     await rm(dir, { recursive: true, force: true });
   }
 }
+
+const PUSH = 'f="$1"; mkdir -p "$(dirname "$f")" && t="$f.dusk-part" && base64 -d > "$t" && mv -f "$t" "$f" && stat -c %s "$f"';
+
+/** Writes `bytes` to `guestPath` on a bot's VPS desktop as its desktop user, in one call; the caller has checked the path
+ * is in its workspace. Resolves with the size the desktop wrote. */
+export async function pushVpsFile(alias: string, containerId: string, guestPath: string, bytes: Buffer, runner: VpsCommandRunner = defaultRunner): Promise<number> {
+  if (!CONTAINER_ID.test(containerId)) throw refusal("invalid VPS computer identity", 400);
+  let stdout: string;
+  try {
+    ({ stdout } = await runner(vpsDockerArgs(alias, ["exec", "-i", "-u", "cua", containerId, "sh", "-c", PUSH, "dusk-push", guestPath]),
+      { input: bytes.toString("base64"), timeoutMs: 60_000 + Math.ceil(bytes.length / 1_000_000) * 2_000 }));
+  } catch {
+    throw refusal("The file could not be written to your VPS computer. Retry once.", 502);
+  }
+  const written = Number.parseInt(stdout.trim(), 10);
+  if (written !== bytes.length) throw refusal("The copy on your VPS computer came out incomplete. Retry once.", 502);
+  return written;
+}

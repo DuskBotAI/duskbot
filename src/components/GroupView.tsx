@@ -943,6 +943,8 @@ export function GroupView({ group: room }: { group: Group }) {
     });
   }, [trailing, group.messages, group.id, group.threadId, members, dispatch]);
 
+  const showToolCalls = showToolCallsEnabled(state.config);
+  const shownRows = useMemo(() => group.messages.filter((m) => m.kind !== "activity" || roomActivityVisible(m, showToolCalls)), [group.messages, showToolCalls]);
   const {
     scrollRef,
     clipRef,
@@ -960,7 +962,7 @@ export function GroupView({ group: room }: { group: Group }) {
   } = useTranscriptViewport({
     ownerId: group.id,
     threadId: group.threadId,
-    messages: group.messages,
+    messages: shownRows,
     pinOn: [group.busyBotId, group.working, composerDock.pad],
     transcriptShown: !setupPending,
     hasMore: group.hasMore,

@@ -622,7 +622,7 @@ import { createInternalMcpRoutes } from "./routes/internal-mcp.ts";
 import { createInternalThreadRoutes } from "./routes/internal-threads.ts";
 import { createBrowserEvidenceRoutes } from "./routes/browser-evidence.ts";
 import { createSignInCardRoutes } from "./routes/sign-in-cards.ts";
-import { createInternalChiefTeamRoutes } from "./routes/internal-chief-team.ts";
+import { createInternalChiefTeamRoutes } from "./routes/internal-chief-team.ts"; import { createComputerCopyRoutes } from "./routes/computer-copy.ts";
 import { createRoomHoldRoutes } from "./routes/room-holds.ts";
 import { checkedGroupResponder, createGroupRoutes } from "./routes/groups.ts"; import { leaderCapRefusal, leaderSystemNote, memberSystemNote, roomLeaderId } from "./room-leader.ts";
 import { createChannelRoutes } from "./routes/channels.ts";
@@ -14746,7 +14746,7 @@ const handleRequestInner = async (req: IncomingMessage, res: ServerResponse) => 
         return json(res, 201, proposed);
       }
       if (await dispatchRoutes([createInternalChiefTeamRoutes({ bot: () => store.bot(internalCapability.botId), requireActive: requireActiveInternalCapability,
-        teams: teamSetupTeams, bots: () => store.bots, instances: async () => selectableInstances(await registry.describe()) })], { req, res, url, path, method, auth, json, readBody })) return;
+        teams: teamSetupTeams, bots: () => store.bots, instances: async () => selectableInstances(await registry.describe()) }), createComputerCopyRoutes({ owns: () => connectorThread(internalCapability.botId, internalCapability.threadId) !== null, roots: () => messageFileRootsForThread(internalCapability.botId, internalCapability.threadId).filter((root) => root !== ATTACHMENTS_DIR), target: async () => { const vm = await attachmentVmForTurn(internalCapability); if (vm) return { localVm: vm.workspaceDir }; const vps = await vpsTurnFiles(internalCapability); return vps ? { vps } : undefined; }, requireActive: requireActiveInternalCapability, body: readInternalBody })], { req, res, url, path, method, auth, json, readBody })) return;
       if (method === "POST" && path === "/api/internal/team-setup-requests") {
         const parsed = z.object({ fromBotId: z.string().optional(), fromThreadId: z.string().optional(), plan: z.unknown() }).strict().safeParse(await readInternalBody());
         if (!parsed.success) return json(res, 400, { error: "Invalid team setup request" });

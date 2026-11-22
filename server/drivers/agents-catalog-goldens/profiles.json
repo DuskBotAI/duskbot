@@ -1,7 +1,7 @@
 {
   "default": {
-    "bytes": 72950,
-    "sha256": "ade375aa4c197df4722cbae41b09976d034055229ac3287019bf55d207908302",
+    "bytes": 73546,
+    "sha256": "af4bfdd838b85af466f0c9ba2c81f3b9b97df7f50ae707243c1f62242c63860a",
     "tools": [
       "set_status",
       "send_message",
@@ -22,6 +22,7 @@
       "close_thread",
       "start_thread",
       "vm_exec",
+      "copy_to_computer",
       "attach_file",
       "show_widget",
       "show_html",
@@ -62,8 +63,8 @@
     ]
   },
   "voice": {
-    "bytes": 73728,
-    "sha256": "0550652b27d718cc71ec8de38ad78aec0d5438752d31464d54ae5fe237d68089",
+    "bytes": 74324,
+    "sha256": "895b007c55b47c780843ff50f2a5f23e39c7c28f251db52503434ec772b54801",
     "tools": [
       "set_status",
       "send_message",
@@ -84,6 +85,7 @@
       "close_thread",
       "start_thread",
       "vm_exec",
+      "copy_to_computer",
       "attach_file",
       "show_widget",
       "show_html",
@@ -125,8 +127,8 @@
     ]
   },
   "skills": {
-    "bytes": 75769,
-    "sha256": "7c37aaa49389e8517446c612e56faaf0eccdec6d98302fb8c9c1de6fe92ac65f",
+    "bytes": 76365,
+    "sha256": "ebd5733001bd132e571088aad2f8f440f819d1c1a7f1cfbe9096a8f51e93e3ae",
     "tools": [
       "set_status",
       "send_message",
@@ -147,6 +149,7 @@
       "close_thread",
       "start_thread",
       "vm_exec",
+      "copy_to_computer",
       "attach_file",
       "show_widget",
       "show_html",
@@ -189,8 +192,8 @@
     ]
   },
   "skills+voice": {
-    "bytes": 76547,
-    "sha256": "638288f3407403e6c97617a1bd4fd0cb79e585833533a3019a7c1f696a156f4e",
+    "bytes": 77143,
+    "sha256": "69a1878f9cfb4b3dcbb5ea6acddfe857469c551fce9d92196877f598de823e7e",
     "tools": [
       "set_status",
       "send_message",
@@ -211,6 +214,7 @@
       "close_thread",
       "start_thread",
       "vm_exec",
+      "copy_to_computer",
       "attach_file",
       "show_widget",
       "show_html",
@@ -254,8 +258,8 @@
     ]
   },
   "non-chief": {
-    "bytes": 64932,
-    "sha256": "fddbbd3d5328255b5afada4e66ce03d4b74ea8d99ecab8b1b1cb3e04027b038d",
+    "bytes": 65528,
+    "sha256": "65bd01e3a605bf6a9e745184e11d4fc8670359e69fc168bfdabc90d686800601",
     "tools": [
       "set_status",
       "send_message",
@@ -276,6 +280,7 @@
       "close_thread",
       "start_thread",
       "vm_exec",
+      "copy_to_computer",
       "attach_file",
       "show_widget",
       "show_html",
@@ -311,8 +316,8 @@
     ]
   },
   "voice+non-chief": {
-    "bytes": 65710,
-    "sha256": "7798d5ce264d81a56134f8642f2b45fdd72c97d6b2637667687ec619b4c24be0",
+    "bytes": 66306,
+    "sha256": "41701c7194222c0eea568ca073372edd6e3cf6c6a7479bd3611643b54dd5bdbd",
     "tools": [
       "set_status",
       "send_message",
@@ -333,6 +338,7 @@
       "close_thread",
       "start_thread",
       "vm_exec",
+      "copy_to_computer",
       "attach_file",
       "show_widget",
       "show_html",
@@ -369,8 +375,8 @@
     ]
   },
   "skills+non-chief": {
-    "bytes": 67751,
-    "sha256": "ce5ed91cb48adc58c2f45831c7108e99dc9ad40f94a40eb24f0f205fcc92b4f9",
+    "bytes": 68347,
+    "sha256": "55d608f8268cd118cebfa28ae5078ddf985148b47f203fee2ab44b934d4455fd",
     "tools": [
       "set_status",
       "send_message",
@@ -391,6 +397,7 @@
       "close_thread",
       "start_thread",
       "vm_exec",
+      "copy_to_computer",
       "attach_file",
       "show_widget",
       "show_html",
@@ -428,8 +435,8 @@
     ]
   },
   "skills+voice+non-chief": {
-    "bytes": 68529,
-    "sha256": "edbad6ab95c47803aee97e3243717cde8736331a1376a9a3e39558a4c1ccd2e8",
+    "bytes": 69125,
+    "sha256": "3334c76ff5256c82f92168d19831d73354e752a7b2c4d4cebf41eb31a3ecd6ba",
     "tools": [
       "set_status",
       "send_message",
@@ -450,6 +457,7 @@
       "close_thread",
       "start_thread",
       "vm_exec",
+      "copy_to_computer",
       "attach_file",
       "show_widget",
       "show_html",
@@ -611,8 +619,8 @@
     ]
   },
   "skills+voice+x": {
-    "bytes": 81981,
-    "sha256": "05b5643520238eac0ca0b2a015e35207f5589e35e367375538d1d2c8cf0b44e7",
+    "bytes": 82577,
+    "sha256": "02b4a00075a305125d5427e6877de11b538f0c2df15083a8e577cfbeed1cb505",
     "tools": [
       "set_status",
       "send_message",
@@ -633,6 +641,7 @@
       "close_thread",
       "start_thread",
       "vm_exec",
+      "copy_to_computer",
       "attach_file",
       "show_widget",
       "show_html",
@@ -681,8 +690,8 @@
     ]
   },
   "skills+voice+x+team": {
-    "bytes": 82397,
-    "sha256": "77a3c1aecf0e05b9e47cca3cec85e0b3c91d71dba842d0941406f3d6806e4137",
+    "bytes": 82993,
+    "sha256": "a7224deeb27b2637493b3ff66ca7b0eb6675c6e2e68e6fc49c4948533cdc4502",
     "tools": [
       "set_status",
       "send_message",
@@ -703,6 +712,7 @@
       "close_thread",
       "start_thread",
       "vm_exec",
+      "copy_to_computer",
       "attach_file",
       "show_widget",
       "show_html",
@@ -752,8 +762,8 @@
     ]
   },
   "skills+skill-reader": {
-    "bytes": 76185,
-    "sha256": "005021bec0a3e6850ebcb104eb49cd7c5303334d1456cf5b9531b389fc8165e4",
+    "bytes": 76781,
+    "sha256": "61ef5eb184e90cb62d043ae8f18337100790caa2968957214128c3edf575ede6",
     "tools": [
       "set_status",
       "send_message",
@@ -774,6 +784,7 @@
       "close_thread",
       "start_thread",
       "vm_exec",
+      "copy_to_computer",
       "attach_file",
       "show_widget",
       "show_html",
@@ -817,8 +828,8 @@
     ]
   },
   "default+legacy-switches": {
-    "bytes": 72950,
-    "sha256": "ade375aa4c197df4722cbae41b09976d034055229ac3287019bf55d207908302",
+    "bytes": 73546,
+    "sha256": "af4bfdd838b85af466f0c9ba2c81f3b9b97df7f50ae707243c1f62242c63860a",
     "tools": [
       "set_status",
       "send_message",
@@ -839,6 +850,7 @@
       "close_thread",
       "start_thread",
       "vm_exec",
+      "copy_to_computer",
       "attach_file",
       "show_widget",
       "show_html",
@@ -879,8 +891,8 @@
     ]
   },
   "default+dusk": {
-    "bytes": 73601,
-    "sha256": "419b76f251d542b54f87dccf6a247ed14718056e95e18ba522fdd030d1380106",
+    "bytes": 74197,
+    "sha256": "27f76ef52b0f52b8802d430ee70ebcd0f14321b761f686df37ad2f6250518e79",
     "tools": [
       "set_status",
       "send_message",
@@ -901,6 +913,7 @@
       "close_thread",
       "start_thread",
       "vm_exec",
+      "copy_to_computer",
       "attach_file",
       "show_widget",
       "show_html",
@@ -943,8 +956,8 @@
     ]
   },
   "skills+voice+dusk": {
-    "bytes": 77198,
-    "sha256": "e68147ae34b197e84fc99904d829fdc714cf385f2d506564675829e58efb0dfb",
+    "bytes": 77794,
+    "sha256": "197a766f7bddd0cae408125880ee58611cdd99e8a75ba1ec88eb793f049e1dc7",
     "tools": [
       "set_status",
       "send_message",
@@ -965,6 +978,7 @@
       "close_thread",
       "start_thread",
       "vm_exec",
+      "copy_to_computer",
       "attach_file",
       "show_widget",
       "show_html",
@@ -1010,8 +1024,8 @@
     ]
   },
   "default+no-computer-pick": {
-    "bytes": 71743,
-    "sha256": "711a4f849f462f2379196dc13e4f6e1a32823bc97133e97d84380dad50129c69",
+    "bytes": 72339,
+    "sha256": "7de165e18a02abdddbcb7eba25e6b665390032d86f4d802e57683c5f798f22f2",
     "tools": [
       "set_status",
       "send_message",
@@ -1031,6 +1045,7 @@
       "close_thread",
       "start_thread",
       "vm_exec",
+      "copy_to_computer",
       "attach_file",
       "show_widget",
       "show_html",
@@ -1071,8 +1086,8 @@
     ]
   },
   "default+room": {
-    "bytes": 62189,
-    "sha256": "e365e91a5f910f8e75f7fd9ef286ebe046114ff1b76e60a094600a75a04127d7",
+    "bytes": 62785,
+    "sha256": "92bbd68d6db807aa4718e31c3ef80ecf47a27c099cebfe2e1cd794a45cc12bc6",
     "tools": [
       "set_status",
       "send_message",
@@ -1091,6 +1106,7 @@
       "close_thread",
       "start_thread",
       "vm_exec",
+      "copy_to_computer",
       "attach_file",
       "publish_page",
       "unpublish_page",
@@ -1124,8 +1140,8 @@
     ]
   },
   "non-chief+room": {
-    "bytes": 54171,
-    "sha256": "73ce79ecb32276a2cb4619c2f07cf87b542a419c2097b4710245346f93caee7b",
+    "bytes": 54767,
+    "sha256": "f89b2421adfd7d47259ea54b0c5cb208c1e725eed3186be764ae62ddc0514b06",
     "tools": [
       "set_status",
       "send_message",
@@ -1144,6 +1160,7 @@
       "close_thread",
       "start_thread",
       "vm_exec",
+      "copy_to_computer",
       "attach_file",
       "publish_page",
       "unpublish_page",

@@ -77,24 +77,24 @@ const FULL = "skills+voice+x+team";
 
 /** Bytes when the budget was last set; a profile may move at most 2% either way (lower it to lock in a win). */
 const BUDGET_BASELINE: Record<string, number> = {
-  "default": 71833,
-  "voice": 72611,
-  "skills": 74652,
-  "skills+voice": 75430,
-  "non-chief": 63815,
-  "voice+non-chief": 64593,
-  "skills+non-chief": 66634,
-  "skills+voice+non-chief": 67412,
+  "default": 73546,
+  "voice": 74324,
+  "skills": 76365,
+  "skills+voice": 77143,
+  "non-chief": 65528,
+  "voice+non-chief": 66306,
+  "skills+non-chief": 68347,
+  "skills+voice+non-chief": 69125,
   "skills+voice+cloud-home": 74451,
   "skills+voice+non-chief+cloud-home": 66433,
-  "skills+voice+x": 80441,
-  "skills+voice+x+team": 80940,
-  "skills+skill-reader": 75151,
-  "default+legacy-switches": 71833,
-  "default+dusk": 72484,
-  "skills+voice+dusk": 76081,
-  "default+no-computer-pick": 70626,
-  "default+room": 61107,
+  "skills+voice+x": 82577,
+  "skills+voice+x+team": 82993,
+  "skills+skill-reader": 76781,
+  "default+legacy-switches": 73546,
+  "default+dusk": 74197,
+  "skills+voice+dusk": 77794,
+  "default+no-computer-pick": 72339,
+  "default+room": 62785,
   "non-chief+room": 54171,
 };
 
@@ -254,9 +254,9 @@ describe("agents proxy tools/list golden", () => {
     for (const name of cloudHome) {
       const desktop = wires[name.slice(0, -"+cloud-home".length)]!;
       const names = toolsOf(wires[name]!).map((tool) => tool.name);
-      expect(names).toEqual(toolsOf(desktop).map((tool) => tool.name).filter((tool) => tool !== "vm_exec"));
+      expect(names).toEqual(toolsOf(desktop).map((tool) => tool.name).filter((tool) => tool !== "vm_exec" && tool !== "copy_to_computer"));
       expect(select(desktop).inputSchema.properties.surface.enum).toEqual(["auto", "cloud", "vm", "local", "browser"]);
-      expect(toolsOf(desktop).map((tool) => tool.name)).toContain("vm_exec");
+      expect(toolsOf(desktop).map((tool) => tool.name)).toEqual(expect.arrayContaining(["vm_exec", "copy_to_computer"]));
       const surface = select(wires[name]!).inputSchema.properties.surface;
       expect(surface.enum).toEqual(["auto", "cloud", "browser"]);
       expect(surface.description).not.toMatch(/\b(?:vm|local) =/);

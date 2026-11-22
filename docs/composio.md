@@ -9,7 +9,7 @@ build's default. The Connect apps window groups apps by how they connect, free f
 - **Paste a token.** GitHub, Notion, Linear, Airtable, Todoist, Trello, ClickUp, HubSpot, Jira, Shopify, Stripe and
   Cloudflare (`server/app-tokens`), plus Gmail with an app password on the built-in email connector. Each shows a
   numbered guide: open the app's token page, make a token, paste it; dusk bot checks it live before saving it.
-- **More apps with your Composio.** The person's own Composio account (Sign in with Composio, or their own `ak_` key),
+- **More apps with your Composio.** The person's own Composio account (Sign in with Composio, or their project API key),
   free for 10,000 actions a month on Composio's own plan.
 
 ## Token apps and native sign-ins
@@ -71,7 +71,7 @@ dusk bot uses one Composio project API key and one reusable Composio Session. Th
 
 1. Open the [Composio Dashboard](https://dashboard.composio.dev).
 2. Select **Platform**, select or create a project, then open **Settings → API Keys**.
-3. Copy a project key beginning with `ak_`.
+3. Copy a project API key. Both standard and scoped project keys use the `x-api-key` header. [Composio authentication](https://docs.composio.dev/reference/authenticating-to-composio)
 4. In dusk bot, open **App Settings → Connections** and save it under **Composio project key**.
 5. Open **Connected apps** and choose Gmail, GitHub, Slack, or another service. Enter a unique label such as `work` or `personal`, then finish the authorization in your normal browser.
 6. To connect another account for the same app, choose **Add account**, give it a unique label, and finish the second authorization in your browser.
@@ -133,7 +133,7 @@ Connected-account write access is required so **Disconnect** can revoke the upst
 Set the key in the server environment:
 
 ```sh
-COMPOSIO_API_KEY=ak_your_project_key pnpm dev:server
+COMPOSIO_API_KEY='<your-project-api-key>' pnpm dev:server
 ```
 
 The browser-only development UI can also save a key to the owner-only `~/.duskbot/config.json` file. Using the environment variable is preferred for headless and shared development machines.

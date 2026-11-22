@@ -26,7 +26,7 @@ const { setLocale } = await import("@/lib/i18n");
 
 const ROOT = new URL("../..", import.meta.url);
 const ACCOUNT_ID = "0123456789abcdef0123456789abcdef";
-const PREFIX: Record<string, string> = { composio: "ak_", elevenlabs: "sk_" };
+const PREFIX: Record<string, string> = { elevenlabs: "sk_" };
 const EXTRA_PATCH: Record<string, (key: string) => Record<string, unknown>> = {
   workersAi: (key) => ({ decider: { workersAiToken: key, workersAiAccountId: ACCOUNT_ID } }),
   imageCustom: (key) => ({ imageGen: { customApiKey: key } }),

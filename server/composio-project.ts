@@ -1,4 +1,4 @@
-// A person's own Composio project, reached with their ak_ key. A Tool Router Session uses one of the project's own auth
+// A person's own Composio project, reached with their project API key. A Tool Router Session uses one of the project's own auth
 // configs (a bring-your-own OAuth app such as Xero or Buffer, or an API-key toolkit) only when it names that config's id
 // under `auth_configs`, keyed by toolkit, and only while the config is enabled for Tool Router. A config a person made
 // themselves can have that off or unset, which Composio's own CLI reads as off; the API's PATCH sets it (v3.1, Oct 2026):

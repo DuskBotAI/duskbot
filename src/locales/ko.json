@@ -5941,7 +5941,6 @@
   "connectApps.key.signUp": "Composio 열기",
   "connectApps.key.openKeys": "API Keys 열기",
   "connectApps.key.label": "Composio API 키",
-  "connectApps.key.shape": "Composio 키는 ak_로 시작합니다. API Keys에서 다시 복사하세요.",
   "connectApps.key.rejected": "Composio가 그 키를 받지 않았습니다. API Keys에서 다시 복사하세요.",
   "connectApps.key.offline": "Composio에 연결할 수 없습니다. 연결을 확인하고 다시 시도하세요.",
   "connectApps.key.add": "내 Composio 키 추가",

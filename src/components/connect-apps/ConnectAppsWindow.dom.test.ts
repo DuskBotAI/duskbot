@@ -336,7 +336,7 @@ describe("the Connect Apps window", () => {
         }
         if (path === "/api/config" && init?.method === "PUT") {
           const sent = JSON.parse(String(init.body)) as { composio?: { apiKey?: string } };
-          if (sent.composio?.apiKey !== "ak_good") throw new ApiError("Composio rejected this key (HTTP 401)", 400, { error: "Composio rejected this key (HTTP 401)" });
+          if (!["ak_good", "fixture-project-token"].includes(sent.composio?.apiKey ?? "")) throw new ApiError("Composio rejected this key (HTTP 401)", 400, { error: "Composio rejected this key (HTTP 401)" });
           keySaved = true;
           return { composio: { mode: "self-hosted", configured: true } };
         }
@@ -386,8 +386,8 @@ describe("the Connect Apps window", () => {
       ]);
       expect([...step.querySelectorAll("a")].map((link) => link.getAttribute("href")))
         .toEqual(["https://dashboard.composio.dev", "https://dashboard.composio.dev/~/project/settings/api-keys"]);
-      await paste("ak_good");
-      expect(fixture.api).toHaveBeenCalledWith("/api/config", { method: "PUT", body: JSON.stringify({ composio: { apiKey: "ak_good" } }) });
+      await paste("fixture-project-token");
+      expect(fixture.api).toHaveBeenCalledWith("/api/config", { method: "PUT", body: JSON.stringify({ composio: { apiKey: "fixture-project-token" } }) });
       expect(fixture.dispatch).toHaveBeenCalledWith({ type: "configStatus", config: { composio: { mode: "self-hosted", configured: true } } });
       expect(fixture.api).toHaveBeenCalledWith("/api/connectors/attio/authorize", { method: "POST" });
       expect(fixture.opened).toEqual(["https://connect.example/attio"]);
@@ -725,11 +725,13 @@ describe("the Connect Apps window", () => {
 
     it("a key Composio refuses says so in one line and connects nothing", async () => {
       await remount({ kind: "detail", id: "attio" }, "unavailable");
-      await paste("ak_bad");
+      await paste("fixture-refused-key");
       expect(dialog().querySelector("[data-composio-key] [role=alert] > span")?.textContent).toBe("Composio didn't accept that key. Copy it again from API keys.");
       expect(fixture.api).not.toHaveBeenCalledWith("/api/connectors/attio/authorize", expect.anything());
+      fixture.api.mockClear();
       await paste("not a key");
-      expect(dialog().querySelector("[data-composio-key] [role=alert] > span")?.textContent).toBe("Composio keys start with ak_. Copy it again from API keys.");
+      expect(fixture.api).not.toHaveBeenCalledWith("/api/config", expect.anything());
+      expect(dialog().querySelector("[data-composio-key] [role=alert] > span")?.textContent).toBe("That doesn't look like an API key: keys have no spaces. Copy the key again and paste it here.");
     });
 
     it("with the managed broker, an app it cannot sign in to asks for the person's own key instead of a dead end", async () => {

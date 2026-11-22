@@ -2571,7 +2571,6 @@
   "connectApps.key.signUp": "Ouvrir Composio",
   "connectApps.key.openKeys": "Ouvrir API Keys",
   "connectApps.key.label": "Clé d'API Composio",
-  "connectApps.key.shape": "Les clés Composio commencent par ak_. Copiez-la à nouveau depuis API Keys.",
   "connectApps.key.rejected": "Composio n'a pas accepté cette clé. Copiez-la à nouveau depuis API Keys.",
   "connectApps.key.offline": "Impossible de joindre Composio. Vérifiez votre connexion et réessayez.",
   "connectApps.key.add": "Ajouter votre clé Composio",

@@ -4477,7 +4477,6 @@
   "connectApps.key.signUp": "Composio'yu aç",
   "connectApps.key.openKeys": "API Keys'i aç",
   "connectApps.key.label": "Composio API anahtarı",
-  "connectApps.key.shape": "Composio anahtarları ak_ ile başlar. API Keys bölümünden tekrar kopyala.",
   "connectApps.key.rejected": "Composio bu anahtarı kabul etmedi. API Keys bölümünden tekrar kopyala.",
   "connectApps.key.offline": "Composio'ya ulaşılamadı. Bağlantını kontrol edip tekrar dene.",
   "connectApps.key.add": "Composio anahtarını ekle",

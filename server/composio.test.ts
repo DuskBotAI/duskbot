@@ -164,7 +164,7 @@ beforeAll(async () => {
     }
 
     const apiKey = String(req.headers["x-api-key"] ?? "");
-    if (!["ak_test", "ak_catalog_a", "ak_catalog_b", "ak_catalog_pages", "ak_catalog_partial", "ak_catalog_stuck",
+    if (!["ak_test", "fixture-project-token", "ak_catalog_a", "ak_catalog_b", "ak_catalog_pages", "ak_catalog_partial", "ak_catalog_stuck",
         "ak_catalog_page_stuck", "ak_catalog_exhausted", "ak_catalog_stalled_total", "ak_catalog_end_short",
         "ak_catalog_http_no_total"].includes(apiKey)) {
       res.writeHead(401, { "content-type": "application/json" });
@@ -750,8 +750,17 @@ describe.sequential("Composio Sessions", () => {
     }
   });
 
-  it("accepts only project API keys", async () => {
-    await expect(prepareProjectSession("old_key")).rejects.toThrow(/start with ak_/i);
+  it.each([" ", "two words", "line\nbreak", "bad\u0000key", "⚿"])("rejects malformed input before contacting Composio", async (value) => {
+    const prior = calls.length;
+    await expect(prepareProjectSession(value)).rejects.toThrow(/Composio project API key/);
+    expect(calls).toHaveLength(prior);
+  });
+
+  it("lets Composio verify the project key independently of its prefix", async () => {
+    await expect(prepareProjectSession("  fixture-project-token  ")).resolves.toMatchObject({
+      apiKey: "fixture-project-token", sessionId: "trs_test",
+    });
+    await expect(prepareProjectSession("old_key")).rejects.toThrow(/invalid project key/i);
     await expect(prepareProjectSession("ak_wrong")).rejects.toThrow(/invalid project key/i);
   });
 

@@ -5521,7 +5521,6 @@
   "connectApps.key.signUp": "Composio を開く",
   "connectApps.key.openKeys": "API Keys を開く",
   "connectApps.key.label": "Composio の API キー",
-  "connectApps.key.shape": "Composio のキーは ak_ で始まります。API Keys からもう一度コピーしてください。",
   "connectApps.key.rejected": "Composio がそのキーを受け付けませんでした。API Keys からもう一度コピーしてください。",
   "connectApps.key.offline": "Composio に接続できませんでした。接続を確認してもう一度お試しください。",
   "connectApps.key.add": "Composio のキーを追加",

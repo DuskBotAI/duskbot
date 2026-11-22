@@ -7779,7 +7779,6 @@
   "connectApps.key.signUp": "Open Composio",
   "connectApps.key.openKeys": "Open API keys",
   "connectApps.key.label": "Composio API key",
-  "connectApps.key.shape": "Composio keys start with ak_. Copy it again from API keys.",
   "connectApps.key.rejected": "Composio didn't accept that key. Copy it again from API keys.",
   "connectApps.key.offline": "Couldn't reach Composio. Check your connection and try again.",
   "connectApps.key.add": "Add your Composio key",

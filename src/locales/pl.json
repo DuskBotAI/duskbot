@@ -5494,7 +5494,6 @@
   "connectApps.key.signUp": "Otwórz Composio",
   "connectApps.key.openKeys": "Otwórz API Keys",
   "connectApps.key.label": "Klucz API Composio",
-  "connectApps.key.shape": "Klucze Composio zaczynają się od ak_. Skopiuj go ponownie z API Keys.",
   "connectApps.key.rejected": "Composio nie przyjęło tego klucza. Skopiuj go ponownie z API Keys.",
   "connectApps.key.offline": "Nie udało się połączyć z Composio. Sprawdź połączenie i spróbuj ponownie.",
   "connectApps.key.add": "Dodaj swój klucz Composio",

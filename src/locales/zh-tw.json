@@ -4047,7 +4047,6 @@
   "connectApps.key.signUp": "開啟 Composio",
   "connectApps.key.openKeys": "開啟 API Keys",
   "connectApps.key.label": "Composio API 金鑰",
-  "connectApps.key.shape": "Composio 金鑰以 ak_ 開頭。請從 API Keys 重新複製。",
   "connectApps.key.rejected": "Composio 不接受這個金鑰。請從 API Keys 重新複製。",
   "connectApps.key.offline": "無法連線到 Composio。請檢查網路後再試一次。",
   "connectApps.key.add": "新增你的 Composio 金鑰",

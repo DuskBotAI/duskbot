@@ -2873,7 +2873,6 @@
   "connectApps.key.signUp": "Відкрити Composio",
   "connectApps.key.openKeys": "Відкрити API Keys",
   "connectApps.key.label": "API-ключ Composio",
-  "connectApps.key.shape": "Ключі Composio починаються з ak_. Скопіюйте його ще раз в API Keys.",
   "connectApps.key.rejected": "Composio не прийняв цей ключ. Скопіюйте його ще раз в API Keys.",
   "connectApps.key.offline": "Не вдалося зв'язатися з Composio. Перевірте з'єднання і спробуйте ще раз.",
   "connectApps.key.add": "Додати свій ключ Composio",

@@ -1,6 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { readSecureCredentials } from "./secure-credentials.mjs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
+import { readSecureCredentials, secureComposioConfig } from "./secure-credentials.mjs";
 
 const transient = () =>
   new Error("safeStorage.decryptStringAsync is temporarily unavailable. Please try again.");
@@ -83,4 +87,27 @@ describe("readSecureCredentials", () => {
     const throws = await readSecureCredentials(deps({ decrypt: vi.fn().mockRejectedValue(transient()), roundTrips: async () => { throw transient(); } }));
     expect(throws.status).toBe("unavailable");
   });
+});
+
+it("migrates a project key of any format only after the encrypted store accepts it", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "dusk-composio-key-"));
+  try {
+    const configPath = join(dir, "config.json");
+    const config = { composio: { apiKey: "fixture-project-token", sessionId: "session" } };
+    writeFileSync(configPath, JSON.stringify(config));
+    const credentials = {};
+    const save = vi.fn().mockRejectedValueOnce(new Error("keychain unavailable")).mockResolvedValue(undefined);
+    const migrate = () => secureComposioConfig({ configPath, credentials, save, log: vi.fn() });
+
+    await migrate();
+    expect(JSON.parse(readFileSync(configPath, "utf8"))).toEqual(config);
+    expect(credentials).toEqual({});
+    await migrate();
+    expect(save).toHaveBeenCalledTimes(2);
+    expect(save).toHaveBeenLastCalledWith({ composioApiKey: "fixture-project-token" });
+    expect(credentials).toEqual({ composioApiKey: "fixture-project-token" });
+    expect(JSON.parse(readFileSync(configPath, "utf8")).composio).toEqual({ apiKey: "", sessionId: "session" });
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });

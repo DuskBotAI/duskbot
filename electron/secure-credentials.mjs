@@ -114,14 +114,12 @@ export async function secureComposioConfig({ configPath, credentials, save, log 
     if (!config?.composio || typeof config.composio !== "object") return;
     let changed = false;
     const apiKey = config?.composio?.apiKey;
-    if (typeof apiKey === "string" && apiKey.trim().startsWith("ak_")) {
+    if (typeof apiKey === "string" && apiKey.trim()) {
       if (!credentials.composioApiKey) {
-        credentials.composioApiKey = apiKey.trim();
-        await save(credentials);
+        const key = apiKey.trim();
+        await save({ ...credentials, composioApiKey: key });
+        credentials.composioApiKey = key;
       }
-      config.composio.apiKey = "";
-      changed = true;
-    } else if (typeof apiKey === "string" && apiKey.trim()) {
       config.composio.apiKey = "";
       changed = true;
     }

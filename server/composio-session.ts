@@ -1,4 +1,4 @@
-// A Composio project key (ak_…) creates or reuses one Tool Router Session, which owns connection state, auth links and the
+// A Composio project key creates or reuses one Tool Router Session, which owns connection state, auth links and the
 // MCP endpoint. A PATCH replaces a Session's whole `auth_configs` map and keeps its id and MCP URL (API v3.1, Oct 2026):
 // https://docs.composio.dev/reference/sdk-reference/python/session
 import { randomUUID } from "node:crypto";
@@ -205,7 +205,7 @@ export async function prepareProjectSession(
 ): Promise<{ apiKey: string; userId: string; sessionId: string }> {
   const trimmed = apiKey.trim();
   if (!trimmed) throw new Error("Enter a Composio project API key");
-  if (!trimmed.startsWith("ak_")) throw new Error("Composio project API keys start with ak_");
+  if (!/^[!-~]+$/.test(trimmed)) throw new Error("Invalid Composio project API key: paste the key as a single token");
 
   // A Session names its auth configs at creation, so the project's are read before deciding to reuse it.
   const authConfigs = knownAuthConfigs ?? (await projectAuthConfigs(trimmed)).configs;

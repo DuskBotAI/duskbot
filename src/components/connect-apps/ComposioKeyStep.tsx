@@ -5,7 +5,7 @@ import { t } from "@/lib/i18n";
 import type { LocaleKey } from "@/locales";
 import { reserveConnectionPage } from "@/lib/connector-oauth";
 import { Icon } from "../Icon";
-import { cleanKey, saveCredential } from "../keys/key-save";
+import { cleanKey, looksLikeKey, saveCredential } from "../keys/key-save";
 import type { Connectors } from "./use-connectors";
 import type { ViaFailure, ViaFlow } from "./via-flow";
 import { KitButton } from "./detail-kit";
@@ -22,7 +22,7 @@ export const COMPOSIO_API_KEYS_URL = "https://dashboard.composio.dev/~/project/s
 /** What went wrong saving a key, in one short line: Composio said no, or it could not be reached. */
 export function keyProblem(cause: unknown): LocaleKey {
   const message = cause instanceof Error ? cause.message : String(cause);
-  return /rejected|start with ak_|\b40[13]\b|unauthori[sz]ed|invalid/i.test(message) ? "connectApps.key.rejected" : "connectApps.key.offline";
+  return /rejected|project API keys start with|\b40[13]\b|unauthori[sz]ed|invalid/i.test(message) ? "connectApps.key.rejected" : "connectApps.key.offline";
 }
 
 /** The sentence for where an app's Composio Connect sign-in stands, when there is one to say. */
@@ -59,7 +59,7 @@ export function ComposioKeyStep({ slug, name, connectors, primary }: { slug: str
     event?.preventDefault();
     const key = cleanKey(draft);
     if (busy || !key) return;
-    if (!/^ak_\S+$/.test(key)) { setProblem("connectApps.key.shape"); return; }
+    if (!looksLikeKey(key)) { setProblem("keys.notAKey"); return; }
     // the sign-in tab is reserved on this click, before saving uses up the browser's user activation
     const launch = reserveConnectionPage();
     setBusy(true);
@@ -90,7 +90,7 @@ export function ComposioKeyStep({ slug, name, connectors, primary }: { slug: str
     { key: "paste", done: saved, text: t("connectApps.guide.paste"),
       action: (
         <form className="ca-guide-action" onSubmit={(event) => void submit(event)}>
-          <input type="password" value={draft} autoFocus autoComplete="off" spellCheck={false} placeholder="ak_…"
+          <input type="password" value={draft} autoFocus autoComplete="off" spellCheck={false} placeholder={t("keys.composio.label")}
             aria-label={t("connectApps.key.label")} aria-invalid={problem ? true : undefined} aria-describedby={problem ? "ca-key-problem" : undefined}
             onChange={(event) => { setDraft(event.target.value); setProblem(null); }} />
           <KitButton type="submit" disabled={busy || !draft.trim()} aria-busy={busy || undefined}>{busy ? t("tokenApps.checking") : t("connectApps.connectApp", { name })}</KitButton>

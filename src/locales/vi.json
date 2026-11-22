@@ -4477,7 +4477,6 @@
   "connectApps.key.signUp": "Mở Composio",
   "connectApps.key.openKeys": "Mở API Keys",
   "connectApps.key.label": "Khóa API Composio",
-  "connectApps.key.shape": "Khóa Composio bắt đầu bằng ak_. Hãy sao chép lại từ API Keys.",
   "connectApps.key.rejected": "Composio không chấp nhận khóa đó. Hãy sao chép lại từ API Keys.",
   "connectApps.key.offline": "Không kết nối được tới Composio. Kiểm tra kết nối rồi thử lại.",
   "connectApps.key.add": "Thêm khóa Composio của bạn",

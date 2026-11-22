@@ -2569,7 +2569,6 @@
   "connectApps.key.signUp": "Composio खोलें",
   "connectApps.key.openKeys": "API Keys खोलें",
   "connectApps.key.label": "Composio API कुंजी",
-  "connectApps.key.shape": "Composio कुंजियाँ ak_ से शुरू होती हैं। API Keys से इसे फिर से कॉपी करें।",
   "connectApps.key.rejected": "Composio ने वह कुंजी स्वीकार नहीं की। API Keys से इसे फिर से कॉपी करें।",
   "connectApps.key.offline": "Composio तक नहीं पहुँच सके। अपना कनेक्शन जाँचें और फिर से कोशिश करें।",
   "connectApps.key.add": "अपनी Composio कुंजी जोड़ें",

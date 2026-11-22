@@ -12,6 +12,7 @@ import { OpenCodeDriver } from "./acp/opencode-go.ts";
 import { QwenAgentDriver } from "./acp/qwen.ts";
 import { CustomAcpDriver } from "./acp/custom.ts";
 import { HermesAgentDriver } from "./acp/hermes.ts";
+import { FxAgentDriver } from "./acp/fx.ts";
 import { DeepSeekAgentDriver } from "./acp/deepseek.ts";
 import { ClineAgentDriver } from "./acp/cline.ts";
 import { CopilotAgentDriver } from "./acp/copilot.ts";
@@ -35,6 +36,7 @@ export const BUILT_IN_DRIVERS: readonly AnyProviderDriver[] = [
   OpenCodeDriver,
   QwenAgentDriver,
   HermesAgentDriver,
+  FxAgentDriver,
   ClineAgentDriver,
   CopilotAgentDriver,
   CustomAcpDriver,

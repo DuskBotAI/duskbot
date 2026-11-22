@@ -46,6 +46,7 @@ export const DEFAULT_FLEET: InstanceConfigMap = {
   ...API_KEY_FLEET,
   qwen: { driver: "qwenAgent" },
   hermes: { driver: "hermesAgent" },
+  fx: { driver: "fxAgent" },
   cline: { driver: "clineAgent" },
   pi: { driver: "piAgent" },
 };
@@ -53,6 +54,7 @@ export const DEFAULT_FLEET: InstanceConfigMap = {
 const CUSTOM_ONLY = {
   qwen: { driver: "qwenAgent" },
   hermes: { driver: "hermesAgent" },
+  fx: { driver: "fxAgent" },
   cline: { driver: "clineAgent" },
   pi: { driver: "piAgent" },
 } as const;

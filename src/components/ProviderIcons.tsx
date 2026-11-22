@@ -179,6 +179,15 @@ export function OpenRouterMark({ size = 16, className }: IconProps) {
   );
 }
 
+export function FxMark({ size = 16, className }: IconProps) {
+  // Vercel triangle mark (Simple Icons, CC0 1.0).
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" className={cn("fill-[var(--color-ink)]", className)} aria-hidden="true">
+      <path d="M24 22.525H0l12-21.05 12 21.05z" />
+    </svg>
+  );
+}
+
 export function ProviderMark({ driverKind, size, className }: IconProps & { driverKind: string }) {
   switch (driverKind) {
     case "grok":
@@ -207,6 +216,8 @@ export function ProviderMark({ driverKind, size, className }: IconProps & { driv
       return <QwenMark size={size} className={className} />;
     case "hermesAgent":
       return <HermesMark size={size} className={className} />;
+    case "fxAgent":
+      return <FxMark size={size} className={className} />;
     case "deepseekAgent":
       return <DeepSeekMark size={size} className={className} />;
     case "piAgent":

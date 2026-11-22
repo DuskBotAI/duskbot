@@ -78,6 +78,18 @@ function isDark(chat: HTMLElement): boolean {
     || chat.closest<HTMLElement>(".dusk-mobile")?.dataset.scheme === "dark";
 }
 
+function focusComposer(chat: HTMLElement, glass?: GlassBridge): void {
+  const field = chat.querySelector<HTMLTextAreaElement>("[data-tour='composer'] textarea");
+  if (field?.disabled) return;
+  if (glass && document.documentElement.dataset.nativeGlassComposer !== undefined) {
+    glass.focus();
+    return;
+  }
+  if (!field) return;
+  field.focus({ preventScroll: true });
+  field.setSelectionRange(field.value.length, field.value.length);
+}
+
 /** Drag a message to the right and a reply icon comes out from under it; past the threshold it arms with one tap of the
  * taptic engine, and letting go there opens the composer quoting it, through the message's own Reply. */
 export function installSwipeReply(chat: HTMLElement, glass?: GlassBridge): () => void {
@@ -157,7 +169,13 @@ export function installSwipeReply(chat: HTMLElement, glass?: GlassBridge): () =>
         const fade = leaving?.animate([{ opacity: leaving.style.opacity, scale: leaving.style.scale, translate: leaving.style.translate }, { opacity: 0, scale: 0.2, translate: "0 0" }], { duration: 300, easing: "ease-out" });
         if (fade) fade.onfinish = () => leaving?.remove(); else leaving?.remove();
       }
-      if (armed) replyButton(row)?.click();
+      if (armed) {
+        const button = replyButton(row);
+        if (button) {
+          button.click();
+          focusComposer(chat, glass);
+        }
+      }
     }
     reset();
   };

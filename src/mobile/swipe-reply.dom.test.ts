@@ -17,7 +17,7 @@ function fire(id: string, type: string, x: number, y: number): Touchy {
   return event;
 }
 
-function chatWith({ own = false, extra = "" } = {}) {
+function chatWith({ own = false, extra = "", composer = "" } = {}) {
   const onReply = vi.fn();
   document.body.innerHTML = `<div id="chat" data-mobile-chat><div role="log">
     <div id="row" data-message-row data-sent-at="1">
@@ -25,7 +25,7 @@ function chatWith({ own = false, extra = "" } = {}) {
       <div data-testid="message-actions"><button id="reply" aria-label="${t("chat.replyToMessage")}"><svg></svg></button></div></div>
     </div>
     <div id="bare" data-message-row><p id="plain">no actions</p></div>
-  </div></div>`;
+  </div>${composer}</div>`;
   document.getElementById("reply")!.addEventListener("click", onReply);
   const chat = document.getElementById("chat")!;
   return { chat, onReply, row: document.getElementById("row")! };
@@ -142,5 +142,50 @@ describe("swipe a message to reply", () => {
     stop();
     expect(swipeReply).toHaveBeenLastCalledWith(null, true);
     delete document.documentElement.dataset.skin;
+  });
+
+  it("raises the native glass composer keyboard on an armed swipe-reply", () => {
+    document.documentElement.dataset.nativeGlassComposer = "";
+    const focus = vi.fn();
+    const swipeReply = vi.fn();
+    const glass = { focus, swipeReply } as unknown as GlassBridge;
+    const { chat, onReply } = chatWith({ composer: `<div data-tour="composer"><textarea id="field"></textarea></div>` });
+    const stop = installSwipeReply(chat, glass);
+
+    fire("text", "touchstart", 100, 300);
+    fire("text", "touchmove", 100 + 20, 300);
+    fire("text", "touchend", 0, 0);
+    expect(focus).not.toHaveBeenCalled();
+
+    fire("text", "touchstart", 100, 300);
+    fire("text", "touchmove", 100 + REPLY_THRESHOLD.incoming + 10, 300);
+    fire("text", "touchend", 0, 0);
+    expect(onReply).toHaveBeenCalledTimes(1);
+    expect(focus).toHaveBeenCalledTimes(1);
+
+    (document.getElementById("field") as HTMLTextAreaElement).disabled = true;
+    fire("text", "touchstart", 100, 300);
+    fire("text", "touchmove", 100 + REPLY_THRESHOLD.incoming + 10, 300);
+    fire("text", "touchend", 0, 0);
+    expect(focus).toHaveBeenCalledTimes(1);
+
+    stop();
+    delete document.documentElement.dataset.nativeGlassComposer;
+  });
+
+  it("focuses the DOM composer field at the end of the draft when native glass does not own it", () => {
+    const { chat, onReply } = chatWith({ composer: `<div data-tour="composer"><textarea id="field">draft</textarea></div>` });
+    const field = document.getElementById("field") as HTMLTextAreaElement;
+    const stop = installSwipeReply(chat);
+
+    fire("text", "touchstart", 100, 300);
+    fire("text", "touchmove", 100 + REPLY_THRESHOLD.incoming + 10, 300);
+    fire("text", "touchend", 0, 0);
+    expect(onReply).toHaveBeenCalledTimes(1);
+    expect(document.activeElement).toBe(field);
+    expect(field.selectionStart).toBe(5);
+    expect(field.selectionEnd).toBe(5);
+
+    stop();
   });
 });

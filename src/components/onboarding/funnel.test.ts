@@ -50,7 +50,7 @@ describe("the AI grid", () => {
   it("names each AI as people know it, in a fixed order, with only the ones this app can connect", () => {
     const tiles = aiTiles([ai("claude", "claudeAgent"), ai("chatgpt", "codex"), ai("antigravity", "antigravityAgent"), ai("openrouter", "openai-compat")], ready);
     expect(tiles.map((tile) => [tile.id, tile.label, tile.instance.instanceId])).toEqual([
-      ["chatgpt", "ChatGPT", "chatgpt"], ["claude", "Claude", "claude"], ["gemini", "Gemini", "antigravity"], ["openrouter", "OpenRouter", "openrouter"],
+      ["chatgpt", "ChatGPT", "chatgpt"], ["claude", "Claude", "claude"], ["antigravity", "Antigravity", "antigravity"], ["openrouter", "OpenRouter", "openrouter"],
     ]);
     expect(aiName({ instanceId: "chatgpt", driverKind: "codex", displayName: "ChatGPT plan" })).toBe("ChatGPT");
     expect(aiName({ instanceId: "kimi", driverKind: "kimiAgent", displayName: "Kimi" })).toBe("Kimi");

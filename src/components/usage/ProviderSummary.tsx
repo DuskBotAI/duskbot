@@ -8,7 +8,14 @@ import { EASE } from "@/lib/motion-presets";
 import { Card as RowsCard } from "../ListRows";
 import { ProviderMark } from "../ProviderIcons";
 
-const DRIVER_MARK: Record<EngineLimit["driver"], string> = { claude: "claudeAgent", codex: "codex", grok: "grok" };
+const DRIVER_MARK: Record<EngineLimit["driver"], string> = {
+  claude: "claudeAgent",
+  codex: "codex",
+  grok: "grok",
+  antigravity: "antigravityAgent",
+  cursor: "cursorAgent",
+  opencode: "opencodeGo",
+};
 
 /** "2d 4h", "3h 10m" or "12m" until a reset; null once it has passed or is unknown. */
 export function resetDistance(at: number | null, now: number): string | null {

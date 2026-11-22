@@ -31,7 +31,7 @@ function startsInteraction(input: PreviewStreamInput): boolean {
   if (COMMANDS.has(input.type)) return true;
   if (input.type === "mouse") return input.action === "down";
   if (input.type === "key") return input.action === "down" && !MODIFIER_KEYS.has(input.key);
-  return input.type === "wheel" || input.type === "text";
+  return input.type === "wheel" || input.type === "text" || input.type === "copy";
 }
 
 const inputId = (input: PreviewStreamInput) => input.type === "key" ? `key:${input.code || input.key}` : input.type === "mouse" ? `mouse:${input.button}` : input.type;

@@ -1,8 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { GROK_HOVER_TINT } from "./SidebarSimpleTop";
-import { Check } from "lucide-react";
-import { X } from "../icons";
+import { Check, X } from "../icons";
 
 import { openExternalLink } from "@/lib/app-links";
 import { productName } from "@/lib/brand";

@@ -144,7 +144,10 @@ export function usageRows(limit: EngineLimit): UsageRow[] {
 export const rowShare = (row: Pick<UsageRow, "left">, display: UsageDisplay): number => (display === "left" ? row.left : 100 - row.left);
 
 export function windowLabel(window: LimitWindowName): string {
-  return window === "5-hour" ? t("planUsage.fiveHour") : window === "weekly" ? t("planUsage.weekly") : t("usage.title");
+  if (window === "5-hour") return t("planUsage.fiveHour");
+  if (window === "weekly") return t("planUsage.weekly");
+  if (window === "monthly") return t("planUsage.monthly");
+  return t("usage.title");
 }
 
 export interface ResetMarker { engine: string; name: string; at: number }

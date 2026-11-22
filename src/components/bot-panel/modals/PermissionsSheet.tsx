@@ -151,7 +151,30 @@ function DailyCapDialog({ cap, onSave, onClose }: { cap: number; onSave: (cap: n
   const parsed = Number(value);
   const valid = Number.isInteger(parsed) && parsed >= 1 && parsed <= 1000;
   return (
-    <FormDialog data-panel-modal="per-day" title={t("botPanel.sheet.perDay")} canSave={valid && parsed !== cap} onSave={() => onSave(parsed)} onClose={onClose}>
+    <FormDialog
+      data-panel-modal="per-day"
+      title={t("botPanel.sheet.perDay")}
+      canSave={valid && parsed !== cap}
+      onSave={() => onSave(parsed)}
+      onClose={onClose}
+      nativeForm={{
+        fields: [{
+          id: "cap",
+          label: t("botPanel.ui.permissionsOutboundDailyLimit"),
+          value: String(cap),
+          kind: "number",
+          integer: true,
+          min: 1,
+          max: 1000,
+          required: true,
+          autoFocus: true,
+        }],
+        onSaved: (values) => {
+          const next = Number((values.cap ?? "").trim());
+          if (Number.isInteger(next) && next >= 1 && next <= 1000 && next !== cap) onSave(next);
+        },
+      }}
+    >
       <FormField label={t("botPanel.ui.permissionsOutboundDailyLimit")}>
         <input
           data-autofocus

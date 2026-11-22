@@ -171,11 +171,14 @@ describe("Settings → General → Appearance", () => {
     expect(fixture.dispatch).not.toHaveBeenCalled();
   });
 
-  it.each([false, true])("shows or brings back the sidebar feedback button when hidden is %s", (hidden) => {
+  it.each([false, true])("shows or brings back the sidebar feedback button with its own icon at the bottom of General when hidden is %s", (hidden) => {
     fixture.section = "general";
     fixture.feedbackHidden = hidden;
     const html = render();
     expect(html).toContain("Show feedback button in sidebar");
+    expect(html).toContain('data-setting-glyph="megaphone"');
+    expect(html.indexOf('data-settings-block="more"')).toBeGreaterThan(html.indexOf('data-settings-block="data-sharing"'));
+    expect(html.indexOf("Show feedback button in sidebar")).toBeGreaterThan(html.indexOf('data-settings-block="more"'));
     const toggle = fixture.switches.find((props) => props["aria-label"] === "Show feedback button in sidebar")!;
     expect(toggle.checked).toBe(!hidden);
     toggle.onClick!({} as never);

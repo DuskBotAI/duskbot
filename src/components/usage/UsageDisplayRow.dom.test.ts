@@ -97,4 +97,31 @@ describe("show usage as", () => {
     flushSync(() => setUsageDisplay("left"));
     expect(banner()).toContain("You have 8% of your Claude usage limit left.");
   });
+
+  it("renders Antigravity and Cursor monthly plan cards in Your AI plans", () => {
+    const cursor: EngineLimit = {
+      engine: "cursor", name: "Cursor", driver: "cursor", window: "monthly", usedPercent: 42, resetsAt: NOW + 240 * HOUR, blocked: false,
+      windows: [{ window: "monthly", usedPercent: 42, resetsAt: NOW + 240 * HOUR }],
+    };
+    const antigravity: EngineLimit = {
+      engine: "antigravity", name: "Antigravity", driver: "antigravity", window: "weekly", usedPercent: 30, resetsAt: NOW + 72 * HOUR, blocked: false,
+      windows: [
+        { window: "5-hour", usedPercent: 10, resetsAt: NOW + 3 * HOUR },
+        { window: "weekly", usedPercent: 30, resetsAt: NOW + 72 * HOUR },
+      ],
+    };
+    const container = document.createElement("div");
+    document.body.append(container);
+    root = createRoot(container);
+    flushSync(() => root!.render(createElement(ProviderSummary, { limits: [cursor, antigravity], now: NOW })));
+    const cursorCard = container.querySelector("[data-usage-provider='cursor']")!;
+    const agCard = container.querySelector("[data-usage-provider='antigravity']")!;
+    expect(cursorCard.textContent).toContain("Cursor");
+    expect(cursorCard.textContent).toContain("Monthly");
+    expect(cursorCard.textContent).toContain("42%Used");
+    expect(agCard.textContent).toContain("Antigravity");
+    expect(agCard.textContent).toContain("Weekly");
+    expect(agCard.textContent).toContain("30%Used");
+    expect(agCard.querySelector("[data-usage-window='5-hour']")?.textContent).toBe("5-hour 10%");
+  });
 });

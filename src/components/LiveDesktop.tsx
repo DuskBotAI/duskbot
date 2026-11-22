@@ -1,15 +1,16 @@
-import { useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Hand, Loader2, Minimize2, RefreshCw, Send } from "../icons";
 import type RFB from "@novnc/novnc";
 import { cn } from "@/lib/cn";
 import { copyText } from "@/lib/copy-text";
-import { connectDesktop, desktopSize, isPasteShortcut, keyOnDesktop, pasteOnDesktop, pointerOnDesktop, typeOnDesktop } from "@/lib/desktop-connection";
+import { connectDesktop, copyFromDesktop, desktopSize, isPasteShortcut, keyOnDesktop, pasteOnDesktop, pointerOnDesktop, typeOnDesktop } from "@/lib/desktop-connection";
 import { t } from "@/lib/i18n";
 import { isMacPlatform } from "@/lib/keyboard-shortcuts";
 import { PlatformContext } from "@/mobile/platform";
 import { phoneApp } from "@/lib/store-app";
 import { rememberScreen } from "./bot-panel/last-screen";
 import { ScreenTrackpad, type RemoteInput } from "@/mobile/ScreenTrackpad";
+import type { BotAvatarProps } from "./Avatar";
 import { BotPointer } from "./BotPointer";
 import { ComputerFullscreen } from "./ComputerFullscreen";
 import { Icon } from "./Icon";
@@ -19,10 +20,11 @@ import { useCaptionChrome, useDesktopCapabilities } from "./DesktopCapabilities"
 type Connection = "connecting" | "connected" | "disconnected";
 
 /** The computer the person took control of, live and drivable where they were watching it. */
-export function LiveDesktop({ target, threadId, botId, name, poster, expanded, onExpandedChange, onHandBack, handingBack, onUnreachable, onReadyChange, onTakeControl, onOpenPreview, onScreenSize, waking, originalViewer = false, viewOnly = false, wake = false, taking = false, asked = false }: {
+export function LiveDesktop({ target, threadId, botId, bot, name, poster, expanded, onExpandedChange, onHandBack, handingBack, onUnreachable, onReadyChange, onTakeControl, onOpenPreview, onScreenSize, waking, originalViewer = false, viewOnly = false, wake = false, taking = false, asked = false }: {
   target: string;
   /** Whose pointer to draw over the screen while it is watched. */
   botId?: string;
+  bot?: BotAvatarProps["bot"];
   viewOnly?: boolean;
   /** The computer is waking: the picture is asked for beside the wake and shows the moment the desktop answers. */
   wake?: boolean;
@@ -76,6 +78,17 @@ export function LiveDesktop({ target, threadId, botId, name, poster, expanded, o
   const [aspect, setAspect] = useState<number | undefined>(undefined);
   const platform = useContext(PlatformContext);
   const phoneKeyboard = useRef<HTMLInputElement>(null);
+  const remoteClipboard = useRef<string | null>(null);
+  const [trackpadMode, setTrackpadMode] = useState(true);
+  const [recenterNonce, setRecenterNonce] = useState(0);
+  const [toast, setToast] = useState<string | null>(null);
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  useEffect(() => () => clearTimeout(toastTimer.current), []);
+  const showToast = useCallback((message: string) => {
+    clearTimeout(toastTimer.current);
+    setToast(message);
+    toastTimer.current = setTimeout(() => setToast(null), 1_800);
+  }, []);
   const remoteInput = useMemo<RemoteInput>(() => ({
     size: () => rfb.current && desktopSize(rfb.current),
     pointer: (x, y, mask) => { if (rfb.current) pointerOnDesktop(rfb.current, x, y, mask); },
@@ -122,7 +135,10 @@ export function LiveDesktop({ target, threadId, botId, name, poster, expanded, o
         },
         disconnected: lost,
         // in control, what the person copies on the desktop reaches their own clipboard, so pasting it back works too
-        clipboard: (copied) => { if (!watching.current && copied) void copyText(copied); },
+        clipboard: (copied) => {
+          if (copied) remoteClipboard.current = copied;
+          if (!watching.current && copied) void copyText(copied);
+        },
       },
     }).then((connected) => {
       if (controller.signal.aborted) return connected.disconnect();
@@ -222,6 +238,41 @@ export function LiveDesktop({ target, threadId, botId, name, poster, expanded, o
   const launching = useLaunchFeedback(screen, !viewOnly && connection === "connected");
   const phoneTrackpad = Boolean(platform) && originalViewer && expanded && !viewOnly && connection === "connected";
 
+  const handlePhoneKeyboard = useCallback(() => {
+    const field = phoneKeyboard.current;
+    if (!field) return;
+    if (document.activeElement === field) {
+      field.blur();
+      platform?.hideKeyboard?.();
+    } else {
+      field.focus({ preventScroll: true });
+    }
+  }, [platform]);
+
+  const handlePasteFromPhone = useCallback(async (provided?: string) => {
+    const client = rfb.current;
+    if (!client || viewOnly) return;
+    const clip = provided !== undefined ? provided : await platform?.readClipboard?.().catch(() => null);
+    if (!clip) {
+      showToast(t("desktopViewer.clipboardEmpty"));
+      return;
+    }
+    pasteOnDesktop(client, clip);
+    showToast(t("desktopViewer.pasted"));
+  }, [platform, showToast, viewOnly]);
+
+  const handleCopyToPhone = useCallback(() => {
+    const client = rfb.current;
+    if (!client || viewOnly) return;
+    copyFromDesktop(client);
+    const write = (value: string) => {
+      if (platform?.writeClipboard) void platform.writeClipboard(value);
+      else void copyText(value);
+    };
+    if (remoteClipboard.current) write(remoteClipboard.current);
+    showToast(t("desktopViewer.copiedToPhone"));
+  }, [platform, showToast, viewOnly]);
+
   const desktopFrame = (
       <div className={cn("relative h-full w-full overflow-hidden", expanded ? "bg-black" : "bg-inset")}>
         {poster && connection !== "connected" && (
@@ -229,7 +280,7 @@ export function LiveDesktop({ target, threadId, botId, name, poster, expanded, o
         )}
         <div ref={screen} role="application" aria-label={label} data-live-desktop-screen="" data-watching={viewOnly ? "" : undefined} className="absolute inset-0" />
         {botId && viewOnly && connection === "connected" && <BotPointer host={screen} botId={botId} />}
-        {phoneTrackpad && <ScreenTrackpad screen={screen} input={remoteInput} keyboard={phoneKeyboard} haptic={platform?.haptic} label={label} />}
+        {phoneTrackpad && <ScreenTrackpad screen={screen} input={remoteInput} keyboard={phoneKeyboard} haptic={platform?.haptic} label={label} mode={trackpadMode ? "trackpad" : "direct"} recenterNonce={recenterNonce} />}
         {launching && (
           <span data-launch-spinner="" aria-hidden="true" className="pointer-events-none absolute z-[3] size-7 -translate-x-1/2 -translate-y-1/2" style={{ left: launching.x, top: launching.y }}>
             <span className="absolute inset-0 rounded-full border-2 border-white/25 border-t-white/90 drop-shadow-[0_0_2px_rgb(0_0_0/0.6)] motion-safe:animate-spin" />
@@ -260,11 +311,28 @@ export function LiveDesktop({ target, threadId, botId, name, poster, expanded, o
   if (originalViewer) return (
     <div data-live-desktop="" data-state={connection} data-view-only={viewOnly ? "true" : undefined}
       data-expanded={expanded ? "true" : undefined} className="relative h-full w-full">
-      <ComputerFullscreen embedded expanded={expanded} label={label} aspect={aspect} onExit={() => onExpandedChange(false)}
-        onKeyboard={phoneTrackpad ? () => phoneKeyboard.current?.focus({ preventScroll: true }) : undefined}
-        frame={desktopFrame} note={null} control={viewOnly
+      <ComputerFullscreen
+        embedded
+        expanded={expanded}
+        label={label}
+        bot={bot}
+        name={name}
+        aspect={aspect}
+        connecting={Boolean(platform) && connection === "connecting"}
+        toast={toast}
+        onExit={() => onExpandedChange(false)}
+        onKeyboard={phoneTrackpad ? handlePhoneKeyboard : undefined}
+        trackpadMode={trackpadMode}
+        onToggleTrackpad={phoneTrackpad ? () => setTrackpadMode((on) => !on) : undefined}
+        onRecenterPointer={phoneTrackpad ? () => setRecenterNonce((n) => n + 1) : undefined}
+        onPasteFromPhone={phoneTrackpad ? (text) => void handlePasteFromPhone(text) : undefined}
+        onCopyToPhone={phoneTrackpad ? handleCopyToPhone : undefined}
+        frame={desktopFrame}
+        note={null}
+        control={viewOnly
           ? { held: false, onTake: onTakeControl, busy: connection !== "connected" || handingBack || taking, pending: taking }
-          : { held: true, onDone: onHandBack, asked, busy: handingBack }} />
+          : { held: true, onDone: onHandBack, asked, busy: handingBack }}
+      />
     </div>
   );
 

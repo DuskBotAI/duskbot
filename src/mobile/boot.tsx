@@ -16,6 +16,7 @@ import { installHaptics } from "./haptics";
 import { installLiveActivitySetting } from "./live-activity-setting";
 import { installSystemMenu } from "@/lib/system-menu";
 import { installSystemControls } from "@/lib/system-control";
+import { installSystemDialogs } from "@/lib/system-dialog";
 import { phoneControlCover } from "./control-cover";
 import { followSystemTextSize } from "./text-scale";
 import { PlatformContext, type MobilePlatform } from "./platform";
@@ -47,6 +48,7 @@ export function mountMobile(platform: MobilePlatform): void {
   followSystemTextSize(platform);
   if (platform.chrome) document.documentElement.dataset.nativeChrome = "";
   installSystemControls(platform.controls ?? null, phoneControlCover);
+  installSystemDialogs(platform.dialogs ?? null);
   const showMenu = platform.showMenu;
   if (showMenu) installSystemMenu((anchor, items) => showMenu({ x: anchor.left, y: anchor.top, width: anchor.width, height: anchor.height }, items));
   document.documentElement.dataset.mobileApp = platform.kind;

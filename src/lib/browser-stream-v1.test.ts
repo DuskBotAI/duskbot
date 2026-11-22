@@ -68,6 +68,7 @@ describe("the v1 view in the stream's words", () => {
     expect(liveAction({ type: "tabNew" })).toEqual({ type: "tab-new" });
     expect(liveAction({ type: "tabSelect", tabId: "t2" })).toEqual({ type: "tab-select", tabId: "t2" });
     expect(liveAction({ type: "tabClose", tabId: "t2" })).toEqual({ type: "tab-close", tabId: "t2" });
+    expect(liveAction({ type: "copy" })).toEqual({ type: "copy" });
     expect(liveAction({ type: "restart" })).toEqual({ type: "restart" });
     for (const unsupported of [{ type: "resize", width: 1, height: 1 }, { type: "zoom", factor: 2 }, { type: "probe", x: 1, y: 1 }, { type: "selectChoose", id: "s", index: 0 }] as const) {
       expect(liveAction(unsupported)).toBeNull();
@@ -103,7 +104,11 @@ describe("the v1 live client", () => {
   }
 
   it("connects to the bot's live view, shows its frames and acknowledges each one", () => {
-    const { post, handlers, source } = open();
+    const onClipboard = vi.fn();
+    const post = vi.fn<(body: Record<string, unknown>, viewerId: string) => Promise<unknown>>().mockResolvedValue({ ok: true });
+    const handlers = events({ onMessage: vi.fn(), onControl: vi.fn(), onGone: vi.fn(), onClipboard });
+    createLiveStreamClient("pepper", handlers, post);
+    const source = FixtureEventSource.instances.at(-1)!;
     expect(source.url).toBe("/api/bots/pepper/browser/live");
     source.emit("ready", { viewerId: "v1" });
     expect(handlers.onConnectedChange).toHaveBeenCalledWith(true);
@@ -113,8 +118,10 @@ describe("the v1 live client", () => {
     expect(post).toHaveBeenCalledWith({ type: "ack", seq: 7 }, "v1");
     source.emit("tabs", { tabs: [{ tabId: "t1", title: "A", url: "https://a.test/", active: true }] });
     source.emit("url", { url: "https://a.test/next" });
+    source.emit("clipboard", { text: "copied value" });
     expect(handlers.onMessage).toHaveBeenCalledWith({ type: "tabs", tabs: [{ tabId: "t1", title: "A", url: "https://a.test/", active: true }] });
     expect(handlers.onMessage).toHaveBeenCalledWith({ type: "url", url: "https://a.test/next" });
+    expect(onClipboard).toHaveBeenCalledWith("copied value");
   });
 
   it("opens at the panel's size and sends each new size to its view while it only watches, the newest once the last is answered", async () => {

@@ -66,6 +66,56 @@ describe("engineLimitFromUsage", () => {
     const weeklyOnly = row("claude", "claude", parseClaudeUsage({ seven_day: { utilization: 30, resets_at: null } }));
     expect(engineLimitFromUsage(weeklyOnly)).toMatchObject({ window: "weekly", windows: [{ window: "weekly", usedPercent: 30, resetsAt: null }] });
   });
+
+  it("includes Antigravity, Cursor monthly, Claude Enterprise monthly spend, and OpenCode Go windows", () => {
+    const closed = { available: false, remainingPercent: null, usedPercent: null, resetsAt: null };
+    const cursorRow: PlanProviderRow = {
+      id: "cursor", name: "Cursor", driver: "cursor", plan: "Pro", ok: true, error: null,
+      fiveHour: closed, weekly: closed,
+      extra: [
+        { label: "Monthly", usedPercent: 42, remainingPercent: 58, resetsAt: iso(NOW + 20 * 24 * HOUR) },
+        { label: "On-demand", usedPercent: 90, remainingPercent: 10, resetsAt: iso(NOW + 20 * 24 * HOUR) },
+      ],
+      models: [],
+    };
+    expect(engineLimitFromUsage(cursorRow)).toEqual({
+      engine: "cursor", name: "Cursor", driver: "cursor", window: "monthly", usedPercent: 42, resetsAt: NOW + 20 * 24 * HOUR, blocked: false,
+      windows: [{ window: "monthly", usedPercent: 42, resetsAt: NOW + 20 * 24 * HOUR }],
+    });
+
+    const agRow: PlanProviderRow = {
+      id: "antigravity", name: "Antigravity", driver: "antigravity", plan: "Pro", ok: true, error: null,
+      fiveHour: { available: true, usedPercent: 15, remainingPercent: 85, resetsAt: iso(NOW + 3 * HOUR) },
+      weekly: { available: true, usedPercent: 60, remainingPercent: 40, resetsAt: iso(NOW + 72 * HOUR) },
+      extra: [], models: [],
+    };
+    expect(engineLimitFromUsage(agRow)).toMatchObject({
+      engine: "antigravity", driver: "antigravity", window: "weekly", usedPercent: 60,
+    });
+
+    const enterpriseRow = row("claude", "claude", parseClaudeUsage({
+      spend: { enabled: true, used: { amount_minor: 10_000, currency: "USD", exponent: 2 }, limit: { amount_minor: 50_000, currency: "USD", exponent: 2 } },
+    }));
+    expect(engineLimitFromUsage(enterpriseRow)).toMatchObject({
+      engine: "claude", window: "monthly", usedPercent: 20,
+    });
+
+    const goRow: PlanProviderRow = {
+      id: "opencodeGo", name: "OpenCode Go", driver: "opencode", plan: "Go", ok: true, error: null,
+      fiveHour: { available: true, usedPercent: 10, remainingPercent: 90, resetsAt: null },
+      weekly: { available: true, usedPercent: 30, remainingPercent: 70, resetsAt: iso(NOW + 48 * HOUR) },
+      extra: [{ label: "Monthly", usedPercent: 50, remainingPercent: 50, resetsAt: iso(NOW + 200 * HOUR) }],
+      models: [],
+    };
+    expect(engineLimitFromUsage(goRow)).toMatchObject({
+      engine: "opencodeGo", driver: "opencode", window: "monthly", usedPercent: 50,
+      windows: [
+        { window: "5-hour", usedPercent: 10, resetsAt: null },
+        { window: "weekly", usedPercent: 30, resetsAt: NOW + 48 * HOUR },
+        { window: "monthly", usedPercent: 50, resetsAt: NOW + 200 * HOUR },
+      ],
+    });
+  });
 });
 
 describe("LimitResetClock", () => {

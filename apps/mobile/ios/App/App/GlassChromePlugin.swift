@@ -30,6 +30,11 @@ public class GlassChromePlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "slide", returnType: CAPPluginReturnNone),
         CAPPluginMethod(name: "glyphs", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "home", returnType: CAPPluginReturnNone),
+        CAPPluginMethod(name: "takeover", returnType: CAPPluginReturnNone),
+        CAPPluginMethod(name: "swipeReply", returnType: CAPPluginReturnNone),
+        CAPPluginMethod(name: "pullRefresh", returnType: CAPPluginReturnNone),
+        CAPPluginMethod(name: "viewer", returnType: CAPPluginReturnNone),
+        CAPPluginMethod(name: "pill", returnType: CAPPluginReturnNone),
     ]
 
     private var chrome: AnyObject?
@@ -48,9 +53,15 @@ public class GlassChromePlugin: CAPPlugin, CAPBridgedPlugin {
                 chrome.apply([:])
                 chrome.pageGone()
                 chrome.applyHome(nil)
+                chrome.applyTakeover(nil)
+                chrome.applySwipeReply(nil, instant: true)
+                chrome.applyPullRefresh(nil, instant: true)
+                chrome.applyViewer(nil)
+                chrome.applyPill(slot: "top", state: nil, clearId: nil, instant: true)
+                chrome.applyPill(slot: "bottom", state: nil, clearId: nil, instant: true)
                 chrome.resetText()
             }
-            call.resolve(["supported": true, "acks": true, "jump": true, "reply": true])
+            call.resolve(["supported": true, "acks": true, "jump": true, "reply": true, "takeover": true, "swipeReply": true, "pullRefresh": true, "viewer": true, "pill": true])
         } else {
             call.resolve(["supported": false])
         }
@@ -111,6 +122,7 @@ public class GlassChromePlugin: CAPPlugin, CAPBridgedPlugin {
         guard #available(iOS 26.0, *) else { return }
         withChrome { chrome in
             chrome.apply([:])
+            chrome.applySwipeReply(nil, instant: true)
             chrome.pageGone()
             chrome.resetText()
         }
@@ -120,6 +132,41 @@ public class GlassChromePlugin: CAPPlugin, CAPBridgedPlugin {
         guard #available(iOS 26.0, *) else { return }
         let state = call.options["state"] as? [String: Any]
         withChrome { $0.applyHome(state) }
+    }
+
+    @objc func takeover(_ call: CAPPluginCall) {
+        guard #available(iOS 26.0, *) else { return }
+        let state = call.options["state"] as? [String: Any]
+        withChrome { $0.applyTakeover(state) }
+    }
+
+    @objc func swipeReply(_ call: CAPPluginCall) {
+        guard #available(iOS 26.0, *) else { return }
+        let state = call.options["state"] as? [String: Any]
+        let instant = call.getBool("instant") ?? false
+        withChrome { $0.applySwipeReply(state, instant: instant) }
+    }
+
+    @objc func pullRefresh(_ call: CAPPluginCall) {
+        guard #available(iOS 26.0, *) else { return }
+        let state = call.options["state"] as? [String: Any]
+        let instant = call.getBool("instant") ?? false
+        withChrome { $0.applyPullRefresh(state, instant: instant) }
+    }
+
+    @objc func viewer(_ call: CAPPluginCall) {
+        guard #available(iOS 26.0, *) else { return }
+        let state = call.options["state"] as? [String: Any]
+        withChrome { $0.applyViewer(state) }
+    }
+
+    @objc func pill(_ call: CAPPluginCall) {
+        guard #available(iOS 26.0, *) else { return }
+        let slot = call.getString("slot") ?? "bottom"
+        let state = call.options["state"] as? [String: Any]
+        let clearId = call.getString("clearId")
+        let instant = call.getBool("instant") ?? false
+        withChrome { $0.applyPill(slot: slot, state: state, clearId: clearId, instant: instant) }
     }
 
     /// The header's own symbols as the page can draw them: while a sheet covers the chat the page shows its header in
@@ -391,6 +438,7 @@ final class ChatGlassChrome: NSObject, UITextViewDelegate {
     private let emit: ([String: Any]) -> Void
 
     private let header = PassthroughView()
+    private let headerGlass = PassthroughGlassContainerView(spacing: 14)
     private let back = UIButton(configuration: .glass())
     private let pill = UIButton(configuration: .glass())
     private let right = UIButton(configuration: .glass())
@@ -401,6 +449,12 @@ final class ChatGlassChrome: NSObject, UITextViewDelegate {
     private let jumpMotion = PassthroughView()
     private let jumpButton = UIButton(configuration: .glass())
     private var home: GlassHomeBar!
+    private var takeover: GlassTakeoverBar!
+    private var swipeReply: GlassSwipeReplyBadge!
+    private var pullRefresh: GlassPullRefreshOrb!
+    private var viewerBar: GlassImageViewerBar!
+    private var statusPill: GlassFloatingPill!
+    private var toastPill: GlassFloatingPill!
     private let capsule = UIVisualEffectView(effect: ChatGlassChrome.interactiveGlass())
     private let plus = DiscButton(configuration: .plain())
     private let text = PastingTextView()
@@ -506,8 +560,7 @@ final class ChatGlassChrome: NSObject, UITextViewDelegate {
         pill.configuration?.imagePadding = 8
         pill.configuration?.contentInsets = NSDirectionalEdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16)
         pill.configuration?.titleLineBreakMode = .byTruncatingTail
-        // the bot's sheet rises as the finger lands, not when it lifts
-        pill.addAction(UIAction { [weak self] _ in self?.emit(["type": "tap", "target": "title"]) }, for: .touchDown)
+        pill.addAction(UIAction { [weak self] _ in self?.emit(["type": "tap", "target": "title"]) }, for: .touchUpInside)
         liveDot.backgroundColor = .systemGreen
         liveDot.layer.cornerRadius = 4
         liveDot.isUserInteractionEnabled = false
@@ -515,7 +568,11 @@ final class ChatGlassChrome: NSObject, UITextViewDelegate {
         right.addSubview(liveDot)
         topBand.isUserInteractionEnabled = false
         topBand.isHidden = true
-        [topBand, back, pill, right].forEach(header.addSubview)
+        headerGlass.frame = header.bounds
+        headerGlass.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        header.addSubview(topBand)
+        header.addSubview(headerGlass)
+        [back, pill, right].forEach(headerGlass.contentView.addSubview)
         home = GlassHomeBar(host: host, below: header, emit: emit)
 
         composer.translatesAutoresizingMaskIntoConstraints = false
@@ -596,6 +653,12 @@ final class ChatGlassChrome: NSObject, UITextViewDelegate {
             jumpButton.topAnchor.constraint(equalTo: jumpMotion.topAnchor),
             jumpButton.bottomAnchor.constraint(equalTo: jumpMotion.bottomAnchor),
         ])
+        takeover = GlassTakeoverBar(host: host, emit: emit)
+        swipeReply = GlassSwipeReplyBadge(host: host, below: jump)
+        pullRefresh = GlassPullRefreshOrb(host: host, below: swipeReply.view)
+        viewerBar = GlassImageViewerBar(host: host, emit: emit)
+        statusPill = GlassFloatingPill(slot: .top, host: host, emit: emit)
+        toastPill = GlassFloatingPill(slot: .bottom, host: host, emit: emit)
 
         NotificationCenter.default.addObserver(self, selector: #selector(contentSizeChanged), name: UIContentSizeCategory.didChangeNotification, object: nil)
         NotificationCenter.default.addObserver(self, selector: #selector(keyboardWillChangeFrame(_:)), name: UIResponder.keyboardWillChangeFrameNotification, object: nil)
@@ -759,6 +822,32 @@ final class ChatGlassChrome: NSObject, UITextViewDelegate {
         keepOnTop()
     }
 
+    func applyTakeover(_ state: [String: Any]?) {
+        takeover.apply(state)
+        keepOnTop()
+    }
+
+    func applySwipeReply(_ state: [String: Any]?, instant: Bool = false) {
+        swipeReply.apply(state, instant: instant)
+        if state != nil { keepOnTop() }
+    }
+
+    func applyPullRefresh(_ state: [String: Any]?, instant: Bool = false) {
+        pullRefresh.apply(state, instant: instant)
+        if state != nil { keepOnTop() }
+    }
+
+    func applyViewer(_ state: [String: Any]?) {
+        viewerBar.apply(state)
+        if state != nil { keepOnTop() }
+    }
+
+    func applyPill(slot: String, state: [String: Any]?, clearId: String?, instant: Bool = false) {
+        let target = slot == "top" ? statusPill : toastPill
+        target?.apply(state, clearId: clearId, instant: instant)
+        if state != nil { keepOnTop() }
+    }
+
     /// Plays the page's own slide: the same positions, one per 60 Hz frame and linear between, which is what the page
     /// hands its compositor in the same frame. Both views share one transaction, so they start together.
     /// The page's slide started `elapsed` seconds before its message got here (the bridge hop): the chrome starts that far
@@ -841,6 +930,8 @@ final class ChatGlassChrome: NSObject, UITextViewDelegate {
             header.overrideUserInterfaceStyle = style
             composer.overrideUserInterfaceStyle = style
             jump.overrideUserInterfaceStyle = style
+            swipeReply.view.overrideUserInterfaceStyle = style
+            pullRefresh.view.overrideUserInterfaceStyle = style
         }
         if let hex = state["accent"] as? String, let color = UIColor(cssHex: hex) { accent = color }
         if let hex = state["ground"] as? String, let color = UIColor(cssHex: hex) {
@@ -883,8 +974,8 @@ final class ChatGlassChrome: NSObject, UITextViewDelegate {
 
     /// views the system adds to the host later must not land over the chrome and take its taps
     private func keepOnTop() {
-        guard let host, headerShown || composerShown || jumpShown || !home.view.isHidden else { return }
-        let views: [UIView] = [home.view, jump, header, composer]
+        guard let host, headerShown || composerShown || jumpShown || !home.view.isHidden || !takeover.view.isHidden || !swipeReply.view.isHidden || !pullRefresh.view.isHidden || !viewerBar.view.isHidden || !statusPill.view.isHidden || !toastPill.view.isHidden else { return }
+        let views: [UIView] = [home.view, pullRefresh.view, swipeReply.view, jump, header, composer, statusPill.view, viewerBar.view, takeover.view, toastPill.view]
         let tail = Array(host.subviews.suffix(views.count))
         if tail.count < views.count || zip(tail, views).contains(where: { $0 !== $1 }) {
             for view in views { host.bringSubviewToFront(view) }
@@ -896,14 +987,14 @@ final class ChatGlassChrome: NSObject, UITextViewDelegate {
             show(header, false, &headerShown)
             return
         }
-        back.frame = backFrame.rect
+        if !back.isTracking, back.frame != backFrame.rect { back.frame = backFrame.rect }
         if let label = data["backLabel"] as? String, !label.isEmpty { back.accessibilityLabel = label }
         let newName = data["name"] as? String ?? ""
         if newName != name { name = newName; refreshPill() }
         pill.accessibilityLabel = data["titleLabel"] as? String ?? newName
         if let rightFrame = Frame(data["right"]) {
             right.isHidden = false
-            right.frame = rightFrame.rect
+            if !right.isTracking, right.frame != rightFrame.rect { right.frame = rightFrame.rect }
             right.accessibilityLabel = data["rightLabel"] as? String
             liveDot.isHidden = !(data["live"] as? Bool ?? false)
             liveDot.frame = CGRect(x: rightFrame.rect.width - 14, y: 6, width: 8, height: 8)
@@ -916,7 +1007,7 @@ final class ChatGlassChrome: NSObject, UITextViewDelegate {
     }
 
     private func layoutPill() {
-        guard let titleRect else { return }
+        guard let titleRect, !pill.isTracking else { return }
         let side: CGFloat = 16 + 44 + 8
         let maxWidth = max(80, (host?.bounds.width ?? 390) - side * 2)
         let fitted = pill.sizeThatFits(CGSize(width: maxWidth, height: 44))

@@ -325,6 +325,7 @@ describe("shared sentences", () => {
     expect(PROFILE_PROMPT).toContain("a pending one, or a card waiting for their OK, is proposed, never done: say it waits for them and end the turn. Never claim one before it applied");
     expect(PROFILE_PROMPT).toContain("Full Access never widens another bot's permissions");
     expect(LEARN_PROMPT).not.toContain("Follow the tool result");
+    expect(LEARN_PROMPT).not.toContain("/learn");
     for (const prompt of [PROFILE_PROMPT, LEARN_PROMPT]) expect(prompt).not.toMatch(/nothing changes until the user confirms|may wait for the person/);
     expect(LEARN_PROMPT).toContain("only when the user explicitly asks to revise that exact name");
     // Triggers have no pending state: the bot sets them up in the same turn and the person undoes from the card.

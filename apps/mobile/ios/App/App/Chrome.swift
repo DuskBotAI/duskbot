@@ -2,12 +2,20 @@ import Capacitor
 import UIKit
 import WebKit
 
+struct ChromeSearchSpec {
+    let key: String
+    let placeholder: String
+    let value: String?
+    let autoFocus: Bool
+}
+
 struct ChromeBarSpec {
     let hidden: Bool
     let title: String?
     let status: String?
     let leading: [[String: Any]]
     let trailing: [[String: Any]]
+    let search: ChromeSearchSpec?
 }
 
 private final class SnapshotViewController: UIViewController {
@@ -450,7 +458,7 @@ final class RootViewController: UIViewController, UINavigationControllerDelegate
 
 /// The bar and the sheet, as the page asks for them.
 @objc(ChromePlugin)
-public class ChromePlugin: CAPPlugin, CAPBridgedPlugin, UIAdaptivePresentationControllerDelegate {
+public class ChromePlugin: CAPPlugin, CAPBridgedPlugin, UIAdaptivePresentationControllerDelegate, UISearchResultsUpdating, UISearchBarDelegate {
     public let identifier = "ChromePlugin"
     public let jsName = "DuskChrome"
     public let pluginMethods: [CAPPluginMethod] = [
@@ -472,6 +480,10 @@ public class ChromePlugin: CAPPlugin, CAPBridgedPlugin, UIAdaptivePresentationCo
 
     private var pictures: [String: UIImage] = [:]
     private var pendingPictures: Set<String> = []
+    private var searchController: UISearchController?
+    private var activeSearchKey: String?
+    private var lastSearchText: String?
+    private var pendingSearchFocus = false
     /// Found from the scene, not from the web view: between a sheet's dismissal and its return under the bar the web view is in no window.
     private var root: RootViewController? {
         for scene in UIApplication.shared.connectedScenes {
@@ -512,6 +524,7 @@ public class ChromePlugin: CAPPlugin, CAPBridgedPlugin, UIAdaptivePresentationCo
                 root.app.navigationItem.setRightBarButtonItems(nil, animated: false)
                 root.app.navigationItem.titleView = nil
                 root.app.navigationItem.title = nil
+                self.detachSearch(from: root.app.navigationItem)
                 root.mainNavigation.setNavigationBarHidden(true, animated: false)
                 call.resolve()
             }
@@ -527,12 +540,23 @@ public class ChromePlugin: CAPPlugin, CAPBridgedPlugin, UIAdaptivePresentationCo
     }
 
     @objc func setBar(_ call: CAPPluginCall) {
+        let searchObj = call.getObject("search")
+        let search: ChromeSearchSpec? = searchObj.flatMap { raw in
+            guard let key = raw["key"] as? String else { return nil }
+            return ChromeSearchSpec(
+                key: key,
+                placeholder: raw["placeholder"] as? String ?? "",
+                value: raw["value"] as? String,
+                autoFocus: raw["autoFocus"] as? Bool ?? false
+            )
+        }
         let spec = ChromeBarSpec(
             hidden: call.getBool("hidden") ?? false,
             title: call.getString("title"),
             status: call.getString("status"),
             leading: (call.getArray("leading") ?? []).compactMap { $0 as? [String: Any] },
-            trailing: (call.getArray("trailing") ?? []).compactMap { $0 as? [String: Any] }
+            trailing: (call.getArray("trailing") ?? []).compactMap { $0 as? [String: Any] },
+            search: search
         )
         DispatchQueue.main.async {
             guard let app = self.bridge?.viewController else { call.resolve(); return }
@@ -588,6 +612,83 @@ public class ChromePlugin: CAPPlugin, CAPBridgedPlugin, UIAdaptivePresentationCo
             item.setLeftBarButtonItems(spec.leading.map { self.barItem($0) }, animated: animated)
         }
         item.setRightBarButtonItems(spec.trailing.reversed().map { self.barItem($0) }, animated: animated)
+        if let app = bridge?.viewController, item === app.navigationItem {
+            applySearch(spec.search, to: app)
+        }
+    }
+
+    private func applySearch(_ search: ChromeSearchSpec?, to controller: UIViewController) {
+        guard let search else {
+            detachSearch(from: controller.navigationItem)
+            return
+        }
+        controller.definesPresentationContext = true
+        let sc: UISearchController
+        if let existing = searchController {
+            sc = existing
+        } else {
+            sc = UISearchController(searchResultsController: nil)
+            sc.obscuresBackgroundDuringPresentation = false
+            sc.hidesNavigationBarDuringPresentation = false
+            sc.automaticallyShowsCancelButton = true
+            sc.searchResultsUpdater = self
+            sc.searchBar.delegate = self
+            searchController = sc
+        }
+        if sc.searchBar.placeholder != search.placeholder {
+            sc.searchBar.placeholder = search.placeholder
+        }
+        if controller.navigationItem.searchController !== sc {
+            controller.navigationItem.searchController = sc
+            controller.navigationItem.hidesSearchBarWhenScrolling = false
+        }
+        if activeSearchKey != search.key {
+            activeSearchKey = search.key
+            let initial = search.value ?? ""
+            lastSearchText = initial
+            sc.searchBar.text = initial
+            pendingSearchFocus = search.autoFocus
+            if search.autoFocus, controller.view.window != nil, root?.sheetNavigation?.isBeingPresented != true {
+                focusSearchBar()
+            }
+        } else if let value = search.value, value != sc.searchBar.text {
+            lastSearchText = value
+            sc.searchBar.text = value
+        }
+    }
+
+    private func detachSearch(from item: UINavigationItem) {
+        activeSearchKey = nil
+        lastSearchText = nil
+        pendingSearchFocus = false
+        if let sc = searchController {
+            if sc.isActive { sc.isActive = false }
+            sc.searchBar.resignFirstResponder()
+        }
+        if item.searchController != nil {
+            item.searchController = nil
+        }
+    }
+
+    private func focusSearchBar() {
+        guard pendingSearchFocus, let sc = searchController else { return }
+        pendingSearchFocus = false
+        DispatchQueue.main.async {
+            sc.searchBar.becomeFirstResponder()
+        }
+    }
+
+    public func updateSearchResults(for searchController: UISearchController) {
+        guard activeSearchKey != nil else { return }
+        let text = searchController.searchBar.text ?? ""
+        guard text != lastSearchText else { return }
+        lastSearchText = text
+        notifyListeners("searchChange", data: ["text": text])
+    }
+
+    public func searchBarCancelButtonClicked(_ searchBar: UISearchBar) {
+        guard activeSearchKey != nil else { return }
+        notifyListeners("searchCancel", data: [:])
     }
 
     private func barItem(_ spec: [String: Any]) -> UIBarButtonItem {
@@ -595,10 +696,24 @@ public class ChromePlugin: CAPPlugin, CAPBridgedPlugin, UIAdaptivePresentationCo
         let press = UIAction { [weak self] _ in self?.notifyListeners("barPress", data: ["id": id]) }
         let symbol = (spec["symbol"] as? String).flatMap { UIImage(systemName: $0) }
         let title = spec["title"] as? String
+        let role = spec["role"] as? String
         let picture = spec["picture"] as? [String: Any]
         let item: UIBarButtonItem
-        if spec["role"] as? String == "close" {
+        if role == "close" {
             item = UIBarButtonItem(systemItem: .close, primaryAction: press)
+        } else if role == "cancel" {
+            if let title = title {
+                item = UIBarButtonItem(title: title, primaryAction: press)
+            } else {
+                item = UIBarButtonItem(systemItem: .cancel, primaryAction: press)
+            }
+        } else if role == "done" || role == "confirm" {
+            if let title = title {
+                item = UIBarButtonItem(title: title, primaryAction: press)
+            } else {
+                item = UIBarButtonItem(systemItem: .done, primaryAction: press)
+            }
+            if #available(iOS 26.0, *) { item.style = .prominent } else { item.style = .done }
         } else if let title = title, picture != nil || symbol != nil {
             var look = UIButton.Configuration.plain()
             look.title = title
@@ -713,7 +828,10 @@ public class ChromePlugin: CAPPlugin, CAPBridgedPlugin, UIAdaptivePresentationCo
         let height = call.getDouble("height").map { CGFloat($0) }
         DispatchQueue.main.async {
             guard let root = self.root else { call.reject("No root.", "unavailable"); return }
-            root.presentSheet(height: height, delegate: self) { call.resolve() }
+            root.presentSheet(height: height, delegate: self) {
+                self.focusSearchBar()
+                call.resolve()
+            }
         }
     }
 

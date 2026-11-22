@@ -1,12 +1,14 @@
 import { useContext, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type ReactNode, type RefObject } from "react";
 import { createPortal } from "react-dom";
 
-import { Loader2, RotateCw } from "../icons";
+import { Loader2 } from "../icons";
 
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
 import { reducedMotion } from "@/lib/onboarding";
-import { PlatformContext, type MobilePlatform } from "@/mobile/platform";
+import { PlatformContext } from "@/mobile/platform";
+import { PhoneTakeoverShell } from "@/mobile/PhoneTakeoverViewer";
+import type { BotAvatarProps } from "./Avatar";
 import { useCaptionChrome, useDesktopCapabilities } from "./DesktopCapabilities";
 import { Icon } from "./Icon";
 import { useDialogKeys } from "./ui/GrokDialog";
@@ -38,17 +40,48 @@ function useWatchHint(active: boolean) {
 
 /** Grok's full computer view: the bot's screen on a dark cover, Exit fullscreen in the top right, and the control pill
  * under the frame. Without a frame it shows `note` (waking up, connecting, or what is in the way). */
-export function ComputerFullscreen({ label, onExit, frame, note, control, alert, onKeyboard, embedded = false, expanded = true, aspect = 16 / 10 }: {
+export function ComputerFullscreen({
+  label,
+  bot,
+  name,
+  onExit,
+  frame,
+  note,
+  connecting = false,
+  connectingText,
+  control,
+  alert,
+  toast,
+  onKeyboard,
+  trackpadMode,
+  onToggleTrackpad,
+  onRecenterPointer,
+  onPasteFromPhone,
+  onCopyToPhone,
+  embedded = false,
+  expanded = true,
+  aspect = 16 / 10,
+}: {
   label: string;
+  bot?: BotAvatarProps["bot"];
+  name?: string;
   /** The screen's width over its height, so the frame meets it edge to edge; bot desktops are 16:10. */
   aspect?: number;
   onExit: () => void;
   frame: ReactNode;
   note: ReactNode;
+  connecting?: boolean;
+  connectingText?: string;
   control: ScreenControl | null;
   alert?: string | null;
+  toast?: string | null;
   /** On a phone: opens the phone's keyboard to type on the screen. */
   onKeyboard?: () => void;
+  trackpadMode?: boolean;
+  onToggleTrackpad?: () => void;
+  onRecenterPointer?: () => void;
+  onPasteFromPhone?: (text?: string) => void;
+  onCopyToPhone?: () => void;
   embedded?: boolean;
   expanded?: boolean;
 }) {
@@ -95,7 +128,36 @@ export function ComputerFullscreen({ label, onExit, frame, note, control, alert,
   // a sideways phone's picture fills the height: the pill moves out of it into the side column with the buttons
   const sideControl = Boolean(phone && landscape && control);
 
-  const content = (
+  const content = phone ? (
+    <>
+      <ComputerViewerKeys box={box} onExit={onExit} />
+      <PhoneTakeoverShell
+        boxRef={box}
+        label={label}
+        bot={bot}
+        name={name}
+        platform={phone}
+        landscape={landscape}
+        onExit={() => close.current()}
+        frame={frame}
+        note={note}
+        connecting={connecting}
+        connectingText={connectingText}
+        control={control}
+        watchHint={hint}
+        onFramePointerDown={watching ? hint.bump : undefined}
+        alert={alert}
+        toast={toast}
+        onKeyboard={onKeyboard}
+        trackpadMode={trackpadMode}
+        onToggleTrackpad={onToggleTrackpad}
+        onRecenterPointer={onRecenterPointer}
+        onPasteFromPhone={onPasteFromPhone}
+        onCopyToPhone={onCopyToPhone}
+        aspect={aspect}
+      />
+    </>
+  ) : (
     <div
       ref={inline ? undefined : box}
       role={inline ? undefined : "dialog"}
@@ -103,13 +165,10 @@ export function ComputerFullscreen({ label, onExit, frame, note, control, alert,
       aria-label={label}
       tabIndex={-1}
       data-computer-fullscreen={inline ? undefined : ""}
-      className={cn(inline ? "relative flex size-full flex-col outline-none" : "fixed inset-0 z-[65] flex flex-col bg-[rgb(20,20,20)] outline-none",
-        phone && "pt-[env(safe-area-inset-top)] pr-[env(safe-area-inset-right)] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)]")}
+      className={cn(inline ? "relative flex size-full flex-col outline-none" : "fixed inset-0 z-[65] flex flex-col bg-[rgb(20,20,20)] outline-none")}
     >
       {!inline && <ComputerViewerKeys box={box} onExit={onExit} />}
-      {phone && <PhoneViewerBar platform={phone} landscape={landscape} onExit={() => close.current()} onKeyboard={onKeyboard}
-        control={sideControl && control ? <ControlPill control={control} hint={hint} compact /> : null} />}
-      {!inline && !phone && <div {...dragProps} className={cn("flex h-11 shrink-0 items-center justify-end pr-2", macInset ? "pl-[88px]" : "pl-2")}>
+      {!inline && <div {...dragProps} className={cn("flex h-11 shrink-0 items-center justify-end pr-2", macInset ? "pl-[88px]" : "pl-2")}>
         <button
           type="button"
           style={noDragStyle}
@@ -156,53 +215,6 @@ const subscribeLandscape = (listener: () => void) => {
   return () => query?.removeEventListener("change", listener);
 };
 const isLandscape = () => landscapeQuery()?.matches ?? false;
-
-const phoneButton = "pointer-events-auto flex size-11 cursor-pointer items-center justify-center rounded-full text-white/85 transition-[background-color] duration-[120ms] ease-[ease] active:bg-white/12 focus-visible:outline-2 focus-visible:-outline-offset-4 focus-visible:outline-white/70";
-
-/** The phone's way out of the screen, below the status bar, and the screen's own tools: turn it sideways and type. The
- * phone may turn while the screen is open. */
-function PhoneViewerBar({ platform, landscape, onExit, onKeyboard, control }: {
-  platform: MobilePlatform;
-  landscape: boolean;
-  onExit: () => void;
-  onKeyboard?: () => void;
-  /** Sideways, the control pill sits at the foot of the tools column. */
-  control?: ReactNode;
-}) {
-  const exit = useRef(onExit);
-  exit.current = onExit;
-  useEffect(() => {
-    platform.orientation?.allowLandscape(true);
-    const unback = platform.onBack?.(() => { exit.current(); return true; });
-    return () => {
-      unback?.();
-      platform.orientation?.allowLandscape(false);
-    };
-  }, [platform]);
-  const back = t("common.back");
-  const rotate = t("desktopViewer.rotate");
-  const keyboard = t("desktopViewer.keyboard");
-  return (
-    <div data-computer-phone-bar="" className="pointer-events-none flex h-11 shrink-0 items-center justify-between px-1 landscape:absolute landscape:inset-y-0 landscape:left-[env(safe-area-inset-left)] landscape:right-[env(safe-area-inset-right)] landscape:z-10 landscape:h-auto landscape:items-start landscape:py-1">
-      <button type="button" onClick={onExit} aria-label={back} title={back} data-computer-exit="" className={phoneButton}>
-        <Icon name="chevron-left" size={22} />
-      </button>
-      <div className="flex items-center gap-1 landscape:flex-col landscape:self-stretch landscape:items-end">
-        {platform.orientation && (
-          <button type="button" onClick={() => platform.orientation?.rotate(landscape ? "portrait" : "landscape")} aria-label={rotate} title={rotate} data-computer-rotate="" className={phoneButton}>
-            <RotateCw size={18} aria-hidden="true" />
-          </button>
-        )}
-        {onKeyboard && (
-          <button type="button" onClick={onKeyboard} aria-label={keyboard} title={keyboard} data-computer-keyboard="" className={phoneButton}>
-            <Icon name="keyboard" size={18} />
-          </button>
-        )}
-        {control && <div data-computer-side-control="" className="pointer-events-auto mt-auto pb-1">{control}</div>}
-      </div>
-    </div>
-  );
-}
 
 export const SCREEN_GROW_MS = 240;
 

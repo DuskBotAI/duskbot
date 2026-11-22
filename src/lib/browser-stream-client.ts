@@ -121,6 +121,7 @@ export type PreviewStreamInput =
       readonly modifiers: number;
     }
   | { readonly type: "text"; readonly text: string }
+  | { readonly type: "copy" }
   | { readonly type: "resize"; readonly width: number; readonly height: number }
   /** The viewer can show larger frames now: the screencast restarts at the new cap without reconnecting. */
   | { readonly type: "frameCap"; readonly maxWidth: number; readonly maxHeight: number }

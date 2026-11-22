@@ -501,7 +501,7 @@ describe("the provider's normal browser sign-in, relayed by this desktop for a r
         "POST /api/instances/antigravity/auth/start": oldServer,
         "POST /api/instances/antigravity/auth/complete": (init) => { completeBody = init?.body ?? ""; done = true; return { ok: true }; },
       }, { relay });
-      flow.start({ tile: "gemini", candidates: ["antigravity"] });
+      flow.start({ tile: "antigravity", candidates: ["antigravity"] });
       await vi.advanceTimersByTimeAsync(0);
       expect(log).toContain("open 51121/");
       expect(flow.state).toMatchObject({ stage: "waiting", kind: "callback", link: googleLink });
@@ -520,7 +520,7 @@ describe("the provider's normal browser sign-in, relayed by this desktop for a r
           "POST /api/instances/antigravity/auth/start": oldServer,
           "POST /api/instances/antigravity/auth/complete": (init) => { completeBody = init?.body ?? ""; done = true; return { ok: true }; },
         }, relay ? { relay } : {});
-        flow.start({ tile: "gemini", candidates: ["antigravity"] });
+        flow.start({ tile: "antigravity", candidates: ["antigravity"] });
         await vi.advanceTimersByTimeAsync(0);
         expect(opened).toEqual([googleLink]);
         expect(calls).not.toContain("POST /api/instances/antigravity/auth/cancel");
@@ -537,7 +537,7 @@ describe("the provider's normal browser sign-in, relayed by this desktop for a r
       const { flow, calls } = harness([[gemini(false)], () => [gemini(done)]], {
         "POST /api/instances/antigravity/auth/start": oldServer,
       });
-      flow.start({ tile: "gemini", candidates: ["antigravity"] });
+      flow.start({ tile: "antigravity", candidates: ["antigravity"] });
       await vi.advanceTimersByTimeAsync(0);
       expect(flow.state).toMatchObject({ stage: "waiting", kind: "redirect" });
       done = true;
@@ -551,7 +551,7 @@ describe("the provider's normal browser sign-in, relayed by this desktop for a r
       const { flow, opened } = harness([[gemini(false)]], {
         "POST /api/instances/antigravity/auth/start": () => ({ ...oldServer(), sameMachine: true }),
       }, { relay });
-      flow.start({ tile: "gemini", candidates: ["antigravity"] });
+      flow.start({ tile: "antigravity", candidates: ["antigravity"] });
       await vi.advanceTimersByTimeAsync(0);
       expect(flow.state).toMatchObject({ stage: "waiting", kind: "callback", link: googleLink });
       expect(opened).toEqual([googleLink]);

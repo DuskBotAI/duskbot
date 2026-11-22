@@ -65,7 +65,7 @@ export const MODEL_PROVIDERS: readonly ModelProviderDef[] = [
     signIn: { label: "Sign in with ChatGPT", driverKinds: ["codex"] }, instances: ["openai"], hosts: ["api.openai.com"], words: ["chatgpt", "gpt", "codex", "o3", "o4"] },
   { id: "google", label: "Google Gemini", section: "major", wire: "openai", baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai", catalogId: "google",
     keyUrl: "https://aistudio.google.com/apikey", keyPlaceholder: "AIza…", listModels: "openai",
-    signIn: { label: "Sign in with Google", driverKinds: ["geminiAgent", "antigravityAgent"] }, hosts: ["generativelanguage.googleapis.com"], words: ["gemini", "google ai studio", "gemma"] },
+    signIn: { label: "Sign in with Google", driverKinds: ["geminiAgent", "antigravityAgent"] }, hosts: ["generativelanguage.googleapis.com"], words: ["gemini", "antigravity", "google ai studio", "gemma"] },
   { id: "xai", label: "xAI Grok", section: "major", wire: "openai", baseUrl: "https://api.x.ai/v1", catalogId: "xai",
     keyUrl: "https://console.x.ai", keyPlaceholder: "xai-…", listModels: "openai",
     signIn: { label: "Sign in with Grok", driverKinds: ["grokAgent"] }, driverKinds: ["grok"], hosts: ["api.x.ai"], words: ["grok", "x"] },

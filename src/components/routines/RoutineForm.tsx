@@ -13,6 +13,7 @@ import { useStore, type Bot } from "@/state/store";
 import { useBotEditor } from "../bot-settings/BotEditorContext";
 import { buttonCls, fieldCls, Segmented } from "../bot-panel/rows";
 import { SelectPill } from "../ui/SelectPill";
+import { Toggle } from "../ui/Toggle";
 import { AlwaysOnNote } from "../CloudUpsell";
 import { friendlyError } from "@/lib/plain-error";
 import { deviceHourCycle } from "@/lib/format-time";
@@ -47,6 +48,18 @@ const shownTime = (time: string) => {
 function TimeField({ value, onChange }: { value: string; onChange: (time: string) => void }) {
   const [text, setText] = useState(() => shownTime(value));
   const [bad, setBad] = useState(false);
+  if (phoneApp()) {
+    return (
+      <input
+        type="time"
+        data-routine-time=""
+        aria-label={t("routines.inline.time")}
+        value={value}
+        onChange={(event) => { if (event.target.value) onChange(event.target.value); }}
+        className={cn(fieldCls, "w-auto flex-none")}
+      />
+    );
+  }
   const commit = () => {
     const time = parseTypedTime(text);
     if (!time) return setBad(true);
@@ -175,10 +188,21 @@ export function RoutineForm({ bot, routine, defaultRunOn, onDone }: {
         )}
         {when.preset === "hourly" && (
           <div className="mt-1.5 flex flex-wrap items-center gap-1.5" data-routine-quiet="">
-            <label className="flex items-center gap-1.5 text-[13px] leading-[18px] text-ink">
-              <input type="checkbox" checked={when.window !== null} onChange={(event) => patchWhen({ window: event.target.checked ? (routine ? WAKING : undefined) : null })} />
-              {upperFirst(t("routines.hours.quietAtNight"))}
-            </label>
+            {phoneApp() ? (
+              <div className="flex w-full items-center justify-between gap-2 text-[13px] leading-[18px] text-ink">
+                <span>{upperFirst(t("routines.hours.quietAtNight"))}</span>
+                <Toggle
+                  checked={when.window !== null}
+                  aria-label={upperFirst(t("routines.hours.quietAtNight"))}
+                  onClick={() => patchWhen({ window: when.window === null ? (routine ? WAKING : undefined) : null })}
+                />
+              </div>
+            ) : (
+              <label className="flex items-center gap-1.5 text-[13px] leading-[18px] text-ink">
+                <input type="checkbox" checked={when.window !== null} onChange={(event) => patchWhen({ window: event.target.checked ? (routine ? WAKING : undefined) : null })} />
+                {upperFirst(t("routines.hours.quietAtNight"))}
+              </label>
+            )}
             {when.window && (
               <>
                 <TimeField value={when.window.start} onChange={(start) => patchWhen({ window: { ...when.window!, start } })} />
@@ -204,10 +228,25 @@ export function RoutineForm({ bot, routine, defaultRunOn, onDone }: {
       </div>
       {when.preset !== "once" && (
         <div data-routine-probe="">
-          <label className="flex items-center gap-1.5 text-[13px] leading-[18px] text-ink">
-            <input type="checkbox" checked={watching} onChange={(event) => { setWatching(event.target.checked); if (event.target.checked && !probe) setProbe({ kind: "page", url: "" }); }} />
-            {upperFirst(t("routines.probe.toggle"))}
-          </label>
+          {phoneApp() ? (
+            <div className="flex items-center justify-between gap-2 text-[13px] leading-[18px] text-ink">
+              <span>{upperFirst(t("routines.probe.toggle"))}</span>
+              <Toggle
+                checked={watching}
+                aria-label={upperFirst(t("routines.probe.toggle"))}
+                onClick={() => {
+                  const next = !watching;
+                  setWatching(next);
+                  if (next && !probe) setProbe({ kind: "page", url: "" });
+                }}
+              />
+            </div>
+          ) : (
+            <label className="flex items-center gap-1.5 text-[13px] leading-[18px] text-ink">
+              <input type="checkbox" checked={watching} onChange={(event) => { setWatching(event.target.checked); if (event.target.checked && !probe) setProbe({ kind: "page", url: "" }); }} />
+              {upperFirst(t("routines.probe.toggle"))}
+            </label>
+          )}
           {watching && probe?.kind === "script" && <p className="m-0 mt-1 text-[13px] leading-[18px] text-ink">{upperFirst(probeLine(probe))}</p>}
           {watching && probe && probe.kind !== "script" && (
             <div className="mt-1 flex items-center gap-1.5">

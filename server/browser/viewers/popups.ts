@@ -133,5 +133,31 @@ export async function editableAt(page: CdpPage, x: number, y: number): Promise<b
   return await valueInWorld<boolean>(page.frames, page.frames.mainFrameId, `${EDITABLE_AT}(${cssNumber(x)}, ${cssNumber(y)})`) === true;
 }
 
+const SELECTED_TEXT = `(() => {
+  let doc = document;
+  let el = doc.activeElement;
+  while (el && el.tagName === "IFRAME") {
+    try {
+      const inner = el.contentDocument;
+      if (!inner) break;
+      doc = inner;
+      el = doc.activeElement;
+    } catch { break; }
+  }
+  while (el && el.shadowRoot && el.shadowRoot.activeElement) el = el.shadowRoot.activeElement;
+  if (el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA")) {
+    const start = el.selectionStart;
+    const end = el.selectionEnd;
+    if (typeof start === "number" && typeof end === "number" && end > start) return el.value.slice(start, end);
+  }
+  return doc.defaultView?.getSelection?.()?.toString() ?? "";
+})()`;
+
+/** The page's current text selection (inside active input/textarea, shadow root or same-origin frame). */
+export async function selectedText(page: CdpPage): Promise<string> {
+  const value = await valueInWorld<string>(page.frames, page.frames.mainFrameId, SELECTED_TEXT);
+  return typeof value === "string" ? value : "";
+}
+
 /** A file picker's `accept` attribute, for the person's own picker. */
 export const ACCEPT_OF = "function () { return typeof this.accept === \"string\" ? this.accept.slice(0, 1024) : \"\"; }";

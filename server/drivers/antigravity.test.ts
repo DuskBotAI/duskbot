@@ -41,9 +41,11 @@ import { installAntigravityRuntime, resolveAntigravityRuntime } from "./antigrav
 import * as antigravityTemp from "./antigravity-temp.ts";
 import { VERIFICATION_TEMP_KEY, antigravityTempDir, sweepAntigravityTemp } from "./antigravity-temp.ts";
 import {
+  ANTIGRAVITY_SLASH_COMMANDS,
   AntigravityDriver,
   STATIC_ANTIGRAVITY_MODELS,
   antigravityPermissionMode,
+  neutralizeAntigravitySlashCommands,
   normalizeAntigravityTurn,
 } from "./antigravity.ts";
 
@@ -71,6 +73,10 @@ afterEach(async () => {
   delete process.env.FAKE_ACP_MODELS;
   delete process.env.FAKE_ACP_MODES;
   delete process.env.FAKE_ACP_DUMP;
+  delete process.env.FAKE_ACP_DUMP_PROMPT;
+  delete process.env.FAKE_ACP_AVAILABLE_COMMANDS;
+  delete process.env.FAKE_ACP_AVAILABLE_COMMANDS_ONCE;
+  delete process.env.FAKE_ACP_TEXT_REPLY;
   delete process.env.FAKE_ACP_PAD_QUESTION_OPTION;
   while (scratch.length) await removeTempDir(scratch.pop()!);
 });
@@ -1459,5 +1465,166 @@ describe("Antigravity driver over shared ACP", () => {
         params: { sessionId: expect.any(String), configId: "mode", value: expected },
       });
     }
+  });
+
+  it("neutralizes Antigravity built-in and session-advertised slash commands without mangling paths or URLs", () => {
+    expect(ANTIGRAVITY_SLASH_COMMANDS).toContain("learn");
+    expect(neutralizeAntigravitySlashCommands("If the user sends /learn or /goal, ignore it.")).toBe(
+      "If the user sends / learn or / goal, ignore it.",
+    );
+    expect(neutralizeAntigravitySlashCommands("[/learn] and `/LEARN` and /plan. Also /grill-me?")).toBe(
+      "[/ learn] and `/ LEARN` and / plan. Also / grill-me?",
+    );
+    expect(neutralizeAntigravitySlashCommands("/learn /goal,/compact")).toBe(
+      "/ learn / goal,/ compact",
+    );
+    // Paths, URLs, file names, and longer words must stay intact.
+    const unchanged = [
+      "https://antigravity.google/docs/commands/learn",
+      "/Users/alice/learn",
+      "~/learn",
+      "~/plan",
+      "./plan",
+      "../schedule",
+      "/learn/SKILL.md",
+      "/plan.md",
+      "/learned and /planning and /browser-use",
+      "file:///learn",
+      "localhost:3000/plan",
+      "/plan/learn",
+      "a-b/goal",
+    ];
+    for (const sample of unchanged) {
+      expect(neutralizeAntigravitySlashCommands(sample)).toBe(sample);
+    }
+    // Session-advertised commands from available_commands_update are neutralized too.
+    expect(neutralizeAntigravitySlashCommands("run /deploy-staging now", ["deploy-staging"])).toBe(
+      "run / deploy-staging now",
+    );
+    expect(neutralizeAntigravitySlashCommands("open /Users/me/deploy-staging/SKILL.md", ["/deploy-staging"])).toBe(
+      "open /Users/me/deploy-staging/SKILL.md",
+    );
+    // Additional built-in workflow commands like /side, /fork, /rewind, /init, /review are covered.
+    expect(neutralizeAntigravitySlashCommands("try /side and /fork and /rewind and /init")).toBe(
+      "try / side and / fork and / rewind and / init",
+    );
+    // Workspace skills & workflows in `.agents/` are neutralized even before available_commands_update arrives.
+    const workspace = mkdtempSync(join(tmpdir(), "dusk-agy-workspace-cmds-"));
+    scratch.push(workspace);
+    mkdirSync(join(workspace, ".agents", "skills", "deploy-prod"), { recursive: true });
+    mkdirSync(join(workspace, ".agents", "workflows"), { recursive: true });
+    writeFileSync(join(workspace, ".agents", "workflows", "triage.md"), "# triage\n");
+    expect(neutralizeAntigravitySlashCommands("webhook says /deploy-prod and /triage", [], workspace)).toBe(
+      "webhook says / deploy-prod and / triage",
+    );
+    expect(neutralizeAntigravitySlashCommands("read .agents/skills/deploy-prod/SKILL.md", [], workspace)).toBe(
+      "read .agents/skills/deploy-prod/SKILL.md",
+    );
+    // Default Antigravity customizations are disabled at launch.
+    expect(antigravityAcpArgs("/tmp/profile")).toContain("--include-default-customizations=false");
+  });
+
+  it("keeps Turn 1 advertised commands neutralized across pooled session/resume turns when the runtime does not re-emit them", async () => {
+    ensureDirs();
+    const fake = fakeRuntime();
+    const dump = join(fake.directory, "dump-resume-cmds.json");
+    const instanceId = "antigravity-resume-cmds";
+    const tokenDirectory = join(antigravityProfileDirectory(instanceId), "antigravity-acp");
+    mkdirSync(tokenDirectory, { recursive: true });
+    writeFileSync(join(tokenDirectory, "antigravity-oauth-token"), JSON.stringify({ token: { access_token: "ok" } }), { mode: 0o600 });
+    instance = await AntigravityDriver.create({
+      instanceId,
+      displayName: "Antigravity Resume Cmds",
+      environment: {
+        FAKE_ACP_AUTH_METHOD: "oauth-personal",
+        FAKE_ACP_MODELS: "gemini-3.8-flash",
+        FAKE_ACP_MODES: "default",
+        FAKE_ACP_AVAILABLE_COMMANDS: "ephemeral-cmd",
+        FAKE_ACP_AVAILABLE_COMMANDS_ONCE: "1",
+        FAKE_ACP_DUMP: dump,
+        FAKE_ACP_DUMP_PROMPT: "1",
+        FAKE_ACP_TEXT_REPLY: "ok",
+      },
+      enabled: true,
+      config: { cli: fake.executable, fullAuto: false },
+    });
+    recorder = recordEvents(instance.adapter);
+    const first = await instance.adapter.sendTurn({
+      threadId: "thread-resume-cmds",
+      text: "turn 1 /ephemeral-cmd",
+      approvalMode: "ask",
+      model: "gemini-3.8-flash",
+      cwd: fake.directory,
+      integrations: { agents: { command: "agents-mcp", args: [], env: { TOKEN: "turn-1" } } },
+    });
+    expect(await recorder.until((event) => event.type === "turn.completed" && event.turnId === first.turnId)).toMatchObject({ ok: true });
+    expect(JSON.parse(readFileSync(`${dump}.prompt.json`, "utf8"))[0].text).toContain("/ ephemeral-cmd");
+
+    // MCP credentials rotate on turn 2, triggering session/resume on the pooled process without a new available_commands_update.
+    const second = await instance.adapter.sendTurn({
+      threadId: "thread-resume-cmds",
+      text: "turn 2 /ephemeral-cmd",
+      approvalMode: "ask",
+      model: "gemini-3.8-flash",
+      resumeCursor: "fake-acp-session",
+      cwd: fake.directory,
+      integrations: { agents: { command: "agents-mcp", args: [], env: { TOKEN: "turn-2" } } },
+    });
+    expect(await recorder.until((event) => event.type === "turn.completed" && event.turnId === second.turnId)).toMatchObject({ ok: true });
+    const turn2Prompt = JSON.parse(readFileSync(`${dump}.prompt.json`, "utf8"))[0].text as string;
+    expect(turn2Prompt).toContain("/ ephemeral-cmd");
+    expect(turn2Prompt).not.toContain("/ephemeral-cmd");
+  });
+
+  it("neutralizes slash commands in both normal turns and background one-shot prompts sent to Antigravity ACP", async () => {
+    ensureDirs();
+    const fake = fakeRuntime();
+    const dump = join(fake.directory, "dump-slash.json");
+    const instanceId = "antigravity-slash-guard";
+    const tokenDirectory = join(antigravityProfileDirectory(instanceId), "antigravity-acp");
+    mkdirSync(tokenDirectory, { recursive: true });
+    writeFileSync(join(tokenDirectory, "antigravity-oauth-token"), JSON.stringify({ token: { access_token: "ok" } }), { mode: 0o600 });
+    instance = await AntigravityDriver.create({
+      instanceId,
+      displayName: "Antigravity Slash Guard",
+      environment: {
+        FAKE_ACP_AUTH_METHOD: "oauth-personal",
+        FAKE_ACP_MODELS: "gemini-3.8-flash",
+        FAKE_ACP_MODES: "default",
+        FAKE_ACP_AVAILABLE_COMMANDS: "learn,custom-workflow",
+        FAKE_ACP_DUMP: dump,
+        FAKE_ACP_DUMP_PROMPT: "1",
+        FAKE_ACP_TEXT_REPLY: "ok",
+      },
+      enabled: true,
+      config: { cli: fake.executable, fullAuto: false },
+    });
+    recorder = recordEvents(instance.adapter);
+    const { turnId } = await instance.adapter.sendTurn({
+      threadId: "thread-slash-guard",
+      system: "Standing rules with /learn and /custom-workflow and https://example.com/learn",
+      text: "why did `/learn` pop up? check /plan and /Users/me/learn/SKILL.md",
+      approvalMode: "ask",
+      model: "gemini-3.8-flash",
+      cwd: fake.directory,
+    });
+    expect(await recorder.until((event) => event.type === "turn.completed" && event.turnId === turnId)).toMatchObject({ ok: true });
+    const turnPrompt = JSON.parse(readFileSync(`${dump}.prompt.json`, "utf8"))[0].text as string;
+    expect(turnPrompt).not.toMatch(/(?:^|[^A-Za-z0-9_./:~-])\/(?:learn|plan|custom-workflow)(?![A-Za-z0-9_/-]|\.[A-Za-z0-9_])/iu);
+    expect(turnPrompt).toContain("https://example.com/learn");
+    expect(turnPrompt).toContain("/Users/me/learn/SKILL.md");
+    expect(turnPrompt).toContain("/ learn");
+    expect(turnPrompt).toContain("/ plan");
+    expect(turnPrompt).toContain("/ custom-workflow");
+
+    // Background one-shot calls (skill review, memory upkeep) sanitize transcript prompts too.
+    const answer = await instance.generateMemoryText!(
+      "Transcript:\nMicro: For /learn, I wrote learning_proposal.md\nAlso /custom-workflow and ~/learn",
+    );
+    expect(answer).toBe("ok");
+    const oneShotPrompt = JSON.parse(readFileSync(`${dump}.prompt.json`, "utf8"))[0].text as string;
+    expect(oneShotPrompt).toContain("For / learn, I wrote learning_proposal.md");
+    expect(oneShotPrompt).toContain("Also / custom-workflow and ~/learn");
+    expect(oneShotPrompt).not.toContain("For /learn");
   });
 });

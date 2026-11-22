@@ -2,6 +2,8 @@
 // folder. It fails closed: any agent request, or any tool call it reports, ends the call.
 import type { TextGenerationOptions, TextGenerationUsage } from "../../contracts.ts";
 import type { killCliTree, spawnCli } from "../../procs.ts";
+import { stripLeakedSystemHarnessMessages } from "../../../shared/system-message-guard.ts";
+import { availableCommandNames } from "./turn-state.ts";
 
 export const BACKGROUND_TEXT_TIMEOUT_MS = 120_000;
 export const BACKGROUND_TEXT_MAX_CHARS = 200_000;
@@ -22,12 +24,17 @@ export interface AcpOneShotInput {
   authRequired: boolean | "if-requested";
   loginNote: string;
   clientCapabilitiesMeta?: Record<string, unknown>;
+  sanitizePromptText?: (text: string, availableCommands: readonly string[], cwd?: string) => string;
   configure?: (ctx: { request: (method: string, params: unknown, timeoutMs?: number) => Promise<any>; sessionId: string; session: any }) => Promise<void>;
   options?: TextGenerationOptions;
   timeoutMs?: number;
 }
 
 const REFUSAL = "dusk bot background text allows no tools, files, terminals or approvals.";
+
+function neutralizeLeadingSlashCommand(text: string): string {
+  return text.replace(/^(\s*)\/([A-Za-z0-9][A-Za-z0-9_:-]*)(?=$|\s)/u, "$1/ $2");
+}
 
 export function runAcpOneShot(input: AcpOneShotInput): Promise<string> {
   const { signal, onUsage } = input.options ?? {};
@@ -40,6 +47,7 @@ export function runAcpOneShot(input: AcpOneShotInput): Promise<string> {
     let received = 0;
     let output = "";
     let sessionId: string | null = null;
+    let availableCommands: string[] = [];
     let model: string | undefined;
     let usage: TextGenerationUsage | undefined;
     let nextId = 1;
@@ -61,9 +69,10 @@ export function runAcpOneShot(input: AcpOneShotInput): Promise<string> {
           error = new Error(`${name} usage callback failed`);
         }
       }
+      const cleaned = stripLeakedSystemHarnessMessages(output);
       if (error) reject(error);
-      else if (!output.trim()) reject(new Error(`${name} background call returned no text`));
-      else resolve(output.trim());
+      else if (!cleaned) reject(new Error(`${name} background call returned no text`));
+      else resolve(cleaned);
     };
     const abort = () => finish(new Error(`${name} background call aborted`));
     const timer = setTimeout(() => finish(new Error(`${name} background call timed out`)), input.timeoutMs ?? input.options?.timeoutMs ?? BACKGROUND_TEXT_TIMEOUT_MS);
@@ -101,6 +110,11 @@ export function runAcpOneShot(input: AcpOneShotInput): Promise<string> {
       if (msg?.method !== "session/update") return;
       if (sessionId !== null && msg.params?.sessionId !== undefined && msg.params.sessionId !== sessionId) return;
       const update = msg.params?.update;
+      const commands = availableCommandNames(update);
+      if (commands) {
+        availableCommands = commands;
+        return;
+      }
       const kind = update?.sessionUpdate;
       if (kind === "tool_call" || kind === "tool_call_update") {
         finish(new Error(`${name} background call tried to use a tool`));
@@ -167,7 +181,10 @@ export function runAcpOneShot(input: AcpOneShotInput): Promise<string> {
       model = typeof session?.models?.currentModelId === "string" ? session.models.currentModelId
         : typeof init?._meta?.modelState?.currentModelId === "string" ? init._meta.modelState.currentModelId : undefined;
       await input.configure?.({ request: (method, params) => request(method, params), sessionId: session.sessionId, session });
-      const result = await request("session/prompt", { sessionId, prompt: [{ type: "text", text: input.prompt }] });
+      const promptText = input.sanitizePromptText
+        ? input.sanitizePromptText(input.prompt, availableCommands, input.cwd)
+        : neutralizeLeadingSlashCommand(input.prompt);
+      const result = await request("session/prompt", { sessionId, prompt: [{ type: "text", text: promptText }] });
       const reported = result?.usage ?? result?._meta ?? {};
       const count = (value: unknown) => (typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : undefined);
       if (count(reported.inputTokens) !== undefined || count(reported.outputTokens) !== undefined) {

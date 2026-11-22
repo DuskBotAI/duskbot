@@ -40,7 +40,7 @@ export function keyRemoved(provider: KeyProvider | "other", via: KeyVia): void {
 }
 
 // a connect card's name as the engine it signs in to: ChatGPT is the codex engine, as its own sign-in panel records it
-const TILE_ENGINE: Readonly<Record<string, (typeof SIGN_IN_ENGINE)[number]>> = { chatgpt: "codex", claude: "claude", grok: "grok", gemini: "gemini", cursor: "cursor", copilot: "copilot" };
+const TILE_ENGINE: Readonly<Record<string, (typeof SIGN_IN_ENGINE)[number]>> = { chatgpt: "codex", claude: "claude", grok: "grok", antigravity: "antigravity", cursor: "cursor", copilot: "copilot" };
 export const tileSignInEngine = (tile: string | undefined): string => (tile && Object.hasOwn(TILE_ENGINE, tile) ? TILE_ENGINE[tile]! : "");
 
 export function engineSignedIn(engine: string, method: SignInMethod): void {

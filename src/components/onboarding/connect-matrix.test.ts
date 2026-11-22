@@ -24,7 +24,7 @@ const TILES: Tile[] = [
   { tile: "chatgpt", instanceId: "codex", driverKind: "codex", displayName: "Codex", auth: { method: "device-code" }, command: "npm install -g @openai/codex" },
   { tile: "claude", instanceId: "claude", driverKind: "claudeAgent", displayName: "Claude", auth: { method: "paste-code" }, command: "npm install -g @anthropic-ai/claude-code" },
   { tile: "grok", instanceId: "grok", driverKind: "grokAgent", displayName: "Grok", auth: { method: "device-code" }, command: "curl -fsSL https://x.ai/cli/install.sh | bash" },
-  { tile: "gemini", instanceId: "antigravity", driverKind: "antigravityAgent", displayName: "Antigravity", auth: { method: "paste-code" } },
+  { tile: "antigravity", instanceId: "antigravity", driverKind: "antigravityAgent", displayName: "Antigravity", auth: { method: "paste-code" } },
   { tile: "cursor", instanceId: "cursor", driverKind: "cursorAgent", displayName: "Cursor", auth: { method: "device-code" }, command: "curl https://cursor.com/install -fsS | bash" },
   { tile: "copilot", instanceId: "githubCopilot", driverKind: "copilotAgent", displayName: "GitHub Copilot", auth: { method: "device-code" }, command: "npm install -g @github/copilot" },
 ];

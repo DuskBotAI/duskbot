@@ -22,7 +22,9 @@ export const AFTER_RESET_MS = 60_000;
 /** From this share of a window used, an engine is shown as near its limit. */
 export const NEAR_LIMIT_PERCENT = 90;
 
-export type LimitWindowName = "5-hour" | "weekly" | "other";
+export type PlanDriver = "claude" | "codex" | "grok" | "antigravity" | "cursor" | "opencode";
+
+export type LimitWindowName = "5-hour" | "weekly" | "monthly" | "other";
 
 /** One usage window as the engine reported it. */
 export interface LimitWindowUsage {
@@ -39,7 +41,7 @@ export interface EngineLimit {
   engine: string;
   /** The engine's display name ("Claude", "Codex", or the instance's own name). */
   name: string;
-  driver: "claude" | "codex" | "grok";
+  driver: PlanDriver;
   /** The window that decides the reset: the fullest, or the one refusing work. */
   window: LimitWindowName | null;
   /** 0–100, or null when the engine reported no window. */

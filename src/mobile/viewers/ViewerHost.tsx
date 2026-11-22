@@ -34,6 +34,7 @@ function TextViewer({ text, open, onClose }: { text: string; open: boolean; onCl
   const { state: copied, copy } = useCopyFeedback(text);
   return (
     <Sheet open={open} onClose={onClose} full title={t("mobile.select.title")}
+      actions={[{ key: "copy", label: t("mobile.select.copyAll"), symbol: copied === "copied" ? "checkmark" : "doc.on.doc", onPress: () => void copy() }]}
       trailing={<RoundButton label={t("mobile.select.copyAll")} onClick={copy}>{copied === "copied" ? <Check size={18} className="text-success" /> : <Copy size={18} />}</RoundButton>}>
       <p className="px-4 pb-2 text-[13px] text-ink-tertiary">{t("mobile.select.hint")}</p>
       <div data-selectable="" className="mx-3 whitespace-pre-wrap break-words rounded-2xl bg-ink/[0.04] px-4 py-3 text-[17px] leading-[1.55] text-ink">

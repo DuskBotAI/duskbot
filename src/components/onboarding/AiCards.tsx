@@ -27,7 +27,7 @@ function TileMark({ tile, size }: { tile: AiTile<InstanceInfo>; size: number }) 
     case "chatgpt": return <ProviderMark driverKind="codex" size={size} />;
     case "claude": return <ProviderMark driverKind="claudeAgent" size={size} />;
     case "grok": return <ProviderMark driverKind="grokAgent" size={size} />;
-    case "gemini": return <PresetProviderMark preset="google" size={size} />;
+    case "antigravity": return <ProviderMark driverKind="antigravityAgent" size={size} />;
     case "cursor": return <CursorMark size={size} />;
     case "copilot": return <ProviderMark driverKind="copilotAgent" size={size} />;
     case "openrouter": return <PresetProviderMark preset="openrouter" size={size} />;

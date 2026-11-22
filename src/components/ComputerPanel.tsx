@@ -8,6 +8,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useLiveDesktop } from "./live-desktop-module";
 import { lastScreen, rememberScreen, SteadyImage } from "./bot-panel/last-screen";
 import { phoneApp } from "@/lib/store-app";
+import { confirmWithSystem } from "@/lib/system-dialog";
 import { z } from "zod";
 import { waitForLocalVmReady } from "@/lib/local-vm-readiness";
 import { Globe, Hand, Loader2, Maximize2, Monitor, Moon, Power, X } from "../icons";
@@ -957,7 +958,7 @@ export function ComputerPanel({
   // a new computer from the current version: the old one goes, then provision makes it again on the bot's home volume
   const replaceComputer = async (keepsFiles: boolean) => {
     if (computerAction.current) return;
-    if (!keepsFiles && !window.confirm(t("computer.problem.replaceLoses", { name: bot.name }))) return;
+    if (!keepsFiles && !(await confirmWithSystem(t("computer.problem.replaceLoses", { name: bot.name }), t("common.ok"), { cancelLabel: t("common.cancel") }))) return;
     const controller = new AbortController();
     computerAction.current = controller;
     setPending("replace");
@@ -976,9 +977,11 @@ export function ComputerPanel({
   const runVmAction = async (action: "vm-start" | "vm-create" | "vm-recreate") => {
     if (
       action === "vm-recreate" &&
-      !window.confirm(
+      !(await confirmWithSystem(
         t("computer.confirm.replaceVm", { name: bot.name }),
-      )
+        t("common.ok"),
+        { cancelLabel: t("common.cancel") },
+      ))
     ) return;
     if (vmActionController.current) return;
     const lifecyclePath = action === "vm-start" && vmStatus?.mode !== "per-bot"
@@ -1195,7 +1198,7 @@ export function ComputerPanel({
   // inline, the panel itself holds the waking picture, so it plays once through the whole wake
   const remoteFrame = (liveHere || livePreview) && liveTarget ? !LiveDesktop ? <span data-live-desktop-loading="" /> : (
         <LiveDesktop key={viewerConnectionKey} waking={(expanded) => (inline && !expanded ? null : wakingView(expanded || Boolean(fullscreen)))} onScreenSize={(width, height) => setScreenAspect(width / height)}
-          target={liveTarget} threadId={bot.threadId} botId={bot.id} name={bot.name} poster={picture} viewOnly={!liveHere} wake={wakingHere} taking={controlPending} asked={Boolean(control.helpReason)}
+          target={liveTarget} threadId={bot.threadId} botId={bot.id} bot={profileBot} name={bot.name} poster={picture} viewOnly={!liveHere} wake={wakingHere} taking={controlPending} asked={Boolean(control.helpReason)}
           expanded={takeover.expanded} onExpandedChange={(expanded) => {
             if (!expanded && inline && takeover.here) void handBack(); else takeover.setExpanded(expanded);
           }}
@@ -1288,6 +1291,9 @@ export function ComputerPanel({
     return (
       <ComputerFullscreen
         label={t("computer.screenOf", { name: bot.name })}
+        bot={profileBot}
+        name={bot.name}
+        connecting={phone && busy && !frame}
         onExit={fullscreen.onExit}
         frame={frame}
         control={frame ? screenControl : null}

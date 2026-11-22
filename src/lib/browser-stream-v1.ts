@@ -66,6 +66,7 @@ export function liveAction(input: PreviewStreamInput): Body | Body[] | null {
       for (let at = 0; at < input.text.length; at += CHAR_LIMIT) chunks.push({ type: "input_keyboard", eventType: "char", text: input.text.slice(at, at + CHAR_LIMIT) });
       return chunks;
     }
+    case "copy": return { type: "copy" };
     case "navigate": return { type: "navigate", url: input.url };
     case "history": return { type: input.delta < 0 ? "back" : "forward" };
     case "reload": return { type: "reload" };
@@ -286,6 +287,7 @@ export function createLiveStreamClient(botId: string, events: PreviewStreamEvent
     });
     listen("tabs", (data) => { if (Array.isArray(data.tabs)) events.onMessage?.({ type: "tabs", tabs: data.tabs }); });
     listen("url", (data) => { if (typeof data.url === "string") events.onMessage?.({ type: "url", url: data.url }); });
+    listen("clipboard", (data) => { if (typeof data.text === "string") events.onClipboard?.(data.text); });
     listen("status", (data) => {
       if (viewport || !(Number(data.viewportWidth) > 0 && Number(data.viewportHeight) > 0)) return;
       viewport = { width: Number(data.viewportWidth), height: Number(data.viewportHeight) };

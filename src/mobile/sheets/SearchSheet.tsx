@@ -10,6 +10,7 @@ import { t } from "@/lib/i18n";
 import type { SearchHit } from "@/lib/search-hit";
 import { api, useStore, type Bot } from "@/state/store";
 import { haptic } from "../haptics";
+import { useChrome } from "../chrome";
 import { Sheet } from "../Sheet";
 import { listTime } from "../time";
 import { SettingsSection } from "./SettingsRow";
@@ -63,13 +64,18 @@ type Results = { query: string; status: "loading" | "ready" | "error"; hits: Sea
 
 export const SearchSheet: ComponentType<SheetPageProps<"search">> = ({ open, onClose, onOpenChat }) => {
   const { state, dispatch } = useStore();
+  const chrome = useChrome();
+  const nativeSearch = Boolean(chrome?.onSearchChange && chrome.onSearchCancel);
   const you = useGroupYou();
   const [query, setQuery] = useState("");
+  const [searchSession, setSearchSession] = useState(0);
   const [retry, setRetry] = useState(0);
   const [results, setResults] = useState<Results>({ query: "", status: "ready", hits: [] });
   const [opening, setOpening] = useState(false);
   const [openError, setOpenError] = useState(false);
   const input = useRef<HTMLInputElement>(null);
+  const closeRef = useRef(onClose);
+  closeRef.current = onClose;
   const q = query.trim();
   const normalized = normalizeSearch(q);
   const bots = state.bots.filter((bot) => !bot.hidden && normalizeSearch(bot.name).includes(normalized));
@@ -81,9 +87,21 @@ export const SearchSheet: ComponentType<SheetPageProps<"search">> = ({ open, onC
 
   useEffect(() => {
     if (!open) return;
+    if (nativeSearch) {
+      setQuery("");
+      setSearchSession((value) => value + 1);
+      return;
+    }
     const frame = requestAnimationFrame(() => input.current?.focus());
     return () => cancelAnimationFrame(frame);
-  }, [open]);
+  }, [open, nativeSearch]);
+
+  useEffect(() => {
+    if (!open || !nativeSearch || !chrome?.onSearchChange || !chrome.onSearchCancel) return;
+    const stopChange = chrome.onSearchChange((text) => setQuery(text));
+    const stopCancel = chrome.onSearchCancel(() => closeRef.current());
+    return () => { stopChange(); stopCancel(); };
+  }, [open, nativeSearch, chrome]);
 
   useEffect(() => {
     setOpenError(false);
@@ -120,16 +138,25 @@ export const SearchSheet: ComponentType<SheetPageProps<"search">> = ({ open, onC
   };
 
   return (
-    <Sheet open={open} onClose={onClose} title={t("mobile.search.title")} full flush>
-      <div className="sticky top-0 z-10 flex items-center gap-1 bg-(--m-sheet-page) px-4 pb-3 pt-6">
-        <div className="flex h-11 min-w-0 flex-1 items-center rounded-full bg-menu pl-3">
-          <Search aria-hidden size={19} className="shrink-0 text-ink-secondary" />
-          <label className="sr-only" htmlFor="mobile-search-input">{t("mobile.search.title")}</label>
-          <input ref={input} id="mobile-search-input" autoFocus type="search" enterKeyHint="search" autoComplete="off" value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t("mobile.search.placeholder")} className="h-11 min-w-0 flex-1 appearance-none rounded-full bg-transparent px-2 text-[16px] text-ink placeholder:text-ink-tertiary [&::-webkit-search-cancel-button]:appearance-none" />
-          {query && <button type="button" onClick={() => { setQuery(""); input.current?.focus(); }} aria-label={t("mobile.search.clear")} className="mobile-press flex size-11 shrink-0 items-center justify-center rounded-full text-ink-secondary"><X aria-hidden size={18} /></button>}
+    <Sheet
+      open={open}
+      onClose={onClose}
+      title={t("mobile.search.title")}
+      full
+      flush={!nativeSearch}
+      search={nativeSearch ? { key: `search:${searchSession}`, placeholder: t("mobile.search.placeholder"), autoFocus: true } : undefined}
+    >
+      {!nativeSearch && (
+        <div className="sticky top-0 z-10 flex items-center gap-1 bg-(--m-sheet-page) px-4 pb-3 pt-6">
+          <div className="flex h-11 min-w-0 flex-1 items-center rounded-full bg-menu pl-3">
+            <Search aria-hidden size={19} className="shrink-0 text-ink-secondary" />
+            <label className="sr-only" htmlFor="mobile-search-input">{t("mobile.search.title")}</label>
+            <input ref={input} id="mobile-search-input" autoFocus type="search" enterKeyHint="search" autoComplete="off" value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t("mobile.search.placeholder")} className="h-11 min-w-0 flex-1 appearance-none rounded-full bg-transparent px-2 text-[16px] text-ink placeholder:text-ink-tertiary [&::-webkit-search-cancel-button]:appearance-none" />
+            {query && <button type="button" onClick={() => { setQuery(""); input.current?.focus(); }} aria-label={t("mobile.search.clear")} className="mobile-press flex size-11 shrink-0 items-center justify-center rounded-full text-ink-secondary"><X aria-hidden size={18} /></button>}
+          </div>
+          <button type="button" onClick={onClose} className="mobile-press min-h-11 rounded-full px-2 text-[15px] font-semibold text-ink">{t("mobile.search.cancel")}</button>
         </div>
-        <button type="button" onClick={onClose} className="mobile-press min-h-11 rounded-full px-2 text-[15px] font-semibold text-ink">{t("mobile.search.cancel")}</button>
-      </div>
+      )}
       {openError && <p role="alert" className="px-6 py-3 text-[14px] text-danger">{t("mobile.search.openError")}</p>}
       {!q ? (
         <div className="px-2">

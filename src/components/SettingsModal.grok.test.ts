@@ -91,9 +91,9 @@ describe("Settings, drawn as Grok Bot's", () => {
     expect(title(html)).toBe("General");
   });
 
-  it("opens General with bring your stuff first for someone new, then you, how it looks, typing and sending, notifications and privacy", () => {
+  it("opens General with bring your stuff first for someone new, then you, how it looks, typing and sending, notifications, privacy and more", () => {
     const html = open("general");
-    expect(groups(html)).toEqual(["Bring your stuff", "You", "How it looks", "Typing and sending", "Notifications", "Privacy"]);
+    expect(groups(html)).toEqual(["Bring your stuff", "You", "How it looks", "Typing and sending", "Notifications", "Privacy", "More"]);
     expect(html).not.toContain("data-settings-fold");
     expect(html).toContain("Bring in from other apps");
     // the import row names the apps it brings bots from; the Grok move itself lives on the import page
@@ -225,7 +225,7 @@ describe("Settings, drawn as Grok Bot's", () => {
   it("shows a paired remote client General and Computer (Texting while the phone app is offered), with its look in General", () => {
     vi.stubGlobal("window", { addEventListener: vi.fn(), removeEventListener: vi.fn(), duskDesktop: { remoteClient: { active: true }, environments: {} } });
     expect(panes(open("general"))).toEqual(["general", "voice", "computer", "texting"]);
-    expect(groups(open("general"))).toEqual(["How it looks", "Notifications"]);
+    expect(groups(open("general"))).toEqual(["How it looks", "Notifications", "More"]);
     expect(current(open("looks"))).toBe("general");
     expect(current(open("engines"))).toBe("general");
   });

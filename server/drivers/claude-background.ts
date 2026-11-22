@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnCli } from "../procs.ts";
 
-type BackgroundFlag = "--tools" | "--no-session-persistence" | "--strict-mcp-config" | "--setting-sources";
+type BackgroundFlag = "--tools" | "--no-session-persistence" | "--strict-mcp-config" | "--setting-sources" | "--disable-slash-commands";
 
 export const BACKGROUND_CALL_TIMEOUT_MS = 60_000;
 
@@ -22,6 +22,7 @@ export function backgroundCallArgs(input: {
   const args = ["-p", "--model", input.model, "--output-format", input.outputFormat, "--settings", BACKGROUND_SETTINGS];
   if (input.supports("--tools")) args.push("--tools", "");
   if (input.supports("--no-session-persistence")) args.push("--no-session-persistence");
+  if (input.supports("--disable-slash-commands")) args.push("--disable-slash-commands");
   if (input.isolated) {
     if (input.supports("--strict-mcp-config")) args.push("--strict-mcp-config");
     if (input.supports("--setting-sources")) args.push("--setting-sources", "project");

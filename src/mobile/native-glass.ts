@@ -87,8 +87,96 @@ export function callHoldsComposer(chat: Element | null): boolean {
   return Boolean(chat?.querySelector("[data-call-surface]:not([data-call-leaving])"));
 }
 
+export interface TakeoverGlassMenuItem {
+  key: string;
+  label: string;
+  detail?: string;
+  symbol?: string;
+  checked?: boolean;
+  disabled?: boolean;
+  danger?: boolean;
+  separated?: boolean;
+}
+
+export type TakeoverGlassButtonId = "back" | "help" | "more" | "clipboard" | "control" | "keyboard";
+
+export interface TakeoverGlassButton {
+  id: TakeoverGlassButtonId;
+  frame: GlassFrame;
+  label: string;
+  symbol?: string;
+  symbolSize?: number;
+  symbolWeight?: "medium" | "semibold";
+  title?: string;
+  compact?: boolean;
+  disabled?: boolean;
+  busy?: boolean;
+  interactive?: boolean;
+  menu?: TakeoverGlassMenuItem[];
+}
+
+/** Floating takeover controls for the native Liquid Glass overlay (ios/App/App/GlassHomeBar.swift). */
+export interface TakeoverGlassState {
+  buttons: TakeoverGlassButton[];
+}
+
+/** Floating swipe-to-reply indicator in native Liquid Glass (ios/App/App/GlassHomeBar.swift). */
+export interface SwipeReplyGlassState {
+  x: number;
+  y: number;
+  restX: number;
+  size: number;
+  progress: number;
+  /** 0..1 rubber-band overscroll past the reply threshold for subtle elastic stretch. */
+  overscroll?: number;
+  armed: boolean;
+  dark: boolean;
+}
+
+/** Pull-to-refresh orb in native Liquid Glass (ios/App/App/GlassOverlays.swift). */
+export interface PullRefreshGlassState {
+  y: number;
+  progress: number;
+  armed: boolean;
+  refreshing: boolean;
+  dark: boolean;
+}
+
+/** Fullscreen photo viewer controls in native Liquid Glass (ios/App/App/GlassOverlays.swift). */
+export interface ViewerGlassState {
+  visible: boolean;
+  close: GlassFrame;
+  closeLabel: string;
+  share?: GlassFrame | null;
+  shareLabel?: string;
+  sharing?: boolean;
+  countText?: string | null;
+  countY?: number;
+}
+
+/** Floating Liquid Glass pill for status banners, toasts, and viewer hints (ios/App/App/GlassOverlays.swift). */
+export interface FloatingPillGlassState {
+  slot: "top" | "bottom";
+  id: string;
+  text: string;
+  tone?: "neutral" | "success" | "error";
+  symbol?: string;
+  trailingSymbol?: string;
+  spinner?: boolean;
+  offset: number;
+  dark: boolean;
+  tappable?: boolean;
+  actionLabel?: string;
+  actionDisabled?: boolean;
+  dismissible?: boolean;
+}
+
 export type GlassEvent =
   | { type: "tap"; target: "back" | "title" | "right" | "plus" | "jump" | "clearReply" | "search" | "newBot" }
+  | { type: "takeoverTap"; target: TakeoverGlassButtonId }
+  | { type: "takeoverMenu"; target: TakeoverGlassButtonId; key: string; text?: string }
+  | { type: "viewerTap"; target: "close" | "share" }
+  | { type: "pillTap"; slot: "top" | "bottom"; id: string; kind: "pill" | "action" | "dismiss" }
   | { type: "button"; index: number; kind?: GlassButtonKind }
   | { type: "text"; text: string }
   | { type: "submit" }
@@ -128,6 +216,16 @@ export interface GlassBridge {
   glyphs?(): Promise<GlassGlyphs>;
   /** Home's top buttons, or null to hide them at once (apps before 1.3 have no home bar). */
   home?(state: HomeGlassState | null): void;
+  /** Fullscreen takeover buttons in Liquid Glass, or null to hide them at once. */
+  takeover?(state: TakeoverGlassState | null): void;
+  /** Swipe-to-reply orb in Liquid Glass, or null to dismiss it (`instant` skips the exit animation). */
+  swipeReply?(state: SwipeReplyGlassState | null, instant?: boolean): void;
+  /** Pull-to-refresh orb in Liquid Glass, or null to dismiss it. */
+  pullRefresh?(state: PullRefreshGlassState | null, instant?: boolean): void;
+  /** Fullscreen image viewer controls in Liquid Glass, or null to hide them. */
+  viewer?(state: ViewerGlassState | null): void;
+  /** Floating status/toast Liquid Glass pill in the top or bottom slot, or null to dismiss (guarded by `clearId`). */
+  pill?(slot: "top" | "bottom", state: FloatingPillGlassState | null, clearId?: string, instant?: boolean): void;
   onEvent(listener: (event: GlassEvent) => void): () => void;
 }
 
@@ -432,7 +530,9 @@ export function rasterAvatar(host: Element | null): string | null {
   try { return canvas.toDataURL("image/png"); } catch { return null; }
 }
 
-const setValue = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
+const setValue = typeof HTMLTextAreaElement !== "undefined"
+  ? Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set
+  : undefined;
 
 /** Types into the page's own field as a person would, so its mentions, commands and draft all follow. */
 export function typeInto(field: HTMLTextAreaElement, text: string): void {
@@ -628,6 +728,76 @@ function cssPx(root: HTMLElement, expression: string): number {
   const value = probe.getBoundingClientRect().height;
   probe.remove();
   return value;
+}
+
+/** Whether the active app skin is dark, matching the page's own ground rather than assuming system appearance. */
+export function isGlassDark(): boolean {
+  if (typeof document === "undefined") return false;
+  const html = document.documentElement;
+  if (html.dataset.skin === "grok-dark") return true;
+  if (html.dataset.skin === "grok-light") return false;
+  const shell = html.querySelector<HTMLElement>(".dusk-mobile");
+  if (shell?.dataset.scheme === "dark") return true;
+  if (shell?.dataset.scheme === "light") return false;
+  return globalThis.matchMedia?.("(prefers-color-scheme: dark)").matches === true;
+}
+
+/** Resolves `--m-safe-top` or `--m-safe-bottom` to CSS pixels. */
+export function safeInsetPx(edge: "top" | "bottom"): number {
+  if (typeof document === "undefined" || !document.body) return 0;
+  const host = document.querySelector<HTMLElement>(".dusk-mobile") ?? document.body;
+  return cssPx(host, `var(--m-safe-${edge}, 0px)`);
+}
+
+/** Syncs a floating native Liquid Glass pill (`top` or `bottom` slot) and routes its tap/action/dismiss events. */
+export function useGlassPill(
+  glass: GlassBridge | undefined,
+  slot: "top" | "bottom",
+  state: Omit<FloatingPillGlassState, "slot"> | null,
+  handlers?: { onPill?: () => void; onAction?: () => void; onDismiss?: () => void },
+): boolean {
+  const pill = glass?.pill;
+  const activeId = useRef<string | null>(null);
+  const handlersRef = useRef(handlers);
+  handlersRef.current = handlers;
+  const payload = state ? JSON.stringify(state) : "";
+  const hasState = payload !== "";
+
+  useEffect(() => {
+    if (!pill) return;
+    if (!payload) {
+      if (activeId.current) {
+        pill(slot, null, activeId.current);
+        activeId.current = null;
+      }
+      return;
+    }
+    const next = JSON.parse(payload) as Omit<FloatingPillGlassState, "slot">;
+    activeId.current = next.id;
+    pill(slot, { slot, ...next });
+  }, [pill, slot, payload]);
+
+  useEffect(() => {
+    if (!pill) return;
+    return () => {
+      if (activeId.current) {
+        pill(slot, null, activeId.current);
+        activeId.current = null;
+      }
+    };
+  }, [pill, slot]);
+
+  useEffect(() => {
+    if (!glass?.pill || !hasState) return;
+    return glass.onEvent((event) => {
+      if (event.type !== "pillTap" || event.slot !== slot || event.id !== activeId.current) return;
+      if (event.kind === "pill") handlersRef.current?.onPill?.();
+      else if (event.kind === "action") handlersRef.current?.onAction?.();
+      else if (event.kind === "dismiss") handlersRef.current?.onDismiss?.();
+    });
+  }, [glass, slot, hasState]);
+
+  return Boolean(pill);
 }
 
 /** While a chat is open, the native glass draws its header and composer: the page's own chrome is measured where it rests

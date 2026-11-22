@@ -241,18 +241,20 @@ export function SignInBanner({
   askerName,
   takeControl,
   onError,
+  onSettled,
 }: {
   help: ComputerHelpRef;
   askerName: string;
   takeControl?: { onClick: () => void; disabled?: boolean; pending?: boolean };
   onError?: (message: string | null) => void;
+  onSettled?: () => void;
 }) {
   const [pending, setPending] = useState<"done" | "cancel" | null>(null);
   const answer = async (choice: "done" | "cancel") => {
     if (pending) return;
     setPending(choice);
     onError?.(null);
-    try { await answerSignIn(help, choice); }
+    try { await answerSignIn(help, choice); onSettled?.(); }
     catch (cause) { onError?.(friendlyError(cause)); }
     finally { setPending(null); }
   };

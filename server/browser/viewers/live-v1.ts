@@ -165,6 +165,9 @@ export class LiveV1 {
       case "control":
         this.#control(viewer);
         return;
+      case "clipboard":
+        this.#send(viewer, { type: "clipboard", text: output.text });
+        return;
       case "gone":
         if (!viewer.restarting) {
           this.#send(viewer, { type: "error", retryable: true, message: "The browser stream disconnected." });
@@ -316,6 +319,7 @@ export class LiveV1 {
     try {
       if (action.type === "command") await core.input(commandMessage(action.args));
       else if (action.type === "input") await core.input(inputMessage(action.message));
+      else if (action.type === "copy") await core.input({ type: "copy" });
       if (!core.controlState().controlling) throw this.#refusal(viewer, "Browser control changed. Try again.");
       core.pushTabs();
       return { ok: true };

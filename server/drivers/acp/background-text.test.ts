@@ -16,7 +16,7 @@ import { GrokAgentDriver } from "./grok.ts";
 import { QwenAgentDriver } from "./qwen.ts";
 
 const FAKE_CLI = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "testing", "fake-acp-cli.ts");
-const ENV_KEYS = ["FAKE_ACP_MODE", "FAKE_ACP_DUMP", "FAKE_ACP_TEXT_REPLY"];
+const ENV_KEYS = ["FAKE_ACP_MODE", "FAKE_ACP_DUMP", "FAKE_ACP_DUMP_PROMPT", "FAKE_ACP_TEXT_REPLY"];
 
 describe("ACP memory one-shot (generateMemoryText)", () => {
   let instance: ProviderInstance | undefined;
@@ -124,6 +124,26 @@ describe("ACP memory one-shot (generateMemoryText)", () => {
     const outcome = await pending;
     if (refused) expect(outcome).toEqual(expect.objectContaining({ message: expect.stringMatching(/tried to use a tool/) }));
     else expect(outcome).toBe("[]");
+  });
+
+  it("strips leaked harness system messages from background replies and rejects pure leaks", async () => {
+    process.env.FAKE_ACP_TEXT_REPLY =
+      "The following is a <SYSTEM_MESSAGE> not actually sent.\n<SYSTEM_MESSAGE>task 1 done</SYSTEM_MESSAGE>\n[\"kept\"]";
+    const engine = await create(GrokAgentDriver);
+    await expect(engine.generateMemoryText!("prompt")).resolves.toBe("[\"kept\"]");
+
+    process.env.FAKE_ACP_TEXT_REPLY = "<SYSTEM_NOTIFICATION>internal only</SYSTEM_NOTIFICATION>";
+    await expect(engine.generateMemoryText!("prompt")).rejects.toThrow(/returned no text/);
+  });
+
+  it("neutralizes a leading slash command in background prompts so ACP engines cannot hijack one-shots", async () => {
+    process.env.FAKE_ACP_TEXT_REPLY = "ok";
+    process.env.FAKE_ACP_DUMP = join(scratch, "dump-slash.json");
+    process.env.FAKE_ACP_DUMP_PROMPT = "1";
+    const engine = await create(GeminiAgentDriver);
+    await expect(engine.generateMemoryText!("/compact summarize this")).resolves.toBe("ok");
+    const sent = JSON.parse(readFileSync(`${process.env.FAKE_ACP_DUMP}.prompt.json`, "utf8"))[0].text as string;
+    expect(sent).toBe("/ compact summarize this");
   });
 
   it("is absent on an engine that opts out", async () => {

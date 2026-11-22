@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { ChevronRight, KeyRound, Plus } from "../../icons";
 import { t } from "@/lib/i18n";
 import { deleteLogin, listLogins } from "@/lib/logins";
+import { systemDialogs } from "@/lib/system-dialog";
 import { api, useStore } from "@/state/store";
 import type { LoginBots, LoginSummary } from "../../../shared/logins";
 import type { SavedSecretSummary } from "../../../shared/saved-secrets";
@@ -64,7 +65,20 @@ export function VaultSheet({ open, onClose }: SheetPageProps<"vault">) {
   const back = () => { setSelected(null); setConfirming(false); setError(null); };
   const remove = async () => {
     if (!selected || deleting.current || selected.kind === "login" && selected.value.source === "1password") return;
-    if (!confirming) { setConfirming(true); return; }
+    const dialogs = systemDialogs();
+    if (dialogs) {
+      const outcome = await dialogs.alert({
+        title: t("mobile.vault.delete"),
+        message: title(selected),
+        confirmLabel: t("mobile.vault.delete"),
+        cancelLabel: t("common.cancel"),
+        tone: "danger",
+      });
+      if (outcome !== "confirm") return;
+    } else if (!confirming) {
+      setConfirming(true);
+      return;
+    }
     deleting.current = true;
     setBusy(true);
     setError(null);

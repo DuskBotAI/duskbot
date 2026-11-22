@@ -77,14 +77,14 @@ interface AiTileInstance {
   snapshot: { state: string; authenticated?: boolean; freeFallback?: boolean; authenticationUnavailableReason?: string };
 }
 
-export type AiTileId = "chatgpt" | "claude" | "grok" | "gemini" | "cursor" | "copilot" | "openrouter" | "local";
+export type AiTileId = "chatgpt" | "claude" | "grok" | "antigravity" | "cursor" | "copilot" | "openrouter" | "local";
 
 /** The grid's AIs, by what people call them, and the instances that are each one (the first listed wins). */
 const TILES: ReadonlyArray<{ id: AiTileId; label: string; ids: readonly string[]; drivers: readonly string[] }> = [
   { id: "chatgpt", label: "ChatGPT", ids: ["chatgpt", "codex"], drivers: ["codex"] },
   { id: "claude", label: "Claude", ids: ["claude"], drivers: [] },
   { id: "grok", label: "Grok", ids: ["grok", "xaiApi"], drivers: ["grokAgent"] },
-  { id: "gemini", label: "Gemini", ids: ["gemini", "antigravity"], drivers: ["geminiAgent", "antigravityAgent"] },
+  { id: "antigravity", label: "Antigravity", ids: ["antigravity", "gemini"], drivers: ["antigravityAgent", "geminiAgent"] },
   { id: "cursor", label: "Cursor", ids: ["cursor"], drivers: ["cursorAgent"] },
   { id: "copilot", label: "GitHub Copilot", ids: ["githubCopilot"], drivers: ["copilotAgent"] },
   { id: "openrouter", label: "OpenRouter", ids: ["openrouter"], drivers: [] },

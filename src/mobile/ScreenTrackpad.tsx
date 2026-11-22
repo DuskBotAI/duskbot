@@ -2,8 +2,8 @@ import { useEffect, useLayoutEffect, useRef, type RefObject } from "react";
 import { t } from "@/lib/i18n";
 import type { HapticKind } from "./platform";
 import {
-  FIT_VIEW, SPECIAL_KEYS, TrackpadGestures, followCursor, moveCursor, pointerEvents, resizeView, wheelEvents, wheelSteps,
-  zoomView, type ScreenView, type TrackpadAction,
+  FIT_VIEW, HOLD_MS, PINCH_RATIO, SCROLL_SLOP, SPECIAL_KEYS, TAP_SLOP, TWO_TAP_MS, TrackpadGestures, clampView, followCursor,
+  moveCursor, pointerEvents, resizeView, wheelEvents, wheelSteps, zoomView, type ScreenView, type TrackpadAction,
 } from "./screen-trackpad";
 
 /** What the trackpad drives: the remote desktop's pointer and keyboard, in desktop pixels and X keysyms. */
@@ -16,17 +16,22 @@ export interface RemoteInput {
 
 /** The viewer that holds the trackpad: touches anywhere on it, margins included, are trackpad touches. */
 export const TRACKPAD_SURFACE = "[data-computer-fullscreen]";
-/** What keeps its own touches on that surface: the viewer's buttons and the control pill. */
-const OWN_TOUCHES = "button, a, input, textarea, select, [data-computer-control]";
+/** What keeps its own touches on that surface: the viewer's buttons, menus, dialogs and the control pill. */
+const OWN_TOUCHES = "button, a, input, textarea, select, [data-computer-control], [data-takeover-help-sheet], [data-takeover-menu], [data-browser-surface] [role=dialog], [role=listbox], [role=menu]";
 
-/** The phone's trackpad over a remote screen: touches anywhere on the viewer drive a cursor drawn over the picture,
- * and the picture (`screen`) zooms and pans under it. The hidden field takes the phone keyboard's typing. */
-export function ScreenTrackpad({ screen, input, keyboard, haptic, label }: {
+type DirectTouch = { x: number; y: number; startX: number; startY: number };
+
+/** The phone's touch layer over a remote screen: in `trackpad` mode touches anywhere on the viewer drive a drawn cursor;
+ * in `direct` mode taps click where touched, one finger drags, two fingers scroll (or pan when zoomed) or right-click,
+ * and pinch zooms. The hidden field takes the phone keyboard's typing. */
+export function ScreenTrackpad({ screen, input, keyboard, haptic, label, mode = "trackpad", recenterNonce = 0 }: {
   screen: RefObject<HTMLElement | null>;
   input: RemoteInput;
   keyboard: RefObject<HTMLInputElement | null>;
   haptic?: (kind: HapticKind) => void;
   label: string;
+  mode?: "trackpad" | "direct";
+  recenterNonce?: number;
 }) {
   const pad = useRef<HTMLDivElement>(null);
   const cursorEl = useRef<HTMLDivElement>(null);
@@ -34,6 +39,8 @@ export function ScreenTrackpad({ screen, input, keyboard, haptic, label }: {
   remote.current = input;
   const buzz = useRef(haptic);
   buzz.current = haptic;
+  const modeRef = useRef(mode);
+  modeRef.current = mode;
   const live = useRef({
     gestures: new TrackpadGestures(),
     view: FIT_VIEW as ScreenView,
@@ -44,7 +51,44 @@ export function ScreenTrackpad({ screen, input, keyboard, haptic, label }: {
     frame: { width: 0, height: 0 },
     raf: 0,
     hold: 0 as ReturnType<typeof setTimeout> | 0,
+    direct: {
+      touches: new Map<number, DirectTouch>(),
+      phase: "idle" as "idle" | "one" | "drag" | "long" | "two" | "scroll" | "pinch" | "done",
+      twoAt: 0,
+      twoMoved: false,
+      center: { x: 0, y: 0 },
+      startCenter: { x: 0, y: 0 },
+      spread: 0,
+      startSpread: 0,
+      hold: 0 as ReturnType<typeof setTimeout> | 0,
+    },
+    repaint: null as (() => void) | null,
   });
+
+  useEffect(() => {
+    const state = live.current;
+    if (mode === "direct") {
+      if (state.mask && state.cursor) remote.current.pointer(state.cursor.x, state.cursor.y, 0);
+      state.mask = 0;
+      state.gestures.cancel();
+      clearTimeout(state.hold);
+      if (cursorEl.current) cursorEl.current.style.opacity = "0";
+    } else {
+      state.direct.touches.clear();
+      state.direct.phase = "idle";
+      clearTimeout(state.direct.hold);
+      state.repaint?.();
+    }
+  }, [mode]);
+
+  useEffect(() => {
+    if (!recenterNonce) return;
+    const state = live.current;
+    const size = remote.current.size();
+    state.view = FIT_VIEW;
+    if (size) state.cursor = { x: size.width / 2, y: size.height / 2 };
+    state.repaint?.();
+  }, [recenterNonce]);
 
   useLayoutEffect(() => {
     const state = live.current;
@@ -64,7 +108,7 @@ export function ScreenTrackpad({ screen, input, keyboard, haptic, label }: {
       state.cursor ??= { x: size.width / 2, y: size.height / 2 };
       return state.cursor;
     };
-    // unzoomed frame px per desktop px, from the picture's own box (noVNC fits it inside the frame)
+    // unzoomed frame px per desktop px, from the picture's own box (handles both sized canvases and object-contain letterboxing)
     const fit = () => {
       const size = desktop();
       const canvas = picture.querySelector("canvas");
@@ -72,33 +116,71 @@ export function ScreenTrackpad({ screen, input, keyboard, haptic, label }: {
       const outer = element.getBoundingClientRect();
       const inner = canvas.getBoundingClientRect();
       const { view } = state;
+      const boxW = inner.width / view.scale;
+      const boxH = inner.height / view.scale;
+      if (!boxW || !boxH || !size.width || !size.height) return null;
+      let shownW = boxW;
+      let shownH = boxH;
+      let offsetX = 0;
+      let offsetY = 0;
+      if (canvas.width > 0 && canvas.height > 0 && getComputedStyle(canvas).objectFit === "contain") {
+        const k = Math.min(boxW / canvas.width, boxH / canvas.height);
+        shownW = canvas.width * k;
+        shownH = canvas.height * k;
+        offsetX = (boxW - shownW) / 2;
+        offsetY = (boxH - shownH) / 2;
+      }
       return {
-        left: (inner.left - outer.left - view.x) / view.scale,
-        top: (inner.top - outer.top - view.y) / view.scale,
-        scale: inner.width / view.scale / size.width,
+        left: (inner.left - outer.left - view.x) / view.scale + offsetX,
+        top: (inner.top - outer.top - view.y) / view.scale + offsetY,
+        scale: shownW / size.width,
+        scaleY: shownH / size.height,
+      };
+    };
+
+    const clientToDesktop = (clientX: number, clientY: number, clamp = true) => {
+      const size = desktop();
+      const box = fit();
+      if (!size || !box || !box.scale || !box.scaleY) return null;
+      const outer = element.getBoundingClientRect();
+      const { view } = state;
+      const unzoomedX = (clientX - outer.left - view.x) / view.scale;
+      const unzoomedY = (clientY - outer.top - view.y) / view.scale;
+      const rawX = (unzoomedX - box.left) / box.scale;
+      const rawY = (unzoomedY - box.top) / box.scaleY;
+      if (!clamp && (rawX < 0 || rawY < 0 || rawX > size.width || rawY > size.height)) return null;
+      return {
+        x: Math.min(size.width - 1, Math.max(0, rawX)),
+        y: Math.min(size.height - 1, Math.max(0, rawY)),
       };
     };
 
     const paint = () => {
       state.raf = 0;
-      const cursor = cursorAt();
+      const isTrackpad = modeRef.current === "trackpad";
+      const cursor = isTrackpad ? cursorAt() : null;
       const box = fit();
-      if (cursor && (state.sent?.x !== Math.round(cursor.x) || state.sent?.y !== Math.round(cursor.y))) {
+      if (isTrackpad && cursor && (state.sent?.x !== Math.round(cursor.x) || state.sent?.y !== Math.round(cursor.y))) {
         state.sent = { x: Math.round(cursor.x), y: Math.round(cursor.y) };
         remote.current.pointer(cursor.x, cursor.y, state.mask);
       }
-      if (cursor && box) state.view = followCursor(state.view, box.left + cursor.x * box.scale, box.top + cursor.y * box.scale, state.frame.width, state.frame.height);
+      if (isTrackpad && cursor && box) state.view = followCursor(state.view, box.left + cursor.x * box.scale, box.top + cursor.y * box.scaleY, state.frame.width, state.frame.height);
       const { view } = state;
       picture.style.transformOrigin = "0 0";
       picture.style.transform = view.scale === 1 ? "" : `translate3d(${view.x}px, ${view.y}px, 0) scale(${view.scale})`;
-      if (cursor && box && cursorEl.current) {
-        const x = view.x + (box.left + cursor.x * box.scale) * view.scale;
-        const y = view.y + (box.top + cursor.y * box.scale) * view.scale;
-        cursorEl.current.style.transform = `translate3d(${x}px, ${y}px, 0)`;
-        cursorEl.current.style.opacity = "1";
+      if (cursorEl.current) {
+        if (isTrackpad && cursor && box) {
+          const x = view.x + (box.left + cursor.x * box.scale) * view.scale;
+          const y = view.y + (box.top + cursor.y * box.scaleY) * view.scale;
+          cursorEl.current.style.transform = `translate3d(${x}px, ${y}px, 0)`;
+          cursorEl.current.style.opacity = "1";
+        } else {
+          cursorEl.current.style.opacity = "0";
+        }
       }
     };
     const schedule = () => { state.raf ||= requestAnimationFrame(paint); };
+    state.repaint = schedule;
 
     // a button never waits on the next frame: the move before it goes first so it lands where the cursor is drawn
     const flushMove = () => {
@@ -147,6 +229,171 @@ export function ScreenTrackpad({ screen, input, keyboard, haptic, label }: {
       if (due !== null) state.hold = setTimeout(() => run(state.gestures.hold(performance.now())), Math.max(0, due - performance.now()));
     };
 
+    const directHandlers = {
+      down(event: PointerEvent) {
+        const d = state.direct;
+        d.touches.set(event.pointerId, { x: event.clientX, y: event.clientY, startX: event.clientX, startY: event.clientY });
+        clearTimeout(d.hold);
+        if (d.touches.size === 1) {
+          d.phase = "one";
+          const startX = event.clientX;
+          const startY = event.clientY;
+          d.hold = setTimeout(() => {
+            if (d.phase !== "one") return;
+            d.phase = "long";
+            const pt = clientToDesktop(startX, startY, false);
+            if (!pt) return;
+            remote.current.pointer(pt.x, pt.y, 0);
+            remote.current.pointer(pt.x, pt.y, 4);
+            remote.current.pointer(pt.x, pt.y, 0);
+            buzz.current?.("medium");
+          }, HOLD_MS);
+        } else if (d.touches.size === 2) {
+          if (d.phase === "drag" && state.mask) {
+            const pt = clientToDesktop(event.clientX, event.clientY);
+            if (pt) remote.current.pointer(pt.x, pt.y, 0);
+            state.mask = 0;
+          }
+          d.phase = "two";
+          d.twoAt = event.timeStamp;
+          d.twoMoved = false;
+          const [a, b] = [...d.touches.values()];
+          d.center = { x: (a!.x + b!.x) / 2, y: (a!.y + b!.y) / 2 };
+          d.startCenter = { ...d.center };
+          d.spread = d.startSpread = Math.max(1, Math.hypot(a!.x - b!.x, a!.y - b!.y));
+        } else {
+          if (d.phase === "drag" && state.mask) {
+            const pt = clientToDesktop(event.clientX, event.clientY);
+            if (pt) remote.current.pointer(pt.x, pt.y, 0);
+            state.mask = 0;
+          }
+          d.phase = "done";
+        }
+      },
+      move(event: PointerEvent) {
+        const d = state.direct;
+        const touch = d.touches.get(event.pointerId);
+        if (!touch) return;
+        touch.x = event.clientX;
+        touch.y = event.clientY;
+        if (d.phase === "one") {
+          if (Math.hypot(touch.x - touch.startX, touch.y - touch.startY) <= TAP_SLOP) return;
+          clearTimeout(d.hold);
+          const start = clientToDesktop(touch.startX, touch.startY, false);
+          if (!start) { d.phase = "done"; return; }
+          d.phase = "drag";
+          const now = clientToDesktop(touch.x, touch.y, true);
+          remote.current.pointer(start.x, start.y, 0);
+          remote.current.pointer(start.x, start.y, 1);
+          state.mask = 1;
+          if (now) remote.current.pointer(now.x, now.y, 1);
+        } else if (d.phase === "drag") {
+          const now = clientToDesktop(touch.x, touch.y);
+          if (now) remote.current.pointer(now.x, now.y, 1);
+        } else if (d.phase === "two" || d.phase === "scroll" || d.phase === "pinch") {
+          if (d.touches.size !== 2) return;
+          const [a, b] = [...d.touches.values()];
+          const center = { x: (a!.x + b!.x) / 2, y: (a!.y + b!.y) / 2 };
+          const spread = Math.max(1, Math.hypot(a!.x - b!.x, a!.y - b!.y));
+          const prev = d.center;
+          const prevSpread = d.spread;
+          d.center = center;
+          d.spread = spread;
+          const rect = element.getBoundingClientRect();
+          if (d.phase === "two") {
+            if (Math.abs(spread / d.startSpread - 1) > PINCH_RATIO) {
+              d.phase = "pinch";
+              d.twoMoved = true;
+              state.view = zoomView(state.view, { factor: spread / d.startSpread, cx: center.x - rect.left, cy: center.y - rect.top, dx: center.x - d.startCenter.x, dy: center.y - d.startCenter.y }, state.frame.width, state.frame.height);
+              schedule();
+              return;
+            }
+            if (Math.hypot(center.x - d.startCenter.x, center.y - d.startCenter.y) <= SCROLL_SLOP) return;
+            d.phase = "scroll";
+            d.twoMoved = true;
+            const dx = center.x - d.startCenter.x;
+            const dy = center.y - d.startCenter.y;
+            if (state.view.scale > 1.01) {
+              state.view = clampView({ ...state.view, x: state.view.x + dx, y: state.view.y + dy }, state.frame.width, state.frame.height);
+              schedule();
+            } else {
+              const pt = clientToDesktop(center.x, center.y);
+              if (pt) {
+                const vertical = wheelSteps(state.wheel.y, dy);
+                const horizontal = wheelSteps(state.wheel.x, dx);
+                state.wheel = { x: horizontal.rest, y: vertical.rest };
+                for (const [x, y, mask] of [...wheelEvents(vertical.steps, false, pt.x, pt.y, 0), ...wheelEvents(horizontal.steps, true, pt.x, pt.y, 0)]) remote.current.pointer(x, y, mask);
+              }
+            }
+          } else if (d.phase === "pinch") {
+            state.view = zoomView(state.view, { factor: spread / prevSpread, cx: center.x - rect.left, cy: center.y - rect.top, dx: center.x - prev.x, dy: center.y - prev.y }, state.frame.width, state.frame.height);
+            schedule();
+          } else {
+            const dx = center.x - prev.x;
+            const dy = center.y - prev.y;
+            if (state.view.scale > 1.01) {
+              state.view = clampView({ ...state.view, x: state.view.x + dx, y: state.view.y + dy }, state.frame.width, state.frame.height);
+              schedule();
+            } else {
+              const pt = clientToDesktop(center.x, center.y);
+              if (pt) {
+                const vertical = wheelSteps(state.wheel.y, dy);
+                const horizontal = wheelSteps(state.wheel.x, dx);
+                state.wheel = { x: horizontal.rest, y: vertical.rest };
+                for (const [x, y, mask] of [...wheelEvents(vertical.steps, false, pt.x, pt.y, 0), ...wheelEvents(horizontal.steps, true, pt.x, pt.y, 0)]) remote.current.pointer(x, y, mask);
+              }
+            }
+          }
+        }
+      },
+      up(event: PointerEvent) {
+        const d = state.direct;
+        const touch = d.touches.get(event.pointerId);
+        if (!touch) return;
+        d.touches.delete(event.pointerId);
+        clearTimeout(d.hold);
+        if (d.phase === "one") {
+          const pt = clientToDesktop(touch.x, touch.y, false);
+          if (pt) {
+            remote.current.pointer(pt.x, pt.y, 0);
+            remote.current.pointer(pt.x, pt.y, 1);
+            remote.current.pointer(pt.x, pt.y, 0);
+            buzz.current?.("light");
+          }
+        } else if (d.phase === "drag") {
+          const pt = clientToDesktop(touch.x, touch.y, true);
+          if (pt) remote.current.pointer(pt.x, pt.y, 0);
+          state.mask = 0;
+        } else if (d.phase === "two") {
+          if (d.touches.size === 0 && !d.twoMoved && event.timeStamp - d.twoAt <= TWO_TAP_MS) {
+            const pt = clientToDesktop(d.center.x, d.center.y, false);
+            if (pt) {
+              remote.current.pointer(pt.x, pt.y, 0);
+              remote.current.pointer(pt.x, pt.y, 4);
+              remote.current.pointer(pt.x, pt.y, 0);
+              buzz.current?.("light");
+            }
+          } else if (d.touches.size === 1) {
+            d.twoMoved ||= event.timeStamp - d.twoAt > TWO_TAP_MS;
+          }
+        } else if (d.phase === "scroll" || d.phase === "pinch") {
+          d.phase = "done";
+        }
+        if (d.touches.size === 0) d.phase = "idle";
+      },
+      cancel() {
+        const d = state.direct;
+        clearTimeout(d.hold);
+        if (d.phase === "drag" && state.mask) {
+          const size = desktop();
+          if (size) remote.current.pointer(size.width / 2, size.height / 2, 0);
+          state.mask = 0;
+        }
+        d.touches.clear();
+        d.phase = "idle";
+      },
+    };
+
     const measure = () => {
       const next = { width: element.clientWidth, height: element.clientHeight };
       state.view = resizeView(state.view, state.frame, next);
@@ -164,15 +411,26 @@ export function ScreenTrackpad({ screen, input, keyboard, haptic, label }: {
         if (event.pointerType === "mouse" && event.button !== 0) return;
         if (surface !== element && event.target instanceof Element && event.target.closest(OWN_TOUCHES)) return;
         surface.setPointerCapture?.(event.pointerId);
-        run(state.gestures.down(event.pointerId, event.clientX, event.clientY, event.timeStamp));
+        if (modeRef.current === "direct") directHandlers.down(event);
+        else run(state.gestures.down(event.pointerId, event.clientX, event.clientY, event.timeStamp));
       },
       move(event: PointerEvent) {
+        if (modeRef.current === "direct") {
+          directHandlers.move(event);
+          return;
+        }
         // the in-between samples the system coalesced into this frame: drawing still happens once per frame
         const samples = event.getCoalescedEvents?.().length ? event.getCoalescedEvents() : [event];
         for (const sample of samples) run(state.gestures.move(event.pointerId, sample.clientX, sample.clientY, sample.timeStamp || event.timeStamp));
       },
-      up(event: PointerEvent) { run(state.gestures.up(event.pointerId, event.timeStamp)); },
-      cancel() { run(state.gestures.cancel()); },
+      up(event: PointerEvent) {
+        if (modeRef.current === "direct") directHandlers.up(event);
+        else run(state.gestures.up(event.pointerId, event.timeStamp));
+      },
+      cancel() {
+        if (modeRef.current === "direct") directHandlers.cancel();
+        else run(state.gestures.cancel());
+      },
     };
     surface.addEventListener("pointerdown", handlers.down);
     surface.addEventListener("pointermove", handlers.move);
@@ -188,7 +446,11 @@ export function ScreenTrackpad({ screen, input, keyboard, haptic, label }: {
       cancelAnimationFrame(state.raf);
       state.raf = 0;
       clearTimeout(state.hold);
+      clearTimeout(state.direct.hold);
       state.gestures.cancel();
+      state.direct.touches.clear();
+      state.direct.phase = "idle";
+      state.repaint = null;
       if (state.mask && state.cursor) remote.current.pointer(state.cursor.x, state.cursor.y, 0);
       state.mask = 0;
       state.view = FIT_VIEW;
@@ -223,13 +485,22 @@ export function ScreenTrackpad({ screen, input, keyboard, haptic, label }: {
       if (event.data) remote.current.text(event.data);
       field.value = "";
     };
+    const fallbackInput = (event: Event) => {
+      if (event instanceof InputEvent && event.isComposing) return;
+      if (!field.value) return;
+      const text = field.value;
+      field.value = "";
+      remote.current.text(text);
+    };
     field.addEventListener("keydown", keydown);
     field.addEventListener("beforeinput", beforeinput);
     field.addEventListener("compositionend", compositionend);
+    field.addEventListener("input", fallbackInput);
     return () => {
       field.removeEventListener("keydown", keydown);
       field.removeEventListener("beforeinput", beforeinput);
       field.removeEventListener("compositionend", compositionend);
+      field.removeEventListener("input", fallbackInput);
     };
   }, [keyboard]);
 

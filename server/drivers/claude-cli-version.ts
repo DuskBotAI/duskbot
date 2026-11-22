@@ -17,6 +17,7 @@ export const CLAUDE_FLAG_FLOORS = {
   "--no-session-persistence": [2, 1, 0],
   // Background calls. Not bisected: the guest path passes it from 2.1.257.
   "--tools": [2, 1, 257],
+  "--disable-slash-commands": [2, 0, 60],
 } as const satisfies Record<string, ClaudeCliVersion>;
 
 

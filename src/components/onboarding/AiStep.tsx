@@ -3,7 +3,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { ChevronLeft, LoaderCircle, RefreshCw, Sparkles } from "../../icons";
 import { engineReady } from "@/components/EngineLibrary";
-import { PresetProviderMark, ProviderMark } from "@/components/ProviderIcons";
+import { ProviderMark } from "@/components/ProviderIcons";
 import { cn } from "@/lib/cn";
 import { activeLocale, t } from "@/lib/i18n";
 import { useStore } from "@/state/store";
@@ -53,7 +53,7 @@ export function AiStep({ tested, cloud = false, computerAis = [], onNext }: { te
           icon={<Sparkles size={22} strokeWidth={1.5} className="text-ink-secondary" />}
           title={t("funnel.ai.useFree")} sub={t("funnel.ai.useFreeSub")} />
         <ChoiceTile kind="plan" onClick={() => setPlan(true)}
-          icon={<><ProviderMark driverKind="claudeAgent" size={20} /><ProviderMark driverKind="codex" size={20} /><PresetProviderMark preset="google" size={20} /></>}
+          icon={<><ProviderMark driverKind="claudeAgent" size={20} /><ProviderMark driverKind="codex" size={20} /><ProviderMark driverKind="antigravityAgent" size={20} /></>}
           title={t("funnel.ai.usePlan")} sub={t("funnel.ai.usePlanSub")} />
       </div>
     </StepFrame>

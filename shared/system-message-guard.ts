@@ -9,22 +9,94 @@ const SYSTEM_TAG_BLOCK_REGEX = /(?:(?:The following is a|Notice: This is a)\s*<S
 const UNCLOSED_SYSTEM_TAG_REGEX = /(?:(?:The following is a|Notice: This is a)\s*<SYSTEM_(?:MESSAGE|NOTIFICATION)>[^\n]*\n*)?<SYSTEM_(?:MESSAGE|NOTIFICATION)>[\s\S]*$/gi;
 const ORPHANED_TAG_REGEX = /<\/?SYSTEM_(?:MESSAGE|NOTIFICATION)>/gi;
 
+function stripSystemHarnessBlocks(text: string): string {
+  let result = text.replace(SYSTEM_TAG_BLOCK_REGEX, "");
+  result = result.replace(PREAMBLE_REGEX, "");
+  result = result.replace(UNCLOSED_SYSTEM_TAG_REGEX, "");
+  result = result.replace(ORPHANED_TAG_REGEX, "");
+  return result;
+}
+
 /** Strips leaked harness system messages and prompt injection preambles from text. */
 export function stripLeakedSystemHarnessMessages(text: string | null | undefined): string {
   if (!text || typeof text !== "string") return "";
-  let result = text.replace(SYSTEM_TAG_BLOCK_REGEX, "");
-  result = result.replace(UNCLOSED_SYSTEM_TAG_REGEX, "");
-  result = result.replace(PREAMBLE_REGEX, "");
-  result = result.replace(ORPHANED_TAG_REGEX, "");
-  return result.trim();
+  return stripSystemHarnessBlocks(text).trim();
 }
 
 /** Returns true if the message text consists entirely of leaked system harness messages. */
 export function isPureLeakedSystemHarnessMessage(text: string | null | undefined): boolean {
   if (!text || typeof text !== "string") return false;
-  const hasMarkers = /<SYSTEM_(?:MESSAGE|NOTIFICATION)>/i.test(text) || /The following is a <SYSTEM_/i.test(text);
+  const hasMarkers = /<SYSTEM_(?:MESSAGE|NOTIFICATION)>/i.test(text)
+    || /(?:The following is a|Notice: This is a)\s*<SYSTEM_/i.test(text);
   if (!hasMarkers) return false;
   return stripLeakedSystemHarnessMessages(text).length === 0;
+}
+
+const STREAM_TAG_TARGETS = [
+  "<system_message>",
+  "<system_notification>",
+  "</system_message>",
+  "</system_notification>",
+] as const;
+
+const STREAM_PREAMBLE_TARGETS = [
+  "the following is a <system_message>",
+  "the following is a <system_notification>",
+  "notice: this is a <system_message>",
+  "notice: this is a <system_notification>",
+] as const;
+
+function partialHarnessLeakTailLength(text: string): number {
+  const lineStart = text.lastIndexOf("\n") + 1;
+  const line = text.slice(lineStart);
+  if (line.length > 0) {
+    const normalized = line.toLowerCase().replace(/^(the following is a|notice: this is a)[ \t]+/, "$1 ");
+    if (STREAM_PREAMBLE_TARGETS.some((target) => target.startsWith(normalized))) {
+      return line.length;
+    }
+  }
+  const tagStart = text.lastIndexOf("<");
+  if (tagStart >= 0) {
+    const tail = text.slice(tagStart);
+    if (tail.length <= 22) {
+      const lower = tail.toLowerCase();
+      if (STREAM_TAG_TARGETS.some((target) => target.startsWith(lower))) {
+        return tail.length;
+      }
+    }
+  }
+  return 0;
+}
+
+/** Filters streamed assistant chunks so leaked harness markers never flash in live deltas,
+ * including case variants, `Notice:` preambles, mid-reply leaks, and chunk-split tags. */
+export function createSystemHarnessStreamFilter(): { push(delta: string): string; reset(): void } {
+  let raw = "";
+  let emitted = "";
+  return {
+    push(delta: string): string {
+      if (!delta) return "";
+      raw += delta;
+      const cleaned = stripSystemHarnessBlocks(raw);
+      const safe = cleaned.slice(0, cleaned.length - partialHarnessLeakTailLength(cleaned));
+      if (!safe) return "";
+      if (safe.startsWith(emitted)) {
+        const next = safe.slice(emitted.length);
+        emitted = safe;
+        return next;
+      }
+      if (safe.length > emitted.length) {
+        const next = safe.slice(emitted.length);
+        emitted = safe;
+        return next;
+      }
+      return "";
+    },
+    reset(): void {
+      raw = "";
+      emitted = "";
+    },
+  };
 }
 
 // the one-line recap server/digest.ts gives a bot of its earlier turns; a model may copy it into its reply

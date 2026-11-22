@@ -1,4 +1,5 @@
 import { lazyScreen } from "./lazy-screen";
+import { PanelAdvancedTab, PanelAvatarEditor, PanelDetailsTab, PanelPageBody } from "./bot-panel/PanelShell";
 
 export { lazyScreen, type LazyScreen } from "./lazy-screen";
 export { BotSettingsDialog } from "./BotSettingsDialog";
@@ -19,6 +20,10 @@ const SCREENS = [
   SettingsModal, KeyboardShortcutsModal,
   RemoteAgentSettingsPanel, RoomPanel,
 ];
+const DEV_SCREENS = [
+  ...SCREENS,
+  PanelDetailsTab, PanelAdvancedTab, PanelPageBody, PanelAvatarEditor,
+];
 
 if (typeof location !== "undefined" && new URLSearchParams(location.search).has("desktop-settings")) {
   void SettingsModal.preload().catch(() => {});
@@ -26,12 +31,14 @@ if (typeof location !== "undefined" && new URLSearchParams(location.search).has(
 
 const LOCAL_HOSTS = new Set(["127.0.0.1", "localhost", "[::1]"]);
 const REMOTE_PRELOAD_AFTER_MS = 5_000;
+const DEV_PRELOAD_AFTER_MS = 1_500;
 
-// On this machine a first open costs 8-28 ms, and fetching every screen during launch held the first paint back by a
-// quarter, so a local page fetches each when it opens. Over a network a first open takes up to a second, so a Cloud page
-// still fetches them, once launch is over and one per idle moment.
-export function preloadScreens(hostname = location.hostname): () => void {
-  if (LOCAL_HOSTS.has(hostname)) return () => {};
+// In production on this machine a first open costs 8-28 ms, so a local page fetches each when it opens. Over a network,
+// or under Vite's unbundled dev server (hundreds of individual modules), preloading one per idle moment avoids stalls.
+export function preloadScreens(hostname = location.hostname, dev = false): () => void {
+  if (!dev && LOCAL_HOSTS.has(hostname)) return () => {};
+  const list = dev ? DEV_SCREENS : SCREENS;
+  const delayMs = dev ? DEV_PRELOAD_AFTER_MS : REMOTE_PRELOAD_AFTER_MS;
   let stopped = false;
   let cancelWait = () => {};
   const whenIdle = (run: () => void) => {
@@ -45,7 +52,7 @@ export function preloadScreens(hostname = location.hostname): () => void {
     }
   };
   const fetchFrom = (index: number) => {
-    const screen = SCREENS[index];
+    const screen = list[index];
     if (!screen) return;
     whenIdle(() => {
       void screen.preload().catch(() => {}).then(() => {
@@ -53,7 +60,7 @@ export function preloadScreens(hostname = location.hostname): () => void {
       });
     });
   };
-  const start = setTimeout(() => fetchFrom(0), REMOTE_PRELOAD_AFTER_MS);
+  const start = setTimeout(() => fetchFrom(0), delayMs);
   cancelWait = () => clearTimeout(start);
   return () => {
     stopped = true;

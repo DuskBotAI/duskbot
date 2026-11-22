@@ -3,6 +3,7 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { MobileConnectionRecord } from "../../../shared/mobile-link";
+import { installSystemDialogs, type SystemDialogs } from "@/lib/system-dialog";
 import { installSystemMenu } from "@/lib/system-menu";
 import { PlatformContext, webPlatform, type MobilePlatform } from "../platform";
 
@@ -103,12 +104,14 @@ beforeEach(() => {
   root = createRoot(host);
   accountState.current = null;
   installSystemMenu(null);
+  installSystemDialogs(null);
   fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("{}", { status: 200 }));
 });
 
 afterEach(() => {
   fetchSpy.mockRestore();
   installSystemMenu(null);
+  installSystemDialogs(null);
   act(() => root.unmount());
   host.remove();
 });
@@ -295,5 +298,44 @@ describe("Settings Computers row 3-dots menu", () => {
 
     expect(removeComputer).toHaveBeenCalledWith(expect.objectContaining({ id: "ws_old" }), undefined);
     expect([...host.querySelectorAll("[data-testid='mobile-place']")].map((el) => el.textContent)).not.toContain("Old ServerNot connected");
+  });
+
+  it("uses native SwiftUI form and UIAlertController for rename and remove when systemDialogs is installed", async () => {
+    const mac = record("mac", "Studio Mac");
+    const oldBox = record("old", "Old Box");
+    makePlatform([mac, oldBox], "mac");
+    const alert = vi.fn<SystemDialogs["alert"]>(async () => "confirm");
+    const form = vi.fn<SystemDialogs["form"]>(async (options) => {
+      const error = await options.onSubmit?.({ name: "Renamed Mac" });
+      expect(error).toBeNull();
+      return { saved: true, values: { name: "Renamed Mac" } };
+    });
+    installSystemDialogs({ alert, form });
+    let choice = "rename";
+    installSystemMenu(vi.fn(async () => choice));
+
+    await mountSettings();
+    const buttons = [...host.querySelectorAll<HTMLButtonElement>("[data-place-menu]")];
+    await act(async () => { buttons[0]!.click(); });
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 20)); });
+
+    expect(form).toHaveBeenCalledWith(expect.objectContaining({
+      title: "Rename",
+      fields: [expect.objectContaining({ id: "name", value: "Studio Mac", required: true })],
+    }));
+    expect(host.querySelector("[data-rename-place-input]")).toBeNull();
+    expect(host.querySelector("[data-testid='mobile-place']")?.textContent).toContain("Renamed Mac");
+
+    choice = "remove";
+    await act(async () => { [...host.querySelectorAll<HTMLButtonElement>("[data-place-menu]")][1]!.click(); });
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 20)); });
+
+    expect(alert).toHaveBeenCalledWith(expect.objectContaining({
+      title: "Remove Old Box from this phone?",
+      tone: "danger",
+    }));
+    expect(host.querySelector("[data-confirm-action]")).toBeNull();
+    const saved = JSON.parse(prefs.get("dusk.mobile.connections.v1")!) as MobileConnectionRecord[];
+    expect(saved.map((one) => one.id)).toEqual(["mac"]);
   });
 });

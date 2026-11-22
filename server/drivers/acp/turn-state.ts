@@ -36,6 +36,7 @@ export interface AcpTurn {
   lookupTools: Set<string>;
   interruptTimer: ReturnType<typeof setTimeout> | null;
   stopQuietWatch: (() => void) | null;
+  pushAssistantDelta: (delta: string) => string;
   flushAssistantText: () => void;
   receiveModelVariants: (result: any) => void;
 }
@@ -53,6 +54,7 @@ export interface AcpSession {
   sessionKey: string | null;
   sessionId: string | null;
   sessionConfigResult: any;
+  availableCommands: string[];
   initResult: any;
   authenticated: boolean;
   idleTimer: ReturnType<typeof setTimeout> | null;
@@ -64,6 +66,21 @@ export interface AcpSession {
   current: AcpTurn | null;
   fallbackNotice?: string;
   launchModel?: string;
+}
+
+/** Extracts command names from an ACP `available_commands_update` notification. */
+export function availableCommandNames(update: unknown): string[] | null {
+  if (!update || typeof update !== "object") return null;
+  const record = update as { sessionUpdate?: unknown; availableCommands?: unknown };
+  if (record.sessionUpdate !== "available_commands_update" || !Array.isArray(record.availableCommands)) return null;
+  const names: string[] = [];
+  for (const entry of record.availableCommands) {
+    const raw = typeof (entry as { name?: unknown })?.name === "string"
+      ? (entry as { name: string }).name.trim().replace(/^\/+/u, "")
+      : "";
+    if (raw) names.push(raw);
+  }
+  return names;
 }
 
 /** A `tool_call` without a status is pending (ACP's default); a `tool_call_update` without one leaves the call as it was. */

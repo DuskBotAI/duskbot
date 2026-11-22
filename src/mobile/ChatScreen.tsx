@@ -42,9 +42,9 @@ export function ChatScreen({ bot, group, members, onBack, onProfile, onComputer 
     const chat = chatRef.current;
     if (!chat) return;
     const stopTimes = installMessageTimes(chat);
-    const stopReply = installSwipeReply(chat);
+    const stopReply = installSwipeReply(chat, glass);
     return () => { stopTimes(); stopReply(); };
-  }, []);
+  }, [glass]);
   return (
     <div ref={chatRef} data-mobile-chat className="relative flex h-full flex-col">
       {group ? <GroupView key={group.id} group={group} /> : bot ? <ChatView bot={bot} /> : null}

@@ -109,9 +109,20 @@ export function bundleSource(dir, { read = readFile, info = stat } = {}) {
 /** Requests to the dev server at once. A page asks for hundreds of modules together; one connection each, against a
  * Vite still busy optimizing, overflowed its listen backlog (128 on macOS) and the rest were reset, so those modules
  * went to the place's server, which has no /src, and the app's import failed. */
-const DEV_CONNECTIONS = 6;
+const DEV_CONNECTIONS = 24;
 const DEV_TRIES = 4;
 const HOP_HEADERS = new Set(["content-encoding", "content-length", "transfer-encoding", "connection", "keep-alive"]);
+
+function conditionalHeaders(accept, requestHeaders) {
+  const headers = { accept };
+  if (requestHeaders) {
+    for (const [name, value] of Object.entries(requestHeaders)) {
+      const lower = name.toLowerCase();
+      if ((lower === "if-none-match" || lower === "if-modified-since") && value) headers[lower] = String(value);
+    }
+  }
+  return headers;
+}
 
 /** `pnpm dev:app`: the files come from the Vite dev server, which also answers a page path with its own index. */
 export function devSource(devOrigin, { fetch: fetchImpl = fetch, connections = DEV_CONNECTIONS, tries = DEV_TRIES, pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms)) } = {}) {
@@ -122,14 +133,15 @@ export function devSource(devOrigin, { fetch: fetchImpl = fetch, connections = D
   const give = () => { const next = waiting.shift(); if (next) next(); else busy -= 1; };
 
   /** Vite's answer, read whole while holding a connection; a dropped connection is asked again. */
-  async function ask(target, accept) {
+  async function ask(target, headers) {
     for (let attempt = 1; ; attempt += 1) {
       await take();
       try {
-        const response = await fetchImpl(target, { headers: { accept }, redirect: "manual", signal: AbortSignal.timeout(30_000) });
-        const headers = {};
-        for (const [name, value] of response.headers) if (!HOP_HEADERS.has(name)) headers[name] = value;
-        return { status: response.status, headers, body: Buffer.from(await response.arrayBuffer()) };
+        const response = await fetchImpl(target, { headers, redirect: "manual", signal: AbortSignal.timeout(30_000) });
+        const responseHeaders = {};
+        for (const [name, value] of response.headers) if (!HOP_HEADERS.has(name)) responseHeaders[name] = value;
+        const body = response.status === 304 ? Buffer.alloc(0) : Buffer.from(await response.arrayBuffer());
+        return { status: response.status, headers: responseHeaders, body };
       } catch (error) {
         if (attempt >= tries) throw error;
       } finally { give(); }
@@ -137,10 +149,10 @@ export function devSource(devOrigin, { fetch: fetchImpl = fetch, connections = D
     }
   }
 
-  async function load(url, accept) {
+  async function load(url, accept, requestHeaders) {
     let at;
     try { at = new URL(url); } catch { return null; }
-    return ask(`${origin}${at.pathname}${at.search}`, accept);
+    return ask(`${origin}${at.pathname}${at.search}`, conditionalHeaders(accept, requestHeaders));
   }
   const html = (answer) => /^text\/html\b/i.test(answer.headers["content-type"] ?? "");
   return {
@@ -148,8 +160,8 @@ export function devSource(devOrigin, { fetch: fetchImpl = fetch, connections = D
     // Vite answers a name it does not have with its index page (200, text/html) or 404: that file is the server's. Any
     // other answer is Vite's own, errors included (a transform error, an outdated optimized dependency), exactly as the
     // page would get it from Vite directly; the place's server has no copy of a dev module to fall back on.
-    file: async (url) => {
-      const answer = await load(url, "*/*");
+    file: async (url, requestHeaders) => {
+      const answer = await load(url, "*/*", requestHeaders);
       return !answer || answer.status === 404 || html(answer) ? null : answer;
     },
     page: async (url) => {
@@ -174,14 +186,14 @@ export function createLocalUi({ source, origins, log = () => {} }) {
       responseErrorReason: paused.responseErrorReason, responseHeaders: paused.responseHeaders }, served);
     if (route === "network") return pass(paused.requestId);
     let answer = null;
-    try { answer = route === "page" ? await source.page(paused.request.url) : await source.file(paused.request.url); }
+    try { answer = route === "page" ? await source.page(paused.request.url) : await source.file(paused.request.url, paused.request.headers); }
     catch (error) { log(`local ui: ${error?.message ?? error}`); }
     // nothing here by that name (a file only the server's own page asks for): the server answers, as it always did
     if (!answer) return pass(paused.requestId);
     await send("Fetch.fulfillRequest", {
       requestId: paused.requestId, responseCode: answer.status,
       responseHeaders: Object.entries(answer.headers).map(([name, value]) => ({ name, value: String(value) })),
-      body: Buffer.from(answer.body).toString("base64"),
+      ...(answer.status === 304 ? {} : { body: Buffer.from(answer.body).toString("base64") }),
     }).catch((error) => {
       // the page let go of it first (a reload or a navigation cancels every module still on its way): nobody is left to
       // answer, and saying so was 3592 lines in two days that buried everything else in the log

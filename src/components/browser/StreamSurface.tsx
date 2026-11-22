@@ -43,6 +43,7 @@ import { friendlyError } from "@/lib/plain-error";
 export interface StreamSurfaceHandle {
   /** The canvas once it shows a frame, to seed picture in picture. */
   readonly canvas: () => HTMLCanvasElement | null;
+  readonly viewport: () => PreviewStreamViewport | null;
   readonly focusPage: () => void;
 }
 
@@ -189,6 +190,12 @@ export function StreamSurface(props: {
   readonly onLeave?: () => void;
   /** The person and the bot use the page together: the bot's pointer shows while the person's input runs too. */
   readonly together?: boolean;
+  /** Keep the remote browser at a fixed desktop viewport (e.g. 1280x800) instead of matching the container's phone size. */
+  readonly fixedViewport?: { readonly width: number; readonly height: number };
+  /** Overrides default clipboard handling when the server sends copied text back. */
+  readonly onClipboard?: (text: string) => void;
+  /** Hide the built-in connecting spinner when an outer viewer renders its own connecting screen. */
+  readonly suppressConnectingSpinner?: boolean;
   readonly className?: string;
   readonly ref?: Ref<StreamSurfaceHandle>;
 }) {
@@ -291,6 +298,7 @@ export function StreamSurface(props: {
 
   useImperativeHandle(ref, () => ({
     canvas: () => (hasFrameRef.current ? canvasRef.current : null),
+    viewport: () => viewportRef.current,
     focusPage: focusInput,
   }), []);
 
@@ -301,11 +309,17 @@ export function StreamSurface(props: {
     let capTimer: ReturnType<typeof setTimeout> | null = null;
     const growCap = () => {
       capTimer = null;
+      const fixed = propsRef.current.fixedViewport;
       const size = sizeRef.current;
       if (!size) return;
       const ratio = window.devicePixelRatio || 1;
-      const width = Math.round(size.width * ratio);
-      const height = Math.round(size.height * ratio);
+      const rect = element.getBoundingClientRect();
+      const width = fixed
+        ? Math.max(Math.round(fixed.width * 1.5), Math.round(rect.width * ratio))
+        : Math.round(size.width * ratio);
+      const height = fixed
+        ? Math.max(Math.round(fixed.height * 1.5), Math.round(rect.height * ratio))
+        : Math.round(size.height * ratio);
       const current = capRef.current;
       if (current !== null && current.width >= width && current.height >= height) return;
       const next = { width: Math.max(width, current?.width ?? 0), height: Math.max(height, current?.height ?? 0) };
@@ -317,9 +331,13 @@ export function StreamSurface(props: {
       timer = null;
       const rect = element.getBoundingClientRect();
       if (rect.width < 1 || rect.height < 1) return;
-      const size = { width: Math.round(rect.width), height: Math.round(rect.height) };
+      const fixed = propsRef.current.fixedViewport;
+      const size = fixed ? { width: fixed.width, height: fixed.height } : { width: Math.round(rect.width), height: Math.round(rect.height) };
       const previous = sizeRef.current;
-      if (previous?.width === size.width && previous.height === size.height) return;
+      if (previous?.width === size.width && previous.height === size.height) {
+        if (capRef.current === null) growCap();
+        return;
+      }
       sizeRef.current = size;
       clientRef.current?.send({ type: "resize", ...size });
       // Outgrowing the cap restarts the screencast, so grow it once the size settles rather than on every throttled
@@ -397,6 +415,10 @@ export function StreamSurface(props: {
         },
         // A device may refuse a write that arrives after the key press; the notice's Copy button is a fresh gesture.
         onClipboard: (text) => {
+          if (propsRef.current.onClipboard) {
+            propsRef.current.onClipboard(text);
+            return;
+          }
           void copyText(text).then((result) => { if (result === "failed") notify({ kind: "clipboard", text }); });
         },
         onDownload: (download) => notify({ kind: "download", download }),
@@ -677,7 +699,7 @@ export function StreamSurface(props: {
             if (text) send({ type: "text", text });
           }}
         />
-        {connected && !painted && !hostSetup ? (
+        {connected && !painted && !hostSetup && !props.suppressConnectingSpinner ? (
           <div className="pointer-events-none absolute inset-0 flex items-center justify-center text-ink-secondary" aria-hidden="true"><Loader2 size={22} className="animate-spin" /></div>
         ) : null}
         {select && selectAnchor && canvas ? (

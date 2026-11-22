@@ -139,7 +139,9 @@ export function hideDesktopPointer(client: RFB): void {
 }
 
 const XK_SHIFT_L = 0xffe1;
+const XK_CONTROL_L = 0xffe3;
 const XK_INSERT = 0xff63;
+const XK_C = 0x0063;
 type HeldKeys = { _keyboard?: { _keyDownList?: Record<string, number>; _sendKeyEvent?(keysym: number, code: string, down: boolean): void } };
 
 /** The paste shortcut of the person's own machine: Cmd+V on a Mac, Ctrl+V elsewhere (with or without Shift). */
@@ -162,6 +164,15 @@ export function pasteOnDesktop(client: RFB, text: string): void {
   client.sendKey(XK_INSERT, "Insert", true);
   client.sendKey(XK_INSERT, "Insert", false);
   client.sendKey(XK_SHIFT_L, "ShiftLeft", false);
+}
+
+/** Sends Ctrl+C to the focused app on the desktop so its selection reaches the clipboard event. */
+export function copyFromDesktop(client: RFB): void {
+  if (client.viewOnly) return;
+  client.sendKey(XK_CONTROL_L, "ControlLeft", true);
+  client.sendKey(XK_C, "KeyC", true);
+  client.sendKey(XK_C, "KeyC", false);
+  client.sendKey(XK_CONTROL_L, "ControlLeft", false);
 }
 
 /** Explicit text entry works with phone keyboards without reading the clipboard; non-Latin text uses Unicode keysyms. */

@@ -396,6 +396,20 @@ const GLYPHS = {
     ".##########.",
     "............",
   ],
+  megaphone: [
+    "............",
+    ".......##...",
+    "......#.#...",
+    "....##..#.#.",
+    ".###....#...",
+    ".#......#.##",
+    ".#......#...",
+    ".###....#.#.",
+    "..#.###.#...",
+    "..#.#..##...",
+    "..###.......",
+    "............",
+  ],
 } as const;
 
 export type SettingGlyphName = keyof typeof GLYPHS;
@@ -417,7 +431,7 @@ const HUE: Record<SettingGlyphName, GlyphHue> = {
   import: "peach", person: "pink", theme: "lilac", picture: "sky", droplet: "sky", bubble: "pink", globe: "lime", enter: "lilac",
   stack: "peach", bolt: "lemon", laptop: "sky", server: "lilac", cloud: "sky", team: "lilac", plus: "lime", shield: "lime",
   sparkle: "lemon", clock: "pink", bell: "lemon", speaker: "lilac", note: "pink", mic: "pink", sliders: "lilac", phone: "sky",
-  gear: "lilac", key: "lemon", chart: "lime", download: "sky",
+  gear: "lilac", key: "lemon", chart: "lime", download: "sky", megaphone: "pink",
 };
 
 /** the empty cells a line closes in: everything the outside can't reach through empty cells */

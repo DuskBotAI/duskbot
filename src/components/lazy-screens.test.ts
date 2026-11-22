@@ -174,6 +174,21 @@ describe("preloadScreens", () => {
     for (const preload of preloads) expect(preload).not.toHaveBeenCalled();
   });
 
+  it("in dev mode, a local page still preloads screens one per idle moment after launch", async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal("requestIdleCallback", undefined);
+    const panel = await import("./bot-panel/PanelShell");
+    const panelPreloads = [panel.PanelDetailsTab, panel.PanelAdvancedTab, panel.PanelPageBody, panel.PanelAvatarEditor]
+      .map((screen) => vi.spyOn(screen, "preload").mockResolvedValue(() => null));
+    const preloads = stubPreloads();
+    preloadScreens("127.0.0.1", true);
+    vi.advanceTimersByTime(1_499);
+    for (const preload of [...preloads, ...panelPreloads]) expect(preload).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(screens.SettingsModal.preload).toHaveBeenCalledTimes(1);
+    for (const preload of panelPreloads) expect(preload).toHaveBeenCalledTimes(1);
+  });
+
   it("a Cloud page fetches the screens after launch, one per idle moment, and can be cancelled", async () => {
     vi.useFakeTimers();
     const idle: Array<() => void> = [];

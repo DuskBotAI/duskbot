@@ -1,4 +1,4 @@
-import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
+import { useContext, useDeferredValue, useEffect, useMemo, useState } from "react";
 import { Check, ChevronRight, Copy, Download, Search } from "../../icons";
 import { cn } from "@/lib/cn";
 import type { TableCell, TableColumn } from "@/components/RichTable";
@@ -8,6 +8,8 @@ import { CELL_PADDING_PX, columnMinimums, fitsColumns } from "@/lib/table-fit";
 import { t } from "@/lib/i18n";
 import { phoneBridge } from "@/lib/phone-bridge";
 import { useChrome } from "../chrome";
+import { isGlassDark, safeInsetPx, useGlassPill } from "../native-glass";
+import { PlatformContext } from "../platform";
 import { RoundButton } from "../RoundButton";
 import { Sheet } from "../Sheet";
 import { ViewerNote } from "./ViewerNote";
@@ -35,10 +37,10 @@ export function TableViewer({ columns, rows, name, direction = "ltr", open, onCl
   const minimums = useMemo(() => columnMinimums(columns.map((column) => column.text), values), [columns, values]);
   const numeric = useMemo(() => numericColumns(columns.length, values), [columns, values]);
 
-  const scroller = useRef<HTMLDivElement>(null);
+  const [scrollerEl, setScrollerEl] = useState<HTMLDivElement | null>(null);
   const [view, setView] = useState({ width: null as number | null, more: false, scrolled: false, moved: false });
   useEffect(() => {
-    const el = scroller.current;
+    const el = scrollerEl;
     if (!el) return;
     const read = () => setView((was) => {
       const width = el.clientWidth || null;
@@ -54,7 +56,7 @@ export function TableViewer({ columns, rows, name, direction = "ltr", open, onCl
     resized?.observe(el);
     if (el.firstElementChild) resized?.observe(el.firstElementChild);
     return () => { el.removeEventListener("scroll", read); resized?.disconnect(); };
-  }, []);
+  }, [scrollerEl]);
   const fit = fitsColumns({ wrap: true, virtual: false, minimums, available: view.width });
 
   const alignment = (column: TableColumn, index: number) => column.align ?? (numeric[index] || direction === "rtl" ? "right" : "left");
@@ -65,6 +67,22 @@ export function TableViewer({ columns, rows, name, direction = "ltr", open, onCl
   const rowCount = (count: number) => t(count === 1 ? "mobile.table.rows.one" : "mobile.table.rows", { count: count.toLocaleString() });
   const download = () => downloadTableCsv(name, csv);
   const systemBar = useChrome() !== null;
+  const glass = useContext(PlatformContext)?.glass;
+  const showHint = open && view.more && !view.moved && copied === "idle";
+  const hintText = t("mobile.table.moreColumns", { count: columns.length });
+  const nativeHint = useGlassPill(
+    glass,
+    "bottom",
+    showHint
+      ? {
+          id: "table-hint",
+          text: hintText,
+          trailingSymbol: direction === "rtl" ? "chevron.left" : "chevron.right",
+          offset: Math.round(safeInsetPx("bottom") + 20),
+          dark: isGlassDark(),
+        }
+      : null,
+  );
 
   return (
     <Sheet open={open} onClose={onClose} full label={name}
@@ -89,7 +107,7 @@ export function TableViewer({ columns, rows, name, direction = "ltr", open, onCl
         </label>
       </div>}
       <div className="relative flex min-h-0 flex-1 flex-col" dir={direction}>
-        <div ref={scroller} data-table-viewer="" data-fit={fit || undefined} data-scrolled={view.scrolled || undefined} tabIndex={0} role="region" aria-label={name}
+        <div ref={setScrollerEl} data-table-viewer="" data-fit={fit || undefined} data-scrolled={view.scrolled || undefined} tabIndex={0} role="region" aria-label={name}
           className="table-viewer min-h-0 flex-1 overflow-auto overscroll-contain pb-[max(var(--m-safe-bottom),16px)] focus-visible:outline-none">
           <table className={cn("border-separate border-spacing-0 text-[15px] leading-[1.45]", fit ? "w-full table-auto" : "w-max min-w-full")}>
             <thead><tr>{columns.map((column, index) => {
@@ -114,9 +132,9 @@ export function TableViewer({ columns, rows, name, direction = "ltr", open, onCl
         </div>
         <div aria-hidden="true" data-table-more={view.more || undefined}
           className={cn("table-viewer-edge pointer-events-none absolute inset-y-0 end-0 w-12", view.more ? "opacity-100" : "opacity-0")} />
-        {view.more && !view.moved && <div role="note" className="table-viewer-hint pointer-events-none absolute inset-x-0 bottom-[calc(var(--m-safe-bottom)+20px)] flex justify-center">
+        {view.more && !view.moved && <div role="note" className={cn(nativeHint ? "sr-only" : "table-viewer-hint pointer-events-none absolute inset-x-0 bottom-[calc(var(--m-safe-bottom)+20px)] flex justify-center")}>
           <span className="flex h-9 items-center gap-1 rounded-full bg-ink px-4 text-[14px] font-medium text-app shadow-[0_4px_16px_rgb(0_0_0/0.16)]">
-            {t("mobile.table.moreColumns", { count: columns.length })}<ChevronRight size={16} className="rtl:-scale-x-100" aria-hidden="true" />
+            {hintText}<ChevronRight size={16} className="rtl:-scale-x-100" aria-hidden="true" />
           </span>
         </div>}
       </div>

@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { botTextForDisplay, isPureLeakedBotText, isPureLeakedSystemHarnessMessage, stripLeakedSystemHarnessMessages } from "./system-message-guard.ts";
+import {
+  botTextForDisplay,
+  createSystemHarnessStreamFilter,
+  isPureLeakedBotText,
+  isPureLeakedSystemHarnessMessage,
+  stripLeakedSystemHarnessMessages,
+} from "./system-message-guard.ts";
 
 describe("system-message-guard", () => {
   it("leaves ordinary conversational text alone", () => {
@@ -69,5 +75,45 @@ Everything compiled successfully and all tests pass!`;
     const asked = "[What we did] and what you did in an earlier turn: both fine.";
     expect(botTextForDisplay(asked)).toBe(asked);
     expect(stripLeakedSystemHarnessMessages(recap)).toBe(recap);
+  });
+
+  it("recognizes Notice: and standalone preambles as pure leaked harness messages without leaving orphaned prefixes", () => {
+    const noticeOnly = "Notice: This is a <SYSTEM_NOTIFICATION> background task finished.\n";
+    expect(stripLeakedSystemHarnessMessages(noticeOnly)).toBe("");
+    expect(isPureLeakedSystemHarnessMessage(noticeOnly)).toBe(true);
+
+    const followingOnly = "The following is a <SYSTEM_MESSAGE> not actually sent by the user.";
+    expect(stripLeakedSystemHarnessMessages(followingOnly)).toBe("");
+    expect(isPureLeakedSystemHarnessMessage(followingOnly)).toBe(true);
+  });
+
+  it("filters streamed chunks for Notice preambles, case variants, mid-reply leaks, and split tags", () => {
+    const filter = createSystemHarnessStreamFilter();
+    const feed = (chunks: string[]) => chunks.map((chunk) => filter.push(chunk)).join("");
+
+    // Split opening tag + lowercase variant + mid-reply leak must never flash in deltas.
+    const streamed = feed([
+      "Hello! ",
+      "<",
+      "sys",
+      "tem_message>internal task done</system_message>",
+      "All set.",
+    ]);
+    expect(streamed).toBe("Hello! All set.");
+
+    filter.reset();
+    const withNotice = feed([
+      "Done.\n",
+      "Notice: This is a ",
+      "<SYSTEM_NOTIFICATION> internal\n",
+      "<SYSTEM_NOTIFICATION>payload</SYSTEM_NOTIFICATION>\n",
+      "Next step.",
+    ]);
+    expect(withNotice).toBe("Done.\n\nNext step.");
+
+    // Ordinary prose starting like a preamble or containing `<` releases without dropping chars.
+    filter.reset();
+    const normal = feed(["The following is a ", "summary: a ", "<", " b and <div>ok</div>."]);
+    expect(normal).toBe("The following is a summary: a < b and <div>ok</div>.");
   });
 });

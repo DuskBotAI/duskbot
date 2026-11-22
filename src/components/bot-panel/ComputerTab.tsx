@@ -298,13 +298,24 @@ export function ComputerTab({ bot, derived, cloudFor, room }: {
   // a bot leads with its browser on this computer, and on a server when its computer is that browser; the dusk cloud card follows it
   const cloudOffer = local && cloudBots.length > 0 && !storeApp() && <CloudCtaCard bot={cloudBots[0]!} group={cloudBots} stage={stage} cloudDesktop={cloudDesktop} />;
   const ownScreen = current === "vm" || (!local && current !== "browser");
+  const signInBrowser = state.signInFocus?.botId === bot.id && !state.signInFocus.consumed && state.signInFocus.place === "browser";
+  const helpBrowser = state.computerControl[bot.id]?.help?.place === "browser";
+  const [browserTakeover, setBrowserTakeover] = useState(signInBrowser);
+  useEffect(() => { setBrowserTakeover(false); }, [bot.id, bot.threadId]);
+  useEffect(() => { if (signInBrowser) setBrowserTakeover(true); }, [signInBrowser]);
+  const wasHelpBrowser = useRef(helpBrowser);
+  useEffect(() => {
+    if (wasHelpBrowser.current && !helpBrowser) setBrowserTakeover(false);
+    wasHelpBrowser.current = helpBrowser;
+  }, [helpBrowser]);
+  const showBrowser = !ownScreen || helpBrowser || browserTakeover;
   const browserAfter = local ? cloudOffer : toCloud && <CloudDesktopCta bots={cloudBots} stage={stage} label={cloudLabel} />;
   // a bot set to use this Mac asks for the Mac's permissions it lacks when the person starts its browser, never before
   const askFirst = local && current === "local" ? macPermissionsBridge() : null;
 
   return (
     <div data-panel-tabpanel="computer">
-      {!ownScreen ? <LocalBrowserSection bot={bot} askFirst={askFirst} steps={<PanelSteps bot={bot} room={room} pictures={false} />} after={browserAfter} /> : <>
+      {showBrowser ? <LocalBrowserSection bot={bot} askFirst={askFirst} steps={<PanelSteps bot={bot} room={room} pictures={false} />} after={browserAfter} onBrowserClosed={ownScreen ? () => setBrowserTakeover(false) : undefined} /> : <>
         <div ref={setScreenBox}>
           <Suspense fallback={<AsleepScreen bot={bot} off={current === "off"} />}>
             <ComputerPanel bot={bot} inline visible={onScreen} onReport={setReport} />

@@ -22,15 +22,16 @@ export function useMemoryEditor(bot: Bot) {
   const notes = memory.docs ? panelMemoryNotes(memory.docs) : null;
   const index = memory.docs?.find((doc) => doc.path === MEMORY_INDEX) ?? null;
 
-  const change = async (save: () => Promise<boolean>) => {
-    if (saving) return false;
+  const change = async (save: () => Promise<string | null>): Promise<string | null> => {
+    if (saving) return t("botPanel.library.memoryError");
     setSaving(true);
     setError(null);
     try {
       return await save();
     } catch (cause) {
-      setError(errorText(cause, t("botPanel.library.memoryError")));
-      return false;
+      const message = errorText(cause, t("botPanel.library.memoryError"));
+      setError(message);
+      return message;
     } finally {
       setSaving(false);
     }
@@ -41,11 +42,12 @@ export function useMemoryEditor(bot: Bot) {
     if (result.ok) {
       memory.setDoc(result.doc);
       onSaved?.(result.doc);
-      return true;
+      return null;
     }
     await memory.reload();
-    setError(t("memory.conflict.title", { name: bot.name }));
-    return false;
+    const message = t("memory.conflict.title", { name: bot.name });
+    setError(message);
+    return message;
   });
   // undo writes the old text back only over the exact version the forget left, so a note saved since is never lost
   const restoreOver = async (doc: MemoryDoc, expectedHash: string) => {
@@ -66,12 +68,15 @@ export function useMemoryEditor(bot: Bot) {
         if (now.exists) throw new Error("memory changed since");
         await restoreOver(doc, now.hash);
       });
-      return true;
+      return null;
     });
   };
-  const add = async () => {
-    if (!index || !draft.trim()) return;
-    if (await write(index, withMemoryNote(index.text, draft))) setDraft("");
+  const add = async (text?: string): Promise<string | null> => {
+    const value = text ?? draft;
+    if (!index || !value.trim()) return null;
+    const problem = await write(index, withMemoryNote(index.text, value));
+    if (!problem) setDraft("");
+    return problem;
   };
 
   const settleForgotten = () => setForgotten(null);

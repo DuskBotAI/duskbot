@@ -215,7 +215,6 @@ export function GeneralPane({ has, remoteActive }: { has: Has; remoteActive: boo
           <TalkingStyleRow />
           <LanguageRow simple />
           <BotOrderRow />
-          <SidebarFeedbackRow />
           <AmbientRows />
         </SettingsRows>
       </SettingsGroup>
@@ -240,6 +239,9 @@ export function GeneralPane({ has, remoteActive }: { has: Has; remoteActive: boo
         </SettingsGroup>
       )}
       {!lead && bring}
+      <SettingsGroup label={t("settings.rows.more")} block="more">
+        <SettingsRows><SidebarFeedbackRow /></SettingsRows>
+      </SettingsGroup>
     </>
   );
 }

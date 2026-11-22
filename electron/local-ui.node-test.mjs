@@ -82,19 +82,30 @@ test("the bundle answers like the local server and never outside its folder", as
 test("the dev source passes Vite's answer through and leaves a missing file to the server", async () => {
   const asked = [];
   const fetch = async (url, init) => {
-    asked.push([url, init.headers.accept]);
+    asked.push([url, init.headers]);
     if (url.endsWith("/missing.js")) return new Response("nope", { status: 404 });
-    if (url.includes("/@vite/client")) return new Response("export {}", { headers: { "content-type": "text/javascript", "content-encoding": "gzip" } });
+    if (url.includes("/@vite/client") && init.headers["if-none-match"] === 'W/"abc"') return new Response(null, { status: 304, headers: { etag: 'W/"abc"' } });
+    if (url.includes("/@vite/client")) return new Response("export {}", { headers: { "content-type": "text/javascript", "content-encoding": "gzip", etag: 'W/"abc"' } });
     return new Response("<html></html>", { headers: { "content-type": "text/html" } });
   };
   const source = devSource("http://127.0.0.1:5199/", { fetch });
   const client = await source.file(`${VPS}/@vite/client?t=1`);
   assert.equal(String(client.body), "export {}");
   assert.equal(client.headers["content-encoding"], undefined);
+  const cached = await source.file(`${VPS}/@vite/client?t=1`, { "If-None-Match": 'W/"abc"', Cookie: "secret=1" });
+  assert.equal(cached.status, 304);
+  assert.equal(cached.body.length, 0);
+  assert.equal(asked[1][1]["if-none-match"], 'W/"abc"');
+  assert.equal(asked[1][1].cookie, undefined);
   assert.equal(await source.file(`${VPS}/missing.js`), null);
   const page = await source.page(`${VPS}/chat/1`);
   assert.equal(page.headers["x-frame-options"], "DENY");
-  assert.deepEqual(asked.map(([url]) => url), ["http://127.0.0.1:5199/@vite/client?t=1", "http://127.0.0.1:5199/missing.js", "http://127.0.0.1:5199/chat/1"]);
+  assert.deepEqual(asked.map(([url]) => url), [
+    "http://127.0.0.1:5199/@vite/client?t=1",
+    "http://127.0.0.1:5199/@vite/client?t=1",
+    "http://127.0.0.1:5199/missing.js",
+    "http://127.0.0.1:5199/chat/1",
+  ]);
 });
 
 test("routing: every dev module, optimized dependency and lazy chunk of a place's page is this app's", () => {

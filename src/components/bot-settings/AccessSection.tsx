@@ -46,14 +46,17 @@ export function useWorkingFolder(bot: Pick<Bot, "id" | "cwd">) {
   const [saving, setSaving] = useState(false);
   const canPick = Boolean(window.duskDesktop?.pickFolder);
 
-  const save = async (cwd: string | null) => {
+  const save = async (cwd: string | null): Promise<string | null> => {
     setSaving(true);
     setError(null);
     try {
       await api(`/api/bots/${bot.id}`, { method: "PATCH", body: JSON.stringify({ cwd }) });
       setDraft(null);
+      return null;
     } catch (e) {
-      setError(friendlyError(e));
+      const message = friendlyError(e);
+      setError(message);
+      return message;
     } finally {
       setSaving(false);
     }

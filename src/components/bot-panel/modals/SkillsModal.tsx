@@ -111,6 +111,18 @@ function AddSkillDialog({ actions, onClose }: { actions: ReturnType<typeof useSk
       error={sent && skills.error ? skills.error : null}
       onSave={() => { setSent(true); return importSkill(); }}
       onClose={onClose}
+      nativeForm={{
+        fields: [{
+          id: "source",
+          label: t("botPanel.ui.skillsImportLabel"),
+          value: source,
+          placeholder: t("botPanel.skills.importPlaceholder"),
+          kind: "url",
+          required: true,
+          autoFocus: true,
+        }],
+        onSubmit: (values) => importSkill(values.source ?? ""),
+      }}
     >
       <FormField label={t("botPanel.ui.skillsImportLabel")}>
         <input

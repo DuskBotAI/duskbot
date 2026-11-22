@@ -94,6 +94,8 @@ export interface SheetPushProps {
   /** Children draw their own bar and scroller (e.g. StackPage or ConnectAppsWindow). */
   bare?: boolean;
   actions?: SheetAction[];
+  /** Prominent trailing text button in the native iOS bar (e.g. Save / Done). */
+  primaryAction?: { label: string; role?: "done" | "confirm"; disabled?: boolean; onPress: () => void };
   swipeBack?: boolean;
   onBack?: () => void;
   contentRef?: (el: HTMLDivElement | null) => void;
@@ -119,6 +121,7 @@ function NativeSheetPush({
   flush = false,
   bare = false,
   actions,
+  primaryAction,
   swipeBack = true,
   onBack,
   contentRef,
@@ -219,10 +222,14 @@ function NativeSheetPush({
   useNativeBar(rank, !bare && shown ? {
     title: title || undefined,
     leading: [{ id: leadingId, symbol: "chevron.backward", label: t("mobile.sheet.back") }],
-    trailing: (actions ?? []).map((action) => ({ id: `action:${action.key}`, symbol: action.symbol, label: action.label, disabled: action.disabled })),
+    trailing: [
+      ...(actions ?? []).map((action) => ({ id: `action:${action.key}`, symbol: action.symbol, label: action.label, disabled: action.disabled })),
+      ...(primaryAction ? [{ id: "primary", title: primaryAction.label, label: primaryAction.label, role: primaryAction.role ?? ("confirm" as const), disabled: primaryAction.disabled }] : []),
+    ],
   } : null, {
     back: handleBack,
     stepBack: handleBack,
+    ...(primaryAction ? { primary: primaryAction.onPress } : {}),
     ...Object.fromEntries((actions ?? []).map((action) => [`action:${action.key}`, action.onPress])),
   });
 

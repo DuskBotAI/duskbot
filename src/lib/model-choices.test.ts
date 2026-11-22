@@ -12,7 +12,7 @@ vi.hoisted(() => {
 const antigravity = {
   instanceId: "google",
   driverKind: "antigravityAgent",
-  displayName: "Google Gemini (Antigravity)",
+  displayName: "Antigravity",
   snapshot: { state: "available", version: "1.4.3" },
   models: { default: "gemini-3.8-flash", options: [{
     id: "gemini-3.8-flash", label: "Gemini 3.8 Flash",

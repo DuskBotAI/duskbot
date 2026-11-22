@@ -3,7 +3,7 @@
 // straight to another AI while one is held. The holds are saved: a restart or a sleep the Cloud was stopped for keeps them.
 import { readFileSync } from "node:fs";
 
-import { NEAR_LIMIT_PERCENT, type EngineLimit, type EngineLimitsReport, type LimitWindowName } from "../shared/limit-reset.ts";
+import { NEAR_LIMIT_PERCENT, type EngineLimit, type EngineLimitsReport, type LimitWindowName, type PlanDriver } from "../shared/limit-reset.ts";
 import { writeFileAtomic } from "./atomic.ts";
 import { loadPlanUsage, type PlanAccount, type PlanProviderRow, type PlanUsageReport, type PlanWindow } from "./plan-usage.ts";
 import type { RuntimeEvent } from "../shared/runtime-events.ts";
@@ -24,12 +24,27 @@ function windowLine(name: LimitWindowName, window: PlanWindow): { window: LimitW
 
 type WindowLine = { window: LimitWindowName; usedPercent: number; resetsAt: number | null };
 
+const DRIVERS: ReadonlySet<string> = new Set<PlanDriver>(["claude", "codex", "grok", "antigravity", "cursor", "opencode"]);
+const WINDOW_NAMES: ReadonlySet<string> = new Set<LimitWindowName>(["5-hour", "weekly", "monthly", "other"]);
+
+function extraWindowLine(name: LimitWindowName, extra: PlanProviderRow["extra"][number]): WindowLine {
+  const resetsAt = extra.resetsAt ? Date.parse(extra.resetsAt) : NaN;
+  return { window: name, usedPercent: extra.usedPercent, resetsAt: Number.isFinite(resetsAt) ? resetsAt : null };
+}
+
 /** An engine's limit from its plan-usage row. The windows at their limit decide, and all must reset, so the latest of
  * their resets counts; with none at the limit, the fullest window counts. Null when the row has no usage. */
 export function engineLimitFromUsage(row: PlanProviderRow): EngineLimit | null {
-  if (!row.ok || (row.driver !== "claude" && row.driver !== "codex" && row.driver !== "grok")) return null;
+  if (!row.ok || !DRIVERS.has(row.driver)) return null;
   const windows = [windowLine("5-hour", row.fiveHour), windowLine("weekly", row.weekly)].filter((line) => line !== null)
     .map(({ window, used, resetsAt }) => ({ window, usedPercent: used, resetsAt }));
+  const primaryMonthly = row.extra.find((entry) => entry.label === "Monthly" || entry.label === "30-day");
+  if (primaryMonthly && (row.driver === "opencode" || windows.length === 0)) {
+    windows.push(extraWindowLine("monthly", primaryMonthly));
+  } else if (windows.length === 0) {
+    const monthlySpend = row.extra.find((entry) => entry.label === "Monthly spend");
+    if (monthlySpend) windows.push(extraWindowLine("monthly", monthlySpend));
+  }
   return limitFromWindows({ engine: row.id, name: row.name, driver: row.driver as Driver }, windows);
 }
 
@@ -50,9 +65,6 @@ function stillCurrent(limit: EngineLimit, now: number): EngineLimit | null {
   const windows = (limit.windows ?? []).filter((line) => line.resetsAt === null || line.resetsAt > now);
   return windows.length ? limitFromWindows(limit, windows) : null;
 }
-
-const DRIVERS: ReadonlySet<string> = new Set<Driver>(["claude", "codex", "grok"]);
-const WINDOW_NAMES: ReadonlySet<string> = new Set<LimitWindowName>(["5-hour", "weekly", "other"]);
 
 function savedLimit(engine: string, value: unknown): EngineLimit | null {
   const saved = value as { name?: unknown; driver?: unknown; windows?: unknown } | null;
@@ -76,7 +88,14 @@ function codexHoldGone(row: PlanProviderRow, limit: EngineLimit, held: number | 
   return windows.every((line) => line === null || (line.resetsAt !== null && Math.abs(line.resetsAt - held) > SAME_RESET_MS));
 }
 
-const PRODUCT_NAMES: Record<string, string> = { claudeAgent: "Claude", codex: "Codex", grokAgent: "Grok" };
+const PRODUCT_NAMES: Record<string, string> = {
+  claudeAgent: "Claude",
+  codex: "Codex",
+  grokAgent: "Grok",
+  antigravityAgent: "Antigravity",
+  cursorAgent: "Cursor",
+  opencodeGo: "OpenCode Go",
+};
 
 /** The AI's own name ("Claude", "Codex"), never the name an install gave its sign-in; the given name for any other AI. */
 export function aiProductName(instance: { displayName?: string; driverKind: string } | undefined, engine: string): string {
@@ -96,7 +115,8 @@ export function nearLimitNote(limit: EngineLimit | undefined, name: string, time
     try { resets = `; it resets ${new Date(limit.resetsAt).toLocaleString("en-US", { weekday: "short", hour: "numeric", minute: "2-digit", timeZone })} (${timeZone})`; }
     catch { resets = `; it resets ${new Date(limit.resetsAt).toISOString()}`; }
   }
-  return ` ${name}'s ${limit.window === "weekly" ? "weekly" : "usage"} limit is ${Math.round(limit.usedPercent)}% used${resets}.`;
+  const kind = limit.window === "weekly" ? "weekly" : limit.window === "monthly" ? "monthly" : "usage";
+  return ` ${name}'s ${kind} limit is ${Math.round(limit.usedPercent)}% used${resets}.`;
 }
 
 export interface LimitClockOptions {
@@ -140,6 +160,7 @@ export class LimitResetClock {
   private readonly heldAt = new Map<string, number>();
   private readonly turnEngines = new Map<string, string>();
   private checkedAt = 0;
+  private checkedAccountsKey = "";
   private loading: Promise<void> | null = null;
   private timer: ReturnType<typeof setInterval> | null = null;
   private soon: ReturnType<typeof setTimeout> | null = null;
@@ -255,19 +276,27 @@ export class LimitResetClock {
     this.options.onChange?.();
   }
 
-  /** Reads usage again when what is known is older than `maxAgeMs`; one read at a time. */
+  /** Marks cached usage stale so the next check re-reads credentials and limits immediately (e.g. after sign-in). */
+  invalidate(): void {
+    this.checkedAt = 0;
+  }
+
+  /** Reads usage again when what is known is older than `maxAgeMs` or configured accounts changed; one read at a time. */
   async ensureFresh(maxAgeMs = LIMIT_POLL_MS): Promise<void> {
-    if (this.now() - this.checkedAt < maxAgeMs) return;
+    const accountsKey = this.accountsFingerprint(this.options.accounts());
+    if (this.checkedAt > 0 && this.now() - this.checkedAt < maxAgeMs && this.checkedAccountsKey === accountsKey) return;
     await this.refresh(false);
   }
 
   async refresh(force: boolean): Promise<void> {
     if (this.loading) return this.loading;
     const accounts = this.options.accounts();
+    const accountsKey = this.accountsFingerprint(accounts);
     this.loading = (async () => {
       try {
         if (accounts.length) this.noteUsage(await this.load(accounts, force));
         else this.checkedAt = this.now();
+        this.checkedAccountsKey = accountsKey;
       } catch {
         this.checkedAt = this.now();
       }
@@ -275,6 +304,10 @@ export class LimitResetClock {
       this.loading = null;
     });
     return this.loading;
+  }
+
+  private accountsFingerprint(accounts: readonly PlanAccount[]): string {
+    return accounts.map((account) => `${account.id}\0${account.driver}\0${account.configDir ?? ""}\0${account.noUsage ? "1" : "0"}`).join("\n");
   }
 
   start(): void {

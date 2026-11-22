@@ -250,7 +250,7 @@ function Shell({ viewer }: { viewer: WelcomeViewer | null }) {
     void preloadConnectedApps(false, true).catch(() => {}); // a background read: a reconnect is nobody using a Cloud home
   }, [state.connected]);
 
-  useEffect(() => preloadScreens(), []);
+  useEffect(() => preloadScreens(location.hostname, import.meta.env.DEV), []);
 
   useEffect(() => {
     setDrawerOpen(false);

@@ -3,8 +3,9 @@ import { AnimatePresence } from "motion/react";
 import { Hand, Loader2 } from "../../icons";
 
 import { resolveAddressBarInput } from "@/lib/browser-address";
+import { createBrowserControl, type BrowserControl } from "@/lib/browser-control";
 import { browserStreamAccess, createPreviewStreamClient, type PreviewStreamClient, type PreviewStreamControl, type PreviewStreamInput } from "@/lib/browser-stream-client";
-import { createLiveStreamClient, type LiveResume } from "@/lib/browser-stream-v1";
+import { createLiveStreamClient, type LiveResume, type LiveStreamClient } from "@/lib/browser-stream-v1";
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
 import { phoneApp } from "@/lib/store-app";
@@ -17,7 +18,8 @@ import { browserScope, withBrowserScope } from "@/lib/team-browser";
 import { api, useStore, type Bot } from "@/state/store";
 import { BROWSER_HELD_ELSEWHERE } from "../../../shared/browser-held";
 import type { BrowserNav } from "../browser/ChromeRow";
-import { StreamSurface, type SurfaceConnect } from "../browser/StreamSurface";
+import { StreamSurface, type StreamSurfaceHandle, type SurfaceConnect } from "../browser/StreamSurface";
+import { SignInBanner } from "../SignInRequestCard";
 import { BrowserHeader, BrowserToolbar, FRAME_TONE, StartPill, TabStrip, tabName, type StripTab } from "./browser-strip";
 import { buttonCls } from "./rows";
 import { BOT_PANEL_ID } from "./side-panel";
@@ -89,16 +91,18 @@ export interface MorphFrom { top: number; left: number; width: number; height: n
  * width the page is too small to aim at, so a click on it expands. What it last showed is kept, so coming back paints at
  * once and goes live after.
  */
-export function LocalBrowserLive({ bot, from, started = false, onClosed, onEnded }: {
+export function LocalBrowserLive({ bot, from, started = false, signIn = null, onClosed, onEnded }: {
   bot: Bot; from?: MorphFrom | null;
   /** The person started this browser with Start browser, so a browser with nothing open yet shows the start page. */
   started?: boolean;
+  /** A sign-in card asked the person to take over this browser. */
+  signIn?: { url: string; site: string; nonce: number } | null;
   /** The person closed it. */
   onClosed: () => void;
   /** The browser closed while shown (idle, or elsewhere). */
   onEnded: () => void;
 }) {
-  const { state } = useStore();
+  const { state, dispatch } = useStore();
   const [fallback, setFallback] = useState(false);
   const stream = state.config?.browserEngine?.engine === "chrome" && !fallback;
   const scopedThread = browserScope(state.config?.team, bot.threadId).threadId;
@@ -119,21 +123,33 @@ export function LocalBrowserLive({ bot, from, started = false, onClosed, onEnded
   const [error, setError] = useState("");
   const [closing, setClosing] = useState(false);
   const [actedAt, setActedAt] = useState<number | null>(null);
+  const phone = phoneApp();
   const wide = usePanelWidth() > panelRest();
+  const interactive = wide || phone;
   const pageVisible = usePageVisible();
+  const signInHelp = state.computerControl?.[bot.id]?.help?.place === "browser" ? state.computerControl[bot.id]!.help! : null;
+  const signInOpen = Boolean(signInHelp);
+  const surfaceRef = useRef<StreamSurfaceHandle | null>(null);
   const clientRef = useRef<PreviewStreamClient | null>(null);
+  const browserControl = useRef<BrowserControl | null>(null);
   const controlRef = useRef<PreviewStreamControl | null>(null);
   const screenRef = useRef<HTMLDivElement | null>(null);
   const sectionRef = useRef<HTMLElement | null>(null);
   const frameRef = useRef<HTMLDivElement | null>(null);
   const insideRef = useRef<HTMLDivElement | null>(null);
   const resume = useRef<LiveResume & { key: string }>({ key: "", viewer: "" });
+  const keepNow = useRef(false);
+  keepNow.current = signInOpen || Boolean(signIn);
+  const signInHandled = useRef(0);
+  const signInUrl = useRef<string | null>(null);
   const personAt = useRef(0);
   const connectedAt = useRef(0);
   const tabsRef = useRef(tabs);
   tabsRef.current = tabs;
   const latest = useRef({ onClosed, onEnded });
   latest.current = { onClosed, onEnded };
+
+  useEffect(() => () => { browserControl.current?.close(); }, []);
 
   const connect = useCallback<SurfaceConnect>((target, events) => {
     // together: the person's input runs beside the bot's work, taking no hold
@@ -150,12 +166,62 @@ export function LocalBrowserLive({ bot, from, started = false, onClosed, onEnded
   const send = useCallback((input: PreviewStreamInput) => {
     personAt.current = Date.now();
     if (fixture) { setTabs((current) => fixtureInput(current, input)); return true; }
+    if (browserControl.current) {
+      if (controlRef.current?.controller === "another-viewer") { setError(BROWSER_HELD_ELSEWHERE); return false; }
+      setError("");
+      if (input.type === "releaseControl") { browserControl.current.handBack(); return true; }
+      if (input.type === "takeControl") { browserControl.current.takeControl(); return true; }
+      if (input.type === "restart" || input.type === "dialog") return clientRef.current?.send(input) ?? false;
+      browserControl.current.interact(input);
+      return true;
+    }
     if (clientRef.current?.send(input)) { setError(""); return true; }
     if (controlRef.current?.controller === "another-viewer") setError(BROWSER_HELD_ELSEWHERE);
     return false;
   }, [fixture]);
-  const onControl = useCallback((next: PreviewStreamControl | null) => { controlRef.current = next; setControl(next); }, []);
-  const onClient = useCallback((client: PreviewStreamClient | null) => { clientRef.current = client; }, []);
+  const onControl = useCallback((next: PreviewStreamControl | null) => {
+    controlRef.current = next;
+    setControl(next);
+    browserControl.current?.observe();
+    if (!browserControl.current && next?.canOperate && next.controller === "unclaimed" && keepNow.current) {
+      clientRef.current?.send({ type: "takeControl" });
+    }
+  }, []);
+  const onClient = useCallback((client: PreviewStreamClient | null) => {
+    clientRef.current = client;
+    browserControl.current?.close();
+    browserControl.current = null;
+    if (client && "transport" in client) {
+      const created = createBrowserControl({
+        transport: (client as LiveStreamClient).transport,
+        owned: () => controlRef.current?.controller === "you",
+        mine: () => controlRef.current?.owned === true,
+        onTakeStatus: () => {},
+        onError: setError,
+        onHalted: () => setError(t("browser.input.tooSlow")),
+      });
+      created.keep(keepNow.current);
+      browserControl.current = created;
+    }
+  }, []);
+  useEffect(() => { browserControl.current?.keep(signInOpen || Boolean(signIn)); }, [signInOpen, signIn]);
+  useEffect(() => {
+    if (!signIn || !connected || signInHandled.current === signIn.nonce) return;
+    signInHandled.current = signIn.nonce;
+    signInUrl.current = signIn.url;
+    browserControl.current?.keep(true);
+    browserControl.current?.takeControl();
+    if (!browserControl.current && controlRef.current?.canOperate && controlRef.current.controller === "unclaimed") {
+      clientRef.current?.send({ type: "takeControl" });
+    }
+  }, [signIn, connected]);
+  useEffect(() => {
+    const url = signInUrl.current;
+    if (!url || !connected || !heard) return;
+    signInUrl.current = null;
+    const current = tabsRef.current.find((tab) => tab.active) ?? tabsRef.current[0];
+    if (!current || blankPage(current.url)) send({ type: "navigate", url });
+  }, [connected, heard, send, signIn]);
   const botActed = useCallback(() => {
     const now = Date.now();
     if (now - personAt.current < PERSON_ECHO_MS || now - connectedAt.current < PERSON_ECHO_MS) return;
@@ -169,7 +235,8 @@ export function LocalBrowserLive({ bot, from, started = false, onClosed, onEnded
       // a browser with nothing open yet shows the start page, once; a failure there is the view's own, never a toast
       if (!opening.current.done && next.length > 0 && next.every((tab) => blankPage(tab.url)) && clientRef.current) {
         opening.current = { quiet: true, done: true };
-        clientRef.current.send({ type: "navigate", url: START_PAGE });
+        if (browserControl.current) browserControl.current.interact({ type: "navigate", url: START_PAGE });
+        else clientRef.current.send({ type: "navigate", url: START_PAGE });
         setTimeout(() => { opening.current.quiet = false; }, 15_000);
       } else if (next.some((tab) => !blankPage(tab.url))) opening.current.done = true;
       keepView(key, { tabs: next });
@@ -268,10 +335,11 @@ export function LocalBrowserLive({ bot, from, started = false, onClosed, onEnded
 
   return (
     <section ref={sectionRef} data-local-browser="live" data-wide={wide || undefined} aria-label={t("localBrowser.label", { name: bot.name })} className="flex flex-col gap-1.5">
-      <BrowserHeader bot={bot} headline={headline} wide={wide} closing={closing} failed={Boolean(error) && !closing} onExpand={toggleWide} onClose={closeBrowser} />
+      <BrowserHeader bot={bot} headline={headline} wide={wide} closing={closing} failed={Boolean(error) && !closing} ready={ready} onExpand={toggleWide} onClose={closeBrowser}
+        onKeyboard={phone ? () => surfaceRef.current?.focusPage() : undefined} />
       <div ref={frameRef} data-local-browser-frame="" className={cn("relative flex w-full flex-col overflow-hidden rounded-[16px] p-1", FRAME_TONE)}>
         <div ref={insideRef} className="flex min-w-0 flex-col">
-          {wide && <TabStrip bot={bot} tabs={strip} selected={selected} wide={wide} ready={ready} onSelect={select} onClose={closeTab} onNew={() => send({ type: "tabNew", url: START_PAGE })} />}
+          {interactive && <TabStrip bot={bot} tabs={strip} selected={selected} wide={wide} ready={ready} onSelect={select} onClose={closeTab} onNew={() => send({ type: "tabNew", url: START_PAGE })} />}
           <BrowserToolbar nav={shownNav} ready={ready}
             onHistory={(delta) => send({ type: "history", delta })}
             onReload={() => send({ type: "reload" })}
@@ -280,11 +348,12 @@ export function LocalBrowserLive({ bot, from, started = false, onClosed, onEnded
               if (url) send({ type: "navigate", url });
               else if (text.trim()) setError(t("browser.panel.enterAddress"));
             }} />
-          <div ref={screenRef} data-local-browser-page="" className="relative m-1 aspect-[16/10] overflow-hidden rounded-[12px] bg-composer">
+          <div ref={screenRef} data-local-browser-page="" className={cn("relative m-1 overflow-hidden rounded-[12px] bg-composer", phone ? "h-[46dvh] min-h-[300px] max-h-[480px]" : "aspect-[16/10]")}>
             {fixture ? <FixturePage tab={strip.find((tab) => tab.tabId === selected) ?? null} /> : pageVisible ? (
-              <div data-local-browser-surface={painted ? "painted" : "waiting"} className={cn("absolute inset-0 flex flex-col transition-opacity duration-150 ease-out", !wide && "pointer-events-none", !painted && "opacity-0")} inert={!wide || undefined}>
+              <div data-local-browser-surface={painted ? "painted" : "waiting"} className={cn("absolute inset-0 flex flex-col transition-opacity duration-150 ease-out", !interactive && "pointer-events-none", !painted && "opacity-0")} inert={!interactive || undefined}>
                 <StreamSurface
                   key={`${attempt}:${stream ? "stream" : "live"}:${bot.browserProfile ?? ""}`}
+                  ref={surfaceRef}
                   connect={connect}
                   input={send}
                   together
@@ -303,7 +372,7 @@ export function LocalBrowserLive({ bot, from, started = false, onClosed, onEnded
             {!fixture && !painted && lastFrame && (
               <img src={lastFrame} alt="" aria-hidden="true" data-local-browser-kept="" draggable={false} className="pointer-events-none absolute inset-0 size-full object-contain" />
             )}
-            {!wide && (
+            {!interactive && (
               // the page draws at a desktop's width, too small here to aim at: a click widens the panel, where it is used
               <button type="button" data-local-browser-action="open-page" aria-label={t("localBrowser.expand")} onClick={toggleWide}
                 className="absolute inset-0 z-10 cursor-zoom-in focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-focus max-md:cursor-default" />
@@ -316,6 +385,14 @@ export function LocalBrowserLive({ bot, from, started = false, onClosed, onEnded
           </div>
         </div>
       </div>
+      {signInHelp && (
+        <SignInBanner
+          help={signInHelp}
+          askerName={bot.name}
+          onError={(message) => setError(message ?? "")}
+          onSettled={phone ? () => dispatch?.({ type: "toggleSettings", open: false }) : undefined}
+        />
+      )}
       {heldTab && (
         <div data-local-browser-held-line="" className="flex min-h-8 items-center gap-2 ps-1">
           <Hand size={14} aria-hidden="true" className="shrink-0 text-ink-secondary" />
@@ -344,17 +421,20 @@ export function LocalBrowserClosed({ bot, pill, starting = false, onStart }: {
 
 /** What the person did that the server's next answer has not caught up with: started the browser, or closed it (or saw it
  * close). `confirmed`: the server has since said it is closed, so its own answer leads again. */
-type Override = { kind: "started"; from: MorphFrom | null } | { kind: "closed"; confirmed: boolean };
+type Override = { kind: "started"; from: MorphFrom | null; startPage: boolean } | { kind: "closed"; confirmed: boolean };
 
 
 /** A bot's browser on this computer in its Computer tab: the live browser while it runs; otherwise the Start browser pill. */
-export function LocalBrowserSection({ bot, steps, after, askFirst = null }: {
+export function LocalBrowserSection({ bot, steps, after, askFirst = null, onBrowserClosed }: {
   bot: Bot; steps?: ReactNode; after?: ReactNode;
   /** this Mac's permissions the bot needs, asked for when the person starts its browser while any is off */
   askFirst?: MacPermissionsBridge | null;
+  onBrowserClosed?: () => void;
 }) {
+  const { state, dispatch } = useStore();
   const { open, known } = useLocalBrowser(bot.id, bot.threadId, bot.browser !== false);
   const [override, setOverride] = useState<Override | null>(null);
+  const [signIn, setSignIn] = useState<{ url: string; site: string; nonce: number } | null>(null);
   const pill = useRef<HTMLButtonElement | null>(null);
   const below = useRef<HTMLDivElement | null>(null);
   const belowTop = useRef<number | null>(null);
@@ -365,7 +445,17 @@ export function LocalBrowserSection({ bot, steps, after, askFirst = null }: {
     const timer = setTimeout(() => setLate(true), 1_500);
     return () => clearTimeout(timer);
   }, [known]);
-  useEffect(() => { setOverride(null); }, [bot.id, bot.threadId]);
+  useEffect(() => { setOverride(null); setSignIn(null); }, [bot.id, bot.threadId]);
+  const consumedSignIn = useRef(0);
+  const requestedSignIn = state.signInFocus?.botId === bot.id && !state.signInFocus.consumed && state.signInFocus.place === "browser" ? state.signInFocus : null;
+  useEffect(() => {
+    if (!requestedSignIn || consumedSignIn.current === requestedSignIn.requestId) return;
+    consumedSignIn.current = requestedSignIn.requestId;
+    setOverride({ kind: "started", from: null, startPage: false });
+    setSignIn({ url: requestedSignIn.url, site: requestedSignIn.site, nonce: requestedSignIn.requestId });
+    if (!phoneApp()) setPanelWide(true);
+    dispatch?.({ type: "signInFocusConsumed", requestId: requestedSignIn.requestId });
+  }, [requestedSignIn, dispatch]);
   // the server's answer catching up: a started browser it reports open, a closed one it reports closed
   useEffect(() => {
     if (override?.kind === "started" && open) setOverride(null);
@@ -379,13 +469,13 @@ export function LocalBrowserSection({ bot, steps, after, askFirst = null }: {
     return () => clearTimeout(timer);
   }, [unconfirmed]);
 
-  const live = override?.kind === "started" ? true : override?.kind === "closed" && !override.confirmed ? false : open;
+  const live = override?.kind === "started" || Boolean(requestedSignIn) ? true : override?.kind === "closed" && !override.confirmed ? false : open;
 
   const openBrowser = () => {
     setAsking(false);
     const box = pill.current?.getBoundingClientRect();
     belowTop.current = below.current?.getBoundingClientRect().top ?? null;
-    setOverride({ kind: "started", from: box ? { top: box.top, left: box.left, width: box.width, height: box.height } : null });
+    setOverride({ kind: "started", from: box ? { top: box.top, left: box.left, width: box.width, height: box.height } : null, startPage: true });
   };
   // what the bot needs on this Mac and lacks is asked for first; once all of it is on, the browser opens
   const [asking, setAsking] = useState(false);
@@ -401,6 +491,7 @@ export function LocalBrowserSection({ bot, steps, after, askFirst = null }: {
   const ended = (kind: "closed" | "ended") => () => {
     belowTop.current = below.current?.getBoundingClientRect().top ?? null;
     setOverride({ kind: "closed", confirmed: kind === "ended" && !open });
+    if (kind === "closed") onBrowserClosed?.();
   };
 
   // what sits below moves with the browser opening or closing above it, instead of jumping
@@ -416,7 +507,7 @@ export function LocalBrowserSection({ bot, steps, after, askFirst = null }: {
   const wide = usePanelWidth() > panelRest();
   return (
     <>
-      {live ? <LocalBrowserLive key={`${bot.id}\n${bot.threadId ?? ""}`} bot={bot} from={from} started={override?.kind === "started"} onClosed={ended("closed")} onEnded={ended("ended")} />
+      {live ? <LocalBrowserLive key={`${bot.id}\n${bot.threadId ?? ""}`} bot={bot} from={from} started={override?.kind === "started" && override.startPage} signIn={signIn} onClosed={ended("closed")} onEnded={ended("ended")} />
         : known || late || override ? <LocalBrowserClosed bot={bot} pill={pill} starting={checking} onStart={start} /> : null}
       <div ref={below} className="mt-3 empty:hidden">{steps}{(known || late) && !wide && after}</div>
       <AnimatePresence>{asking && askFirst && <MacPermissionsDialog key="mac-permissions-dialog" bridge={askFirst} onClose={() => setAsking(false)} onAllowed={openBrowser}

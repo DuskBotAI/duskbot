@@ -36,9 +36,9 @@ export function SettingsRow({ icon, label, detail, value, onClick, href, chevron
     {value != null && <span className="max-w-[45%] shrink-0 truncate text-[15px] text-ink-secondary">{value}</span>}
     {chevron && <ChevronRight aria-hidden size={18} className="shrink-0 text-ink-tertiary" />}
   </>;
-  if (href) return <a href={href} onClick={onClick} className={className}>{content}</a>;
-  if (onClick) return <button type="button" onClick={onClick} className={className}>{content}</button>;
-  return <div className={className}>{content}</div>;
+  if (href) return <a href={href} onClick={onClick} data-settings-row="" className={className}>{content}</a>;
+  if (onClick) return <button type="button" onClick={onClick} data-settings-row="" className={className}>{content}</button>;
+  return <div data-settings-row="" className={className}>{content}</div>;
 }
 
 export function SettingsSwitch({ icon, label, detail, checked, onChange }: { icon?: ReactNode; label: string; detail?: string; checked: boolean; onChange: (checked: boolean) => void }) {

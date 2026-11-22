@@ -105,6 +105,17 @@ function AddNoteDialog({ bot, editor, onClose }: { bot: Bot; editor: ReturnType<
       error={sent ? error : null}
       onSave={() => { setSent(true); return add(); }}
       onClose={onClose}
+      nativeForm={{
+        fields: [{
+          id: "note",
+          label: t("botPanel.memory.addPlaceholder", { name: bot.name }),
+          value: draft,
+          kind: "multiline",
+          required: true,
+          autoFocus: true,
+        }],
+        onSubmit: (values) => add(values.note ?? ""),
+      }}
     >
       <FormField label={t("botPanel.memory.addPlaceholder", { name: bot.name })}>
         <textarea

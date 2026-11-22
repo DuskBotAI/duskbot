@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useContext, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { animate, motion, useMotionValue, useTransform, type AnimationPlaybackControls, type MotionValue } from "motion/react";
 import { ImageOff, LoaderCircle, RotateCcw, Share, X } from "../../icons";
 import { cn } from "@/lib/cn";
@@ -6,6 +6,8 @@ import { t } from "@/lib/i18n";
 import type { PhoneBridge, PhoneImage } from "@/lib/phone-bridge";
 import { haptic } from "../haptics";
 import { dur, ease, prefersReducedMotion, velocityTracker } from "../motion";
+import { frameOf } from "../native-glass";
+import { PlatformContext } from "../platform";
 import { closesOnBack } from "../Sheet";
 import { ViewerNote } from "./ViewerNote";
 import { clampPan, dismisses, doubleTapZoom, dragAxis, elasticPan, fitted, MAX_ZOOM, panLimit, pageStep, pinchTo, type Point, type Size } from "./image-gesture";
@@ -249,6 +251,11 @@ export function ImageViewer({ images, initialIndex, bridge, onClose }: { images:
     tapTimer.current = window.setTimeout(() => setChrome((on) => !on), DOUBLE_TAP_MS);
   };
 
+  const glass = useContext(PlatformContext)?.glass;
+  const nativeViewer = Boolean(glass?.viewer);
+  const closeBtnRef = useRef<HTMLButtonElement>(null);
+  const shareBtnRef = useRef<HTMLButtonElement>(null);
+  const shareRef = useRef<() => Promise<void>>(async () => {});
   const current = images[index]!;
   const share = async () => {
     if (sharing) return;
@@ -270,7 +277,47 @@ export function ImageViewer({ images, initialIndex, bridge, onClose }: { images:
       setSharing(false);
     }
   };
+  shareRef.current = share;
   const canShare = Boolean(bridge.shareFile || (current.openUrl && bridge.share));
+  const countText = images.length > 1 ? t("mobile.image.count", { index: index + 1, count: images.length }) : null;
+
+  useEffect(() => {
+    if (!glass?.viewer) return;
+    const sync = () => {
+      const closeEl = closeBtnRef.current;
+      if (!closeEl) return;
+      const closeRect = frameOf(closeEl);
+      if (closeRect.w <= 0 || closeRect.h <= 0) return;
+      const shareEl = canShare ? shareBtnRef.current : null;
+      const shareRect = shareEl ? frameOf(shareEl) : null;
+      glass.viewer!({
+        visible: chrome,
+        close: closeRect,
+        closeLabel: t("attach.close"),
+        share: shareRect && shareRect.w > 0 && shareRect.h > 0 ? shareRect : null,
+        shareLabel: t("mobile.image.share", { name: current.name }),
+        sharing,
+        countText,
+        countY: closeRect.y + closeRect.h / 2,
+      });
+    };
+    sync();
+    const frame = requestAnimationFrame(sync);
+    return () => cancelAnimationFrame(frame);
+  }, [glass, chrome, canShare, sharing, countText, current.name, stage.w, stage.h]);
+
+  useEffect(() => {
+    if (!glass?.viewer) return;
+    const stop = glass.onEvent((event) => {
+      if (event.type !== "viewerTap") return;
+      if (event.target === "close") closeRef.current();
+      else if (event.target === "share") void shareRef.current();
+    });
+    return () => {
+      stop();
+      glass.viewer!(null);
+    };
+  }, [glass]);
 
   return (
     <div ref={dialogRef} role="dialog" aria-modal="true" aria-label={t("attach.previewAria", { name: current.name })} tabIndex={-1} data-image-viewer=""
@@ -291,12 +338,12 @@ export function ImageViewer({ images, initialIndex, bridge, onClose }: { images:
           </motion.div>
         </motion.div>
       </div>
-      <div data-viewer-controls="" className={cn("viewer-chrome pointer-events-none absolute inset-x-0 top-0 flex items-center gap-3 ps-[calc(var(--m-safe-left)+16px)] pe-[calc(var(--m-safe-right)+16px)] pt-[calc(var(--m-safe-top)+8px)]", chrome ? "opacity-100" : "opacity-0")}>
-        <button type="button" onClick={() => close()} aria-label={t("attach.close")} className="viewer-key pointer-events-auto"><X size={20} /></button>
+      <div data-viewer-controls="" className={cn("viewer-chrome pointer-events-none absolute inset-x-0 top-0 flex items-center gap-3 ps-[calc(var(--m-safe-left)+16px)] pe-[calc(var(--m-safe-right)+16px)] pt-[calc(var(--m-safe-top)+8px)]", nativeViewer || !chrome ? "opacity-0" : "opacity-100")}>
+        <button ref={closeBtnRef} type="button" onClick={() => close()} aria-label={t("attach.close")} className={cn("viewer-key", nativeViewer ? "pointer-events-none" : "pointer-events-auto")}><X size={20} /></button>
         <span className="min-w-0 flex-1 truncate text-center text-[15px] font-semibold text-[rgb(245_245_245)] tabular-nums">
-          {images.length > 1 ? t("mobile.image.count", { index: index + 1, count: images.length }) : ""}
+          {countText ?? ""}
         </span>
-        {canShare ? <button type="button" onClick={() => void share()} disabled={sharing} aria-label={t("mobile.image.share", { name: current.name })} className="viewer-key pointer-events-auto">
+        {canShare ? <button ref={shareBtnRef} type="button" onClick={() => void share()} disabled={sharing} aria-label={t("mobile.image.share", { name: current.name })} className={cn("viewer-key", nativeViewer ? "pointer-events-none" : "pointer-events-auto")}>
           {sharing ? <LoaderCircle size={18} className="animate-spin" /> : <Share size={18} />}
         </button> : <span className="size-11" />}
       </div>

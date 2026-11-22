@@ -157,6 +157,22 @@ export default defineConfig({
     // the desktop window also runs this dev UI on a server's origin (electron/local-ui.mjs), so the client is told
     // where hot reload lives instead of reaching for the page's host
     hmr: { protocol: "ws", host: "127.0.0.1", clientPort: Number(process.env.DUSK_UI_PORT) || 5199 },
+    warmup: {
+      clientFiles: [
+        "./src/main.tsx",
+        "./src/App.tsx",
+        "./src/components/SettingsModal.tsx",
+        "./src/components/connect-apps/ConnectAppsWindow.tsx",
+        "./src/components/bot-panel/DetailsTab.tsx",
+        "./src/components/bot-panel/AdvancedTab.tsx",
+        "./src/components/bot-panel/AvatarEditorCard.tsx",
+        "./src/components/bot-panel/pages.tsx",
+        "./src/components/room-panel/RoomPanel.tsx",
+        "./src/components/KeyboardShortcutsModal.tsx",
+        "./src/components/ComputerPanel.tsx",
+        "./src/components/RemoteAgentSettingsPanel.tsx",
+      ],
+    },
     // packager output lands inside the repo — its HTML files must never
     // trigger dev full-page reloads
     watch: {

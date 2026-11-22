@@ -23,12 +23,14 @@ const SECRET_PREFIX = "dusk.";
 const LEGACY_SECRET_PREFIX = "omb.";
 import { BarcodeScanner, BarcodeFormat, GoogleBarcodeScannerModuleInstallState } from "@capacitor-mlkit/barcode-scanning";
 import { keychainSecrets } from "@/mobile/keychain";
+import { friendlyError } from "@/lib/plain-error";
 import { handleBack, type AppleCredential, type BackGestureEvent, type BarConfig, type CameraPermission, type CameraScanner, type DeliveredNotification, type MobileChrome, type MobilePlatform, type OrientationBridge, type ScanOverlay, type SystemMenuAction, type TurnActivityBridge } from "@/mobile/platform";
 import type { ControlPlace, SystemControl } from "@/lib/system-control";
+import type { SystemAlertOptions, SystemAlertOutcome, SystemDialogs, SystemFormOptions, SystemFormResult } from "@/lib/system-dialog";
 import type { NativeAction } from "@/mobile/phone-actions";
 import { shortcutAction, type ShortcutBot, type ShortcutsBridge } from "@/mobile/shortcuts";
 import type { TurnActivityAttributes, TurnActivityState } from "../../../shared/phone-activity";
-import type { GlassBridge, GlassEvent, GlassGlyphs, GlassState } from "@/mobile/native-glass";
+import type { FloatingPillGlassState, GlassBridge, GlassEvent, GlassGlyphs, GlassState, PullRefreshGlassState, SwipeReplyGlassState, TakeoverGlassState, ViewerGlassState } from "@/mobile/native-glass";
 import type { HomeGlassState } from "@/mobile/native-home-glass";
 import type { SlidePath } from "@/mobile/NavStack";
 import type { MenuBridge, NativeMenuArm, NativeMenuContent, NativeMenuEvent } from "@/mobile/native-menu";
@@ -104,6 +106,8 @@ interface ChromePlugin {
   addListener(event: "pictureTaken", listener: (event: { key?: string }) => void): Promise<PluginListenerHandle>;
   addListener(event: "sheetDismissed", listener: () => void): Promise<PluginListenerHandle>;
   addListener(event: "pagePopped", listener: (event: { tokens?: string[] }) => void): Promise<PluginListenerHandle>;
+  addListener(event: "searchChange", listener: (event: { text?: string }) => void): Promise<PluginListenerHandle>;
+  addListener(event: "searchCancel", listener: () => void): Promise<PluginListenerHandle>;
 }
 const DuskChrome = registerPlugin<ChromePlugin>("DuskChrome");
 
@@ -113,6 +117,8 @@ function nativeChrome(plugin: ChromePlugin, push = false): MobileChrome {
     setBar: (config) => { void quiet(plugin.setBar(config ? { ...config, hidden: false } : { hidden: true, leading: [], trailing: [] })); },
     onBarPress: (listener) => unsubscribe([plugin.addListener("barPress", ({ id }) => { if (typeof id === "string") listener(id); })]),
     onPictureTaken: (listener) => unsubscribe([plugin.addListener("pictureTaken", ({ key }) => { if (typeof key === "string") listener(key); })]),
+    onSearchChange: (listener) => unsubscribe([plugin.addListener("searchChange", ({ text }) => { if (typeof text === "string") listener(text); })]),
+    onSearchCancel: (listener) => unsubscribe([plugin.addListener("searchCancel", listener)]),
     freeze: () => quiet(plugin.freeze()),
     thaw: () => quiet(plugin.thaw()),
     presentSheet: (height) => quiet(plugin.presentSheet(height === null ? {} : { height })),
@@ -140,8 +146,67 @@ const DuskControls = registerPlugin<{
   addListener(event: "change", listener: (event: { id?: string; selected?: number; on?: boolean; value?: string }) => void): Promise<PluginListenerHandle>;
 }>("DuskControls");
 
+/** Native UIKit alerts and SwiftUI modal forms (ios/App/App/NativeDialogPlugin.swift). */
+interface DialogPlugin {
+  alert(options: SystemAlertOptions): Promise<{ outcome?: SystemAlertOutcome }>;
+  form(options: Omit<SystemFormOptions, "onSubmit"> & { id: string; asyncSubmit: boolean }): Promise<{ saved?: boolean; values?: Record<string, string> }>;
+  finishForm(options: { id: string; ok: boolean; error?: string }): Promise<void>;
+  dismissForm(): Promise<void>;
+  addListener(event: "formSubmit", listener: (event: { id?: string; values?: Record<string, string> }) => void): Promise<PluginListenerHandle>;
+}
+const DuskDialog = registerPlugin<DialogPlugin>("DuskDialog");
+
+let nextNativeFormId = 0;
+
+function nativeDialogs(plugin: DialogPlugin): SystemDialogs {
+  return {
+    async alert(options) {
+      try {
+        const result = await plugin.alert({
+          ...options,
+          cancelLabel: options.cancelLabel ?? t("common.cancel"),
+        });
+        return result.outcome === "confirm" || result.outcome === "alternative" ? result.outcome : "cancel";
+      } catch {
+        return "cancel";
+      }
+    },
+    async form(options): Promise<SystemFormResult> {
+      const id = `form-${++nextNativeFormId}`;
+      const { onSubmit, ...rest } = options;
+      const stop = onSubmit
+        ? unsubscribe([plugin.addListener("formSubmit", (event) => {
+          if (event.id !== id) return;
+          void Promise.resolve().then(() => onSubmit(event.values ?? {})).then(
+            (error) => plugin.finishForm({ id, ok: !error, ...(error ? { error } : {}) }),
+            (cause) => plugin.finishForm({ id, ok: false, error: friendlyError(cause) }),
+          ).catch(() => {});
+        })])
+        : null;
+      try {
+        const result = await plugin.form({
+          ...rest,
+          id,
+          asyncSubmit: Boolean(onSubmit),
+          saveLabel: options.saveLabel ?? t("common.save"),
+          cancelLabel: options.cancelLabel ?? t("common.cancel"),
+        });
+        return result.saved === true ? { saved: true, values: result.values ?? {} } : { saved: false };
+      } catch {
+        return { saved: false };
+      } finally {
+        stop?.();
+      }
+    },
+    dismissForm() {
+      void plugin.dismissForm().catch(() => {});
+    },
+  };
+}
+
 /** The app's own look on the system's surfaces (ios/App/App/AppearancePlugin.swift). */
 const DuskAppearance = registerPlugin<{ set(options: { scheme: "system" | "light" | "dark" }): Promise<void> }>("DuskAppearance");
+const DuskClipboard = registerPlugin<{ read(): Promise<{ text?: string }>; write(options: { text: string }): Promise<void> }>("DuskClipboard");
 
 /** The app's own dictation(ios/App/App/SpeechRecognizerPlugin.swift, android .../SpeechRecognizerPlugin.java): the
  * phone's recognizer, offline where it can be. Events carry the session number `start` was given. */
@@ -161,7 +226,17 @@ const DuskSpeech = registerPlugin<SpeechPlugin>("DuskSpeech");
 
 /** The app's own Liquid Glass chat chrome (ios/App/App/GlassChromePlugin.swift), iOS 26 and later. */
 interface GlassPlugin {
-  supported(): Promise<{ supported: boolean; acks?: boolean; jump?: boolean; reply?: boolean }>;
+  supported(): Promise<{
+    supported: boolean;
+    acks?: boolean;
+    jump?: boolean;
+    reply?: boolean;
+    takeover?: boolean;
+    swipeReply?: boolean;
+    pullRefresh?: boolean;
+    viewer?: boolean;
+    pill?: boolean;
+  }>;
   update(state: GlassState): Promise<void>;
   setText(options: { text: string; seq: number }): Promise<void>;
   clearText(options: { id: number }): Promise<void>;
@@ -172,6 +247,11 @@ interface GlassPlugin {
   slide(options: { path: SlidePath | null; at?: number }): Promise<void>;
   glyphs(): Promise<GlassGlyphs>;
   home(options: { state: HomeGlassState | null }): Promise<void>;
+  takeover(options: { state: TakeoverGlassState | null }): Promise<void>;
+  swipeReply(options: { state: SwipeReplyGlassState | null; instant?: boolean }): Promise<void>;
+  pullRefresh(options: { state: PullRefreshGlassState | null; instant?: boolean }): Promise<void>;
+  viewer(options: { state: ViewerGlassState | null }): Promise<void>;
+  pill(options: { slot: "top" | "bottom"; state: FloatingPillGlassState | null; clearId?: string; instant?: boolean }): Promise<void>;
   addListener(event: "glass", listener: (event: GlassEvent | { type: "paste"; files: NativeFile[] }) => void): Promise<PluginListenerHandle>;
 }
 const DuskGlass = registerPlugin<GlassPlugin>("DuskGlass");
@@ -262,7 +342,17 @@ export async function nativeFiles(list: readonly NativeFile[], read: typeof fetc
   return files.filter((file): file is File => file !== null);
 }
 
-export function glassBridge(plugin: GlassPlugin, acks = false, jump = false, reply = false): GlassBridge {
+export function glassBridge(
+  plugin: GlassPlugin,
+  acks = false,
+  jump = false,
+  reply = false,
+  takeover = false,
+  swipeReply = false,
+  pullRefresh = false,
+  viewer = false,
+  pill = false,
+): GlassBridge {
   const quiet = (work: Promise<unknown>) => { void work.catch(() => {}); };
   return {
     acks,
@@ -278,6 +368,14 @@ export function glassBridge(plugin: GlassPlugin, acks = false, jump = false, rep
     slide: (path, at) => quiet(plugin.slide({ path, at })),
     glyphs: () => plugin.glyphs().catch(() => ({})),
     home: (state) => quiet(plugin.home({ state })),
+    ...(takeover ? { takeover: (state: TakeoverGlassState | null) => quiet(plugin.takeover({ state })) } : {}),
+    ...(swipeReply ? { swipeReply: (state: SwipeReplyGlassState | null, instant?: boolean) => quiet(plugin.swipeReply({ state, ...(instant ? { instant } : {}) })) } : {}),
+    ...(pullRefresh ? { pullRefresh: (state: PullRefreshGlassState | null, instant?: boolean) => quiet(plugin.pullRefresh({ state, ...(instant ? { instant } : {}) })) } : {}),
+    ...(viewer ? { viewer: (state: ViewerGlassState | null) => quiet(plugin.viewer({ state })) } : {}),
+    ...(pill ? {
+      pill: (slot: "top" | "bottom", state: FloatingPillGlassState | null, clearId?: string, instant?: boolean) =>
+        quiet(plugin.pill({ slot, state, ...(clearId ? { clearId } : {}), ...(instant ? { instant } : {}) })),
+    } : {}),
     onEvent: (listener) => unsubscribe([plugin.addListener("glass", (event) => {
       if (event.type === "paste") void nativeFiles(event.files).then(attachToComposer);
       else listener(event);
@@ -944,7 +1042,19 @@ export async function nativePlatform(): Promise<MobilePlatform> {
     native: true,
     appVersion: info?.version || __APP_VERSION__,
     deviceName: () => kind === "ios" ? "iPhone" : "Android phone",
-    glass: glass?.supported ? glassBridge(DuskGlass, glass.acks === true, glass.jump === true, glass.reply === true) : undefined,
+    glass: glass?.supported
+      ? glassBridge(
+          DuskGlass,
+          glass.acks === true,
+          glass.jump === true,
+          glass.reply === true,
+          glass.takeover === true,
+          glass.swipeReply === true,
+          glass.pullRefresh === true,
+          glass.viewer === true,
+          glass.pill === true,
+        )
+      : undefined,
     menu: menu?.supported ? menuBridge(DuskMenu) : undefined,
     orientation: Capacitor.isPluginAvailable("DuskOrientation") ? orientationBridge(DuskOrientation) : undefined,
     haptic(type) {
@@ -1059,6 +1169,7 @@ export async function nativePlatform(): Promise<MobilePlatform> {
         if (typeof id === "string" && next !== undefined) listener(id, next);
       })]),
     } : undefined,
+    dialogs: kind === "ios" && Capacitor.isPluginAvailable("DuskDialog") ? nativeDialogs(DuskDialog) : undefined,
     showMenu: kind === "ios" && Capacitor.isPluginAvailable("DuskPulldown") ? async (anchor, items) => {
       try { return (await DuskPulldown.show({ ...anchor, items, cancel: t("mobile.settings.cancel") }))?.key ?? null; } catch { return null; }
     } : undefined,
@@ -1077,7 +1188,30 @@ export async function nativePlatform(): Promise<MobilePlatform> {
     } : undefined,
     camera: kind === "ios" ? (Capacitor.isPluginAvailable("QrScanner") ? scannerCamera(iosScanner) : undefined) : scannerCamera(androidScanner),
     async readClipboard() {
+      if (kind === "ios" && Capacitor.isPluginAvailable("DuskClipboard")) {
+        try {
+          const { text } = await DuskClipboard.read();
+          return typeof text === "string" ? text : null;
+        } catch {
+          return null;
+        }
+      }
       try { return await navigator.clipboard?.readText() ?? null; } catch { return null; }
+    },
+    async writeClipboard(text) {
+      if (kind === "ios" && Capacitor.isPluginAvailable("DuskClipboard")) {
+        try {
+          await DuskClipboard.write({ text });
+          return true;
+        } catch {}
+      }
+      try {
+        if (navigator.clipboard?.writeText) {
+          await navigator.clipboard.writeText(text);
+          return true;
+        }
+      } catch {}
+      return false;
     },
     // Capacitor 8 hands a top-level navigation off the app's own origin to the system (Mail for mailto:); the in-app
     // browser view takes web pages only

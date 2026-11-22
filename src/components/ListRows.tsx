@@ -4,6 +4,7 @@ import { Check, ChevronRight, Copy, type GlyphIcon } from "../icons";
 import { cn } from "@/lib/cn";
 import { useCopyFeedback } from "@/lib/copy-text";
 import { t } from "@/lib/i18n";
+import { plainDialogText, systemDialogs, type SystemFormOptions } from "@/lib/system-dialog";
 import { BAR_RANK, useChrome, useNativeBar, useSheetPushDepth } from "@/mobile/chrome";
 import { useNativeTrail } from "@/mobile/native-push";
 import type { MobileChrome } from "@/mobile/platform";
@@ -571,7 +572,7 @@ function WebOwnSheetPane({ title, footer, children, ...rest }: { title: string; 
 
 /** Grok's compact form dialog for typing something in (a name, a key, a login): fields, then a quiet Cancel and an ink
  * Save on the right. Always its own sheet, even when opened from inside a railed sheet's pane. */
-export function FormDialog({ title, description, saveLabel, cancelLabel, canSave = true, busy = false, error, width = 400, onSave, onClose, children, ...rest }: {
+export function FormDialog({ title, description, saveLabel, cancelLabel, canSave = true, busy = false, error, width = 400, onSave, onClose, nativeForm, children, ...rest }: {
   title: ReactNode;
   description?: ReactNode;
   saveLabel?: string;
@@ -583,15 +584,37 @@ export function FormDialog({ title, description, saveLabel, cancelLabel, canSave
   /** without it the dialog has only a Done that closes it, for fields that save as they change */
   onSave?: () => void | Promise<unknown>;
   onClose: () => void;
+  /** When supplied on iOS, presents a native SwiftUI modal Form sheet instead of a web dialog. */
+  nativeForm?: Omit<SystemFormOptions, "title" | "description" | "saveLabel" | "cancelLabel"> & {
+    onSaved?: (values: Record<string, string>) => void;
+  };
   children: ReactNode;
   "data-panel-modal"?: string;
 }) {
   const formId = useId();
-  const submit = (event: FormEvent) => {
-    event.preventDefault();
+  const dialogs = systemDialogs();
+  const nativeTitle = dialogs && nativeForm ? plainDialogText(title)?.trim() : null;
+  if (dialogs && nativeForm && nativeTitle) {
+    const nativeDesc = description ? plainDialogText(description)?.trim() || undefined : undefined;
+    return (
+      <NativeFormDialog
+        title={nativeTitle}
+        description={nativeDesc}
+        saveLabel={saveLabel}
+        cancelLabel={cancelLabel}
+        nativeForm={nativeForm}
+        onClose={onClose}
+      />
+    );
+  }
+  const runSave = () => {
     if (!onSave) { onClose(); return; }
     if (!canSave || busy) return;
     void onSave();
+  };
+  const submit = (event: FormEvent) => {
+    event.preventDefault();
+    runSave();
   };
   return (
     <DialogPane.Provider value={false}>
@@ -601,6 +624,12 @@ export function FormDialog({ title, description, saveLabel, cancelLabel, canSave
         description={description}
         width={width}
         onClose={onClose}
+        nativeAction={{
+          label: onSave ? saveLabel ?? t("common.save") : t("common.done"),
+          role: onSave ? "confirm" : "done",
+          disabled: Boolean(onSave) && (!canSave || busy),
+          onPress: runSave,
+        }}
         footer={(
           <>
             {onSave && <button type="button" className={mdSecondaryCls} onClick={onClose}>{cancelLabel ?? t("common.cancel")}</button>}
@@ -615,6 +644,46 @@ export function FormDialog({ title, description, saveLabel, cancelLabel, canSave
       </GrokDialog>
     </DialogPane.Provider>
   );
+}
+
+function NativeFormDialog({ title, description, saveLabel, cancelLabel, nativeForm, onClose }: {
+  title: string;
+  description?: string;
+  saveLabel?: string;
+  cancelLabel?: string;
+  nativeForm: Omit<SystemFormOptions, "title" | "description" | "saveLabel" | "cancelLabel"> & {
+    onSaved?: (values: Record<string, string>) => void;
+  };
+  onClose: () => void;
+}) {
+  const latest = useRef({ nativeForm, onClose });
+  latest.current = { nativeForm, onClose };
+
+  useEffect(() => {
+    const dialogs = systemDialogs();
+    if (!dialogs) return;
+    let alive = true;
+    const { onSaved: _, onSubmit, fields, requireChange } = latest.current.nativeForm;
+    void dialogs.form({
+      title,
+      description,
+      saveLabel,
+      cancelLabel,
+      fields,
+      requireChange,
+      ...(onSubmit ? { onSubmit: (values) => latest.current.nativeForm.onSubmit?.(values) } : {}),
+    }).then((result) => {
+      if (!alive) return;
+      if (result.saved) latest.current.nativeForm.onSaved?.(result.values);
+      latest.current.onClose();
+    });
+    return () => {
+      alive = false;
+      dialogs.dismissForm?.();
+    };
+  }, [title, description, saveLabel, cancelLabel]);
+
+  return null;
 }
 
 /** A labelled field inside a FormDialog. */

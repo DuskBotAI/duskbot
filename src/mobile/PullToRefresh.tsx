@@ -1,8 +1,10 @@
-import { useCallback, useRef, useState, type ReactNode, type RefObject } from "react";
+import { useCallback, useContext, useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 import { motion, useMotionValue, useMotionValueEvent, useTransform, type MotionValue } from "motion/react";
 import { haptic } from "./haptics";
 import { ownsDrag, useDrag } from "./gesture";
 import { rubberband, settleTo } from "./motion";
+import { isGlassDark } from "./native-glass";
+import { PlatformContext } from "./platform";
 
 const THRESHOLD = 72;
 const HOLD = 60;
@@ -17,24 +19,62 @@ export function PullToRefresh({ scrollRef, onRefresh, indicator, children, top =
   /** Where the indicator sits, below the floating bar. */
   top?: number | string;
 }) {
+  const glass = useContext(PlatformContext)?.glass;
+  const nativeOrb = glass?.pullRefresh;
+  const anchorRef = useRef<HTMLDivElement>(null);
   const pull = useMotionValue(0);
   const progress = useTransform(pull, [0, THRESHOLD], [0, 1], { clamp: false });
   const indicatorOpacity = useTransform(pull, [8, 40], [0, 1]);
   const [refreshing, setRefreshing] = useState(false);
   const armed = useRef(false);
   const busy = useRef(false);
+  const nativeActive = useRef(false);
+
+  const syncNative = useCallback((value: number, isRefreshing: boolean) => {
+    if (!nativeOrb) return;
+    if (value <= 1 && !isRefreshing) {
+      if (nativeActive.current) {
+        nativeActive.current = false;
+        nativeOrb(null);
+      }
+      return;
+    }
+    nativeActive.current = true;
+    const baseTop = anchorRef.current?.getBoundingClientRect().top || 108;
+    const y = Math.round((baseTop + Math.min(34, Math.max(12, value * 0.5))) * 2) / 2;
+    nativeOrb({
+      y,
+      progress: Math.max(0, value / THRESHOLD),
+      armed: armed.current,
+      refreshing: isRefreshing,
+      dark: isGlassDark(),
+    });
+  }, [nativeOrb]);
+
+  useEffect(() => () => {
+    if (nativeActive.current) {
+      nativeActive.current = false;
+      nativeOrb?.(null, true);
+    }
+  }, [nativeOrb]);
 
   useMotionValueEvent(pull, "change", (value) => {
-    if (busy.current) return;
-    if (value >= THRESHOLD && !armed.current) { armed.current = true; haptic("refresh"); }
-    else if (value < THRESHOLD - 12 && armed.current) armed.current = false;
+    if (!busy.current) {
+      if (value >= THRESHOLD && !armed.current) { armed.current = true; haptic("refresh"); }
+      else if (value < THRESHOLD - 12 && armed.current) armed.current = false;
+    }
+    syncNative(value, busy.current);
   });
 
   const finish = useCallback(() => {
     busy.current = false;
     setRefreshing(false);
+    if (nativeOrb && nativeActive.current) {
+      nativeActive.current = false;
+      nativeOrb(null);
+    }
     settleTo(pull, 0, 0);
-  }, [pull]);
+  }, [pull, nativeOrb]);
 
   useDrag(scrollRef, {
     axis: "y",
@@ -45,6 +85,7 @@ export function PullToRefresh({ scrollRef, onRefresh, indicator, children, top =
         busy.current = true;
         armed.current = false;
         setRefreshing(true);
+        syncNative(HOLD, true);
         settleTo(pull, HOLD, 0);
         const started = performance.now();
         // a refresh that answers at once still shows its beat, so the hand sees it happened
@@ -58,7 +99,7 @@ export function PullToRefresh({ scrollRef, onRefresh, indicator, children, top =
 
   return (
     <>
-      <motion.div aria-hidden={!refreshing} role="status" className="pointer-events-none absolute inset-x-0 z-0 flex justify-center" style={{ top, opacity: refreshing ? 1 : indicatorOpacity }}>
+      <motion.div ref={anchorRef} aria-hidden={!refreshing} role="status" className="pointer-events-none absolute inset-x-0 z-0 flex justify-center" style={{ top, opacity: nativeOrb ? 0 : refreshing ? 1 : indicatorOpacity }}>
         {indicator(progress, refreshing)}
       </motion.div>
       <motion.div className="relative z-[1] bg-app" style={{ y: pull }}>

@@ -4186,10 +4186,12 @@ describe("ClaudeDriver turns (fake CLI)", () => {
     const cli = (version: [number, number, number]) => (flag: Parameters<typeof claudeCliSupports>[1]) => claudeCliSupports(version, flag);
     expect(backgroundCallArgs({ ...base, supports: cli([2, 1, 296]), isolated: true })).toEqual([
       "-p", "--model", "claude-haiku-5-5", "--output-format", "text", "--settings", BACKGROUND_SETTINGS,
-      "--tools", "", "--no-session-persistence", "--strict-mcp-config", "--setting-sources", "project",
+      "--tools", "", "--no-session-persistence", "--disable-slash-commands", "--strict-mcp-config", "--setting-sources", "project",
     ]);
-    // DUSK_CLAUDE_INHERIT_USER_CONFIG keeps the person's own setup, still without tools
-    expect(backgroundCallArgs({ ...base, supports: cli([2, 1, 296]), isolated: false })).not.toContain("--strict-mcp-config");
+    // DUSK_CLAUDE_INHERIT_USER_CONFIG keeps the person's own setup, still without tools or slash commands
+    const inherited = backgroundCallArgs({ ...base, supports: cli([2, 1, 296]), isolated: false });
+    expect(inherited).not.toContain("--strict-mcp-config");
+    expect(inherited).toContain("--disable-slash-commands");
     expect(backgroundCallArgs({ ...base, supports: cli([1, 0, 100]), isolated: true })).toEqual([
       "-p", "--model", "claude-haiku-5-5", "--output-format", "text", "--settings", BACKGROUND_SETTINGS, "--strict-mcp-config",
     ]);

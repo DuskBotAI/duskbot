@@ -228,7 +228,7 @@ export function SidebarFeedbackRow() {
   const hidden = useSidebarFeedbackHidden();
   const title = t("settings.sidebarFeedback.title");
   return (
-    <SettingRow icon="bubble" title={title} subtitle={t("settings.sidebarFeedback.hint")}>
+    <SettingRow icon="megaphone" title={title} subtitle={t("settings.sidebarFeedback.hint")}>
       <Switch
         checked={!hidden}
         aria-label={title}

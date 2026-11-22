@@ -15,8 +15,11 @@ describe("setting glyphs", () => {
 
   it("fills a closed outline and leaves an open one empty", () => {
     const person = renderToStaticMarkup(createElement(SettingGlyph, { name: "person" }));
+    const megaphone = renderToStaticMarkup(createElement(SettingGlyph, { name: "megaphone" }));
     const sliders = renderToStaticMarkup(createElement(SettingGlyph, { name: "sliders" }));
     expect(person).toContain('fill="#fbd3e4"');
+    expect(megaphone).toContain('fill="#fbd3e4"');
+    expect(megaphone).toContain('fill="#d0679a"');
     expect(sliders).not.toContain('fill="#e2d6fb"');
   });
 });

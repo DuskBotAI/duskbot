@@ -36,11 +36,11 @@ export const SectionRows = memo(function SectionRows({ open, animate, children }
     <div
       data-sidebar-section-rows=""
       className={cn(
-        "grid transition-[grid-template-rows,opacity] duration-200 ease-[cubic-bezier(0.165,0.84,0.44,1)] motion-reduce:transition-none",
+        "grid grid-cols-[minmax(0,1fr)] transition-[grid-template-rows,opacity] duration-200 ease-[cubic-bezier(0.165,0.84,0.44,1)] motion-reduce:transition-none",
         expanded ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0",
       )}
     >
-      <div className={cn("flex min-h-0 flex-col gap-1", expanded ? "overflow-visible" : "overflow-hidden")}>
+      <div className={cn("flex min-h-0 min-w-0 flex-col gap-1", expanded ? "overflow-visible" : "overflow-hidden")}>
         {open ? children : lastChildren.current}
       </div>
     </div>

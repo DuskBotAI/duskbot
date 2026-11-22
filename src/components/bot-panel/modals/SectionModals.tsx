@@ -74,7 +74,52 @@ function ProfileDialog({ bot, focus, onSave, onClose }: {
   if (title !== (bot.title ?? "")) patch.title = title;
   if (description !== (bot.description ?? "")) patch.description = description;
   return (
-    <FormDialog data-panel-modal="identity-form" title={t("botPanel.sheet.profile")} canSave={Boolean(name.trim()) && Object.keys(patch).length > 0} onSave={() => onSave(patch)} onClose={onClose}>
+    <FormDialog
+      data-panel-modal="identity-form"
+      title={t("botPanel.sheet.profile")}
+      canSave={Boolean(name.trim()) && Object.keys(patch).length > 0}
+      onSave={() => onSave(patch)}
+      onClose={onClose}
+      nativeForm={{
+        fields: [
+          {
+            id: "name",
+            label: t("botPanel.ui.botSettingsIdentityName"),
+            value: bot.name,
+            required: true,
+            maxLength: BOT_PROFILE_LIMITS.name,
+            autoFocus: focus === "name",
+          },
+          {
+            id: "title",
+            label: t("botPanel.ui.botSettingsIdentityTitle"),
+            value: bot.title ?? "",
+            placeholder: t("botPanel.ui.botSettingsIdentityTitlePlaceholder"),
+            maxLength: BOT_PROFILE_LIMITS.title,
+            autoFocus: focus === "title",
+          },
+          {
+            id: "description",
+            label: t("botPanel.sheet.blurb"),
+            value: bot.description ?? "",
+            placeholder: t("botPanel.sheet.blurbHint"),
+            kind: "multiline",
+            maxLength: BOT_PROFILE_LIMITS.description,
+            autoFocus: focus === "description",
+          },
+        ],
+        onSaved: (values) => {
+          const nextName = values.name ?? "";
+          const nextTitle = values.title ?? "";
+          const nextDescription = values.description ?? "";
+          const nextPatch: Partial<Pick<Bot, ProfileField>> = {};
+          if (nextName.trim() && nextName !== bot.name) nextPatch.name = nextName;
+          if (nextTitle !== (bot.title ?? "")) nextPatch.title = nextTitle;
+          if (nextDescription !== (bot.description ?? "")) nextPatch.description = nextDescription;
+          if (Object.keys(nextPatch).length > 0) onSave(nextPatch);
+        },
+      }}
+    >
       <FormField label={t("botPanel.ui.botSettingsIdentityName")}>
         <input data-autofocus={focus === "name" || undefined} aria-label={t("botPanel.ui.botSettingsIdentityName")} maxLength={BOT_PROFILE_LIMITS.name} value={name} onChange={(event) => setName(event.target.value)} className={textFieldCls} />
       </FormField>

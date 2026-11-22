@@ -170,6 +170,18 @@ describe("the v1 live view on the new browser", () => {
     expect(backend.chromes).toHaveLength(1);
   });
 
+  it("copies selected text on request and pushes a clipboard event to the phone", async () => {
+    const { open, backend } = setup();
+    const { sse, action } = await open();
+    await action({ type: "take" });
+    expect(await action({ type: "copy" })).toEqual({ ok: true });
+    expect(backend.chrome.sent).toContainEqual(expect.objectContaining({
+      method: "Input.dispatchKeyEvent",
+      params: expect.objectContaining({ type: "rawKeyDown", key: "c", code: "KeyC", commands: ["copy"] }),
+    }));
+    expect(sse.events.filter((event) => event.type === "clipboard").map((event) => event.data)).toEqual([{ text: "" }]);
+  });
+
   it("restarts the browser for the person, closes every view of it, and the bot hears it on its next call", async () => {
     const { open, service, backend } = setup();
     const { sse, action } = await open();

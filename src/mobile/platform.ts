@@ -7,6 +7,7 @@ import { friendlyError } from "@/lib/plain-error";
 import type { GlassBridge } from "./native-glass";
 import type { MenuBridge } from "./native-menu";
 import type { SystemControls } from "@/lib/system-control";
+import type { SystemDialogs } from "@/lib/system-dialog";
 
 export type HapticKind = "light" | "soft" | "medium" | "selection" | "error" | "success";
 
@@ -85,13 +86,20 @@ export interface BarItem {
   label: string;
   symbol?: string;
   title?: string;
-  role?: "close";
+  role?: "close" | "cancel" | "done" | "confirm";
   badge?: number;
   disabled?: boolean;
   picture?: { key: string; data?: string; url?: string; x?: number; y?: number; width?: number; height?: number };
 }
 
-export interface BarConfig { title?: string; status?: string; leading: BarItem[]; trailing: BarItem[] }
+export interface BarSearchConfig {
+  key: string;
+  placeholder: string;
+  value?: string;
+  autoFocus?: boolean;
+}
+
+export interface BarConfig { title?: string; status?: string; leading: BarItem[]; trailing: BarItem[]; search?: BarSearchConfig }
 
 /** The system's own bar and sheet around the page (iOS 26): bar buttons in the system's glass, and a sheet that is the
  * page itself, presented by the system over a picture of what it left. */
@@ -100,6 +108,10 @@ export interface MobileChrome {
   setBar(config: BarConfig | null): void;
   onBarPress(listener: (id: string) => void): () => void;
   onPictureTaken(listener: (key: string) => void): () => void;
+  /** Fired when text in the navigation bar's native UISearchController changes. */
+  onSearchChange?(listener: (text: string) => void): () => void;
+  /** Fired when the person taps Cancel on the navigation bar's native UISearchController. */
+  onSearchCancel?(listener: () => void): () => void;
   /** Holds a picture of the screen over the page, so the page can redraw itself underneath unseen, until `thaw`. */
   freeze(): Promise<void>;
   thaw(): Promise<void>;
@@ -225,9 +237,12 @@ export interface MobilePlatform {
   chrome?: MobileChrome;
   /** The system's own segmented control and switch (iOS 26), in the page. */
   controls?: SystemControls;
+  /** Native UIKit alerts and SwiftUI modal form sheets (iOS). */
+  dialogs?: SystemDialogs;
   scanQr?(): Promise<ScanResult | null>;
   camera?: CameraScanner;
   readClipboard?(): Promise<string | null>;
+  writeClipboard?(text: string): Promise<boolean>;
   openExternal(url: string): Promise<void>;
   /** Closes the in-app browser sheet openExternal showed, if one is up. */
   closeBrowser?(): void;
@@ -383,6 +398,15 @@ export function webPlatform(): MobilePlatform {
     } : undefined,
     async readClipboard() {
       try { return await navigator.clipboard?.readText() ?? null; } catch { return null; }
+    },
+    async writeClipboard(text) {
+      try {
+        if (navigator.clipboard?.writeText) {
+          await navigator.clipboard.writeText(text);
+          return true;
+        }
+      } catch {}
+      return false;
     },
     openExternal: async (url) => { window.open(url, "_blank", "noopener"); },
     share: typeof navigator !== "undefined" && "share" in navigator

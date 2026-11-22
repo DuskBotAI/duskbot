@@ -98,8 +98,17 @@ export function takeLines(buffer: string): { lines: string[]; rest: string } {
   return { lines: parts.map((line) => line.replace(/\r$/u, "")), rest };
 }
 
+// Antigravity CLI 1.5+ enables its built-in skills and customizations by default (`--include-default-customizations=true`),
+// injecting Antigravity-specific workflows and prompts into dusk bot sessions unless explicitly disabled.
 export function antigravityAcpArgs(profileDirectory: string): string[] {
-  return ["acp", "--gemini-dir", profileDirectory, "--app-data-dir", ANTIGRAVITY_APP_DATA_DIR];
+  return [
+    "acp",
+    "--gemini-dir",
+    profileDirectory,
+    "--app-data-dir",
+    ANTIGRAVITY_APP_DATA_DIR,
+    "--include-default-customizations=false",
+  ];
 }
 
 /** Only fixed, allowlisted hints leave stderr: native output can carry OAuth codes in any format. */

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { runWaitingOnYou, type Automation } from "@/lib/automations";
 import { t } from "@/lib/i18n";
 import { copyText } from "@/lib/copy-text";
+import { confirmWithSystem } from "@/lib/system-dialog";
 import type { RoutineRun } from "@/lib/routines";
 import { keptWebhookAddress, loadWebhookCredentials, removeWebhookCredential, saveWebhookCredential, webhookCredentialStore } from "@/lib/webhook-credentials";
 import type { WebhookCredential } from "@/lib/webhooks";
@@ -47,7 +48,7 @@ export function useAutomationActions() {
 
   /** Asks once (a person deleting their own automation), then deletes it; `null` when the caller already asked. */
   const remove = async (automation: Automation, question: string | null): Promise<boolean> => {
-    if (question !== null && !window.confirm(question)) return false;
+    if (question !== null && !(await confirmWithSystem(question, t("common.delete"), { cancelLabel: t("common.cancel") }))) return false;
     if (automation.kind === "schedule") {
       await attempt(`delete:${automation.id}`, async () => {
         await api(`/api/routines/${automation.id}`, { method: "DELETE" });

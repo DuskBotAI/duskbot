@@ -5,6 +5,7 @@ import { parseComputerHelp } from "@/lib/computer-control";
 import { trailHeaders } from "@/lib/trail";
 import { friendlyError } from "@/lib/plain-error";
 import { t } from "@/lib/i18n";
+import { phoneApp } from "@/lib/store-app";
 import { api, useStore } from "@/state/store";
 import { SCREEN_GROW_MS } from "./ComputerFullscreen";
 import { useComputerTakeover } from "./computer-takeover";
@@ -87,6 +88,7 @@ export function useSignInTakeover({ botId, threadId, name, place, poster, onDone
     wanted.current = true;
     if (target) {
       setShown(true);
+      if (phoneApp()) takeover.setExpanded(true);
       if (ready) void take();
       return;
     }
@@ -100,6 +102,7 @@ export function useSignInTakeover({ botId, threadId, name, place, poster, onDone
       if (!next) throw new Error(t("computer.err.openDesktop"));
       setTarget(next);
       setShown(true);
+      if (phoneApp()) takeover.setExpanded(true);
     } catch (cause) {
       if (controller.signal.aborted) return;
       wanted.current = false;
@@ -138,10 +141,11 @@ export function useSignInTakeover({ botId, threadId, name, place, poster, onDone
   };
   const viewerFailed = viewerCode.kind === "failed" && shown && Boolean(target);
   useEffect(() => { if (viewerFailed) unreachable(); }, [viewerFailed]); // eslint-disable-line react-hooks/exhaustive-deps
+  const bot = state.bots?.find((one) => one.id === botId);
   const media: ReactNode = shown && target ? (
     <div data-sign-in-live="" data-in-control={takeover.here ? "true" : undefined} className="relative aspect-[16/10] w-full overflow-hidden bg-[#000]">
       {LiveDesktop && (
-        <LiveDesktop key={target} target={target} threadId={threadId} botId={botId} name={name} poster={poster}
+        <LiveDesktop key={target} target={target} threadId={threadId} botId={botId} bot={bot} name={name} poster={poster}
           viewOnly={!takeover.here} taking={taking} asked originalViewer
           expanded={takeover.expanded} onExpandedChange={takeover.setExpanded} onOpenPreview={() => void open()}
           onTakeControl={() => void open()} onHandBack={() => void done()} handingBack={finishing || takeover.handingBack}

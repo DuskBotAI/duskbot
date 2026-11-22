@@ -20,7 +20,7 @@ import type { PromptSplitReceipt } from "../prompt-split.ts";
 import { closedOrKilled, describeSpawnFailure, execCli, killCliTree, readOnlyBotFolders, spawnCli } from "../../procs.ts";
 import { runAcpOneShot } from "./background-text.ts";
 import { sanitizeAcpToolMessage } from "./tool-log.ts";
-import { stripLeakedSystemHarnessMessages } from "../../../shared/system-message-guard.ts";
+import { createSystemHarnessStreamFilter, stripLeakedSystemHarnessMessages } from "../../../shared/system-message-guard.ts";
 import {
   classifyQuiet, describeQuiet, firstReplyMs, freeTurnMs, formatQuietLimit, FREE_MODEL_ATTEMPTS, lastSeenPhrase, LIMIT_WORDS, LogTail, promptIdleTimeoutMs, quietKey, quietNoticeMs, quietTickMs, quietVerdict, sampleProcessTree,
   type LogSignal, type ProcessSample, type QuietState,
@@ -66,7 +66,7 @@ import { commandSummary, toolDetailPreview } from "../../tool-summary.ts";
 import { acpToolEndEvents } from "./tool-items.ts";
 import { AcpHost } from "./host.ts";
 import { exitDetail } from "./exit-report.ts";
-import { endTurn, lookupResultArrived, trackRunningTool, type AcpAskFinish, type AcpSession, type AcpTurn } from "./turn-state.ts";
+import { availableCommandNames, endTurn, lookupResultArrived, trackRunningTool, type AcpAskFinish, type AcpSession, type AcpTurn } from "./turn-state.ts";
 import { recoveryPromptFor } from "../../resume-recovery.ts";
 import { engineIdleMs, keepWarm, sessionIdlePolicy, stopIdleClose } from "../session-idle.ts";
 import { classifyError } from "../retry.ts";
@@ -239,6 +239,8 @@ export interface AcpSupport {
   describeAccountError?(code: AccountErrorCode, model?: string): string | undefined;
   /** Compose the session/prompt text. Default prepends the persona. */
   buildPromptText?(turn: SendTurnInput): string;
+  /** Rewrite final text sent to `session/prompt` (normal turns and background one-shots) with the session's advertised commands. */
+  sanitizePromptText?(text: string, availableCommands: readonly string[], cwd?: string): string;
   /** Rewrite a picker id (`omlx::model`) into the CLI-native id before spawn and session/select. */
   resolveTurnModel?(
     model: string | undefined,
@@ -891,6 +893,13 @@ export function createAcpDriver(support: AcpSupport): ProviderDriver<AcpConfig> 
             if (current && !current.state.settled && session.sessionId && p.sessionId === session.sessionId) current.receiveModelVariants(p.update);
             return;
           }
+          const advertisedCommands = availableCommandNames(p.update);
+          if (advertisedCommands) {
+            if (!session.sessionId || !p.sessionId || p.sessionId === session.sessionId || session.host.key === null) {
+              session.availableCommands = advertisedCommands;
+            }
+            return;
+          }
           if (current && ["agent_message_chunk", "agent_thought_chunk", "tool_call", "tool_call_update"].includes(p.update?.sessionUpdate)) {
             current.state.startupActivity = true;
           }
@@ -921,11 +930,9 @@ export function createAcpDriver(support: AcpSupport): ProviderDriver<AcpConfig> 
                     && isHermesReasoningReplay(delta, current.state.text)) break;
                 current.state.textMessageId = messageId;
                 current.state.text += delta;
-                const trimmed = current.state.text.trimStart();
-                if (!trimmed.startsWith("<SYSTEM_MESSAGE") &&
-                    !trimmed.startsWith("The following is a <SYSTEM_MESSAGE") &&
-                    !trimmed.startsWith("<SYSTEM_NOTIFICATION")) {
-                  emit({ ...base(threadId, current.turnId), type: "content.delta", streamKind: "assistant_text", delta });
+                const visible = current.pushAssistantDelta(delta);
+                if (visible) {
+                  emit({ ...base(threadId, current.turnId), type: "content.delta", streamKind: "assistant_text", delta: visible });
                 }
               }
               break;
@@ -988,6 +995,7 @@ export function createAcpDriver(support: AcpSupport): ProviderDriver<AcpConfig> 
           get sessionId() { return acp.sessionId; },
           set sessionId(id: string | null) { acp.sessionId = id; },
           sessionConfigResult: null,
+          availableCommands: [],
           get initResult() { return host.initResult; },
           set initResult(result: any) { host.initResult = result; },
           get authenticated() { return host.authenticated; },
@@ -1201,9 +1209,11 @@ export function createAcpDriver(support: AcpSupport): ProviderDriver<AcpConfig> 
         const receiveModelVariants = (result: any, replace = false) => modelControls.receive(result, replace);
         const requestedVariantOption = () => modelControls.variant(variant);
 
+        const harnessFilter = createSystemHarnessStreamFilter();
         const flushAssistantText = () => {
           const raw = state.text;
           state.text = "";
+          harnessFilter.reset();
           const text = stripLeakedSystemHarnessMessages(raw);
           if (!text.trim()) return;
           state.producedItem = true;
@@ -1224,6 +1234,7 @@ export function createAcpDriver(support: AcpSupport): ProviderDriver<AcpConfig> 
           lookupTools: new Set(),
           interruptTimer: null,
           stopQuietWatch: null,
+          pushAssistantDelta: (delta) => harnessFilter.push(delta),
           flushAssistantText,
           receiveModelVariants,
         };
@@ -1333,6 +1344,7 @@ export function createAcpDriver(support: AcpSupport): ProviderDriver<AcpConfig> 
                 ? support.toolScopeSessionParams!(turn, init, mcpServers.length > 0, { config: turnConfig, env, cwd }) : {};
               let loaded = false;
               if (cursor) {
+                if (cursor !== liveSessionId) session.availableCommands = [];
                 try {
                   await request(
                     support.resumeMethod === "resume" ? "session/resume" : "session/load",
@@ -1379,6 +1391,8 @@ export function createAcpDriver(support: AcpSupport): ProviderDriver<AcpConfig> 
                 promptTurn = { ...turn, text: recovery.text };
                 rebuiltFromReplay = recovery.replayed;
               }
+              session.sessionId = null;
+              session.availableCommands = [];
               await request("session/new", { cwd, mcpServers: support.mcpServersFromLaunch ? [] : mcpServers, ...selectionParams }, NEW_SESSION_TIMEOUT, (result) => {
                 session.sessionId = typeof result?.sessionId === "string" ? result.sessionId : null;
                 session.sessionKey = sessionKey;
@@ -1496,11 +1510,14 @@ export function createAcpDriver(support: AcpSupport): ProviderDriver<AcpConfig> 
               promptInput = { ...promptTurn, system: "", text: composed.text };
               pendingSplitReceipt = { key: receiptKey, receipt: composed.receipt, previous: previousReceipt };
             }
-            const text = support.buildPromptText
+            const rawText = support.buildPromptText
               ? support.buildPromptText(promptInput)
               : promptInput.system
                 ? `${promptInput.system}\n\n${promptInput.text}`
                 : promptInput.text;
+            const text = support.sanitizePromptText
+              ? support.sanitizePromptText(rawText, session.availableCommands, cwd)
+              : rawText;
             const imageBlocks = support.images === true && runtimeAcceptsImages
               ? await readAcpImageBlocks(turn.images ?? [])
               : [];
@@ -1783,6 +1800,7 @@ export function createAcpDriver(support: AcpSupport): ProviderDriver<AcpConfig> 
             authRequired: support.authFailure === "fail-request" ? "if-requested" : support.authFailure === "fail",
             loginNote: support.loginNote,
             clientCapabilitiesMeta: support.clientCapabilitiesMeta,
+            sanitizePromptText: support.sanitizePromptText,
             ...(rung && support.selectModel ? {
               configure: async ({ request, sessionId }) => {
                 const picked = await request("session/set_config_option", { sessionId, configId: support.selectModel!.configId, value: rung.model });

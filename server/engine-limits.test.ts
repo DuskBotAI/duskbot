@@ -45,7 +45,7 @@ describe("usage limits a bot reads", () => {
 
   it("tells unknown from unsupported", () => {
     const accounts = read({
-      instances: [instance("signed-out", "claudeAgent", "Signed out"), instance("quiet", "codex", "Quiet"), instance("cursor", "cursorAgent", "Cursor"), instance("key", "claudeAgent", "Key")],
+      instances: [instance("signed-out", "claudeAgent", "Signed out"), instance("quiet", "codex", "Quiet"), instance("mistral", "mistral", "Mistral"), instance("key", "claudeAgent", "Key")],
       status: (id) => id === "key" ? { ...ready, billing: "metered" } : ready,
       report: report(
         row("signed-out", { ok: false, error: "Sign in again in Claude", fiveHour: closed, weekly: closed }),
@@ -56,19 +56,39 @@ describe("usage limits a bot reads", () => {
     expect(accounts.map(({ account, status, checkedAt, windows, why }) => ({ account, status, checkedAt, windows: windows.length, why }))).toEqual([
       { account: "Signed out", status: "unknown", checkedAt: AT, windows: 0, why: "Sign in again in Claude" },
       { account: "Quiet", status: "unknown", checkedAt: AT, windows: 0, why: "The account answered but reported no usage windows." },
-      { account: "Cursor", status: "unsupported", checkedAt: null, windows: 0, why: "This AI does not report usage limits to this app." },
+      { account: "Mistral", status: "unsupported", checkedAt: null, windows: 0, why: "This AI does not report usage limits to this app." },
       { account: "Key", status: "unsupported", checkedAt: null, windows: 0, why: "This AI does not report usage limits to this app." },
     ]);
   });
 
+  it("reports limits for Antigravity, Cursor, and OpenCode Go accounts", () => {
+    const accounts = read({
+      instances: [
+        instance("antigravity", "antigravityAgent", "Antigravity"),
+        instance("cursor", "cursorAgent", "Cursor"),
+        instance("opencodeGo", "opencodeGo", "OpenCode Go"),
+      ],
+      report: report(
+        row("antigravity", { driver: "antigravity", plan: "Pro", fiveHour: open(20), weekly: open(35) }),
+        row("cursor", { driver: "cursor", plan: "Pro", fiveHour: closed, weekly: closed, extra: [{ label: "Monthly", usedPercent: 45, remainingPercent: 55, resetsAt: AT }] }),
+        row("opencodeGo", { driver: "opencode", plan: "Go", fiveHour: open(10), weekly: open(25), extra: [{ label: "Monthly", usedPercent: 12, remainingPercent: 88, resetsAt: AT }] }),
+      ),
+    });
+    expect(accounts.map((entry) => [entry.account, entry.status, entry.windows.length])).toEqual([
+      ["Antigravity", "ok", 2],
+      ["Cursor", "ok", 1],
+      ["OpenCode Go", "ok", 3],
+    ]);
+  });
+
   it("says unknown, not unsupported, when the read itself failed", () => {
-    expect(read({ instances: [instance("claude"), instance("cursor", "cursorAgent", "Cursor")], report: null }).map((account) => account.status)).toEqual(["unknown", "unsupported"]);
+    expect(read({ instances: [instance("claude"), instance("cursor", "cursorAgent", "Cursor"), instance("mistral", "mistral", "Mistral")], report: null }).map((account) => account.status)).toEqual(["unknown", "unknown", "unsupported"]);
   });
 
   it("leaves out an engine that is off, not installed, or a signed-out one that reports nothing", () => {
     const accounts = read({
-      instances: [instance("off", "claudeAgent", "Off", false), instance("missing"), instance("cursor", "cursorAgent", "Cursor")],
-      status: (id) => id === "missing" ? { state: "unavailable", reason: "no CLI" } : id === "cursor" ? { ...ready, authenticated: false } : ready,
+      instances: [instance("off", "claudeAgent", "Off", false), instance("missing"), instance("mistral", "mistral", "Mistral")],
+      status: (id) => id === "missing" ? { state: "unavailable", reason: "no CLI" } : id === "mistral" ? { ...ready, authenticated: false } : ready,
       report: report(row("off"), row("missing")),
     });
     expect(accounts).toEqual([]);

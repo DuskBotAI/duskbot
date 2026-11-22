@@ -91,9 +91,9 @@ describe("local event helper arguments", () => {
 });
 
 describe("an AI sign-in from a connect card", () => {
-  it("names the engine, so ChatGPT and Gemini sign-ins are not counted as other", () => {
-    for (const tile of ["chatgpt", "grok", "gemini", "claude"]) engineSignedIn(tileSignInEngine(tile), "browser");
+  it("names the engine, so ChatGPT and Antigravity sign-ins are not counted as other", () => {
+    for (const tile of ["chatgpt", "grok", "antigravity", "claude"]) engineSignedIn(tileSignInEngine(tile), "browser");
     engineSignedIn(tileSignInEngine("openrouter"), "browser");
-    expect(ph.captured.map(({ props }) => (props as { engine: string }).engine)).toEqual(["codex", "grok", "gemini", "claude", "other"]);
+    expect(ph.captured.map(({ props }) => (props as { engine: string }).engine)).toEqual(["codex", "grok", "antigravity", "claude", "other"]);
   });
 });

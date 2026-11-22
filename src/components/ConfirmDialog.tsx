@@ -7,6 +7,7 @@ import { t } from "@/lib/i18n";
 import { dialogMotion, phoneDialogMotion } from "@/lib/motion-presets";
 import { phoneApp } from "@/lib/store-app";
 import { flushSystemControls, wakeSystemControls } from "@/lib/system-control";
+import { plainDialogText, systemDialogs } from "@/lib/system-dialog";
 import { closesOnBack } from "@/mobile/Sheet";
 import { confirmCancelCls, mdDangerCls, mdPrimaryCls } from "./ui/GrokDialog";
 import { ScrimMotion, SheetMotion, useMotionReduced } from "./ui/SheetMotion";
@@ -41,11 +42,55 @@ export interface ConfirmDialogProps {
  * the containing block.
  */
 export const ConfirmDialog = memo(function ConfirmDialog(props: ConfirmDialogProps) {
+  const nativeBody = systemDialogs() ? plainDialogText(props.body) : null;
+  if (nativeBody !== null && systemDialogs()) {
+    return <NativeConfirmDialog {...props} message={nativeBody} />;
+  }
+  return <WebConfirmDialog {...props} />;
+}, (prev, next) => !prev.open && !next.open);
+
+function NativeConfirmDialog(props: ConfirmDialogProps & { message: string }) {
+  const { open, title, message, confirmLabel, cancelLabel, tone = "danger", alternative } = props;
+  const latest = useRef(props);
+  latest.current = props;
+  const presented = useRef(false);
+
+  useEffect(() => {
+    if (!open) {
+      presented.current = false;
+      return;
+    }
+    if (presented.current) return;
+    const dialogs = systemDialogs();
+    if (!dialogs) return;
+    presented.current = true;
+    let alive = true;
+    void dialogs.alert({
+      title,
+      message: message.trim() || undefined,
+      confirmLabel,
+      cancelLabel: cancelLabel ?? t("common.cancel"),
+      alternativeLabel: alternative?.label,
+      tone,
+    }).then((outcome) => {
+      if (!alive) return;
+      if (outcome === "confirm") latest.current.onConfirm();
+      else if (outcome === "alternative") latest.current.alternative?.onClick();
+      else latest.current.onCancel();
+      latest.current.onClosed?.();
+    });
+    return () => { alive = false; };
+  }, [open, title, message, confirmLabel, cancelLabel, alternative?.label, tone]);
+
+  return null;
+}
+
+function WebConfirmDialog(props: ConfirmDialogProps) {
   const [mounted, setMounted] = useState(props.open);
   if (props.open && !mounted) setMounted(true);
   if (!mounted && !props.open) return null;
   return <ConfirmDialogInner {...props} />;
-}, (prev, next) => !prev.open && !next.open);
+}
 
 function ConfirmDialogInner(props: ConfirmDialogProps) {
   const { open, onCancel, returnFocusRef } = props;
@@ -205,6 +250,19 @@ export type ConfirmRequest = Pick<ConfirmDialogProps, "title" | "body" | "confir
 /** The same dialog asked from an event handler, in place of `window.confirm`: true once confirmed, false on Cancel or
  * Escape. Mounts its own root on <body> and removes it when answered. */
 export function askConfirm(request: ConfirmRequest): Promise<boolean> {
+  const dialogs = systemDialogs();
+  if (dialogs) {
+    const message = plainDialogText(request.body);
+    if (message !== null) {
+      return dialogs.alert({
+        title: request.title,
+        message: message.trim() || undefined,
+        confirmLabel: request.confirmLabel,
+        cancelLabel: request.cancelLabel ?? t("common.cancel"),
+        tone: request.tone ?? "danger",
+      }).then((outcome) => outcome === "confirm");
+    }
+  }
   if (typeof document === "undefined") return Promise.resolve(false);
   return new Promise((resolve) => {
     const host = document.createElement("div");

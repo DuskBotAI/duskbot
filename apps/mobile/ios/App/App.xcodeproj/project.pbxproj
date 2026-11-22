@@ -24,6 +24,7 @@
 		D05E4C346D67B1393C017725 /* PulldownMenuPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = D05D4C346D67B1393C017725 /* PulldownMenuPlugin.swift */; };
 		D05E9240CB6504DB8342267F /* Chrome.swift in Sources */ = {isa = PBXBuildFile; fileRef = D05D9240CB6504DB8342267F /* Chrome.swift */; };
 		D05E7A3B11C0FFEE00000001 /* AppearancePlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = D05D7A3B11C0FFEE00000001 /* AppearancePlugin.swift */; };
+		D05E7A3C11C0FFEE00000002 /* NativeDialogPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = D05D7A3C11C0FFEE00000002 /* NativeDialogPlugin.swift */; };
 		D05C000D2F00000100B07D05 /* GlassChromePlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = D05C000E2F00000100B07D05 /* GlassChromePlugin.swift */; };
 		D05C000F2F00000100B07D05 /* NativeMenuPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = D05C00102F00000100B07D05 /* NativeMenuPlugin.swift */; };
 		D05C00F12F00000100B07D05 /* HapticsPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = D05C00F22F00000100B07D05 /* HapticsPlugin.swift */; };
@@ -33,6 +34,7 @@
 		D05C00F52F00000100B07D05 /* MediaPickerSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = D05C00F62F00000100B07D05 /* MediaPickerSheet.swift */; };
 		D05C01112F00000100B07D05 /* GlassVoiceWave.swift in Sources */ = {isa = PBXBuildFile; fileRef = D05C01122F00000100B07D05 /* GlassVoiceWave.swift */; };
 		D05C01132F00000100B07D05 /* GlassHomeBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = D05C01142F00000100B07D05 /* GlassHomeBar.swift */; };
+		D05C01152F00000100B07D05 /* GlassOverlays.swift in Sources */ = {isa = PBXBuildFile; fileRef = D05C01162F00000100B07D05 /* GlassOverlays.swift */; };
 		D05C00052F00000100B07D05 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = D05C00062F00000100B07D05 /* PrivacyInfo.xcprivacy */; };
 		E1A100112F00000100B07D05 /* TurnActivityPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1A100012F00000100B07D05 /* TurnActivityPlugin.swift */; };
 		E1A100192F00000100B07D05 /* SseStreamPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1A100092F00000100B07D05 /* SseStreamPlugin.swift */; };
@@ -89,6 +91,7 @@
 		D05D4C346D67B1393C017725 /* PulldownMenuPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PulldownMenuPlugin.swift; sourceTree = "<group>"; };
 		D05D9240CB6504DB8342267F /* Chrome.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Chrome.swift; sourceTree = "<group>"; };
 		D05D7A3B11C0FFEE00000001 /* AppearancePlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppearancePlugin.swift; sourceTree = "<group>"; };
+		D05D7A3C11C0FFEE00000002 /* NativeDialogPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeDialogPlugin.swift; sourceTree = "<group>"; };
 		D05C000E2F00000100B07D05 /* GlassChromePlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlassChromePlugin.swift; sourceTree = "<group>"; };
 		D05C00102F00000100B07D05 /* NativeMenuPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeMenuPlugin.swift; sourceTree = "<group>"; };
 		D05C00F22F00000100B07D05 /* HapticsPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HapticsPlugin.swift; sourceTree = "<group>"; };
@@ -98,6 +101,7 @@
 		D05C00F62F00000100B07D05 /* MediaPickerSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaPickerSheet.swift; sourceTree = "<group>"; };
 		D05C01122F00000100B07D05 /* GlassVoiceWave.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlassVoiceWave.swift; sourceTree = "<group>"; };
 		D05C01142F00000100B07D05 /* GlassHomeBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlassHomeBar.swift; sourceTree = "<group>"; };
+		D05C01162F00000100B07D05 /* GlassOverlays.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlassOverlays.swift; sourceTree = "<group>"; };
 		D05C00062F00000100B07D05 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		D05C00072F00000100B07D05 /* App.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = App.entitlements; sourceTree = "<group>"; };
 		E1A100012F00000100B07D05 /* TurnActivityPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TurnActivityPlugin.swift; sourceTree = "<group>"; };
@@ -182,6 +186,7 @@
 				D05D4C346D67B1393C017725 /* PulldownMenuPlugin.swift */,
 				D05D9240CB6504DB8342267F /* Chrome.swift */,
 				D05D7A3B11C0FFEE00000001 /* AppearancePlugin.swift */,
+				D05D7A3C11C0FFEE00000002 /* NativeDialogPlugin.swift */,
 				D05C000E2F00000100B07D05 /* GlassChromePlugin.swift */,
 				D05C00102F00000100B07D05 /* NativeMenuPlugin.swift */,
 				D05C00F22F00000100B07D05 /* HapticsPlugin.swift */,
@@ -191,6 +196,7 @@
 				D05C00F62F00000100B07D05 /* MediaPickerSheet.swift */,
 				D05C01122F00000100B07D05 /* GlassVoiceWave.swift */,
 				D05C01142F00000100B07D05 /* GlassHomeBar.swift */,
+				D05C01162F00000100B07D05 /* GlassOverlays.swift */,
 				E1A100012F00000100B07D05 /* TurnActivityPlugin.swift */,
 				E1A100092F00000100B07D05 /* SseStreamPlugin.swift */,
 				F2B100012F00000100B07D05 /* PhoneNotificationsPlugin.swift */,
@@ -355,6 +361,7 @@
 				D05E4C346D67B1393C017725 /* PulldownMenuPlugin.swift in Sources */,
 				D05E9240CB6504DB8342267F /* Chrome.swift in Sources */,
 				D05E7A3B11C0FFEE00000001 /* AppearancePlugin.swift in Sources */,
+				D05E7A3C11C0FFEE00000002 /* NativeDialogPlugin.swift in Sources */,
 				D05C000D2F00000100B07D05 /* GlassChromePlugin.swift in Sources */,
 				D05C000F2F00000100B07D05 /* NativeMenuPlugin.swift in Sources */,
 				D05C00F12F00000100B07D05 /* HapticsPlugin.swift in Sources */,
@@ -364,6 +371,7 @@
 				D05C00F52F00000100B07D05 /* MediaPickerSheet.swift in Sources */,
 				D05C01112F00000100B07D05 /* GlassVoiceWave.swift in Sources */,
 				D05C01132F00000100B07D05 /* GlassHomeBar.swift in Sources */,
+				D05C01152F00000100B07D05 /* GlassOverlays.swift in Sources */,
 				E1A100112F00000100B07D05 /* TurnActivityPlugin.swift in Sources */,
 				E1A100192F00000100B07D05 /* SseStreamPlugin.swift in Sources */,
 				E1A100122F00000100B07D05 /* TurnActivity.swift in Sources */,

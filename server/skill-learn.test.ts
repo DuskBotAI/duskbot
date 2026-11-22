@@ -34,6 +34,7 @@ describe("expandLearnTurnText", () => {
         expect(expandLearnTurnText("fix the tests")).toBe("fix the tests");
         const expanded = expandLearnTurnText("/learn the REST client in ~/sdk");
         expect(expanded.startsWith(LEARN_PROMPT_MARKER)).toBe(true);
+        expect(expanded).not.toContain("/learn");
         expect(expanded).toContain("the REST client in ~/sdk");
         expect(expanded).toContain("skill_manage");
         expect(expanded).toContain("current version untouched");

@@ -18,7 +18,7 @@ import { textFieldCls } from "../ui/GrokDialog";
 
 const FIELD = cn(textFieldCls, "bg-ink/[0.04]");
 
-const SIGN_IN_TILE: Partial<Record<string, AiTileId>> = { anthropic: "claude", openai: "chatgpt", google: "gemini", xai: "grok" };
+const SIGN_IN_TILE: Partial<Record<string, AiTileId>> = { anthropic: "claude", openai: "chatgpt", google: "antigravity", xai: "grok" };
 
 /** The short sheet that connects one provider on the server the bots run on: a sign-in where the provider has one, else
  * its details and key, an optional check that lists its models, and Connect. */

@@ -7,10 +7,31 @@ const f = vi.hoisted(() => ({
   open: false,
   closed: null as null | { at: number; tabs: Array<{ title: string; url: string; image: string | null }> },
   sent: [] as unknown[],
+  dispatched: [] as unknown[],
   closes: [] as Array<[string, string | undefined]>,
-  surface: null as null | { onMessage: (message: Record<string, unknown>) => void; onFirstFrame: () => void; quietNotice?: (message: string) => boolean },
+  signInFocus: null as null | { botId: string; messageId: string; url: string; site: string; place: "browser" | "cloud" | "vm" | "local"; requestId: number; consumed: boolean },
+  computerControl: {} as Record<string, { held: boolean; helpReason: string | null; help?: { botId: string; threadId: string; messageId: string; site: string; place: "browser" | "cloud" | "vm" | "local" } | null }>,
+  v1: null as null | { takes: number; releases: number; sent: unknown[]; take: () => Promise<{ waited: boolean }> },
+  focusCalls: 0,
+  surface: null as null | {
+    onMessage: (message: Record<string, unknown>) => void;
+    onFirstFrame: () => void;
+    onControl?: (control: unknown) => void;
+    quietNotice?: (message: string) => boolean;
+  },
 }));
-vi.mock("@/state/store", () => ({ useStore: () => ({ state: { config: { browserEngine: { engine: "chrome" } } } }), api: vi.fn() }));
+const dispatchMock = (action: unknown) => { f.dispatched.push(action); };
+vi.mock("@/state/store", () => ({
+  useStore: () => ({
+    state: {
+      config: { browserEngine: { engine: "chrome" } },
+      signInFocus: f.signInFocus,
+      computerControl: f.computerControl,
+    },
+    dispatch: dispatchMock,
+  }),
+  api: vi.fn(),
+}));
 vi.mock("../Avatar", () => ({ BotAvatar: () => null }));
 vi.mock("@/lib/local-browser", async (importOriginal) => ({
   ...await importOriginal<typeof import("@/lib/local-browser")>(),
@@ -18,14 +39,41 @@ vi.mock("@/lib/local-browser", async (importOriginal) => ({
   closeLocalBrowser: async (botId: string, threadId: string | undefined) => { f.closes.push([botId, threadId]); return true; },
 }));
 vi.mock("../browser/StreamSurface", async () => {
-  const { useEffect } = await import("react");
+  const { useEffect, useImperativeHandle } = await import("react");
   return {
-    StreamSurface: (props: { onClient: (client: unknown) => void; onConnectedChange: (on: boolean) => void; onMessage: (message: Record<string, unknown>) => void; onFirstFrame: () => void; quietNotice?: (message: string) => boolean }) => {
+    StreamSurface: (props: {
+      ref?: unknown;
+      onClient: (client: unknown) => void;
+      onControl?: (control: unknown) => void;
+      onConnectedChange: (on: boolean) => void;
+      onMessage: (message: Record<string, unknown>) => void;
+      onFirstFrame: () => void;
+      quietNotice?: (message: string) => boolean;
+    }) => {
+      useImperativeHandle(props.ref as never, () => ({ canvas: () => null, focusPage: () => { f.focusCalls++; } }), []);
       useEffect(() => {
-        props.onClient({ send: (input: unknown) => { f.sent.push(input); return true; } });
+        if (f.v1) {
+          const v1 = f.v1;
+          props.onClient({
+            send: (input: unknown) => { f.sent.push(input); return false; },
+            stop: () => {},
+            transport: {
+              send: (input: unknown) => { v1.sent.push(input); },
+              drain: async () => {},
+              settle: async () => {},
+              size: () => 0,
+              stopped: () => false,
+              take: () => { v1.takes++; return v1.take(); },
+              release: async () => { v1.releases++; },
+            },
+          });
+          props.onControl?.({ canOperate: true, controller: "unclaimed", generation: 1, dialog: null });
+        } else {
+          props.onClient({ send: (input: unknown) => { f.sent.push(input); return true; }, stop: () => {} });
+        }
         props.onConnectedChange(true);
       }, []);
-      f.surface = { onMessage: props.onMessage, onFirstFrame: props.onFirstFrame, quietNotice: props.quietNotice };
+      f.surface = { onMessage: props.onMessage, onFirstFrame: props.onFirstFrame, onControl: props.onControl, quietNotice: props.quietNotice };
       return null;
     },
   };
@@ -43,12 +91,13 @@ const TABS = [
 
 let host: HTMLDivElement, root: Root;
 beforeEach(() => {
-  f.open = true; f.closed = null; f.sent = []; f.closes = []; f.surface = null;
+  f.open = true; f.closed = null; f.sent = []; f.dispatched = []; f.closes = []; f.signInFocus = null; f.computerControl = {}; f.v1 = null; f.focusCalls = 0; f.surface = null;
+  delete document.documentElement.dataset.mobileApp;
   host = document.createElement("div");
   document.body.append(host);
   root = createRoot(host);
 });
-afterEach(() => { act(() => root.unmount()); host.remove(); vi.useRealTimers(); });
+afterEach(() => { act(() => root.unmount()); host.remove(); delete document.documentElement.dataset.mobileApp; vi.useRealTimers(); });
 
 const q = <T extends HTMLElement = HTMLElement>(selector: string) => host.querySelector<T>(selector);
 const render = (props: Record<string, unknown> = {}) => act(async () => { root.render(createElement(LocalBrowserSection, { bot: { ...(BOT as object), ...props } as never, after: createElement("p", { "data-cta": "" }, "Keep Nova working") })); });
@@ -273,5 +322,45 @@ describe("the compact browser in the Computer tab", () => {
     expect(q("[data-local-browser-held-line]")!.textContent).toBe("You’re using this tabHand back");
     await click("[data-local-browser-action=hand-back]");
     expect(f.sent.at(-1)).toEqual({ type: "releaseControl" });
+  });
+
+  it("is directly interactive on phones with tabs and keyboard focus, without the desktop expand overlay", async () => {
+    document.documentElement.dataset.mobileApp = "ios";
+    await render();
+    await message({ type: "tabs", tabs: TABS });
+    const surface = q("[data-local-browser-surface]")!;
+    expect(surface.className).not.toContain("pointer-events-none");
+    expect(surface.hasAttribute("inert")).toBe(false);
+    expect(q("[data-local-browser-action=open-page]")).toBeNull();
+    expect(q("[data-local-browser-strip]")).not.toBeNull();
+    await click("[data-local-browser-action=keyboard]");
+    expect(f.focusCalls).toBe(1);
+  });
+
+  it("opens for a browser sign-in request, consumes signInFocus, shows the banner, and opens the URL only when blank", async () => {
+    document.documentElement.dataset.mobileApp = "ios";
+    f.open = false;
+    f.signInFocus = { botId: "b1", messageId: "m1", url: "https://youtube.com/", site: "youtube.com", place: "browser", requestId: 4, consumed: false };
+    f.computerControl = { b1: { held: false, helpReason: "sign in to youtube.com", help: { botId: "b1", threadId: "t1", messageId: "m1", site: "youtube.com", place: "browser" } } };
+    await render();
+    expect(q("[data-local-browser=live]")).not.toBeNull();
+    expect(f.dispatched).toContainEqual({ type: "signInFocusConsumed", requestId: 4 });
+    expect(q('[data-testid="sign-in-banner"]')).not.toBeNull();
+    await message({ type: "tabs", tabs: [{ tabId: "t1", title: "", url: "about:blank", active: true }] });
+    expect(f.sent).toContainEqual({ type: "navigate", url: "https://youtube.com/" });
+  });
+
+  it("takes control through browserControl on v1 SSE fallback (5G relay) so sign-in and inputs are not dropped", async () => {
+    document.documentElement.dataset.mobileApp = "ios";
+    const v1 = { takes: 0, releases: 0, sent: [] as unknown[], take: async () => ({ waited: false }) };
+    f.v1 = v1;
+    f.signInFocus = { botId: "b1", messageId: "m2", url: "https://youtube.com/", site: "youtube.com", place: "browser", requestId: 5, consumed: false };
+    await render();
+    await message({ type: "tabs", tabs: [{ tabId: "t1", title: "YouTube", url: "https://www.youtube.com/", active: true }] });
+    await act(async () => { await Promise.resolve(); });
+    expect(v1.takes).toBe(1);
+    await click("[data-local-browser-action=reload]");
+    await act(async () => { await Promise.resolve(); });
+    expect(v1.sent).toContainEqual({ type: "reload" });
   });
 });

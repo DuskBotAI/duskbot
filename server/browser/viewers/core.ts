@@ -21,7 +21,7 @@ import type { ProfileControl, TakeResult } from "../control.ts";
 import { personUrl } from "../dispatch.ts";
 import type { HoldLimits } from "../hold.ts";
 import type { Tab } from "../tabs.ts";
-import { ACCEPT_OF, chooseOption, cursorAt, editableAt, selectAt, type SelectPopup } from "./popups.ts";
+import { ACCEPT_OF, chooseOption, cursorAt, editableAt, selectAt, selectedText, type SelectPopup } from "./popups.ts";
 import { ViewerHold } from "./hold.ts";
 import { fitsScreen, MIN_WINDOW_WIDTH, requestedSize, VIEWPORT_PRESETS, viewportFor, ZOOM_LIMITS, zoomedLayout, type ViewportSetting } from "./viewport.ts";
 
@@ -976,6 +976,17 @@ export class ViewerHub {
       case "text":
         if (typeof message.text === "string" && message.text.length > 0) await session.send("Input.insertText", { text: message.text.slice(0, TEXT_LIMIT) });
         return;
+      case "copy": {
+        const mod = (this.host.browser()?.mac ?? process.platform === "darwin") ? 4 : 2;
+        await tab.page.takeCopiedText();
+        await session.send("Input.dispatchKeyEvent", {
+          type: "rawKeyDown", key: "c", code: "KeyC", modifiers: mod, commands: ["copy"], windowsVirtualKeyCode: 67,
+        });
+        await session.send("Input.dispatchKeyEvent", { type: "keyUp", key: "c", code: "KeyC", modifiers: mod });
+        const copied = (await tab.page.takeCopiedText()) || await selectedText(tab.page).catch(() => "");
+        viewer.push({ type: "clipboard", text: copied });
+        return;
+      }
       case "navigate": {
         const url = typeof message.url === "string" ? personUrl(message.url) : null;
         if (url) await tab.page.navigate(url, { readiness: "none", timeoutMs: 15_000 });

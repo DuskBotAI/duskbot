@@ -589,8 +589,8 @@ html[data-native-glass-composer] .dusk-mobile [data-mobile-chat] [data-tour="com
   position: fixed;
   z-index: 40;
   display: flex;
-  width: 33px;
-  height: 33px;
+  width: 36px;
+  height: 36px;
   align-items: center;
   justify-content: center;
   border-radius: 9999px;

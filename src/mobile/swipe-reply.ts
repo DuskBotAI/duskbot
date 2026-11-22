@@ -2,6 +2,7 @@ import { t } from "@/lib/i18n";
 import { canScroll } from "./gesture";
 import { haptic } from "./haptics";
 import { prefersReducedMotion, rubberband, springEasing } from "./motion";
+import type { GlassBridge } from "./native-glass";
 
 /** Telegram iOS's numbers: the pull that arms a reply, by who sent the message. */
 export const REPLY_THRESHOLD = { incoming: 45, outgoing: 60 } as const;
@@ -12,7 +13,7 @@ const RUBBER_COEFFICIENT = 0.4;
 const DECIDE = 10;
 /** from the screen's left edge a drag is the page's swipe back, never this */
 export const BACK_EDGE = 24;
-const ICON = 33;
+const ICON = 36;
 /** settles in about 0.3 s, as Telegram's release does */
 const RELEASE = springEasing(700, 50);
 
@@ -48,23 +49,40 @@ export function replyRowAt(target: EventTarget | null, x: number): HTMLElement |
   return row;
 }
 
-function drawIcon(row: HTMLElement): HTMLElement {
+function anchorFor(row: HTMLElement): { restX: number; y: number } {
+  const bubble = (row.querySelector<HTMLElement>("[data-chat-bubble]") ?? row).getBoundingClientRect();
+  const restX = bubble.left - ICON / 2 - 6;
+  const viewH = typeof window === "undefined" ? 0 : window.innerHeight;
+  const visTop = viewH > 220 ? Math.max(bubble.top, 88) : bubble.top;
+  const visBottom = viewH > 220 ? Math.min(bubble.bottom, viewH - 104) : bubble.bottom;
+  const y = bubble.height > 0 && visBottom > visTop
+    ? (visTop + visBottom) / 2
+    : bubble.top + bubble.height / 2;
+  return { restX, y };
+}
+
+function drawIcon(row: HTMLElement, anchor: { restX: number; y: number }): HTMLElement {
   const icon = document.createElement("span");
   icon.className = "m-swipe-reply";
   icon.setAttribute("aria-hidden", "true");
   const glyph = replyButton(row)?.querySelector("svg")?.cloneNode(true);
   if (glyph) icon.append(glyph);
-  const bubble = (row.querySelector<HTMLElement>("[data-chat-bubble]") ?? row).getBoundingClientRect();
-  icon.style.left = `${bubble.left - ICON - 6}px`;
-  icon.style.top = `${bubble.top + bubble.height / 2 - ICON / 2}px`;
-  document.body.append(icon);
+  icon.style.left = `${anchor.restX - ICON / 2}px`;
+  icon.style.top = `${anchor.y - ICON / 2}px`;
+  (row.closest(".dusk-mobile") ?? document.body).append(icon);
   return icon;
+}
+
+function isDark(chat: HTMLElement): boolean {
+  return document.documentElement.dataset.skin === "grok-dark"
+    || chat.closest<HTMLElement>(".dusk-mobile")?.dataset.scheme === "dark";
 }
 
 /** Drag a message to the right and a reply icon comes out from under it; past the threshold it arms with one tap of the
  * taptic engine, and letting go there opens the composer quoting it, through the message's own Reply. */
-export function installSwipeReply(chat: HTMLElement): () => void {
-  let start: { x: number; y: number; row: HTMLElement; threshold: number } | null = null;
+export function installSwipeReply(chat: HTMLElement, glass?: GlassBridge): () => void {
+  const nativeBadge = glass?.swipeReply;
+  let start: { x: number; y: number; row: HTMLElement; threshold: number; anchor: { restX: number; y: number } | null } | null = null;
   let mode: "reply" | "other" | null = null;
   let icon: HTMLElement | null = null;
   let offset = 0;
@@ -79,7 +97,7 @@ export function installSwipeReply(chat: HTMLElement): () => void {
     const row = replyRowAt(event.target, touch.clientX);
     if (!row || !chat.contains(row)) return;
     const outgoing = row.querySelector("[data-own-row]") !== null;
-    start = { x: touch.clientX, y: touch.clientY, row, threshold: outgoing ? REPLY_THRESHOLD.outgoing : REPLY_THRESHOLD.incoming };
+    start = { x: touch.clientX, y: touch.clientY, row, threshold: outgoing ? REPLY_THRESHOLD.outgoing : REPLY_THRESHOLD.incoming, anchor: null };
   };
   const onMove = (event: TouchEvent) => {
     if (!start || mode === "other") return;
@@ -90,22 +108,36 @@ export function installSwipeReply(chat: HTMLElement): () => void {
       if (mode !== "reply") return;
       back?.cancel();
       icon?.remove();
-      icon = drawIcon(start.row);
+      start.anchor = anchorFor(start.row);
+      icon = nativeBadge ? null : drawIcon(start.row, start.anchor);
     }
     if (event.cancelable) event.preventDefault();
     offset = replyOffset(dx, start.threshold);
     const progress = Math.min(1, offset / start.threshold);
+    const overscroll = offset > start.threshold ? Math.min(1, (offset - start.threshold) / 60) : 0;
+    const nowArmed = progress >= 1;
     start.row.style.translate = `${offset}px 0`;
-    if (icon) {
+    if (nativeBadge && start.anchor) {
+      nativeBadge({
+        x: start.anchor.restX + offset,
+        y: start.anchor.y,
+        restX: start.anchor.restX,
+        size: ICON,
+        progress,
+        overscroll,
+        armed: nowArmed,
+        dark: isDark(chat),
+      });
+    } else if (icon) {
       icon.style.translate = `${offset}px 0`;
       icon.style.opacity = String(progress);
       icon.style.scale = String(0.6 + 0.4 * progress);
-      icon.toggleAttribute("data-armed", progress >= 1);
+      icon.toggleAttribute("data-armed", nowArmed);
     }
-    if (progress >= 1 && !armed) haptic("swipeReply");
-    armed = progress >= 1;
+    if (nowArmed && !armed) haptic("swipeReply");
+    armed = nowArmed;
   };
-  const onEnd = (event?: TouchEvent) => {
+  const onEnd = (event?: TouchEvent, instant = false) => {
     if (start && mode === "reply") {
       if (event?.cancelable) event.preventDefault();
       const { row } = start;
@@ -113,8 +145,14 @@ export function installSwipeReply(chat: HTMLElement): () => void {
       row.style.translate = "";
       const leaving = icon;
       icon = null;
-      if (prefersReducedMotion() || !from) leaving?.remove();
-      else {
+      if (nativeBadge) {
+        nativeBadge(null, instant || prefersReducedMotion());
+        if (!prefersReducedMotion() && from) {
+          back = row.animate([{ translate: from }, { translate: "0 0" }], { duration: RELEASE.duration, easing: RELEASE.easing });
+        }
+      } else if (prefersReducedMotion() || !from) {
+        leaving?.remove();
+      } else {
         back = row.animate([{ translate: from }, { translate: "0 0" }], { duration: RELEASE.duration, easing: RELEASE.easing });
         const fade = leaving?.animate([{ opacity: leaving.style.opacity, scale: leaving.style.scale, translate: leaving.style.translate }, { opacity: 0, scale: 0.2, translate: "0 0" }], { duration: 300, easing: "ease-out" });
         if (fade) fade.onfinish = () => leaving?.remove(); else leaving?.remove();
@@ -123,13 +161,14 @@ export function installSwipeReply(chat: HTMLElement): () => void {
     }
     reset();
   };
-  const onCancel = () => { armed = false; onEnd(); };
+  const onCancel = () => { armed = false; onEnd(undefined, true); };
   chat.addEventListener("touchstart", onStart, { passive: true });
   chat.addEventListener("touchmove", onMove, { passive: false });
   chat.addEventListener("touchend", onEnd);
   chat.addEventListener("touchcancel", onCancel);
   return () => {
     onCancel();
+    nativeBadge?.(null, true);
     chat.removeEventListener("touchstart", onStart);
     chat.removeEventListener("touchmove", onMove);
     chat.removeEventListener("touchend", onEnd);

@@ -1,12 +1,14 @@
-import { useCallback, useContext, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useContext, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { RotateCcw } from "../../icons";
 import { useStore } from "@/state/store";
 import { WorkingDots } from "@/components/WorkingIndicator";
 import { cloudAsleep, cloudWaking, markCloudAwake, onCloudPower, onCloudWaking } from "@/lib/cloud-power";
 import { retryLiveEventsNow } from "@/lib/live-events";
+import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
-import { usePlatform } from "../platform";
+import { isGlassDark, useGlassPill } from "../native-glass";
+import { PlatformContext, usePlatform } from "../platform";
 import { useOffline } from "../network";
 import { refreshSnapshot } from "../refresh";
 import { LoadingMascot, PixelArt } from "../Illustration";
@@ -77,18 +79,66 @@ export function connectionNoticeLabel(notice: NonNullable<ConnectionNotice>, try
 }
 
 export function ConnectionPill({ notice, trying, onRetry, testId, className = "h-11 px-4" }: { notice: ConnectionNotice; trying: boolean; onRetry(): void; testId: string; className?: string }) {
+  const glass = useContext(PlatformContext)?.glass;
+  const pillRef = useRef<HTMLElement | null>(null);
+  const onRetryRef = useRef(onRetry);
+  onRetryRef.current = onRetry;
+  const [topOffset, setTopOffset] = useState(112);
+  const [obscured, setObscured] = useState(false);
+
+  useLayoutEffect(() => {
+    if (!glass?.pill || !notice) return;
+    const sync = () => {
+      const rect = pillRef.current?.getBoundingClientRect();
+      if (rect && rect.top > 0) setTopOffset(Math.round(rect.top));
+      setObscured(Boolean(document.querySelector(".mobile-sheet-layer, [data-image-viewer], [data-phone-takeover]")));
+    };
+    sync();
+    const observer = typeof MutationObserver === "function" ? new MutationObserver(sync) : null;
+    observer?.observe(document.body, { childList: true, subtree: true });
+    window.addEventListener("resize", sync);
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener("resize", sync);
+    };
+  }, [glass, notice]);
+
+  const problem = notice !== null && isConnectionProblem(notice);
+  const nativePill = useGlassPill(
+    glass,
+    "top",
+    notice && !obscured
+      ? {
+          id: testId,
+          text: connectionNoticeLabel(notice, trying),
+          tone: "neutral",
+          spinner: notice !== "offline" && (!problem || trying),
+          symbol: notice === "offline" ? "wifi.slash" : problem && !trying ? "arrow.counterclockwise" : undefined,
+          offset: topOffset,
+          dark: isGlassDark(),
+          tappable: problem && !trying,
+        }
+      : null,
+    { onPill: () => onRetryRef.current() },
+  );
+
   if (!notice) return null;
-  const base = `mobile-float bg-composer pointer-events-auto flex min-w-0 items-center gap-2 whitespace-nowrap rounded-full text-[13px] font-medium ${className}`;
-  if (isConnectionProblem(notice)) {
+  const hiddenCls = nativePill ? "opacity-0 pointer-events-none" : "pointer-events-auto";
+  const base = cn(
+    "mobile-float mobile-glass bg-composer relative flex min-w-0 items-center gap-2 whitespace-nowrap rounded-full text-[13px] font-medium",
+    hiddenCls,
+    className,
+  );
+  if (problem) {
     return (
-      <button type="button" data-testid={testId} data-notice={notice} disabled={trying} onClick={onRetry} className={`${base} mobile-press text-ink`}>
+      <button ref={(el) => { pillRef.current = el; }} type="button" data-testid={testId} data-notice={notice} disabled={trying} onClick={onRetry} className={cn(base, "mobile-press text-ink")}>
         {trying ? <WorkingDots size={3} /> : <RotateCcw size={14} aria-hidden />}
         {connectionNoticeLabel(notice, trying)}
       </button>
     );
   }
   return (
-    <span role="status" data-testid={testId} data-notice={notice} className={`${base} text-ink-secondary`}>
+    <span ref={(el) => { pillRef.current = el; }} role="status" data-testid={testId} data-notice={notice} className={cn(base, "text-ink-secondary")}>
       {notice !== "offline" && <LoadingMascot size={20} />}{connectionNoticeLabel(notice, trying)}
     </span>
   );

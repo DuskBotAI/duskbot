@@ -80,6 +80,24 @@ export function FolderPathDialog({ title, initial, saving, error, onSave, onClos
       error={sent ? error : null}
       onSave={() => { setSent(true); return onSave(path.trim()); }}
       onClose={onClose}
+      nativeForm={{
+        fields: [{
+          id: "path",
+          label: t("botPanel.ui.botAccessFolderTitle"),
+          value: initial,
+          placeholder: t("botPanel.ui.botAccessFolderPlaceholder"),
+          kind: "text",
+          monospaced: true,
+          required: true,
+          autoFocus: true,
+        }],
+        onSubmit: async (values) => {
+          const trimmed = (values.path ?? "").trim();
+          if (!trimmed || trimmed === initial) return null;
+          const result = await onSave(trimmed);
+          return typeof result === "string" ? result : null;
+        },
+      }}
     >
       <FormField label={t("botPanel.ui.botAccessFolderTitle")}>
         <input

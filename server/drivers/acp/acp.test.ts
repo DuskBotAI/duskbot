@@ -831,6 +831,32 @@ describe("ACP turns (fake CLI)", () => {
     });
   });
 
+  it("suppresses mid-reply, Notice:, lowercase, and chunk-split <SYSTEM_MESSAGE> leaks in live streaming deltas", async () => {
+    const { report, send, lastTurn } = await reportingThread("harness-stream-guard");
+    const chunk = (text: string) => ({ sessionUpdate: "agent_message_chunk", content: { type: "text", text } });
+    report(
+      chunk("Before. "),
+      chunk("<"),
+      chunk("sys"),
+      chunk("tem_message>secret task</system_message>"),
+      chunk("\nNotice: This is a "),
+      chunk("<SYSTEM_NOTIFICATION> bg\n<SYSTEM_NOTIFICATION>hidden</SYSTEM_NOTIFICATION>\n"),
+      chunk("After."),
+    );
+    await send("hi");
+    const events = lastTurn();
+    const streamed = events
+      .flatMap((event) => (event.type === "content.delta" && event.streamKind === "assistant_text" ? [event.delta] : []))
+      .join("");
+    expect(streamed).toContain("Before. ");
+    expect(streamed).toContain("After.");
+    expect(streamed).not.toMatch(/SYSTEM_MESSAGE|SYSTEM_NOTIFICATION|secret task|hidden|Notice: This is a/i);
+    const completed = events
+      .flatMap((event) => (event.type === "item.completed" && event.itemType === "assistant_text" ? [event.text] : []))
+      .at(-1);
+    expect(completed).toBe("Before. \n\nAfter.");
+  });
+
   const plan = (...entries: Array<[status: string, content: string]>) => ({
     sessionUpdate: "plan",
     entries: entries.map(([status, content]) => ({ content, priority: "medium", status })),

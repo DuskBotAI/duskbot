@@ -1,5 +1,7 @@
 // Google Antigravity through its official CLI ACP server (`agy acp`): managed runtime,
 // isolated Google profile, model/mode configuration, `--login` OAuth, and ACP `logout`.
+import { readdirSync } from "node:fs";
+import { join } from "node:path";
 import type { ApprovalMode } from "../../shared/approval-mode.ts";
 import { antigravityAccount, clearAntigravityAccountCache } from "./antigravity-account.ts";
 import type {
@@ -89,12 +91,107 @@ export function antigravityPermissionMode(
   return "default";
 }
 
+// Antigravity CLI 1.5+ parses slash commands anywhere in `session/prompt` text
+// (not only at column 0), injecting built-in workflows such as `/learn` -> `learning_proposal.md`.
+export const ANTIGRAVITY_SLASH_COMMANDS: readonly string[] = [
+  "learn",
+  "goal",
+  "compact",
+  "schedule",
+  "browser",
+  "plan",
+  "grill-me",
+  "teamwork",
+  "teamwork-preview",
+  "boost",
+  "swarm",
+  "btw",
+  "side",
+  "fork",
+  "rewind",
+  "init",
+  "review",
+  "remote-control",
+  "add-dir",
+  "codesearch",
+  "statusline",
+  "keybindings",
+  "changelog",
+  "permissions",
+  "hooks",
+  "plugins",
+  "plugin",
+  "artifact",
+  "mcp",
+  "skills",
+  "agents",
+  "context",
+  "usage",
+  "credits",
+  "automation",
+  "generative_ui",
+  "agy-customizations",
+  "antigravity-guide",
+  "mcp-app-development",
+  "run-workflow",
+  "swarm_monitor",
+  "swarm_pane",
+];
+
+const SLASH_COMMAND_NAME = /^[a-z0-9][a-z0-9_-]*$/iu;
+const WORKSPACE_COMMAND_DIRS = [
+  { relative: join(".agents", "skills"), stripExtension: false },
+  { relative: join(".agents", "workflows"), stripExtension: true },
+  { relative: join(".agent", "workflows"), stripExtension: true },
+  { relative: join(".gemini", "skills"), stripExtension: false },
+  { relative: join(".gemini", "commands"), stripExtension: true },
+] as const;
+const MAX_WORKSPACE_COMMANDS = 200;
+
+function workspaceAntigravitySlashCommands(cwd?: string): string[] {
+  if (!cwd) return [];
+  const names: string[] = [];
+  for (const { relative, stripExtension } of WORKSPACE_COMMAND_DIRS) {
+    let entries: string[];
+    try {
+      entries = readdirSync(join(cwd, relative));
+    } catch {
+      continue;
+    }
+    for (const entry of entries) {
+      if (names.length >= MAX_WORKSPACE_COMMANDS) return names;
+      const name = stripExtension ? entry.replace(/\.(?:md|toml)$/iu, "") : entry;
+      if (SLASH_COMMAND_NAME.test(name)) names.push(name);
+    }
+  }
+  return names;
+}
+
+export function neutralizeAntigravitySlashCommands(
+  text: string,
+  availableCommands: readonly string[] = [],
+  cwd?: string,
+): string {
+  if (!text.includes("/")) return text;
+  const seen = new Set<string>();
+  for (const raw of [...ANTIGRAVITY_SLASH_COMMANDS, ...availableCommands, ...workspaceAntigravitySlashCommands(cwd)]) {
+    const name = raw.trim().replace(/^\/+/u, "").toLowerCase();
+    if (SLASH_COMMAND_NAME.test(name)) seen.add(name);
+  }
+  if (!seen.size) return text;
+  const alternatives = [...seen].sort((a, b) => b.length - a.length).join("|");
+  const pattern = new RegExp(
+    `(^|[^A-Za-z0-9_./:~-])\\/(${alternatives})(?![A-Za-z0-9_/-]|\\.[A-Za-z0-9_])`,
+    "gi",
+  );
+  return text.replace(pattern, "$1/ $2");
+}
+
 const managedAsset = resolveAntigravityReleaseAsset();
 
 const support: AcpSupport = {
   driverKind: "antigravityAgent",
-  // Named for what people look for: Google moved personal Gemini subscriptions (free, AI Pro, AI Ultra) from Gemini CLI to Antigravity on 2026-06-18.
-  displayName: "Google Gemini (Antigravity)",
+  displayName: "Antigravity",
   models: STATIC_ANTIGRAVITY_MODELS,
   defaultCli: "agy",
   nativeSource: "antigravity.acp",
@@ -116,6 +213,7 @@ const support: AcpSupport = {
   resumeMethod: "resume",
   clientFileSystem: true,
   sanitizeToolPayload: true,
+  sanitizePromptText: neutralizeAntigravitySlashCommands,
 
   resolveCommand: async (env, config, instanceId) => {
     const runtime = await resolveAntigravityRuntime(config.cli, env);

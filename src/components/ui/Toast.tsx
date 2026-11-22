@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState, type FocusEvent, type ReactNode, type RefObject } from "react";
+import { useContext, useEffect, useId, useLayoutEffect, useRef, useState, type FocusEvent, type ReactNode, type RefObject } from "react";
 import { createPortal } from "react-dom";
 
 import { cn } from "@/lib/cn";
@@ -6,7 +6,9 @@ import { t } from "@/lib/i18n";
 import { cssCurve, desktopMotion } from "@/lib/desktop-motion";
 import { motionReduced, playGhostExit } from "@/lib/ghost-exit";
 import { pacedMs } from "@/lib/motion-speed";
+import { isGlassDark, safeInsetPx, useGlassPill } from "@/mobile/native-glass";
 import { PHONE_FEEL } from "@/mobile/phone-feel";
+import { PlatformContext } from "@/mobile/platform";
 import { Icon } from "../Icon";
 import { smallButtonCls } from "./GrokDialog";
 
@@ -28,10 +30,14 @@ export function Toast({ text, tone = "done", action, onDone, timeoutMs, classNam
   "data-notice-toast"?: string;
   "data-access-toast"?: string;
 }) {
+  const glass = useContext(PlatformContext)?.glass;
+  const uid = useId();
   const error = tone === "error";
   const ms = timeoutMs ?? (action ? UNDO_TOAST_MS : TOAST_MS);
   const done = useRef(onDone);
   done.current = onDone;
+  const actionRef = useRef(action);
+  actionRef.current = action;
   const [held, setHeld] = useState(false);
   const left = useRef(ms);
   // the clock restarts only when the words change, not on every render of a caller's inline onDone
@@ -46,12 +52,50 @@ export function Toast({ text, tone = "done", action, onDone, timeoutMs, classNam
     };
   }, [ms, text, held]);
   const node = useRef<HTMLDivElement>(null);
-  useToastLeave(node);
+  const [measuredText, setMeasuredText] = useState("");
+  const [offset, setOffset] = useState(96);
+  useLayoutEffect(() => {
+    if (!glass?.pill) return;
+    if (typeof text !== "string") {
+      setMeasuredText(node.current?.querySelector("[data-toast-text]")?.textContent?.trim() ?? "");
+    }
+    const composer = document.querySelector<HTMLElement>('.dusk-mobile [data-tour="composer"]');
+    const sheetOpen = Boolean(document.querySelector(".mobile-sheet-layer"));
+    const rect = !sheetOpen && composer ? composer.getBoundingClientRect() : null;
+    if (rect && rect.height > 0 && rect.top < window.innerHeight) {
+      setOffset(Math.max(28, Math.round(window.innerHeight - rect.top + 12)));
+    } else {
+      setOffset(Math.round(safeInsetPx("bottom") + 28));
+    }
+  }, [glass, text]);
+  const pillText = typeof text === "string" ? text : measuredText;
+  const nativePill = useGlassPill(
+    glass,
+    "bottom",
+    pillText
+      ? {
+          id: `toast:${uid}`,
+          text: pillText,
+          tone: error ? "error" : "success",
+          symbol: error ? "exclamationmark.circle.fill" : "checkmark",
+          offset,
+          dark: isGlassDark(),
+          actionLabel: action?.label,
+          actionDisabled: action?.disabled,
+          dismissible: true,
+        }
+      : null,
+    {
+      onAction: () => actionRef.current?.onClick(),
+      onDismiss: () => done.current(),
+    },
+  );
+  useToastLeave(node, nativePill);
   const release = (event: FocusEvent<HTMLDivElement>) => {
     if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setHeld(false);
   };
   const toast = (
-    <div ref={node} {...rest} role={error ? "alert" : "status"} aria-live={error ? "assertive" : "polite"} data-kind={tone} className={cn("ui-toast", className)}
+    <div ref={node} {...rest} role={error ? "alert" : "status"} aria-live={error ? "assertive" : "polite"} data-kind={tone} className={cn("ui-toast", nativePill && "pointer-events-none opacity-0", className)}
       onPointerEnter={() => setHeld(true)} onPointerLeave={() => setHeld(false)} onFocus={() => setHeld(true)} onBlur={release}>
       <span aria-hidden="true" className={cn("inline-flex shrink-0", error ? "text-danger" : "text-ink-secondary")}>
         <Icon name={error ? "exclamation-circle" : "check"} size={13} />
@@ -68,11 +112,13 @@ export function Toast({ text, tone = "done", action, onDone, timeoutMs, classNam
 
 /** The toast leaves the way it came, from wherever it is, as it unmounts: on the desktop at a pick with a toast motion,
  * on the phone as its feel has toasts leave. */
-function useToastLeave(node: RefObject<HTMLDivElement | null>) {
+function useToastLeave(node: RefObject<HTMLDivElement | null>, skip = false) {
   const held = useRef<HTMLDivElement | null>(null);
+  const skipRef = useRef(skip);
+  skipRef.current = skip;
   useLayoutEffect(() => { held.current = node.current; });
   useLayoutEffect(() => () => {
-    if (motionReduced()) return;
+    if (skipRef.current || motionReduced()) return;
     const exit = toastExit();
     if (!exit) return;
     playGhostExit(held.current, document.body, (ghost) => [ghost.animate(

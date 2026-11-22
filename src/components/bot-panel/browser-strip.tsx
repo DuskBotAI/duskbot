@@ -1,10 +1,11 @@
 import { forwardRef, useEffect, useId, useLayoutEffect, useRef, useState, type RefObject } from "react";
-import { ArrowLeft, ArrowRight, Globe, Hand, Loader2, Lock, Maximize, Plus, RotateCw, Shrink, X } from "../../icons";
+import { ArrowLeft, ArrowRight, Globe, Hand, Keyboard, Loader2, Lock, Maximize, Plus, RotateCw, Shrink, X } from "../../icons";
 
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
 import { blankPage, pageTitle, siteOf, tabLetter } from "@/lib/local-browser";
 import { siteIconUrl } from "@/lib/site-icon";
+import { systemDialogs } from "@/lib/system-dialog";
 import { popoverClosesOnKey, popoverClosesOnPointer } from "@/hooks/use-popover-dismiss";
 import type { Bot } from "@/state/store";
 import { BotAvatar } from "../Avatar";
@@ -191,8 +192,9 @@ export const BrowserToolbar = forwardRef<HTMLInputElement, {
 });
 
 /** The line above the browser: who is using it, the expand toggle and the close, which asks first. */
-export function BrowserHeader({ bot, headline, wide, closing, failed, onExpand, onClose }: {
-  bot: Bot; headline: "browsing" | "open"; wide: boolean; closing: boolean; failed: boolean; onExpand: () => void; onClose: () => void;
+export function BrowserHeader({ bot, headline, wide, closing, failed, ready = true, onExpand, onClose, onKeyboard }: {
+  bot: Bot; headline: "browsing" | "open"; wide: boolean; closing: boolean; failed: boolean; ready?: boolean;
+  onExpand: () => void; onClose: () => void; onKeyboard?: () => void;
 }) {
   const [asking, setAsking] = useState(false);
   const root = useRef<HTMLDivElement | null>(null);
@@ -215,6 +217,19 @@ export function BrowserHeader({ bot, headline, wide, closing, failed, onExpand, 
     window.addEventListener("pointerdown", onDown);
     return () => { window.removeEventListener("keydown", onKey, true); window.removeEventListener("pointerdown", onDown); };
   }, [asking]);
+  const askClose = () => {
+    const dialogs = systemDialogs();
+    if (dialogs) {
+      void dialogs.alert({
+        title: t("localBrowser.closeAsk"),
+        message: t("localBrowser.closeBody", { name: bot.name }),
+        confirmLabel: t("localBrowser.closeConfirm"),
+        cancelLabel: t("localBrowser.cancel"),
+      }).then((outcome) => { if (outcome === "confirm") onClose(); });
+      return;
+    }
+    setAsking((on) => !on);
+  };
   const words = headline === "browsing" ? t("localBrowser.browsing", { name: bot.name }) : t("localBrowser.open");
   return (
     <div data-local-browser-header={headline} className="flex h-8 items-center gap-1">
@@ -222,13 +237,19 @@ export function BrowserHeader({ bot, headline, wide, closing, failed, onExpand, 
         <span className="flex shrink-0"><BotAvatar bot={bot} size={16} animated={false} trackPointer={false} /></span>
         <span data-local-browser-status="" aria-live="polite" className="min-w-0 truncate text-[13px] leading-[18px] text-ink-secondary">{words}</span>
       </span>
+      {onKeyboard && (
+        <button type="button" data-local-browser-action="keyboard" aria-label={t("desktopViewer.keyboard")} title={t("desktopViewer.keyboard")}
+          disabled={!ready} onClick={onKeyboard} className={ICON_BUTTON}>
+          <Keyboard size={16} aria-hidden="true" />
+        </button>
+      )}
       <button type="button" data-local-browser-action="expand" aria-pressed={wide} aria-label={t(wide ? "localBrowser.narrow" : "localBrowser.expand")} title={t(wide ? "localBrowser.narrow" : "localBrowser.expand")}
         onClick={onExpand} className={cn(ICON_BUTTON, "max-md:hidden")}>
         {wide ? <Shrink size={16} aria-hidden="true" /> : <Maximize size={16} aria-hidden="true" />}
       </button>
       <div ref={root} className="relative">
         <button ref={trigger} type="button" data-local-browser-action="close" aria-haspopup="dialog" aria-expanded={asking} aria-label={t("localBrowser.close")} title={t("localBrowser.close")}
-          disabled={closing} onClick={() => setAsking((on) => !on)} className={ICON_BUTTON}>
+          disabled={closing} onClick={askClose} className={ICON_BUTTON}>
           {closing ? <Loader2 size={16} aria-hidden="true" className="motion-safe:animate-spin" /> : <X size={16} aria-hidden="true" />}
         </button>
         {asking && (

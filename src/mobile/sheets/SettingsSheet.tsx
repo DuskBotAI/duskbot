@@ -13,6 +13,7 @@ import { trackUpsell, watchUpsell } from "@/lib/cloud-upsell";
 import { activeLocale, t } from "@/lib/i18n";
 import { effectiveLanguage, setLanguageChoice, useLanguageChoice, usePageLanguage } from "@/lib/language-preference";
 import { applySkinChoice, readSkinChoice, subscribeSkin, THEME_SKINS } from "@/lib/skins";
+import { systemDialogs } from "@/lib/system-dialog";
 import { systemMenu } from "@/lib/system-menu";
 import { localeChoices } from "@/locales";
 import { api, useStore, type ConfigStatus } from "@/state/store";
@@ -296,6 +297,93 @@ function SettingsList({ onClose, push, placesState }: { onClose: () => void; pus
     }
   };
 
+  const renamePlace = (place: Place) => {
+    const dialogs = systemDialogs();
+    if (!dialogs) { push({ kind: "renamePlace", place }); return; }
+    void dialogs.form({
+      title: t("mobile.settings.renamePlace"),
+      saveLabel: t("mobile.settings.save"),
+      cancelLabel: t("mobile.settings.cancel"),
+      fields: [{
+        id: "name",
+        label: t("mobile.settings.placeName"),
+        value: place.name,
+        placeholder: t("mobile.settings.placeNamePlaceholder"),
+        required: true,
+        maxLength: 60,
+        autoFocus: true,
+      }],
+      onSubmit: async ({ name }) => {
+        const trimmed = (name ?? "").trim();
+        if (!trimmed || trimmed === place.name) return null;
+        const ok = await placesState.rename(place, trimmed).catch(() => false);
+        return ok ? null : t("mobile.settings.renamePlaceError", { name: place.name });
+      },
+    });
+  };
+
+  const confirmRemovePlace = (place: Place) => {
+    const dialogs = systemDialogs();
+    if (!dialogs) { push({ kind: "removePlace", place }); return; }
+    const copy = removePlaceCopy(place);
+    void dialogs.alert({
+      title: copy.heading,
+      message: copy.body,
+      confirmLabel: t("mobile.settings.removeComputerAction"),
+      cancelLabel: t("mobile.settings.cancel"),
+      tone: "danger",
+    }).then(async (choice) => {
+      if (choice !== "confirm") return;
+      const outcome = await placesState.remove(place).catch(() => ({ ok: false as const }));
+      if (!outcome.ok) {
+        haptic("error");
+        void dialogs.alert({
+          title: t("mobile.settings.removePlace"),
+          message: t("mobile.settings.removePlaceError", { name: place.name }),
+          confirmLabel: t("common.done"),
+          singleAction: true,
+        });
+        return;
+      }
+      if (outcome.reload) window.location.reload();
+    });
+  };
+
+  const confirmRemoveComputer = () => {
+    haptic("tap");
+    const dialogs = systemDialogs();
+    if (!dialogs || !computer) { push("removeComputer"); return; }
+    const name = readableWorkspace(computer.label) ?? t("mobile.connection.yourComputer");
+    void dialogs.alert({
+      title: t("mobile.settings.removeComputerTitle", { name }),
+      message: t("mobile.settings.removeComputerBody", { name }),
+      confirmLabel: t("mobile.settings.removeComputerAction"),
+      cancelLabel: t("mobile.settings.cancel"),
+      tone: "danger",
+    }).then(async (choice) => {
+      if (choice !== "confirm") return;
+      await removePlace(platform, computer.id);
+      window.location.reload();
+    });
+  };
+
+  const confirmSignOut = () => {
+    haptic("tap");
+    const dialogs = systemDialogs();
+    if (!dialogs || !account) { push("signOut"); return; }
+    const keepsComputers = connections.some((connection) => placeKind(connection) === "computer");
+    void dialogs.alert({
+      title: account.accounts.length > 1 && account.account ? t("mobile.settings.signOutAccountTitle", { email: account.account.email }) : t("mobile.settings.signOutTitle"),
+      message: t(account.accounts.length > 1 ? "mobile.settings.signOutAccountBody" : keepsComputers ? "mobile.settings.signOutKeepsComputers" : "mobile.settings.signOutBody"),
+      confirmLabel: t("accountGate.signOut"),
+      cancelLabel: t("mobile.settings.cancel"),
+      tone: "danger",
+    }).then(async (choice) => {
+      if (choice !== "confirm") return;
+      await account.signOutOfPhone();
+    });
+  };
+
   return (
     <div className="pb-6">
       <SettingsSection card>
@@ -342,8 +430,8 @@ function SettingsList({ onClose, push, placesState }: { onClose: () => void; pus
             expected={expected}
             opening={opening}
             onChoose={(place) => { void choosePlace(place); }}
-            onRename={(place) => push({ kind: "renamePlace", place })}
-            onRemove={(place) => push({ kind: "removePlace", place })}
+            onRename={renamePlace}
+            onRemove={confirmRemovePlace}
           />
         )}
         <SettingsRow icon={<Plus />} label={t("mobile.settings.addPlace")} onClick={() => { haptic("pick"); onClose(); window.dispatchEvent(new Event("dusk:add-place")); }} />
@@ -403,8 +491,8 @@ function SettingsList({ onClose, push, placesState }: { onClose: () => void; pus
       )}
       {(rows.signOut || computer) && (
         <SettingsSection card>
-          {computer && <SettingsRow icon={<MonitorX />} label={t("mobile.settings.removeComputer")} chevron={false} onClick={() => { haptic("tap"); push("removeComputer"); }} />}
-          {rows.signOut && <SettingsRow icon={<LogOut />} label={t("accountGate.signOut")} chevron={false} onClick={() => { haptic("tap"); push("signOut"); }} />}
+          {computer && <SettingsRow icon={<MonitorX />} label={t("mobile.settings.removeComputer")} chevron={false} onClick={confirmRemoveComputer} />}
+          {rows.signOut && <SettingsRow icon={<LogOut />} label={t("accountGate.signOut")} chevron={false} onClick={confirmSignOut} />}
         </SettingsSection>
       )}
       {rows.dashboard && !state.config?.cloudHome && <CloudCard onOpen={() => void accountDashboardUrl().then((url) => platform.openExternal(url))} />}

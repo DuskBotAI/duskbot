@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { t } from "@/lib/i18n";
 import { installHaptics } from "./haptics";
 import { installMessageTimes } from "./message-times";
+import type { GlassBridge } from "./native-glass";
 import type { MobilePlatform } from "./platform";
 import { decideReplyDrag, installSwipeReply, REPLY_MAX, REPLY_THRESHOLD, replyOffset, replyRowAt } from "./swipe-reply";
 
@@ -108,5 +109,38 @@ describe("swipe a message to reply", () => {
     expect(onReply).not.toHaveBeenCalled();
     stop();
     stopTimes();
+  });
+
+  it("drives the native Liquid Glass swipe-reply badge instead of a DOM badge when supported", () => {
+    document.documentElement.dataset.skin = "grok-dark";
+    const swipeReply = vi.fn();
+    const glass = { swipeReply } as unknown as GlassBridge;
+    const { chat, onReply } = chatWith();
+    const bubble = document.querySelector<HTMLElement>("[data-chat-bubble]")!;
+    vi.spyOn(bubble, "getBoundingClientRect").mockReturnValue({
+      left: 16, top: 200, right: 260, bottom: 280, width: 244, height: 80, x: 16, y: 200, toJSON: () => ({}),
+    });
+    const stop = installSwipeReply(chat, glass);
+
+    fire("text", "touchstart", 100, 240);
+    fire("text", "touchmove", 125, 242);
+    expect(document.querySelector(".m-swipe-reply")).toBeNull();
+    expect(swipeReply).toHaveBeenLastCalledWith({
+      x: 17, y: 240, restX: -8, size: 36, progress: 25 / REPLY_THRESHOLD.incoming, overscroll: 0, armed: false, dark: true,
+    });
+
+    fire("text", "touchmove", 100 + REPLY_THRESHOLD.incoming + 30, 242);
+    const armedCall = swipeReply.mock.calls.at(-1)?.[0] as { progress: number; overscroll: number; armed: boolean; dark: boolean };
+    expect(armedCall).toMatchObject({ progress: 1, armed: true, dark: true });
+    expect(armedCall.overscroll).toBeGreaterThan(0);
+    expect(armedCall.overscroll).toBeLessThanOrEqual(1);
+
+    fire("text", "touchend", 0, 0);
+    expect(swipeReply).toHaveBeenLastCalledWith(null, false);
+    expect(onReply).toHaveBeenCalledTimes(1);
+
+    stop();
+    expect(swipeReply).toHaveBeenLastCalledWith(null, true);
+    delete document.documentElement.dataset.skin;
   });
 });

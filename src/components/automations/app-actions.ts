@@ -3,6 +3,8 @@ import { useState } from "react";
 
 import { appTriggerApi } from "@/lib/app-triggers";
 import type { Automation } from "@/lib/automations";
+import { t } from "@/lib/i18n";
+import { confirmWithSystem } from "@/lib/system-dialog";
 import { useAutomationActions } from "./actions";
 import { friendlyError } from "@/lib/plain-error";
 
@@ -31,7 +33,7 @@ export function useAllAutomationActions() {
       : base.runNow(automation),
     remove: async (automation: Automation, question: string | null): Promise<boolean> => {
       if (automation.kind !== "app") return base.remove(automation, question);
-      if (question !== null && !window.confirm(question)) return false;
+      if (question !== null && !(await confirmWithSystem(question, t("common.delete"), { cancelLabel: t("common.cancel") }))) return false;
       await attempt(`delete:${automation.id}`, () => appTriggerApi.remove(automation.id));
       return true;
     },

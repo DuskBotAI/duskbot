@@ -72,13 +72,16 @@ export function RoomFolderModal({ group }: { group: Group; onClose: () => void }
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
-  const save = async (next: string | null) => {
+  const save = async (next: string | null): Promise<string | null> => {
     setSaving(true);
     setError(null);
     try {
       await api(`/api/groups/${group.id}`, { method: "PATCH", body: JSON.stringify({ cwd: next }) });
+      return null;
     } catch (e) {
-      setError(friendlyError(e));
+      const message = friendlyError(e);
+      setError(message);
+      return message;
     } finally {
       setSaving(false);
     }
@@ -200,6 +203,29 @@ function RoomAboutDialog({ group, onClose }: { group: Group; onClose: () => void
         onClose();
       }}
       onClose={onClose}
+      nativeForm={{
+        fields: [
+          {
+            id: "name",
+            label: t("botPanel.ui.botSettingsSimpleName"),
+            value: group.name,
+            required: true,
+            autoFocus: true,
+          },
+          {
+            id: "description",
+            label: t("botPanel.ui.presetShareDescription"),
+            value: group.description ?? "",
+            placeholder: t("room.panel.descriptionHint"),
+          },
+        ],
+        onSaved: (values) => {
+          const next = { name: (values.name ?? "").trim(), description: (values.description ?? "").trim() };
+          if (next.name && (next.name !== group.name || next.description !== (group.description ?? ""))) {
+            dispatch({ type: "patchGroup", groupId: group.id, patch: next });
+          }
+        },
+      }}
     >
       <FormField label={t("botPanel.ui.botSettingsSimpleName")}>
         <input data-autofocus dir="auto" value={name} onChange={(event) => setName(event.target.value)} className={textFieldCls} />

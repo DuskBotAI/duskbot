@@ -128,6 +128,10 @@ html[data-native-chrome] .dusk-mobile .mobile-panel-sheet [data-panel-tabs] { po
   font-size: 16px;
   line-height: 22px;
 }
+.dusk-mobile .mobile-panel-sheet [data-local-browser-address] {
+  font-size: 16px;
+  line-height: 20px;
+}
 
 .dusk-mobile .mobile-panel-sheet [data-select-pill]:not([data-system-popup]),
 .dusk-mobile [data-phone-bot-page] [data-select-pill]:not([data-system-popup]),
@@ -510,6 +514,7 @@ html[data-mobile-glass] .dusk-mobile [data-settings-card] > ul > li:has(> [data-
   background-color: var(--m-ios-row-active);
 }
 html[data-mobile-glass] .dusk-mobile [data-settings-card] .mobile-row > span.flex-1 > span:first-child,
+html[data-mobile-glass] .dusk-mobile [data-settings-card] [data-settings-row] > span.flex-1 > span:first-child,
 html[data-mobile-glass] .dusk-mobile [data-settings-card] [data-testid="mobile-place"] > span.flex-1,
 html[data-mobile-glass] .dusk-mobile [data-settings-card] [data-phone-thinking-option] > span:first-child {
   font-size: 17px;

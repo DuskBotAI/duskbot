@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { BotAvatar } from "@/components/Avatar";
 import { WorkingDots } from "@/components/WorkingIndicator";
 import { t } from "@/lib/i18n";
+import { systemDialogs } from "@/lib/system-dialog";
 import { routineDateTime, routineNextLabel, routineRunLabel, routineRunTime } from "@/lib/routine-display";
 import { upperFirst } from "@/lib/lower-first";
 import { scheduleLabel } from "@/lib/schedule-label";
@@ -53,7 +54,22 @@ export function RoutinesSheet({ sheet, open, onClose, onOpenChat }: SheetPagePro
   useEffect(() => { if (!armed) return; const timer = window.setTimeout(() => setArmed(null), 3000); return () => window.clearTimeout(timer); }, [armed]);
   const work = async (routine: Routine, action: "toggle" | "run" | "delete") => {
     if (pending.current.has(routine.id)) return;
-    if (action === "delete" && armed !== routine.id) { setArmed(routine.id); return; }
+    if (action === "delete") {
+      const dialogs = systemDialogs();
+      if (dialogs) {
+        const outcome = await dialogs.alert({
+          title: t("mobile.routines.delete"),
+          message: routine.name,
+          confirmLabel: t("mobile.routines.delete"),
+          cancelLabel: t("common.cancel"),
+          tone: "danger",
+        });
+        if (outcome !== "confirm") return;
+      } else if (armed !== routine.id) {
+        setArmed(routine.id);
+        return;
+      }
+    }
     pending.current.add(routine.id);
     setBusy([...pending.current]);
     setError(null);

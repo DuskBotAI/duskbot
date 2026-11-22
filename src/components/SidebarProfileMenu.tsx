@@ -505,7 +505,7 @@ export function planUsageSummary(report: PlanUsageWindows | null, now = Date.now
     const resets = resetsIn(tightest.resetsAt ? Date.parse(tightest.resetsAt) : null, now);
     return { value: usageValue(tightest.usedPercent!, display), weekly: window === "weekly", ...(resets ? { resets } : {}) };
   }
-  const budgets = signedIn.flatMap((provider) => provider.extra?.filter((extra) => extra.label === "Monthly spend") ?? []);
+  const budgets = signedIn.flatMap((provider) => provider.extra?.filter((extra) => extra.label === "Monthly spend" || extra.label === "Monthly") ?? []);
   return budgets.length ? { value: usageValue(Math.max(...budgets.map((budget) => budget.usedPercent)), display) } : null;
 }
 

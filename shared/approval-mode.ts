@@ -35,9 +35,9 @@ export function modelSwitchNeedsAsk(
 }
 
 export function hasNativeAutoReview(driverKind: string | undefined): boolean {
-  // Qwen Code's `--approval-mode auto` is an LLM classifier that approves
-  // safe actions and blocks risky ones, a reviewer, not a rubber stamp.
-  return ["codex", "claudeAgent", "cursorAgent", "grokAgent", "qwenAgent"].includes(driverKind ?? "");
+  // Qwen Code's `--approval-mode auto` and stock fx's `auto` mode both run an
+  // LLM safety reviewer rather than rubber-stamping tool calls.
+  return ["codex", "claudeAgent", "cursorAgent", "grokAgent", "qwenAgent", "fxAgent"].includes(driverKind ?? "");
 }
 
 const APPROVAL_RANK: Record<ApprovalMode, number> = { ask: 0, edits: 1, auto: 2, full: 3, custom: 4 };

@@ -239,6 +239,8 @@ export interface AcpSupport {
   describeAccountError?(code: AccountErrorCode, model?: string): string | undefined;
   /** Compose the session/prompt text. Default prepends the persona. */
   buildPromptText?(turn: SendTurnInput): string;
+  /** Extra fields merged into session/new (e.g. ACP client systemPrompt blocks). */
+  sessionNewParams?(turn: SendTurnInput, init: any, ctx: { config: AcpConfig; env: Record<string, string | undefined>; cwd: string }): Record<string, unknown>;
   /** Rewrite a picker id (`omlx::model`) into the CLI-native id before spawn and session/select. */
   resolveTurnModel?(
     model: string | undefined,
@@ -1379,7 +1381,8 @@ export function createAcpDriver(support: AcpSupport): ProviderDriver<AcpConfig> 
                 promptTurn = { ...turn, text: recovery.text };
                 rebuiltFromReplay = recovery.replayed;
               }
-              await request("session/new", { cwd, mcpServers: support.mcpServersFromLaunch ? [] : mcpServers, ...selectionParams }, NEW_SESSION_TIMEOUT, (result) => {
+              const extraSessionNew = support.sessionNewParams?.(promptTurn, init, { config: turnConfig, env, cwd }) ?? {};
+              await request("session/new", { cwd, mcpServers: support.mcpServersFromLaunch ? [] : mcpServers, ...selectionParams, ...extraSessionNew }, NEW_SESSION_TIMEOUT, (result) => {
                 session.sessionId = typeof result?.sessionId === "string" ? result.sessionId : null;
                 session.sessionKey = sessionKey;
                 receiveModelVariants(result, true);

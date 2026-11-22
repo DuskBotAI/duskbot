@@ -28,14 +28,14 @@ export function credentialProvider(target: unknown): KeyProvider | "other" {
 }
 
 export const ENGINE = [
-  "claude", "codex", "gemini", "cursor", "opencode", "qwen", "hermes", "cline", "custom_acp", "pi", "openai_compat", "grok",
+  "claude", "codex", "gemini", "cursor", "opencode", "qwen", "hermes", "fx", "cline", "custom_acp", "pi", "openai_compat", "grok",
   "grok_api", "kimi", "droid", "antigravity", "minimax", "mistral", "cerebras", "groq", "greenference", "meta", "muse_code", "deepseek", "copilot",
 ] as const;
 export type Engine = (typeof ENGINE)[number];
 
 const ENGINE_BY_DRIVER = new Map<string, Engine>(Object.entries({
   claudeAgent: "claude", codex: "codex", geminiAgent: "gemini", cursorAgent: "cursor", opencodeGo: "opencode",
-  qwenAgent: "qwen", hermesAgent: "hermes", clineAgent: "cline", customAcp: "custom_acp", piAgent: "pi",
+  qwenAgent: "qwen", hermesAgent: "hermes", fxAgent: "fx", clineAgent: "cline", customAcp: "custom_acp", piAgent: "pi",
   "openai-compat": "openai_compat", grokAgent: "grok", grok: "grok_api", kimiAgent: "kimi", droidAgent: "droid",
   antigravityAgent: "antigravity", minimax: "minimax", mistral: "mistral", cerebras: "cerebras", groq: "groq", greenference: "greenference",
   meta: "meta", museCode: "muse_code", deepseekAgent: "deepseek", copilotAgent: "copilot",

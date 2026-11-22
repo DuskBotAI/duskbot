@@ -158,6 +158,7 @@ export function verificationServerEnvironment(parentEnv: NodeJS.ProcessEnv, data
     TMP: fixtureTemp,
     TMPDIR: fixtureTemp,
     HERMES_HOME: join(home, ".hermes"),
+    FX_HOME: join(home, ".fx"),
     DUSK_DATA_DIR: dataDir,
     DUSK_PORT: String(port),
     DUSK_WEBHOOK_PORT: String(port + 1),
@@ -323,7 +324,7 @@ export async function launchVerificationServer(
     features: { smartSetupChoices: false },
     instances: {
       // the engines every server lists by default, off unless a fixture stands in below: never the real CLIs on PATH
-      ...Object.fromEntries(["codex", "cursor", "githubCopilot", "qwen", "hermes", "pi"].map((id) => [id, { driver: "not-a-real-driver" }])),
+      ...Object.fromEntries(["codex", "cursor", "githubCopilot", "qwen", "hermes", "fx", "pi"].map((id) => [id, { driver: "not-a-real-driver" }])),
       ...(extraProviders.includes("codex") ? { codex: {
         driver: "codex", displayName: "Verification Codex", config: { cli: fileURLToPath(new URL("../server/testing/fake-codex-app-server.ts", import.meta.url)) },
       } } : {}),

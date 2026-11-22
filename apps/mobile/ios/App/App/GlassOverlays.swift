@@ -37,29 +37,54 @@ private final class LayoutPassthroughView: PassthroughView {
 
 /// Pull-to-refresh orb in native Liquid Glass (iOS 26+), sliding out below the navigation bar as the list pulls down,
 /// popping with a spring when crossing the refresh threshold, and morphing to a native activity indicator while loading.
+extension CAKeyframeAnimation {
+    static func pageSlide(keyPath: String, values: [CGFloat], duration: TimeInterval, beginTime: CFTimeInterval) -> CAKeyframeAnimation {
+        let animation = CAKeyframeAnimation(keyPath: keyPath)
+        animation.values = values.map { NSNumber(value: Double($0)) }
+        animation.duration = duration
+        animation.calculationMode = .linear
+        animation.beginTime = beginTime
+        animation.fillMode = .backwards
+        animation.preferredFrameRateRange = CAFrameRateRange(minimum: 80, maximum: 120, preferred: 120)
+        return animation
+    }
+}
+
+extension UIImage {
+    static func fromDataURL(_ data: String) -> UIImage? {
+        guard data.hasPrefix("data:image/"), let comma = data.firstIndex(of: ",") else { return nil }
+        let encoded = String(data[data.index(after: comma)...])
+        guard let bytes = Data(base64Encoded: encoded) else { return nil }
+        return UIImage(data: bytes)
+    }
+}
+
+/// Shared Liquid Glass floating orb base for pull-to-refresh and swipe-to-reply badges.
 @available(iOS 26.0, *)
-final class GlassPullRefreshOrb {
-    private static let orbSize: CGFloat = 42
-    private static let symbolConfig = UIImage.SymbolConfiguration(pointSize: 16, weight: .semibold)
-    private static let arrowImage = UIImage(systemName: "arrow.clockwise", withConfiguration: symbolConfig)
+class GlassOrbBase {
+    let layerView = UIView()
+    let container = UIView()
+    let orb = UIVisualEffectView(effect: UIGlassEffect(style: .regular))
+    let icon = UIImageView()
+    var shown = false
+    var armed = false
+    var generation = 0
 
-    private let layerView = UIView()
-    private let container = UIView()
-    private let orb = UIVisualEffectView(effect: UIGlassEffect(style: .regular))
-    private let icon = UIImageView()
-    private let spinner = UIActivityIndicatorView(style: .medium)
-    private var shown = false
-    private var armed = false
-    private var refreshing = false
-    private var generation = 0
+    private let tintAlpha: CGFloat
+    private let armedDuration: TimeInterval
+    private let armedBounce: CGFloat
 
-    init(host: UIView, below: UIView) {
+    init(host: UIView, below: UIView, size: CGFloat, image: UIImage?, tintAlpha: CGFloat, armedDuration: TimeInterval, armedBounce: CGFloat) {
+        self.tintAlpha = tintAlpha
+        self.armedDuration = armedDuration
+        self.armedBounce = armedBounce
+
         layerView.frame = host.bounds
         layerView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         layerView.isUserInteractionEnabled = false
         layerView.isHidden = true
 
-        container.bounds = CGRect(x: 0, y: 0, width: Self.orbSize, height: Self.orbSize)
+        container.bounds = CGRect(x: 0, y: 0, width: size, height: size)
         container.isUserInteractionEnabled = false
         container.alpha = 0
 
@@ -71,26 +96,110 @@ final class GlassPullRefreshOrb {
         icon.frame = orb.contentView.bounds
         icon.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         icon.contentMode = .center
-        icon.image = Self.arrowImage
+        icon.image = image
         icon.tintColor = .secondaryLabel
         icon.isUserInteractionEnabled = false
 
-        spinner.hidesWhenStopped = true
-        spinner.translatesAutoresizingMaskIntoConstraints = false
-        spinner.isUserInteractionEnabled = false
-
         orb.contentView.addSubview(icon)
-        orb.contentView.addSubview(spinner)
-        NSLayoutConstraint.activate([
-            spinner.centerXAnchor.constraint(equalTo: orb.contentView.centerXAnchor),
-            spinner.centerYAnchor.constraint(equalTo: orb.contentView.centerYAnchor),
-        ])
         container.addSubview(orb)
         layerView.addSubview(container)
         host.insertSubview(layerView, belowSubview: below)
     }
 
     var view: UIView { layerView }
+
+    func makeEffect(armed: Bool) -> UIGlassEffect {
+        let effect = UIGlassEffect(style: .regular)
+        effect.isInteractive = armed
+        if armed { effect.tintColor = UIColor.label.withAlphaComponent(tintAlpha) }
+        return effect
+    }
+
+    func beginShow(reset: () -> Void = {}) {
+        generation += 1
+        shown = true
+        armed = false
+        container.layer.removeAllAnimations()
+        orb.layer.removeAllAnimations()
+        orb.transform = .identity
+        orb.effect = makeEffect(armed: false)
+        icon.tintColor = .secondaryLabel
+        reset()
+        layerView.isHidden = false
+    }
+
+    func transitionArmed(_ isArmed: Bool, image: UIImage? = nil) {
+        if let image { icon.image = image }
+        icon.tintColor = isArmed ? .label : .secondaryLabel
+        let effect = makeEffect(armed: isArmed)
+        if UIAccessibility.isReduceMotionEnabled {
+            orb.effect = effect
+            orb.transform = isArmed ? CGAffineTransform(scaleX: 1.06, y: 1.06) : .identity
+            return
+        }
+        if isArmed {
+            orb.transform = CGAffineTransform(scaleX: 0.9, y: 0.9)
+            UIView.animate(springDuration: armedDuration, bounce: armedBounce) {
+                self.orb.effect = effect
+                self.orb.transform = CGAffineTransform(scaleX: 1.08, y: 1.08)
+            }
+        } else {
+            UIView.animate(withDuration: 0.18, delay: 0, options: [.curveEaseOut, .beginFromCurrentState]) {
+                self.orb.effect = effect
+                self.orb.transform = .identity
+            }
+        }
+    }
+
+    func dismissOrb(instant: Bool, duration: TimeInterval, exit: @escaping () -> Void, cleanup: @escaping () -> Void = {}) {
+        guard shown || !layerView.isHidden else { return }
+        shown = false
+        armed = false
+        generation += 1
+        let gen = generation
+        if instant || UIAccessibility.isReduceMotionEnabled {
+            container.layer.removeAllAnimations()
+            orb.layer.removeAllAnimations()
+            cleanup()
+            container.alpha = 0
+            container.transform = .identity
+            orb.transform = .identity
+            orb.effect = makeEffect(armed: false)
+            layerView.isHidden = true
+            return
+        }
+        UIView.animate(withDuration: duration, delay: 0, options: [.curveEaseOut, .beginFromCurrentState]) {
+            exit()
+            self.orb.transform = .identity
+        } completion: { [weak self] _ in
+            guard let self, self.generation == gen else { return }
+            cleanup()
+            self.orb.effect = self.makeEffect(armed: false)
+            self.layerView.isHidden = true
+        }
+    }
+}
+
+@available(iOS 26.0, *)
+final class GlassPullRefreshOrb: GlassOrbBase {
+    private static let orbSize: CGFloat = 42
+    private static let symbolConfig = UIImage.SymbolConfiguration(pointSize: 16, weight: .semibold)
+    private static let arrowImage = UIImage(systemName: "arrow.clockwise", withConfiguration: symbolConfig)
+
+    private let spinner = UIActivityIndicatorView(style: .medium)
+    private var refreshing = false
+
+    init(host: UIView, below: UIView) {
+        super.init(host: host, below: below, size: Self.orbSize, image: Self.arrowImage, tintAlpha: 0.12, armedDuration: 0.34, armedBounce: 0.45)
+        spinner.hidesWhenStopped = true
+        spinner.translatesAutoresizingMaskIntoConstraints = false
+        spinner.isUserInteractionEnabled = false
+        orb.contentView.addSubview(spinner)
+        NSLayoutConstraint.activate([
+            spinner.centerXAnchor.constraint(equalTo: orb.contentView.centerXAnchor),
+            spinner.centerYAnchor.constraint(equalTo: orb.contentView.centerYAnchor),
+        ])
+    }
 
     func apply(_ data: [String: Any]?, instant: Bool = false) {
         guard let data,
@@ -111,19 +220,12 @@ final class GlassPullRefreshOrb {
         }
 
         if !shown {
-            generation += 1
-            shown = true
-            armed = false
             refreshing = false
-            container.layer.removeAllAnimations()
-            orb.layer.removeAllAnimations()
-            orb.transform = .identity
-            orb.effect = Self.makeEffect(armed: false)
-            icon.isHidden = false
-            icon.alpha = 1
-            icon.tintColor = .secondaryLabel
-            spinner.stopAnimating()
-            layerView.isHidden = false
+            beginShow {
+                icon.isHidden = false
+                icon.alpha = 1
+                spinner.stopAnimating()
+            }
         }
 
         let centerX = layerView.bounds.width / 2
@@ -150,35 +252,13 @@ final class GlassPullRefreshOrb {
         }
     }
 
-    private func transitionArmed(_ isArmed: Bool) {
-        icon.tintColor = isArmed ? .label : .secondaryLabel
-        let effect = Self.makeEffect(armed: isArmed)
-        if UIAccessibility.isReduceMotionEnabled {
-            orb.effect = effect
-            orb.transform = isArmed ? CGAffineTransform(scaleX: 1.06, y: 1.06) : .identity
-            return
-        }
-        if isArmed {
-            orb.transform = CGAffineTransform(scaleX: 0.9, y: 0.9)
-            UIView.animate(springDuration: 0.34, bounce: 0.45) {
-                self.orb.effect = effect
-                self.orb.transform = CGAffineTransform(scaleX: 1.08, y: 1.08)
-            }
-        } else {
-            UIView.animate(withDuration: 0.18, delay: 0, options: [.curveEaseOut, .beginFromCurrentState]) {
-                self.orb.effect = effect
-                self.orb.transform = .identity
-            }
-        }
-    }
-
     private func transitionRefreshing(_ isRefreshing: Bool) {
         if isRefreshing {
             spinner.color = .label
             spinner.startAnimating()
             UIView.animate(springDuration: 0.32, bounce: 0.25) {
                 self.icon.alpha = 0
-                self.orb.effect = Self.makeEffect(armed: false)
+                self.orb.effect = self.makeEffect(armed: false)
                 self.orb.transform = .identity
             }
         } else {
@@ -188,43 +268,17 @@ final class GlassPullRefreshOrb {
     }
 
     private func dismiss(instant: Bool) {
-        guard shown || !layerView.isHidden else { return }
-        shown = false
-        armed = false
         refreshing = false
-        generation += 1
-        let gen = generation
-        if instant || UIAccessibility.isReduceMotionEnabled {
-            container.layer.removeAllAnimations()
-            orb.layer.removeAllAnimations()
-            spinner.stopAnimating()
-            container.alpha = 0
-            container.transform = .identity
-            orb.transform = .identity
-            orb.effect = Self.makeEffect(armed: false)
-            layerView.isHidden = true
-            return
-        }
-        UIView.animate(withDuration: 0.24, delay: 0, options: [.curveEaseOut, .beginFromCurrentState]) {
-            self.container.alpha = 0
-            self.container.transform = CGAffineTransform(scaleX: 0.4, y: 0.4)
-            self.container.center = CGPoint(x: self.container.center.x, y: self.container.center.y - 12)
-            self.orb.transform = .identity
-        } completion: { [weak self] _ in
-            guard let self, self.generation == gen else { return }
-            self.spinner.stopAnimating()
-            self.orb.effect = Self.makeEffect(armed: false)
-            self.layerView.isHidden = true
-        }
-    }
-
-    private static func makeEffect(armed: Bool) -> UIGlassEffect {
-        let effect = UIGlassEffect(style: .regular)
-        effect.isInteractive = armed
-        if armed {
-            effect.tintColor = UIColor.label.withAlphaComponent(0.12)
-        }
-        return effect
+        dismissOrb(
+            instant: instant,
+            duration: 0.24,
+            exit: {
+                self.container.alpha = 0
+                self.container.transform = CGAffineTransform(scaleX: 0.4, y: 0.4)
+                self.container.center = CGPoint(x: self.container.center.x, y: self.container.center.y - 12)
+            },
+            cleanup: { self.spinner.stopAnimating() }
+        )
     }
 }
 
@@ -322,15 +376,7 @@ final class GlassImageViewerBar {
             if let label = data["shareLabel"] as? String, !label.isEmpty {
                 shareButton.accessibilityLabel = label
             }
-            let nextSharing = data["sharing"] as? Bool == true
-            if nextSharing != sharing {
-                sharing = nextSharing
-                var cfg = shareButton.configuration ?? UIButton.Configuration.glass()
-                cfg.showsActivityIndicator = nextSharing
-                cfg.image = nextSharing ? nil : UIImage(systemName: "square.and.arrow.up", withConfiguration: Self.shareConfig)
-                shareButton.configuration = cfg
-                shareButton.isEnabled = !nextSharing
-            }
+            setSharing(data["sharing"] as? Bool == true)
         } else {
             shareButton.isHidden = true
         }
@@ -346,6 +392,7 @@ final class GlassImageViewerBar {
             countPill.isHidden = true
         }
 
+        container.isUserInteractionEnabled = visible
         if !shown {
             shown = true
             chromeVisible = visible
@@ -354,7 +401,6 @@ final class GlassImageViewerBar {
         } else if chromeVisible != visible {
             chromeVisible = visible
             let targetAlpha: CGFloat = visible ? 1 : 0
-            container.isUserInteractionEnabled = visible
             if UIAccessibility.isReduceMotionEnabled {
                 container.alpha = targetAlpha
             } else {
@@ -363,6 +409,16 @@ final class GlassImageViewerBar {
                 }
             }
         }
+    }
+
+    private func setSharing(_ next: Bool) {
+        guard next != sharing else { return }
+        sharing = next
+        var cfg = shareButton.configuration ?? UIButton.Configuration.glass()
+        cfg.showsActivityIndicator = next
+        cfg.image = next ? nil : UIImage(systemName: "square.and.arrow.up", withConfiguration: Self.shareConfig)
+        shareButton.configuration = cfg
+        shareButton.isEnabled = !next
     }
 
     private func repositionCountPill(animated: Bool) {
@@ -385,8 +441,9 @@ final class GlassImageViewerBar {
         guard shown || !container.isHidden else { return }
         shown = false
         chromeVisible = false
-        sharing = false
+        setSharing(false)
         countCenterY = nil
+        container.isUserInteractionEnabled = false
         container.alpha = 0
         container.isHidden = true
     }
@@ -541,6 +598,7 @@ final class GlassFloatingPill: NSObject {
 
         let wasShown = shown
         let previous = spec
+        if wasShown && previous == next { return }
         spec = next
 
         layerView.overrideUserInterfaceStyle = next.dark ? .dark : .light
@@ -684,9 +742,11 @@ final class GlassFloatingPill: NSObject {
     @objc private func handlePillTap() {
         guard let spec, spec.tappable else { return }
         if !UIAccessibility.isReduceMotionEnabled {
+            let gen = generation
             UIView.animate(springDuration: 0.26, bounce: 0.35) {
                 self.pill.transform = CGAffineTransform(scaleX: 0.96, y: 0.96)
-            } completion: { _ in
+            } completion: { [weak self] _ in
+                guard let self, self.generation == gen else { return }
                 UIView.animate(springDuration: 0.28, bounce: 0.35) { self.pill.transform = .identity }
             }
         }

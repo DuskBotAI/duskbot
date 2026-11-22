@@ -2,7 +2,7 @@ import { t } from "@/lib/i18n";
 import { canScroll } from "./gesture";
 import { haptic } from "./haptics";
 import { prefersReducedMotion, rubberband, springEasing } from "./motion";
-import type { GlassBridge } from "./native-glass";
+import { isGlassDark, type GlassBridge } from "./native-glass";
 
 /** Telegram iOS's numbers: the pull that arms a reply, by who sent the message. */
 export const REPLY_THRESHOLD = { incoming: 45, outgoing: 60 } as const;
@@ -73,11 +73,6 @@ function drawIcon(row: HTMLElement, anchor: { restX: number; y: number }): HTMLE
   return icon;
 }
 
-function isDark(chat: HTMLElement): boolean {
-  return document.documentElement.dataset.skin === "grok-dark"
-    || chat.closest<HTMLElement>(".dusk-mobile")?.dataset.scheme === "dark";
-}
-
 function focusComposer(chat: HTMLElement, glass?: GlassBridge): void {
   const field = chat.querySelector<HTMLTextAreaElement>("[data-tour='composer'] textarea");
   if (field?.disabled) return;
@@ -138,7 +133,7 @@ export function installSwipeReply(chat: HTMLElement, glass?: GlassBridge): () =>
         progress,
         overscroll,
         armed: nowArmed,
-        dark: isDark(chat),
+        dark: isGlassDark(),
       });
     } else if (icon) {
       icon.style.translate = `${offset}px 0`;
@@ -157,15 +152,15 @@ export function installSwipeReply(chat: HTMLElement, glass?: GlassBridge): () =>
       row.style.translate = "";
       const leaving = icon;
       icon = null;
+      const instantRelease = prefersReducedMotion() || !from;
+      if (!instantRelease) {
+        back = row.animate([{ translate: from }, { translate: "0 0" }], { duration: RELEASE.duration, easing: RELEASE.easing });
+      }
       if (nativeBadge) {
         nativeBadge(null, instant || prefersReducedMotion());
-        if (!prefersReducedMotion() && from) {
-          back = row.animate([{ translate: from }, { translate: "0 0" }], { duration: RELEASE.duration, easing: RELEASE.easing });
-        }
-      } else if (prefersReducedMotion() || !from) {
+      } else if (instantRelease) {
         leaving?.remove();
       } else {
-        back = row.animate([{ translate: from }, { translate: "0 0" }], { duration: RELEASE.duration, easing: RELEASE.easing });
         const fade = leaving?.animate([{ opacity: leaving.style.opacity, scale: leaving.style.scale, translate: leaving.style.translate }, { opacity: 0, scale: 0.2, translate: "0 0" }], { duration: 300, easing: "ease-out" });
         if (fade) fade.onfinish = () => leaving?.remove(); else leaving?.remove();
       }

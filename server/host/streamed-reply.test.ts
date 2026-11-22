@@ -53,6 +53,10 @@ describe("what of a streaming reply reaches the chat", () => {
     expect(replies.passes(THREAD, "(pass)")).toBe(true);
     expect(replies.passedQuietly(THREAD, { turnId: "turn", startedAt: 0, reply: "" })).toBe(true);
     expect(replies.passedQuietly(THREAD, { turnId: "turn", startedAt: 0, reply: "" })).toBe(false);
+
+    expect(replies.shown(item("(pass)\n\n(pass)"), false)).toBeNull();
+    expect(replies.passes(THREAD, "(pass)\n\n(pass)")).toBe(true);
+    expect(replies.shown(item("Done.\n\n(pass)"), false)).toEqual(item("Done."));
   });
 
   it("shows (pass) where a quiet reply is not allowed, and never counts a turn that also spoke", () => {

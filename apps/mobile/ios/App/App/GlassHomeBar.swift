@@ -88,16 +88,9 @@ final class GlassHomeBar {
         guard let last = points.last else { return }
         let width = bar.bounds.width
         let pages = points.map { min($0, width) }
-        let move = CAKeyframeAnimation(keyPath: "transform.translation.x")
-        move.values = pages.map { NSNumber(value: Double(shift($0))) }
-        let reveal = CAKeyframeAnimation(keyPath: "bounds.size.width")
-        reveal.values = pages.map { NSNumber(value: Double(max(0, $0 - shift($0)))) }
+        let move = CAKeyframeAnimation.pageSlide(keyPath: "transform.translation.x", values: pages.map(shift), duration: duration, beginTime: beginTime)
+        let reveal = CAKeyframeAnimation.pageSlide(keyPath: "bounds.size.width", values: pages.map { max(0, $0 - shift($0)) }, duration: duration, beginTime: beginTime)
         for (animation, layer, key) in [(move, bar.layer, Self.slideKeys[0]), (reveal, clip, Self.slideKeys[1])] {
-            animation.duration = duration
-            animation.calculationMode = .linear
-            animation.beginTime = beginTime
-            animation.fillMode = .backwards
-            animation.preferredFrameRateRange = CAFrameRateRange(minimum: 80, maximum: 120, preferred: 120)
             layer.removeAnimation(forKey: key)
             layer.add(animation, forKey: key)
         }
@@ -355,49 +348,16 @@ final class GlassTakeoverBar {
 /// Floating swipe-to-reply orb in native Liquid Glass (iOS 26+), refracting the chat behind a swiped message bubble
 /// and springing with a luminous fill + symbol swap when the drag crosses the reply threshold.
 @available(iOS 26.0, *)
-final class GlassSwipeReplyBadge {
+final class GlassSwipeReplyBadge: GlassOrbBase {
     private static let symbolConfig = UIImage.SymbolConfiguration(pointSize: 15, weight: .semibold)
     private static let idleImage = UIImage(systemName: "arrowshape.turn.up.left", withConfiguration: symbolConfig)
     private static let armedImage = UIImage(systemName: "arrowshape.turn.up.left.fill", withConfiguration: symbolConfig)
 
-    private let layerView = UIView()
-    private let container = UIView()
-    private let orb = UIVisualEffectView(effect: UIGlassEffect(style: .regular))
-    private let icon = UIImageView()
-    private var shown = false
-    private var armed = false
     private var restCenter = CGPoint.zero
-    private var generation = 0
 
     init(host: UIView, below: UIView) {
-        layerView.frame = host.bounds
-        layerView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
-        layerView.isUserInteractionEnabled = false
-        layerView.isHidden = true
-
-        container.bounds = CGRect(x: 0, y: 0, width: 36, height: 36)
-        container.isUserInteractionEnabled = false
-        container.alpha = 0
-
-        orb.frame = container.bounds
-        orb.autoresizingMask = [.flexibleWidth, .flexibleHeight]
-        orb.cornerConfiguration = .capsule()
-        orb.isUserInteractionEnabled = false
-
-        icon.frame = orb.contentView.bounds
-        icon.autoresizingMask = [.flexibleWidth, .flexibleHeight]
-        icon.contentMode = .center
-        icon.image = Self.idleImage
-        icon.tintColor = .secondaryLabel
-        icon.isUserInteractionEnabled = false
-
-        orb.contentView.addSubview(icon)
-        container.addSubview(orb)
-        layerView.addSubview(container)
-        host.insertSubview(layerView, belowSubview: below)
+        super.init(host: host, below: below, size: 36, image: Self.idleImage, tintAlpha: 0.14, armedDuration: 0.36, armedBounce: 0.46)
     }
-
-    var view: UIView { layerView }
 
     func apply(_ data: [String: Any]?, instant: Bool = false) {
         guard let data,
@@ -419,16 +379,7 @@ final class GlassSwipeReplyBadge {
         restCenter = CGPoint(x: restX, y: y)
 
         if !shown {
-            generation += 1
-            shown = true
-            armed = false
-            container.layer.removeAllAnimations()
-            orb.layer.removeAllAnimations()
-            orb.transform = .identity
-            orb.effect = Self.makeEffect(armed: false)
-            icon.image = Self.idleImage
-            icon.tintColor = .secondaryLabel
-            layerView.isHidden = false
+            beginShow { icon.image = Self.idleImage }
         }
 
         CATransaction.begin()
@@ -445,67 +396,15 @@ final class GlassSwipeReplyBadge {
 
         if nextArmed != armed {
             armed = nextArmed
-            transitionArmed(nextArmed)
-        }
-    }
-
-    private func transitionArmed(_ isArmed: Bool) {
-        icon.image = isArmed ? Self.armedImage : Self.idleImage
-        icon.tintColor = isArmed ? .label : .secondaryLabel
-        let effect = Self.makeEffect(armed: isArmed)
-        if UIAccessibility.isReduceMotionEnabled {
-            orb.effect = effect
-            orb.transform = isArmed ? CGAffineTransform(scaleX: 1.06, y: 1.06) : .identity
-            return
-        }
-        if isArmed {
-            orb.transform = CGAffineTransform(scaleX: 0.9, y: 0.9)
-            UIView.animate(springDuration: 0.36, bounce: 0.46) {
-                self.orb.effect = effect
-                self.orb.transform = CGAffineTransform(scaleX: 1.08, y: 1.08)
-            }
-        } else {
-            UIView.animate(withDuration: 0.18, delay: 0, options: [.curveEaseOut, .beginFromCurrentState]) {
-                self.orb.effect = effect
-                self.orb.transform = .identity
-            }
+            transitionArmed(nextArmed, image: nextArmed ? Self.armedImage : Self.idleImage)
         }
     }
 
     private func dismiss(instant: Bool) {
-        guard shown || !layerView.isHidden else { return }
-        shown = false
-        armed = false
-        generation += 1
-        let gen = generation
-        if instant || UIAccessibility.isReduceMotionEnabled {
-            container.layer.removeAllAnimations()
-            orb.layer.removeAllAnimations()
-            container.alpha = 0
-            container.transform = .identity
-            orb.transform = .identity
-            orb.effect = Self.makeEffect(armed: false)
-            layerView.isHidden = true
-            return
-        }
-        UIView.animate(withDuration: 0.26, delay: 0, options: [.curveEaseOut, .beginFromCurrentState]) {
+        dismissOrb(instant: instant, duration: 0.26, exit: {
             self.container.center = self.restCenter
             self.container.alpha = 0
             self.container.transform = CGAffineTransform(scaleX: 0.25, y: 0.25)
-            self.orb.transform = .identity
-        } completion: { [weak self] _ in
-            guard let self, self.generation == gen else { return }
-            self.orb.effect = Self.makeEffect(armed: false)
-            self.layerView.isHidden = true
-        }
-    }
-
-    private static func makeEffect(armed: Bool) -> UIGlassEffect {
-        let effect = UIGlassEffect(style: .regular)
-        effect.isInteractive = armed
-        if armed {
-            effect.tintColor = UIColor.label.withAlphaComponent(0.14)
-        }
-        return effect
+        })
     }
 }

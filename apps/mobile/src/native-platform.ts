@@ -224,20 +224,21 @@ export interface SpeechPlugin {
 }
 const DuskSpeech = registerPlugin<SpeechPlugin>("DuskSpeech");
 
+interface GlassCapabilities {
+  acks?: boolean;
+  jump?: boolean;
+  reply?: boolean;
+  attachments?: boolean;
+  takeover?: boolean;
+  swipeReply?: boolean;
+  pullRefresh?: boolean;
+  viewer?: boolean;
+  pill?: boolean;
+}
+
 /** The app's own Liquid Glass chat chrome (ios/App/App/GlassChromePlugin.swift), iOS 26 and later. */
 interface GlassPlugin {
-  supported(): Promise<{
-    supported: boolean;
-    acks?: boolean;
-    jump?: boolean;
-    reply?: boolean;
-    attachments?: boolean;
-    takeover?: boolean;
-    swipeReply?: boolean;
-    pullRefresh?: boolean;
-    viewer?: boolean;
-    pill?: boolean;
-  }>;
+  supported(): Promise<{ supported: boolean } & GlassCapabilities>;
   update(state: GlassState): Promise<void>;
   setText(options: { text: string; seq: number }): Promise<void>;
   clearText(options: { id: number }): Promise<void>;
@@ -343,24 +344,13 @@ export async function nativeFiles(list: readonly NativeFile[], read: typeof fetc
   return files.filter((file): file is File => file !== null);
 }
 
-export function glassBridge(
-  plugin: GlassPlugin,
-  acks = false,
-  jump = false,
-  reply = false,
-  takeover = false,
-  swipeReply = false,
-  pullRefresh = false,
-  viewer = false,
-  pill = false,
-  attachments = false,
-): GlassBridge {
+export function glassBridge(plugin: GlassPlugin, caps: GlassCapabilities = {}): GlassBridge {
   const quiet = (work: Promise<unknown>) => { void work.catch(() => {}); };
   return {
-    acks,
-    jump,
-    reply,
-    attachments,
+    acks: caps.acks === true,
+    jump: caps.jump === true,
+    reply: caps.reply === true,
+    attachments: caps.attachments === true,
     update: (state) => quiet(plugin.update(state)),
     setText: (text, seq) => quiet(plugin.setText({ text, seq })),
     clearText: (id) => quiet(plugin.clearText({ id })),
@@ -371,13 +361,13 @@ export function glassBridge(
     slide: (path, at) => quiet(plugin.slide({ path, at })),
     glyphs: () => plugin.glyphs().catch(() => ({})),
     home: (state) => quiet(plugin.home({ state })),
-    ...(takeover ? { takeover: (state: TakeoverGlassState | null) => quiet(plugin.takeover({ state })) } : {}),
-    ...(swipeReply ? { swipeReply: (state: SwipeReplyGlassState | null, instant?: boolean) => quiet(plugin.swipeReply({ state, ...(instant ? { instant } : {}) })) } : {}),
-    ...(pullRefresh ? { pullRefresh: (state: PullRefreshGlassState | null, instant?: boolean) => quiet(plugin.pullRefresh({ state, ...(instant ? { instant } : {}) })) } : {}),
-    ...(viewer ? { viewer: (state: ViewerGlassState | null) => quiet(plugin.viewer({ state })) } : {}),
-    ...(pill ? {
+    ...(caps.takeover ? { takeover: (state: TakeoverGlassState | null) => quiet(plugin.takeover({ state })) } : {}),
+    ...(caps.swipeReply ? { swipeReply: (state: SwipeReplyGlassState | null, instant?: boolean) => quiet(plugin.swipeReply({ state, instant })) } : {}),
+    ...(caps.pullRefresh ? { pullRefresh: (state: PullRefreshGlassState | null, instant?: boolean) => quiet(plugin.pullRefresh({ state, instant })) } : {}),
+    ...(caps.viewer ? { viewer: (state: ViewerGlassState | null) => quiet(plugin.viewer({ state })) } : {}),
+    ...(caps.pill ? {
       pill: (slot: "top" | "bottom", state: FloatingPillGlassState | null, clearId?: string, instant?: boolean) =>
-        quiet(plugin.pill({ slot, state, ...(clearId ? { clearId } : {}), ...(instant ? { instant } : {}) })),
+        quiet(plugin.pill({ slot, state, clearId, instant })),
     } : {}),
     onEvent: (listener) => unsubscribe([plugin.addListener("glass", (event) => {
       if (event.type === "paste") void nativeFiles(event.files).then(attachToComposer);
@@ -1045,20 +1035,7 @@ export async function nativePlatform(): Promise<MobilePlatform> {
     native: true,
     appVersion: info?.version || __APP_VERSION__,
     deviceName: () => kind === "ios" ? "iPhone" : "Android phone",
-    glass: glass?.supported
-      ? glassBridge(
-          DuskGlass,
-          glass.acks === true,
-          glass.jump === true,
-          glass.reply === true,
-          glass.takeover === true,
-          glass.swipeReply === true,
-          glass.pullRefresh === true,
-          glass.viewer === true,
-          glass.pill === true,
-          glass.attachments === true,
-        )
-      : undefined,
+    glass: glass?.supported ? glassBridge(DuskGlass, glass) : undefined,
     menu: menu?.supported ? menuBridge(DuskMenu) : undefined,
     orientation: Capacitor.isPluginAvailable("DuskOrientation") ? orientationBridge(DuskOrientation) : undefined,
     haptic(type) {

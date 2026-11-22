@@ -137,7 +137,14 @@ export function LiveDesktop({ target, threadId, botId, bot, name, poster, expand
         // in control, what the person copies on the desktop reaches their own clipboard, so pasting it back works too
         clipboard: (copied) => {
           if (copied) remoteClipboard.current = copied;
-          if (!watching.current && copied) void copyText(copied);
+          if (copyFallback.current !== null) {
+            clearTimeout(copyFallback.current);
+            copyFallback.current = null;
+            if (copied) void writeClipboard.current(copied, true);
+            else showToastRef.current(t("desktopViewer.nothingSelected"));
+            return;
+          }
+          if (!watching.current && copied) void writeClipboard.current(copied, false);
         },
       },
     }).then((connected) => {
@@ -261,17 +268,29 @@ export function LiveDesktop({ target, threadId, botId, bot, name, poster, expand
     showToast(t("desktopViewer.pasted"));
   }, [platform, showToast, viewOnly]);
 
+  const copyFallback = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const showToastRef = useRef(showToast);
+  showToastRef.current = showToast;
+  const writeClipboard = useRef(async (_value: string, _announce: boolean) => {});
+  writeClipboard.current = async (value: string, announce: boolean) => {
+    const ok = platform?.writeClipboard
+      ? await platform.writeClipboard(value).catch(() => false)
+      : (await copyText(value)) === "copied";
+    if (announce && ok) showToast(t("desktopViewer.copiedToPhone"));
+  };
+  useEffect(() => () => { if (copyFallback.current !== null) clearTimeout(copyFallback.current); }, []);
+
   const handleCopyToPhone = useCallback(() => {
     const client = rfb.current;
     if (!client || viewOnly) return;
     copyFromDesktop(client);
-    const write = (value: string) => {
-      if (platform?.writeClipboard) void platform.writeClipboard(value);
-      else void copyText(value);
-    };
-    if (remoteClipboard.current) write(remoteClipboard.current);
-    showToast(t("desktopViewer.copiedToPhone"));
-  }, [platform, showToast, viewOnly]);
+    if (copyFallback.current !== null) clearTimeout(copyFallback.current);
+    copyFallback.current = setTimeout(() => {
+      copyFallback.current = null;
+      if (remoteClipboard.current) void writeClipboard.current(remoteClipboard.current, true);
+      else showToast(t("desktopViewer.nothingSelected"));
+    }, 350);
+  }, [showToast, viewOnly]);
 
   const desktopFrame = (
       <div className={cn("relative h-full w-full overflow-hidden", expanded ? "bg-black" : "bg-inset")}>

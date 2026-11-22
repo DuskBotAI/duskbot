@@ -1051,21 +1051,7 @@ final class ChatGlassChrome: NSObject, UITextViewDelegate {
             pendingTopPill = nil
             pendingMainTakeover = nil
             if text.isFirstResponder { text.resignFirstResponder() }
-            if lift > 0 || keyboardOverlap > 0 {
-                keyboardMissed = false
-                keyboardMove += 1
-                keyboardOverlap = 0
-                keyboardRide = false
-                bottom.constant = restingBottom()
-                if jumpShown { jumpBottom.constant = restingJumpBottom() }
-                if restingFrame.width > 0 { applyComposerWidth() }
-                UIView.performWithoutAnimation {
-                    mainHost?.layoutIfNeeded()
-                    layoutComposer(animated: false)
-                    setLift(0)
-                    page?.landed()
-                }
-            }
+            if lift > 0 || keyboardOverlap > 0 { settleKeyboardGone("sheet") }
         case .thawing:
             if mainSheetFreeze == .active {
                 mainSheetFreeze = .thawing
@@ -1178,26 +1164,14 @@ final class ChatGlassChrome: NSObject, UITextViewDelegate {
         CATransaction.setDisableActions(true)
         for view in slidingViews {
             view.layer.removeAnimation(forKey: Self.slideKey)
-            let animation = CAKeyframeAnimation(keyPath: "transform.translation.x")
-            animation.values = points.map { NSNumber(value: Double($0)) }
-            animation.duration = duration
-            animation.calculationMode = .linear
-            animation.beginTime = view.layer.convertTime(now, from: nil) - skipped
-            animation.fillMode = .backwards
-            animation.preferredFrameRateRange = CAFrameRateRange(minimum: 80, maximum: 120, preferred: 120)
+            let animation = CAKeyframeAnimation.pageSlide(keyPath: "transform.translation.x", values: points, duration: duration, beginTime: view.layer.convertTime(now, from: nil) - skipped)
             view.layer.add(animation, forKey: Self.slideKey)
         }
         home.slide(points, duration: duration, beginTime: now - skipped)
         root?.slideMainBar(points, duration: duration, beginTime: now - skipped)
         if headerShown {
             header.layer.removeAnimation(forKey: "header-slide-alpha")
-            let fade = CAKeyframeAnimation(keyPath: "opacity")
-            fade.values = points.map { NSNumber(value: Double(headerAlpha(for: $0))) }
-            fade.duration = duration
-            fade.calculationMode = .linear
-            fade.beginTime = header.layer.convertTime(now, from: nil) - skipped
-            fade.fillMode = .backwards
-            fade.preferredFrameRateRange = CAFrameRateRange(minimum: 80, maximum: 120, preferred: 120)
+            let fade = CAKeyframeAnimation.pageSlide(keyPath: "opacity", values: points.map(headerAlpha(for:)), duration: duration, beginTime: header.layer.convertTime(now, from: nil) - skipped)
             header.layer.add(fade, forKey: "header-slide-alpha")
             header.alpha = headerAlpha(for: to)
         }
@@ -1295,24 +1269,25 @@ final class ChatGlassChrome: NSObject, UITextViewDelegate {
         emit(event)
     }
 
+    private func raise(_ views: [UIView], in host: UIView) {
+        let tail = Array(host.subviews.suffix(views.count))
+        if tail.count < views.count || zip(tail, views).contains(where: { $0 !== $1 }) {
+            for view in views { host.bringSubviewToFront(view) }
+        }
+    }
+
     /// views the system adds to the host later must not land over the chrome and take its taps
     private func keepOnTop() {
         if let host = mainHost, headerShown || composerShown || jumpShown || !home.view.isHidden || !swipeReply.view.isHidden || !pullRefresh.view.isHidden || !statusPill.view.isHidden || (takeover.view.superview === host && !takeover.view.isHidden) {
             var views: [UIView] = [home.view, pullRefresh.view, swipeReply.view, jump, header, composer, statusPill.view]
             if takeover.view.superview === host { views.append(takeover.view) }
-            let tail = Array(host.subviews.suffix(views.count))
-            if tail.count < views.count || zip(tail, views).contains(where: { $0 !== $1 }) {
-                for view in views { host.bringSubviewToFront(view) }
-            }
+            raise(views, in: host)
         }
         if let host = webHost, !viewerBar.view.isHidden || !toastPill.view.isHidden || (takeover.view.superview === host && !takeover.view.isHidden) {
             var views: [UIView] = [viewerBar.view]
             if takeover.view.superview === host { views.append(takeover.view) }
             views.append(toastPill.view)
-            let tail = Array(host.subviews.suffix(views.count))
-            if tail.count < views.count || zip(tail, views).contains(where: { $0 !== $1 }) {
-                for view in views { host.bringSubviewToFront(view) }
-            }
+            raise(views, in: host)
         }
     }
 
@@ -1723,6 +1698,29 @@ final class ChatGlassChrome: NSObject, UITextViewDelegate {
 
     // MARK: layout
 
+    private func prepareStrip(_ view: UIView, active: Bool, frame: CGRect) {
+        guard active && view.isHidden else { return }
+        UIView.performWithoutAnimation {
+            view.frame = frame
+            view.layoutIfNeeded()
+            view.isHidden = false
+            view.accessibilityElementsHidden = false
+            view.alpha = 0
+        }
+    }
+
+    private func settleStrip(_ view: UIView, active: Bool, reset: () -> Void) {
+        view.accessibilityElementsHidden = !active
+        view.alpha = active ? 1 : 0
+        view.isHidden = !active
+        if !active { reset() }
+    }
+
+    private func resetReplyBar() {
+        replyBar.label.text = nil
+        replyBar.setThumbnail(nil)
+    }
+
     /// `animated` false when the page set the text (a send clearing it): the page re-pins the chat to the new height in
     /// the same frame, so the capsule must not spring there behind it
     private func layoutComposer(animated: Bool = true) {
@@ -1745,24 +1743,8 @@ final class ChatGlassChrome: NSObject, UITextViewDelegate {
         let replyRect = CGRect(x: Self.inset, y: Self.inset, width: max(0, w - Self.inset * 2), height: Self.replyHeight)
         let attachmentInset: CGFloat = 12
         let attachmentRect = CGRect(x: attachmentInset, y: (hasReply ? Self.inset + replyExtra : attachmentInset), width: max(0, w - attachmentInset * 2), height: Self.attachmentHeight)
-        if hasReply && replyBar.isHidden {
-            UIView.performWithoutAnimation {
-                replyBar.frame = replyRect
-                replyBar.layoutIfNeeded()
-                replyBar.isHidden = false
-                replyBar.accessibilityElementsHidden = false
-                replyBar.alpha = 0
-            }
-        }
-        if hasAttachments && attachmentBar.isHidden {
-            UIView.performWithoutAnimation {
-                attachmentBar.frame = attachmentRect
-                attachmentBar.layoutIfNeeded()
-                attachmentBar.isHidden = false
-                attachmentBar.accessibilityElementsHidden = false
-                attachmentBar.alpha = 0
-            }
-        }
+        prepareStrip(replyBar, active: hasReply, frame: replyRect)
+        prepareStrip(attachmentBar, active: hasAttachments, frame: attachmentRect)
         // the discs sit on the capsule's bottom edge and the field fills it: they move in the capsule's own animation, or
         // a wrapping line drops them to the new bottom at once while the capsule is still growing toward it
         let place = { [self] in
@@ -1798,53 +1780,26 @@ final class ChatGlassChrome: NSObject, UITextViewDelegate {
                     self.replyBar.alpha = self.hasReply ? 1 : 0
                     self.attachmentBar.alpha = self.hasAttachments ? 1 : 0
                 } completion: { _ in
-                    if !self.hasReply && self.replyBar.alpha == 0 {
-                        self.replyBar.isHidden = true
-                        self.replyBar.label.text = nil
-                        self.replyBar.setThumbnail(nil)
-                    }
-                    if !self.hasAttachments && self.attachmentBar.alpha == 0 {
-                        self.attachmentBar.isHidden = true
-                        self.attachmentBar.clear()
-                    }
+                    if !self.hasReply && self.replyBar.alpha == 0 { self.settleStrip(self.replyBar, active: false, reset: self.resetReplyBar) }
+                    if !self.hasAttachments && self.attachmentBar.alpha == 0 { self.settleStrip(self.attachmentBar, active: false, reset: self.attachmentBar.clear) }
                 }
             } else {
                 UIView.performWithoutAnimation {
                     mainHost?.layoutIfNeeded()
                     place()
-                    replyBar.alpha = hasReply ? 1 : 0
-                    replyBar.isHidden = !hasReply
-                    if !hasReply {
-                        replyBar.label.text = nil
-                        replyBar.setThumbnail(nil)
-                    }
-                    attachmentBar.alpha = hasAttachments ? 1 : 0
-                    attachmentBar.isHidden = !hasAttachments
-                    if !hasAttachments {
-                        attachmentBar.clear()
-                    }
+                    settleStrip(replyBar, active: hasReply, reset: resetReplyBar)
+                    settleStrip(attachmentBar, active: hasAttachments, reset: attachmentBar.clear)
                 }
             }
         } else {
             place()
             if replyTarget != hasReply || replyBar.layer.animationKeys()?.isEmpty != false {
                 replyTarget = hasReply
-                replyBar.accessibilityElementsHidden = !hasReply
-                replyBar.alpha = hasReply ? 1 : 0
-                replyBar.isHidden = !hasReply
-                if !hasReply {
-                    replyBar.label.text = nil
-                    replyBar.setThumbnail(nil)
-                }
+                settleStrip(replyBar, active: hasReply, reset: resetReplyBar)
             }
             if attachmentsTarget != hasAttachments || attachmentBar.layer.animationKeys()?.isEmpty != false {
                 attachmentsTarget = hasAttachments
-                attachmentBar.accessibilityElementsHidden = !hasAttachments
-                attachmentBar.alpha = hasAttachments ? 1 : 0
-                attachmentBar.isHidden = !hasAttachments
-                if !hasAttachments {
-                    attachmentBar.clear()
-                }
+                settleStrip(attachmentBar, active: hasAttachments, reset: attachmentBar.clear)
             }
         }
         if h != reportedHeight {
@@ -2043,9 +1998,7 @@ final class ChatGlassChrome: NSObject, UITextViewDelegate {
     }
 
     private static func image(fromDataURL url: String) -> UIImage? {
-        guard let comma = url.firstIndex(of: ","), url.hasPrefix("data:image/") else { return nil }
-        guard let data = Data(base64Encoded: String(url[url.index(after: comma)...])) else { return nil }
-        return UIImage(data: data)
+        UIImage.fromDataURL(url)
     }
 
     /// pixel art stays crisp: nearest neighbour, then the 30pt circle the pill shows

@@ -60,6 +60,7 @@ export function ScreenTrackpad({ screen, input, keyboard, haptic, label, mode = 
       startCenter: { x: 0, y: 0 },
       spread: 0,
       startSpread: 0,
+      lastDesktop: null as { x: number; y: number } | null,
       hold: 0 as ReturnType<typeof setTimeout> | 0,
     },
     repaint: null as (() => void) | null,
@@ -74,6 +75,11 @@ export function ScreenTrackpad({ screen, input, keyboard, haptic, label, mode = 
       clearTimeout(state.hold);
       if (cursorEl.current) cursorEl.current.style.opacity = "0";
     } else {
+      if (state.mask && state.direct.lastDesktop) {
+        remote.current.pointer(state.direct.lastDesktop.x, state.direct.lastDesktop.y, 0);
+      }
+      state.mask = 0;
+      state.direct.lastDesktop = null;
       state.direct.touches.clear();
       state.direct.phase = "idle";
       clearTimeout(state.direct.hold);
@@ -192,6 +198,37 @@ export function ScreenTrackpad({ screen, input, keyboard, haptic, label, mode = 
       }
       return cursor;
     };
+    const emitWheel = (pt: { x: number; y: number }, dx: number, dy: number, mask: number) => {
+      const vertical = wheelSteps(state.wheel.y, dy);
+      const horizontal = wheelSteps(state.wheel.x, dx);
+      state.wheel = { x: horizontal.rest, y: vertical.rest };
+      for (const [x, y, nextMask] of [...wheelEvents(vertical.steps, false, pt.x, pt.y, mask), ...wheelEvents(horizontal.steps, true, pt.x, pt.y, mask)]) {
+        remote.current.pointer(x, y, nextMask);
+      }
+    };
+    const emitClick = (pt: { x: number; y: number }, buttonMask: number, feedback: HapticKind) => {
+      remote.current.pointer(pt.x, pt.y, 0);
+      remote.current.pointer(pt.x, pt.y, buttonMask);
+      remote.current.pointer(pt.x, pt.y, 0);
+      buzz.current?.(feedback);
+    };
+    const scrollOrPan = (dx: number, dy: number, center: { x: number; y: number }) => {
+      if (state.view.scale > 1.01) {
+        state.view = clampView({ ...state.view, x: state.view.x + dx, y: state.view.y + dy }, state.frame.width, state.frame.height);
+        schedule();
+        return;
+      }
+      const pt = clientToDesktop(center.x, center.y);
+      if (pt) emitWheel(pt, dx, dy, 0);
+    };
+    const releaseDirectDrag = (fallback?: { x: number; y: number } | null) => {
+      const d = state.direct;
+      const pt = fallback ?? d.lastDesktop;
+      if (state.mask && pt) remote.current.pointer(pt.x, pt.y, 0);
+      state.mask = 0;
+      d.lastDesktop = null;
+    };
+
     const run = (actions: TrackpadAction[]) => {
       for (const action of actions) {
         if (action.kind === "move") {
@@ -212,12 +249,7 @@ export function ScreenTrackpad({ screen, input, keyboard, haptic, label, mode = 
         } else if (action.kind === "scroll") {
           const cursor = flushMove();
           if (!cursor) continue;
-          const vertical = wheelSteps(state.wheel.y, action.dy);
-          const horizontal = wheelSteps(state.wheel.x, action.dx);
-          state.wheel = { x: horizontal.rest, y: vertical.rest };
-          for (const [x, y, mask] of [...wheelEvents(vertical.steps, false, cursor.x, cursor.y, state.mask), ...wheelEvents(horizontal.steps, true, cursor.x, cursor.y, state.mask)]) {
-            remote.current.pointer(x, y, mask);
-          }
+          emitWheel(cursor, action.dx, action.dy, state.mask);
         } else {
           const rect = element.getBoundingClientRect();
           state.view = zoomView(state.view, { ...action, cx: action.cx - rect.left, cy: action.cy - rect.top }, state.frame.width, state.frame.height);
@@ -242,18 +274,10 @@ export function ScreenTrackpad({ screen, input, keyboard, haptic, label, mode = 
             if (d.phase !== "one") return;
             d.phase = "long";
             const pt = clientToDesktop(startX, startY, false);
-            if (!pt) return;
-            remote.current.pointer(pt.x, pt.y, 0);
-            remote.current.pointer(pt.x, pt.y, 4);
-            remote.current.pointer(pt.x, pt.y, 0);
-            buzz.current?.("medium");
+            if (pt) emitClick(pt, 4, "medium");
           }, HOLD_MS);
         } else if (d.touches.size === 2) {
-          if (d.phase === "drag" && state.mask) {
-            const pt = clientToDesktop(event.clientX, event.clientY);
-            if (pt) remote.current.pointer(pt.x, pt.y, 0);
-            state.mask = 0;
-          }
+          if (d.phase === "drag") releaseDirectDrag();
           d.phase = "two";
           d.twoAt = event.timeStamp;
           d.twoMoved = false;
@@ -262,11 +286,7 @@ export function ScreenTrackpad({ screen, input, keyboard, haptic, label, mode = 
           d.startCenter = { ...d.center };
           d.spread = d.startSpread = Math.max(1, Math.hypot(a!.x - b!.x, a!.y - b!.y));
         } else {
-          if (d.phase === "drag" && state.mask) {
-            const pt = clientToDesktop(event.clientX, event.clientY);
-            if (pt) remote.current.pointer(pt.x, pt.y, 0);
-            state.mask = 0;
-          }
+          if (d.phase === "drag") releaseDirectDrag();
           d.phase = "done";
         }
       },
@@ -286,10 +306,17 @@ export function ScreenTrackpad({ screen, input, keyboard, haptic, label, mode = 
           remote.current.pointer(start.x, start.y, 0);
           remote.current.pointer(start.x, start.y, 1);
           state.mask = 1;
-          if (now) remote.current.pointer(now.x, now.y, 1);
+          d.lastDesktop = start;
+          if (now) {
+            remote.current.pointer(now.x, now.y, 1);
+            d.lastDesktop = now;
+          }
         } else if (d.phase === "drag") {
           const now = clientToDesktop(touch.x, touch.y);
-          if (now) remote.current.pointer(now.x, now.y, 1);
+          if (now) {
+            remote.current.pointer(now.x, now.y, 1);
+            d.lastDesktop = now;
+          }
         } else if (d.phase === "two" || d.phase === "scroll" || d.phase === "pinch") {
           if (d.touches.size !== 2) return;
           const [a, b] = [...d.touches.values()];
@@ -311,38 +338,12 @@ export function ScreenTrackpad({ screen, input, keyboard, haptic, label, mode = 
             if (Math.hypot(center.x - d.startCenter.x, center.y - d.startCenter.y) <= SCROLL_SLOP) return;
             d.phase = "scroll";
             d.twoMoved = true;
-            const dx = center.x - d.startCenter.x;
-            const dy = center.y - d.startCenter.y;
-            if (state.view.scale > 1.01) {
-              state.view = clampView({ ...state.view, x: state.view.x + dx, y: state.view.y + dy }, state.frame.width, state.frame.height);
-              schedule();
-            } else {
-              const pt = clientToDesktop(center.x, center.y);
-              if (pt) {
-                const vertical = wheelSteps(state.wheel.y, dy);
-                const horizontal = wheelSteps(state.wheel.x, dx);
-                state.wheel = { x: horizontal.rest, y: vertical.rest };
-                for (const [x, y, mask] of [...wheelEvents(vertical.steps, false, pt.x, pt.y, 0), ...wheelEvents(horizontal.steps, true, pt.x, pt.y, 0)]) remote.current.pointer(x, y, mask);
-              }
-            }
+            scrollOrPan(center.x - d.startCenter.x, center.y - d.startCenter.y, center);
           } else if (d.phase === "pinch") {
             state.view = zoomView(state.view, { factor: spread / prevSpread, cx: center.x - rect.left, cy: center.y - rect.top, dx: center.x - prev.x, dy: center.y - prev.y }, state.frame.width, state.frame.height);
             schedule();
           } else {
-            const dx = center.x - prev.x;
-            const dy = center.y - prev.y;
-            if (state.view.scale > 1.01) {
-              state.view = clampView({ ...state.view, x: state.view.x + dx, y: state.view.y + dy }, state.frame.width, state.frame.height);
-              schedule();
-            } else {
-              const pt = clientToDesktop(center.x, center.y);
-              if (pt) {
-                const vertical = wheelSteps(state.wheel.y, dy);
-                const horizontal = wheelSteps(state.wheel.x, dx);
-                state.wheel = { x: horizontal.rest, y: vertical.rest };
-                for (const [x, y, mask] of [...wheelEvents(vertical.steps, false, pt.x, pt.y, 0), ...wheelEvents(horizontal.steps, true, pt.x, pt.y, 0)]) remote.current.pointer(x, y, mask);
-              }
-            }
+            scrollOrPan(center.x - prev.x, center.y - prev.y, center);
           }
         }
       },
@@ -354,25 +355,13 @@ export function ScreenTrackpad({ screen, input, keyboard, haptic, label, mode = 
         clearTimeout(d.hold);
         if (d.phase === "one") {
           const pt = clientToDesktop(touch.x, touch.y, false);
-          if (pt) {
-            remote.current.pointer(pt.x, pt.y, 0);
-            remote.current.pointer(pt.x, pt.y, 1);
-            remote.current.pointer(pt.x, pt.y, 0);
-            buzz.current?.("light");
-          }
+          if (pt) emitClick(pt, 1, "light");
         } else if (d.phase === "drag") {
-          const pt = clientToDesktop(touch.x, touch.y, true);
-          if (pt) remote.current.pointer(pt.x, pt.y, 0);
-          state.mask = 0;
+          releaseDirectDrag(clientToDesktop(touch.x, touch.y, true));
         } else if (d.phase === "two") {
           if (d.touches.size === 0 && !d.twoMoved && event.timeStamp - d.twoAt <= TWO_TAP_MS) {
             const pt = clientToDesktop(d.center.x, d.center.y, false);
-            if (pt) {
-              remote.current.pointer(pt.x, pt.y, 0);
-              remote.current.pointer(pt.x, pt.y, 4);
-              remote.current.pointer(pt.x, pt.y, 0);
-              buzz.current?.("light");
-            }
+            if (pt) emitClick(pt, 4, "light");
           } else if (d.touches.size === 1) {
             d.twoMoved ||= event.timeStamp - d.twoAt > TWO_TAP_MS;
           }
@@ -384,11 +373,7 @@ export function ScreenTrackpad({ screen, input, keyboard, haptic, label, mode = 
       cancel() {
         const d = state.direct;
         clearTimeout(d.hold);
-        if (d.phase === "drag" && state.mask) {
-          const size = desktop();
-          if (size) remote.current.pointer(size.width / 2, size.height / 2, 0);
-          state.mask = 0;
-        }
+        if (d.phase === "drag") releaseDirectDrag();
         d.touches.clear();
         d.phase = "idle";
       },
@@ -451,7 +436,9 @@ export function ScreenTrackpad({ screen, input, keyboard, haptic, label, mode = 
       state.direct.touches.clear();
       state.direct.phase = "idle";
       state.repaint = null;
-      if (state.mask && state.cursor) remote.current.pointer(state.cursor.x, state.cursor.y, 0);
+      const releasePt = state.cursor ?? state.direct.lastDesktop;
+      if (state.mask && releasePt) remote.current.pointer(releasePt.x, releasePt.y, 0);
+      state.direct.lastDesktop = null;
       state.mask = 0;
       state.view = FIT_VIEW;
       picture.style.transform = "";

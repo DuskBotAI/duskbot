@@ -88,18 +88,24 @@ export function ConnectionPill({ notice, trying, onRetry, testId, className = "h
 
   useLayoutEffect(() => {
     if (!glass?.pill || !notice) return;
+    let raf = 0;
     const sync = () => {
+      raf = 0;
       const rect = pillRef.current?.getBoundingClientRect();
       if (rect && rect.top > 0) setTopOffset(Math.round(rect.top));
       setObscured(Boolean(document.querySelector(".mobile-sheet-layer, [data-image-viewer], [data-phone-takeover]")));
     };
+    const schedule = () => {
+      if (!raf) raf = requestAnimationFrame(sync);
+    };
     sync();
-    const observer = typeof MutationObserver === "function" ? new MutationObserver(sync) : null;
+    const observer = typeof MutationObserver === "function" ? new MutationObserver(schedule) : null;
     observer?.observe(document.body, { childList: true, subtree: true });
-    window.addEventListener("resize", sync);
+    window.addEventListener("resize", schedule);
     return () => {
+      if (raf) cancelAnimationFrame(raf);
       observer?.disconnect();
-      window.removeEventListener("resize", sync);
+      window.removeEventListener("resize", schedule);
     };
   }, [glass, notice]);
 

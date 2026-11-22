@@ -103,9 +103,7 @@ function TakeoverControlButton({ control, hint, compact = false }: {
   compact?: boolean;
 }) {
   const action = control.held ? control.onDone : control.onTake;
-  const label = control.held
-    ? (control.asked ? t("computer.done") : t("computer.stopControl"))
-    : t("computer.takeControl");
+  const label = controlTitle(control);
   const status = control.held ? t("computer.inControl") : t("computer.watching");
 
   return (
@@ -260,6 +258,23 @@ export function UsingComputerHelpSheet({ open = true, onClose }: { open?: boolea
   );
 }
 
+function toNativeMenu(items: readonly TakeoverMenuItem[]): TakeoverGlassMenuItem[] {
+  return items.map(({ onSelect: _onSelect, icon: _icon, ...action }) => action);
+}
+
+function restoreAppearance(platform: MobilePlatform): void {
+  const skin = readSkinChoice();
+  const dark = document.documentElement.dataset.skin === THEME_SKINS.dark;
+  platform.setStatusBar?.(dark ? "light" : "dark");
+  platform.setAppearance?.(skin === THEME_SKINS.dark ? "dark" : skin === THEME_SKINS.light ? "light" : "system");
+}
+
+function controlTitle(control: ScreenControl): string {
+  const action = control.held ? control.onDone : control.onTake;
+  if (!action) return control.held ? t("computer.inControl") : t("computer.watching");
+  return control.held ? (control.asked ? t("computer.done") : t("computer.stopControl")) : t("computer.takeControl");
+}
+
 export function PhoneTakeoverShell({
   boxRef,
   label,
@@ -334,12 +349,8 @@ export function PhoneTakeoverShell({
   }, []);
 
   useEffect(() => {
-    if (helpOpen) {
-      const skin = readSkinChoice();
-      const dark = document.documentElement.dataset.skin === THEME_SKINS.dark;
-      platform.setStatusBar?.(dark ? "light" : "dark");
-      platform.setAppearance?.(skin === THEME_SKINS.dark ? "dark" : skin === THEME_SKINS.light ? "light" : "system");
-    } else {
+    if (helpOpen) restoreAppearance(platform);
+    else {
       platform.setStatusBar?.("light");
       platform.setAppearance?.("dark");
     }
@@ -357,10 +368,7 @@ export function PhoneTakeoverShell({
       unlayer();
       unback?.();
       platform.orientation?.allowLandscape(false);
-      const skin = readSkinChoice();
-      const dark = document.documentElement.dataset.skin === THEME_SKINS.dark;
-      platform.setStatusBar?.(dark ? "light" : "dark");
-      platform.setAppearance?.(skin === THEME_SKINS.dark ? "dark" : skin === THEME_SKINS.light ? "light" : "system");
+      restoreAppearance(platform);
     };
   }, [platform]);
 
@@ -408,7 +416,7 @@ export function PhoneTakeoverShell({
       const rect = button.getBoundingClientRect();
       const picked = await platform.showMenu(
         { x: rect.left, y: rect.top, width: rect.width, height: rect.height },
-        items.map(({ onSelect: _onSelect, icon: _icon, ...action }) => action),
+        toNativeMenu(items),
       );
       if (picked) items.find((item) => item.key === picked)?.onSelect();
       return;
@@ -424,10 +432,7 @@ export function PhoneTakeoverShell({
   const clipboardLabel = t("desktopViewer.clipboard");
   const keyboardLabel = t("desktopViewer.keyboard");
 
-  const toNativeMenu = (items: readonly TakeoverMenuItem[]): TakeoverGlassMenuItem[] =>
-    items.map(({ onSelect: _onSelect, icon: _icon, ...action }) => action);
-
-  const glassInputRef = useRef({
+  const glassInput = {
     control,
     landscape,
     kbHeight,
@@ -438,31 +443,14 @@ export function PhoneTakeoverShell({
     onKeyboard,
     onExit,
     openHelp,
-    openMenu,
-    backLabel,
-    helpLabel,
-    moreLabel,
-    clipboardLabel,
-    keyboardLabel,
-  });
-  glassInputRef.current = {
-    control,
-    landscape,
-    kbHeight,
-    helpOpen,
-    fallbackMenu,
-    moreItems,
-    clipboardItems,
-    onKeyboard,
-    onExit,
-    openHelp,
-    openMenu,
     backLabel,
     helpLabel,
     moreLabel,
     clipboardLabel,
     keyboardLabel,
   };
+  const glassInputRef = useRef(glassInput);
+  glassInputRef.current = glassInput;
   const triggerGlassSyncRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
@@ -509,9 +497,7 @@ export function PhoneTakeoverShell({
       if (current.control) {
         const c = current.control;
         const action = c.held ? c.onDone : c.onTake;
-        const title = action
-          ? (c.held ? (c.asked ? t("computer.done") : t("computer.stopControl")) : t("computer.takeControl"))
-          : (c.held ? t("computer.inControl") : t("computer.watching"));
+        const title = controlTitle(c);
         add("control", {
           label: title,
           title,
@@ -561,8 +547,6 @@ export function PhoneTakeoverShell({
         switch (event.target) {
           case "back": haptic("back"); current.onExit(); break;
           case "help": current.openHelp(); break;
-          case "more": void current.openMenu("more", moreRef.current, current.moreItems); break;
-          case "clipboard": void current.openMenu("clipboard", clipboardRef.current, current.clipboardItems); break;
           case "control": {
             const action = current.control?.held ? current.control.onDone : current.control?.onTake;
             if (action && !current.control?.busy) { haptic("tap"); action(); }
@@ -620,6 +604,32 @@ export function PhoneTakeoverShell({
       : null,
   );
 
+  const backButton = (
+    <button type="button" onClick={() => { haptic("back"); onExit(); }} aria-label={backLabel} title={backLabel} data-computer-exit="" data-takeover-glass="back" className={circleGlass}>
+      <ChevronLeft size={22} strokeWidth={2} />
+    </button>
+  );
+  const helpButton = (
+    <button type="button" onClick={openHelp} aria-label={helpLabel} title={helpLabel} data-takeover-help="" data-takeover-glass="help" className={circleGlass}>
+      <QuestionGlyph />
+    </button>
+  );
+  const moreButton = moreItems.length > 0 && (
+    <button ref={moreRef} type="button" onClick={() => void openMenu("more", moreRef.current, moreItems)} aria-label={moreLabel} title={moreLabel} data-takeover-more="" data-takeover-glass="more" className={circleGlass}>
+      <MoreHorizontal size={20} />
+    </button>
+  );
+  const clipboardButton = clipboardItems.length > 0 && (
+    <button ref={clipboardRef} type="button" onClick={() => void openMenu("clipboard", clipboardRef.current, clipboardItems)} aria-label={clipboardLabel} title={clipboardLabel} data-takeover-clipboard="" data-takeover-glass="clipboard" className={circleGlass}>
+      <ClipboardList size={19} />
+    </button>
+  );
+  const keyboardButton = onKeyboard && (
+    <button type="button" onClick={() => { haptic("tap"); onKeyboard(); }} aria-label={keyboardLabel} title={keyboardLabel} data-computer-keyboard="" data-takeover-glass="keyboard" className={circleGlass}>
+      <Keyboard size={19} />
+    </button>
+  );
+
   return (
     <div
       ref={setShellEl}
@@ -637,29 +647,13 @@ export function PhoneTakeoverShell({
           data-computer-phone-bar=""
           className="pointer-events-none absolute inset-y-0 left-[var(--safe-area-inset-left,env(safe-area-inset-left,0px))] right-[var(--safe-area-inset-right,env(safe-area-inset-right,0px))] z-10 flex items-start justify-between px-2 py-2"
         >
-          <button type="button" onClick={() => { haptic("back"); onExit(); }} aria-label={backLabel} title={backLabel} data-computer-exit="" data-takeover-glass="back" className={circleGlass}>
-            <ChevronLeft size={22} strokeWidth={2} />
-          </button>
+          {backButton}
           <div className="flex flex-col items-end gap-2 self-stretch">
             <div className="flex items-center gap-2">
-              <button type="button" onClick={openHelp} aria-label={helpLabel} title={helpLabel} data-takeover-help="" data-takeover-glass="help" className={circleGlass}>
-                <QuestionGlyph />
-              </button>
-              {moreItems.length > 0 && (
-                <button ref={moreRef} type="button" onClick={() => void openMenu("more", moreRef.current, moreItems)} aria-label={moreLabel} title={moreLabel} data-takeover-more="" data-takeover-glass="more" className={circleGlass}>
-                  <MoreHorizontal size={20} />
-                </button>
-              )}
-              {clipboardItems.length > 0 && (
-                <button ref={clipboardRef} type="button" onClick={() => void openMenu("clipboard", clipboardRef.current, clipboardItems)} aria-label={clipboardLabel} title={clipboardLabel} data-takeover-clipboard="" data-takeover-glass="clipboard" className={circleGlass}>
-                  <ClipboardList size={19} />
-                </button>
-              )}
-              {onKeyboard && (
-                <button type="button" onClick={() => { haptic("tap"); onKeyboard(); }} aria-label={keyboardLabel} title={keyboardLabel} data-computer-keyboard="" data-takeover-glass="keyboard" className={circleGlass}>
-                  <Keyboard size={19} />
-                </button>
-              )}
+              {helpButton}
+              {moreButton}
+              {clipboardButton}
+              {keyboardButton}
             </div>
             {sideControl && control && (
               <div data-computer-side-control="" className="mt-auto pb-1">
@@ -673,9 +667,7 @@ export function PhoneTakeoverShell({
           data-computer-phone-bar=""
           className="relative z-10 flex shrink-0 items-center justify-between px-4 pb-2 pt-[calc(var(--safe-area-inset-top,env(safe-area-inset-top,0px))+6px)]"
         >
-          <button type="button" onClick={() => { haptic("back"); onExit(); }} aria-label={backLabel} title={backLabel} data-computer-exit="" data-takeover-glass="back" className={circleGlass}>
-            <ChevronLeft size={22} strokeWidth={2} />
-          </button>
+          {backButton}
 
           {(bot || displayName) && (
             <div data-takeover-identity="" className="pointer-events-none absolute inset-x-[112px] bottom-2 flex h-11 items-center justify-center gap-2">
@@ -685,14 +677,8 @@ export function PhoneTakeoverShell({
           )}
 
           <div className="flex items-center gap-2.5">
-            <button type="button" onClick={openHelp} aria-label={helpLabel} title={helpLabel} data-takeover-help="" data-takeover-glass="help" className={circleGlass}>
-              <QuestionGlyph />
-            </button>
-            {moreItems.length > 0 && (
-              <button ref={moreRef} type="button" onClick={() => void openMenu("more", moreRef.current, moreItems)} aria-label={moreLabel} title={moreLabel} data-takeover-more="" data-takeover-glass="more" className={circleGlass}>
-                <MoreHorizontal size={20} />
-              </button>
-            )}
+            {helpButton}
+            {moreButton}
           </div>
         </header>
       )}
@@ -739,20 +725,10 @@ export function PhoneTakeoverShell({
             kbHeight > 0 ? "pb-2.5" : "pb-[max(var(--safe-area-inset-bottom,env(safe-area-inset-bottom,0px)),16px)]",
           )}
         >
-          <div>
-            {clipboardItems.length > 0 && (
-              <button ref={clipboardRef} type="button" onClick={() => void openMenu("clipboard", clipboardRef.current, clipboardItems)} aria-label={clipboardLabel} title={clipboardLabel} data-takeover-clipboard="" data-takeover-glass="clipboard" className={circleGlass}>
-                <ClipboardList size={19} />
-              </button>
-            )}
-          </div>
+          <div>{clipboardButton}</div>
           <div className="flex items-center gap-2.5">
             {control && <TakeoverControlButton control={control} hint={watchHint} />}
-            {onKeyboard && (
-              <button type="button" onClick={() => { haptic("tap"); onKeyboard(); }} aria-label={keyboardLabel} title={keyboardLabel} data-computer-keyboard="" data-takeover-glass="keyboard" className={circleGlass}>
-                <Keyboard size={19} />
-              </button>
-            )}
+            {keyboardButton}
           </div>
         </div>
       )}

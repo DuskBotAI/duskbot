@@ -226,6 +226,19 @@ describe("LimitResetClock", () => {
     await instance.refresh(true);
     expect(load).toHaveBeenCalledTimes(1);
   });
+
+  it("throttles retries after a failed usage load until the refresh window passes", async () => {
+    const load = vi.fn(async (): Promise<PlanUsageReport> => {
+      throw new Error("network down");
+    });
+    const { instance, at } = clock({ loadUsage: load });
+    await instance.ensureFresh();
+    await instance.ensureFresh();
+    expect(load).toHaveBeenCalledTimes(1);
+    at(NOW + 10 * 60_000);
+    await instance.ensureFresh();
+    expect(load).toHaveBeenCalledTimes(2);
+  });
 });
 
 describe("codexLimitResetsAt", () => {

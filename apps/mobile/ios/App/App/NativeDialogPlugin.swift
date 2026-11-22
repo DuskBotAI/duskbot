@@ -62,8 +62,8 @@ public class NativeDialogPlugin: CAPPlugin, CAPBridgedPlugin, UIAdaptivePresenta
                 let raw = values[field.id] ?? ""
                 let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
                 if field.required && trimmed.isEmpty { return false }
-                if field.kind == .number {
-                    guard !trimmed.isEmpty, let parsed = Double(trimmed) else { return false }
+                if field.kind == .number, !trimmed.isEmpty {
+                    guard let parsed = Double(trimmed), parsed.isFinite else { return false }
                     if field.integer && parsed.rounded() != parsed { return false }
                     if let min = field.min, parsed < min { return false }
                     if let max = field.max, parsed > max { return false }
@@ -169,57 +169,34 @@ public class NativeDialogPlugin: CAPPlugin, CAPBridgedPlugin, UIAdaptivePresenta
         @ViewBuilder
         private func inputView(for field: FieldSpec) -> some View {
             let isLastSingle = singleLineIds.last == field.id && !model.fields.contains(where: { $0.kind == .multiline })
-            switch field.kind {
-            case .multiline:
-                TextField(field.placeholder, text: model.binding(for: field), axis: .vertical)
-                    .lineLimit(3...8)
-                    .focused($focused, equals: field.id)
-                    .disabled(model.saving)
-            case .password:
-                SecureField(field.placeholder, text: model.binding(for: field))
-                    .focused($focused, equals: field.id)
-                    .disabled(model.saving)
-                    .submitLabel(isLastSingle ? .done : .next)
-                    .onSubmit { advance(from: field.id) }
-            case .number:
-                TextField(field.placeholder, text: model.binding(for: field))
-                    .keyboardType(.numberPad)
-                    .monospacedDigit()
-                    .focused($focused, equals: field.id)
-                    .disabled(model.saving)
-            case .url:
-                HStack(spacing: 8) {
-                    TextField(field.placeholder, text: model.binding(for: field))
-                        .keyboardType(.URL)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled(true)
-                        .focused($focused, equals: field.id)
-                        .disabled(model.saving)
+            Group {
+                switch field.kind {
+                case .multiline:
+                    TextField(field.placeholder, text: model.binding(for: field), axis: .vertical)
+                        .lineLimit(3...8)
+                case .password:
+                    SecureField(field.placeholder, text: model.binding(for: field))
                         .submitLabel(isLastSingle ? .done : .next)
                         .onSubmit { advance(from: field.id) }
-                    clearButton(for: field)
-                }
-            case .text:
-                HStack(spacing: 8) {
-                    if field.monospaced {
+                case .number:
+                    TextField(field.placeholder, text: model.binding(for: field))
+                        .keyboardType(.numberPad)
+                        .monospacedDigit()
+                case .url, .text:
+                    HStack(spacing: 8) {
                         TextField(field.placeholder, text: model.binding(for: field))
-                            .font(.system(.body, design: .monospaced))
-                            .textInputAutocapitalization(.never)
-                            .autocorrectionDisabled(true)
-                            .focused($focused, equals: field.id)
-                            .disabled(model.saving)
+                            .font(field.kind == .text && field.monospaced ? .system(.body, design: .monospaced) : .body)
+                            .keyboardType(field.kind == .url ? .URL : .default)
+                            .textInputAutocapitalization(field.kind == .url || field.monospaced ? .never : .sentences)
+                            .autocorrectionDisabled(field.kind == .url || field.monospaced)
                             .submitLabel(isLastSingle ? .done : .next)
                             .onSubmit { advance(from: field.id) }
-                    } else {
-                        TextField(field.placeholder, text: model.binding(for: field))
-                            .focused($focused, equals: field.id)
-                            .disabled(model.saving)
-                            .submitLabel(isLastSingle ? .done : .next)
-                            .onSubmit { advance(from: field.id) }
+                        clearButton(for: field)
                     }
-                    clearButton(for: field)
                 }
             }
+            .focused($focused, equals: field.id)
+            .disabled(model.saving)
         }
 
         @ViewBuilder
@@ -290,6 +267,37 @@ public class NativeDialogPlugin: CAPPlugin, CAPBridgedPlugin, UIAdaptivePresenta
         }
     }
 
+    private func presentWhenReady(
+        _ build: @escaping (UIViewController) -> UIViewController?,
+        onCancel: @escaping () -> Void,
+        retries: Int = 4
+    ) {
+        guard let presenter = topPresenter() else {
+            onCancel()
+            return
+        }
+        if let dismissing = presenter.presentedViewController, dismissing.isBeingDismissed {
+            guard retries > 0 else { onCancel(); return }
+            let retry: () -> Void = { [weak self] in
+                DispatchQueue.main.async {
+                    self?.presentWhenReady(build, onCancel: onCancel, retries: retries - 1)
+                }
+            }
+            if let coordinator = dismissing.transitionCoordinator {
+                coordinator.animate(alongsideTransition: nil) { _ in retry() }
+            } else {
+                retry()
+            }
+            return
+        }
+        guard let controller = build(presenter) else {
+            onCancel()
+            return
+        }
+        Self.inheritAppearance(controller, from: presenter)
+        presenter.present(controller, animated: true)
+    }
+
     @objc func alert(_ call: CAPPluginCall) {
         let title = call.getString("title") ?? ""
         let rawMessage = call.getString("message")?.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -302,36 +310,32 @@ public class NativeDialogPlugin: CAPPlugin, CAPBridgedPlugin, UIAdaptivePresenta
         let style: UIAlertController.Style = call.getString("style") == "actionSheet" ? .actionSheet : .alert
 
         DispatchQueue.main.async {
-            guard let presenter = self.topPresenter() else {
-                call.resolve(["outcome": "cancel"])
-                return
-            }
             var resolved = false
             let finish: (String) -> Void = { outcome in
                 guard !resolved else { return }
                 resolved = true
                 call.resolve(["outcome": outcome])
             }
-            let alert = UIAlertController(title: title.isEmpty ? nil : title, message: message, preferredStyle: style)
-            Self.inheritAppearance(alert, from: presenter)
-
-            if !singleAction {
-                alert.addAction(UIAlertAction(title: cancelLabel, style: .cancel) { _ in finish("cancel") })
-            }
-            if let alternativeLabel, !alternativeLabel.isEmpty {
-                alert.addAction(UIAlertAction(title: alternativeLabel, style: .default) { _ in finish("alternative") })
-            }
-            let confirm = UIAlertAction(title: confirmLabel, style: danger ? .destructive : .default) { _ in finish("confirm") }
-            alert.addAction(confirm)
-            if style == .alert && (!danger || singleAction) {
-                alert.preferredAction = confirm
-            }
-            if style == .actionSheet, let popover = alert.popoverPresentationController {
-                popover.sourceView = presenter.view
-                popover.sourceRect = CGRect(x: presenter.view.bounds.midX, y: presenter.view.bounds.maxY - 1, width: 1, height: 1)
-                popover.permittedArrowDirections = []
-            }
-            presenter.present(alert, animated: true)
+            self.presentWhenReady({ presenter in
+                let alert = UIAlertController(title: title.isEmpty ? nil : title, message: message, preferredStyle: style)
+                if !singleAction {
+                    alert.addAction(UIAlertAction(title: cancelLabel, style: .cancel) { _ in finish("cancel") })
+                }
+                if let alternativeLabel, !alternativeLabel.isEmpty {
+                    alert.addAction(UIAlertAction(title: alternativeLabel, style: .default) { _ in finish("alternative") })
+                }
+                let confirm = UIAlertAction(title: confirmLabel, style: danger ? .destructive : .default) { _ in finish("confirm") }
+                alert.addAction(confirm)
+                if style == .alert && (!danger || singleAction) {
+                    alert.preferredAction = confirm
+                }
+                if style == .actionSheet, let popover = alert.popoverPresentationController {
+                    popover.sourceView = presenter.view
+                    popover.sourceRect = CGRect(x: presenter.view.bounds.midX, y: presenter.view.bounds.maxY - 1, width: 1, height: 1)
+                    popover.permittedArrowDirections = []
+                }
+                return alert
+            }, onCancel: { finish("cancel") })
         }
     }
 
@@ -373,68 +377,76 @@ public class NativeDialogPlugin: CAPPlugin, CAPBridgedPlugin, UIAdaptivePresenta
                 call.resolve(["saved": false])
                 return
             }
-            if let existing = self.activeForm {
-                self.activeForm = nil
-                existing.controller.dismiss(animated: false)
-                existing.resolve(["saved": false])
-            }
-            guard let presenter = self.topPresenter() else {
-                call.resolve(["saved": false])
-                return
-            }
-
-            let model = FormModel(fields: fields, requireChange: requireChange)
-            weak var activeRef: ActiveForm?
-
-            let cancel: () -> Void = { [weak self] in
-                guard let self, let active = activeRef, !active.model.saving else { return }
-                if self.activeForm === active { self.activeForm = nil }
-                active.controller.dismiss(animated: true) {
-                    active.resolve(["saved": false])
-                }
-            }
-
-            let submit: () -> Void = { [weak self] in
-                guard let self, let active = activeRef, active.model.canSave else { return }
-                let snapshot = active.model.values
-                if !asyncSubmit {
-                    if self.activeForm === active { self.activeForm = nil }
-                    UINotificationFeedbackGenerator().notificationOccurred(.success)
-                    active.controller.dismiss(animated: true) {
-                        active.resolve(["saved": true, "values": snapshot])
-                    }
+            let presentNewForm: () -> Void = { [weak self] in
+                guard let self else {
+                    call.resolve(["saved": false])
                     return
                 }
-                active.model.saving = true
-                active.model.errorMessage = nil
-                active.controller.isModalInPresentation = true
-                self.notifyListeners("formSubmit", data: ["id": active.id, "values": snapshot])
+                let model = FormModel(fields: fields, requireChange: requireChange)
+                weak var activeRef: ActiveForm?
+
+                let cancel: () -> Void = { [weak self] in
+                    guard let self, let active = activeRef, !active.model.saving else { return }
+                    if self.activeForm === active { self.activeForm = nil }
+                    active.controller.dismiss(animated: true) {
+                        active.resolve(["saved": false])
+                    }
+                }
+
+                let submit: () -> Void = { [weak self] in
+                    guard let self, let active = activeRef, active.model.canSave else { return }
+                    let snapshot = active.model.values
+                    if !asyncSubmit {
+                        if self.activeForm === active { self.activeForm = nil }
+                        UINotificationFeedbackGenerator().notificationOccurred(.success)
+                        active.controller.dismiss(animated: true) {
+                            active.resolve(["saved": true, "values": snapshot])
+                        }
+                        return
+                    }
+                    active.model.saving = true
+                    active.model.errorMessage = nil
+                    active.controller.isModalInPresentation = true
+                    self.notifyListeners("formSubmit", data: ["id": active.id, "values": snapshot])
+                }
+
+                let view = NativeFormView(
+                    title: title,
+                    description: description,
+                    saveLabel: saveLabel,
+                    cancelLabel: cancelLabel,
+                    model: model,
+                    onCancel: cancel,
+                    onSubmit: submit
+                )
+                self.presentWhenReady({ _ in
+                    let hosting = UIHostingController(rootView: view)
+                    hosting.modalPresentationStyle = .pageSheet
+                    hosting.presentationController?.delegate = self
+                    if let sheet = hosting.sheetPresentationController {
+                        let largeOnly = fields.count >= 2 || fields.contains(where: { $0.kind == .multiline })
+                        sheet.detents = largeOnly ? [.large()] : [.medium(), .large()]
+                        sheet.prefersGrabberVisible = true
+                        sheet.prefersScrollingExpandsWhenScrolledToEdge = true
+                    }
+                    let active = ActiveForm(id: formId, call: call, model: model, controller: hosting)
+                    activeRef = active
+                    self.activeForm = active
+                    return hosting
+                }, onCancel: {
+                    call.resolve(["saved": false])
+                })
             }
 
-            let view = NativeFormView(
-                title: title,
-                description: description,
-                saveLabel: saveLabel,
-                cancelLabel: cancelLabel,
-                model: model,
-                onCancel: cancel,
-                onSubmit: submit
-            )
-            let hosting = UIHostingController(rootView: view)
-            hosting.modalPresentationStyle = .pageSheet
-            Self.inheritAppearance(hosting, from: presenter)
-            hosting.presentationController?.delegate = self
-            if let sheet = hosting.sheetPresentationController {
-                let largeOnly = fields.count >= 2 || fields.contains(where: { $0.kind == .multiline })
-                sheet.detents = largeOnly ? [.large()] : [.medium(), .large()]
-                sheet.prefersGrabberVisible = true
-                sheet.prefersScrollingExpandsWhenScrolledToEdge = true
+            if let existing = self.activeForm {
+                self.activeForm = nil
+                existing.controller.dismiss(animated: false) {
+                    existing.resolve(["saved": false])
+                    presentNewForm()
+                }
+            } else {
+                presentNewForm()
             }
-
-            let active = ActiveForm(id: formId, call: call, model: model, controller: hosting)
-            activeRef = active
-            self.activeForm = active
-            presenter.present(hosting, animated: true)
         }
     }
 

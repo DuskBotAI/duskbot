@@ -177,7 +177,10 @@ final class RootViewController: UIViewController, UINavigationControllerDelegate
         return max(0, min(1, (progress - 0.42) / 0.58))
     }
 
-    private func resetMainBarMotion() {
+    private var mainBarSlideGen = 0
+
+    func resetMainBarMotion() {
+        mainBarSlideGen += 1
         let bar = mainNavigation.navigationBar
         for key in Self.mainBarSlideKeys {
             bar.layer.removeAnimation(forKey: key)
@@ -187,6 +190,11 @@ final class RootViewController: UIViewController, UINavigationControllerDelegate
         bar.transform = .identity
         bar.alpha = 1
         CATransaction.commit()
+    }
+
+    var isMainBarSliding: Bool {
+        let keys = mainNavigation.navigationBar.layer.animationKeys() ?? []
+        return Self.mainBarSlideKeys.contains(where: keys.contains)
     }
 
     /// Cross-fades and glides `mainNavigation.navigationBar` in lockstep with a chat page dragging across the screen.
@@ -215,6 +223,7 @@ final class RootViewController: UIViewController, UINavigationControllerDelegate
             resetMainBarMotion()
             return
         }
+        mainBarSlideGen += 1
         if mainNavigation.isNavigationBarHidden {
             mainNavigation.setNavigationBarHidden(false, animated: false)
             mainNavigation.view.layoutIfNeeded()
@@ -244,22 +253,28 @@ final class RootViewController: UIViewController, UINavigationControllerDelegate
             mainNavigation.setNavigationBarHidden(false, animated: false)
             mainNavigation.view.layoutIfNeeded()
         }
-        let move = CAKeyframeAnimation(keyPath: "transform.translation.x")
-        move.values = pages.map { NSNumber(value: Double(mainBarShift($0, width: width))) }
-        let fade = CAKeyframeAnimation(keyPath: "opacity")
-        fade.values = pages.map { NSNumber(value: Double(mainBarAlpha($0, width: width))) }
+        mainBarSlideGen += 1
+        let gen = mainBarSlideGen
+        let finalX = min(max(0, last), width)
+        let move = CAKeyframeAnimation.pageSlide(keyPath: "transform.translation.x", values: pages.map { mainBarShift($0, width: width) }, duration: duration, beginTime: beginTime)
+        let fade = CAKeyframeAnimation.pageSlide(keyPath: "opacity", values: pages.map { mainBarAlpha($0, width: width) }, duration: duration, beginTime: beginTime)
+        CATransaction.begin()
+        if finalX <= 0.5 {
+            CATransaction.setCompletionBlock { [weak self] in
+                guard let self, self.mainBarSlideGen == gen, self.sheetNavigation == nil, !self.preparingSheet else { return }
+                self.resetMainBarMotion()
+                if !self.mainNavigation.isNavigationBarHidden {
+                    self.mainNavigation.setNavigationBarHidden(true, animated: false)
+                }
+            }
+        }
         for (animation, key) in [(move, Self.mainBarSlideKeys[0]), (fade, Self.mainBarSlideKeys[1])] {
-            animation.duration = duration
-            animation.calculationMode = .linear
-            animation.beginTime = beginTime
-            animation.fillMode = .backwards
-            animation.preferredFrameRateRange = CAFrameRateRange(minimum: 80, maximum: 120, preferred: 120)
             bar.layer.removeAnimation(forKey: key)
             bar.layer.add(animation, forKey: key)
         }
-        let finalX = min(max(0, last), width)
         bar.transform = CGAffineTransform(translationX: mainBarShift(finalX, width: width), y: 0)
         bar.alpha = mainBarAlpha(finalX, width: width)
+        CATransaction.commit()
     }
 
     /// Holds the sheet's incoming bar spec between `freeze()` and `presentSheet()` so `mainNavigation.navigationBar`
@@ -270,15 +285,20 @@ final class RootViewController: UIViewController, UINavigationControllerDelegate
         return true
     }
 
-    /// Snapshots `app.view` underneath `mainHost.glassHost` and `mainNavigation.navigationBar` so native Liquid Glass
-    /// buttons stay live and complete their press-release spring animations while the sheet prepares and rises.
-    func freeze() {
-        guard cover == nil, sheetNavigation == nil, let picture = app.view.snapshotView(afterScreenUpdates: false) else { return }
+    private func installFreezeCover() -> Bool {
+        guard cover == nil, let picture = app.view.snapshotView(afterScreenUpdates: false) else { return cover != nil }
         mainHost.view.backgroundColor = app.view.backgroundColor
         picture.frame = mainHost.view.bounds
         picture.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         mainHost.view.insertSubview(picture, belowSubview: mainHost.glassHost)
         cover = picture
+        return true
+    }
+
+    /// Snapshots `app.view` underneath `mainHost.glassHost` and `mainNavigation.navigationBar` so native Liquid Glass
+    /// buttons stay live and complete their press-release spring animations while the sheet prepares and rises.
+    func freeze() {
+        guard cover == nil, sheetNavigation == nil, installFreezeCover() else { return }
         preparingSheet = true
         glassPlugin?.setMainSheetFreeze(.active)
     }
@@ -298,13 +318,7 @@ final class RootViewController: UIViewController, UINavigationControllerDelegate
     func presentSheet(height: CGFloat?, delegate: UIAdaptivePresentationControllerDelegate, shown: @escaping () -> Void) {
         guard sheetNavigation == nil else { shown(); return }
         preparingSheet = false
-        if cover == nil, let picture = app.view.snapshotView(afterScreenUpdates: false) {
-            mainHost.view.backgroundColor = app.view.backgroundColor
-            picture.frame = mainHost.view.bounds
-            picture.autoresizingMask = [.flexibleWidth, .flexibleHeight]
-            mainHost.view.insertSubview(picture, belowSubview: mainHost.glassHost)
-            cover = picture
-        }
+        _ = installFreezeCover()
         glassPlugin?.setMainSheetFreeze(.active)
         mainHost.detach(app)
 
@@ -757,10 +771,7 @@ public class ChromePlugin: CAPPlugin, CAPBridgedPlugin, UIAdaptivePresentationCo
         let nextSignature = signature(for: spec)
         if spec.hidden {
             if !nav.isNavigationBarHidden {
-                nav.navigationBar.layer.removeAllAnimations()
-                nav.navigationBar.layer.mask = nil
-                nav.navigationBar.transform = .identity
-                nav.navigationBar.alpha = 1
+                root.resetMainBarMotion()
                 nav.setNavigationBarHidden(true, animated: false)
             }
             return
@@ -779,20 +790,15 @@ public class ChromePlugin: CAPPlugin, CAPBridgedPlugin, UIAdaptivePresentationCo
         root.markMainBarContent(!spec.leading.isEmpty || !spec.trailing.isEmpty || spec.title != nil || spec.status != nil)
         let bar = nav.navigationBar
         if wasHidden && !suppressAnimation {
-            bar.layer.removeAllAnimations()
-            bar.layer.mask = nil
-            bar.transform = .identity
+            root.resetMainBarMotion()
             nav.setNavigationBarHidden(false, animated: false)
             bar.alpha = 0
             UIView.animate(withDuration: 0.18, delay: 0, options: [.curveEaseOut, .beginFromCurrentState, .allowUserInteraction]) {
                 bar.alpha = 1
             }
         } else {
-            if bar.layer.animationKeys()?.contains("main-bar-slide") != true {
-                bar.layer.removeAllAnimations()
-                bar.layer.mask = nil
-                bar.transform = .identity
-                bar.alpha = 1
+            if !root.isMainBarSliding {
+                root.resetMainBarMotion()
             }
             nav.setNavigationBarHidden(false, animated: false)
         }
@@ -1050,10 +1056,7 @@ public class ChromePlugin: CAPPlugin, CAPBridgedPlugin, UIAdaptivePresentationCo
     }
 
     private static func image(fromDataURL raw: String) -> UIImage? {
-        guard raw.hasPrefix("data:image/"), let comma = raw.firstIndex(of: ",") else { return nil }
-        let base64 = String(raw[raw.index(after: comma)...])
-        guard let bytes = Data(base64Encoded: base64) else { return nil }
-        return UIImage(data: bytes)
+        UIImage.fromDataURL(raw)
     }
 
     private func fill(_ button: UIButton, with picture: [String: Any], side: CGFloat = 30) {

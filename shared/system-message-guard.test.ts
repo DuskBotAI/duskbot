@@ -115,5 +115,15 @@ Everything compiled successfully and all tests pass!`;
     filter.reset();
     const normal = feed(["The following is a ", "summary: a ", "<", " b and <div>ok</div>."]);
     expect(normal).toBe("The following is a summary: a < b and <div>ok</div>.");
+
+    // Mid-line preamble stripped retroactively rebases so trailing text is not sliced away.
+    filter.reset();
+    const retroactive = feed([
+      "Hi. ",
+      "Notice: This is a ",
+      "<SYSTEM_NOTIFICATION> hidden\n<SYSTEM_NOTIFICATION>body</SYSTEM_NOTIFICATION>",
+      "After.",
+    ]);
+    expect(retroactive).toBe("Hi. Notice: This is a After.");
   });
 });

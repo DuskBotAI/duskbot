@@ -99,10 +99,27 @@ export function isGlassDark(): boolean {
   return globalThis.matchMedia?.("(prefers-color-scheme: dark)").matches === true;
 }
 
+let safeInsetCache: { w: number; h: number; host: HTMLElement; values: Partial<Record<"top" | "bottom", number>> } | null = null;
+let safeInsetListening = false;
+
 export function safeInsetPx(edge: "top" | "bottom"): number {
   if (typeof document === "undefined" || !document.body) return 0;
   const host = document.querySelector<HTMLElement>(".dusk-mobile") ?? document.body;
-  return cssPx(host, `var(--m-safe-${edge}, 0px)`);
+  const w = typeof window === "undefined" ? 0 : window.innerWidth;
+  const h = typeof window === "undefined" ? 0 : window.innerHeight;
+  if (!safeInsetListening && typeof window !== "undefined") {
+    safeInsetListening = true;
+    const clear = () => { safeInsetCache = null; };
+    window.addEventListener("resize", clear);
+    window.addEventListener("orientationchange", clear);
+  }
+  if (!safeInsetCache || safeInsetCache.w !== w || safeInsetCache.h !== h || safeInsetCache.host !== host) {
+    safeInsetCache = { w, h, host, values: {} };
+  }
+  if (safeInsetCache.values[edge] === undefined) {
+    safeInsetCache.values[edge] = cssPx(host, `var(--m-safe-${edge}, 0px)`);
+  }
+  return safeInsetCache.values[edge]!;
 }
 
 export function useGlassPill(

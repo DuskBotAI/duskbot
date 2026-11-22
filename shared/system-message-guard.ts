@@ -79,18 +79,16 @@ export function createSystemHarnessStreamFilter(): { push(delta: string): string
       raw += delta;
       const cleaned = stripSystemHarnessBlocks(raw);
       const safe = cleaned.slice(0, cleaned.length - partialHarnessLeakTailLength(cleaned));
-      if (!safe) return "";
-      if (safe.startsWith(emitted)) {
-        const next = safe.slice(emitted.length);
-        emitted = safe;
-        return next;
+      const next = safe.startsWith(emitted) ? safe.slice(emitted.length) : "";
+      emitted = safe;
+      if (cleaned === raw) {
+        const cut = safe.lastIndexOf("\n") + 1;
+        if (cut > 0) {
+          raw = raw.slice(cut);
+          emitted = safe.slice(cut);
+        }
       }
-      if (safe.length > emitted.length) {
-        const next = safe.slice(emitted.length);
-        emitted = safe;
-        return next;
-      }
-      return "";
+      return next;
     },
     reset(): void {
       raw = "";

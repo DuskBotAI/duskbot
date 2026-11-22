@@ -315,10 +315,10 @@ export class LimitResetClock {
     const accounts = this.options.accounts();
     const accountsKey = this.accountsFingerprint(accounts);
     this.loading = (async () => {
+      this.checkedAccountsKey = accountsKey;
       try {
         if (accounts.length) this.noteUsage(await this.load(accounts, force));
         else this.checkedAt = this.now();
-        this.checkedAccountsKey = accountsKey;
       } catch {
         this.checkedAt = this.now();
       }

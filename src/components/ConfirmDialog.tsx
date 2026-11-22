@@ -50,7 +50,7 @@ export const ConfirmDialog = memo(function ConfirmDialog(props: ConfirmDialogPro
 }, (prev, next) => !prev.open && !next.open);
 
 function NativeConfirmDialog(props: ConfirmDialogProps & { message: string }) {
-  const { open, title, message, confirmLabel, cancelLabel, tone = "danger", alternative } = props;
+  const { open } = props;
   const latest = useRef(props);
   latest.current = props;
   const presented = useRef(false);
@@ -65,6 +65,7 @@ function NativeConfirmDialog(props: ConfirmDialogProps & { message: string }) {
     if (!dialogs) return;
     presented.current = true;
     let alive = true;
+    const { title, message, confirmLabel, cancelLabel, tone = "danger", alternative } = latest.current;
     void dialogs.alert({
       title,
       message: message.trim() || undefined,
@@ -80,7 +81,7 @@ function NativeConfirmDialog(props: ConfirmDialogProps & { message: string }) {
       latest.current.onClosed?.();
     });
     return () => { alive = false; };
-  }, [open, title, message, confirmLabel, cancelLabel, alternative?.label, tone]);
+  }, [open]);
 
   return null;
 }

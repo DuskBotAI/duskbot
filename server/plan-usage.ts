@@ -319,9 +319,8 @@ async function tryRenewCredential(
 ): Promise<{ status: "renewed"; token: string } | { status: "rejected" } | { status: "unchanged" }> {
   const store = credential.store;
   const timeoutMs = deps.timeoutMs ?? PROVIDER_TIMEOUT_MS;
-  if (!store) return { status: "unchanged" };
+  if (!store || !credential.refreshToken) return { status: "unchanged" };
   if (store.kind === "antigravity-memory") {
-    if (!credential.refreshToken) return { status: "unchanged" };
     return renewAntigravityToken({
       refreshToken: credential.refreshToken,
       target: store,
@@ -331,47 +330,12 @@ async function tryRenewCredential(
       timeoutMs,
     });
   }
-  if (!credential.token || !credential.refreshToken) return { status: "unchanged" };
-  if (store.kind === "claude-file" || store.kind === "claude-keychain") {
-    return renewClaudeToken({
-      target: store,
-      token: credential.token,
-      turnedAway,
-      fetch: deps.fetch,
-      now: deps.now,
-      timeoutMs,
-    });
-  }
-  if (store.kind === "codex-file") {
-    return renewCodexToken({
-      target: store,
-      token: credential.token,
-      turnedAway,
-      fetch: deps.fetch,
-      now: deps.now,
-      timeoutMs,
-    });
-  }
-  if (store.kind === "grok-file") {
-    return renewGrokToken({
-      target: store,
-      token: credential.token,
-      turnedAway,
-      fetch: deps.fetch,
-      now: deps.now,
-      timeoutMs,
-    });
-  }
-  if (store.kind === "cursor-file") {
-    return renewCursorToken({
-      target: store,
-      token: credential.token,
-      turnedAway,
-      fetch: deps.fetch,
-      now: deps.now,
-      timeoutMs,
-    });
-  }
+  if (!credential.token) return { status: "unchanged" };
+  const common = { token: credential.token, turnedAway, fetch: deps.fetch, now: deps.now, timeoutMs };
+  if (store.kind === "claude-file" || store.kind === "claude-keychain") return renewClaudeToken({ target: store, ...common });
+  if (store.kind === "codex-file") return renewCodexToken({ target: store, ...common });
+  if (store.kind === "grok-file") return renewGrokToken({ target: store, ...common });
+  if (store.kind === "cursor-file") return renewCursorToken({ target: store, ...common });
   return { status: "unchanged" };
 }
 
@@ -415,12 +379,12 @@ async function fetchProviderForLogin(
   now: number,
   deps: PlanUsageDeps,
 ): Promise<PlanProviderRow> {
-  const cooldown = rateLimitCooldowns.get(loginKey);
-  if (cooldown && cooldown.until > now) {
+  const cachedRowOr = (fallback: PlanProviderRow): PlanProviderRow => {
     const cached = lastGoodRows.get(loginKey);
-    const pruned = cached ? pruneLastGoodRow(cached, account, now) : null;
-    return pruned ?? errorRow(account, rateLimitedError(account.driver));
-  }
+    return (cached ? pruneLastGoodRow(cached, account, now) : null) ?? fallback;
+  };
+  const cooldown = rateLimitCooldowns.get(loginKey);
+  if (cooldown && cooldown.until > now) return cachedRowOr(errorRow(account, rateLimitedError(account.driver)));
 
   let token = credential.token;
   const needsProactiveRenewal =
@@ -437,9 +401,7 @@ async function fetchProviderForLogin(
       rateLimitCooldowns.delete(loginKey);
       return errorRow(account, signInAgain(account.driver));
     } else if (credential.expired || !token) {
-      const cached = lastGoodRows.get(loginKey);
-      const pruned = cached ? pruneLastGoodRow(cached, account, now) : null;
-      return pruned ?? errorRow(account, account.driver === "antigravity" ? couldNotReach("antigravity") : signInAgain(account.driver));
+      return cachedRowOr(errorRow(account, account.driver === "antigravity" ? couldNotReach("antigravity") : signInAgain(account.driver)));
     }
   } else if (credential.expired || !token) {
     lastGoodRows.delete(loginKey);
@@ -447,11 +409,11 @@ async function fetchProviderForLogin(
     return errorRow(account, signInAgain(account.driver));
   }
 
-  let outcome = await fetchSignedIn(account, { ...credential, token }, now, deps);
+  let outcome = await fetchSignedIn(account, { ...credential, token }, loginKey, now, deps);
   if (outcome.kind === "auth" && credential.refreshToken && credential.store) {
     const renewed = await tryRenewCredential({ ...credential, token }, true, deps);
     if (renewed.status === "renewed" && renewed.token !== token) {
-      outcome = await fetchSignedIn(account, { ...credential, token: renewed.token }, now, deps);
+      outcome = await fetchSignedIn(account, { ...credential, token: renewed.token }, loginKey, now, deps);
     }
   }
 
@@ -467,21 +429,16 @@ async function fetchProviderForLogin(
   }
   if (outcome.kind === "rate_limit") {
     recordRateLimit(loginKey, outcome.retryAfterMs ?? null, now);
-    const cached = lastGoodRows.get(loginKey);
-    const pruned = cached ? pruneLastGoodRow(cached, account, now) : null;
-    return pruned ?? outcome.row;
+    return cachedRowOr(outcome.row);
   }
-  if (outcome.kind === "transient") {
-    const cached = lastGoodRows.get(loginKey);
-    const pruned = cached ? pruneLastGoodRow(cached, account, now) : null;
-    return pruned ?? outcome.row;
-  }
+  if (outcome.kind === "transient") return cachedRowOr(outcome.row);
   return outcome.row;
 }
 
 async function fetchSignedIn(
   account: PlanAccount,
   credential: PlanCredential & { token: string },
+  loginKey: string,
   now: number,
   deps: PlanUsageDeps,
 ): Promise<ProviderOutcome> {
@@ -489,7 +446,7 @@ async function fetchSignedIn(
     if (account.driver === "claude") return await fetchClaude(account, credential.token, credential.planHint ?? null, now, deps);
     if (account.driver === "codex") return await fetchCodex(account, credential.token, credential.accountId, now, deps);
     if (account.driver === "grok") return await fetchGrok(account, credential.token, now, deps);
-    if (account.driver === "antigravity") return await fetchAntigravity(account, credential.token, now, deps);
+    if (account.driver === "antigravity") return await fetchAntigravity(account, credential.token, loginKey, now, deps);
     if (account.driver === "cursor") return await fetchCursor(account, credential.token, credential.planHint ?? null, now, deps);
     return await fetchOpenCode(account, credential.token, now, deps);
   } catch {
@@ -550,6 +507,19 @@ function authRejected(status: number): boolean {
   return status === 401 || status === 403;
 }
 
+function failedJsonOutcome(account: PlanAccount, result: HttpResult, forbiddenMessage?: string): ProviderOutcome | null {
+  if (result.status === 403 && forbiddenMessage) return { kind: "auth", row: errorRow(account, forbiddenMessage) };
+  if (authRejected(result.status)) return { kind: "auth", row: errorRow(account, signInAgain(account.driver)) };
+  if (result.status === 429) {
+    return { kind: "rate_limit", retryAfterMs: result.retryAfterMs, row: errorRow(account, rateLimitedError(account.driver)) };
+  }
+  if (!result.ok || result.body === null || typeof result.body !== "object") {
+    const transient = result.status === 0 || result.status >= 500;
+    return { kind: transient ? "transient" : "other", row: errorRow(account, transient ? couldNotReach(account.driver) : unexpectedUsage(account.driver)) };
+  }
+  return null;
+}
+
 async function fetchClaude(
   account: PlanAccount,
   token: string,
@@ -563,15 +533,7 @@ async function fetchClaude(
     "anthropic-beta": "oauth-2025-04-20",
     "User-Agent": CLAUDE_USER_AGENT,
   }, deps.timeoutMs ?? PROVIDER_TIMEOUT_MS, { now });
-  if (authRejected(result.status)) return { kind: "auth", row: errorRow(account, signInAgain("claude")) };
-  if (result.status === 429) {
-    return { kind: "rate_limit", retryAfterMs: result.retryAfterMs, row: errorRow(account, rateLimitedError("claude")) };
-  }
-  if (!result.ok || result.body === null || typeof result.body !== "object") {
-    const transient = result.status === 0 || result.status >= 500;
-    return { kind: transient ? "transient" : "other", row: errorRow(account, transient ? couldNotReach("claude") : unexpectedUsage("claude")) };
-  }
-  return { kind: "ok", row: okRow(account, parseClaudeUsage(result.body, planHint)) };
+  return failedJsonOutcome(account, result) ?? { kind: "ok", row: okRow(account, parseClaudeUsage(result.body, planHint)) };
 }
 
 async function fetchCodex(
@@ -587,15 +549,7 @@ async function fetchCodex(
   };
   if (accountId) headers["ChatGPT-Account-Id"] = accountId;
   const result = await fetchJson(deps.fetch, CODEX_USAGE_URL, headers, deps.timeoutMs ?? PROVIDER_TIMEOUT_MS, { now });
-  if (authRejected(result.status)) return { kind: "auth", row: errorRow(account, signInAgain("codex")) };
-  if (result.status === 429) {
-    return { kind: "rate_limit", retryAfterMs: result.retryAfterMs, row: errorRow(account, rateLimitedError("codex")) };
-  }
-  if (!result.ok || result.body === null || typeof result.body !== "object") {
-    const transient = result.status === 0 || result.status >= 500;
-    return { kind: transient ? "transient" : "other", row: errorRow(account, transient ? couldNotReach("codex") : unexpectedUsage("codex")) };
-  }
-  return { kind: "ok", row: okRow(account, parseCodexUsage(result.body, now)) };
+  return failedJsonOutcome(account, result) ?? { kind: "ok", row: okRow(account, parseCodexUsage(result.body, now)) };
 }
 
 async function fetchGrok(
@@ -648,13 +602,12 @@ function recordAntigravityWeeklyResets(modelsNode: unknown, now: number): void {
 }
 
 async function fetchAntigravityPlan(
-  token: string,
+  cacheKey: string,
   headers: Record<string, string>,
   timeoutMs: number,
   deps: PlanUsageDeps,
 ): Promise<string | null> {
-  const tokenHash = createHash("sha256").update(token).digest("hex").slice(0, 16);
-  const cached = antigravityPlanCache.get(tokenHash);
+  const cached = antigravityPlanCache.get(cacheKey);
   if (cached) return cached;
   const body = JSON.stringify({
     metadata: { ideType: "ANTIGRAVITY", platform: "PLATFORM_UNSPECIFIED", pluginType: "GEMINI" },
@@ -667,7 +620,7 @@ async function fetchAntigravityPlan(
     if (!result.ok) continue;
     const plan = parseAntigravityPlan(result.body);
     if (plan) {
-      antigravityPlanCache.set(tokenHash, plan);
+      antigravityPlanCache.set(cacheKey, plan);
       return plan;
     }
   }
@@ -683,6 +636,7 @@ function antigravityHasUsage(windows: PlanWindows): boolean {
 async function fetchAntigravity(
   account: PlanAccount,
   token: string,
+  loginKey: string,
   now: number,
   deps: PlanUsageDeps,
 ): Promise<ProviderOutcome> {
@@ -712,7 +666,7 @@ async function fetchAntigravity(
   }
   const fromSummary = parseAntigravitySummary(summaryBodies);
   if (fromSummary) {
-    const plan = await fetchAntigravityPlan(token, headers, timeout, deps);
+    const plan = await fetchAntigravityPlan(loginKey, headers, timeout, deps);
     return { kind: "ok", row: okRow(account, { ...fromSummary, plan }) };
   }
   if (rejected) return { kind: "auth", row: errorRow(account, signInAgain("antigravity")) };
@@ -731,7 +685,7 @@ async function fetchAntigravity(
       const parsed = parseAntigravityModels(modelsNode, now, antigravityWeeklyResets);
       if (!parsed) continue;
       if (antigravityHasUsage(parsed)) {
-        const plan = await fetchAntigravityPlan(token, headers, timeout, deps);
+        const plan = await fetchAntigravityPlan(loginKey, headers, timeout, deps);
         return { kind: "ok", row: okRow(account, { ...parsed, plan }) };
       }
       if (!fallback) fallback = parsed;
@@ -742,7 +696,7 @@ async function fetchAntigravity(
     }
   }
   if (fallback) {
-    const plan = await fetchAntigravityPlan(token, headers, timeout, deps);
+    const plan = await fetchAntigravityPlan(loginKey, headers, timeout, deps);
     return { kind: "ok", row: okRow(account, { ...fallback, plan }) };
   }
   if (rejected) return { kind: "auth", row: errorRow(account, signInAgain("antigravity")) };
@@ -777,14 +731,8 @@ async function fetchCursor(
     fetchJson(deps.fetch, `${CURSOR_API_BASE}GetCurrentPeriodUsage`, headers, timeout, { method: "POST", body: "{}", now }),
   ]);
 
-  if (authRejected(usageResponse.status)) return { kind: "auth", row: errorRow(account, signInAgain("cursor")) };
-  if (usageResponse.status === 429) {
-    return { kind: "rate_limit", retryAfterMs: usageResponse.retryAfterMs, row: errorRow(account, rateLimitedError("cursor")) };
-  }
-  if (!usageResponse.ok || usageResponse.body === null || typeof usageResponse.body !== "object") {
-    const transient = usageResponse.status === 0 || usageResponse.status >= 500;
-    return { kind: transient ? "transient" : "other", row: errorRow(account, transient ? couldNotReach("cursor") : unexpectedUsage("cursor")) };
-  }
+  const failed = failedJsonOutcome(account, usageResponse);
+  if (failed) return failed;
 
   const subjectKey = createHash("sha256").update(jwtSubject(token) ?? token).digest("hex").slice(0, 16);
   const livePlanInfo = planResponse.ok ? asRecord(asRecord(planResponse.body)?.planInfo) : null;
@@ -839,17 +787,8 @@ async function fetchOpenCode(
     Authorization: `Bearer ${token}`,
     Accept: "application/json",
   }, deps.timeoutMs ?? PROVIDER_TIMEOUT_MS, { now });
-  if (result.status === 401) return { kind: "auth", row: errorRow(account, signInAgain("opencode")) };
-  if (result.status === 403) {
-    return { kind: "auth", row: errorRow(account, "This OpenCode Go key has no active subscription") };
-  }
-  if (result.status === 429) {
-    return { kind: "rate_limit", retryAfterMs: result.retryAfterMs, row: errorRow(account, rateLimitedError("opencode")) };
-  }
-  if (!result.ok || result.body === null || typeof result.body !== "object") {
-    const transient = result.status === 0 || result.status >= 500;
-    return { kind: transient ? "transient" : "other", row: errorRow(account, transient ? couldNotReach("opencode") : unexpectedUsage("opencode")) };
-  }
+  const failed = failedJsonOutcome(account, result, "This OpenCode Go key has no active subscription");
+  if (failed) return failed;
   const windows = parseOpenCodeUsage(result.body, now);
   const row = okRow(account, windows);
   if (!rowHasAnyWindow(row)) return { kind: "other", row: errorRow(account, unexpectedUsage("opencode")) };

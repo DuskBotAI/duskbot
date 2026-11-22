@@ -8,6 +8,7 @@ import { join, resolve } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
 import { writeFileAtomic } from "./atomic.ts";
+import { asRecord, numericValue as numericSeconds, parseJson, secretString as nonEmptySecret, timeMs as readTimeMs } from "./plan-usage-types.ts";
 
 export interface PlanHttpResponse {
   ok: boolean;
@@ -119,33 +120,8 @@ function sha256Prefix(value: string, hexChars = 16): string {
   return createHash("sha256").update(value).digest("hex").slice(0, hexChars);
 }
 
-function asRecord(value: unknown): Record<string, unknown> | null {
-  return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
-}
-
-function nonEmptySecret(value: unknown): string | null {
-  if (typeof value !== "string") return null;
-  const trimmed = value.trim();
-  if (!trimmed || trimmed.length > 16_000 || /[\r\n]/.test(trimmed)) return null;
-  return trimmed;
-}
-
-function numericSeconds(value: unknown): number | null {
-  if (typeof value === "number" && Number.isFinite(value)) return value;
-  if (typeof value === "string" && value.trim()) {
-    const parsed = Number(value.trim());
-    if (Number.isFinite(parsed)) return parsed;
-  }
-  return null;
-}
-
 function parseJsonObject(text: string | null): Record<string, unknown> | null {
-  if (!text) return null;
-  try {
-    return asRecord(JSON.parse(text));
-  } catch {
-    return null;
-  }
+  return asRecord(parseJson(text));
 }
 
 function sleep(ms: number): Promise<void> {
@@ -507,16 +483,6 @@ function readJsonFile(path: string): Record<string, unknown> | null {
   } catch {
     return null;
   }
-}
-
-function readTimeMs(value: unknown): number | null {
-  if (typeof value === "number" && Number.isFinite(value)) return Math.abs(value) >= 1e12 ? value : value * 1000;
-  if (typeof value === "string" && value.trim()) {
-    if (/^\d+(\.\d+)?$/.test(value.trim())) return readTimeMs(Number(value.trim()));
-    const parsed = Date.parse(value.trim());
-    return Number.isFinite(parsed) ? parsed : null;
-  }
-  return null;
 }
 
 export async function renewClaudeToken(input: {

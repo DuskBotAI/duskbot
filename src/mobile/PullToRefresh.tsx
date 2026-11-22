@@ -28,17 +28,21 @@ export function PullToRefresh({ scrollRef, onRefresh, indicator, children, top =
   const [refreshing, setRefreshing] = useState(false);
   const armed = useRef(false);
   const busy = useRef(false);
+  const settling = useRef(false);
   const nativeActive = useRef(false);
+  const finishTimer = useRef<number | null>(null);
 
   const syncNative = useCallback((value: number, isRefreshing: boolean) => {
     if (!nativeOrb) return;
     if (value <= 1 && !isRefreshing) {
+      settling.current = false;
       if (nativeActive.current) {
         nativeActive.current = false;
         nativeOrb(null);
       }
       return;
     }
+    if (settling.current && !isRefreshing) return;
     nativeActive.current = true;
     const baseTop = anchorRef.current?.getBoundingClientRect().top || 108;
     const y = Math.round((baseTop + Math.min(34, Math.max(12, value * 0.5))) * 2) / 2;
@@ -52,6 +56,10 @@ export function PullToRefresh({ scrollRef, onRefresh, indicator, children, top =
   }, [nativeOrb]);
 
   useEffect(() => () => {
+    if (finishTimer.current !== null) {
+      window.clearTimeout(finishTimer.current);
+      finishTimer.current = null;
+    }
     if (nativeActive.current) {
       nativeActive.current = false;
       nativeOrb?.(null, true);
@@ -67,7 +75,9 @@ export function PullToRefresh({ scrollRef, onRefresh, indicator, children, top =
   });
 
   const finish = useCallback(() => {
+    finishTimer.current = null;
     busy.current = false;
+    settling.current = true;
     setRefreshing(false);
     if (nativeOrb && nativeActive.current) {
       nativeActive.current = false;
@@ -79,7 +89,7 @@ export function PullToRefresh({ scrollRef, onRefresh, indicator, children, top =
   useDrag(scrollRef, {
     axis: "y",
     claim: (s) => s.dy > 0 && !busy.current && (scrollRef.current?.scrollTop ?? 1) <= 0 && !ownsDrag(s.target),
-    onMove: (s) => pull.set(rubberband(Math.max(0, s.dy), 220, 0.75)),
+    onMove: (s) => { settling.current = false; pull.set(rubberband(Math.max(0, s.dy), 220, 0.75)); },
     onEnd: () => {
       if (pull.get() >= THRESHOLD) {
         busy.current = true;
@@ -90,7 +100,8 @@ export function PullToRefresh({ scrollRef, onRefresh, indicator, children, top =
         const started = performance.now();
         // a refresh that answers at once still shows its beat, so the hand sees it happened
         void onRefresh().catch(() => haptic("error")).finally(() => {
-          window.setTimeout(finish, Math.max(0, 450 - (performance.now() - started)));
+          if (finishTimer.current !== null) window.clearTimeout(finishTimer.current);
+          finishTimer.current = window.setTimeout(finish, Math.max(0, 450 - (performance.now() - started)));
         });
       } else settleTo(pull, 0, 0);
     },

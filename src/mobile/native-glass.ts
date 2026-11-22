@@ -559,8 +559,7 @@ function handoffReason(shell: HTMLElement | null, chat: HTMLElement, allowReply:
   return "no field";
 }
 
-/** When a slide begun this frame shows its first moved frame, on the clock the native side reads (epoch ms): a web
- * animation started now draws from the next frame, about half a 60 Hz frame on average from here. */
+/** Epoch ms timestamp passed to native `slide` so the native side accounts for bridge delivery latency. */
 export function slideStart(now = performance.timeOrigin + performance.now()): number {
   return Math.round(now);
 }

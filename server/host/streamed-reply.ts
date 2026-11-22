@@ -40,6 +40,7 @@ export function createStreamedReply(deps: StreamedReplyDeps) {
     replyAtStop.set(threadId, keptAtStop(threadId, turnId, streamedReply.get(threadId) ?? ""));
   };
 
+  const allowsPass = (threadId: string) => Boolean(store.botByThread(threadId) ? deps.directPassAllowed(threadId) : store.groupByThread(threadId));
   return {
     saidAtStop(threadId: string, said: string): void {
       replySaidAtStop.set(threadId, said);
@@ -69,8 +70,9 @@ export function createStreamedReply(deps: StreamedReplyDeps) {
         const spoken = assistantTranscript(event.text);
         if (spoken.kind === "stopped") return event;
         const room = store.botByThread(threadId) ? undefined : store.groupByThread(threadId);
-        const canPass = Boolean(room) || deps.directPassAllowed(threadId);
-        const pass = room ? Boolean(spoken.text.trim()) && isPassText(spoken.text) : canPass && isDirectPassText(spoken.text);
+        const canPass = allowsPass(threadId);
+        const stripped = canPass ? stripTrailingPass(spoken.text) : spoken.text;
+        const pass = room ? Boolean(stripped.trim()) && isPassText(stripped) : canPass && isDirectPassText(stripped);
         if (pass) return null;
         if (canPass) {
           const cleaned = stripTrailingPass(event.text);
@@ -97,12 +99,11 @@ export function createStreamedReply(deps: StreamedReplyDeps) {
     },
     /** Strips a trailing standalone "(pass)" line when this thread allows silent passes. */
     stripTrailingPass(threadId: string, text: string): string {
-      const room = store.botByThread(threadId) ? undefined : store.groupByThread(threadId);
-      return room || deps.directPassAllowed(threadId) ? stripTrailingPass(text) : text;
+      return allowsPass(threadId) ? stripTrailingPass(text) : text;
     },
     /** True when this one-on-one reply is only "(pass)": it is not sent, and the turn counts as quiet until it speaks. */
     passes(threadId: string, text: string): boolean {
-      if (!deps.directPassAllowed(threadId) || !isDirectPassText(text)) return false;
+      if (!deps.directPassAllowed(threadId) || !isDirectPassText(stripTrailingPass(text))) return false;
       silentPassTurns.add(threadId);
       return true;
     },

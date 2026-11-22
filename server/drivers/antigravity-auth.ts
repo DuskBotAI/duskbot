@@ -51,14 +51,17 @@ interface LoginFlow {
   stop: () => Promise<boolean>;
 }
 
-function loginEnvironment(base: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+function loginEnvironment(base: NodeJS.ProcessEnv, profileDirectory: string): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = {};
   for (const [key, value] of Object.entries(base)) {
     const upper = key.toUpperCase();
     // Without a display, `agy acp --login` prints the link instead of opening a browser on the server.
-    if (upper === "DISPLAY" || upper === "WAYLAND_DISPLAY") continue;
+    // Antigravity CLI 1.5+ ignores --gemini-dir during --login summary reconciliation and scans $HOME/.gemini/antigravity/conversations.
+    if (upper === "DISPLAY" || upper === "WAYLAND_DISPLAY" || upper === "HOME" || upper === "USERPROFILE") continue;
     env[key] = value;
   }
+  env.HOME = profileDirectory;
+  if (process.platform === "win32") env.USERPROFILE = profileDirectory;
   return env;
 }
 
@@ -78,7 +81,7 @@ export class AntigravityAuthController {
       [...antigravityAcpArgs(profile.directory), "--login"],
       {
         cwd: profile.directory,
-        env: loginEnvironment(profile.environment),
+        env: loginEnvironment(profile.environment, profile.directory),
         stdio: ["pipe", "pipe", "pipe"],
         box: { net: "shared" as const },
       },

@@ -71,6 +71,7 @@ const REMOVED_ENVIRONMENT_KEYS = new Set([
   "AGY_ACP_CCPA_PROJECT",
   "AGY_ACP_ENABLE_OAUTH",
   "AGY_ACP_DEFAULT_MODEL",
+  "GEMINI_DIR",
   "GEMINI_HOME",
   "AGY_ACP_FORCE_FILE_STORAGE",
   "AGY_CLI_DISABLE_AUTO_UPDATE",
@@ -81,6 +82,14 @@ const REMOVED_ENVIRONMENT_KEYS = new Set([
   // An inherited pipe whose owner exited makes Electron-as-Node print Crashpad errors to stderr.
   "CHROME_CRASHPAD_PIPE_NAME",
 ]);
+// Another Antigravity host (IDE, T3 Code, CLI) exports ANTIGRAVITY_LS_ADDRESS, CSRF tokens, and app-data dirs into child shells.
+const REMOVED_ENVIRONMENT_PREFIXES = ["ANTIGRAVITY_", "AGY_", "JETSKI_"] as const;
+
+function isRemovedAntigravityEnvKey(key: string): boolean {
+  const upper = key.toUpperCase();
+  return REMOVED_ENVIRONMENT_KEYS.has(upper)
+    || REMOVED_ENVIRONMENT_PREFIXES.some((prefix) => upper.startsWith(prefix));
+}
 
 const BROWSER_MARKER = "__DUSK_ANTIGRAVITY_AUTH_URL__";
 const browserHelperSource =
@@ -218,7 +227,7 @@ export async function prepareAntigravityProfile(input: {
   const sourceEnv = input.baseEnv ?? process.env;
   const environment: NodeJS.ProcessEnv = {};
   for (const [key, value] of Object.entries(sourceEnv)) {
-    if (!REMOVED_ENVIRONMENT_KEYS.has(key.toUpperCase())) environment[key] = value;
+    if (!isRemovedAntigravityEnvKey(key)) environment[key] = value;
   }
   stripWorkspaceCredentialEnv(environment);
   const caBundlePath = resolveLinuxCaBundle(sourceEnv, platform);

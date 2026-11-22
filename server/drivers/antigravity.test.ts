@@ -763,12 +763,30 @@ describe("official Antigravity runtime", () => {
     const first = await prepareAntigravityProfile({
       instanceId: "work",
       runtime,
-      baseEnv: { HOME: "/tmp/home", GEMINI_API_KEY: "must-not-leak", GOOGLE_API_KEY: "also-no" },
+      baseEnv: {
+        HOME: "/tmp/home",
+        GEMINI_API_KEY: "must-not-leak",
+        GOOGLE_API_KEY: "also-no",
+        GEMINI_DIR: "/tmp/other-gemini",
+        ANTIGRAVITY_LS_ADDRESS: "127.0.0.1:57534",
+        ANTIGRAVITY_CSRF_TOKEN: "other-app-csrf",
+        ANTIGRAVITY_CONVERSATION_ID: "other-app-conv",
+        ANTIGRAVITY_APP_DATA_DIR: "/tmp/other-app",
+        AGY_ACCOUNT: "other-account",
+        JETSKI_PROXY_SOCKET: "/tmp/other-jetski.sock",
+      },
     });
     const second = await prepareAntigravityProfile({ instanceId: "personal", runtime, baseEnv: {} });
     expect(first.directory).not.toBe(second.directory);
     expect(first.environment.GEMINI_API_KEY).toBeUndefined();
     expect(first.environment.GOOGLE_API_KEY).toBeUndefined();
+    expect(first.environment.GEMINI_DIR).toBeUndefined();
+    expect(first.environment.ANTIGRAVITY_LS_ADDRESS).toBeUndefined();
+    expect(first.environment.ANTIGRAVITY_CSRF_TOKEN).toBeUndefined();
+    expect(first.environment.ANTIGRAVITY_CONVERSATION_ID).toBeUndefined();
+    expect(first.environment.ANTIGRAVITY_APP_DATA_DIR).toBeUndefined();
+    expect(first.environment.AGY_ACCOUNT).toBeUndefined();
+    expect(first.environment.JETSKI_PROXY_SOCKET).toBeUndefined();
     expect(first.environment.GEMINI_HOME).toBe(first.directory);
     expect(first.environment.AGY_CLI_DISABLE_AUTO_UPDATE).toBe("1");
     expect(first.environment.SSH_CONNECTION).toBe("127.0.0.1 0 127.0.0.1 0");

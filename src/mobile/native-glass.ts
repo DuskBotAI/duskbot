@@ -4,7 +4,35 @@ import type { SlidePath } from "./NavStack";
 import type { MobilePlatform } from "./platform";
 import { composerHandoff } from "./native-composer-ack";
 import type { HomeGlassState } from "./native-home-glass";
+import {
+  cssPx,
+  isGlassDark,
+  safeInsetPx,
+  useGlassPill,
+  type FloatingPillGlassState,
+  type PullRefreshGlassState,
+  type SwipeReplyGlassState,
+  type TakeoverGlassButton,
+  type TakeoverGlassButtonId,
+  type TakeoverGlassMenuItem,
+  type TakeoverGlassState,
+  type ViewerGlassState,
+} from "./native-glass-overlays";
 import { kbTrace } from "./keyboard";
+
+export {
+  isGlassDark,
+  safeInsetPx,
+  useGlassPill,
+  type FloatingPillGlassState,
+  type PullRefreshGlassState,
+  type SwipeReplyGlassState,
+  type TakeoverGlassButton,
+  type TakeoverGlassButtonId,
+  type TakeoverGlassMenuItem,
+  type TakeoverGlassState,
+  type ViewerGlassState,
+};
 
 /** A rect in css px from the top left of the screen, which on the phone is the native view's own point space. */
 export interface GlassFrame { x: number; y: number; w: number; h: number }
@@ -85,90 +113,6 @@ export interface GlassState {
  * back under it). */
 export function callHoldsComposer(chat: Element | null): boolean {
   return Boolean(chat?.querySelector("[data-call-surface]:not([data-call-leaving])"));
-}
-
-export interface TakeoverGlassMenuItem {
-  key: string;
-  label: string;
-  detail?: string;
-  symbol?: string;
-  checked?: boolean;
-  disabled?: boolean;
-  danger?: boolean;
-  separated?: boolean;
-}
-
-export type TakeoverGlassButtonId = "back" | "help" | "more" | "clipboard" | "control" | "keyboard";
-
-export interface TakeoverGlassButton {
-  id: TakeoverGlassButtonId;
-  frame: GlassFrame;
-  label: string;
-  symbol?: string;
-  symbolSize?: number;
-  symbolWeight?: "medium" | "semibold";
-  title?: string;
-  compact?: boolean;
-  disabled?: boolean;
-  busy?: boolean;
-  interactive?: boolean;
-  menu?: TakeoverGlassMenuItem[];
-}
-
-/** Floating takeover controls for the native Liquid Glass overlay (ios/App/App/GlassHomeBar.swift). */
-export interface TakeoverGlassState {
-  buttons: TakeoverGlassButton[];
-}
-
-/** Floating swipe-to-reply indicator in native Liquid Glass (ios/App/App/GlassHomeBar.swift). */
-export interface SwipeReplyGlassState {
-  x: number;
-  y: number;
-  restX: number;
-  size: number;
-  progress: number;
-  /** 0..1 rubber-band overscroll past the reply threshold for subtle elastic stretch. */
-  overscroll?: number;
-  armed: boolean;
-  dark: boolean;
-}
-
-/** Pull-to-refresh orb in native Liquid Glass (ios/App/App/GlassOverlays.swift). */
-export interface PullRefreshGlassState {
-  y: number;
-  progress: number;
-  armed: boolean;
-  refreshing: boolean;
-  dark: boolean;
-}
-
-/** Fullscreen photo viewer controls in native Liquid Glass (ios/App/App/GlassOverlays.swift). */
-export interface ViewerGlassState {
-  visible: boolean;
-  close: GlassFrame;
-  closeLabel: string;
-  share?: GlassFrame | null;
-  shareLabel?: string;
-  sharing?: boolean;
-  countText?: string | null;
-  countY?: number;
-}
-
-/** Floating Liquid Glass pill for status banners, toasts, and viewer hints (ios/App/App/GlassOverlays.swift). */
-export interface FloatingPillGlassState {
-  slot: "top" | "bottom";
-  id: string;
-  text: string;
-  tone?: "neutral" | "success" | "error";
-  symbol?: string;
-  trailingSymbol?: string;
-  spinner?: boolean;
-  offset: number;
-  dark: boolean;
-  tappable?: boolean;
-  actionLabel?: string;
-  actionDisabled?: boolean;
-  dismissible?: boolean;
 }
 
 export type GlassEvent =
@@ -719,85 +663,6 @@ export const REASSERT_MS = 1000;
 function inTranscript(node: Node): boolean {
   const el = node instanceof Element ? node : node.parentElement;
   return Boolean(el?.closest("[role=log]"));
-}
-
-function cssPx(root: HTMLElement, expression: string): number {
-  const probe = document.createElement("div");
-  probe.style.cssText = `position:absolute;visibility:hidden;height:${expression}`;
-  root.appendChild(probe);
-  const value = probe.getBoundingClientRect().height;
-  probe.remove();
-  return value;
-}
-
-/** Whether the active app skin is dark, matching the page's own ground rather than assuming system appearance. */
-export function isGlassDark(): boolean {
-  if (typeof document === "undefined") return false;
-  const html = document.documentElement;
-  if (html.dataset.skin === "grok-dark") return true;
-  if (html.dataset.skin === "grok-light") return false;
-  const shell = html.querySelector<HTMLElement>(".dusk-mobile");
-  if (shell?.dataset.scheme === "dark") return true;
-  if (shell?.dataset.scheme === "light") return false;
-  return globalThis.matchMedia?.("(prefers-color-scheme: dark)").matches === true;
-}
-
-/** Resolves `--m-safe-top` or `--m-safe-bottom` to CSS pixels. */
-export function safeInsetPx(edge: "top" | "bottom"): number {
-  if (typeof document === "undefined" || !document.body) return 0;
-  const host = document.querySelector<HTMLElement>(".dusk-mobile") ?? document.body;
-  return cssPx(host, `var(--m-safe-${edge}, 0px)`);
-}
-
-/** Syncs a floating native Liquid Glass pill (`top` or `bottom` slot) and routes its tap/action/dismiss events. */
-export function useGlassPill(
-  glass: GlassBridge | undefined,
-  slot: "top" | "bottom",
-  state: Omit<FloatingPillGlassState, "slot"> | null,
-  handlers?: { onPill?: () => void; onAction?: () => void; onDismiss?: () => void },
-): boolean {
-  const pill = glass?.pill;
-  const activeId = useRef<string | null>(null);
-  const handlersRef = useRef(handlers);
-  handlersRef.current = handlers;
-  const payload = state ? JSON.stringify(state) : "";
-  const hasState = payload !== "";
-
-  useEffect(() => {
-    if (!pill) return;
-    if (!payload) {
-      if (activeId.current) {
-        pill(slot, null, activeId.current);
-        activeId.current = null;
-      }
-      return;
-    }
-    const next = JSON.parse(payload) as Omit<FloatingPillGlassState, "slot">;
-    activeId.current = next.id;
-    pill(slot, { slot, ...next });
-  }, [pill, slot, payload]);
-
-  useEffect(() => {
-    if (!pill) return;
-    return () => {
-      if (activeId.current) {
-        pill(slot, null, activeId.current);
-        activeId.current = null;
-      }
-    };
-  }, [pill, slot]);
-
-  useEffect(() => {
-    if (!glass?.pill || !hasState) return;
-    return glass.onEvent((event) => {
-      if (event.type !== "pillTap" || event.slot !== slot || event.id !== activeId.current) return;
-      if (event.kind === "pill") handlersRef.current?.onPill?.();
-      else if (event.kind === "action") handlersRef.current?.onAction?.();
-      else if (event.kind === "dismiss") handlersRef.current?.onDismiss?.();
-    });
-  }, [glass, slot, hasState]);
-
-  return Boolean(pill);
 }
 
 /** While a chat is open, the native glass draws its header and composer: the page's own chrome is measured where it rests

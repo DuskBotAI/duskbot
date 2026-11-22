@@ -1,10 +1,31 @@
 // What the ACP driver keeps for each thread: its session on an agent process (alone or shared with other threads'
 // sessions) and the turn running in it.
-import type { RequestOutcome, SendTurnInput } from "../../contracts.ts";
+import type { ProviderErrorCode, RequestOutcome, SendTurnInput } from "../../contracts.ts";
 import type { spawnCli } from "../../procs.ts";
 import { errorReplyFailure, type ErrorReplyFailure } from "../engine-errors.ts";
-import type { AcpConfig } from "./core.ts";
+import { decodeInjectId } from "../local-inject.ts";
 import type { AcpHost, AcpLink } from "./host.ts";
+
+/** Failures fixed on the provider account, not by retrying; the reporting process stays pooled. */
+export type AccountErrorCode = Extract<ProviderErrorCode,
+  "invalid_credentials" | "inactive_subscription" | "insufficient_funds" | "quota_or_region_restriction">;
+
+const ACCOUNT_ERROR_CODES: ReadonlySet<ProviderErrorCode> = new Set<AccountErrorCode>([
+  "invalid_credentials", "inactive_subscription", "insufficient_funds", "quota_or_region_restriction",
+]);
+
+export const isAccountError = (code: ProviderErrorCode | undefined): code is AccountErrorCode =>
+  code !== undefined && ACCOUNT_ERROR_CODES.has(code);
+
+export interface AcpConfig {
+  cli: string;
+  fullAuto: boolean;
+  workspace?: string;
+}
+
+export function skipSubscriptionAuthForLocalInject(model: string | undefined): boolean {
+  return Boolean(decodeInjectId(model));
+}
 
 export type AcpAskFinish = (
   behavior: string,

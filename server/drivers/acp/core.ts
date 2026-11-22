@@ -13,7 +13,6 @@ import { createHash } from "node:crypto";
 import { PROVIDER_CREDENTIAL_ENV, stripControlPlaneEnv, WORKSPACE_CREDENTIAL_ENV } from "../../config.ts";
 import { openStartupModelCatalog } from "../../startup-model-catalog.ts";
 import { acpModelCatalog } from "./model-catalog.ts";
-import { decodeInjectId } from "../local-inject.ts";
 import { DeviceAuthController, type DeviceSignIn } from "../device-auth.ts";
 import { deletePromptSplitReceipt, promptHalves, readPromptSplitReceipt, splitSessionPrompt, writePromptSplitReceipt } from "../prompt-split.ts";
 import type { PromptSplitReceipt } from "../prompt-split.ts";
@@ -31,10 +30,6 @@ import { acpVariantOption } from "./config-options.ts";
 import { advertisedVariant, coolFreeRung, FREE_POOL_LIMIT, FREE_PROBE_MS, FREE_PROBE_PROMPT, freeFailure, freeLadder, probeFreeLadder, warmFreeModel, warmFreeRung, type FreeFailure, type FreeRung } from "./free-ladder.ts";
 import { trail } from "../../trail.ts";
 import { versionFromProbe } from "./version-probe.ts"; import { engineHomes } from "../../engine-homes/engine-homes.ts";
-
-export function skipSubscriptionAuthForLocalInject(model: string | undefined): boolean {
-  return Boolean(decodeInjectId(model));
-}
 
 import type {
   DriverCreateInput,
@@ -66,7 +61,8 @@ import { commandSummary, toolDetailPreview } from "../../tool-summary.ts";
 import { acpToolEndEvents } from "./tool-items.ts";
 import { AcpHost } from "./host.ts";
 import { exitDetail } from "./exit-report.ts";
-import { availableCommandNames, endTurn, lookupResultArrived, trackRunningTool, type AcpAskFinish, type AcpSession, type AcpTurn } from "./turn-state.ts";
+import { availableCommandNames, endTurn, isAccountError, lookupResultArrived, skipSubscriptionAuthForLocalInject, trackRunningTool, type AccountErrorCode, type AcpAskFinish, type AcpConfig, type AcpSession, type AcpTurn } from "./turn-state.ts";
+export { skipSubscriptionAuthForLocalInject, type AccountErrorCode, type AcpConfig };
 import { recoveryPromptFor } from "../../resume-recovery.ts";
 import { engineIdleMs, keepWarm, sessionIdlePolicy, stopIdleClose } from "../session-idle.ts";
 import { classifyError } from "../retry.ts";
@@ -75,21 +71,6 @@ import { cliExitCode, failureCode, rpcCode } from "../../../shared/usage-signals
 import { narrowsNativeTools, parseToolScope } from "../../../shared/tool-scope.ts";
 import { acpMcpServers, type AcpMcpServer } from "../turn-mcp.ts"; import { acpToolOutput, acpToolProgress } from "../tool-progress.ts";
 import { learnedMcpToolBudget, retryUnderToolLimit } from "../../tool-count-limit.ts"; import { instanceEnvNames } from "../../bot-box/env.ts"; import { botBox } from "../../bot-box/box.ts";
-
-/** Failures fixed on the provider account, not by retrying; the reporting process stays pooled. */
-export type AccountErrorCode = Extract<ProviderErrorCode,
-  "invalid_credentials" | "inactive_subscription" | "insufficient_funds" | "quota_or_region_restriction">;
-const ACCOUNT_ERROR_CODES: ReadonlySet<ProviderErrorCode> = new Set<AccountErrorCode>([
-  "invalid_credentials", "inactive_subscription", "insufficient_funds", "quota_or_region_restriction",
-]);
-const isAccountError = (code: ProviderErrorCode | undefined): code is AccountErrorCode =>
-  code !== undefined && ACCOUNT_ERROR_CODES.has(code);
-
-export interface AcpConfig {
-  cli: string;
-  fullAuto: boolean;
-  workspace?: string;
-}
 
 /** Per-CLI specifics plugged into the shared ACP runtime; `askTool` is the native tool `questionRequests` come from. */
 export interface AcpSupport {

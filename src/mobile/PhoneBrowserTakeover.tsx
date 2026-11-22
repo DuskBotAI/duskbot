@@ -63,6 +63,21 @@ const subscribeLandscape = (listener: () => void) => {
 };
 const isLandscape = () => landscapeQuery()?.matches ?? false;
 
+/** True when tapping a bot's Computer button on a phone should launch the browser directly into fullscreen takeover
+ * instead of opening the Computer settings sheet (local Mac/PC bots, browser-only bots, or active browser help). */
+export function opensBrowserTakeoverDirectly(
+  bot: Pick<Bot, "id" | "browser" | "computer">,
+  state: { config?: { cloudHome?: boolean } | null; computerControl?: Record<string, { help?: { place?: string } | null } | undefined> },
+): boolean {
+  if (bot.browser === false) return false;
+  const current = bot.computer ?? "auto";
+  const helpBrowser = state.computerControl?.[bot.id]?.help?.place === "browser";
+  if (current === "off" && !helpBrowser) return false;
+  const local = state.config?.cloudHome !== true;
+  const ownScreen = current === "vm" || (!local && current !== "browser");
+  return !ownScreen || helpBrowser;
+}
+
 /** Fullscreen pure-black built-in browser takeover on phones, matching the remote desktop viewer's controls. */
 export function PhoneBrowserTakeover({ bot, signIn, onClose }: {
   bot: Bot;
@@ -99,6 +114,7 @@ export function PhoneBrowserTakeover({ bot, signIn, onClose }: {
   tabsRef.current = tabs;
   const signInHandled = useRef(0);
   const signInUrl = useRef<string | null>(null);
+  const openingDone = useRef(false);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const pointerState = useRef({
     mask: 0,
@@ -106,8 +122,10 @@ export function PhoneBrowserTakeover({ bot, signIn, onClose }: {
   });
 
   const signInHelp = state.computerControl?.[bot.id]?.help?.place === "browser" ? state.computerControl[bot.id]!.help! : null;
-  const keepNow = useRef(false);
-  keepNow.current = Boolean(signInHelp || signIn);
+
+  useEffect(() => {
+    openingDone.current = false;
+  }, [bot.id, bot.threadId, attempt]);
 
   const showToast = useCallback((message: string) => {
     clearTimeout(toastTimer.current);
@@ -149,7 +167,7 @@ export function PhoneBrowserTakeover({ bot, signIn, onClose }: {
   const onControl = useCallback((next: PreviewStreamControl | null) => {
     controlRef.current = next;
     browserControl.current?.observe();
-    if (!browserControl.current && next?.canOperate && next.controller === "unclaimed" && keepNow.current) {
+    if (!browserControl.current && next?.canOperate && next.controller === "unclaimed") {
       clientRef.current?.send({ type: "takeControl" });
     }
   }, []);
@@ -167,28 +185,28 @@ export function PhoneBrowserTakeover({ bot, signIn, onClose }: {
         onError: setError,
         onHalted: () => setError(t("browser.input.tooSlow")),
       });
-      created.keep(keepNow.current);
+      created.keep(true);
       browserControl.current = created;
     }
   }, []);
 
-  useEffect(() => { browserControl.current?.keep(Boolean(signInHelp || signIn)); }, [signInHelp, signIn]);
-
   useEffect(() => {
-    if (!signIn || !connected || signInHandled.current === signIn.nonce) return;
-    signInHandled.current = signIn.nonce;
-    signInUrl.current = signIn.url;
+    if (!connected) return;
     browserControl.current?.keep(true);
     browserControl.current?.takeControl();
     if (!browserControl.current && controlRef.current?.canOperate && controlRef.current.controller === "unclaimed") {
       clientRef.current?.send({ type: "takeControl" });
     }
+    if (!signIn || signInHandled.current === signIn.nonce) return;
+    signInHandled.current = signIn.nonce;
+    signInUrl.current = signIn.url;
   }, [signIn, connected]);
 
   useEffect(() => {
     const url = signInUrl.current;
     if (!url || !connected || !heard) return;
     signInUrl.current = null;
+    openingDone.current = true;
     const current = tabsRef.current.find((tab) => tab.active) ?? tabsRef.current[0];
     if (!current || blankPage(current.url)) send({ type: "navigate", url });
   }, [connected, heard, send, signIn]);
@@ -198,14 +216,25 @@ export function PhoneBrowserTakeover({ bot, signIn, onClose }: {
       const next = tabsOf(message.tabs);
       setTabs(next);
       setHeard(true);
+      if (next.some((tab) => !blankPage(tab.url))) {
+        openingDone.current = true;
+      } else if (!openingDone.current && !signInUrl.current && !signIn?.url) {
+        openingDone.current = true;
+        if (next.length > 0) send({ type: "navigate", url: START_PAGE });
+        else send({ type: "tabNew", url: START_PAGE });
+      }
       const active = next.find((tab) => tab.active);
       if (active) setNav((current) => ({ ...current, url: active.url }));
     } else if (message.type === "nav" && typeof message.url === "string") {
       setNav({ url: message.url, loading: message.loading === true, canGoBack: message.canGoBack === true, canGoForward: message.canGoForward === true });
     } else if (message.type === "url" && typeof message.url === "string") {
       setNav((current) => ({ ...current, url: message.url as string }));
+    } else if (message.type === "asleep") {
+      setConnected(false);
+      setPainted(false);
+      setGone(true);
     }
-  }, []);
+  }, [send, signIn?.url]);
 
   const remoteInput = useMemo<RemoteInput>(() => ({
     size: () => {
@@ -256,6 +285,11 @@ export function PhoneBrowserTakeover({ bot, signIn, onClose }: {
       if (typed) send({ type: "text", text: typed });
     },
   }), [send]);
+
+  const handleExit = useCallback(() => {
+    if (!signInHelp) send({ type: "releaseControl" });
+    onClose();
+  }, [signInHelp, send, onClose]);
 
   const handleDone = useCallback(async () => {
     if (finishing) return;
@@ -464,7 +498,7 @@ export function PhoneBrowserTakeover({ bot, signIn, onClose }: {
       name={bot.name}
       platform={platform}
       landscape={landscape}
-      onExit={onClose}
+      onExit={handleExit}
       frame={gone ? null : frame}
       note={gone ? (
         <div className="flex flex-col items-center gap-3">

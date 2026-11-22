@@ -96,6 +96,9 @@ final class RootViewController: UIViewController, UINavigationControllerDelegate
     private var sheetIsLarge = false
     private var preparingSheet = false
     private var heldSheetBarSpec: ChromeBarSpec?
+    private var hasMainBarContent = false
+    private static let mainBarSlideKeys = ["main-bar-slide", "main-bar-alpha"]
+    private static let mainBarParallax: CGFloat = 24
 
     var currentBarSpec: ChromeBarSpec?
     var applyBarItem: ((ChromeBarSpec, UINavigationItem, Bool, Bool) -> Void)?
@@ -158,6 +161,106 @@ final class RootViewController: UIViewController, UINavigationControllerDelegate
     override var preferredStatusBarStyle: UIStatusBarStyle { sheetNavigation != nil && sheetIsLarge ? .lightContent : app.preferredStatusBarStyle }
     override var prefersStatusBarHidden: Bool { app.prefersStatusBarHidden }
     override var supportedInterfaceOrientations: UIInterfaceOrientationMask { app.supportedInterfaceOrientations }
+
+    func markMainBarContent(_ hasContent: Bool) {
+        hasMainBarContent = hasContent
+        if !hasContent { resetMainBarMotion() }
+    }
+
+    private func mainBarShift(_ page: CGFloat, width: CGFloat) -> CGFloat {
+        let progress = min(1, max(0, page / max(1, width)))
+        return -Self.mainBarParallax * (1 - progress)
+    }
+
+    private func mainBarAlpha(_ page: CGFloat, width: CGFloat) -> CGFloat {
+        let progress = min(1, max(0, page / max(1, width)))
+        return max(0, min(1, (progress - 0.42) / 0.58))
+    }
+
+    private func resetMainBarMotion() {
+        let bar = mainNavigation.navigationBar
+        for key in Self.mainBarSlideKeys {
+            bar.layer.removeAnimation(forKey: key)
+        }
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        bar.transform = .identity
+        bar.alpha = 1
+        CATransaction.commit()
+    }
+
+    /// Cross-fades and glides `mainNavigation.navigationBar` in lockstep with a chat page dragging across the screen.
+    /// Avoids `CALayer.mask` (which hides iOS 26 Liquid Glass navigation bars) and starts revealing only after the chat
+    /// header has faded out past ~42% drag so the two glass bars never collide.
+    func followMainBar(page: CGFloat?) {
+        guard hasMainBarContent, sheetNavigation == nil, !preparingSheet else { return }
+        let bar = mainNavigation.navigationBar
+        let width = max(1, mainNavigation.view.bounds.width)
+        guard let page else {
+            resetMainBarMotion()
+            return
+        }
+        let x = min(max(0, page), width)
+        if x <= 0.5 {
+            resetMainBarMotion()
+            if !mainNavigation.isNavigationBarHidden {
+                mainNavigation.setNavigationBarHidden(true, animated: false)
+            }
+            return
+        }
+        if x >= width - 0.5 {
+            if mainNavigation.isNavigationBarHidden {
+                mainNavigation.setNavigationBarHidden(false, animated: false)
+            }
+            resetMainBarMotion()
+            return
+        }
+        if mainNavigation.isNavigationBarHidden {
+            mainNavigation.setNavigationBarHidden(false, animated: false)
+            mainNavigation.view.layoutIfNeeded()
+        }
+        for key in Self.mainBarSlideKeys {
+            bar.layer.removeAnimation(forKey: key)
+        }
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        bar.transform = CGAffineTransform(translationX: mainBarShift(x, width: width), y: 0)
+        bar.alpha = mainBarAlpha(x, width: width)
+        CATransaction.commit()
+    }
+
+    /// Plays `mainNavigation.navigationBar`'s parallax and cross-fade in the same CoreAnimation transaction as a chat
+    /// push or pop slide.
+    func slideMainBar(_ points: [CGFloat], duration: TimeInterval, beginTime: CFTimeInterval) {
+        guard hasMainBarContent, sheetNavigation == nil, !preparingSheet, let last = points.last else { return }
+        let bar = mainNavigation.navigationBar
+        let width = max(1, mainNavigation.view.bounds.width)
+        let pages = points.map { min(max(0, $0), width) }
+        if pages.allSatisfy({ $0 <= 0.5 }) {
+            followMainBar(page: 0)
+            return
+        }
+        if mainNavigation.isNavigationBarHidden {
+            mainNavigation.setNavigationBarHidden(false, animated: false)
+            mainNavigation.view.layoutIfNeeded()
+        }
+        let move = CAKeyframeAnimation(keyPath: "transform.translation.x")
+        move.values = pages.map { NSNumber(value: Double(mainBarShift($0, width: width))) }
+        let fade = CAKeyframeAnimation(keyPath: "opacity")
+        fade.values = pages.map { NSNumber(value: Double(mainBarAlpha($0, width: width))) }
+        for (animation, key) in [(move, Self.mainBarSlideKeys[0]), (fade, Self.mainBarSlideKeys[1])] {
+            animation.duration = duration
+            animation.calculationMode = .linear
+            animation.beginTime = beginTime
+            animation.fillMode = .backwards
+            animation.preferredFrameRateRange = CAFrameRateRange(minimum: 80, maximum: 120, preferred: 120)
+            bar.layer.removeAnimation(forKey: key)
+            bar.layer.add(animation, forKey: key)
+        }
+        let finalX = min(max(0, last), width)
+        bar.transform = CGAffineTransform(translationX: mainBarShift(finalX, width: width), y: 0)
+        bar.alpha = mainBarAlpha(finalX, width: width)
+    }
 
     /// Holds the sheet's incoming bar spec between `freeze()` and `presentSheet()` so `mainNavigation.navigationBar`
     /// keeps the presenting screen's live Liquid Glass bar items untouched while their release animation completes.
@@ -652,26 +755,46 @@ public class ChromePlugin: CAPPlugin, CAPBridgedPlugin, UIAdaptivePresentationCo
     private func applyMainBar(_ spec: ChromeBarSpec, on root: RootViewController) {
         let nav = root.mainNavigation
         let nextSignature = signature(for: spec)
-        if mainBarSignature == nextSignature && nav.isNavigationBarHidden == spec.hidden {
+        if spec.hidden {
+            if !nav.isNavigationBarHidden {
+                nav.navigationBar.layer.removeAllAnimations()
+                nav.navigationBar.layer.mask = nil
+                nav.navigationBar.transform = .identity
+                nav.navigationBar.alpha = 1
+                nav.setNavigationBarHidden(true, animated: false)
+            }
+            return
+        }
+        let itemsUnchanged = mainBarSignature == nextSignature
+        if itemsUnchanged && !nav.isNavigationBarHidden {
             return
         }
         let wasHidden = nav.isNavigationBarHidden
         let suppressAnimation = root.isCovered
-        let animateItems = !suppressAnimation && !spec.hidden && !wasHidden
-        applyBar(spec, to: root.mainHost.navigationItem, isPushed: false, animated: animateItems)
-        mainBarSignature = signature(for: spec)
+        if !itemsUnchanged {
+            let animateItems = !suppressAnimation && !wasHidden
+            applyBar(spec, to: root.mainHost.navigationItem, isPushed: false, animated: animateItems)
+            mainBarSignature = signature(for: spec)
+        }
+        root.markMainBarContent(!spec.leading.isEmpty || !spec.trailing.isEmpty || spec.title != nil || spec.status != nil)
         let bar = nav.navigationBar
-        if wasHidden && !spec.hidden && !suppressAnimation {
+        if wasHidden && !suppressAnimation {
             bar.layer.removeAllAnimations()
+            bar.layer.mask = nil
+            bar.transform = .identity
             nav.setNavigationBarHidden(false, animated: false)
             bar.alpha = 0
             UIView.animate(withDuration: 0.18, delay: 0, options: [.curveEaseOut, .beginFromCurrentState, .allowUserInteraction]) {
                 bar.alpha = 1
             }
         } else {
-            bar.layer.removeAllAnimations()
-            bar.alpha = 1
-            nav.setNavigationBarHidden(spec.hidden, animated: false)
+            if bar.layer.animationKeys()?.contains("main-bar-slide") != true {
+                bar.layer.removeAllAnimations()
+                bar.layer.mask = nil
+                bar.transform = .identity
+                bar.alpha = 1
+            }
+            nav.setNavigationBarHidden(false, animated: false)
         }
     }
 
@@ -688,6 +811,7 @@ public class ChromePlugin: CAPPlugin, CAPBridgedPlugin, UIAdaptivePresentationCo
                 root.resetPushStack()
                 root.currentBarSpec = nil
                 self.mainBarSignature = nil
+                root.markMainBarContent(false)
                 root.thaw()
                 self.clearNavigationItem(root.app.navigationItem)
                 self.clearNavigationItem(root.mainHost.navigationItem)

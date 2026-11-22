@@ -95,6 +95,7 @@ public class GlassChromePlugin: CAPPlugin, CAPBridgedPlugin {
             let chrome = ChatGlassChrome(
                 mainHost: mainHost,
                 webHost: webHost,
+                root: root,
                 isInSheet: { [weak self] in self?.rootViewController?.sheetNavigation != nil }
             ) { [weak self] event in self?.notifyListeners("glass", data: event) }
             self.chrome = chrome
@@ -460,6 +461,7 @@ final class ChatGlassChrome: NSObject, UITextViewDelegate {
 
     private weak var mainHost: UIView?
     private weak var webHost: UIView?
+    private weak var root: RootViewController?
     private let isInSheet: () -> Bool
     private let emit: ([String: Any]) -> Void
     private var mainSheetFreeze: MainSheetFreeze = .none
@@ -572,9 +574,10 @@ final class ChatGlassChrome: NSObject, UITextViewDelegate {
     private let topBand = GradientView()
     private var ground: UIColor?
 
-    init(mainHost: UIView, webHost: UIView, isInSheet: @escaping () -> Bool, emit: @escaping ([String: Any]) -> Void) {
+    init(mainHost: UIView, webHost: UIView, root: RootViewController?, isInSheet: @escaping () -> Bool, emit: @escaping ([String: Any]) -> Void) {
         self.mainHost = mainHost
         self.webHost = webHost
+        self.root = root
         self.isInSheet = isInSheet
         self.emit = emit
         super.init()
@@ -838,17 +841,42 @@ final class ChatGlassChrome: NSObject, UITextViewDelegate {
 
     // MARK: riding on the page
 
-    private func setOffset(_ x: CGFloat, homeFollows: Bool = true) {
+    private var slidingViews: [UIView] {
+        var views: [UIView] = [header, composer, jump]
+        if headerShown || composerShown, let statusView = statusPill?.view {
+            views.append(statusView)
+        }
+        return views
+    }
+
+    private func headerAlpha(for pageX: CGFloat) -> CGFloat {
+        guard headerShown else { return 0 }
+        let width = max(1, mainHost?.bounds.width ?? 390)
+        let progress = min(1, max(0, pageX / width))
+        return max(0, 1 - progress * 2.2)
+    }
+
+    private func setOffset(_ x: CGFloat, homeFollows: Bool = true, fadeHeader: Bool = true) {
         offset = x
         let moved = CGAffineTransform(translationX: x, y: 0)
-        for view in [header, composer, jump] where view.transform != moved { view.transform = moved }
-        if homeFollows { home.follow(page: x) }
+        for view in slidingViews where view.transform != moved { view.transform = moved }
+        if fadeHeader && headerShown {
+            header.layer.removeAnimation(forKey: "header-slide-alpha")
+            header.alpha = headerAlpha(for: x)
+        }
+        if homeFollows {
+            home.follow(page: x)
+            root?.followMainBar(page: x)
+        }
     }
 
     /// The chat's page is gone: Home's bar is the list's again, whole and in place.
     func pageGone() {
         headerPopping = false
+        statusPill?.view.layer.removeAnimation(forKey: Self.slideKey)
+        statusPill?.view.transform = .identity
         home.follow(page: nil)
+        root?.followMainBar(page: nil)
     }
 
     func setMainSheetFreeze(_ phase: MainSheetFreeze) {
@@ -985,7 +1013,7 @@ final class ChatGlassChrome: NSObject, UITextViewDelegate {
         let now = CACurrentMediaTime()
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        for view in [header, composer, jump] {
+        for view in slidingViews {
             view.layer.removeAnimation(forKey: Self.slideKey)
             let animation = CAKeyframeAnimation(keyPath: "transform.translation.x")
             animation.values = points.map { NSNumber(value: Double($0)) }
@@ -997,20 +1025,23 @@ final class ChatGlassChrome: NSObject, UITextViewDelegate {
             view.layer.add(animation, forKey: Self.slideKey)
         }
         home.slide(points, duration: duration, beginTime: now - skipped)
-        setOffset(to, homeFollows: false)
+        root?.slideMainBar(points, duration: duration, beginTime: now - skipped)
+        if headerShown {
+            header.layer.removeAnimation(forKey: "header-slide-alpha")
+            let fade = CAKeyframeAnimation(keyPath: "opacity")
+            fade.values = points.map { NSNumber(value: Double(headerAlpha(for: $0))) }
+            fade.duration = duration
+            fade.calculationMode = .linear
+            fade.beginTime = header.layer.convertTime(now, from: nil) - skipped
+            fade.fillMode = .backwards
+            fade.preferredFrameRateRange = CAFrameRateRange(minimum: 80, maximum: 120, preferred: 120)
+            header.layer.add(fade, forKey: "header-slide-alpha")
+            header.alpha = headerAlpha(for: to)
+        }
+        setOffset(to, homeFollows: false, fadeHeader: false)
         CATransaction.commit()
         slideEnd = now + duration - skipped
-        let popping = to > 0.5
-        if popping && headerShown {
-            headerPopping = true
-            UIView.animate(withDuration: 0.14, delay: 0, options: [.curveEaseOut, .beginFromCurrentState, .allowUserInteraction]) {
-                self.header.alpha = 0
-            }
-        } else if !popping && headerPopping {
-            headerPopping = false
-            stopFades(header)
-            if headerShown { header.alpha = 1 }
-        }
+        headerPopping = to > 0.5
     }
 
     /// a message older than this is a stalled page, not a bridge hop: the chrome plays the rest from where it is due
@@ -1026,13 +1057,10 @@ final class ChatGlassChrome: NSObject, UITextViewDelegate {
     func stopSlide() {
         guard sliding else { return }
         let drawn = (header.layer.presentation()?.value(forKeyPath: "transform.translation.x") as? NSNumber).map { CGFloat($0.doubleValue) }
-        for view in [header, composer, jump] { view.layer.removeAnimation(forKey: Self.slideKey) }
+        for view in slidingViews { view.layer.removeAnimation(forKey: Self.slideKey) }
+        header.layer.removeAnimation(forKey: "header-slide-alpha")
         slideEnd = 0
-        if headerPopping {
-            headerPopping = false
-            stopFades(header)
-            if headerShown { header.alpha = 1 }
-        }
+        headerPopping = false
         setOffset(drawn ?? offset)
     }
 
@@ -1127,7 +1155,7 @@ final class ChatGlassChrome: NSObject, UITextViewDelegate {
 
     private func applyHeader(_ data: [String: Any]?) {
         guard let data, let backFrame = Frame(data["back"]), let titleFrame = Frame(data["title"]) else {
-            show(header, false, &headerShown)
+            show(header, false, \.headerShown)
             return
         }
         if !back.isTracking, back.frame != backFrame.rect { back.frame = backFrame.rect }
@@ -1146,7 +1174,7 @@ final class ChatGlassChrome: NSObject, UITextViewDelegate {
         }
         titleRect = titleFrame.rect
         layoutPill()
-        show(header, true, &headerShown)
+        show(header, true, \.headerShown)
     }
 
     private func layoutPill() {
@@ -1195,7 +1223,7 @@ final class ChatGlassChrome: NSObject, UITextViewDelegate {
                 KeyboardTrace.log("resign (page composer)", [:])
                 text.resignFirstResponder()
             }
-            show(composer, false, &composerShown)
+            show(composer, false, \.composerShown)
             return
         }
         restingFrame = frame.rect
@@ -1217,7 +1245,7 @@ final class ChatGlassChrome: NSObject, UITextViewDelegate {
         applyActions(data["buttons"] as? [[String: Any]] ?? [])
         updatePlaceholder()
         layoutComposer()
-        show(composer, true, &composerShown)
+        show(composer, true, \.composerShown)
     }
 
     private func applyReply(_ data: [String: Any]?) {
@@ -1446,29 +1474,30 @@ final class ChatGlassChrome: NSObject, UITextViewDelegate {
         button.configuration = config
     }
 
-    private func show(_ view: UIView, _ visible: Bool, _ shown: inout Bool) {
+    private func show(_ view: UIView, _ visible: Bool, _ shownKey: ReferenceWritableKeyPath<ChatGlassChrome, Bool>) {
         if view === composer && composerSuppressed {
-            shown = visible
+            self[keyPath: shownKey] = visible
             composer.isHidden = true
             composer.alpha = 0
             return
         }
-        guard visible != shown else {
+        guard visible != self[keyPath: shownKey] else {
             if visible { reassert(view) }
             return
         }
         // a view riding a page's slide goes off with it and is hidden by the first update after the slide
         if !visible && sliding { return }
-        shown = visible
+        self[keyPath: shownKey] = visible
+        let targetAlpha: CGFloat = visible ? (view === header && abs(offset) > 0.5 ? headerAlpha(for: offset) : 1) : 0
         if instant {
             stopFades(view)
-            view.alpha = visible ? 1 : 0
+            view.alpha = targetAlpha
             view.isHidden = !visible
             return
         }
         if visible { view.isHidden = false }
         UIView.animate(withDuration: 0.18, delay: 0, options: [.beginFromCurrentState, .allowUserInteraction]) {
-            view.alpha = visible ? 1 : 0
+            view.alpha = targetAlpha
         } completion: { _ in
             if !visible && view.alpha == 0 { view.isHidden = true }
         }
@@ -1476,7 +1505,7 @@ final class ChatGlassChrome: NSObject, UITextViewDelegate {
 
     /// The page says this view shows: whatever hid it since (an animation cut short, a view put over it) is undone.
     private func reassert(_ view: UIView) {
-        guard let host = mainHost, !(view === header && headerPopping), !(view === composer && composerSuppressed) else { return }
+        guard let host = mainHost, !(view === header && (headerPopping || abs(offset) > 0.5)), !(view === composer && composerSuppressed) else { return }
         let lost = view.superview !== host || view.isHidden || (view.alpha < 1 && view.layer.animationKeys()?.isEmpty != false)
         guard lost else { return }
         KeyboardTrace.log("reassert", ["hidden": view.isHidden ? 1 : 0, "alpha": view.alpha, "attached": view.superview === host ? 1 : 0])

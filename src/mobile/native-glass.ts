@@ -600,7 +600,7 @@ function handoffReason(shell: HTMLElement | null, chat: HTMLElement, allowReply:
 /** When a slide begun this frame shows its first moved frame, on the clock the native side reads (epoch ms): a web
  * animation started now draws from the next frame, about half a 60 Hz frame on average from here. */
 export function slideStart(now = performance.timeOrigin + performance.now()): number {
-  return Math.round(now + 1000 / 120);
+  return Math.round(now);
 }
 
 /** The native field keeps the highest sequence it has taken for as long as the app runs, across chats: a count that
@@ -679,6 +679,11 @@ export function useNativeGlass(platform: MobilePlatform, rootRef: RefObject<HTML
       if (!slideRef.current) return;
       slideRef.current = null;
       glass.slide(null);
+      return;
+    }
+    if (path.duration <= 0) {
+      slideRef.current = null;
+      glass.slide(path);
       return;
     }
     slideRef.current = { until: performance.now() + path.duration, to: path.points.at(-1) ?? 0 };

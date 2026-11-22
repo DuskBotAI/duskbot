@@ -135,13 +135,23 @@ export function NavStack({ base, page, pageKey, onBack, onSettled, onSlide, onLe
   // the list under a page is inert from the page's landing until it has fully left: toggling inert restyles the whole
   // list, so it never happens as a back slide or a finger's drag starts, only once nothing moves
   const [covered, setCovered] = useState(false);
+  const lockSafeTop = useCallback(() => {
+    const el = pageRef.current;
+    if (!el) return;
+    const top = readSafeTop(el);
+    if (top > 0) el.style.setProperty("--m-safe-top", `${top}px`);
+  }, []);
+  const unlockSafeTop = useCallback(() => {
+    pageRef.current?.style.removeProperty("--m-safe-top");
+  }, []);
   const landed = useCallback(() => {
+    unlockSafeTop();
     setCovered(true);
     sliding.current = false;
     const steps = [...waiting.current];
     waiting.current.clear();
     for (const step of steps) step();
-  }, []);
+  }, [unlockSafeTop]);
   const gone = useCallback(() => {
     sliding.current = false;
     waiting.current.clear();
@@ -180,17 +190,6 @@ export function NavStack({ base, page, pageKey, onBack, onSettled, onSlide, onLe
     run.current = slideLayers({ page, base: baseRef.current, dim: dimRef.current }, x, width, path, finish, () => slid.current?.(null));
     slid.current?.(path);
   }, [x, pageOpacity, width, snappy]);
-
-  const lockSafeTop = useCallback(() => {
-    const el = pageRef.current;
-    if (!el) return;
-    const top = readSafeTop(el);
-    if (top > 0) el.style.setProperty("--m-safe-top", `${top}px`);
-  }, []);
-
-  const unlockSafeTop = useCallback(() => {
-    pageRef.current?.style.removeProperty("--m-safe-top");
-  }, []);
 
   const preparing = useRef<{ cancelled: boolean } | null>(null);
   const push = useCallback(() => {
@@ -279,7 +278,7 @@ export function NavStack({ base, page, pageKey, onBack, onSettled, onSlide, onLe
     run.current?.stop();
     popping.current = false;
     setLeavingPage(false);
-    unlockSafeTop();
+    lockSafeTop();
     // a slide that already landed is over for the chrome too: from here it follows the finger
     slid.current?.(null);
     sliding.current = true;
@@ -288,7 +287,7 @@ export function NavStack({ base, page, pageKey, onBack, onSettled, onSlide, onLe
     leaving.current?.();
     const active = document.activeElement;
     if (active instanceof HTMLElement && pageRef.current?.contains(active)) active.blur();
-  }, [unlockSafeTop]);
+  }, [lockSafeTop]);
 
   // Android 14+'s back gesture moves the page as a finger on it does, and lands or returns on the same spring
   const platform = useContext(PlatformContext);
@@ -327,7 +326,12 @@ export function NavStack({ base, page, pageKey, onBack, onSettled, onSlide, onLe
     enabled: Boolean(shownKey),
     claim: (s, start) => s.dx > 0 && !ownsDrag(s.target) && !canScroll(s.target, pageRef.current!, "x", -1) && !replyRowAt(s.target, start.x),
     onStart: takeHold,
-    onMove: (s) => { x.set(Math.max(0, s.dx)); wakeSystemControls(); },
+    onMove: (s) => {
+      const pos = Math.max(0, s.dx);
+      x.set(pos);
+      slid.current?.({ duration: 0, points: [pos] });
+      wakeSystemControls();
+    },
     onEnd: (s) => {
       const landing = projectRelease(x.get(), s.vx);
       if ((landing > width / 2 && s.vx > -200) || s.vx > 500) {

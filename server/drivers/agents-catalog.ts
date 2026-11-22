@@ -326,7 +326,7 @@ const TOOL_DEFINITIONS = [
   {
     name: "vm_exec",
     description:
-      "Run a shell command on your own computer, your Local VM or your VPS desktop (as its desktop user, starting in /home/cua/workspace), and get its exit code, stdout and stderr back as text. Use this for all command-line work there: downloading with curl, calling an API, parsing a page or writing a CSV with python3, installing software, checking a file's size with ls -l. Do not type commands into a terminal window and read screenshots: that is slow and unreliable. GUI programs you start appear on that desktop. For a long job raise timeout_seconds (default 60, at most 300). Only available while this turn has a Local VM or VPS desktop.",
+      "Run a shell command on your own computer, your Local VM or your VPS desktop (as its desktop user, starting in /home/cua/workspace), and get its exit code, stdout and stderr back as text. Use this for all command-line work there: downloading with curl, calling an API, parsing a page or writing a CSV with python3, installing software, checking a file's size with ls -l. Do not type commands into a terminal window and read screenshots: that is slow and unreliable. GUI programs you start appear on that desktop. For a long job raise timeout_seconds (default 60, at most 300). To put a file from your working folder there, use copy_to_computer, never commands in pieces. Only available while this turn has a Local VM or VPS desktop.",
     inputSchema: {
       type: "object",
       additionalProperties: false,
@@ -335,6 +335,20 @@ const TOOL_DEFINITIONS = [
         timeout_seconds: { type: "integer", description: "How long it may run before it is stopped. Default 60." },
       },
       required: ["command"],
+    },
+  },
+  {
+    name: "copy_to_computer",
+    description:
+      "Copy one file from your working folder onto this turn's Local VM or VPS desktop in one call, for example a video its browser should upload. It lands in /home/cua/workspace, or at `to`.",
+    inputSchema: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        path: { type: "string", description: "The file in your working folder" },
+        to: { type: "string", description: "Optional: a path in /home/cua/workspace; end with / for a folder" },
+      },
+      required: ["path"],
     },
   },
   {
@@ -924,7 +938,7 @@ const CHIEF_ONLY_TOOL_NAMES = new Set([
 const CHIEF_TARGET_TOOL_NAMES = new Set(["propose_profile", "propose_model"]);
 const WATCHER_TOOL_NAMES = new Set(["create_options_card"]);
 
-const LOCAL_VM_TOOL_NAMES = new Set(["vm_exec"]);
+const LOCAL_VM_TOOL_NAMES = new Set(["vm_exec", "copy_to_computer"]);
 /** Refused in a room's thread (chat-widgets.ts, chat-apps.ts, routes/waits.ts), and list_waits, since a room holds no wait. */
 const ROOM_REFUSED_TOOL_NAMES = new Set(["show_widget", "show_html", "show_products", REACT_TOOL, ...WAIT_TOOL_NAMES, JOB_TOOL]);
 const CLOUD_HOME_SURFACE = {

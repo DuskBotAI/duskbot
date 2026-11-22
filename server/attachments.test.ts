@@ -593,6 +593,8 @@ describe("shared files", () => {
     ["audio/mpeg", ".mp3"], ["audio/mp4", ".m4a"],
     ["audio/x-wav", ".wav"], ["audio/aac", ".aac"],
     ["audio/flac", ".flac"], ["audio/webm", ".webm"],
+    ["video/mp4", ".mp4"], ["video/x-m4v", ".m4v"],
+    ["video/webm", ".webm"], ["video/quicktime", ".mov"],
   ])("stores %s audio privately and retries without duplicating it", async (mime, extension) => {
     const bytes = Buffer.from([0, 255, 1, 128, 79, 103, 103, 83]);
     const chunks = async function* () { yield bytes.subarray(0, 3); yield bytes.subarray(3); };
@@ -766,5 +768,24 @@ describe("clearing attachments from Settings", () => {
 
     expect(clearAttachments(new Set())).toEqual({ removed: 0, freedBytes: 0, failed: 0 });
     expect(existsSync(partial)).toBe(true);
+  });
+
+  it("removes cached video frames when a video attachment is deleted or cleared", async () => {
+    const savedA = await saveFile((async function* () { yield Buffer.from("video-a"); })(), "a.mp4", "video/mp4", { uploadId: UPLOAD_A });
+    const savedB = await saveFile((async function* () { yield Buffer.from("video-b"); })(), "b.mov", "video/quicktime", { uploadId: UPLOAD_B });
+    const cacheA = join(ATTACHMENTS_DIR, ".video-frames", `${UPLOAD_A}.mp4`);
+    const cacheB = join(ATTACHMENTS_DIR, ".video-frames", `${UPLOAD_B}.mov`);
+    mkdirSync(cacheA, { recursive: true });
+    mkdirSync(cacheB, { recursive: true });
+    writeFileSync(join(cacheA, "frame-01.jpg"), "jpg");
+    writeFileSync(join(cacheB, "frame-01.jpg"), "jpg");
+
+    deleteAttachment(savedA.path);
+    expect(existsSync(cacheA)).toBe(false);
+    expect(existsSync(cacheB)).toBe(true);
+
+    age(savedB.path, ATTACHMENT_CLEAR_MIN_AGE_MS + 1_000);
+    expect(clearAttachments(new Set())).toMatchObject({ removed: 1, failed: 0 });
+    expect(existsSync(cacheB)).toBe(false);
   });
 });

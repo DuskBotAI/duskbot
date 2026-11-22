@@ -243,6 +243,10 @@ export async function callTool(called: string, input: Json, context: ToolCallCon
     if (!stdout && !stderr && !body.timedOut) lines.push("(no output)");
     return { text: lines.join("\n"), ...(exitCode !== 0 || body.timedOut ? { isError: true } : {}) };
   }
+  if (name === "copy_to_computer") {
+    const { ok, body } = await apiResponse("/api/internal/copy-to-computer", { method: "POST", body: JSON.stringify({ path: args.path, ...(typeof args.to === "string" ? { to: args.to } : {}) }) });
+    return ok ? { text: `Copied it to ${String(body.path)} on your computer (${Number(body.bytes ?? 0)} bytes).` } : { text: String(body.error ?? "Could not copy that file."), isError: true };
+  }
   if (name === "attach_file") {
     const { ok, body } = await apiResponse("/api/internal/attach-file", {
       method: "POST",

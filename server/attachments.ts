@@ -88,6 +88,7 @@ export function scriptExtensionOf(name: string): string | null {
  * filename never does, except a script's own extension on a text/plain download. */
 const FILE_MIMES: Readonly<Record<string, string>> = {
   "video/mp4": ".mp4",
+  "video/x-m4v": ".m4v",
   "video/webm": ".webm",
   "video/quicktime": ".mov",
   "audio/opus": ".opus",
@@ -211,6 +212,17 @@ function dropBoxUploadCopies(names: readonly string[], dataDir = DATA_DIR): void
   }
 }
 
+function dropVideoFrameCaches(names: readonly string[], attachmentsDir = ATTACHMENTS_DIR): void {
+  if (!names.length) return;
+  const root = join(attachmentsDir, ".video-frames");
+  for (const name of names) {
+    if (!/.(?:mp4|m4v|webm|mov)$/i.test(name)) continue;
+    try {
+      rmSync(join(root, name), { recursive: true, force: true });
+    } catch { /* best effort */ }
+  }
+}
+
 /** Every removal of a file saveImage/saveFile created must come through here, or the cache overcounts and rejects uploads. */
 export function deleteAttachment(path: string): void {
   try {
@@ -223,7 +235,11 @@ export function deleteAttachment(path: string): void {
     // An upload still on disk (a busy file on Windows) keeps its box copies; one already gone loses them.
     if ((error as NodeJS.ErrnoException).code !== "ENOENT") return;
   }
-  if (resolve(dirname(path)) === resolve(ATTACHMENTS_DIR)) dropBoxUploadCopies([basename(path)]);
+  if (resolve(dirname(path)) === resolve(ATTACHMENTS_DIR)) {
+    const name = basename(path);
+    dropBoxUploadCopies([name]);
+    dropVideoFrameCaches([name]);
+  }
 }
 
 /** Settings → General: what the store holds against its ceiling, rescanned so files removed outside the app count. */
@@ -277,6 +293,7 @@ export function clearAttachments(kept: ReadonlySet<string>, now = Date.now()): {
     }
   }
   dropBoxUploadCopies(gone);
+  dropVideoFrameCaches(gone);
   invalidateAttachmentAccounting();
   return { removed, freedBytes, failed };
 }
@@ -427,7 +444,7 @@ export function extensionForFileMime(mime: string | undefined): string | null {
 /** Separators and encoded separators are rejected, not massaged, so traversal attempts stay visible as bad requests. */
 export function sanitizeSharedFileName(name: string, mime: string): string {
   const extension = extensionForFileMime(mime);
-  if (!extension) throw statusError(400, "content-type must be a supported document or audio type");
+  if (!extension) throw statusError(400, "content-type must be a supported document, audio, or video type");
 
   const normalized = name.normalize("NFKC").trim();
   if (!normalized) throw statusError(400, "name is required");
@@ -462,7 +479,7 @@ export async function saveFile(
 ): Promise<SavedFile> {
   const normalized = normalizedMime(mime);
   if (!normalized || !extensionForFileMime(normalized)) {
-    throw statusError(400, "content-type must be a supported document or audio type");
+    throw statusError(400, "content-type must be a supported document, audio, or video type");
   }
   const name = sanitizeSharedFileName(originalName, normalized);
   const extension = extensionForFileMime(normalized)!;

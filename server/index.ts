@@ -342,6 +342,7 @@ import { replaysTranscriptNatively } from "./runtime/capabilities.ts";
 import { buildRecoveryText, buildTurnContext, engineIsFresh } from "./turn-context.ts";
 import { Handoffs, handedStateUsable, isContextMessage, recordHanded, renderUnseen, sessionStart, unseenMessages, withUnseenMessages, type ContextMessage } from "./delta-context.ts";
 import { engineRefusedImage, extractReplayImages, extractTurnImages, TURN_IMAGE_MAX_COUNT } from "./turn-images.ts"; import { prepareAttachedDocuments, withAttachedDocuments } from "./attached-documents.ts";
+import { extractRoomTurnMedia, extractTurnVideoFrames, hasTurnVideos } from "./turn-videos.ts";
 import { callTitleExcerpt } from "./thread-title.ts";
 import { generateThreadTitle, llmThreadTitlesEnabled } from "./thread-title-generate.ts";
 import { stallLimitMs, TurnWatchdog } from "./turn-watchdog.ts";
@@ -621,7 +622,7 @@ import { createInternalMcpRoutes } from "./routes/internal-mcp.ts";
 import { createInternalThreadRoutes } from "./routes/internal-threads.ts";
 import { createBrowserEvidenceRoutes } from "./routes/browser-evidence.ts";
 import { createSignInCardRoutes } from "./routes/sign-in-cards.ts";
-import { createInternalChiefTeamRoutes } from "./routes/internal-chief-team.ts";
+import { createInternalChiefTeamRoutes } from "./routes/internal-chief-team.ts"; import { createComputerCopyRoutes } from "./routes/computer-copy.ts";
 import { createRoomHoldRoutes } from "./routes/room-holds.ts";
 import { checkedGroupResponder, createGroupRoutes } from "./routes/groups.ts"; import { leaderCapRefusal, leaderSystemNote, memberSystemNote, roomLeaderId } from "./room-leader.ts";
 import { createChannelRoutes } from "./routes/channels.ts";
@@ -8216,7 +8217,8 @@ async function acceptDirectSend(
         const instance = runningTurnInstance(currentAtStart, threadId);
         let steered: SteerOutcome = "refused";
         const steerInput = extractTurnImages(text);
-        const carriesImages = steerInput.images.length > 0;
+        const carriesVideos = Boolean(instance?.adapter.capabilities.nativeImageInput) && hasTurnVideos(steerInput.text);
+        const carriesImages = steerInput.images.length > 0 || carriesVideos;
         if (!app && (trigger.kind === "user" || trigger.kind === "owner") && introTurns.has(threadId) && introAllowed(store.messagesFor(threadId))) { const queued = queueSteeredMessage(currentAtStart.id, threadId, text, { replyToId: replyTo?.id, sendId, dataContext, mentions, prompt: queuedPrompt, sender, trigger, via, callId, first: true }); await interruptDirectThread(botId, threadId); return { ok: true as const, queued: true as const, queueId: queued.id, threadId }; }
         if (repliesWhileWorking(sideSendFacts(botId, threadId, { personsOwn: personsOwn && !relayed, spoken: Boolean(via), images: carriesImages, followUp }))) {
           if (personPresent) clearUnattended(threadId);
@@ -8240,9 +8242,13 @@ async function acceptDirectSend(
         // A chosen wait (queue, or restart's Stop) is never cut short by person-first.
         const chose = busyAdmission.action === "queue" ? busyAdmission.chose : undefined;
         if (busyAdmission.action === "steer" && instance?.adapter.steer) {
-          const prompt = (app?.context ?? "") + personPrompt(threadId, sender, promptWithReply(promptWithDataContext(steerInput.text, dataContext), replyTo, userNameFor(threadId)));
-          steered = await (steerInput.images.length > 0
-            ? instance.adapter.steer(threadId, prompt, steerInput.images)
+          const steeredVideos = carriesVideos
+            ? await extractTurnVideoFrames(steerInput.text, steerInput.images)
+            : { text: steerInput.text, images: [] };
+          const steerImages = [...steerInput.images, ...steeredVideos.images];
+          const prompt = (app?.context ?? "") + personPrompt(threadId, sender, promptWithReply(promptWithDataContext(steeredVideos.text, dataContext), replyTo, userNameFor(threadId)));
+          steered = await (steerImages.length > 0
+            ? instance.adapter.steer(threadId, prompt, steerImages)
             : instance.adapter.steer(threadId, prompt))
             .catch((): SteerOutcome => "indeterminate");
         }
@@ -8925,17 +8931,23 @@ async function beginTurn(
         createHash("sha256").update(JSON.stringify([...persistentConfig, soul])).digest("hex").slice(0, 16);
       const plannedConfig = sessionConfig(bot.soul);
       const skillAuthoring = skillAuthoringEnabled(cfg) && agentsMounted;
-      const documents = await withAttachedDocuments(providerText, { vision: usesNativeImageInput, imageRoom: TURN_IMAGE_MAX_COUNT - turnImages.length }); if (!directTurnClaimIsCurrent(bot.id, dispatchClaimId, threadId)) throw new DirectTurnSetupCancelled("turn stopped during context setup");
+      const withoutImages = imageRefusedThreads.delete(threadId);
+      const documents = await withAttachedDocuments(providerText, { vision: usesNativeImageInput && !withoutImages, imageRoom: TURN_IMAGE_MAX_COUNT - turnImages.length }); if (!directTurnClaimIsCurrent(bot.id, dispatchClaimId, threadId)) throw new DirectTurnSetupCancelled("turn stopped during context setup");
+      const videoInputImages = [...turnImages, ...documents.images];
+      const resolvedVideos = usesNativeImageInput && !withoutImages
+        ? await extractTurnVideoFrames(documents.text, videoInputImages)
+        : { text: documents.text, images: [] }; if (!directTurnClaimIsCurrent(bot.id, dispatchClaimId, threadId)) throw new DirectTurnSetupCancelled("turn stopped during context setup");
+      const turnMediaImages = [...videoInputImages, ...resolvedVideos.images];
       const skillCommandText = supportsWorkspaceFiles(instance.driverKind) || agentsMounted
-        ? skillsHost.expandSkillCommand(bot, threadId, documents.text, instance, personLine ? activeMessages.filter((line) => skipTranscript.has(line.id)) : [], (personLine && !userMessage.relayed && !startedOutside(threadId)) || ["schedule", "manual", "startup"].includes(opts?.automationSource ?? ""))
-        : documents.text; const setupText = agentsMounted ? expandSetupTurnText(skillCommandText) : skillCommandText;
+        ? skillsHost.expandSkillCommand(bot, threadId, resolvedVideos.text, instance, personLine ? activeMessages.filter((line) => skipTranscript.has(line.id)) : [], (personLine && !userMessage.relayed && !startedOutside(threadId)) || ["schedule", "manual", "startup"].includes(opts?.automationSource ?? ""))
+        : resolvedVideos.text; const setupText = agentsMounted ? expandSetupTurnText(skillCommandText) : skillCommandText;
       const { text: userTurnText, images: quotedImages } = withQuotedImages((opts?.app?.context ?? "") + (opts?.cardContinuation ? "" : routineRunNote(threadId, opts?.automationSource)) + labelledLine(personLine && !opts?.excludeMessageIds ? userMessage : {}, withReactionNotes(promptWithReply(
         skillAuthoring ? expandLearnTurnText(setupText) : setupText,
         opts?.replyTo,
         userNameFor(threadId),
-      ), personLine ? activeMessages : [], skipTranscript, userNameFor(threadId)), lineLabels(threadId)), [...turnImages, ...documents.images], usesNativeImageInput && !imageRefusedThreads.has(threadId)), currentImages = [...turnImages, ...documents.images, ...quotedImages];
+      ), personLine ? activeMessages : [], skipTranscript, userNameFor(threadId)), lineLabels(threadId)), turnMediaImages, usesNativeImageInput && !withoutImages), currentImages = [...turnMediaImages, ...quotedImages];
       const replay = usesNativeImageInput
-        ? extractReplayImages(selection.inline, currentImages, { withoutImages: imageRefusedThreads.delete(threadId) })
+        ? extractReplayImages(selection.inline, currentImages, { withoutImages })
         : { transcript: selection.inline, images: [] };
       const decideContext = (config: string) => {
         // A Codex thread keeps the last effort it was sent and no turn can clear it, so one holding a level is rebuilt, not resumed.
@@ -10905,35 +10917,10 @@ async function runClaimedGroupMemberTurn(
   const usesNativeImageInput = instance.adapter.capabilities.nativeImageInput === true;
   // A drained burst runs as one turn: recover its lines by queueId, not position.
   const burstIds = new Set(operation?.queuedQueueIds ?? []);
-  const burstOverrides: Array<{ messageId: string; text: string }> = [];
-  const burstImages: ReturnType<typeof extractTurnImages>["images"] = [];
-  if (usesNativeImageInput && !cardContinuation) {
-    for (const message of store.activePath(threadId)) {
-      if (message.role !== "user" || message.kind !== "text" || !message.text) continue;
-      if (!message.queueId || !burstIds.has(message.queueId)) continue;
-      const resolved = extractTurnImages(message.text);
-      burstOverrides.push({ messageId: message.id, text: resolved.text });
-      burstImages.push(...resolved.images);
-    }
-  }
-  // The latest line is usually the burst's last: extracting it again would double-count its attachments.
-  const latestInBurst = latestUser?.queueId !== undefined && burstIds.has(latestUser.queueId);
-  const resolvedLatestImages = latestUser?.text && !cardContinuation && !latestInBurst
-    ? extractTurnImages(latestUser.text)
-    : { text: latestUser?.text ?? "", images: [] };
-  const roomWindow = roomTranscript.window(
-    threadId,
-    userName,
-    usesNativeImageInput && latestUser
-      ? [
-          ...burstOverrides,
-          ...(latestInBurst ? [] : [{ messageId: latestUser.id, text: resolvedLatestImages.text }]),
-        ]
-      : undefined,
-    bot.id,
-  );
+  const roomMedia = await extractRoomTurnMedia(store.activePath(threadId), latestUser, burstIds, { enabled: usesNativeImageInput, cardContinuation: Boolean(cardContinuation) });
+  const roomWindow = roomTranscript.window(threadId, userName, roomMedia.overrides, bot.id);
   const roomContext = roomWindow.text;
-  const ownImages = usesNativeImageInput ? [...burstImages, ...resolvedLatestImages.images] : [], roomQuote = withQuotedImages(cardContinuation ? "" : quotedAttachmentBlock(store.messagesFor(threadId), latestUser?.replyToId), ownImages, usesNativeImageInput), turnImages = [...ownImages, ...roomQuote.images];
+  const ownImages = roomMedia.images, roomQuote = withQuotedImages(cardContinuation ? "" : quotedAttachmentBlock(store.messagesFor(threadId), latestUser?.replyToId), ownImages, usesNativeImageInput), turnImages = [...ownImages, ...roomQuote.images];
   const skills = availableSkills(), phoneOffered = usbPhoneOffered(instance, skills);
   const selectedSkills = mergeSkills(
     selectBundledSkills(
@@ -11252,7 +11239,7 @@ async function runClaimedGroupMemberTurn(
     .filter(Boolean)
     .join("\n");
 
-  const latestUserText = usesNativeImageInput ? resolvedLatestImages.text : latestUser?.text;
+  const latestUserText = usesNativeImageInput ? roomMedia.latestText : latestUser?.text;
   const learnTurn = skillAuthoring && latestUserText ? expandLearnTurnText(latestUserText) : "";
   const learnBlock = learnTurn && learnTurn !== latestUserText ? `\n\n${learnTurn}` : "";
   const addressedRequest = orchestration?.roomHandoffId ? coordinator.node(orchestration.roomHandoffId) : undefined;
@@ -11396,7 +11383,7 @@ async function runClaimedGroupMemberTurn(
       : store.groupTaskByThread(liveGroup.id, threadId)?.turnTimeoutMinutes,
   );
   // A private chat reaches a room only through the explicit, disclosed session_search, never automatically.
-  const roomRecalled = cardContinuation ? "" : await autoRecallPrompt(bot, threadId, resolvedLatestImages.text, { conversations: false, userName }); const roomDocuments = await prepareAttachedDocuments(cardContinuation ? "" : [...burstOverrides.map((line) => line.text), latestUser?.text ?? ""].join("\n"), { vision: usesNativeImageInput, imageRoom: TURN_IMAGE_MAX_COUNT - turnImages.length });
+  const roomRecalled = cardContinuation ? "" : await autoRecallPrompt(bot, threadId, roomMedia.latestText, { conversations: false, userName }); const roomDocuments = await prepareAttachedDocuments(cardContinuation ? "" : [...roomMedia.burstOverrides.map((line) => line.text), latestUser?.text ?? ""].join("\n"), { vision: usesNativeImageInput, imageRoom: TURN_IMAGE_MAX_COUNT - turnImages.length });
   const outcome = await new Promise<GroupMemberTurnOutcome>((resolve) => {
     let done = false;
     let unsub = () => {};
@@ -14759,7 +14746,7 @@ const handleRequestInner = async (req: IncomingMessage, res: ServerResponse) => 
         return json(res, 201, proposed);
       }
       if (await dispatchRoutes([createInternalChiefTeamRoutes({ bot: () => store.bot(internalCapability.botId), requireActive: requireActiveInternalCapability,
-        teams: teamSetupTeams, bots: () => store.bots, instances: async () => selectableInstances(await registry.describe()) })], { req, res, url, path, method, auth, json, readBody })) return;
+        teams: teamSetupTeams, bots: () => store.bots, instances: async () => selectableInstances(await registry.describe()) }), createComputerCopyRoutes({ owns: () => connectorThread(internalCapability.botId, internalCapability.threadId) !== null, roots: () => messageFileRootsForThread(internalCapability.botId, internalCapability.threadId).filter((root) => root !== ATTACHMENTS_DIR), target: async () => { const vm = await attachmentVmForTurn(internalCapability); if (vm) return { localVm: vm.workspaceDir }; const vps = await vpsTurnFiles(internalCapability); return vps ? { vps } : undefined; }, requireActive: requireActiveInternalCapability, body: readInternalBody })], { req, res, url, path, method, auth, json, readBody })) return;
       if (method === "POST" && path === "/api/internal/team-setup-requests") {
         const parsed = z.object({ fromBotId: z.string().optional(), fromThreadId: z.string().optional(), plan: z.unknown() }).strict().safeParse(await readInternalBody());
         if (!parsed.success) return json(res, 400, { error: "Invalid team setup request" });

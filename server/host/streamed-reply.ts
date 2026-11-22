@@ -2,7 +2,7 @@
 import { assistantTranscript } from "../../shared/client-cancel.ts";
 import type { RuntimeEvent } from "../contracts.ts";
 import { isPassText } from "../room-reply.ts";
-import { isDirectPassText, PassStreamGate } from "../silent-reply.ts";
+import { isDirectPassText, PassStreamGate, stripTrailingPass } from "../silent-reply.ts";
 import type { Message, Store } from "../store.ts";
 
 export interface StreamedReplyDeps {
@@ -69,8 +69,14 @@ export function createStreamedReply(deps: StreamedReplyDeps) {
         const spoken = assistantTranscript(event.text);
         if (spoken.kind === "stopped") return event;
         const room = store.botByThread(threadId) ? undefined : store.groupByThread(threadId);
-        const pass = room ? Boolean(spoken.text.trim()) && isPassText(spoken.text) : deps.directPassAllowed(threadId) && isDirectPassText(spoken.text);
-        return pass ? null : event;
+        const canPass = Boolean(room) || deps.directPassAllowed(threadId);
+        const pass = room ? Boolean(spoken.text.trim()) && isPassText(spoken.text) : canPass && isDirectPassText(spoken.text);
+        if (pass) return null;
+        if (canPass) {
+          const cleaned = stripTrailingPass(event.text);
+          if (cleaned !== event.text) return { ...event, text: cleaned };
+        }
+        return event;
       }
       return event;
     },
@@ -88,6 +94,11 @@ export function createStreamedReply(deps: StreamedReplyDeps) {
       replyAtStop.delete(threadId);
       replySaidAtStop.delete(threadId);
       passStreamGate.reset(threadId);
+    },
+    /** Strips a trailing standalone "(pass)" line when this thread allows silent passes. */
+    stripTrailingPass(threadId: string, text: string): string {
+      const room = store.botByThread(threadId) ? undefined : store.groupByThread(threadId);
+      return room || deps.directPassAllowed(threadId) ? stripTrailingPass(text) : text;
     },
     /** True when this one-on-one reply is only "(pass)": it is not sent, and the turn counts as quiet until it speaks. */
     passes(threadId: string, text: string): boolean {

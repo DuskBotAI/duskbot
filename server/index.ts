@@ -7196,7 +7196,7 @@ bus.subscribe((event: RuntimeEvent) => {
     }
     if (group && isPassText(spoken.text) && spoken.text.trim()) return;
     if (bot && streamedReplies.passes(event.threadId, spoken.text)) return;
-    const voiced = cleanBotVoice(spoken.text, (speaker ?? bot)?.name); if (voiced.taggedLine && turnId && group && !personTaggedTurns.has(`${event.threadId}:${turnId}`)) personTaggedTurns.set(`${event.threadId}:${turnId}`, voiced.taggedLine);
+    const voiced = cleanBotVoice(streamedReplies.stripTrailingPass(event.threadId, spoken.text), (speaker ?? bot)?.name); if (voiced.taggedLine && turnId && group && !personTaggedTurns.has(`${event.threadId}:${turnId}`)) personTaggedTurns.set(`${event.threadId}:${turnId}`, voiced.taggedLine);
     // while a human-check card waits, it is the only ask: lines that only say it again never reach the chat
     const shown = pendingCheckCard(store.activePath(event.threadId), speaker?.botId ?? bot?.id) ? withoutCheckAsk(voiced.text) : voiced.text;
     if (!shown.trim()) return;

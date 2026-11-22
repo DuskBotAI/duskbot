@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isDirectPassText, isPassStreamPrefix, PassStreamGate } from "./silent-reply.ts";
+import { isDirectPassText, isPassStreamPrefix, PassStreamGate, stripTrailingPass } from "./silent-reply.ts";
 
 describe("direct-chat silent pass detection", () => {
   it("matches explicit parenthesized pass variants", () => {
@@ -47,5 +47,26 @@ describe("PassStreamGate", () => {
     expect(gate.delta("t1", ")")).toBeNull();
     gate.reset("t1");
     expect(gate.delta("t1", "Next reply")).toBe("Next reply");
+  });
+
+  it("strips trailing standalone (pass) lines without touching inline text or code blocks", () => {
+    expect(stripTrailingPass("All done.\n\n(pass)")).toBe("All done.");
+    expect(stripTrailingPass("All done.\n(Pass).")).toBe("All done.");
+    expect(stripTrailingPass("All done.\n\n(pass)\n\n(pass)\n")).toBe("All done.");
+    expect(stripTrailingPass("I'll (pass)")).toBe("I'll (pass)");
+    expect(stripTrailingPass("```text\n(pass)\n```")).toBe("```text\n(pass)\n```");
+    expect(stripTrailingPass("(pass)")).toBe("(pass)");
+  });
+
+  it("withholds a trailing newline-prefixed (pass) during streaming and flushes normal paragraphs", () => {
+    const gate = new PassStreamGate();
+    expect(gate.delta("t1", "All done.\n\n")).toBe("All done.");
+    expect(gate.delta("t1", "(")).toBeNull();
+    expect(gate.delta("t1", "pass)")).toBeNull();
+    gate.reset("t1");
+
+    expect(gate.delta("t1", "Para 1.\n\n")).toBe("Para 1.");
+    expect(gate.delta("t1", "Para 2.")).toBe("\n\nPara 2.");
+    expect(gate.delta("t1", "\n(note)")).toBe("\n(note)");
   });
 });

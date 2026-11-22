@@ -119,9 +119,7 @@ export function RichTable({ columns, rows, name = t("table.title"), expanded = f
             <span role="status" className="shrink-0 text-[12px] tabular-nums">{t("table.count", { shown: order.length.toLocaleString(), total: rows.length.toLocaleString(), columns: columns.length })}</span>
           </div>
         )}
-        <div className="contents" onClick={phone ? (event) => { if (!(event.target as Element).closest("button, a, input")) expand(null); } : undefined}>
-          <TableViewport columns={columns} rows={rows} order={order} name={name} wrap={wrap} large={false} sort={sort} direction={direction} headless={headless} look="card" onSort={sortBy} />
-        </div>
+        <TableViewport columns={columns} rows={rows} order={order} name={name} wrap={wrap} large={false} sort={sort} direction={direction} headless={headless} look="card" onSort={sortBy} />
         {phone && (
           <div className="flex h-10 items-center justify-between border-t border-(--table-line) ps-3.5 text-ink-tertiary">
             <span className="text-[13px] tabular-nums">{t(rows.length === 1 ? "mobile.table.rows.one" : "mobile.table.rows", { count: rows.length.toLocaleString() })}</span>

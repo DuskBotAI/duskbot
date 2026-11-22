@@ -7,6 +7,7 @@ import { describe, expect, it, vi } from "vitest";
 import { RichTable } from "./RichTable";
 import { ChatMarkdown } from "./ChatMarkdown";
 import { CELL_PADDING_PX, CHAR_PX, COLUMN_MAX_CHARS, COLUMN_MIN_CHARS, columnMinimums, fitsColumns } from "@/lib/table-fit";
+import { setPhoneBridge } from "@/lib/phone-bridge";
 
 
 const header = ["App", "Stars", "License", "Target user", "Strength", "Weakness", "Verdict"];
@@ -90,5 +91,34 @@ describe("a table in a reply", () => {
       COLUMN_MIN_CHARS * CHAR_PX, COLUMN_MAX_CHARS * CHAR_PX,
     ]);
     expect(columnMinimums(["Verdict"], [["Best open coding agent"]])).toEqual([Math.round(7 * CHAR_PX)]);
+  });
+
+  it("enlarges on mobile only from the expand button, not from clicking the table itself", () => {
+    const view = vi.fn();
+    const clearBridge = setPhoneBridge({
+      haptic: () => {},
+      openLink: () => {},
+      share: async () => {},
+      shareFile: async () => {},
+      view,
+    });
+    const host = document.createElement("div");
+    const root = createRoot(host);
+    try {
+      flushSync(() => root.render(createElement(RichTable, {
+        columns: [{ text: "Plan" }, { text: "Price" }],
+        rows: [[{ text: "Pro" }, { text: "$20" }]],
+      })));
+      host.querySelector<HTMLElement>("td")!.click();
+      host.querySelector<HTMLElement>("th")!.click();
+      expect(view).not.toHaveBeenCalled();
+
+      host.querySelector<HTMLButtonElement>("[data-table-expand]")!.click();
+      expect(view).toHaveBeenCalledTimes(1);
+      expect(view.mock.calls[0]?.[0]).toMatchObject({ kind: "table" });
+    } finally {
+      root.unmount();
+      clearBridge();
+    }
   });
 });

@@ -189,10 +189,11 @@ export function ComposerAttachmentStrip({ items, onRemove, onRetry, onDisplayInC
       {items.length > 0 && (
         <div data-composer-attachments role="list" aria-label={t("attach.gallery")} className="pointer-events-none -mx-[9px] -mt-1.5 -mb-[18px] flex min-w-0 flex-nowrap gap-2 overflow-x-auto px-[9px] pt-1.5 pb-[18px] [scrollbar-width:none] *:pointer-events-auto">
           {items.map((a) => a.kind === "image" ? (
-            <div key={a.id} role="listitem" aria-label={a.failed ? `${a.name}, ${t("attach.uploadFailed")}` : a.name} data-composer-attachment aria-busy={a.uploading || undefined}
+            <div key={a.id} role="listitem" aria-label={a.failed ? `${a.name}, ${t("attach.uploadFailed")}` : a.name} data-composer-attachment data-attachment-id={a.id} data-attachment-kind="image" data-attachment-failed={a.failed ? "" : undefined} aria-busy={a.uploading || undefined}
               className="group/tile relative size-14 shrink-0 overflow-hidden rounded-[10px] border-[0.5px] border-ink/12 bg-composer">
               <button
                 type="button"
+                data-attachment-action="preview"
                 onClick={() => {
                   const index = images.findIndex((entry) => entry.id === a.id);
                   if (index >= 0) setPreview({ images: images.map((entry) => entry.image), index });
@@ -207,19 +208,19 @@ export function ComposerAttachmentStrip({ items, onRemove, onRetry, onDisplayInC
               <UploadRing id={a.id} name={a.name} uploading={Boolean(a.uploading)} failed={Boolean(a.failed)} radius={9.5}
                 percentClassName="end-1 bottom-1 rounded-[5px] bg-[rgb(28_28_28/0.62)] px-1 text-[10px] leading-[14px] font-medium text-white" />
               {a.failed && (
-                <button type="button" onClick={() => retry(a.id)} aria-label={t("attach.retryNamed", { name: a.name })} title={t("attach.uploadFailed")}
+                <button type="button" data-attachment-action="retry" onClick={() => retry(a.id)} aria-label={t("attach.retryNamed", { name: a.name })} title={t("attach.uploadFailed")}
                   className="absolute inset-0 m-auto flex size-7 items-center justify-center rounded-full bg-ink text-app transition-colors duration-[120ms] ease-[ease] hover:bg-[color-mix(in_srgb,var(--color-ink),white_12%)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus">
                   <RotateCcw size={14} strokeWidth={2} aria-hidden="true" />
                 </button>
               )}
-              <button type="button" onClick={() => remove(a.id)} aria-label={t("attach.removeNamed", { name: a.name })}
+              <button type="button" data-attachment-action="remove" onClick={() => remove(a.id)} aria-label={t("attach.removeNamed", { name: a.name })}
                 className={cn("absolute end-0.5 top-0.5 flex size-5 items-center justify-center rounded-full bg-ink text-app hover:bg-[color-mix(in_srgb,var(--color-ink),white_12%)]", !a.failed && TILE_REMOVE)}>
                 <Icon name="close" size={12} />
               </button>
             </div>
           ) : (
             <div key={a.id} role="listitem" aria-label={a.kind === "paste" ? t("composer.pastedText") : a.name} title={a.kind === "paste" ? a.text.slice(0, 4000) : a.path || undefined}
-              data-composer-attachment aria-busy={(a.kind === "file" && a.uploading) || undefined} className={CARD}>
+              data-composer-attachment data-attachment-id={a.id} data-attachment-kind={a.kind} aria-busy={(a.kind === "file" && a.uploading) || undefined} className={CARD}>
               <span className="flex size-10 shrink-0 items-center justify-center">
                 {a.kind === "paste" ? (
                   <span className="chat-file-glyph flex h-10 w-8 items-center justify-center rounded-[6px] bg-composer text-ink/40" aria-hidden="true"><ClipboardPaste size={14} strokeWidth={1.75} /></span>

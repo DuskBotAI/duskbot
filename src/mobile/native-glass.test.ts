@@ -231,12 +231,13 @@ describe("useNativeGlass", () => {
   let root: Root;
   let host: HTMLDivElement;
 
-  function mount(options: boolean | { acks?: boolean; jump?: boolean; reply?: boolean } = false) {
+  function mount(options: boolean | { acks?: boolean; jump?: boolean; reply?: boolean; attachments?: boolean } = false) {
     const opts = typeof options === "boolean" ? { acks: options } : options;
     const { glass, send } = fakeGlass();
     if (opts.acks) Object.assign(glass, { acks: true });
     if (opts.jump) Object.assign(glass, { jump: true });
     if (opts.reply) Object.assign(glass, { reply: true });
+    if (opts.attachments) Object.assign(glass, { attachments: true });
     const platform = { kind: "ios", native: true, glass } as unknown as MobilePlatform;
     host = document.createElement("div");
     document.body.appendChild(host);
@@ -710,6 +711,44 @@ describe("useNativeGlass", () => {
     strip.setAttribute("data-composer-reply", "");
     place(strip, 18, 728, 354, 32);
     $("field").closest("[data-composer-row]")!.parentElement!.prepend(strip);
+    for (let i = 0; i < 15; i += 1) runFrame();
+    expect(glass.update.mock.lastCall![0].composer).toBeNull();
+    strip.remove();
+  });
+
+  it("keeps the native composer active for image attachments when supported and forwards tile actions", () => {
+    const { glass, send, $ } = mount({ reply: true, attachments: true });
+    runFrame();
+    const strip = document.createElement("div");
+    strip.setAttribute("data-composer-strip", "");
+    strip.innerHTML = `<div data-composer-attachments=""><div data-composer-attachment="" data-attachment-id="img-1" data-attachment-kind="image" aria-label="photo.png">
+      <button type="button" data-attachment-action="preview" aria-label="Open full screen"></button>
+      <button type="button" data-attachment-action="remove" aria-label="Remove photo.png"></button>
+    </div></div>`;
+    place(strip, 18, 700, 354, 56);
+    const parent = $("field").closest("[data-composer-row]")!.parentElement!;
+    parent.prepend(strip);
+    for (let i = 0; i < 15; i += 1) runFrame();
+    expect(glass.update.mock.lastCall![0].composer).toMatchObject({
+      attachments: [{ id: "img-1", label: "photo.png", removeLabel: "Remove photo.png" }],
+    });
+    expect(document.documentElement.dataset.nativeGlassComposer).toBe("");
+
+    const previewed = vi.fn();
+    const removed = vi.fn();
+    strip.querySelector("[data-attachment-action='preview']")!.addEventListener("click", previewed);
+    strip.querySelector("[data-attachment-action='remove']")!.addEventListener("click", removed);
+    send({ type: "attachment", id: "img-1", action: "preview" });
+    send({ type: "attachment", id: "img-1", action: "remove" });
+    expect(previewed).toHaveBeenCalledTimes(1);
+    expect(removed).toHaveBeenCalledTimes(1);
+
+    // non-image file attachments still hand off to the page composer
+    const fileItem = document.createElement("div");
+    fileItem.setAttribute("data-composer-attachment", "");
+    fileItem.setAttribute("data-attachment-id", "file-1");
+    fileItem.setAttribute("data-attachment-kind", "file");
+    strip.querySelector("[data-composer-attachments]")!.append(fileItem);
     for (let i = 0; i < 15; i += 1) runFrame();
     expect(glass.update.mock.lastCall![0].composer).toBeNull();
     strip.remove();

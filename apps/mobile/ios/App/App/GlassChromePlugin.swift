@@ -62,7 +62,7 @@ public class GlassChromePlugin: CAPPlugin, CAPBridgedPlugin {
                 chrome.applyPill(slot: "bottom", state: nil, clearId: nil, instant: true)
                 chrome.resetText()
             }
-            call.resolve(["supported": true, "acks": true, "jump": true, "reply": true, "takeover": true, "swipeReply": true, "pullRefresh": true, "viewer": true, "pill": true])
+            call.resolve(["supported": true, "acks": true, "jump": true, "reply": true, "attachments": true, "takeover": true, "swipeReply": true, "pullRefresh": true, "viewer": true, "pill": true])
         } else {
             call.resolve(["supported": false])
         }
@@ -353,6 +353,159 @@ private final class ReplyBarView: UIView {
     }
 }
 
+private struct AttachmentItem: Equatable {
+    let id: String
+    let label: String
+    let removeLabel: String
+    let thumbnail: String?
+    let uploading: Bool
+    let failed: Bool
+    let retryLabel: String
+}
+
+private final class AttachmentTileView: UIView {
+    static let size: CGFloat = 56
+
+    let preview = UIButton(type: .custom)
+    let imageView = UIImageView()
+    let spinner = UIActivityIndicatorView(style: .medium)
+    let retry = UIButton(type: .custom)
+    let remove = UIButton(type: .custom)
+
+    var onAction: ((String) -> Void)?
+    private var thumbData: String?
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        backgroundColor = UIColor.label.withAlphaComponent(0.06)
+        layer.cornerRadius = 12
+        layer.cornerCurve = .continuous
+        layer.borderWidth = 0.5
+        layer.borderColor = UIColor.label.withAlphaComponent(0.14).cgColor
+        clipsToBounds = true
+
+        imageView.contentMode = .scaleAspectFill
+        imageView.clipsToBounds = true
+        imageView.isUserInteractionEnabled = false
+
+        preview.addAction(UIAction { [weak self] _ in self?.onAction?("preview") }, for: .touchUpInside)
+
+        spinner.hidesWhenStopped = true
+        spinner.color = .white
+
+        retry.setImage(
+            UIImage(systemName: "arrow.counterclockwise", withConfiguration: UIImage.SymbolConfiguration(pointSize: 12, weight: .semibold))?.withRenderingMode(.alwaysTemplate),
+            for: .normal
+        )
+        retry.backgroundColor = .label
+        retry.tintColor = .systemBackground
+        retry.layer.cornerRadius = 14
+        retry.clipsToBounds = true
+        retry.isHidden = true
+        retry.addAction(UIAction { [weak self] _ in self?.onAction?("retry") }, for: .touchUpInside)
+
+        remove.setImage(
+            UIImage(systemName: "xmark", withConfiguration: UIImage.SymbolConfiguration(pointSize: 9, weight: .bold))?.withRenderingMode(.alwaysTemplate),
+            for: .normal
+        )
+        remove.backgroundColor = .label
+        remove.tintColor = .systemBackground
+        remove.layer.cornerRadius = 10
+        remove.clipsToBounds = true
+        remove.addAction(UIAction { [weak self] _ in self?.onAction?("remove") }, for: .touchUpInside)
+
+        [imageView, preview, spinner, retry, remove].forEach(addSubview)
+    }
+
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    func apply(_ item: AttachmentItem, decode: (String) -> UIImage?) {
+        accessibilityLabel = item.label
+        preview.accessibilityLabel = item.label
+        remove.accessibilityLabel = item.removeLabel.isEmpty ? "Remove" : item.removeLabel
+        retry.accessibilityLabel = item.retryLabel.isEmpty ? "Retry" : item.retryLabel
+        if item.thumbnail != thumbData {
+            thumbData = item.thumbnail
+            imageView.image = item.thumbnail.flatMap(decode)
+        }
+        imageView.alpha = (item.uploading || item.failed) ? 0.6 : 1
+        if item.uploading { spinner.startAnimating() } else { spinner.stopAnimating() }
+        retry.isHidden = !item.failed
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        imageView.frame = bounds
+        preview.frame = bounds
+        spinner.center = CGPoint(x: bounds.midX, y: bounds.midY)
+        let retrySize: CGFloat = 28
+        retry.frame = CGRect(x: (bounds.width - retrySize) / 2, y: (bounds.height - retrySize) / 2, width: retrySize, height: retrySize)
+        let removeSize: CGFloat = 20
+        remove.frame = CGRect(x: bounds.width - removeSize - 3, y: 3, width: removeSize, height: removeSize)
+    }
+}
+
+private final class AttachmentStripView: UIView {
+    static let rowHeight: CGFloat = AttachmentTileView.size
+    private static let spacing: CGFloat = 8
+
+    private let scroller = UIScrollView()
+    private var tiles: [String: AttachmentTileView] = [:]
+    private var order: [String] = []
+    var onAction: ((String, String) -> Void)?
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        scroller.showsHorizontalScrollIndicator = false
+        scroller.showsVerticalScrollIndicator = false
+        scroller.alwaysBounceHorizontal = false
+        scroller.clipsToBounds = true
+        addSubview(scroller)
+    }
+
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    func apply(_ items: [AttachmentItem], decode: (String) -> UIImage?) {
+        let nextOrder = items.map(\.id)
+        let keep = Set(nextOrder)
+        for (id, tile) in tiles where !keep.contains(id) {
+            tile.removeFromSuperview()
+            tiles.removeValue(forKey: id)
+        }
+        for item in items {
+            let tile = tiles[item.id] ?? {
+                let view = AttachmentTileView()
+                let id = item.id
+                view.onAction = { [weak self] action in self?.onAction?(id, action) }
+                scroller.addSubview(view)
+                tiles[id] = view
+                return view
+            }()
+            tile.apply(item, decode: decode)
+        }
+        order = nextOrder
+        setNeedsLayout()
+    }
+
+    func clear() {
+        for tile in tiles.values { tile.removeFromSuperview() }
+        tiles.removeAll()
+        order.removeAll()
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        scroller.frame = bounds
+        var x: CGFloat = 0
+        for id in order {
+            guard let tile = tiles[id] else { continue }
+            tile.frame = CGRect(x: x, y: 0, width: AttachmentTileView.size, height: AttachmentTileView.size)
+            x += AttachmentTileView.size + Self.spacing
+        }
+        scroller.contentSize = CGSize(width: max(0, x - Self.spacing), height: Self.rowHeight)
+    }
+}
+
 /// The round button at the end of the composer: a solid disc in the page's own colours for it, not glass. A prominent
 /// glass button (iOS 26) lays its tint over what is behind it and adapts its glyph to that backdrop, so a near-black or
 /// near-white fill read washed out or inverted; this one is exactly the page's fill and ink. Fill and glyph change in
@@ -454,6 +607,8 @@ final class ChatGlassChrome: NSObject, UITextViewDelegate {
     private static let capsuleHeight: CGFloat = 48
     private static let replyHeight: CGFloat = 32
     private static let replyGap: CGFloat = 4
+    private static let attachmentHeight: CGFloat = AttachmentStripView.rowHeight
+    private static let attachmentGap: CGFloat = 6
     private static let inset: CGFloat = 8
     private static let disc: CGFloat = 32
     private static let between: CGFloat = 8
@@ -498,6 +653,10 @@ final class ChatGlassChrome: NSObject, UITextViewDelegate {
     private var hasReply = false
     private var replyTarget = false
     private var replyThumbData: String?
+    private let attachmentBar = AttachmentStripView()
+    private var hasAttachments = false
+    private var attachmentsTarget = false
+    private var attachmentItems: [AttachmentItem] = []
     private var listening = false
     private var actions: [UIButton] = []
     private var actionKinds: [String] = []
@@ -648,7 +807,11 @@ final class ChatGlassChrome: NSObject, UITextViewDelegate {
         replyBar.isHidden = true
         replyBar.accessibilityElementsHidden = true
         replyBar.onClear = { [weak self] in self?.emit(["type": "tap", "target": "clearReply"]) }
-        [plus, text, placeholder, voice, wave, replyBar].forEach(capsule.contentView.addSubview)
+        attachmentBar.alpha = 0
+        attachmentBar.isHidden = true
+        attachmentBar.accessibilityElementsHidden = true
+        attachmentBar.onAction = { [weak self] id, action in self?.emit(["type": "attachment", "id": id, "action": action]) }
+        [plus, text, placeholder, voice, wave, replyBar, attachmentBar].forEach(capsule.contentView.addSubview)
         capsule.addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(capsuleTapped)))
 
         leading = composer.leadingAnchor.constraint(equalTo: host.leadingAnchor)
@@ -1219,6 +1382,13 @@ final class ChatGlassChrome: NSObject, UITextViewDelegate {
             replyBar.accessibilityElementsHidden = true
             replyBar.label.text = nil
             replyBar.setThumbnail(nil)
+            hasAttachments = false
+            attachmentsTarget = false
+            attachmentItems = []
+            attachmentBar.alpha = 0
+            attachmentBar.isHidden = true
+            attachmentBar.accessibilityElementsHidden = true
+            attachmentBar.clear()
             if text.isFirstResponder {
                 KeyboardTrace.log("resign (page composer)", [:])
                 text.resignFirstResponder()
@@ -1242,6 +1412,7 @@ final class ChatGlassChrome: NSObject, UITextViewDelegate {
         text.returnKeyType = returnSends ? .send : .default
         setListening(data["voice"] as? String, spoken: data["voiceHeard"] as? Bool ?? true)
         applyReply(data["reply"] as? [String: Any])
+        applyAttachments(data["attachments"] as? [[String: Any]])
         applyActions(data["buttons"] as? [[String: Any]] ?? [])
         updatePlaceholder()
         layoutComposer()
@@ -1263,6 +1434,27 @@ final class ChatGlassChrome: NSObject, UITextViewDelegate {
         } else {
             replyThumbData = nil
             hasReply = false
+        }
+    }
+
+    private func applyAttachments(_ data: [[String: Any]]?) {
+        let next: [AttachmentItem] = (data ?? []).compactMap { entry in
+            guard let id = entry["id"] as? String, !id.isEmpty else { return nil }
+            return AttachmentItem(
+                id: id,
+                label: entry["label"] as? String ?? "",
+                removeLabel: entry["removeLabel"] as? String ?? "",
+                thumbnail: entry["thumbnail"] as? String,
+                uploading: entry["uploading"] as? Bool ?? false,
+                failed: entry["failed"] as? Bool ?? false,
+                retryLabel: entry["retryLabel"] as? String ?? ""
+            )
+        }
+        hasAttachments = !next.isEmpty
+        guard next != attachmentItems else { return }
+        attachmentItems = next
+        if hasAttachments {
+            attachmentBar.apply(next, decode: Self.image(fromDataURL:))
         }
     }
 
@@ -1545,10 +1737,14 @@ final class ChatGlassChrome: NSObject, UITextViewDelegate {
         let textHeight = min(max(line, ceil(fitted)), maxText)
         text.isScrollEnabled = fitted > maxText
         let pad = (Self.capsuleHeight - line) / 2
-        let topExtra: CGFloat = hasReply ? Self.replyHeight + Self.replyGap : 0
+        let replyExtra: CGFloat = hasReply ? Self.replyHeight + Self.replyGap : 0
+        let attachmentExtra: CGFloat = hasAttachments ? Self.attachmentHeight + Self.attachmentGap + 4 : 0
+        let topExtra = replyExtra + attachmentExtra
         let baseH = max(Self.capsuleHeight, textHeight + pad * 2)
         let h = baseH + topExtra
         let replyRect = CGRect(x: Self.inset, y: Self.inset, width: max(0, w - Self.inset * 2), height: Self.replyHeight)
+        let attachmentInset: CGFloat = 12
+        let attachmentRect = CGRect(x: attachmentInset, y: (hasReply ? Self.inset + replyExtra : attachmentInset), width: max(0, w - attachmentInset * 2), height: Self.attachmentHeight)
         if hasReply && replyBar.isHidden {
             UIView.performWithoutAnimation {
                 replyBar.frame = replyRect
@@ -1558,10 +1754,20 @@ final class ChatGlassChrome: NSObject, UITextViewDelegate {
                 replyBar.alpha = 0
             }
         }
+        if hasAttachments && attachmentBar.isHidden {
+            UIView.performWithoutAnimation {
+                attachmentBar.frame = attachmentRect
+                attachmentBar.layoutIfNeeded()
+                attachmentBar.isHidden = false
+                attachmentBar.accessibilityElementsHidden = false
+                attachmentBar.alpha = 0
+            }
+        }
         // the discs sit on the capsule's bottom edge and the field fills it: they move in the capsule's own animation, or
         // a wrapping line drops them to the new bottom at once while the capsule is still growing toward it
         let place = { [self] in
             replyBar.frame = replyRect
+            attachmentBar.frame = attachmentRect
             let discY = h - Self.inset - Self.disc
             plus.frame = CGRect(x: Self.inset, y: discY, width: Self.disc, height: Self.disc)
             text.frame = CGRect(x: leadingX, y: topExtra + pad, width: fieldWidth, height: baseH - pad * 2)
@@ -1581,18 +1787,25 @@ final class ChatGlassChrome: NSObject, UITextViewDelegate {
         if height.constant != h {
             height.constant = h
             replyTarget = hasReply
+            attachmentsTarget = hasAttachments
             replyBar.accessibilityElementsHidden = !hasReply
+            attachmentBar.accessibilityElementsHidden = !hasAttachments
             if jumpShown { jumpBottom.constant = restingJumpBottom() }
             if animated && composerShown && mainHost?.window != nil {
                 UIView.animate(springDuration: 0.3, bounce: 0, initialSpringVelocity: 0, delay: 0, options: [.beginFromCurrentState, .allowUserInteraction]) {
                     self.mainHost?.layoutIfNeeded()
                     place()
                     self.replyBar.alpha = self.hasReply ? 1 : 0
+                    self.attachmentBar.alpha = self.hasAttachments ? 1 : 0
                 } completion: { _ in
                     if !self.hasReply && self.replyBar.alpha == 0 {
                         self.replyBar.isHidden = true
                         self.replyBar.label.text = nil
                         self.replyBar.setThumbnail(nil)
+                    }
+                    if !self.hasAttachments && self.attachmentBar.alpha == 0 {
+                        self.attachmentBar.isHidden = true
+                        self.attachmentBar.clear()
                     }
                 }
             } else {
@@ -1604,6 +1817,11 @@ final class ChatGlassChrome: NSObject, UITextViewDelegate {
                     if !hasReply {
                         replyBar.label.text = nil
                         replyBar.setThumbnail(nil)
+                    }
+                    attachmentBar.alpha = hasAttachments ? 1 : 0
+                    attachmentBar.isHidden = !hasAttachments
+                    if !hasAttachments {
+                        attachmentBar.clear()
                     }
                 }
             }
@@ -1617,6 +1835,15 @@ final class ChatGlassChrome: NSObject, UITextViewDelegate {
                 if !hasReply {
                     replyBar.label.text = nil
                     replyBar.setThumbnail(nil)
+                }
+            }
+            if attachmentsTarget != hasAttachments || attachmentBar.layer.animationKeys()?.isEmpty != false {
+                attachmentsTarget = hasAttachments
+                attachmentBar.accessibilityElementsHidden = !hasAttachments
+                attachmentBar.alpha = hasAttachments ? 1 : 0
+                attachmentBar.isHidden = !hasAttachments
+                if !hasAttachments {
+                    attachmentBar.clear()
                 }
             }
         }

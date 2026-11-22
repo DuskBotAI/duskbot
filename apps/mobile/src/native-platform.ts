@@ -231,6 +231,7 @@ interface GlassPlugin {
     acks?: boolean;
     jump?: boolean;
     reply?: boolean;
+    attachments?: boolean;
     takeover?: boolean;
     swipeReply?: boolean;
     pullRefresh?: boolean;
@@ -352,12 +353,14 @@ export function glassBridge(
   pullRefresh = false,
   viewer = false,
   pill = false,
+  attachments = false,
 ): GlassBridge {
   const quiet = (work: Promise<unknown>) => { void work.catch(() => {}); };
   return {
     acks,
     jump,
     reply,
+    attachments,
     update: (state) => quiet(plugin.update(state)),
     setText: (text, seq) => quiet(plugin.setText({ text, seq })),
     clearText: (id) => quiet(plugin.clearText({ id })),
@@ -1053,6 +1056,7 @@ export async function nativePlatform(): Promise<MobilePlatform> {
           glass.pullRefresh === true,
           glass.viewer === true,
           glass.pill === true,
+          glass.attachments === true,
         )
       : undefined,
     menu: menu?.supported ? menuBridge(DuskMenu) : undefined,

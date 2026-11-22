@@ -187,11 +187,26 @@ const ACCEPTED_AUDIO_MIMES = new Set([
   "audio/x-m4a", "audio/x-wav", "audio/wave", "audio/x-flac",
 ]);
 
+const VIDEO_MIMES_BY_EXTENSION: Readonly<Record<string, string>> = {
+  mp4: "video/mp4",
+  m4v: "video/x-m4v",
+  mov: "video/quicktime",
+  webm: "video/webm",
+};
+const ACCEPTED_VIDEO_MIMES = new Set(Object.values(VIDEO_MIMES_BY_EXTENSION));
+
 export function documentMime(file: Pick<File, "name" | "type">): string | null {
   const declared = file.type.split(";", 1)[0]!.trim().toLowerCase();
   if (ACCEPTED_DOCUMENT_MIMES.has(declared)) return declared;
   const extension = file.name.split(".").at(-1)?.toLowerCase() ?? "";
   return DOCUMENT_MIMES[extension] ?? null;
+}
+
+export function videoMime(file: Pick<File, "name" | "type">): string | null {
+  const declared = file.type.split(";", 1)[0]!.trim().toLowerCase();
+  if (ACCEPTED_VIDEO_MIMES.has(declared)) return declared;
+  const extension = file.name.split(".").at(-1)?.toLowerCase() ?? "";
+  return VIDEO_MIMES_BY_EXTENSION[extension] ?? null;
 }
 
 export function isImageFile(file: { type: string; size?: number }): boolean {
@@ -355,7 +370,10 @@ function uploadableFileMime(file: Pick<File, "name" | "type" | "size">): string 
   const declared = file.type.split(";", 1)[0]!.trim().toLowerCase();
   const extension = file.name.split(".").at(-1)?.toLowerCase() ?? "";
   const mime = documentMime(file) ??
-    (ACCEPTED_AUDIO_MIMES.has(declared) ? declared : AUDIO_MIMES_BY_EXTENSION[extension]);
+    (ACCEPTED_AUDIO_MIMES.has(declared) ? declared : null) ??
+    (ACCEPTED_VIDEO_MIMES.has(declared) ? declared : null) ??
+    AUDIO_MIMES_BY_EXTENSION[extension] ??
+    VIDEO_MIMES_BY_EXTENSION[extension];
   if (!mime) return null;
   if (file.size > FILE_MAX_BYTES) {
     throw Object.assign(new Error(`${file.name} is over ${FILE_MAX_BYTES / (1024 * 1024)} MB.`), { status: 413 });
@@ -363,7 +381,7 @@ function uploadableFileMime(file: Pick<File, "name" | "type" | "size">): string 
   return mime;
 }
 
-/** The tile a document or audio file shows while it uploads; null for a file the composer does not upload. */
+/** The tile a document, audio, or video file shows while it uploads; null for a file the composer does not upload. */
 export function pendingFileAttachment(file: Pick<File, "name" | "type" | "size">): FileAttachment | null {
   if (!uploadableFileMime(file)) return null;
   return { kind: "file", id: newId(), path: "", name: file.name, size: file.size, uploading: true };
@@ -840,7 +858,7 @@ export async function intakeFiles<T extends DroppedFile & { type: string }>(
   const unsupported = rejectedNames.filter((name) => !ARCHIVE_NAME.test(name));
   const uploadErrors = results.flatMap((result) => result.uploadError ? [result.uploadError] : []);
   const pathless = [
-    unsupported.length ? `Unable to attach ${unsupported.join(", ")}. Choose a supported image, document, or audio file.` : "",
+    unsupported.length ? `Unable to attach ${unsupported.join(", ")}. Choose a supported image, document, audio, or video file.` : "",
     archives.length ? `Archives can't be attached: unzip ${archives.join(", ")} and attach the files inside.` : "",
   ].filter(Boolean).join(" ") || null;
   const notice = [pathless, ...uploadErrors].filter(Boolean).join(" ") || null;

@@ -555,6 +555,39 @@ describe("private document intake", () => {
     }
   });
 
+  it.each([
+    ["Screen Recording.mov", "video/quicktime", "video/quicktime"],
+    ["demo.mp4", "", "video/mp4"],
+    ["clip.m4v", "application/octet-stream", "video/x-m4v"],
+    ["capture.webm", "video/webm; codecs=vp9", "video/webm"],
+  ])("uploads %s as video without a local path", async (name, type, mime) => {
+    const fetch = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({
+      path: "/private/attachments/clip.mp4", name, bytes: 4,
+    }), { status: 201, headers: { "content-type": "application/json" } }));
+    try {
+      const file = new File([new Uint8Array([0, 0, 0, 24])], name, { type });
+      expect(pendingFileAttachment(file)).toMatchObject({ kind: "file", name, uploading: true });
+      await expect(fileAttachmentFromFile(file)).resolves.toMatchObject({
+        kind: "file", name, path: "/private/attachments/clip.mp4", size: 4,
+      });
+      expect(fetch).toHaveBeenCalledWith(expect.stringMatching(/^\/api\/files\?/),
+        expect.objectContaining({ method: "POST", body: file, headers: { "content-type": mime } }));
+    } finally {
+      fetch.mockRestore();
+    }
+  });
+
+  it("rejects oversized video before uploading", async () => {
+    const fetch = vi.spyOn(globalThis, "fetch");
+    try {
+      const file = new File([new Uint8Array(25 * 1024 * 1024 + 1)], "large.mp4", { type: "video/mp4" });
+      await expect(fileAttachmentFromFile(file)).rejects.toMatchObject({ status: 413 });
+      expect(fetch).not.toHaveBeenCalled();
+    } finally {
+      fetch.mockRestore();
+    }
+  });
+
   it("recognises supported documents by declared mime or filename", () => {
     expect(documentMime({ name: "notes.bin", type: "text/markdown; charset=utf-8" })).toBe("text/markdown");
     expect(documentMime({ name: "REPORT.PDF", type: "" })).toBe("application/pdf");

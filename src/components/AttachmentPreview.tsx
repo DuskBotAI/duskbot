@@ -877,6 +877,7 @@ function fileBand(name: string): string {
   if (["xls", "xlsx", "csv", "tsv", "numbers"].includes(ext)) return "#14c16f";
   if (["doc", "docx", "pages", "rtf", "txt", "md"].includes(ext)) return "#1e86fc";
   if (["ppt", "pptx", "key"].includes(ext)) return "#fd690f";
+  if (["mp4", "m4v", "mov", "webm"].includes(ext)) return "#14b8a6";
   if (["zip", "tar", "gz", "rar", "7z"].includes(ext)) return "#a06b39";
   return "rgb(28 28 28 / 0.24)";
 }

@@ -46,6 +46,7 @@ public class GlassChromePlugin: CAPPlugin, CAPBridgedPlugin {
             // a page that asks has just loaded, maybe in place of one the system reclaimed with a chat open: the chrome
             // outlives the page, so nothing that page showed (header, composer, Home's bar, focus, text) stays up
             withChrome { chrome in
+                chrome.setMainSheetFreeze(.none)
                 chrome.setComposerSuppressed(false)
                 chrome.blur()
                 chrome.dropStrandedLift("reload")
@@ -68,16 +69,34 @@ public class GlassChromePlugin: CAPPlugin, CAPBridgedPlugin {
     }
 
     @available(iOS 26.0, *)
+    private var rootViewController: RootViewController? {
+        if let root = bridge?.viewController?.view.window?.rootViewController as? RootViewController { return root }
+        for scene in UIApplication.shared.connectedScenes {
+            for window in (scene as? UIWindowScene)?.windows ?? [] {
+                if let root = window.rootViewController as? RootViewController { return root }
+            }
+        }
+        return nil
+    }
+
+    @available(iOS 26.0, *)
     private func withChrome(_ body: @escaping (ChatGlassChrome) -> Void) {
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
             if let chrome = self.chrome as? ChatGlassChrome { body(chrome); return }
-            guard let host = self.bridge?.nativeHost else {
+            guard let webHost = self.bridge?.nativeHost else {
                 KeyboardTrace.log("composer ack", ["shown": 0, "host": 0])
                 self.notifyListeners("glass", data: ["type": "composer", "shown": false, "reason": "no host"])
                 return
             }
-            let chrome = ChatGlassChrome(host: host) { [weak self] event in self?.notifyListeners("glass", data: event) }
+            let root = self.rootViewController
+            root?.mainHost.loadViewIfNeeded()
+            let mainHost = root?.mainHost.glassHost ?? webHost
+            let chrome = ChatGlassChrome(
+                mainHost: mainHost,
+                webHost: webHost,
+                isInSheet: { [weak self] in self?.rootViewController?.sheetNavigation != nil }
+            ) { [weak self] event in self?.notifyListeners("glass", data: event) }
             self.chrome = chrome
             body(chrome)
         }
@@ -200,6 +219,11 @@ public class GlassChromePlugin: CAPPlugin, CAPBridgedPlugin {
     func setComposerSuppressed(_ suppressed: Bool) {
         guard #available(iOS 26.0, *), let chrome = chrome as? ChatGlassChrome else { return }
         chrome.setComposerSuppressed(suppressed)
+    }
+
+    func setMainSheetFreeze(_ phase: MainSheetFreeze) {
+        guard #available(iOS 26.0, *), let chrome = chrome as? ChatGlassChrome else { return }
+        chrome.setMainSheetFreeze(phase)
     }
 }
 
@@ -434,8 +458,15 @@ final class ChatGlassChrome: NSObject, UITextViewDelegate {
     private static let between: CGFloat = 8
     private static let maxLines: CGFloat = 5
 
-    private weak var host: UIView?
+    private weak var mainHost: UIView?
+    private weak var webHost: UIView?
+    private let isInSheet: () -> Bool
     private let emit: ([String: Any]) -> Void
+    private var mainSheetFreeze: MainSheetFreeze = .none
+    private var pendingState: [String: Any]?
+    private var pendingHome: ([String: Any]?)?
+    private var pendingTopPill: (state: [String: Any]?, clearId: String?, instant: Bool)?
+    private var pendingMainTakeover: ([String: Any]?)?
 
     private let header = PassthroughView()
     private let headerGlass = PassthroughGlassContainerView(spacing: 14)
@@ -541,14 +572,16 @@ final class ChatGlassChrome: NSObject, UITextViewDelegate {
     private let topBand = GradientView()
     private var ground: UIColor?
 
-    init(host: UIView, emit: @escaping ([String: Any]) -> Void) {
-        self.host = host
+    init(mainHost: UIView, webHost: UIView, isInSheet: @escaping () -> Bool, emit: @escaping ([String: Any]) -> Void) {
+        self.mainHost = mainHost
+        self.webHost = webHost
+        self.isInSheet = isInSheet
         self.emit = emit
         super.init()
-        build(in: host)
+        build(mainHost: mainHost, webHost: webHost)
     }
 
-    private func build(in host: UIView) {
+    private func build(mainHost host: UIView, webHost: UIView) {
         header.frame = host.bounds
         header.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         header.alpha = 0
@@ -656,9 +689,9 @@ final class ChatGlassChrome: NSObject, UITextViewDelegate {
         takeover = GlassTakeoverBar(host: host, emit: emit)
         swipeReply = GlassSwipeReplyBadge(host: host, below: jump)
         pullRefresh = GlassPullRefreshOrb(host: host, below: swipeReply.view)
-        viewerBar = GlassImageViewerBar(host: host, emit: emit)
+        viewerBar = GlassImageViewerBar(host: webHost, emit: emit)
         statusPill = GlassFloatingPill(slot: .top, host: host, emit: emit)
-        toastPill = GlassFloatingPill(slot: .bottom, host: host, emit: emit)
+        toastPill = GlassFloatingPill(slot: .bottom, host: webHost, emit: emit)
 
         NotificationCenter.default.addObserver(self, selector: #selector(contentSizeChanged), name: UIContentSizeCategory.didChangeNotification, object: nil)
         NotificationCenter.default.addObserver(self, selector: #selector(keyboardWillChangeFrame(_:)), name: UIResponder.keyboardWillChangeFrameNotification, object: nil)
@@ -668,25 +701,26 @@ final class ChatGlassChrome: NSObject, UITextViewDelegate {
 
     /// the page's own frame at rest, nearly the full width while typing
     private func applyComposerWidth() {
-        let typing = keyboardOverlap > 0 && (host?.bounds.width ?? 0) > 0
+        let typing = keyboardOverlap > 0 && (mainHost?.bounds.width ?? 0) > 0
         leading.constant = typing ? Self.typingInset : restingFrame.minX
-        width.constant = typing ? (host?.bounds.width ?? restingFrame.width) - Self.typingInset * 2 : restingFrame.width
+        width.constant = typing ? (mainHost?.bounds.width ?? restingFrame.width) - Self.typingInset * 2 : restingFrame.width
     }
 
     private func restingBottom() -> CGFloat {
-        -(max(host?.safeAreaInsets.bottom ?? 0, keyboardOverlap) + gap)
+        -(max(mainHost?.safeAreaInsets.bottom ?? 0, keyboardOverlap) + gap)
     }
 
     private func restingJumpBottom() -> CGFloat {
         let growth = composerShown && composerDomHeight > 0 ? height.constant - composerDomHeight : 0
-        return -(max(host?.safeAreaInsets.bottom ?? 0, keyboardOverlap) + jumpGap + growth)
+        return -(max(mainHost?.safeAreaInsets.bottom ?? 0, keyboardOverlap) + jumpGap + growth)
     }
 
     /// The composer rides the keyboard in the keyboard's own animation: the duration and curve its notification carries.
     /// With the composer's own field focused the page rides in the same animation, lifted whole by a transform: one
     /// clock for the keyboard, composer and transcript, and no page layout until the keyboard has stopped.
     @objc private func keyboardWillChangeFrame(_ note: Notification) {
-        guard let host, let info = note.userInfo, let end = (info[UIResponder.keyboardFrameEndUserInfoKey] as? NSValue)?.cgRectValue else { return }
+        guard mainSheetFreeze != .active else { return }
+        guard let host = mainHost, let info = note.userInfo, let end = (info[UIResponder.keyboardFrameEndUserInfoKey] as? NSValue)?.cgRectValue else { return }
         guard let window = host.window else { keyboardMissed = true; return }
         keyboardMissed = false
         let local = host.convert(end, from: window.screen.coordinateSpace)
@@ -754,7 +788,7 @@ final class ChatGlassChrome: NSObject, UITextViewDelegate {
         if jumpShown { jumpBottom.constant = restingJumpBottom() }
         if restingFrame.width > 0 { applyComposerWidth() }
         UIView.performWithoutAnimation {
-            host?.layoutIfNeeded()
+            mainHost?.layoutIfNeeded()
             layoutComposer(animated: false)
             setLift(0)
         }
@@ -762,7 +796,7 @@ final class ChatGlassChrome: NSObject, UITextViewDelegate {
         keyboardSettled(height: 0, lift: 0)
     }
 
-    private var page: PageWebView? { host?.subviews.lazy.compactMap { $0 as? PageWebView }.first }
+    private var page: PageWebView? { webHost?.subviews.lazy.compactMap { $0 as? PageWebView }.first }
 
     private func stopScrolling(_ view: UIView) {
         if let scroller = view as? UIScrollView, !scroller.isDragging {
@@ -786,14 +820,14 @@ final class ChatGlassChrome: NSObject, UITextViewDelegate {
     private func keyboardSettled(height: CGFloat, lift: CGFloat) {
         KeyboardTrace.log("settled", ["overlap": height, "lift": lift])
         emit(["type": "keyboard", "height": height, "lift": lift, "settled": true])
-        guard height <= (host?.safeAreaInsets.bottom ?? 0) else { return }
+        guard height <= (mainHost?.safeAreaInsets.bottom ?? 0) else { return }
         keyboardRide = false
         topBand.isHidden = true
         page?.landed()
     }
 
     private func showTopBand() {
-        guard let host, let ground else { return }
+        guard let host = mainHost, let ground else { return }
         let height = host.safeAreaInsets.top + 16
         UIView.performWithoutAnimation {
             topBand.frame = CGRect(x: 0, y: 0, width: host.bounds.width, height: height)
@@ -817,12 +851,89 @@ final class ChatGlassChrome: NSObject, UITextViewDelegate {
         home.follow(page: nil)
     }
 
+    func setMainSheetFreeze(_ phase: MainSheetFreeze) {
+        switch phase {
+        case .active:
+            mainSheetFreeze = .active
+            pendingState = nil
+            pendingHome = nil
+            pendingTopPill = nil
+            pendingMainTakeover = nil
+            if text.isFirstResponder { text.resignFirstResponder() }
+            if lift > 0 || keyboardOverlap > 0 {
+                keyboardMissed = false
+                keyboardMove += 1
+                keyboardOverlap = 0
+                keyboardRide = false
+                bottom.constant = restingBottom()
+                if jumpShown { jumpBottom.constant = restingJumpBottom() }
+                if restingFrame.width > 0 { applyComposerWidth() }
+                UIView.performWithoutAnimation {
+                    mainHost?.layoutIfNeeded()
+                    layoutComposer(animated: false)
+                    setLift(0)
+                    page?.landed()
+                }
+            }
+        case .thawing:
+            if mainSheetFreeze == .active {
+                mainSheetFreeze = .thawing
+            }
+        case .none:
+            guard mainSheetFreeze != .none else { return }
+            mainSheetFreeze = .none
+            if lift <= 0 { topBand.isHidden = true }
+            let state = pendingState
+            let homeState = pendingHome
+            let topPill = pendingTopPill
+            let takeoverState = pendingMainTakeover
+            pendingState = nil
+            pendingHome = nil
+            pendingTopPill = nil
+            pendingMainTakeover = nil
+            if let state { apply(state) }
+            if let homeState { applyHome(homeState) }
+            if let topPill { applyPill(slot: "top", state: topPill.state, clearId: topPill.clearId, instant: topPill.instant) }
+            if let takeoverState { applyTakeover(takeoverState) }
+        }
+    }
+
     func applyHome(_ state: [String: Any]?) {
+        if mainSheetFreeze == .active {
+            pendingHome = .some(state)
+            return
+        }
+        if mainSheetFreeze == .thawing && state == nil {
+            pendingHome = .some(nil)
+            return
+        }
+        pendingHome = nil
         home.apply(state)
         keepOnTop()
     }
 
     func applyTakeover(_ state: [String: Any]?) {
+        let inSheet = isInSheet()
+        if mainSheetFreeze == .active {
+            if inSheet {
+                if state != nil, let webHost { takeover.attach(to: webHost) }
+                if takeover.view.superview === webHost {
+                    takeover.apply(state)
+                    keepOnTop()
+                }
+                return
+            }
+            pendingMainTakeover = .some(state)
+            return
+        }
+        if mainSheetFreeze == .thawing && takeover.view.superview === mainHost && state == nil {
+            pendingMainTakeover = .some(nil)
+            return
+        }
+        pendingMainTakeover = nil
+        if state != nil, let targetHost = inSheet ? webHost : mainHost {
+            takeover.attach(to: targetHost)
+        }
         takeover.apply(state)
         keepOnTop()
     }
@@ -843,6 +954,17 @@ final class ChatGlassChrome: NSObject, UITextViewDelegate {
     }
 
     func applyPill(slot: String, state: [String: Any]?, clearId: String?, instant: Bool = false) {
+        if slot == "top" {
+            if mainSheetFreeze == .active {
+                pendingTopPill = (state, clearId, instant)
+                return
+            }
+            if mainSheetFreeze == .thawing && state == nil {
+                pendingTopPill = (nil, clearId, instant)
+                return
+            }
+            pendingTopPill = nil
+        }
         let target = slot == "top" ? statusPill : toastPill
         target?.apply(state, clearId: clearId, instant: instant)
         if state != nil { keepOnTop() }
@@ -925,6 +1047,15 @@ final class ChatGlassChrome: NSObject, UITextViewDelegate {
     // MARK: state from the page
 
     func apply(_ state: [String: Any]) {
+        if mainSheetFreeze == .active {
+            pendingState = state
+            return
+        }
+        if mainSheetFreeze == .thawing, state["header"] == nil, state["composer"] == nil, state["jump"] == nil {
+            pendingState = state
+            return
+        }
+        pendingState = nil
         if let dark = state["dark"] as? Bool {
             let style: UIUserInterfaceStyle = dark ? .dark : .light
             header.overrideUserInterfaceStyle = style
@@ -936,7 +1067,8 @@ final class ChatGlassChrome: NSObject, UITextViewDelegate {
         if let hex = state["accent"] as? String, let color = UIColor(cssHex: hex) { accent = color }
         if let hex = state["ground"] as? String, let color = UIColor(cssHex: hex) {
             ground = color
-            host?.backgroundColor = color
+            webHost?.backgroundColor = color
+            mainHost?.superview?.backgroundColor = color
         }
         if let x = (state["offset"] as? NSNumber).map({ CGFloat($0.doubleValue) }), !sliding { setOffset(x) }
         let handing = state["handoff"] as? Bool ?? false
@@ -960,25 +1092,36 @@ final class ChatGlassChrome: NSObject, UITextViewDelegate {
 
     /// tells the page whether the composer it asked for is on screen, so it hides its own only then
     private func ackComposer() {
-        let shown = host != nil && composerShown && composer.superview === host && (!composer.isHidden || composerSuppressed)
-        KeyboardTrace.log("composer ack", ["shown": shown ? 1 : 0, "host": host == nil ? 0 : 1])
+        let shown = mainHost != nil && composerShown && composer.superview === mainHost && (!composer.isHidden || composerSuppressed)
+        KeyboardTrace.log("composer ack", ["shown": shown ? 1 : 0, "host": mainHost == nil ? 0 : 1])
         var event: [String: Any] = ["type": "composer", "shown": shown]
         if shown {
             let f = composer.frame
             event["frame"] = ["x": f.minX, "y": f.minY, "w": f.width, "h": f.height]
         } else {
-            event["reason"] = host == nil ? "no host" : "not drawn"
+            event["reason"] = mainHost == nil ? "no host" : "not drawn"
         }
         emit(event)
     }
 
     /// views the system adds to the host later must not land over the chrome and take its taps
     private func keepOnTop() {
-        guard let host, headerShown || composerShown || jumpShown || !home.view.isHidden || !takeover.view.isHidden || !swipeReply.view.isHidden || !pullRefresh.view.isHidden || !viewerBar.view.isHidden || !statusPill.view.isHidden || !toastPill.view.isHidden else { return }
-        let views: [UIView] = [home.view, pullRefresh.view, swipeReply.view, jump, header, composer, statusPill.view, viewerBar.view, takeover.view, toastPill.view]
-        let tail = Array(host.subviews.suffix(views.count))
-        if tail.count < views.count || zip(tail, views).contains(where: { $0 !== $1 }) {
-            for view in views { host.bringSubviewToFront(view) }
+        if let host = mainHost, headerShown || composerShown || jumpShown || !home.view.isHidden || !swipeReply.view.isHidden || !pullRefresh.view.isHidden || !statusPill.view.isHidden || (takeover.view.superview === host && !takeover.view.isHidden) {
+            var views: [UIView] = [home.view, pullRefresh.view, swipeReply.view, jump, header, composer, statusPill.view]
+            if takeover.view.superview === host { views.append(takeover.view) }
+            let tail = Array(host.subviews.suffix(views.count))
+            if tail.count < views.count || zip(tail, views).contains(where: { $0 !== $1 }) {
+                for view in views { host.bringSubviewToFront(view) }
+            }
+        }
+        if let host = webHost, !viewerBar.view.isHidden || !toastPill.view.isHidden || (takeover.view.superview === host && !takeover.view.isHidden) {
+            var views: [UIView] = [viewerBar.view]
+            if takeover.view.superview === host { views.append(takeover.view) }
+            views.append(toastPill.view)
+            let tail = Array(host.subviews.suffix(views.count))
+            if tail.count < views.count || zip(tail, views).contains(where: { $0 !== $1 }) {
+                for view in views { host.bringSubviewToFront(view) }
+            }
         }
     }
 
@@ -1009,7 +1152,7 @@ final class ChatGlassChrome: NSObject, UITextViewDelegate {
     private func layoutPill() {
         guard let titleRect, !pill.isTracking else { return }
         let side: CGFloat = 16 + 44 + 8
-        let maxWidth = max(80, (host?.bounds.width ?? 390) - side * 2)
+        let maxWidth = max(80, (mainHost?.bounds.width ?? 390) - side * 2)
         let fitted = pill.sizeThatFits(CGSize(width: maxWidth, height: 44))
         let pillWidth = min(maxWidth, ceil(fitted.width))
         let frame = CGRect(x: titleRect.midX - pillWidth / 2, y: titleRect.midY - 22, width: pillWidth, height: 44)
@@ -1038,7 +1181,7 @@ final class ChatGlassChrome: NSObject, UITextViewDelegate {
     }
 
     private func applyComposer(_ data: [String: Any]?) {
-        guard let data, let frame = Frame(data["frame"]), host != nil else {
+        guard let data, let frame = Frame(data["frame"]), mainHost != nil else {
             composerDomHeight = 0
             hasReply = false
             replyTarget = false
@@ -1096,7 +1239,7 @@ final class ChatGlassChrome: NSObject, UITextViewDelegate {
     }
 
     private func applyJump(_ data: [String: Any]?, instant jumpInstant: Bool) {
-        guard let data, let frame = Frame(data["frame"]), let host else {
+        guard let data, let frame = Frame(data["frame"]), let host = mainHost else {
             showJump(false, instant: jumpInstant)
             return
         }
@@ -1182,7 +1325,7 @@ final class ChatGlassChrome: NSObject, UITextViewDelegate {
             wave.alpha = now ? 1 : 0
         }
         let done: (Bool) -> Void = { [self] _ in if !listening { wave.stop() } }
-        guard composerShown, !instant, host?.window != nil else {
+        guard composerShown, !instant, mainHost?.window != nil else {
             change()
             done(true)
             return
@@ -1333,7 +1476,7 @@ final class ChatGlassChrome: NSObject, UITextViewDelegate {
 
     /// The page says this view shows: whatever hid it since (an animation cut short, a view put over it) is undone.
     private func reassert(_ view: UIView) {
-        guard let host, !(view === header && headerPopping), !(view === composer && composerSuppressed) else { return }
+        guard let host = mainHost, !(view === header && headerPopping), !(view === composer && composerSuppressed) else { return }
         let lost = view.superview !== host || view.isHidden || (view.alpha < 1 && view.layer.animationKeys()?.isEmpty != false)
         guard lost else { return }
         KeyboardTrace.log("reassert", ["hidden": view.isHidden ? 1 : 0, "alpha": view.alpha, "attached": view.superview === host ? 1 : 0])
@@ -1411,9 +1554,9 @@ final class ChatGlassChrome: NSObject, UITextViewDelegate {
             replyTarget = hasReply
             replyBar.accessibilityElementsHidden = !hasReply
             if jumpShown { jumpBottom.constant = restingJumpBottom() }
-            if animated && composerShown && host?.window != nil {
+            if animated && composerShown && mainHost?.window != nil {
                 UIView.animate(springDuration: 0.3, bounce: 0, initialSpringVelocity: 0, delay: 0, options: [.beginFromCurrentState, .allowUserInteraction]) {
-                    self.host?.layoutIfNeeded()
+                    self.mainHost?.layoutIfNeeded()
                     place()
                     self.replyBar.alpha = self.hasReply ? 1 : 0
                 } completion: { _ in
@@ -1425,7 +1568,7 @@ final class ChatGlassChrome: NSObject, UITextViewDelegate {
                 }
             } else {
                 UIView.performWithoutAnimation {
-                    host?.layoutIfNeeded()
+                    mainHost?.layoutIfNeeded()
                     place()
                     replyBar.alpha = hasReply ? 1 : 0
                     replyBar.isHidden = !hasReply
@@ -1547,7 +1690,7 @@ final class ChatGlassChrome: NSObject, UITextViewDelegate {
     }
 
     func morphOrigin(in coordinateSpace: UICoordinateSpace) -> ComposerMorphOrigin? {
-        guard composerShown, let host, host.window != nil, !composer.isHidden,
+        guard composerShown, let host = mainHost, host.window != nil, !composer.isHidden,
               composer.bounds.width > 1, composer.bounds.height > 1 else { return nil }
         let currentRect = composer.convert(composer.bounds, to: coordinateSpace)
         let restingRect: CGRect
@@ -1575,7 +1718,7 @@ final class ChatGlassChrome: NSObject, UITextViewDelegate {
     }
 
     func currentComposerRect(in coordinateSpace: UICoordinateSpace) -> CGRect? {
-        guard composerShown, let host, host.window != nil,
+        guard composerShown, let host = mainHost, host.window != nil,
               composer.bounds.width > 1, composer.bounds.height > 1 else { return nil }
         return composer.convert(composer.bounds, to: coordinateSpace)
     }

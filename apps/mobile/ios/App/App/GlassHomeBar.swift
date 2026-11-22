@@ -170,6 +170,12 @@ final class GlassTakeoverBar {
 
     var view: UIView { bar }
 
+    func attach(to host: UIView) {
+        guard bar.superview !== host else { return }
+        bar.frame = host.bounds
+        host.addSubview(bar)
+    }
+
     func apply(_ data: [String: Any]?) {
         guard let data, let list = data["buttons"] as? [[String: Any]], !list.isEmpty else {
             clear()

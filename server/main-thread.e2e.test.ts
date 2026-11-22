@@ -50,6 +50,7 @@ it("stamps askedAt where a person writes, never for a routine, a webhook, start_
       [bot.id]: { turns: [
         { steps: [{ tool: "start_thread", arguments: { title: "Side job", message: "Check the side job." } }], reply: "Opened a side job." },
         { reply: "Side job checked." },
+        { reply: "Side job reported back." },
         { reply: "Relayed line handled." },
         { reply: "Routine report." },
         { reply: "Webhook handled." },
@@ -63,6 +64,7 @@ it("stamps askedAt where a person writes, never for a routine, a webhook, start_
     await cli("send", "--bot", bot.id, "--task", first, "--text", "Open a side job.");
     const side = await thread(bot.id, "Side job");
     await replied(bot.id, side.threadId, "Side job checked.");
+    await replied(bot.id, first, "Side job reported back.");
     const asked = stamps(bot.id);
     expect(asked).toEqual({ [first]: expect.any(Number) });
     expect(side.openedBy).toMatchObject({ botId: bot.id });
@@ -117,7 +119,7 @@ it("moves no main thread for a teammate's work or results; results are news wher
     writeFileSync(join(dataDir, "room-plan.json"), JSON.stringify({
       [asker.id]: { script: [
         { key: "open", match: ["Open a side job that asks Teammate."],
-          steps: [{ tool: "start_thread", arguments: { title: "Side job", message: "Ask Teammate to check the books." } }], reply: "Opened a side job." },
+          steps: [{ tool: "start_thread", arguments: { title: "Side job", message: "Ask Teammate to check the books.", report_back: false } }], reply: "Opened a side job." },
         { key: "ask", match: ["Ask Teammate to check the books."], steps: [{ arguments: { bot_ids: [teammate.id], message: "BOOKS: check the books." } }], reply: "Asked Teammate." },
         { key: "review", match: ["Your downstream room requests have settled."], reply: "Side job done: the books balance." },
       ] },

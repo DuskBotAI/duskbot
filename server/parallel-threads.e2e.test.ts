@@ -417,7 +417,7 @@ describe("a Starter Cloud", () => {
     await whenStarted(main!);
     const opened = await startThread(main!, "Own child");
     expect(opened.status, JSON.stringify(opened.body)).toBe(201);
-    expect(opened.body.state).toBe("running");
+    expect(opened.body.reportBack).toBe(true);
     await whenStarted(opened.body.threadId);
     expect((await busyThreads(f, botId)).sort(), "parent and child run at once").toEqual([main, opened.body.threadId].sort());
     // A job the bot opened on itself opens no more (self-threads.e2e): only the person's own request does.

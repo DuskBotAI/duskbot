@@ -101,6 +101,7 @@ export function view(a: Assignment, parent?: Assignment): HandoffView {
   if (a.cards !== undefined) node.cards = a.cards;
   if (a.continuation !== undefined) node.continuation = { ...a.continuation };
   if (a.goalRunId !== undefined) node.goalRunId = a.goalRunId;
+  if (a.selfJob) node.selfJob = true;
   if (a.parentId !== undefined) node.parentId = a.parentId;
   if (groupId !== undefined) node.groupId = groupId;
   if (a.batchKey !== undefined) node.requestBatchKey = a.batchKey;
@@ -229,7 +230,7 @@ export class RuntimeCoordinator implements Coordinator {
   enqueue(source: RoomAddress, generation: string, parentId: string | undefined, target: RoomAddress, text: string,
     options: HandoffOptions = {}): { node: HandoffView; duplicate: boolean } {
     this.ready();
-    const { approvalGranted = false, rework = false, requestBatchKey, thread } = options;
+    const { approvalGranted = false, rework = false, requestBatchKey, thread, selfJob = false } = options;
     const mode = options.mode ?? "work";
     const parent = parentId ? this.store.get(parentId) : this.store.get(generation);
     if (!parent) throw new Error(parentId ? NOT_RUNNING : NO_TURN);
@@ -239,15 +240,20 @@ export class RuntimeCoordinator implements Coordinator {
     const kind: HandoffView["kind"] = target.groupId !== undefined && target.groupId === source.groupId ? "assignment" : "work";
     const lineage = path(this.store, parent);
     const root = lineage[0]!;
-    if (!answersSender(parent, mode, target) && lineage.some(n => ancestorOf(address(n), target))) throw new Error(ANCESTOR);
+    // A self job's one exception to the ancestor rule is the runtime's to judge (selfJobProblem); every other request keeps it.
+    if (!selfJob && !answersSender(parent, mode, target) && lineage.some(n => ancestorOf(address(n), target))) throw new Error(ANCESTOR);
     if (this.stoppedFor(root, target.botId)) throw new Error(STOPPED_AGAIN);
     const siblings = this.store.children(parent.id);
-    const existing = siblings.findLast(c => c.assignee.botId === target.botId && c.assignee.destination.groupId === target.groupId && c.brief === brief && c.mode === mode);
+    // A self job's thread is always new, so the same words in another of its threads are another job.
+    const existing = siblings.findLast(c => c.assignee.botId === target.botId && c.assignee.destination.groupId === target.groupId && c.brief === brief && c.mode === mode
+      && (!selfJob || c.assignee.destination.threadId === target.threadId));
     if (existing && !(rework && isTerminal(existing))) return { node: view(existing, parent), duplicate: true };
-    if (mode === "work" && !rework && siblings.some(c => c.mode === "work" && kindOf(c.assignee.destination.groupId, parent) === kind &&
+    // Each self job is new work in a thread of its own, so a finished one is no reason to refuse the next.
+    if (mode === "work" && !rework && !selfJob && siblings.some(c => c.mode === "work" && kindOf(c.assignee.destination.groupId, parent) === kind &&
       c.assignee.destination.groupId === target.groupId && c.assignee.botId === target.botId && c.status === "completed")) throw new Error(ALREADY_COMPLETED);
     if (kind === "work" && target.groupId && lineage.some(n => n.assignee.destination.groupId === target.groupId)) throw new Error(ROOM_ANCESTOR);
-    const waiting = mode === "notify" || target.groupId !== undefined ? undefined : this.waitingOn(source.botId, target.botId);
+    // Two bots waiting on each other is the danger here; a bot's own job never asks it back (the ancestor rule still holds there).
+    const waiting = mode === "notify" || target.groupId !== undefined || selfJob ? undefined : this.waitingOn(source.botId, target.botId);
     if (waiting) throw new Error(crossed(this.host.names(this.project(waiting.request), this.project(waiting.parent)).requester, waiting.request));
     const wanted: Reply = mode === "notify" ? "none" : options.reply ?? "resume";
     const reply: Reply = wanted === "none" ? "none" : root.reply === "poll" ? "poll" : wanted;
@@ -266,6 +272,7 @@ export class RuntimeCoordinator implements Coordinator {
       ...(level.driverKind !== undefined ? { driverKind: level.driverKind } : {}),
       approved: approvalGranted,
       ...(target.groupId && requestBatchKey ? { batchKey: requestBatchKey } : {}),
+      ...(selfJob ? { selfJob: true } : {}),
     });
     if (!result.ok) {
       if (result.outcome === "budget") throw new Error(BUDGET);

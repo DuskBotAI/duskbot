@@ -444,6 +444,9 @@ export async function callTool(called: string, input: Json, context: ToolCallCon
     const body: Record<string, unknown> = { fromBotId: BOT_ID, fromThreadId: THREAD_ID, title, message, depth: DEPTH };
     if (toBotId) body.toBotId = toBotId;
     if (folder) body.folder = folder;
+    if (args.report_back === false || (typeof args.report_back === "string" && args.report_back.trim().toLowerCase() === "false")) {
+      body.reportBack = false;
+    }
     if (args.model_selection !== undefined) {
       const fields = jsonRecord(args.model_selection) ? args.model_selection : null;
       if (!fields || typeof fields.instanceId !== "string" || !fields.instanceId.trim() || typeof fields.model !== "string" || !fields.model.trim()) {
@@ -458,6 +461,10 @@ export async function callTool(called: string, input: Json, context: ToolCallCon
     const threadId = String(r.threadId ?? receipt?.threadId ?? "");
     const where = r.self === true ? "on yourself" : `on @${String(r.botName ?? receipt?.botName ?? "that bot")}`;
     const opened = `Opened thread #${threadTitle} ${where} [thread id: ${threadId}].`;
+    if (r.self === true && r.reportBack === true) {
+      const limit = Number(r.limit) || 0;
+      return { text: `${opened} It runs in parallel with this conversation as soon as one of your${limit ? ` ${limit}` : ""} thread slots is free. When it finishes, its result comes back to this conversation automatically and resumes you here (assignment id: ${String(r.assignmentId ?? "unknown")}). Tell the person you are on it as #${threadTitle} and that they can keep chatting here, and finish your turn; do not check or wait for it in this turn.` };
+    }
     if (r.self === true) {
       if (r.state === "running") {
         return { text: `${opened} It is running now, in parallel with this conversation, and its result stays in that thread: it will not be delivered here. Mention it to the person as #${threadTitle}; use list_threads in a later turn to see how it is going.` };

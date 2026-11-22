@@ -667,7 +667,7 @@ import { personKey, relayedPersonKey } from "./person-key.ts";
 import { createOutsideLineage, OUTSIDE_STAYS_HERE } from "./host/outside-lineage.ts"; import { OUTSIDE_REFUSAL, outsideRouteRefused } from "./host/outside-fence.ts"; import { createOutsideWrites } from "./host/outside-writes.ts";
 import { teamAiOwner } from "./host/team-ai-owner.ts"; import { createTeamOwners, type AskViewer } from "./host/team-owners.ts"; import { createTeamMessages } from "./host/team-messages.ts"; import { createPlaceInbox, guestNameIn, placeInboxViewer } from "./host/place-inbox.ts"; import { relayedTurn } from "./host/relayed-turn.ts"; import { createPersonCalendar } from "./host/person-calendar.ts";
 import { roomBusyError, roomBusyReason } from "./room-busy.ts"; import { roomResponderFromTool, roomResponderLine } from "./room-responder-tool.ts"; import { createAppSettings } from "./host/app-settings.ts"; import { createDevsReports } from "./host/devs-reports.ts"; import { bugReportEndpoint, devsReportSender, devsStatusAsker } from "./devs-report-send.ts"; import { captureRecentLog } from "./recent-log.ts"; import { createShareAnswer } from "./host/share-answer.ts";
-import { createCardRequester, linePersonKey } from "./host/thread-person.ts"; import { selfThreadRefusal } from "./host/self-threads.ts"; import { lookedAfterBy } from "./host/looked-after.ts"; import { createActingPeople, HANDED_PEOPLE_FILE, HandedPeople, type HandedRun, keptPrivate, privateHandBack, withPerson } from "./host/acting-person.ts";
+import { createCardRequester, linePersonKey } from "./host/thread-person.ts"; import { openSelfThread } from "./host/self-threads.ts"; import { lookedAfterBy } from "./host/looked-after.ts"; import { createActingPeople, HANDED_PEOPLE_FILE, HandedPeople, type HandedRun, keptPrivate, privateHandBack, withPerson } from "./host/acting-person.ts";
 import { createThreadRoutes } from "./routes/threads.ts";
 import { createWebhookRoutes } from "./routes/webhooks.ts";
 import { withBrowserFallback, withScopeHint } from "./connector-scope-hint.ts";
@@ -4262,7 +4262,7 @@ const handoffTicks = createHandoffTicks(), coordinator: Coordinator = createCoor
         store.appendMessage(node.threadId, { role: "bot", kind: "text",
           roomRequest: { id: request.id, phase: "request" },
           from: sender ? { botId: sender.id, name: sender.name, color: sender.color } : undefined,
-          text: `${request.botIds.map(id => `@${store.bot(id)?.name ?? "Teammate"}`).join(" ")} ${node.text}`,
+          text: node.selfJob ? node.text : `${request.botIds.map(id => `@${store.bot(id)?.name ?? "Teammate"}`).join(" ")} ${node.text}`,
         });
       }
       markInternalTurn(node.threadId);
@@ -15403,32 +15403,19 @@ const handleRequestInner = async (req: IncomingMessage, res: ServerResponse) => 
         }
         const sourceTitle = owner.group ? owner.group.name : (store.taskByThread(from.id, fromThreadId)?.title ?? "");
         const picked = body.modelSelection === undefined ? null : checkedModelSelection(body.modelSelection, undefined, true); const refused = !picked ? null : target.id !== from.id ? "model_selection is only for threads on yourself" : !picked.ok ? picked.error : validateModelProposal(picked.selection, from); if (refused) return json(res, 400, { error: refused });
-        if (target.id === from.id) { const selfRefused = selfThreadRefusal({ handoff: Boolean(internalCapability.roomHandoffId), requestLine: store.activePath(fromThreadId).findLast((line) => line.role === "user" && line.kind === "text") }); if (selfRefused) return json(res, 409, { error: selfRefused });
+        if (target.id === from.id) {
           const inherited = picked?.ok ? { modelSelection: picked.selection, approvalMode: undefined } : parentThreadModel(from.id, fromThreadId);
-          const task = store.createTask(from.id, title, false, projectId, { botId: from.id, name: from.name, at: Date.now() }, inherited.approvalMode, inherited.modelSelection);
-          if (!task) return json(res, 500, { error: "couldn't create that thread" });
-          threadStarters.set(task.threadId, (CLOUD_TEAM ? teamConnections.handOnFor(internalCapability.threadId, internalCapability.generation) : null) ?? openerFrom(fromThreadId));
-          internalCapability.openedThreads += 1;
-          const chip: Omit<Message, "id" | "at"> = {
-            role: "bot",
-            kind: "activity",
-            tool: { name: serverLine(threadLanguage(fromThreadId), "server.rooms.openedThread", { title: task.title }), ok: true },
-            threadRef: { botId: from.id, threadId: task.threadId, title: task.title },
-          };
-          if (owner.group) chip.from = { botId: from.id, name: from.name, color: from.color };
-          store.appendMessage(fromThreadId, chip);
-          // Mark the bot's own words, so a later turn never mistakes the request for the person's.
-          const opening = `[Thread you opened yourself${sourceTitle ? ` from #${sourceTitle}` : ""}. The request below is your own words, not the person's: do the work here and end with a clear result they can read.]\n\n${message}`;
-          const worker = { kind: "thread" as const, botId: from.id, threadId: task.threadId }; const outcome = await startOrQueueOpenedThread(from.id, task.threadId, opening, isUnattended(from.id, fromThreadId), withPerson(turnOrigin(internalCapability), actingPeople.requester(internalCapability.threadId, internalCapability.generation)), (queuedId) => { Object.assign(worker, { queuedId }); }); if (outcome.state !== "failed") turnWorkers.started(fromThreadId, internalCapability.generation, worker);
-          return json(res, 201, {
-            threadId: task.threadId,
-            title: task.title,
-            botId: from.id,
-            botName: from.name,
-            self: true,
-            limit: maxConcurrentBotThreads(cfg, botThreadsHost(cloudPlanTier.starter())),
-            ...outcome,
+          const opened = await openSelfThread({
+            bot: from, fromThreadId, generation: internalCapability.generation, title, message, sourceTitle, inRoom: Boolean(owner.group), external: EXTERNAL, reportBack: body.reportBack !== false, handoff: Boolean(internalCapability.roomHandoffId), requestLine: store.activePath(fromThreadId).findLast((line) => line.role === "user" && line.kind === "text"), coordinator,
+            createTask: () => store.createTask(from.id, title, false, projectId, { botId: from.id, name: from.name, at: Date.now() }, inherited.approvalMode, inherited.modelSelection),
+            deleteTask: (threadId) => { store.deleteTask(from.id, threadId); },
+            recordOpened: (task) => { threadStarters.set(task.threadId, (CLOUD_TEAM ? teamConnections.handOnFor(internalCapability.threadId, internalCapability.generation) : null) ?? openerFrom(fromThreadId)); internalCapability.openedThreads += 1; const chip: Omit<Message, "id" | "at"> = { role: "bot", kind: "activity", tool: { name: serverLine(threadLanguage(fromThreadId), "server.rooms.openedThread", { title: task.title }), ok: true }, threadRef: { botId: from.id, threadId: task.threadId, title: task.title }, ...(owner.group ? { from: { botId: from.id, name: from.name, color: from.color } } : {}) }; store.appendMessage(fromThreadId, chip); },
+            onSelfJobEnqueued: (job) => { usageTrace.link(job.id, job.parentId, { threadId: fromThreadId, turnId: liveTurnByThread.get(fromThreadId) ?? "" }); actingPeople.handOn(internalCapability, job); delegatedThisTurn(job.id); },
+            startDetached: async (threadId, opening) => { const worker = { kind: "thread" as const, botId: from.id, threadId }; const outcome = await startOrQueueOpenedThread(from.id, threadId, opening, isUnattended(from.id, fromThreadId), withPerson(turnOrigin(internalCapability), actingPeople.requester(internalCapability.threadId, internalCapability.generation)), (queuedId) => { Object.assign(worker, { queuedId }); }); if (outcome.state !== "failed") turnWorkers.started(fromThreadId, internalCapability.generation, worker); return outcome; },
+            childLimit: () => maxConcurrentChildThreads(cfg, botThreadsHost(cloudPlanTier.starter())),
+            botLimit: () => maxConcurrentBotThreads(cfg, botThreadsHost(cloudPlanTier.starter())),
           });
+          return json(res, opened.status, opened.body);
         }
         const result = await coordinateBots({ botIds: [target.id], message, rework: false, thread: "new", reply: "resume", consult: false, title, projectId });
         return json(res, result.status, result.body);

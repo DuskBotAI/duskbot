@@ -6,7 +6,7 @@ import { Runtime, type BeginRequest } from "./runtime.ts";
 import { openRuntimeStore, type RuntimeStore } from "./store.ts";
 import { FakeClock } from "./testing/fake-clock.ts";
 import { complete, continueTurn, custom, fail, FakeRunner, handOut, hang, needsInput, type ChildSpec } from "./testing/fake-runner.ts";
-import { CUT_TWICE, INTERRUPTED_OUTWARD } from "./tree.ts";
+import { CUT_TWICE, INTERRUPTED_OUTWARD, SELF_JOB_FRESH, SELF_JOB_FROM_ROOT, SELF_JOB_NOT_SELF } from "./tree.ts";
 import {
   terminal,
   type Assignment,
@@ -2078,6 +2078,149 @@ describe("§5 outward / §2 loop guard", () => {
     expect(w.runner.runs(root.id)).toHaveLength(1);
     expect(w.runner.runs(root.id)[0].input).toMatchObject({ turn: "continued", continuation: { note: "The computer is taken. Continue when it is free." } });
     expect(get(w, root.id)).toMatchObject({ status: "completed", result: "done on the computer", executions: 2 });
+    invariants(w);
+  });
+});
+
+describe("§2 self jobs: start_thread with report_back", () => {
+  const ownJob = (threadId: string, brief: string, over: Partial<ChildSpec> = {}): ChildSpec =>
+    ({ assignee: { botId: "chief", destination: { kind: "work_thread", threadId } }, brief, selfJob: true, ...over });
+
+  it("SJ1 a job the bot opens on itself reports back and resumes the requesting conversation exactly once", async () => {
+    const w = world();
+    const root = beginChief(w);
+    const job = ok(enqueueFrom(w, root, ownJob("job-1", "Research the long thing", { levels: { own: "edits" } })));
+    expect(job).toMatchObject({ selfJob: true, parentId: root.id, depth: 1, mode: "work", reply: "resume", status: "queued",
+      requester: { kind: "bot_turn", botId: "chief", threadId: CHIEF_THREAD }, level: "edits", levelSource: "own" });
+    const second = ok(enqueueFrom(w, root, ownJob("job-2", "Research the other thing")));
+    expect(second.selfJob).toBe(true);
+
+    w.runner.script(job.id, complete("found it"));
+    w.runner.script(second.id, complete("found the other"));
+    w.runner.script(root.id, complete("here is what both jobs found"));
+    w.rt.end(root.id, { ok: true, text: "Started two jobs; keep chatting." });
+    expect(get(w, root.id).status).toBe("waiting");
+    await drain(w);
+
+    const runs = w.runner.runs(job.id);
+    expect(runs).toHaveLength(1);
+    const envelope = runs[0].input!.envelope;
+    expect(envelope.startsWith(ENVELOPE_MARK)).toBe(true);
+    expect(envelope).toContain(`You opened this job yourself from "${CHIEF_THREAD}": the brief below is your own words, not`);
+    expect(envelope).toContain("Brief from yourself, in your own words:\nResearch the long thing");
+    expect(envelope).toContain("your reply goes back to the conversation you opened this from and resumes it there");
+    expect(runs[0].input!.level).toBe("edits");
+
+    expect(get(w, job.id)).toMatchObject({ status: "completed", outcome: "done", result: "found it" });
+    expect(w.runner.reports(job.id)).toHaveLength(1);
+    expect(w.runner.reports(job.id)[0].parent?.id).toBe(root.id);
+    const rootRuns = w.runner.runs(root.id);
+    expect(rootRuns).toHaveLength(1);
+    expect(rootRuns[0].input!.settled?.map((a) => a.id).sort()).toEqual([job.id, second.id].sort());
+    expect(w.store.inbox(chiefOwner, false).map((item) => item.assignmentId).sort()).toEqual([job.id, second.id].sort());
+    expect(w.store.inbox(chiefOwner, true)).toHaveLength(0);
+    expect(get(w, root.id)).toMatchObject({ status: "completed", executions: 2 });
+    invariants(w);
+  });
+
+  it("SJ2 a self job cannot open from inside another self job or a teammate's hand-off, nor into a lineage thread or a room", async () => {
+    const w = world();
+    const root = beginChief(w);
+    const job = ok(enqueueFrom(w, root, ownJob("job-1", "Do the long thing")));
+    const handoff = ok(enqueueFrom(w, root, workFor("dev", "Build")));
+    const tries: Record<string, EnqueueResult> = {};
+    w.runner.script(job.id, custom(({ handOut: give }) => {
+      tries.nested = give(ownJob("job-2", "Open another job"));
+      return { kind: "completed", text: "did it here" };
+    }));
+    w.runner.script("dev", custom(({ handOut: give }) => {
+      tries.devOwn = give({ assignee: { botId: "dev", destination: { kind: "work_thread", threadId: "dev-job" } }, brief: "My own job", selfJob: true });
+      tries.devToChief = give(ownJob("chief-job", "Chief, do this"));
+      return { kind: "completed", text: "built" };
+    }));
+    tries.ownThread = enqueueFrom(w, root, ownJob(CHIEF_THREAD, "Here again"));
+    tries.room = enqueueFrom(w, root, { assignee: { botId: "chief", destination: { kind: "room_thread", threadId: "room-1", groupId: "g1" } }, brief: "In the room", selfJob: true });
+    tries.teammate = enqueueFrom(w, root, { ...workFor("qa", "Test"), selfJob: true });
+    tries.consult = enqueueFrom(w, root, ownJob("job-c", "What do you think?", { mode: "consult" }));
+    w.runner.script(root.id, complete("final"));
+    w.rt.end(root.id, { ok: true, text: "" });
+    await drain(w);
+
+    expect(refused(tries.nested).reason).toBe(SELF_JOB_FROM_ROOT);
+    expect(refused(tries.devOwn).reason).toBe(SELF_JOB_FROM_ROOT);
+    expect(refused(tries.devToChief).reason).toBe(SELF_JOB_FROM_ROOT);
+    expect(refused(tries.ownThread).reason).toBe(SELF_JOB_FRESH);
+    expect(refused(tries.room).reason).toBe(SELF_JOB_FRESH);
+    expect(refused(tries.teammate).reason).toBe(SELF_JOB_NOT_SELF);
+    expect(refused(tries.consult).reason).toBe(SELF_JOB_NOT_SELF);
+    expect(w.store.all().map((a) => a.id).sort()).toEqual([root.id, job.id, handoff.id].sort());
+    expect(get(w, job.id).status).toBe("completed");
+    expect(get(w, handoff.id).status).toBe("completed");
+    expect(get(w, root.id).status).toBe("completed");
+    invariants(w);
+  });
+
+  it("SJ3 without the self-job mark the ancestor rule holds: a fresh thread on the requesting bot, or on an ancestor, is refused", async () => {
+    const w = world();
+    const root = beginChief(w);
+    const plain = enqueueFrom(w, root, ownJob("job-1", "Do it myself", { selfJob: undefined }));
+    expect(refused(plain).reason).toMatch(/ancestor/);
+    const job = ok(enqueueFrom(w, root, ownJob("job-2", "Do the long thing")));
+    let back: EnqueueResult | undefined;
+    w.runner.script(job.id, custom(({ handOut: give }) => {
+      back = give({ assignee: chiefAssignee(), brief: "Back to the main chat" });
+      return { kind: "completed", text: "done" };
+    }));
+    w.runner.script(root.id, complete("final"));
+    w.rt.end(root.id, { ok: true, text: "" });
+    await drain(w);
+    expect(refused(back).reason).toMatch(/ancestor/);
+    expect(w.store.all().filter((a) => a.assignee.botId === "chief")).toHaveLength(2);
+    invariants(w);
+  });
+
+  it("SJ4 a self job a restart cuts keeps its mark: it reruns once as a self job and still reports back once", async () => {
+    const w = world();
+    const root = beginChief(w);
+    const job = ok(enqueueFrom(w, root, ownJob("job-1", "Do the long thing")));
+    w.runner.script(job.id, hang(), complete("done after the restart"));
+    w.runner.script(root.id, complete("final"));
+    w.rt.end(root.id, { ok: true, text: "" });
+    await drain(w);
+    expect(get(w, job.id).status).toBe("running");
+
+    reopen(w);
+    expect(get(w, job.id)).toMatchObject({ selfJob: true, restart: "rerun", restarts: 1 });
+    await drain(w);
+    const runs = w.runner.runs(job.id);
+    expect(runs).toHaveLength(2);
+    expect(runs[1].input!.turn).toBe("rerun");
+    expect(runs[1].input!.envelope).toContain("You opened this job yourself");
+    expect(get(w, job.id)).toMatchObject({ status: "completed", selfJob: true, result: "done after the restart" });
+    expect(w.runner.reports(job.id)).toHaveLength(1);
+    expect(w.runner.runs(root.id)).toHaveLength(1);
+    expect(get(w, root.id).status).toBe("completed");
+    invariants(w);
+  });
+
+  it("SJ5 stopping the requesting conversation cancels its running and queued self jobs without resuming it", async () => {
+    const w = world();
+    const root = beginChief(w);
+    const running = ok(enqueueFrom(w, root, ownJob("job-1", "First long thing")));
+    const queued = ok(enqueueFrom(w, root, ownJob("job-2", "Second long thing")));
+    w.runner.script(running.id, hang());
+    w.runner.setCanStart(queued.id, false);
+    w.rt.end(root.id, { ok: true, text: "Started both." });
+    await drain(w);
+    expect(get(w, running.id).status).toBe("running");
+    expect(get(w, queued.id).status).toBe("queued");
+
+    w.rt.stopRequester(chiefOwner, "person stopped the chat");
+    await drain(w);
+    expect(get(w, root.id)).toMatchObject({ status: "cancelled", outcome: "stopped" });
+    expect(get(w, running.id)).toMatchObject({ status: "cancelled", outcome: "stopped" });
+    expect(get(w, queued.id)).toMatchObject({ status: "cancelled", outcome: "stopped" });
+    expect(w.runner.runs(root.id)).toHaveLength(0);
     invariants(w);
   });
 });

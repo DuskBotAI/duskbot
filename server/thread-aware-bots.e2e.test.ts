@@ -244,13 +244,13 @@ describe("start_thread on yourself", () => {
       const token = await liveToken(pm.threadId);
       const folder = (await api("POST", `/api/bots/${pm.id}/projects`, { name: "QA" })).body.project;
 
-      const first = await api("POST", "/api/internal/threads", { title: "QA: PR #1", message: "Review the login fix." }, token);
+      const first = await api("POST", "/api/internal/threads", { title: "QA: PR #1", message: "Review the login fix.", reportBack: false }, token);
       expect(first.status).toBe(201);
       expect(first.body).toMatchObject({ title: "QA: PR #1", botId: pm.id, self: true, state: "running", limit: 2 });
-      const second = await api("POST", "/api/internal/threads", { title: "QA: PR #2", message: "Review the signup fix.", folder: "qa" }, token);
+      const second = await api("POST", "/api/internal/threads", { title: "QA: PR #2", message: "Review the signup fix.", folder: "qa", reportBack: false }, token);
       expect(second.status).toBe(201);
       expect(second.body).toMatchObject({ state: "queued", position: 1 });
-      const third = await api("POST", "/api/internal/threads", { title: "QA: PR #3", message: "Review the reset fix." }, token);
+      const third = await api("POST", "/api/internal/threads", { title: "QA: PR #3", message: "Review the reset fix.", reportBack: false }, token);
       expect(third.body).toMatchObject({ state: "queued", position: 2 });
 
       const state = await botState(pm.id);
@@ -382,6 +382,7 @@ describe("start_thread on yourself", () => {
       const elsewhere = await api("POST", "/api/internal/threads", { title: "Retired engine", message: "go" },
         await mintedToken(pm.id, fresh.body.task.threadId));
       expect(elsewhere.status).toBe(201);
+      await expect.poll(async () => (await taskOf(pm.id, elsewhere.body.threadId))?.followsBotModel, { timeout: 15_000 }).toBe(true);
       expect(await taskOf(pm.id, elsewhere.body.threadId)).toMatchObject({ modelSelection: sonnet, followsBotModel: true, approvalMode: "ask", alwaysAllow: [] });
       expect((await messages(elsewhere.body.threadId)).filter((message) => message.tool?.name?.startsWith("notice: This thread's model (old-model)")))
         .toHaveLength(1);

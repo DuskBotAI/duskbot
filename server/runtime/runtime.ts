@@ -5,7 +5,7 @@ import { plainComputerFailure } from "../../shared/computer-unreachable.ts";
 import { composeEnvelope } from "./envelope.ts";
 import { assignmentLevel } from "./level.ts";
 import type { RuntimeStore } from "./store.ts";
-import { answersSender, asking, awaited, childrenSince, settledSince, clip, continuations, CUT_TWICE, duration, isTerminal, loopStop, nextGuard, outwardDetail, ownsConversation, path, restartNote, wakeOwner } from "./tree.ts";
+import { answersSender, asking, awaited, childrenSince, settledSince, clip, continuations, CUT_TWICE, duration, isTerminal, loopStop, nextGuard, outwardDetail, ownsConversation, path, restartNote, selfJobProblem, wakeOwner } from "./tree.ts";
 import { DEFAULT_LIMITS, type Answerer, type Assignment, type Assignee, type Clock, type EndResult, type EnqueueRequest, type EnqueueResult, type EnvelopeNames,
   type EventKind, type InboxItem, type InboxKind, type Level, type Limits, type LiveEdge, type Origin, type Outcome, type Owner,
   type Reply, type Requester, type RunInput, type RunResult, type StatusView, type TurnRunner } from "./types.ts";
@@ -193,7 +193,10 @@ export class Runtime {
     const lineage = parent ? path(this.store, parent) : [];
     const root = lineage[0];
     const target = req.assignee;
-    if (!answersSender(parent, mode, { botId: target.botId, ...target.destination }) && lineage.some(a => a.assignee.botId === target.botId &&
+    if (req.selfJob) {
+      const problem = selfJobProblem(parent, lineage, mode, target);
+      if (problem) return refuse(problem);
+    } else if (!answersSender(parent, mode, { botId: target.botId, ...target.destination }) && lineage.some(a => a.assignee.botId === target.botId &&
       (!a.assignee.destination.groupId || !target.destination.groupId || a.assignee.destination.groupId === target.destination.groupId))) {
       return refuse("Cannot assign work back to an ancestor; results return automatically");
     }
@@ -216,7 +219,7 @@ export class Runtime {
       reply: req.reply ?? (mode === "notify" ? "none" : "resume"), brief, ...(req.doneWhen ? { doneWhen: req.doneWhen } : {}),
       status: "queued", level, levelSource: source, executions: 0, restarts: 0, createdAt: now, lastActivityAt: now, result: "",
       rework: Boolean(req.rework), ...(req.approved !== undefined ? { approved: req.approved } : {}),
-      ...(req.batchKey !== undefined ? { batchKey: req.batchKey } : {}), version: 1,
+      ...(req.batchKey !== undefined ? { batchKey: req.batchKey } : {}), ...(req.selfJob ? { selfJob: true } : {}), version: 1,
     };
     if (!parent) { node.rootId = node.id; node.budgets = { since: now, requests: 0, executions: 0, wakes: 0 }; }
     const problem = this.safe("validate", () => this.runner.validate(node, parent));

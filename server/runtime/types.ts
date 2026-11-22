@@ -152,6 +152,9 @@ export interface Assignment {
   approved?: boolean;
   /** A room brief shown once per call: every recipient of that call shares it. */
   batchKey?: string;
+  /** A job the requesting conversation's bot opened on itself, in a fresh thread, whose result resumes that conversation
+   * (start_thread with report_back). Its brief is the bot's own words, never the person's. Never changed after enqueue. */
+  selfJob?: boolean;
   version: 1;
 }
 
@@ -217,6 +220,9 @@ export interface EnqueueRequest {
   driverKind?: string;
   approved?: boolean;
   batchKey?: string;
+  /** The requesting bot hands this to itself, in a fresh thread of its own, outside any room: the one case the ancestor
+   * rule lets through, and only from the requesting conversation's own turn. */
+  selfJob?: boolean;
 }
 
 export type EnqueueResult =

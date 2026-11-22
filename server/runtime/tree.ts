@@ -1,6 +1,6 @@
 // "Since this turn began" is read from event ids (one global order), never timestamps: a clock can step back.
 import type { RuntimeStore } from "./store.ts";
-import { terminal, type Assignment, type Mode, type Owner, type TurnEvidence } from "./types.ts";
+import { terminal, type Assignee, type Assignment, type Mode, type Owner, type TurnEvidence } from "./types.ts";
 
 export const CUT_TWICE = "Interrupted by another dusk bot restart after resuming once; not resumed again. Some of its steps may already have taken effect.";
 
@@ -80,6 +80,22 @@ export const asking = (a: Assignment): boolean => a.status === "needs_input" && 
 export const answersSender = (parent: Assignment | undefined, mode: Mode, target: { botId: string; threadId: string; groupId?: string | undefined }): boolean =>
   mode === "notify" && parent?.reply === "none" && parent.requester.botId === target.botId && parent.requester.threadId === target.threadId
   && parent.assignee.destination.groupId === undefined && target.groupId === undefined;
+
+export const SELF_JOB_FROM_ROOT = "Only the requesting conversation's own turn can open a job on itself; a hand-off or a job it opened finishes its own work";
+export const SELF_JOB_NOT_SELF = "A job on yourself goes to the requesting bot itself, as work";
+export const SELF_JOB_FRESH = "A job on yourself runs in a fresh thread of its own, outside any room";
+
+/** Why a self job (start_thread with report_back) may not open here, or undefined when it may. The ancestor rule lets
+ * exactly this through: the requesting root's own bot, as work, in a fresh direct thread no node of the lineage runs in.
+ * Only a root may open one, so a job never opens another job, and every job stays under its root's depth, budgets and stop. */
+export function selfJobProblem(parent: Assignment | undefined, lineage: readonly Assignment[], mode: Mode, target: Assignee): string | undefined {
+  if (!parent || parent.parentId !== undefined) return SELF_JOB_FROM_ROOT;
+  if (mode !== "work" || target.botId !== parent.assignee.botId) return SELF_JOB_NOT_SELF;
+  const { kind, threadId, groupId } = target.destination;
+  if (kind !== "work_thread" || !threadId || groupId !== undefined || parent.assignee.destination.groupId !== undefined
+    || lineage.some(n => n.assignee.destination.threadId === threadId)) return SELF_JOB_FRESH;
+  return undefined;
+}
 
 export function path(store: RuntimeStore, n: Assignment): Assignment[] {
   const out: Assignment[] = [];

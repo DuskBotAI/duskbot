@@ -978,8 +978,11 @@ describe("agents-proxy MCP surface", () => {
     const list = await rpc("tools/list");
     const start = list.result.tools.find((tool: { name: string }) => tool.name === "start_thread");
     expect(start.inputSchema.required).toEqual(["title", "message"]);
-    expect(Object.keys(start.inputSchema.properties)).toEqual(["title", "message", "folder", "model_selection"]);
+    expect(Object.keys(start.inputSchema.properties)).toEqual(["title", "message", "report_back", "folder", "model_selection"]);
+    expect(start.inputSchema.properties.report_back.type).toBe("boolean");
     expect(start.description).toContain("Open a separate job on yourself");
+    expect(start.description).toContain("so they can keep chatting with you here");
+    expect(start.description).toContain("With report_back (the default) its result comes back to this conversation automatically and resumes you here");
     expect(start.description).toContain('use coordinate_bots for teammates (thread "new" opens a fresh thread on them)');
     expect(start.description).toContain("do not retry it");
     expect(start.description).not.toMatch(/\b(delegate_bot|ask_bot)\b/);
@@ -1028,6 +1031,26 @@ describe("agents-proxy MCP surface", () => {
     const failed = await callTool("start_thread", { title: "QA: PR #3", message: "Review the reset fix." });
     expect(failed.result.isError).toBe(true);
     expect(failed.result.content[0].text).toContain("could not start: provider unavailable");
+  });
+
+  it("start_thread with report_back says the result comes back here and resumes the bot; report_back false (and stringified \"false\") is forwarded", async () => {
+    threadResponse = { threadId: "thread-job", title: "Research", botId: "bot-asker", botName: "Asker", self: true, reportBack: true, assignmentId: "asg-self-1", limit: 3 };
+    const running = await callTool("start_thread", { title: "Research", message: "Research the market." });
+    const text = running.result.content[0].text;
+    expect(running.result.isError).toBeFalsy();
+    expect(text).toContain("Opened thread #Research on yourself [thread id: thread-job]. It runs in parallel with this conversation as soon as one of your 3 thread slots is free.");
+    expect(text).toContain("its result comes back to this conversation automatically and resumes you here (assignment id: asg-self-1)");
+    expect(text).toContain("they can keep chatting here");
+    expect(text).toContain("do not check or wait for it in this turn");
+    expect(text).not.toContain("will not be delivered here");
+    expect(lastThreadBody.reportBack).toBeUndefined();
+    threadResponse = { threadId: "thread-plain", title: "Plain", botId: "bot-asker", botName: "Asker", self: true, state: "running", limit: 3 };
+    const plain = await callTool("start_thread", { title: "Plain", message: "Read it there.", report_back: false });
+    expect(lastThreadBody.reportBack).toBe(false);
+    expect(plain.result.content[0].text).toContain("its result stays in that thread: it will not be delivered here");
+    const coerced = await callTool("start_thread", { title: "Plain 2", message: "Read it there.", report_back: "false" });
+    expect(lastThreadBody.reportBack).toBe(false);
+    expect(coerced.result.content[0].text).toContain("its result stays in that thread: it will not be delivered here");
   });
 
   it("start_thread refuses a missing title or message locally, and hands a harness refusal to the model", async () => {

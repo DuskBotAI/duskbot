@@ -3,7 +3,7 @@ import { act, createElement, StrictMode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { setLocale } from "@/lib/i18n";
-import { DeviceNotificationsRow } from "./NotificationSettingsRows";
+import { NotificationRows } from "./NotificationSettingsRows";
 
 const fixture = vi.hoisted(() => ({ optedIn: true, setFinishedNotifications: vi.fn() }));
 vi.mock("@/lib/notification-preferences", () => ({
@@ -40,7 +40,7 @@ afterEach(async () => {
 });
 
 const toggle = () => container.querySelector<HTMLButtonElement>('[role="switch"]')!;
-const mount = async () => { await act(async () => root!.render(createElement(StrictMode, null, createElement(DeviceNotificationsRow)))); };
+const mount = async () => { await act(async () => root!.render(createElement(StrictMode, null, createElement(NotificationRows)))); };
 const resume = async (event: "visibilitychange" | "focus") => {
   await act(async () => (event === "focus" ? window : document).dispatchEvent(new Event(event)));
 };
@@ -102,4 +102,28 @@ it("ignores hidden pages and stops listening once unmounted", async () => {
   await resume("visibilitychange");
   await resume("focus");
   expect(readPermission).not.toHaveBeenCalled();
+});
+
+const soundSwitch = () => container.querySelector<HTMLButtonElement>('[role="switch"][aria-label="Play sound for notifications"]')!;
+const soundPicker = () => container.querySelector<HTMLElement>('[aria-label="Notification sound"]')!;
+
+it("turns the sound rows off while this device may not show notifications, and back on once it may", async () => {
+  permission = "denied";
+  await mount();
+  expect(soundSwitch().disabled).toBe(true);
+  expect(soundSwitch().getAttribute("aria-checked")).toBe("false");
+  expect(soundPicker().hasAttribute("disabled") || soundPicker().getAttribute("aria-disabled") === "true").toBe(true);
+  expect(container.textContent).toContain("Sounds play only with notifications on this device.");
+  permission = "granted";
+  await resume("focus");
+  expect(soundSwitch().disabled).toBe(false);
+  expect(soundSwitch().getAttribute("aria-checked")).toBe("true");
+  expect(soundPicker().hasAttribute("disabled") || soundPicker().getAttribute("aria-disabled") === "true").toBe(false);
+  expect(container.textContent).not.toContain("Sounds play only with notifications");
+});
+
+it("keeps the sound rows for approvals and questions while finished notices are off", async () => {
+  fixture.optedIn = false;
+  await mount();
+  expect(soundSwitch().disabled).toBe(false);
 });

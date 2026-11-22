@@ -7,12 +7,14 @@ removes only the fixture data.
 
 The preview mounts the actual Sidebar and StoreProvider. Verify:
 
-1. Click Archive Sidebar Atlas: Cancel receives focus by default.
-2. Shift-Tab wraps to Archive; Tab wraps back to Cancel.
+1. Click Archive Sidebar Atlas: Archive receives focus by default, since an
+   archive can be undone.
+2. Tab wraps to Cancel; Shift-Tab wraps back to Archive.
 3. Escape closes the dialog, leaves `Drawer: open`, and restores focus to the
    Archive trigger. No bot is archived.
-4. Right-click Sidebar Atlas and choose Delete. Cancel leaves the bot intact
-   and returns focus to the sidebar if the menu trigger has disappeared.
+4. Right-click Sidebar Atlas and choose Delete: Cancel receives focus by
+   default, so Enter does not delete. Cancel leaves the bot intact and returns
+   focus to the sidebar if the menu trigger has disappeared.
 5. Repeat Delete and confirm. Only the disposable Atlas bot disappears; the
    remaining bots are unchanged and keyboard focus remains in the sidebar.
 

@@ -20,15 +20,16 @@ It starts two fake-engine servers, one without a plan and one wired to a
 loopback stand-in for the relay, with the same stand-in as treg
 (`DUSK_TREG_URL`). It drives the real Apps pop-up and checks:
 
-- With neither a key nor a plan, the card asks for a treg key and links to
-  treg.to. The managed install's Composio Twitter tile, which cannot connect
-  there, is gone.
-- Saving a key tests it at once ("treg is working ✓ Balance: $4.25."), and
+- X (Twitter), opened from the window's search, asks for a treg key and links
+  to treg.to when there is neither a key nor a plan. The managed install's
+  Composio Twitter app, which cannot connect there, is not offered.
+- Saving a key tests it at once ("Treg is working ✓ Balance: $4.25."), and
   **Remove key** takes the card back.
 - On a plan, the card shows "Included with your plan" and the month's use.
 - With both, the card says the own key is used first. Removing it falls back
   to the plan.
-- A used-up month says when it resets and opens the key field.
+- A used-up month, read on a later visit once the server's 30 s usage cache
+  has passed, says when it resets and opens the key field.
 - At 390 px wide the pop-up does not scroll sideways.
 
 It saves a screenshot of each state. No real treg key, account or relay is

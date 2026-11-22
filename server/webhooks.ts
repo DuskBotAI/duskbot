@@ -630,19 +630,20 @@ export class WebhookManager {
     this.recordRejectedForTrigger(trigger, status, error instanceof Error ? error.message : String(error), event);
   }
 
-  test(id: string, payload: JsonValue = { event: "dusk.test", message: "Test webhook delivery" }): WebhookReceiveResult | null {
+  /** sample: a bot's realistic body, run as a real call (no test markers, so its steps never read it as a dry run). */
+  test(id: string, sample?: JsonValue): WebhookReceiveResult | null {
     const trigger = this.webhooks.find((candidate) => candidate.id === id);
     if (!trigger) return null;
     // A room delivery synthesizes voice and stores images asynchronously; the test route stays synchronous.
     if (trigger.delivery === "post" && trigger.groupId) fail(400, "a room webhook posts through its webhook URL, not the test button");
-    const eventName = trigger.eventTypes?.[0] ?? "dusk.test";
+    const real = sample !== undefined;
     // Run now is the person's own test: like a schedule's, it runs while paused.
     return this.dispatch(trigger, {
-      payload,
+      payload: real ? sample : { event: "dusk.test", message: "Test webhook delivery" },
       contentType: "application/json",
-      eventName,
-      userAgent: "dusk bot webhook tester",
-      deliveryId: `test-${randomUUID()}`,
+      eventName: trigger.eventTypes?.[0] ?? (real ? undefined : "dusk.test"),
+      ...(real ? {} : { userAgent: "dusk bot webhook tester" }),
+      deliveryId: real ? randomUUID() : `test-${randomUUID()}`,
     }, true);
   }
 

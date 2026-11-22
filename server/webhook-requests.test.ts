@@ -144,12 +144,13 @@ describe("WebhookRequestService", () => {
     expect(service.undo({ botId: "bot-a", threadId: "thread-a", requestId: tested.requestId })).toMatchObject({ state: "invalid" });
   });
 
-  it("runs a webhook once on the bot's sample body", () => {
+  it("runs a webhook once on the bot's sample body as a real call, with no test markers", () => {
     const { service, queued } = harness();
     const created = service.submit({ botId: "bot-a", threadId: "thread-a", operation: create });
     service.submit({ botId: "bot-a", threadId: "thread-a", operation: { action: "run_now", webhookId: created.resultId }, payload: { email: "maya@loomware.co" } });
     expect(queued[0]!.prompt).toContain("maya@loomware.co");
     expect(queued[0]!.prompt).not.toContain("Test webhook delivery");
+    expect(queued[0]!.prompt).not.toMatch(/webhook tester|dusk\.test|Delivery ID: test-/);
   });
 
   it("refuses to save when the requesting turn already ended, changing nothing", () => {

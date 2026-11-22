@@ -80,6 +80,18 @@ export function createLinkPreviews({ dir, net = {}, now = Date.now }: { dir: str
   const imagesRunning = new Map<string, Promise<{ type: string; body: Buffer } | null>>();
   const pagesDir = join(dir, "pages"), imagesDir = join(dir, "images");
   let lastPrune = 0;
+  const MAX_BUILDING = 6;
+  let building = 0;
+  const waiting: Array<() => void> = [];
+  const gated = async <T>(run: () => Promise<T>): Promise<T> => {
+    if (building >= MAX_BUILDING) await new Promise<void>((admit) => waiting.push(admit));
+    building += 1;
+    try { return await run(); }
+    finally {
+      building -= 1;
+      waiting.shift()?.();
+    }
+  };
 
   const remember = (key: string, entry: Entry) => {
     memory.delete(key);
@@ -226,7 +238,7 @@ export function createLinkPreviews({ dir, net = {}, now = Date.now }: { dir: str
     if (!IMAGE_ID.test(id)) return Promise.resolve(null);
     let pending = imagesRunning.get(id);
     if (!pending) {
-      pending = loadImage(id).finally(() => imagesRunning.delete(id));
+      pending = gated(() => loadImage(id)).finally(() => imagesRunning.delete(id));
       imagesRunning.set(id, pending);
     }
     return pending;
@@ -239,7 +251,7 @@ export function createLinkPreviews({ dir, net = {}, now = Date.now }: { dir: str
       if (!fetchableUrl(url)) return Promise.resolve(emptyPreview(url));
       let pending = running.get(url.href);
       if (!pending) {
-        pending = load(url).finally(() => running.delete(url.href));
+        pending = gated(() => load(url)).finally(() => running.delete(url.href));
         running.set(url.href, pending);
       }
       return pending;

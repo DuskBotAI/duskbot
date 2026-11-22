@@ -84,7 +84,7 @@ describe("the profile photo", () => {
     vi.stubGlobal("fetch", fetched);
     try {
       await act(async () => root.render(createElement(ProfileFields)));
-      const email = host.querySelector<HTMLInputElement>('input[type="email"]')!;
+      const email = host.querySelector<HTMLInputElement>('input[inputmode="email"]')!;
       expect(email.readOnly).toBe(true);
       expect(email.value).toBe("bob@acme.test");
       const name = host.querySelector<HTMLInputElement>('input[aria-label="Your name"]')!;
@@ -108,5 +108,45 @@ describe("the profile photo", () => {
     await act(async () => image.dispatchEvent(new Event("error")));
     expect(host.querySelector("img")).toBeNull();
     expect(host.textContent).toBe("AL");
+  });
+});
+
+describe("name and email", () => {
+  const put = vi.fn();
+  const input = (label: string) => host.querySelector<HTMLInputElement>(`input[aria-label="${label}"]`)!;
+  const type = (field: HTMLInputElement, value: string) => act(() => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(field, value);
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  const blur = (field: HTMLInputElement) => act(async () => { field.dispatchEvent(new FocusEvent("focusout", { bubbles: true })); });
+
+  beforeEach(() => {
+    put.mockReset();
+    vi.stubGlobal("fetch", vi.fn(async (_url: string, init: RequestInit) => {
+      put(JSON.parse(String(init.body)));
+      return new Response(JSON.stringify({ profile: { name: "Ada", email: "" } }), { status: 200 });
+    }));
+    fixture.config = { profile: { name: "Ada", email: "" } };
+  });
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("keeps an address that is not an email from being saved and says so in the app's words", async () => {
+    await act(async () => root.render(createElement(ProfileFields)));
+    const email = input("Email");
+    expect(email.type, "no browser bubble in the browser's own language").toBe("text");
+    type(email, "not-an-email");
+    await blur(email);
+    expect(put).toHaveBeenCalledWith({ profile: { name: "Ada" } });
+    expect(host.querySelector('[role="alert"]')?.textContent).toBe("Use an email address like you@example.com. It wasn't saved.");
+    expect(email.getAttribute("aria-invalid")).toBe("true");
+    type(email, "ada@example.com");
+    expect(host.querySelector('[role="alert"]')).toBeNull();
+    await blur(email);
+    expect(put).toHaveBeenLastCalledWith({ profile: { name: "Ada", email: "ada@example.com" } });
+  });
+
+  it("caps the name at a bot name's length", async () => {
+    await act(async () => root.render(createElement(ProfileFields)));
+    expect(input("Your name").maxLength).toBe(80);
   });
 });

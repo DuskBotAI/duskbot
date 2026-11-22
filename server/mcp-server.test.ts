@@ -13,6 +13,7 @@ import {
   TOOLS,
   validateBaseUrl,
   validateToolArguments,
+  withoutLocalPaths,
 } from "../scripts/mcp-server.ts";
 
 const ORIGINAL_FETCH = globalThis.fetch;
@@ -521,6 +522,24 @@ describe("MCP tool execution", () => {
     expect(result.instances[0]).not.toHaveProperty("cliCandidates");
     expect(result.instances[0]).not.toHaveProperty("install");
     expect(result.instances[0].snapshot).toEqual({ state: "available" });
+  });
+
+  it("says why an engine is unusable and whether it is signed in, with no local path", async () => {
+    const fetcher = vi.fn(async () => ({ instances: [
+      { instanceId: "claude", snapshot: { state: "unavailable", reason: "`/secret/bin/claude` CLI not found" } },
+      { instanceId: "codex", snapshot: { state: "available", authenticated: false, account: { email: "a@example.test" } } },
+    ] }));
+    const result: any = await handleToolCall("list_available_models", {}, fetcher);
+    expect(result.instances[0].snapshot).toEqual({ state: "unavailable", reason: "`claude` CLI not found" });
+    expect(result.instances[1].snapshot).toEqual({ state: "available", authenticated: false });
+  });
+
+  it("cuts a quoted path whose folders hold spaces whole, so no folder name is left behind", () => {
+    expect(withoutLocalPaths("`/Users/Ada Byron/Library/Application Support/bin/claude` CLI not found")).toBe("`claude` CLI not found");
+    expect(withoutLocalPaths("`C:\\Users\\Ada Byron\\bin\\claude.exe` CLI not found")).toBe("`claude.exe` CLI not found");
+    expect(withoutLocalPaths('could not read "~/My Tools/codex/config.toml"')).toBe('could not read "config.toml"');
+    expect(withoutLocalPaths("spawn /opt/homebrew/bin/codex ENOENT")).toBe("spawn codex ENOENT");
+    expect(withoutLocalPaths("see https://example.test/a/b, or run `claude /login`")).toBe("see https://example.test/a/b, or run `claude /login`");
   });
 });
 

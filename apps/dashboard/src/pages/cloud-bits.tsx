@@ -1,5 +1,5 @@
 import { useState, type CSSProperties, type ReactNode } from "react";
-import { Cloud, LoaderCircle, Monitor, Power, Server } from "@/icons";
+import { Cloud, Monitor, Power, Server } from "@/icons";
 import type { WorkspaceSummary } from "../../../../shared/dashboard-protocol";
 import { useCloud } from "../data/cloud";
 import { wakeCloud } from "../data/cloud-wake";
@@ -7,7 +7,7 @@ import { api } from "../lib/api";
 import type { CheckoutSource, CloudDesktop, PlanCatalog } from "../data/contracts";
 import { bundleOf, desktopOf, dollars, planSpecLine } from "../data/pricing";
 import { planSelection, type PaidPlan } from "./plan-sheet";
-import { checkoutDone, trialAction, useQuickCheckout } from "./cloud-offer";
+import { checkoutDone, trialAction, usePlanChoice } from "./cloud-offer";
 import { useSession } from "../data/session";
 import { duration } from "../lib/format";
 import { Link, navigate } from "../lib/router";
@@ -139,10 +139,10 @@ export function QuickPick({ catalog, source, className, onDone, secondary }: { s
   );
 }
 
-/** the one cloud pitch: a line, a sentence, one button straight to checkout and the three mascots; home and the empty cloud page share it */
+/** the one cloud pitch: a line, a sentence, one button to the plan choice and the three mascots; home and the empty cloud page share it */
 export function CloudPitch({ source = "dash_cloud", title = "keep your bots on while your mac sleeps", body = "dusk cloud runs them all day and all night. set up in one click.", action, link = { to: "/billing", label: "see plans" }, className, id = "pitch-title", style }: { source?: CheckoutSource; title?: string; body?: ReactNode; action?: ReactNode | false; link?: { to: string; label: string } | null; className?: string; id?: string; style?: CSSProperties }) {
   const { catalog } = useCloud();
-  const { busy, error, buy } = useQuickCheckout(source);
+  const { choose, sheet } = usePlanChoice(source);
   return (
     <section className={cx("surface enter flex items-center gap-8 rounded-card bg-card px-8 py-7 max-sm:flex-col-reverse max-sm:items-start max-sm:gap-5 max-sm:p-5", className)} style={style} aria-labelledby={id}>
       <div className="min-w-0 flex-1">
@@ -150,11 +150,11 @@ export function CloudPitch({ source = "dash_cloud", title = "keep your bots on w
         <p className="mt-1.5 max-w-[52ch] text-14 leading-[1.55] text-ink-3">{body}</p>
         {(action !== false || link) && (
           <div className="mt-5 flex flex-wrap items-center gap-x-5 gap-y-2">
-            {action === false ? null : action ?? <Button variant="primary" onClick={() => void buy("starter")} disabled={busy || !catalog} aria-busy={busy}>{busy ? <><LoaderCircle size={17} strokeWidth={2} className="spin" aria-hidden />opening checkout</> : "get dusk cloud"}</Button>}
+            {action === false ? null : action ?? <Button variant="primary" onClick={() => choose("starter")} disabled={!catalog}>get dusk cloud</Button>}
             {link && <Link to={link.to} className="text-link inline-flex h-9 items-center text-14 max-sm:h-11">{link.label}</Link>}
           </div>
         )}
-        {error && <p role="alert" className="mt-3 text-13 text-bad">{error}</p>}
+        {sheet}
       </div>
       <div className="flex shrink-0 items-end gap-1 pe-2" aria-hidden>
         <Mascot color="orange" body="boxo" size={52} state="sleeping" />

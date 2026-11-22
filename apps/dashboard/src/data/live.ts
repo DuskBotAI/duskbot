@@ -145,7 +145,7 @@ export function accountFromWire(answer: AccountAnswer, now = Date.now(), storage
       ...(account.providers.includes("email") ? [{ provider: "email" as const, label: account.email, linkedAt: account.createdAt }] : []),
       ...answer.identities.map((identity) => ({ provider: identity.provider, label: identity.label ?? identity.email ?? "", linkedAt: identity.addedAt })),
     ],
-    devices: answer.sessions.map((session) => ({ id: session.id, kind: kinds[session.kind], label: session.name, platform: session.platform, location: null, createdAt: session.createdAt, lastSeenAt: session.lastSeenAt, current: session.current })),
+    devices: answer.sessions.map((session) => ({ id: session.id, kind: kinds[session.kind], label: session.kind === "web" && session.name === "Browser" ? "browser" : session.name, platform: session.platform, location: null, createdAt: session.createdAt, lastSeenAt: session.lastSeenAt, current: session.current })),
     notifications,
   };
 }

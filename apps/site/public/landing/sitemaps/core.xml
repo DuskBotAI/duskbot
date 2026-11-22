@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-  <url><loc>https://dusk.bot/</loc><lastmod>2026-11-16</lastmod></url>
+  <url><loc>https://dusk.bot/</loc><lastmod>2026-11-22</lastmod></url>
   <url><loc>https://dusk.bot/about</loc><lastmod>2026-11-19</lastmod></url>
   <url><loc>https://dusk.bot/acceptable-use</loc><lastmod>2026-11-13</lastmod></url>
   <url><loc>https://dusk.bot/brand</loc><lastmod>2026-11-12</lastmod></url>
@@ -18,20 +18,19 @@
   <url><loc>https://dusk.bot/docs/getting-started</loc><lastmod>2026-11-12</lastmod></url>
   <url><loc>https://dusk.bot/docs/group-chats</loc><lastmod>2026-11-12</lastmod></url>
   <url><loc>https://dusk.bot/docs/memory</loc><lastmod>2026-11-12</lastmod></url>
-  <url><loc>https://dusk.bot/docs/phone</loc><lastmod>2026-11-17</lastmod></url>
+  <url><loc>https://dusk.bot/docs/phone</loc><lastmod>2026-11-22</lastmod></url>
   <url><loc>https://dusk.bot/docs/privacy-and-data</loc><lastmod>2026-11-12</lastmod></url>
   <url><loc>https://dusk.bot/docs/routines</loc><lastmod>2026-11-12</lastmod></url>
   <url><loc>https://dusk.bot/docs/tips</loc><lastmod>2026-11-13</lastmod></url>
   <url><loc>https://dusk.bot/docs/troubleshooting</loc><lastmod>2026-11-12</lastmod></url>
   <url><loc>https://dusk.bot/docs/your-own-server</loc><lastmod>2026-11-19</lastmod></url>
-  <url><loc>https://dusk.bot/download</loc><lastmod>2026-11-20</lastmod></url>
+  <url><loc>https://dusk.bot/download</loc><lastmod>2026-11-21</lastmod></url>
   <url><loc>https://dusk.bot/license</loc><lastmod>2026-11-19</lastmod></url>
-  <url><loc>https://dusk.bot/pricing</loc><lastmod>2026-11-13</lastmod></url>
+  <url><loc>https://dusk.bot/pricing</loc><lastmod>2026-11-22</lastmod></url>
   <url><loc>https://dusk.bot/privacy</loc><lastmod>2026-11-16</lastmod></url>
   <url><loc>https://dusk.bot/refunds</loc><lastmod>2026-11-13</lastmod></url>
   <url><loc>https://dusk.bot/security</loc><lastmod>2026-11-12</lastmod></url>
   <url><loc>https://dusk.bot/subprocessors</loc><lastmod>2026-11-15</lastmod></url>
-  <url><loc>https://dusk.bot/support</loc><lastmod>2026-11-14</lastmod></url>
   <url><loc>https://dusk.bot/terms</loc><lastmod>2026-11-15</lastmod></url>
   <url><loc>https://dusk.bot/waitlist</loc><lastmod>2026-11-15</lastmod></url>
 </urlset>

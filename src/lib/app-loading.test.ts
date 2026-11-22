@@ -6,16 +6,17 @@ import { loadingLine } from "./app-loading";
 
 afterEach(() => { vi.unstubAllGlobals(); });
 
-const line = (connected: boolean, hydrated: boolean, { updating = false, developer = false } = {}) => loadingLine({ connected, hydrated, updating, developer });
+const line = (connected: boolean, hydrated: boolean, { updating = false, developer = false, unreachable = false } = {}) =>
+  loadingLine({ connected, hydrated, updating, developer, unreachable });
 
 it("says No bots yet only once the bots have loaded and there are none, never while they load after the move", () => {
-  expect(line(true, false), "connected, bots not loaded yet").toEqual({ text: "app.loading.connecting", busy: true, command: false });
+  expect(line(true, false), "connected, bots not loaded yet").toEqual({ text: "app.loading.connecting", busy: true, command: false, failed: false });
   expect(line(false, false).text).toBe("app.loading.connecting");
-  expect(line(true, true)).toEqual({ text: "app.loading.noBots", busy: false, command: false });
+  expect(line(true, true)).toEqual({ text: "app.loading.noBots", busy: false, command: false, failed: false });
 });
 
 it("says Updating My Cloud… while the page the window reloaded for its newer version loads", () => {
-  expect(line(false, false, { updating: true })).toEqual({ text: "app.loading.updating", busy: true, command: false });
+  expect(line(false, false, { updating: true })).toEqual({ text: "app.loading.updating", busy: true, command: false, failed: false });
   expect(line(true, false, { updating: true }).text).toBe("app.loading.updating");
   expect(line(true, true, { updating: true }).text, "loaded: the update is over").toBe("app.loading.noBots");
 });
@@ -44,4 +45,10 @@ it("the app's main area says what loadingLine says, and the command only when it
   expect(main).toContain("{t(loading.text)}");
   expect(main).toMatch(/\{loading\.command && \(\s*<p[^]*?pnpm dev:server/u);
   expect(main).not.toContain("app.loading.noBots");
+});
+
+it("stops the endless loader once the server has not answered: says it can't be reached, with the command in a developer's build", () => {
+  expect(line(false, false, { unreachable: true })).toEqual({ text: "app.loading.unreachable", busy: false, command: false, failed: true });
+  expect(line(false, false, { unreachable: true, developer: true }).command).toBe(true);
+  expect(line(true, true, { unreachable: true }).text, "loaded after all").toBe("app.loading.noBots");
 });

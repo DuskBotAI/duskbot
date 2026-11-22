@@ -1,6 +1,6 @@
 #!/usr/bin/env -S node --experimental-strip-types
 // Creates or updates the Dodo products that sell each plan as ONE line (plan_pro, plan_team, month and year) and names the
-// plain cloud products, so a checkout shows "dusk cloud Pro (monthly)" at its full price and no separate licence line.
+// plain cloud products, so a checkout shows "dusk cloud pro (monthly)" at its full price and no separate licence line.
 // Prices come from the billing config (a plan's quote), so the products cannot drift from what the account service charges.
 //
 //   DUSK_DODO_API_KEY=... DUSK_DODO_MODE=test DUSK_DODO_PRODUCTS='{...}' node scripts/dodo-plan-products.ts [--apply] [--out map.json]
@@ -33,9 +33,9 @@ for (const interval of ["month", "year"] as const) {
   const word = interval === "month" ? "monthly" : "yearly";
   for (const bundle of BILLING_CONFIG.bundles) {
     const total = quote({ ...bundle.cart, interval }, BILLING_CONFIG).totalCents;
-    if (bundle.id === "starter") wanted.push({ key: `desktop_shared_s:${interval}`, name: `dusk cloud Plus (${word})`, cents: total, description: bundle.highlights.join(". ") });
-    if (bundle.id === "pro") wanted.push({ key: `plan_pro:${interval}`, name: `dusk cloud Pro (${word})`, cents: total, description: bundle.highlights.join(". ") });
-    if (bundle.id === "team") wanted.push({ key: `plan_team:${interval}`, name: `dusk cloud Team (${word})`, cents: total, description: bundle.highlights.join(". ") });
+    if (bundle.id === "starter") wanted.push({ key: `desktop_shared_s:${interval}`, name: `dusk cloud plus (${word})`, cents: total, description: bundle.highlights.join(". ") });
+    if (bundle.id === "pro") wanted.push({ key: `plan_pro:${interval}`, name: `dusk cloud pro (${word})`, cents: total, description: bundle.highlights.join(". ") });
+    if (bundle.id === "team") wanted.push({ key: `plan_team:${interval}`, name: `dusk cloud team (${word})`, cents: total, description: bundle.highlights.join(". ") });
   }
 }
 for (const w of wanted) {
@@ -51,7 +51,7 @@ for (const w of wanted) {
   if (!same && apply) await call(`/products/${encodeURIComponent(id)}`, "PATCH", { name: w.name, description: w.description, ...(have!.price?.price === w.cents ? {} : { price: price(w.cents, w.key.endsWith(":year") ? "year" : "month") }) });
 }
 // the cloud-only products used when a licence is already held keep their price; only their name changes so it never reads as the plan
-const renames: Record<string, string> = { "desktop_shared_m": "dusk cloud Pro, extra cloud" };
+const renames: Record<string, string> = { "desktop_shared_m": "dusk cloud pro, extra cloud" };
 for (const interval of ["month", "year"] as const) for (const [k, label] of Object.entries(renames)) {
   const id = map[`${k}:${interval}`], name = `${label} (${interval === "month" ? "monthly" : "yearly"})`;
   if (!id) continue;

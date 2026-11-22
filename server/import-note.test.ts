@@ -28,6 +28,17 @@ describe("the first bot's note after a bring-in", () => {
     expect(importNoteText({ from: ["ChatGPT"], start: true })).toBe("Got it. Setting up your bots, memories and routines now…");
   });
 
+  it("says when the notes were cut off, and when nothing in them was new", () => {
+    expect(importNoteText({ from: ["Grok Bot"], bots: ["Kiln"], partial: true })).toMatch(/The end of your notes was cut off\. Ask for the rest and paste it here too\. Ask me about any of it\.$/);
+    expect(importNoteText({ from: ["Claude"], joined: 2 })).toContain("\n- 2 bots already here, with more of what they knew\n");
+    expect(importNoteText({ from: ["Grok Bot"], nothingNew: true })).toBe("Nothing new from Grok Bot: it was all here already.");
+    expect(importNoteText({ from: ["Grok Bot"], nothingNew: true, failed: true })).toBe("A few things couldn't come in. Try again from settings → general → import.");
+  });
+
+  it("says where facts that didn't fit in About me went", () => {
+    expect(importNoteText({ from: ["ChatGPT"], facts: 40, aboutInMemory: 12 })).toContain("\n- 40 things about you, now in about me\n- 12 more things about you that didn't fit in about me, kept in memory\n");
+  });
+
   it("says it found the notes in Downloads when they came by themselves", () => {
     expect(importNoteText({ from: ["ChatGPT"], facts: 4, via: "downloads" })).toMatch(/^I found your notes from ChatGPT in Downloads and brought them in:\n- 4 things about you/);
   });

@@ -120,6 +120,9 @@ export interface PackageImportResult {
 
 export type ImportResult = PackageImportResult | { alreadyAdded: true; installId: string };
 
+/** The category of a package that moves a bot in from another app: its id names that bot, so it is added once. */
+export const MOVED_IN_CATEGORY = "Imported";
+
 export function orgInstallId(adminOrigin: string, organizationId: string, packageId: string): string {
   return createHash("sha256").update(`omb-install:v1\n${adminOrigin}\n${organizationId}\n${packageId}`, "utf8").digest("hex").slice(0, 32);
 }
@@ -194,6 +197,10 @@ export function importPackageDocument(
     }
   }
   if (library) return importLibraryFile(document, deps.presets!);
+  const moved = options.trust === "file" && pkg.category === MOVED_IN_CATEGORY
+    ? deps.store.bots.find((bot) => !bot.hidden && bot.installedPackage?.source === "file" && bot.installedPackage.id === pkg.id)?.installedPackage
+    : undefined;
+  if (moved) return { alreadyAdded: true, installId: moved.installId ?? pkg.id };
   return runImport({ kind: "package", document }, options, deps);
 }
 

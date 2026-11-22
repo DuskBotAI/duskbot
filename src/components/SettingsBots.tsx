@@ -216,7 +216,7 @@ function BotRows({ bot }: { bot: Bot }) {
         <SwitchRow title={t("settings.bots.panel.botPanelMemoryRow")} hint={memoryOn ? memoryLine : t("settings.bots.panel.botPanelMemoryOff")} label={t("memory.enable")} checked={memoryOn}
           disabled={Boolean(bot.busy) || !editable} onChange={() => derived.patch({ memoryEnabled: !memoryOn })} />
         {memoryOn && <NavRow data-panel-page="memory" title={t("sheet.rows.notes")} hint={t("settings.bots.hint.notes")} onClick={() => open("bot:memory", sheetLabel("memory", bot))} />}
-        {row("skills", skills.loading ? undefined : skillsOn > 0 ? t("settings.bots.panel.botPanelSkillsOn", { count: skillsOn }) : t("settings.bots.panel.botPanelNone"))}
+        {row("skills", skills.loading ? undefined : skills.loadFailed ? t("botPanel.skills.notLoaded") : skillsOn > 0 ? t("settings.bots.panel.botPanelSkillsOn", { count: skillsOn }) : t("settings.bots.panel.botPanelNone"))}
       </Card>
       <Card label={t("botSettings.sections.access")} data-settings-block="bot-access">
         {row("tools", bot.toolScope !== undefined ? t("settings.bots.panel.botPanelToolsCustom") : undefined)}

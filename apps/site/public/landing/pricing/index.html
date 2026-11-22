@@ -32,6 +32,7 @@
 <script type="application/ld+json">{"@context":"https://schema.org","@type":"FAQPage","mainEntity":[{"@type":"Question","name":"is the free plan really free?","acceptedAnswer":{"@type":"Answer","text":"yes, for personal use. the app runs on your computer or your own server with every feature. no card, no account and no trial timer."}},{"@type":"Question","name":"what counts as work?","acceptedAnswer":{"@type":"Answer","text":"using dusk bot at or for a business. that needs a work license: pro includes one for one person, you can add one on its own for $12 a month, and a team plan covers a team. study, hobby projects and personal use are free. the license has the exact words."}},{"@type":"Question","name":"how does yearly billing work?","acceptedAnswer":{"@type":"Answer","text":"you pay for ten months and get twelve. plus is $200 a year, pro is $500 a year and team is $1,190 a year."}},{"@type":"Question","name":"who bills me for the ai?","acceptedAnswer":{"@type":"Answer","text":"your ai provider, on the plan or key you already have. a dusk plan pays for the cloud computer and the license, not for ai usage."}},{"@type":"Question","name":"do i need an account?","acceptedAnswer":{"@type":"Answer","text":"not for the free plan. an account at dusk.bot/dashboard is only needed for a paid plan, and it is also where you see your workspaces side by side."}},{"@type":"Question","name":"how do i pay, and where are my invoices?","acceptedAnswer":{"@type":"Answer","text":"by card at checkout. payments, tax and invoices are handled by dodo payments, our merchant of record. your invoices show up on the billing page of your account. we never see or store your card number."}},{"@type":"Question","name":"can i cancel?","acceptedAnswer":{"@type":"Answer","text":"any time, from the billing page of your account. cancelling a dusk plan does not cancel your ai subscriptions. those are separate and stay yours."}},{"@type":"Question","name":"what happens to my bots if i stop paying?","acceptedAnswer":{"@type":"Answer","text":"bots on your own computer or server are not affected. a cloud computer is kept for 30 days after the plan ends and is then deleted (we email you a week before), so move or save what you need first."}}]}</script>
 </head>
 <body>
+<!--email_off-->
 <a class="skip" href="#main">skip to the page</a>
 <header class="bar"><a class="brand" href="/"><img src="/art/logo-96.webp" alt="" width="28" height="28">dusk bot</a><nav aria-label="main"><a href="/download">download</a><a href="/docs">docs</a><a href="/pricing" aria-current="page">pricing</a><a class="cta" href="/dashboard/">sign in</a></nav><details class="menu"><summary><span class="vh">menu</span><span class="burger" aria-hidden="true"><i></i><i></i><i></i></span></summary><nav aria-label="every page"><a href="/download">download</a><a href="/docs">docs</a><a href="/pricing" aria-current="page">pricing</a><a href="/changelog">what's new</a><a href="/about">about</a><a href="/contact">contact</a><a class="cta" href="/dashboard/">sign in</a></nav></details></header>
 <main id="main" class="inner p-pricing">
@@ -68,7 +69,7 @@
       <img class="plan-art" src="/art/p-meadow.webp?v=4e4830d2" alt="" width="800" height="354">
       <h2>plus</h2>
       <p class="why">your bots keep working with the laptop shut.</p>
-      <p class="plan-price"><span class="amt">$<span data-m="20" data-y="200">20</span></span><span class="per" data-m="a month" data-y="a year. two months free.">a month</span></p>
+      <p class="plan-price"><span class="amt">$<span data-m="20" data-y="200">20</span></span><span class="per" data-m="a month" data-y="a year. two months free.">a month</span><span class="per">+ tax where applicable</span></p>
       <a class="btn light" href="/dashboard/signup?plan=plus" data-dusk-value="plus">get started</a>
       <ul class="has">
         <li><svg class="i" viewBox="-0.5 -0.5 17 17" fill="none" aria-hidden="true"><path fill="currentColor" fill-rule="evenodd" d="M13.488 3.43a.75.75 0 0 1 .081 1.058l-6 7a.75.75 0 0 1-1.1.042l-3.5-3.5A.75.75 0 0 1 4.03 6.97l2.928 2.927 5.473-6.385a.75.75 0 0 1 1.057-.081" clip-rule="evenodd"/></svg>everything in free</li>
@@ -83,7 +84,7 @@
       <img class="plan-art" src="/art/p-peaks.webp?v=bc51fca3" alt="" width="800" height="354">
       <h2>pro</h2>
       <p class="why">for heavy workloads, and for work.</p>
-      <p class="plan-price"><span class="amt">$<span data-m="50" data-y="500">50</span></span><span class="per" data-m="a month" data-y="a year. two months free.">a month</span></p>
+      <p class="plan-price"><span class="amt">$<span data-m="50" data-y="500">50</span></span><span class="per" data-m="a month" data-y="a year. two months free.">a month</span><span class="per">+ tax where applicable</span></p>
       <a class="btn light" href="/dashboard/signup?plan=pro" data-dusk-value="pro">get started</a>
       <ul class="has">
         <li><svg class="i" viewBox="-0.5 -0.5 17 17" fill="none" aria-hidden="true"><path fill="currentColor" fill-rule="evenodd" d="M13.488 3.43a.75.75 0 0 1 .081 1.058l-6 7a.75.75 0 0 1-1.1.042l-3.5-3.5A.75.75 0 0 1 4.03 6.97l2.928 2.927 5.473-6.385a.75.75 0 0 1 1.057-.081" clip-rule="evenodd"/></svg>everything in plus</li>
@@ -95,8 +96,8 @@
 
   </div>
   <div class="team-line">
-    <div><h2>a team?</h2><p>team is $119 a month, or $1,190 a year: a team license with 2 seats and a dedicated dusk cloud with 8 vcpu, 16 gb ram and a 160 gb disk, with priority wake. each extra team member is $20 a month, up to 50. <a href="mailto:hello@dusk.bot?subject=dusk%20bot%20for%20a%20team">write to us</a> and we will set it up, or add the team license on its own from your account.</p></div>
-    <a class="btn dark" href="/dashboard/billing?plan=team" data-dusk-value="team">get a team license</a>
+    <div><h2>a team?</h2><p>a team license is $30 a month, + tax where applicable, with 2 seats for using dusk bot at work. each extra member is $20 a month, up to 50. it covers the app; add plus or pro for dusk cloud. for a dedicated team cloud with 8 vcpu, 16 gb ram and a 160 gb disk ($119 a month with the license, or $1,190 a year), <a href="mailto:hello@dusk.bot?subject=dusk%20bot%20for%20a%20team">write to us</a> and we will set it up.</p></div>
+    <a class="btn dark" href="/dashboard/billing?plan=team" data-dusk-value="team">get a team license, $30/mo</a>
   </div>
 </section>
 
@@ -145,5 +146,6 @@
 <script src="/mascot.js?v=d75a43e6" defer></script>
 <script src="/site.js?v=f8803a70" defer></script>
 <script src="/pages.js?v=03966c49" defer></script>
+<!--/email_off-->
 </body>
 </html>

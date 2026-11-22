@@ -8,7 +8,7 @@ import { BILLING_CONFIG } from "./plans.ts";
 import { quote } from "./pricing.ts";
 import { createFakeBillingProvider } from "./fake-provider.ts";
 import { createBillingStore } from "./store.ts";
-import { CHECKOUT_BURST, CHECKOUT_REUSE_MS, createBillingService } from "./service.ts";
+import { CHECKOUT_BURST, CHECKOUT_REUSE_MS, createBillingService, type PaymentRetryMode } from "./service.ts";
 import { BillingProviderError } from "./types.ts";
 
 const owner = { id: "owner", email: "owner@example.com" }, stranger = { id: "stranger", email: "stranger@example.com" };
@@ -1099,6 +1099,52 @@ describe("payment problems", () => {
     return notices;
   }
   const kinds = (notices: Array<{ kind: string; step?: string }>) => notices.map(notice => notice.step ? `${notice.kind}:${notice.step}` : notice.kind);
+  function retryWith(retry: PaymentRetryMode) { service.close(); service = createBillingService({ store, provider, clouds, config, publicUrl: "https://dashboard.test", now: () => time, retry }); }
+  const failedRenewal = (sub: { providerSubscriptionId: string | null; checkoutId: string; totalCents: number }, id: string) => deliver([signed("payment.failed", { payment_id: id, subscription_id: sub.providerSubscriptionId,
+    customer: { customer_id: provider.subscriptions.get(sub.providerSubscriptionId!)!.customerId }, metadata: { checkoutId: sub.checkoutId, accountId: owner.id }, total_amount: sub.totalCents, currency: "USD" })]);
+  async function unpaidTrial() {
+    config.trial = { days: 3 };
+    const answer = await service.checkout(owner, { kind: "cart", cart: desktopOnly() });
+    deliver(provider.complete(store.state.checkouts.find(row => row.id === answer.checkoutId)!.providerSessionId!));
+    const sub = store.state.subscriptions[0]!;
+    time = sub.trialEndsAt! + 60_000; failedRenewal(sub, "pay_trial"); deliver(provider.fail(sub.providerSubscriptionId!));
+    return sub;
+  }
+
+  it("retries nothing unless DUSK_BILLING_RETRY says so: off by default", async () => {
+    const { sub } = await buy(); time += day;
+    failedRenewal(sub, "pay_off"); deliver(provider.fail(sub.providerSubscriptionId!));
+    for (const at of [1, 3, 6]) { time = sub.paymentProblem!.since + at * day; expect(await service.retryPayments()).toEqual({ sent: 0 }); }
+    retryWith("off"); await service.retryPayments();
+    expect(provider.retryCalls).toEqual([]); expect(sub.paymentProblem!.retries).toBeUndefined();
+  });
+
+  it("paid retries a plan that was paid before and never a trial's unpaid first charge; all retries both", async () => {
+    retryWith("paid");
+    const trial = await unpaidTrial();
+    for (const at of [1, 3, 6]) { time = trial.paymentProblem!.since + at * day; await service.retryPayments(); }
+    expect(provider.retryCalls).toEqual([]);
+    retryWith("all"); await service.retryPayments();
+    expect(provider.retryCalls).toEqual(["pay_trial"]);
+  });
+
+  it("paid retries a renewal of a plan that was paid", async () => {
+    retryWith("paid");
+    const { sub } = await buy(); time += day;
+    failedRenewal(sub, "pay_paid"); deliver(provider.fail(sub.providerSubscriptionId!));
+    time = sub.paymentProblem!.since + day; expect(await service.retryPayments()).toEqual({ sent: 1 });
+    expect(provider.retryCalls).toEqual(["pay_paid"]);
+  });
+
+  it("never retries a plan we already ended, even one the provider still holds", async () => {
+    retryWith("all");
+    const { sub } = await buy(); time += day;
+    failedRenewal(sub, "pay_ended"); deliver(provider.fail(sub.providerSubscriptionId!));
+    sub.cancelAtPeriodEnd = true; time = sub.currentPeriodEnd! + 1; service.dunning();
+    expect(sub.status).toBe("ended");
+    sub.cancelAtPeriodEnd = false; time += 2 * day; await service.retryPayments();
+    expect(provider.retryCalls).toEqual([]);
+  });
 
   it("sends one email per step: the failure, day 14, 3 days before the fix-by date, never twice across retries and restarts", async () => {
     const { sub } = await buy(); const notices = withNotices();
@@ -1160,6 +1206,53 @@ describe("payment problems", () => {
     time += 2 * day; deliver(provider.expire(sub.providerSubscriptionId!));
     expect(sub.status).toBe("ended"); expect(sub.paymentProblem).toBeDefined();
     expect(clouds.end).toHaveBeenLastCalledWith(sub.cloudId, time + config.graceDays * day);
+  });
+
+  it("charges a failed renewal again on days 1, 3 and 6 on the saved card, and stops when it is fixed or the provider can't", async () => {
+    retryWith("all"); const { sub } = await buy(); time += day;
+    const failedCharge = (id: string) => deliver([signed("payment.failed", { payment_id: id, subscription_id: sub.providerSubscriptionId, customer: { customer_id: provider.subscriptions.get(sub.providerSubscriptionId!)!.customerId },
+      metadata: { checkoutId: sub.checkoutId, accountId: owner.id }, total_amount: sub.totalCents, currency: "USD" })]);
+    failedCharge("pay_renewal"); deliver(provider.fail(sub.providerSubscriptionId!));
+    const since = sub.paymentProblem!.since;
+    expect(await service.retryPayments()).toEqual({ sent: 0 });
+    time = since + day; expect(await service.retryPayments()).toEqual({ sent: 1 }); expect(await service.retryPayments()).toEqual({ sent: 0 });
+    expect(provider.retryCalls).toEqual(["pay_renewal"]);
+    provider.retryAnswer = "later"; time = since + 3 * day; await service.retryPayments();
+    expect(sub.paymentProblem!.retries).toBe(1);
+    provider.retryAnswer = "sent"; failedCharge("pay_retry_1"); await service.retryPayments();
+    expect(provider.retryCalls.at(-1)).toBe("pay_retry_1"); expect(sub.paymentProblem!.retries).toBe(2);
+    provider.retryAnswer = "refused"; time = since + 6 * day; await service.retryPayments();
+    expect(sub.paymentProblem!.retries).toBe(3); time = since + 9 * day; await service.retryPayments();
+    expect(provider.retryCalls).toHaveLength(4);
+  });
+
+  it("never retries a plan set to end, and a charge that goes through restores it like a fixed card", async () => {
+    retryWith("all"); const { sub } = await buy(); time += day;
+    deliver([signed("payment.failed", { payment_id: "pay_r", subscription_id: sub.providerSubscriptionId, customer: { customer_id: provider.subscriptions.get(sub.providerSubscriptionId!)!.customerId }, metadata: { checkoutId: sub.checkoutId, accountId: owner.id }, total_amount: sub.totalCents, currency: "USD" })]);
+    deliver(provider.fail(sub.providerSubscriptionId!));
+    sub.cancelAtPeriodEnd = true; time += day; await service.retryPayments(); expect(provider.retryCalls).toEqual([]);
+    sub.cancelAtPeriodEnd = false; await service.retryPayments(); expect(provider.retryCalls).toEqual(["pay_r"]);
+    deliver(provider.renew(sub.providerSubscriptionId!));
+    expect(sub.status).toBe("active"); expect(sub.paymentProblem).toBeUndefined();
+    time += 5 * day; await service.retryPayments(); expect(provider.retryCalls).toHaveLength(1);
+  });
+
+  it("a trial's failed first charge is retried before its data goes on day 7 when all are on", async () => {
+    retryWith("all");
+    const sub = await unpaidTrial();
+    for (const at of [1, 3, 6]) { time = sub.paymentProblem!.since + at * day; await service.retryPayments(); }
+    expect(provider.retryCalls).toEqual(["pay_trial", "pay_trial", "pay_trial"]);
+    expect(time).toBeLessThan(sub.paymentProblem!.fixBy);
+  });
+
+  it("a plan that failed before retries existed gets them spaced from the first one sent, never several at once", async () => {
+    retryWith("all"); const { sub } = await buy(); time += day;
+    deliver([signed("payment.failed", { payment_id: "pay_old", subscription_id: sub.providerSubscriptionId, customer: { customer_id: provider.subscriptions.get(sub.providerSubscriptionId!)!.customerId }, metadata: { checkoutId: sub.checkoutId, accountId: owner.id }, total_amount: sub.totalCents, currency: "USD" })]);
+    deliver(provider.fail(sub.providerSubscriptionId!));
+    time = sub.paymentProblem!.since + 5 * day; await service.retryPayments(); await service.retryPayments();
+    time += 10 * 60_000; await service.retryPayments();
+    expect(provider.retryCalls).toHaveLength(1);
+    time += 2 * day; await service.retryPayments(); expect(provider.retryCalls).toHaveLength(2);
   });
 
   it("a trial's unpaid first charge gets one email and no reminders, and its plan ends 7 days after the trial", async () => {

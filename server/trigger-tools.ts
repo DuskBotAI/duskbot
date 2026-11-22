@@ -185,8 +185,12 @@ const triggerRequestSchema = z.union([
   z.object({ ...source, action: z.enum(["pause", "resume", "delete"]), triggerId: z.string().min(1).max(200) }).strict(),
   z.object({ ...source, action: z.literal("run_now"), triggerId: z.string().min(1).max(200), test: z.literal(true).optional(), payload: z.unknown().optional() }).strict(),
 ]);
-/** A sample body a bot tests its webhook with, as the sending app would post it. */
+/** A sample body a bot tests its webhook or app event with, as the sending app would post it. */
 const TEST_PAYLOAD_MAX = 32 * 1024;
+const SAMPLE_NEEDED = {
+  webhook: "Nothing ran: a webhook's run_now runs its real steps on a sample, never a dry run. Call trigger action=run_now again with this trigger_id and payload, a realistic sample shaped as that app posts it (its usual field names), with the person's own name and email, and no test, so the row lands and the email reaches them.",
+  app: "Nothing ran: an app event's run_now runs its real steps on a sample, never a dry run. Call trigger action=run_now again with this trigger_id and payload, a realistic sample of that event as the app sends it (its usual field names), with the person's own name and email, and no test.",
+} as const;
 
 const WEBHOOK_FIELDS = new Set(["name", "instructions", "runOn", "eventTypes"]);
 const APP_FIELDS = new Set(["name", "instructions", "runOn", "filter", "config"]);
@@ -195,7 +199,7 @@ export type ParsedTriggerRequest =
   | { ok: false; error: string }
   | { ok: true; kind: "schedule"; forBotId: unknown; proposal: { action: string; routine?: unknown; routineId?: string; changes?: unknown; test?: boolean } }
   | { ok: true; kind: "webhook"; forBotId: unknown; operation: { action: string; webhook?: unknown; webhookId?: string; changes?: unknown }; payload?: JsonValue }
-  | { ok: true; kind: "app"; forBotId: unknown; operation: { action: string; trigger?: unknown; triggerId?: string; changes?: unknown } };
+  | { ok: true; kind: "app"; forBotId: unknown; operation: { action: string; trigger?: unknown; triggerId?: string; changes?: unknown }; payload?: JsonValue };
 
 /** A create names its kind; a change finds it from the trigger id (routine, webhook and app-event ids never collide). */
 const WEEKDAY = "monday|tuesday|wednesday|thursday|friday|saturday|sunday";
@@ -230,16 +234,17 @@ export function parseTriggerRequest(body: unknown, kindOf: (id: string) => "sche
   const changes = request.action === "update" ? request.changes : undefined;
   const kind = kindOf(request.triggerId);
   const payload = request.action === "run_now" ? request.payload : undefined;
+  if (payload !== undefined && kind === "schedule") return { ok: false, error: "payload is for run_now on a webhook or app event: a sample of what the sending app posts. A schedule runs without one." };
+  // a webhook or app event never dry-runs: its test is a realistic sample run through its real steps
+  if (request.action === "run_now" && kind !== "schedule" && (payload === undefined || request.test)) return { ok: false, error: SAMPLE_NEEDED[kind] };
   if (payload !== undefined) {
-    if (kind !== "webhook") return { ok: false, error: "payload is for run_now on a webhook trigger: a sample of what the sending app posts. A schedule or app event runs without one." };
-    if (request.action === "run_now" && request.test) return { ok: false, error: "A webhook test with payload runs the real steps; leave test out, and use the person's own address in the sample so nothing reaches a stranger." };
-    if (payload === null || typeof payload !== "object") return { ok: false, error: "payload must be a JSON object: the body the sending app posts." };
+    if (payload === null || typeof payload !== "object" || Array.isArray(payload)) return { ok: false, error: "payload must be a JSON object: the body the sending app posts." };
     if (JSON.stringify(payload).length > TEST_PAYLOAD_MAX) return { ok: false, error: "payload is too long: send a sample of at most 32 KB." };
   }
   if (kind === "app") {
     const misplaced = changes && Object.keys(changes).find((key) => !APP_FIELDS.has(key));
     if (misplaced) return { ok: false, error: `An app-event trigger has no ${misplaced} to change. Change name, instructions, run_on, filter or event_config; to watch another app, event or account, delete it and create a new one.` };
-    return { ok: true, kind: "app", forBotId: request.forBotId, operation: { action: request.action, triggerId: request.triggerId, ...(changes ? { changes } : {}) } };
+    return { ok: true, kind: "app", forBotId: request.forBotId, operation: { action: request.action, triggerId: request.triggerId, ...(changes ? { changes } : {}) }, ...(payload !== undefined ? { payload: payload as JsonValue } : {}) };
   }
   if (kind === "schedule") {
     if (changes && "eventTypes" in changes) return { ok: false, error: "webhook_event_types applies only to webhook triggers" };

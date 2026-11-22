@@ -104,10 +104,10 @@ export const BACKUP_LONG_HOLD_MS = 14 * DAY_MS;
  * The generations a cloud no longer needs. Kept: the newest verified one of each of the latest `keep` UTC days that have one,
  * so a home backed up several times a day keeps a day's worth of copies rather than hours of them; the oldest verified one
  * while it is under BACKUP_LONG_HOLD_MS older than the newest, so a home that wiped its own data cannot push every good copy
- * out within a few days; and any file in `protect` (a restore under way). A generation that failed its check is dropped
- * once a newer one passed.
+ * out within a few days (unless `longHold` is false: an archived home, whose provider snapshot is the other copy); and any
+ * file in `protect` (a restore under way). A generation that failed its check is dropped once a newer one passed.
  */
-export function prunableBackups<G extends Generation>(generations: readonly G[], options: { keep: number; protect?: readonly string[] }): G[] {
+export function prunableBackups<G extends Generation>(generations: readonly G[], options: { keep: number; protect?: readonly string[]; longHold?: boolean }): G[] {
   const verified = generations.filter(g => g.verifiedAt !== null).sort((a, b) => b.snapshotAt - a.snapshotAt);
   const newest = verified[0];
   if (!newest) return [];
@@ -119,7 +119,7 @@ export function prunableBackups<G extends Generation>(generations: readonly G[],
     days.add(day); kept.add(g);
   }
   const oldest = verified.at(-1)!;
-  if (newest.snapshotAt - oldest.snapshotAt < BACKUP_LONG_HOLD_MS) kept.add(oldest);
+  if (options.longHold !== false && newest.snapshotAt - oldest.snapshotAt < BACKUP_LONG_HOLD_MS) kept.add(oldest);
   const protect = new Set(options.protect ?? []);
   return generations.filter(g => !kept.has(g) && !protect.has(g.file) && (g.verifiedAt !== null || g.snapshotAt < newest.snapshotAt));
 }

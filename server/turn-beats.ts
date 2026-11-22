@@ -117,6 +117,9 @@ const SETUP_ASK = /\b(?:remind|reminder|notify|alert|ping me|tell me (?:when|if|
 const MAKE_ASK = /\b(?:make (?:me |us )?(?:an?|the|my|some|\d+)\b|draw|sketch|illustrate|audit|go through)|\b(?:an?|the|my) (?:image|picture|thumbnail|logo|poster|banner|chart|graph|deck|slides?|spreadsheet|pdf)\b/i;
 const SETUP_ASK_PT_ES = /\b(?:tod[oa]s (?:os|as|los|las) (?:dias|días|semanas|manh(?:ã|a)s|mañanas|noites|noches|segundas|lunes)|tod[ao] (?:dia|día|semana|segunda|lunes)|cada (?:dia|día|semana|manh(?:ã|a)|mañana|hora)|lembr[ae]|recu(?:é|e)rd|avis[ae]|av(?:í|i)same|me avise|cancel[ae])/i;
 
+/** A message that only says yes to something earlier in the chat ("go ahead and set it up", "ok do that"). */
+const GO_AHEAD = /^\s*(?:ok(?:ay)?|yes|yep|yeah|sure|great|perfect|sounds good|looks good|go ahead|do it|do that|please do|set it up|go for it)\b[^?]{0,40}$/i;
+
 /** Whether a message asks for work that is worth an ack before any tool has run. */
 export function looksLikeWork(text: string, attachments: number): boolean {
   return classifyTurn({ text, attachments, priorTurnUsedTools: false }) === "complex" || SETUP_ASK.test(text) || MAKE_ASK.test(text) || SETUP_ASK_PT_ES.test(text);
@@ -156,7 +159,7 @@ export function beatPrompt(kind: BeatKind, input: { name: string; soul?: string;
       "Write the acknowledgement they see first.",
       "- One sentence, 6 to 20 words, present tense, naming the concrete action and object, like \"On it, pulling this week's Delhi to Goa fares.\" or \"Got it, comparing the three plans now.\" Write names and products exactly as the person did (EndNote, not \"the endnote\"). Say it in your own words, never their sentence back, and never a stock phrase like \"I'd be happy to help\".",
       "- When the work needs their own inbox, files, computer, account or a booking, name the check, never the work as underway: \"Checking your support inbox.\", not \"Going through your inbox now.\"",
-      "- When the work cannot start without a detail only the person can give (where they are, for a nearest or near-me ask that names no place; which of two accounts; a date they never gave), never say the work is underway: reply ASK: and one short question for just that detail, the one place a question is allowed (\"ASK: Which area or landmark are you near?\").",
+      "- When the work cannot start without a detail only the person can give (where they are, for a nearest or near-me ask that names no place; which of two accounts; a date they never gave), never say the work is underway: reply ASK: and one short question for just that detail, the one place a question is allowed (\"ASK: Which area or landmark are you near?\"). You see only this message, not the chat before it: a go-ahead or a pointer back (\"go ahead and set it up\", \"do that\") never gets ASK; reply SKIP.",
       `- Reply exactly SKIP only if the message is a greeting, thanks or small talk, or ${input.name}'s setup says it asks before using tools. Any other ask for work gets an ack: a correction or a change ("wait, it's in Rust") gets one naming the change, and setting up a watch or an automation names what is being set up.`,
       SHARED_RULES(input.name),
     ].join("\n");
@@ -244,7 +247,8 @@ export function createTurnBeats(deps: TurnBeatsDeps) {
     void written.then((reply) => {
       if (beat.phase !== "writing") return;
       const line = cleanBeatLine(kind, reply);
-      if (!line) {
+      // the writer never sees the chat before this message, so a question back to a go-ahead is always one already answered
+      if (!line || (line.asks && GO_AHEAD.test(watch.ask))) {
         beat.phase = "dropped";
         deps.log?.(`turn beats: the ${kind} for ${watch.threadId} was skipped`);
         return;

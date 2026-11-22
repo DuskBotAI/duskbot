@@ -3,12 +3,15 @@ import { createRoot } from "react-dom/client";
 import { LocalComputerSection } from "../../src/components/LocalComputerSection";
 import { ComputerPanel } from "../../src/components/ComputerPanel";
 import { BotSettingsDialog } from "../../src/components/BotSettingsDialog";
+import { SubPageContext } from "../../src/components/ListRows";
 import { StoreProvider, useStore, type Bot } from "../../src/state/store";
 import { rememberComputerPanelOpen } from "../../src/lib/computer-panel-focus";
 import { applySkin, readSkin } from "../../src/lib/skins";
 import { publishLiveFrame } from "../../src/lib/live-events";
 import { CLOUD_COMPUTER_BUSY_ERROR } from "../../shared/computer-contention";
 import "../../src/styles.css";
+import "../../src/styles/overlays.css";
+import "../../src/styles/motion.css";
 
 function frame(label: string, color: string) {
   const canvas = document.createElement("canvas");
@@ -135,13 +138,21 @@ window.fetch = async (input, init) => {
   return originalFetch(input, init);
 };
 
+function SettingsPane() {
+  const [at, setAt] = useState<string | undefined>();
+  return <SubPageContext.Provider value={{ at, open: (id) => setAt(id), back: () => setAt(undefined) }}>
+    <LocalComputerSection />
+  </SubPageContext.Provider>;
+}
+
 function Fixture() {
   const { state, dispatch } = useStore();
   const bot = state.bots[0];
   const [busy, setBusy] = useState(false);
   const [generation, setGeneration] = useState(0);
   const [panel, setPanel] = useState("computer");
-  // the app has no separate screen panel any more: this harness alone still mounts ComputerPanel outside the bot panel
+  // the app has no separate screen panel any more: this harness alone still mounts ComputerPanel outside the bot panel,
+  // so its close button, a no-op in the app's store, closes it here
   const [panelOpen, setPanelOpen] = useState(false);
   const [scenario, setScenario] = useState("default");
   useEffect(() => {
@@ -150,6 +161,15 @@ function Fixture() {
       setPanelOpen(true);
     }
   }, [bot?.id, dispatch]);
+  // the store keeps no open state for a panel mounted outside the bot panel, so its close button closes it here, after
+  // the panel's own handler has handed focus back
+  useEffect(() => {
+    const close = (event: MouseEvent) => {
+      if (event.target instanceof Element && event.target.closest("[data-computer-panel-close]")) setPanelOpen(false);
+    };
+    document.addEventListener("click", close);
+    return () => document.removeEventListener("click", close);
+  }, []);
   useEffect(() => {
     if (state.config && state.config.features?.browser !== true) {
       dispatch({ type: "configStatus", config: { ...state.config, features: { ...state.config.features, browser: true },
@@ -165,7 +185,9 @@ function Fixture() {
       tasks: [{ threadId: `fixture-${scenario}`, title: scenario, createdAt: 1, busy: false, modelSelection: bot.modelSelection,
         ...(scenario === "auto-vm" ? {} : { surface: scenario === "browser-pin" ? "browser" : scenario === "cloud-pin" ? "cloud" : "vm" }) }],
     });
-  return <div className="flex h-screen justify-center">
+  return <div className="flex h-screen justify-center" onClick={(event) => {
+    if ((event.target as Element).closest("[data-computer-panel-close]")) setPanelOpen(false);
+  }}>
     <div className="fixed left-2 top-2 grid max-w-32 gap-3 text-sm">
       <label>Screenshot response<select aria-label="Screenshot response" defaultValue={mode} onChange={(e) => { mode = e.target.value; }}>
         {["connected", "slow", "held", "contended", "failed", "unconfigured", "corrupt", "timeout"].map((value) => <option key={value}>{value}</option>)}
@@ -200,7 +222,7 @@ function Fixture() {
     {state.settingsOpen && bot && <BotSettingsDialog key={bot.id} bot={bot} />}
     {panelOpen && fixtureBot && (panel === "computer"
       ? <ComputerPanel key={generation} bot={fixtureBot} />
-      : <div className="w-[720px] overflow-y-auto"><LocalComputerSection /></div>)}
+      : <div className="w-[720px] overflow-y-auto"><SettingsPane /></div>)}
   </div>;
 }
 applySkin(readSkin());

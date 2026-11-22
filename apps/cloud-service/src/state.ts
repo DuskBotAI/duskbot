@@ -45,6 +45,9 @@ export interface HomeLifecycleState {
   wakeBy?: "webhook" | "client" | null;
   /** the current wake's failure was counted already */
   wakeFailureNoted?: boolean;
+  /** the entitlement refresh failing: its cause as one token (home-client `homeFailure`), since when, how many tries,
+   *  when it goes again and whether the operator was alerted (one alert per incident) */
+  entitleProblem?: { cause: string; since: number; tries: number; retryAt: number; alerted: boolean } | null;
   /** why the power policy or the rails last kept a home up (or a sleeping one asleep), for the operator */
   stayReason?: string | null;
   wakeStartedAt: number | null;

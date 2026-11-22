@@ -52,6 +52,13 @@ describe("scripts/log-doctor.mjs", () => {
     expect(trailLine({ ev: "ui.click", control: "x" })).toBeNull();
   });
 
+  it("a failed turn carries why it stopped, so each cause is its own signature", () => {
+    const end = { ev: "bot.turn.end", bot: "b", thread: "t", turn: "u", ok: false, ms: 120 };
+    expect(trailLine({ ...end, stop: "api_error" }).text).toBe("trail bot.turn.end: api_error");
+    expect(trailLine({ ...end, stop: "quota" }).text).toBe("trail bot.turn.end: quota");
+    expect(signature(trailLine({ ...end, stop: "auth_required" }).text)).not.toBe(signature(trailLine({ ...end, stop: "quota" }).text));
+  });
+
   it("groups by source and signature, ranks errors and counts first, says what is known, and marks what is new", () => {
     const at = (minute) => Date.parse("2026-11-13T00:00:00Z") + minute * 60_000;
     const lines = [

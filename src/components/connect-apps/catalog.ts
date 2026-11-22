@@ -150,14 +150,16 @@ export function recommended(entries: readonly AppEntry[], connection: (id: strin
     .map(({ entry }) => entry);
 }
 
-/** How well `query` names `text`: 0 starts it, 1 starts a word, 2 is inside it, 3 is its letters in order, null misses. */
-export function matchRank(text: string, query: string): number | null {
+/** How well `query` names `text`: 0 starts it, 1 starts a word, 2 is inside it, 3 is its letters in order, null misses.
+ * `scattered: false` stops at 2: a long text holds almost any query's letters in order. */
+export function matchRank(text: string, query: string, scattered = true): number | null {
   const haystack = text.toLowerCase();
   const needle = query.trim().toLowerCase();
   if (!needle) return null;
   if (haystack.startsWith(needle)) return 0;
   const at = haystack.indexOf(needle);
   if (at > 0) return /[\s\-_.(/]/.test(haystack[at - 1]!) ? 1 : 2;
+  if (!scattered) return null;
   let from = 0;
   for (const letter of needle) {
     if (letter === " ") continue;
@@ -168,12 +170,13 @@ export function matchRank(text: string, query: string): number | null {
   return 3;
 }
 
-/** The apps a search finds, Grok's way: by name, then by what they do, each from a prefix down to letters in order. */
+/** The apps a search finds, Grok's way: by name, from a prefix down to letters in order, then by what they do, where the
+ * query must be whole. */
 export function searchApps(entries: readonly AppEntry[], query: string, limit = SEARCH_LIMIT): AppEntry[] {
   return entries
     .map((entry, index) => {
       const byName = matchRank(entry.label, query);
-      const byWords = byName === null ? matchRank(`${entry.keywords ?? ""} ${entry.description}`, query) : null;
+      const byWords = byName === null ? matchRank(`${entry.keywords ?? ""} ${entry.description}`, query, false) : null;
       const rank = byName ?? (byWords === null ? null : 4 + byWords);
       return { entry, index, rank };
     })

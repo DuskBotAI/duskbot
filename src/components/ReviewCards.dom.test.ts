@@ -98,6 +98,49 @@ describe("the email card", () => {
   });
 });
 
+describe("the message card", () => {
+  const slack = { app: "Slack", to: "#launch", text: "Shipping at 5", attachments: 2 };
+  const message = card({ title: "Send this message?", tool: "SLACK_SEND_MESSAGE", messageReview: slack, outboundRequest: { tool: "SLACK_SEND_MESSAGE", app: "Slack" } });
+  const type = (field: HTMLTextAreaElement, value: string) => act(() => {
+    Object.getOwnPropertyDescriptor(Object.getPrototypeOf(field), "value")!.set!.call(field, value);
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+
+  it("shows where it goes and the whole text, never the raw call, and sends the person's edit", () => {
+    const { button } = pendingView(message);
+    for (const part of ["Send this message?", "To", "#launch", "Shipping at 5", "2 attachments"]) expect(container.textContent).toContain(part);
+    expect(container.textContent).not.toContain("{");
+    expect(button("Always allow")).toBeUndefined();
+    act(() => button("Edit")!.click());
+    const text = container.querySelector<HTMLTextAreaElement>('textarea[aria-label="Message text"]')!;
+    type(text, "  ");
+    expect(button("Send")!.disabled).toBe(true);
+    type(text, "Shipping at 6");
+    act(() => button("Send")!.click());
+    expect(fixture.dispatch).toHaveBeenLastCalledWith(expect.objectContaining({ behavior: "allow", edits: { text: "Shipping at 6" } }));
+  });
+
+  it("asks Post this? for a public post, and Don't send refuses it", () => {
+    const { button } = pendingView(card({ title: "Post this?", tool: "TWITTER_CREATION_OF_A_POST", messageReview: { app: "X", to: "", text: "We launched.", post: true }, outboundRequest: { tool: "TWITTER_CREATION_OF_A_POST", app: "X" } }));
+    for (const part of ["Post this?", "On", "X", "We launched."]) expect(container.textContent).toContain(part);
+    expect(button("Post")).toBeDefined();
+    act(() => button("Don't send")!.click());
+    expect(fixture.dispatch).toHaveBeenLastCalledWith(expect.objectContaining({ behavior: "deny" }));
+  });
+
+  it("offers no Edit for app-formatted text", () => {
+    const { button } = pendingView(card({ title: "Send this message?", messageReview: { app: "Microsoft Teams", to: "19:abc", text: "Hi team", fixed: true }, outboundRequest: { tool: "MICROSOFT_TEAMS_TEAMS_POST_CHAT_MESSAGE", app: "Microsoft Teams" } }));
+    expect(button("Edit")).toBeUndefined();
+    expect(button("Send")).toBeDefined();
+  });
+
+  it("stays in the chat as the record once answered", () => {
+    act(() => root.render(createElement(ApprovalCard, { message: card({ title: "Send this message?", messageReview: slack, answered: "deny" }) })));
+    expect(container.querySelector("[data-review-record]")?.getAttribute("data-review-record")).toBe("message");
+    for (const part of ["Message via Slack", "#launch", "Shipping at 5", "Not sent"]) expect(container.textContent).toContain(part);
+  });
+});
+
 describe("product cards", () => {
   it("lists each product with its price and link, and loads photos only when asked", () => {
     const message = { id: "p1", at: 1, role: "bot", kind: "widget", text: "", products: { title: "Kettles", items: [

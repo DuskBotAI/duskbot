@@ -277,6 +277,47 @@ describe("purchases and emails on their own cards", () => {
     await expect(plain).resolves.toEqual({ ok: true, approved: true });
   });
 
+  it("a message below Full access shows where it goes and its text, and goes out as the person edited it", async () => {
+    const held = setup(bot(undefined));
+    const args: Record<string, unknown> = { to_number: "+15551234567", text: "On my way", phone_number_id: "1" };
+    const pending = held.hold.hold({ ...held.input, tool: "WHATSAPP_SEND_MESSAGE", calls: [{ slug: "WHATSAPP_SEND_MESSAGE", arguments: args }], active: () => true });
+    expect(held.appended[0]!.message.card).toMatchObject({
+      title: "Send this message?", subtitle: "To +15551234567\n\nOn my way", options: ["Send", "Don't send"],
+      messageReview: { app: "WhatsApp", to: "+15551234567", text: "On my way" },
+    });
+    expect(held.outboundRequests.resolve({ threadId: "t1", requestId: requestOf(held), behavior: "allow", edits: { body: "email-shaped" } })).toEqual({ claimed: true, state: "denied" });
+    await expect(pending).resolves.toMatchObject({ ok: false });
+    expect(args.text).toBe("On my way");
+
+    const again = setup(bot(undefined));
+    const sent = again.hold.hold({ ...again.input, tool: "WHATSAPP_SEND_MESSAGE", calls: [{ slug: "WHATSAPP_SEND_MESSAGE", arguments: args }], active: () => true });
+    again.outboundRequests.resolve({ threadId: "t1", requestId: requestOf(again), behavior: "allow", edits: { text: "Running 10 late" } });
+    await expect(sent).resolves.toEqual({ ok: true, approved: true });
+    expect(args).toEqual({ to_number: "+15551234567", text: "Running 10 late", phone_number_id: "1" });
+    expect(again.patches.at(-1)!.patch.card).toMatchObject({ messageReview: { text: "Running 10 late" }, subtitle: "To +15551234567\n\nRunning 10 late" });
+  });
+
+  it("app-formatted text goes out only as the bot wrote it", async () => {
+    const held = setup(bot(undefined));
+    const calls = [{ slug: "MICROSOFT_TEAMS_TEAMS_POST_CHAT_MESSAGE", arguments: { chat_id: "19:abc", content: "<p>Hi</p>", content_type: "html" } }];
+    const pending = held.hold.hold({ ...held.input, tool: calls[0]!.slug, calls, active: () => true });
+    held.outboundRequests.resolve({ threadId: "t1", requestId: requestOf(held), behavior: "allow", edits: { text: "Changed" } });
+    await expect(pending).resolves.toMatchObject({ ok: false, text: expect.stringMatching(/formatted for the app/) });
+    expect(calls[0]!.arguments.content).toBe("<p>Hi</p>");
+  });
+
+  it("by default (Full access, no sending rule) a message sends without a card, an email waits on its card", async () => {
+    const held = setup(bot(undefined));
+    const slack = [{ slug: "SLACK_SEND_MESSAGE", arguments: { channel: "launch", markdown_text: "Hi" } }];
+    await expect(held.hold.hold({ ...held.input, tool: "SLACK_SEND_MESSAGE", calls: slack, fullAccess: true, active: () => true })).resolves.toEqual({ ok: true, approved: false });
+    expect(held.appended).toEqual([]);
+    const email = held.hold.hold({ ...held.input, fullAccess: true, calls: [{ slug: "GMAIL_SEND_EMAIL", arguments: { to: "ana@example.com", subject: "Hi", body: "Hello" } }], active: () => true });
+    expect(held.appended[0]!.message.card).toMatchObject({ title: "Send this email?" });
+    held.outboundRequests.resolve({ threadId: "t1", requestId: requestOf(held), behavior: "deny" });
+    await email;
+    await flushDecisionLog(held.dataDir);
+  });
+
   it("an email allowance the person set still sends on its own", async () => {
     const held = setup(bot({ policy: "allow", dailyCap: 5 }));
     const send = [{ slug: "GMAIL_SEND_EMAIL", arguments: { recipient_email: "ana@example.com", subject: "Hi", body: "Hello" } }];

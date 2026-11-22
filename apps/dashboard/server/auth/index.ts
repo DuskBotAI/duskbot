@@ -8,7 +8,7 @@ import { CHECKOUT_SOURCES } from "../../../../shared/billing-api.ts";
 import { parseUserAvatarChoice } from "../../../../shared/user-avatar.ts";
 import { createAuthStore } from "./store.ts";
 import type { Account, AdminRole, Identity, Session, StoredPhoneCode } from "./store.ts";
-import { codeMessage, isTestAddress, magicLinkMessage, recoveryMessage } from "./mail.ts";
+import { codeMessage, isTestAddress, magicLinkMessage, MailDeliveryError, recoveryMessage } from "./mail.ts";
 import type { Mailer } from "./mail.ts";
 import { emailConfig } from "../email/templates.ts";
 import type { EmailConfig } from "../email/templates.ts";
@@ -32,6 +32,8 @@ export const PHONE_CODES_OUTSTANDING = 3, PHONE_CODE_REMEMBERED_MS = 60 * 60_000
 
 export interface AuthOptions {
   dataDir: string; publicUrl: string; mailer: Mailer; email?: EmailConfig; now?: () => number; fetch?: typeof fetch;
+  /** whether an account may open the admin panel, said on GET /v1/me so the page asks the panel only then */
+  isAdmin?: (account: Account) => boolean;
   /** where the page is served on publicUrl ("/dashboard" when it shares the origin with the site, "" at the root) */
   pageBase?: string;
   /** sign-in emails the service sends an hour across everyone (DUSK_AUTH_MAIL_PER_HOUR, default AUTH_LIMITS.mailPerHour) */
@@ -70,6 +72,8 @@ const messages: Partial<Record<AccountErrorCode, string>> = {
   billing_active: "Cancel your plan and dusk cloud before deleting your account.",
   delete_on_account_page: "Delete your account on your account page.",
   invalid_request: "Invalid request.", invalid_email: "Enter a valid email address.", wrong_code: "Code is incorrect.", invalid_code: "Code is incorrect.",
+  mail_unavailable: "We couldn't send your code just now. Try again in a few minutes, or sign in with Google or Apple.",
+  email_undeliverable: "We can't send mail to that address. Check it, or sign in with Google or Apple.",
   expired: "Sign-in has expired.", rate_limited: "Try again later.", signup_closed: "New accounts are not available.", signed_out: "Sign in to continue.",
   csrf: "Refresh the page and try again.", confirm: "Confirm the account to continue.", other_account: "This browser is signed in to another account.", forbidden: "Request is not allowed.", not_found: "Not found.", invalid_token: "Session is invalid.", invalid_grant: "Grant is invalid.",
 };
@@ -167,6 +171,13 @@ export function createAuth(options: AuthOptions) {
   const csrfFor = (session: Session) => hmac(session.tokenHash);
   const fail = (status: number, code: AccountErrorCode, fields?: Record<string, unknown>): never => { throw new AuthError(status, code, fields); };
   const account = (id: string) => state.accounts.find(item => item.id === id) ?? null;
+  /** a sign-in email that did not go out: logged with the provider's reason token, answered with a plain sentence */
+  function mailFailed(error: unknown): never {
+    const reason = error instanceof MailDeliveryError ? error.reason : "failed";
+    console.warn(`auth: a sign-in email was not sent (${reason})`);
+    if (error instanceof MailDeliveryError && (error.status === 400 || error.status === 422)) return fail(400, "email_undeliverable");
+    return fail(503, "mail_unavailable");
+  }
   function sweep() {
     const time = now();
     for (const [key, item] of oauthStates) if (item.expiresAt + 600_000 <= time) oauthStates.delete(key);
@@ -323,10 +334,10 @@ export function createAuth(options: AuthOptions) {
     } else if (magicNext) {
       if (options.signupOpen || state.accounts.some(item => item.email === email)) {
         const link = `${pages}/sign-in?${new URLSearchParams({ attempt, next: magicNext })}#${new URLSearchParams({ code })}`;
-        try { await options.mailer.send(magicLinkMessage(email, link, emailCfg)); } catch { attempts.delete(hash(attempt)); fail(502, "failed"); }
+        try { await options.mailer.send(magicLinkMessage(email, link, emailCfg)); } catch (error) { attempts.delete(hash(attempt)); sentAt.delete(email); mailFailed(error); }
       }
     } else if (options.signupOpen) {
-      try { await options.mailer.send(codeMessage(email, code, emailCfg)); } catch { attempts.delete(hash(attempt)); fail(502, "failed"); }
+      try { await options.mailer.send(codeMessage(email, code, emailCfg)); } catch (error) { attempts.delete(hash(attempt)); sentAt.delete(email); mailFailed(error); }
     } else if (state.accounts.some(item => item.email === email)) {
       // signups closed: answer before delivery so timing and mail failures never tell whether the address has an account
       void options.mailer.send(codeMessage(email, code, emailCfg)).catch(() => console.error("Email delivery failed."));
@@ -685,7 +696,7 @@ export function createAuth(options: AuthOptions) {
         json({ v: 1, providers: OAUTH_PROVIDERS.map(id => ({ id, enabled: providers.has(id), comingSoon: !providers.has(id) && options.dev })), signupOpen: options.signupOpen, recovery: true });
       } else if (method === "GET" && path === R.me) {
         const owner = requireWeb(req, { mutation: false });
-        json({ account: view(owner), csrfToken: csrfFor(webSession(req)!.session) });
+        json({ account: view(owner), csrfToken: csrfFor(webSession(req)!.session), ...(options.isAdmin ? { admin: options.isAdmin(owner) } : {}) });
       } else if ((method === "GET" || method === "PATCH") && path === R.account) {
         const owner = requireWeb(req, { mutation });
         if (mutation) {

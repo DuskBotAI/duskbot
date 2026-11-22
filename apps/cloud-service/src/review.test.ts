@@ -43,7 +43,7 @@ async function fixture() {
     const home = { healthy: vi.fn(async () => true), pair: vi.fn(async () => ({ code: "ABCD-EFGH-JKLM", expiresAt: at + 300_000 })),
       power: vi.fn(async () => ({ ...power })), sleep: vi.fn(async () => ({ ok: power.idle, nextDueAt: power.nextDueAt })), plan: vi.fn(async () => {}) };
     const audit = createAudit({ dataDir, now });
-    const backups = createBackupStore({ dir: join(dataDir, "managed-backups"), now });
+    const backups = createBackupStore({ dir: join(dataDir, "managed-backups"), now, freeBytes: () => 1024 ** 4 });
     const workspaces = { register: vi.fn(() => "workspace-1"), lastReportAt: vi.fn(() => null), remove: vi.fn() };
     const service = createCloudsService({ dataDir, now, home, sealer: createSealer(SEAL), workspaces,
       providers: { dedicated: createFakeCloudProvider(), pool: { ...createFakeCloudProvider(), suspend: async () => {}, resume: async () => {} } },

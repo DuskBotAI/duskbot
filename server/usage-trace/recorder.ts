@@ -97,7 +97,8 @@ const TURN_TOTALS = new Set(["grok", "groq", "greenference", "cerebras", "mistra
 const MAX_LINKS = 5_000;
 const ENDED_GRACE_MS = 120_000;
 const RECEIPT_SLACK_MS = 3_000;
-const STOPPED = /interrupt|cancel|abort|stopp?ed|user_stop/i;
+/** a turn the person stopped, however it ended: `stop_failed` is an ACP engine that did not confirm the Stop in time */
+const STOPPED = /interrupt|cancel|abort|stopp?ed|user_stop|stop_failed/i;
 
 const at = (event: RuntimeEvent): number => {
   const parsed = Date.parse(event.createdAt);

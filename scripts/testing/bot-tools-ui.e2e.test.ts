@@ -92,7 +92,8 @@ describe("bot setup and tools in the real renderer", () => {
     await press("Enter");
     expect(await evaluate("window.botCreateRequests")).toBe(1);
     await press("Escape");
-    expect(await dialogCount()).toBe(0);
+    // dialogs leave the way they arrive, a 120 ms fade
+    await expect.poll(dialogCount, { timeout: 2_000 }).toBe(0);
     await evaluate("window.releaseBotCreation(); true");
     await expect.poll(async () => (await bots()).length, { timeout: 10_000 }).toBe(original.length + 1);
     expect(await evaluate("window.botCreateRequests")).toBe(1);
@@ -104,7 +105,7 @@ describe("bot setup and tools in the real renderer", () => {
     expect(created[0].browser).toBe(original[0].browser);
     // Its chat is open, ready for the first message.
     await expect.poll(() => evaluate("document.activeElement?.getAttribute('aria-label')"), { timeout: 10_000 }).toBe(`Message ${created[0].name}`);
-    expect(await dialogCount()).toBe(0);
+    await expect.poll(dialogCount, { timeout: 2_000 }).toBe(0);
 
     // Give the selected disposable bot real usage so its header shortcut
     // exercises the same external open action as the shipped chat header.

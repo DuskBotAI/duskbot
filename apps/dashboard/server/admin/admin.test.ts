@@ -84,6 +84,11 @@ describe("admin panel api", () => {
     const reads = ["/v1/admin/me", "/v1/admin/overview", "/v1/admin/overview?days=7", "/v1/admin/users", "/v1/admin/users?q=owner&filter=all", "/v1/admin/clouds", "/v1/admin/clouds?status=all",
       "/v1/admin/waitlist", "/v1/admin/waitlist.csv", "/v1/admin/events", "/v1/admin/events?name=sign_in&days=30", "/v1/admin/health", "/v1/admin/audit", "/v1/admin/revenue/infra", "/v1/admin/ops", "/v1/admin/ops/relays"];
 
+    it("says on /v1/me who may open the panel, so the page asks the panel only then", async () => {
+      expect(await (await call("/v1/me", { cookie: await login(ADMIN) })).json()).toMatchObject({ admin: true });
+      expect(await (await call("/v1/me", { cookie: await login(OTHER) })).json()).toMatchObject({ admin: false });
+    });
+
     it("keeps relay limit changes to the admin, with the csrf header", async () => {
       const admin = await login(ADMIN), other = await login(OTHER);
       const path = "/v1/admin/ops/relays/cloudflare/limits", body = { maxTunnels: 10 };

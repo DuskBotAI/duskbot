@@ -4,11 +4,12 @@ import type { WorkspaceSummary } from "../../../../shared/dashboard-protocol";
 import { cloudForWorkspace, useCloud } from "../data/cloud";
 import type { CloudDesktop } from "../data/contracts";
 import { useSession } from "../data/session";
-import { api } from "../lib/api";
+import { api, meSaysAdmin } from "../lib/api";
 import { trackUpsell, watchUpsell } from "../lib/analytics";
 import { Link, navigate, useLocation } from "../lib/router";
 import { RoutineUpsell } from "../pages/routine-upsell";
-import { useQuickCheckout } from "../pages/cloud-offer";
+import { usePlanChoice } from "../pages/cloud-offer";
+import { computerWord } from "../lib/downloads";
 import { Button, cx, FreshnessTag } from "./kit";
 import { placeState, TONE_TEXT } from "../data/place";
 import { Mascot } from "./Mascot";
@@ -114,7 +115,8 @@ function useIsAdmin(accountId: string | undefined) {
   useEffect(() => {
     if (!accountId) return;
     let live = true;
-    adminAsked ??= adminCall<{ admin: true }>("/me").then((me) => me.admin === true, () => false);
+    // the panel is asked only when /v1/me did not already say no, so everyone else never gets its 403
+    adminAsked ??= meSaysAdmin() === false ? Promise.resolve(false) : adminCall<{ admin: true }>("/me").then((me) => me.admin === true, () => false);
     void adminAsked.then((yes) => {
       try { if (yes) sessionStorage.setItem(ADMIN_KEY, accountId); else sessionStorage.removeItem(ADMIN_KEY); } catch {}
       if (live) setAdmin(yes);
@@ -199,7 +201,7 @@ function SideUpsellCard() {
   const invested = held ?? (due ? facts : null);
   const source = invested ? "dash_invested" : "dash_sidebar";
   const { catalog } = useCloud();
-  const { busy, error, buy } = useQuickCheckout(source);
+  const { choose, sheet } = usePlanChoice(source);
   useEffect(() => {
     if (!ready || shown.current) return;
     shown.current = true;
@@ -218,17 +220,17 @@ function SideUpsellCard() {
           <span className="shrink-0" aria-hidden><Mascot body="kit" color="blue" size={34} state="celebrate" tappable /></span>
           <div className="min-w-0">
             <h2 className="text-14 font-semibold leading-[1.3] text-ink">{investedLine(invested)}</h2>
-            <p className="mt-0.5 text-13 font-medium leading-[1.4] text-ink-2">dusk cloud keeps them working, even when your mac is off.</p>
+            <p className="mt-0.5 text-13 font-medium leading-[1.4] text-ink-2">dusk cloud keeps them working, even when your {computerWord()} is off.</p>
           </div>
         </div>
       ) : (
         <div className="flex items-center gap-3">
           <Mascot color="purple" body="wisp" size={34} state="sleeping" tappable />
-          <p className="min-w-0 text-13 font-medium leading-[1.4] text-ink-2">dusk cloud keeps your bots working, even when your mac is off.</p>
+          <p className="min-w-0 text-13 font-medium leading-[1.4] text-ink-2">dusk cloud keeps your bots working, even when your {computerWord()} is off.</p>
         </div>
       )}
-      <Button size="sm" variant="primary" className="mt-3.5 w-full" disabled={busy || !catalog} aria-busy={busy} onClick={() => { trackUpsell("click", source); void buy("starter"); }}>{busy ? "opening checkout" : invested ? "get dusk cloud" : "keep them working"}</Button>
-      {error && <p role="alert" className="mt-2 text-12 font-medium leading-[1.4] text-bad">{error}</p>}
+      <Button size="sm" variant="primary" className="mt-3.5 w-full" disabled={!catalog} onClick={() => { trackUpsell("click", source); choose("starter"); }}>{invested ? "get dusk cloud" : "keep them working"}</Button>
+      {sheet}
     </m.div>
   );
 }

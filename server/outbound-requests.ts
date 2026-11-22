@@ -2,6 +2,10 @@ import { randomUUID } from "node:crypto";
 import type { ConnectorCall } from "../shared/outbound.ts";
 import { describeTool } from "./activity.ts";
 import { normalizeEmailEdits, type EmailEdits } from "../shared/email-review.ts";
+import { normalizeMessageEdits, type MessageEdits } from "../shared/message-review.ts";
+
+/** What a card's Edit changes: an email's fields or a message's text. */
+export type CardEdits = EmailEdits | MessageEdits;
 
 /** replied: the person wrote in the chat while the card waited, so the turn reads their words instead of waiting on. */
 export type OutboundAnswer = "allow" | "deny" | "timeout" | "replied";
@@ -12,7 +16,8 @@ interface Held {
   tool: string;
   settle: (answer: OutboundAnswer) => void;
   answered?: OutboundAnswer;
-  edits?: EmailEdits;
+  reviews: "email" | "message";
+  edits?: CardEdits;
   timer: ReturnType<typeof setTimeout>;
 }
 
@@ -24,7 +29,8 @@ export type OutboundResolution =
 export class OutboundRequestService {
   private held = new Map<string, Held>();
 
-  open(input: { botId: string; threadId: string; tool: string; timeoutMs: number }): {
+  /** `reviews`: which card's edits the answer may carry; an email card's unless it holds a message. */
+  open(input: { botId: string; threadId: string; tool: string; timeoutMs: number; reviews?: "email" | "message" }): {
     requestId: string;
     answer: Promise<OutboundAnswer>;
   } {
@@ -35,7 +41,7 @@ export class OutboundRequestService {
     });
     const timer = setTimeout(() => this.settle(requestId, "timeout"), input.timeoutMs);
     timer.unref?.();
-    this.held.set(requestId, { botId: input.botId, threadId: input.threadId, tool: input.tool, settle, timer });
+    this.held.set(requestId, { botId: input.botId, threadId: input.threadId, tool: input.tool, reviews: input.reviews ?? "email", settle, timer });
     return { requestId, answer };
   }
 
@@ -47,12 +53,14 @@ export class OutboundRequestService {
     entry.settle(answer);
   }
 
-  /** `edits`: what the person changed on an email card before Send; edits that do not read as a valid set send nothing: the card is denied rather than sent as the bot wrote it. */
+  /** `edits`: what the person changed on an email or message card before Send; edits that do not read as a valid set send nothing: the card is denied rather than sent as the bot wrote it. */
   resolve(input: { threadId: string; requestId: string; behavior: "allow" | "deny" | "answer"; edits?: unknown }): OutboundResolution {
     const entry = this.held.get(input.requestId);
     if (!entry || entry.threadId !== input.threadId) return { claimed: false };
     if (entry.answered) return { claimed: true, state: "already_settled", behavior: entry.answered };
-    const edits = input.behavior === "allow" && input.edits !== undefined ? normalizeEmailEdits(input.edits) : null;
+    const edits = input.behavior === "allow" && input.edits !== undefined
+      ? entry.reviews === "message" ? normalizeMessageEdits(input.edits) : normalizeEmailEdits(input.edits)
+      : null;
     const answer: OutboundAnswer = input.behavior === "allow" && (input.edits === undefined || edits) ? "allow" : "deny";
     if (edits) entry.edits = edits;
     this.settle(input.requestId, answer);
@@ -72,7 +80,7 @@ export class OutboundRequestService {
       .map(([requestId]) => requestId);
   }
 
-  edits(requestId: string): EmailEdits | null {
+  edits(requestId: string): CardEdits | null {
     return this.held.get(requestId)?.edits ?? null;
   }
 

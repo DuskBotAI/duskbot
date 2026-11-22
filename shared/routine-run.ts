@@ -48,8 +48,9 @@ export interface AutomationLine {
   copyOf?: string;
 }
 
-/** A routine run's opening line in its own conversation: what the person sees instead of the prompt the bot was given. */
-export interface RoutineStartLine { name: string }
+/** A routine run's opening line in its own conversation: what the person sees instead of the prompt the bot was given.
+ * `routineId` names the routine that ran; lines written before it was kept carry only the name. */
+export interface RoutineStartLine { name: string; routineId?: string }
 
 const ROUTINE_PROMPT_HEAD = /^\[(?:Scheduled routine|Routine) ("(?:[^"\\]|\\.)*"), do this now:\]/u;
 
@@ -63,3 +64,21 @@ export function routinePromptName(text: string | undefined): string | null {
 
 /** The exact silence token a routine run answers with when nothing needs the person: a line of its own, never shown. */
 export const SILENT_LINE = /^[\s*_`"'.!-]*nothing new[\s*_`"'.!-]*$/i;
+
+const ROUTINE_PROMPT_ID = /^\[(?:Scheduled routine|Routine) "(?:[^"\\]|\\.)*", do this now:\]\nTrigger id: ([^\s]+)/u;
+
+/** The routine a user row started a run of, from its mark or, on older lines, from the prompt's header; null for a
+ * person's own line. The text of such a row is the routine's prompt, never words a person sent. */
+export function routineStartOf(message: { role: string; text?: string; routineStart?: RoutineStartLine }): RoutineStartLine | null {
+  if (message.role !== "user") return null;
+  const name = message.routineStart?.name ?? routinePromptName(message.text);
+  if (name === null) return null;
+  const routineId = message.routineStart?.routineId ?? (message.text ? ROUTINE_PROMPT_ID.exec(message.text)?.[1] : undefined);
+  return routineId ? { name, routineId } : { name };
+}
+
+/** The mark a routine run's opening line carries. A webhook or app event's run names no routine: it is not one to run again. */
+export function routineStartMark(run: { routineId: string; routineName: string; webhookId?: string; eventSource?: string } | null, text: string): RoutineStartLine {
+  if (run) return run.webhookId || run.eventSource ? { name: run.routineName } : { name: run.routineName, routineId: run.routineId };
+  return routineStartOf({ role: "user", text }) ?? { name: "" };
+}

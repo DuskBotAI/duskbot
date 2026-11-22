@@ -228,6 +228,8 @@ export interface HomeWorld {
   /** Down: every request on the way to My Cloud fails, the window's and main's alike; `teamDown`: the team's Cloud only;
    * `nameMissing`: My Cloud's name isn't found (a resolver kept the answer it got while My Cloud was set up). */
   network: { down: boolean; teamDown: boolean; nameMissing: boolean };
+  /** How far main's clock runs ahead: past FRESH_MS, a My Cloud this window saw set up is no longer brand-new. */
+  clock: { aheadMs: number };
   /** False: the move hasn't happened, so My Cloud is a saved server this window opens when asked (no journal, no freeze). */
   moved: boolean;
   /** How often the window's Electron session had its host cache cleared. */
@@ -284,6 +286,7 @@ export async function launchHomeWorld(fx: CloudSendFixture, { chrome, ports, ver
   const teamOrigin = `http://[::1]:${teamPort}`;
   const otherOrigin = ipcBase;
   const network = { down: false, teamDown: false, nameMissing: false };
+  const clock = { aheadMs: 0 };
   const moves = { moved: true };
   const hostCache = { cleared: 0 };
   const admin: HomeWorld["admin"] = { teamPairings: [], removed: new Set() };
@@ -495,6 +498,7 @@ export async function launchHomeWorld(fx: CloudSendFixture, { chrome, ports, ver
     splash: null as TabWindow | null,
   };
   const home = createHomeWindow({
+    now: () => Date.now() + clock.aheadMs,
     journal: () => (moves.moved ? { v: 1, phase: "done", cloud: { origin: cloudOrigin, account: ACCOUNT_ID, machine: cloudOrigin }, doneAt: Date.now() } : null),
     frozen: async () => (moves.moved ? (await fetch(`${fx.desktopBase}/api/move/freeze`, { headers: { "x-dusk-desktop-owner": fx.ownerCapability } })).json() : { frozen: false }),
     // The window's Electron session: its own resolver and host cache, for My Cloud's name.
@@ -542,7 +546,7 @@ export async function launchHomeWorld(fx: CloudSendFixture, { chrome, ports, ver
 
   let startup: ReturnType<typeof createStartupScreen> | null = null;
   return {
-    cloudOrigin, localOrigin, teamOrigin, otherOrigin, window: win, home, account, network, admin, cloudRequests, notifications, hostCache,
+    cloudOrigin, localOrigin, teamOrigin, otherOrigin, window: win, home, account, network, clock, admin, cloudRequests, notifications, hostCache,
     get moved() { return moves.moved; },
     set moved(value: boolean) { moves.moved = value; },
     places: homePlaces, environments: () => envState,

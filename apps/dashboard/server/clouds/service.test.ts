@@ -324,3 +324,23 @@ it("never ends, schedules the destruction of or flags a payment problem on App R
   f.service.end(c.id, f.now() + 1_000);
   expect(c.ended).toBe(true);
 });
+
+it("answers a home's pairing refusal with 503, logs its cause once and waits before asking the home again", async () => {
+  const f = fixture(), c = f.order();
+  f.service.activate(c.id, "sub", dedicatedPlan); await f.ready(c);
+  const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+  f.home.pair.mockRejectedValue(Object.assign(new Error("Cloud home request failed."), { status: 403, code: "entitlement_required" }));
+  await expect(f.service.pair("a", c.id)).rejects.toMatchObject({ status: 503, code: "cloud_unreachable" });
+  await expect(f.service.pair("a", c.id)).rejects.toMatchObject({ status: 503, code: "cloud_unreachable" });
+  expect(f.home.pair).toHaveBeenCalledTimes(1);
+  f.advance(15_000);
+  await expect(f.service.pair("a", c.id)).rejects.toMatchObject({ status: 503 });
+  expect(f.home.pair).toHaveBeenCalledTimes(2);
+  expect(warn.mock.calls.flat().filter(line => String(line).includes("pairing with cloud"))).toEqual([`clouds: pairing with cloud ${c.id} failed (http_403:entitlement_required)`]);
+  f.home.pair.mockResolvedValue({ code: "ABCD-EFGH-JKLM", expiresAt: f.now() + 300_000 });
+  f.advance(29_999);
+  await expect(f.service.pair("a", c.id)).rejects.toMatchObject({ status: 503 });
+  f.advance(1);
+  expect(await f.service.pair("a", c.id)).toMatchObject({ code: "ABCD-EFGH-JKLM" });
+  warn.mockRestore();
+});

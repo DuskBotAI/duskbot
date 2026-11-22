@@ -178,9 +178,9 @@ export function createBotMessageRoutes(deps: BotMessageRouteDeps): RouteHandler 
   } = deps;
   const pinnedClientThread = pinnedClientThreadGuard(store);
   /** Security: a bot's own shell must never approve its own card, so a local request counts only from the desktop app, or
-   * from a browser while every bot is idle. */
+   * from the owner's browser (never a service-trust shell, whose Origin header it can set) while every bot is idle. */
   const ownerReview = (auth: RequestAuth, req: IncomingMessage) => auth.kind === "loopback"
-    ? DESKTOP_MANAGED || Boolean(req.headers.origin) && !store.bots.some((bot) => bot.busy || activeGroupTurnForBot(bot.id))
+    ? DESKTOP_MANAGED || auth.trust !== "service" && Boolean(req.headers.origin) && !store.bots.some((bot) => bot.busy || activeGroupTurnForBot(bot.id))
     : auth.scopes.includes("admin");
   /** widget -> sendId of a press on its way in: a second tap before acceptance must not send a second answer. */
   const pressesInFlight = new Map<string, string | undefined>();

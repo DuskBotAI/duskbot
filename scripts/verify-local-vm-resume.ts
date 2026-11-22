@@ -7,6 +7,9 @@ import { join, dirname, resolve } from "node:path";
 import { launchVerificationServer, runControlDusk } from "./control-dusk.ts";
 import { mountPreview } from "./testing/preview-fixture.ts";
 import { agentBrowser, ensureUiBrowser, sessionEnv } from "./testing/control-dusk-ui.ts";
+import en from "../src/locales/en.json" with { type: "json" };
+
+const text = (key: keyof typeof en) => JSON.stringify(en[key]);
 
 const fixture = await launchVerificationServer();
 const home = mkdtempSync(join(tmpdir(), "dusk-vmr-")); // Keep macOS browser sockets below their path limit.
@@ -33,22 +36,22 @@ try {
   await wait(`document.querySelector('select[aria-label="Conversation surface"]') !== null`);
   await wait(`Array.from(document.querySelectorAll('img')).some(img => img.src === window.cloudPreviewFixture.screenshot && img.complete)`);
   await evaluate(`(() => { const s = document.querySelector('select[aria-label="Conversation surface"]'); s.value='vm-stopped'; s.dispatchEvent(new Event('change', {bubbles:true})); })()`);
-  await wait(`document.body.textContent.includes('The Local VM is stopped')`);
-  assert.equal(await evaluate(`document.body.textContent.includes('Stopped after inactivity')`), true);
-  assert.equal(await evaluate(`document.body.textContent.includes("isn't available for this bot")`), false);
+  await wait(`document.body.textContent.includes(${text("computer.phase.vmStopped")})`);
+  assert.equal(await evaluate(`document.body.textContent.includes(${text("vm.stopped.idle")})`), true);
+  assert.equal(await evaluate(`document.body.textContent.includes(${text("computer.phase.vmUnavailable")})`), false);
   await command("screenshot", "aside", join(evidenceDir, "stopped.png"));
   if (record) {
     // Hide only fixture controls in the video, leaving product UI untouched.
     await evaluate(`document.querySelector('.fixed.left-2.top-2').style.visibility = 'hidden'`);
     await command("record", "start", join(evidenceDir, "resume.mp4"));
   }
-  await command("find", "role", "button", "click", "--name", "Start Local VM", "--exact");
+  await command("find", "role", "button", "click", "--name", en["vm.setup.start"], "--exact");
   await wait(`window.cloudPreviewFixture.vmStarts === 1`);
-  await wait(`Array.from(document.querySelectorAll('button')).some(b => b.textContent.includes('Starting Local VM') && b.disabled && b.getAttribute('aria-busy') === 'true')`);
+  await wait(`Array.from(document.querySelectorAll('button')).some(b => b.textContent.includes(${text("vm.setup.starting")}) && b.disabled && b.getAttribute('aria-busy') === 'true')`);
   // The POST has returned but Cua is still warming up: the button must keep
   // spinning rather than become clickable or claim the desktop is ready.
   await wait(`window.cloudPreviewFixture.vmReadinessReads >= 2`);
-  assert.equal(await evaluate(`Array.from(document.querySelectorAll('button')).some(b => b.textContent.includes('Starting Local VM') && b.disabled)`), true);
+  assert.equal(await evaluate(`Array.from(document.querySelectorAll('button')).some(b => b.textContent.includes(${text("vm.setup.starting")}) && b.disabled)`), true);
   await command("screenshot", "aside", join(evidenceDir, "starting.png"));
   await evaluate(`Array.from(document.querySelectorAll("button")).find(b => b.textContent === "Finish VM startup").click()`);
   await wait(`Array.from(document.querySelectorAll('img')).some(img => img.src === window.cloudPreviewFixture.vmScreenshot && img.complete && img.naturalWidth > 1)`);
@@ -60,12 +63,13 @@ try {
     await evaluate(`document.querySelector('.fixed.left-2.top-2').style.visibility = ''`);
   }
   await evaluate(`window.cloudPreviewFixture.resetVm(); const s = document.querySelector('select[aria-label="Panel"]'); s.value='settings'; s.dispatchEvent(new Event('change', {bubbles:true}));`);
-  await wait(`document.body.textContent.includes('Stopped after inactivity')`);
-  assert.equal(await evaluate(`document.body.textContent.includes('Delete and recreate')`), false);
-  await command("find", "role", "button", "click", "--name", "Start Local VM", "--exact");
-  await wait(`document.body.textContent.includes('Waiting for the desktop')`);
+  await command("find", "role", "button", "click", "--name", en["settings.w6a.private.more"], "--exact");
+  await wait(`Array.from(document.querySelectorAll('button')).some(b => b.textContent === ${text("vm.setup.start")})`);
+  assert.equal(await evaluate(`document.body.textContent.includes(${text("vm.setup.recreate")})`), false);
+  await command("find", "role", "button", "click", "--name", en["vm.setup.start"], "--exact");
+  await wait(`document.body.textContent.includes(${text("vm.setup.waiting")})`);
   await command("find", "role", "button", "click", "--name", "Finish VM startup", "--exact");
-  await wait(`Array.from(document.querySelectorAll('[aria-live]')).some(el => el.textContent.trim() === 'Ready')`);
+  await wait(`Array.from(document.querySelectorAll('[role=group]')).some(el => el.textContent === ${text("vm.setup.step4")} + ${text("settings.w6.setup.done")})`);
   console.log("PASS: stopped explanation → one start → pending through warmup → live preview; Settings also resumes without replacement");
 } catch (error) {
   if (browser) console.error(JSON.stringify(await agentBrowser(browser.binary, browser.env, ["snapshot"]).catch(() => ({}))));

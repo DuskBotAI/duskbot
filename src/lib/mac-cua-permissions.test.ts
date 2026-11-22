@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { macCuaPermissionHelper, macCuaPermissionMessage, missingMacCuaPermissions } from "./mac-cua-permissions";
+import { macCuaPermissionHelper, macCuaPermissionMessage, macPermissionPaneToOpen, missingMacCuaPermissions } from "./mac-cua-permissions";
 
 describe("macOS CUA permission recovery", () => {
   it("names only the grants the host reported missing", () => {
@@ -29,5 +29,14 @@ describe("macOS CUA permission recovery", () => {
     expect(missingMacCuaPermissions("Screen Recording available")).toEqual([]);
     expect(missingMacCuaPermissions("Screen Recording granted; Accessibility required")).toEqual(["accessibility"]);
     expect(macCuaPermissionMessage([])).toBeNull();
+  });
+
+  it("opens one pane: the first missing permission, Accessibility before Screen Recording", () => {
+    expect(macPermissionPaneToOpen("Accessibility and Screen Recording required", null)).toBe("accessibility");
+    expect(macPermissionPaneToOpen("Screen Recording required", { supported: true, accessibility: "missing", screen: "missing" })).toBe("screen");
+    expect(macPermissionPaneToOpen(undefined, { supported: true, accessibility: "granted", screen: "asked" })).toBe("screen");
+    expect(macPermissionPaneToOpen(undefined, { supported: true, accessibility: "missing", screen: "missing" })).toBe("accessibility");
+    expect(macPermissionPaneToOpen("helper exited", { supported: false })).toBe("accessibility");
+    expect(macPermissionPaneToOpen(undefined, null)).toBe("accessibility");
   });
 });

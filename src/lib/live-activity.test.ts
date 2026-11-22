@@ -174,6 +174,14 @@ describe("turnNowPhrases: what the status line says is happening now", () => {
     for (const phrase of [turnNowPhrases(null, long)!.phrases[0]!, turnNowPhrases(null, short)!.phrases[0]!]) expect(phrase.length).toBeLessThanOrEqual(NOTICE_LABEL_MAX);
   });
 
+  it("never names a first reply's wait: the chat holds that row back while the turn runs, so the sidebar says Thinking as the chat does", () => {
+    const rescue = { botId: "pepper", threadId: "t", turnId: "turn-1", instanceId: "claude", ai: "Claude" };
+    const waiting = activity("notice: Pepper hasn't heard back from Verification fixture yet.", { rescue });
+    expect(turnNowPhrases(null, waiting)).toBeNull();
+    expect(friendlyNowPhrases(null, waiting).phrases[0]).not.toBe("Heads up");
+    expect(turnNowPhrases({ activity: "thinking" }, waiting)?.phrases[0]).toBe("Thinking");
+  });
+
   it("names the file being written and how much, from the engine's own report", () => {
     expect(turnNowPhrases({ activity: "write", itemId: "w", file: "index.html", bytes: 14 * 1024 + 9 })).toMatchObject({ phrases: ["Writing index.html"], size: "14 KB" });
     expect(turnNowPhrases({ activity: "edit", file: "app.ts", bytes: 3 * 1024 * 1024 + 300_000 })).toMatchObject({ phrases: ["Editing app.ts"], size: "3.2 MB" });

@@ -5,6 +5,7 @@ import { randomBytes } from "node:crypto";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { resolveAgentBrowserBinary } from "../../server/browser-engine.ts";
+import { CONNECT_GRACE_MS, FRESH_MS } from "../../electron/home-window.mjs";
 import { hostTimeout } from "../../server/testing/host-timeout.ts";
 import { freePortBlock } from "../../server/testing/ports.ts";
 import { launchCloudSendFixture, type CloudSendFixture } from "./cloud-send-fixture.ts";
@@ -37,6 +38,15 @@ const PAIR_FORM = "Boolean(document.querySelector('form input') && /pairing code
   const onCloudPage = () => until(() => page<boolean>("Boolean(document.querySelector('textarea[aria-label^=\"Message\"]'))"), Boolean, 60_000, "My Cloud's page")
     .then(() => expect(new URL(world.window.url).origin).toBe(world.cloudOrigin));
   const screen = () => page<string | null>("document.querySelector('[data-home-screen]')?.dataset.homeScreen ?? null");
+  // A place that stops answering as the window sets out to open it keeps the opening screen (words, never blank) for
+  // CONNECT_GRACE_MS of retries, then says it can't be reached: main's clock is moved past the grace instead of waiting it out.
+  const offlineAfterGrace = async (what: string) => {
+    const shown = await until(() => page<string | null>("document.querySelector('[data-home-screen=offline]') ? 'offline' : document.querySelector('[data-home-screen=opening] [role=status]')?.textContent?.trim() || null"),
+      Boolean, 3_000, `the opening screen for ${what} within 3 s`);
+    if (shown === "offline") return;
+    world.clock.aheadMs += CONNECT_GRACE_MS;
+    await until(() => screen(), (value) => value === "offline", 10_000, `the offline screen for ${what} once the connect grace is over`);
+  };
   const blank = async () => { await world.window.loadURL("about:blank"); await new Promise((resolve) => setTimeout(resolve, 200)); };
 
   beforeAll(async () => {
@@ -133,21 +143,30 @@ const PAIR_FORM = "Boolean(document.querySelector('form input') && /pairing code
     } finally { world.account.state = signedIn; }
   }, hostTimeout(60_000));
 
-  it("launching with My Cloud asleep shows Waking My Cloud…, then the page", async () => {
+  it("launching with My Cloud asleep opens with the startup card, then this computer's asleep screen, which wakes it and opens the page", async () => {
     await blank();
     world.account.power = { state: "asleep", since: Date.now(), sleeps: true };
-    const before = world.cloudRequests.length;
-    const launched = world.launch();
-    await until(async () => world.splash && !world.splash.destroyed ? world.splash.evaluate<string>("document.querySelector('[role=status]')?.textContent ?? ''") : "", (text) => text === "Waking My Cloud…", 20_000, "the startup screen");
-    await world.splash!.screenshot(join(shots, "1-startup-waking.png"));
-    expect(world.cloudRequests.slice(before).filter((entry) => entry.at < Date.now()).map((entry) => entry.path)).not.toContain("/api/health");
-    await launched;
-    await onCloudPage();
-    expect(world.account.wakes).toBe(1);
-    expect(world.cloudRequests.slice(before)[0]?.path, "nothing knocks on a sleeping Cloud before the Admin wakes it").not.toBe("/api/health");
-    await until(async () => world.splash?.destroyed ?? true, Boolean, 15_000, "the startup screen to close");
-    await world.window.screenshot(join(shots, "2-my-cloud-after-waking.png"));
-    world.account.power = null;
+    const before = world.cloudRequests.length, wakes = world.account.wakes;
+    try {
+      const launched = world.launch();
+      // opening never wakes My Cloud by itself: the card says Opening, and the asleep screen that replaces it asks for the wake
+      await until(async () => world.splash && !world.splash.destroyed ? world.splash.evaluate<string>("document.querySelector('[role=status]')?.textContent ?? ''") : "",
+        (text) => text !== "", 20_000, "the startup card's line");
+      await launched;
+      await until(() => screen(), (value) => value === "asleep", 30_000, "the asleep screen");
+      const words = await page<string>("document.querySelector('main').innerText.trim()");
+      expect(words, "the asleep screen is never blank").toMatch(/Connecting…/);
+      // the loader holds back a moment (APPEAR_AFTER_MS) so a short wait never flashes it, then fades in
+      await until(() => page<boolean>(`(() => { const main = document.querySelector('main[data-home-screen=asleep]');
+        if (!main) return false; if (!main.hasAttribute('data-cloud-asleep-loading')) return true;
+        const box = main.querySelector('[style*="opacity"]'); return Boolean(box) && getComputedStyle(box).opacity === '1'; })()`), Boolean, 3_000, "the asleep screen drawn");
+      await world.window.screenshot(join(shots, "1-startup-asleep-connecting.png"));
+      await onCloudPage();
+      expect(world.account.wakes - wakes).toBe(1);
+      expect(world.cloudRequests.slice(before)[0]?.path, "nothing knocks on a sleeping Cloud before the Admin wakes it").not.toBe("/api/health");
+      await until(async () => world.splash?.destroyed ?? true, Boolean, 15_000, "the startup card to close");
+      await world.window.screenshot(join(shots, "2-my-cloud-after-waking.png"));
+    } finally { world.account.power = null; }
   }, hostTimeout(180_000));
 
   it("a lapsed cookie signs in again by itself, with no pairing page, back where it was", async () => {
@@ -191,26 +210,31 @@ const PAIR_FORM = "Boolean(document.querySelector('form input') && /pairing code
     await onCloudPage();
   }, hostTimeout(120_000));
 
-  it("with the network down the offline screen shows within 3 s, and goes away by itself", async () => {
-    await blank();
-    world.network.down = true;
-    const started = Date.now();
-    void world.home.show();
-    await until(() => screen(), (value) => value === "offline", 3_000, "the offline screen within 3 s");
-    expect(Date.now() - started).toBeLessThan(3_000);
-    expect(await page<string>("document.body.innerText")).toContain("Can't reach my cloud right now.");
-    await world.window.screenshot(join(shots, "5-offline.png"));
-    world.network.down = false;
-    await onCloudPage();
-    expect(await screen()).toBeNull();
-    // A reload with the network gone fails to load My Cloud: the same screen, as quickly.
-    world.network.down = true;
-    const reloaded = Date.now();
-    world.window.webContents.reload();
-    await until(() => screen(), (value) => value === "offline", 3_000, "the offline screen after a failed load");
-    expect(Date.now() - reloaded).toBeLessThan(3_000);
-    world.network.down = false;
-    await onCloudPage();
+  it("with the network down the opening screen shows within 3 s, then the offline screen once the connect grace is over, and goes away by itself", async () => {
+    // a My Cloud that only just became ready (as the setup tests above left it) keeps the setup screen while it doesn't
+    // answer; this one has been up a while
+    world.clock.aheadMs = FRESH_MS + 60_000;
+    try {
+      await blank();
+      world.network.down = true;
+      const started = Date.now();
+      void world.home.show();
+      await offlineAfterGrace("My Cloud");
+      expect(Date.now() - started).toBeLessThan(15_000);
+      expect(await page<string>("document.body.innerText")).toContain("Can't reach my cloud right now.");
+      await world.window.screenshot(join(shots, "5-offline.png"));
+      world.network.down = false;
+      await onCloudPage();
+      expect(await screen()).toBeNull();
+      // A reload with the network gone fails to load My Cloud: the same screen, as quickly.
+      world.network.down = true;
+      const reloaded = Date.now();
+      world.window.webContents.reload();
+      await offlineAfterGrace("a failed load");
+      expect(Date.now() - reloaded).toBeLessThan(15_000);
+      world.network.down = false;
+      await onCloudPage();
+    } finally { world.network.down = false; world.clock.aheadMs = 0; }
   }, hostTimeout(120_000));
 
   it("notifications are allowed for My Cloud's page and this computer's, never another server's", async () => {
@@ -297,7 +321,7 @@ const PAIR_FORM = "Boolean(document.querySelector('form input') && /pairing code
     await blank();
     world.network.teamDown = true;
     void world.home.show({ place: { team: "team-acme" } });
-    await until(() => screen(), (value) => value === "offline", 3_000, "the offline screen within 3 s");
+    try { await offlineAfterGrace("Acme"); } finally { world.clock.aheadMs = 0; }
     expect(await page<string>("document.body.innerText")).toContain("Can't reach Acme right now.");
     await world.window.screenshot(join(shots, "9-team-offline.png"));
     await world.home.show({ place: "cloud" });

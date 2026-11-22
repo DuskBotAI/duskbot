@@ -25,14 +25,15 @@ has no alternate endpoint or test switch. It checks:
 - A pre-existing unrelated server named `whop` is never overwritten.
 - Cancellation and denied consent leave the connection disabled.
 - Repeated sign-ins reuse the configured server.
-- Whop connects directly in the same grid as the Composio apps, without a
-  Composio key or a detour to the MCP settings. Connected filtering and its
-  count include Whop; disconnect removes it from that filter.
+- Whop, found through the Apps window's search, connects on its own app page
+  without a Composio key or a detour to the MCP settings. **Your plugins** and
+  the header's connected count include Whop; disconnect removes it there.
 - Successful consent plus tool discovery enables the connection; an OAuth
   token reaches the synthetic provider without appearing in the renderer list.
 - Failed post-login tool discovery does not enable the server and is retryable.
 - Reload keeps the connection; disconnect disables it and revokes sign-in.
-- The Agentcard card, from the same table of hosted apps, draws a glyph with
+- Search finds Whop and Agentcard and keeps Gmail apart from them. The
+  Agentcard card, from the same table of hosted apps, draws a glyph with
   no logo, connects and disconnects beside Whop, and each stays connected
   while the other changes.
 - Narrow layout has no page overflow; no business tools execute during setup.

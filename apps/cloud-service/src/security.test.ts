@@ -35,7 +35,7 @@ async function fixture() {
   });
   for (const key of ["DUSK_BILLING_PROVIDER", "DUSK_CLOUD_PROVIDER", "DUSK_POOL_DRIVER", "DUSK_CLOUD_SEAL_KEY", "DUSK_DODO_PRODUCTS"]) vi.stubEnv(key, undefined);
   vi.stubEnv("DUSK_MANAGED", "1"); vi.stubEnv("INSTABOX_API_KEY", api.key); vi.stubEnv("INSTABOX_BASE_URL", api.baseUrl);
-  vi.stubEnv("DUSK_MANAGED_HOME_PACKAGE_URL", "https://packages.example.test/home.tgz"); vi.stubEnv("DUSK_MANAGED_HOME_PACKAGE_SHA256", "b".repeat(64));
+  vi.stubEnv("DUSK_MANAGED_HOME_PACKAGE_URL", "https://packages.example.test/home.tgz"); vi.stubEnv("DUSK_MANAGED_HOME_PACKAGE_SHA256", "b".repeat(64)); vi.stubEnv("DUSK_MANAGED_BACKUP_MIN_FREE_GB", "1");
   // the homes answer their signed reads; nothing else leaves the machine
   let idle = false;
   const fetcher: typeof fetch = async (input, init) => {

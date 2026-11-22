@@ -21,7 +21,7 @@ import { Duplex, Readable } from "node:stream";
 import { connect as tlsConnect } from "node:tls";
 import { connect as http2Connect, constants as h2Constants } from "node:http2";
 import { homedir, hostname, networkInterfaces, userInfo } from "node:os";
-import { dirname, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { pipeline } from "node:stream/promises";
 import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
@@ -3184,7 +3184,12 @@ async function selftest() {
 
 const main = { probe, link, tunnel, direct, selftest };
 const runAs = (file) => { try { return realpathSync(file); } catch { return file; } };
-if (process.argv[1] && runAs(fileURLToPath(import.meta.url)) === runAs(process.argv[1])) {
+/** true only when node was started on this file itself: bundled into another script (the cloud home's server, whose
+ * phone relay loads this module as its hub), the module's url is that script's and must never run a command */
+export function runsAsCommand(moduleFile, entry) {
+  return Boolean(entry) && basename(moduleFile) === "agent.mjs" && runAs(moduleFile) === runAs(entry);
+}
+if (runsAsCommand(fileURLToPath(import.meta.url), process.argv[1])) {
   const command = main[process.argv[2]];
   if (!command) { console.error("usage: node agent.mjs probe|link|tunnel|direct|selftest"); process.exit(2); }
   command().then((code) => process.exit(code ?? 0), (error) => { console.error(error?.message ?? String(error)); process.exit(1); });

@@ -141,6 +141,9 @@ function addToBrevo(email, meta, attempt = 0) {
   }, (err) => retry(err.name));
 }
 const clean = (v, max = 64) => (typeof v === 'string' && v.trim() ? v.trim().slice(0, max).replace(/[^\w .:/@-]/g, '') || null : null);
+// browsers check a page on every load; the edge may answer for 5 minutes and keep serving the old copy for a day while it
+// fetches the new one. cloudflare caches html only under a cache rule that respects origin headers (s-maxage)
+const PAGE_CACHE = 'public, max-age=0, s-maxage=300, stale-while-revalidate=86400';
 const sendJson = (res, status, data, extra = {}) => { const body = JSON.stringify(data); res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'Content-Length': Buffer.byteLength(body), ...extra }); res.end(body); };
 const fail = (res, status, error) => sendJson(res, status, { ok: false, error, message: WAIT_MSG[error] });
 
@@ -313,7 +316,7 @@ const server = http.createServer((req, res) => {
     // a deploy shows at once instead of after a cached page (and the old asset hashes it points at) runs out
     // only when the stamp is this file's own: a page from before a deploy asking for its old stamp gets today's file, and
     // that must not be kept for a year under the old address (a browser or the edge would then mix two builds)
-    'Cache-Control': status >= 400 ? 'no-store' : /\.(sh|sha256|json|html)$/.test(file) ? 'no-cache' : stampOf(req.url) ? (stampOf(req.url) === contentStamp(file, body) ? 'public, max-age=31536000, immutable' : 'no-cache') : file.endsWith('.woff2') ? 'public, max-age=86400' : 'public, max-age=300',
+    'Cache-Control': status >= 400 ? 'no-store' : /\.(sh|sha256|json)$/.test(file) ? 'no-cache' : file.endsWith('.html') ? PAGE_CACHE : stampOf(req.url) ? (stampOf(req.url) === contentStamp(file, body) ? 'public, max-age=31536000, immutable' : 'no-cache') : file.endsWith('.woff2') ? 'public, max-age=86400' : 'public, max-age=300',
   };
   if (/^text\/|svg|json/.test(type) && body.length > 1024) {
     headers.Vary = 'Accept-Encoding';

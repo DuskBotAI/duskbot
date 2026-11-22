@@ -14,6 +14,7 @@ import { CopyRow, FormDialog, FormField, ItemRow, NoteRow } from "./ListRows";
 import { textFieldCls } from "./ui/GrokDialog";
 import { friendlyError } from "@/lib/plain-error";
 import { ArtState } from "./ui/Art";
+import { askConfirm } from "./ConfirmDialog";
 
 export type Role = "admin" | "member";
 
@@ -63,6 +64,20 @@ export function mergePeople(
   return people;
 }
 
+/** Whether an invite link on this origin opens only on the computer that made it. */
+export function linkStaysOnThisComputer(base: string): boolean {
+  try {
+    const host = new URL(base).hostname.replace(/^\[|\]$/g, "");
+    return host === "localhost" || host.endsWith(".localhost") || host === "::1" || /^127(\.\d{1,3}){3}$/.test(host);
+  } catch {
+    return false;
+  }
+}
+
+function personName(person: Person): string {
+  return person.isDomain ? t("people.everyoneAt", { domain: person.entry.slice(1) }) : person.entry;
+}
+
 export function lastSeenLabel(lastSeenAt: number | null, now = Date.now()): string {
   if (lastSeenAt === null) return t("people.never");
   if (now - lastSeenAt < 24 * 60 * 60_000) return t("people.today");
@@ -89,7 +104,7 @@ export function PeopleTable({ people, busy, onRole, onRemove, onLink }: {
           person.devices > 0 ? t("people.devices", { count: String(person.devices) }) : "",
         ].filter(Boolean).join(" · ");
         return (
-          <ItemRow key={person.entry} title={person.isDomain ? t("people.everyoneAt", { domain: person.entry.slice(1) }) : person.entry} hint={<span title={t("people.turns", { turns: String(person.turns) })}>{hint}</span>}>
+          <ItemRow key={person.entry} title={personName(person)} hint={<span title={t("people.turns", { turns: String(person.turns) })}>{hint}</span>}>
               <button type="button" disabled={busy} onClick={() => onLink(person)} aria-label={t("people.link")} title={t("people.link")}
                 className="flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-md text-ink-secondary hover:bg-ink/[0.035] hover:text-ink disabled:opacity-45"><Link2 size={13} aria-hidden="true" /></button>
               <button type="button" disabled={busy} onClick={() => onRole(person, person.role === "admin" ? "member" : "admin")} className="ui-button">
@@ -158,14 +173,16 @@ export function PeopleSection() {
     });
   }, [load]);
 
-  const save = async (next: SignInLists) => {
+  const save = async (next: SignInLists): Promise<boolean> => {
     setBusy(true);
     setError(null);
     try {
       await api("/api/config", { method: "PUT", body: JSON.stringify({ signIn: next }) });
       await load();
+      return true;
     } catch (cause) {
       setError(friendlyError(cause));
+      return false;
     } finally {
       setBusy(false);
     }
@@ -179,16 +196,35 @@ export function PeopleSection() {
       setError(t("remote.signInAccess.invalid"));
       return false;
     }
-    await save(withEntry(lists, entry, role));
+    if (!await save(withEntry(lists, entry, role))) return false;
     setDraft("");
     setLink(inviteLink(base, entry));
     return true;
   };
 
+  const changeRole = async (person: Person, next: Role) => {
+    if (!lists) return;
+    if (next === "admin" && !await askConfirm({
+      title: t("people.makeAdminTitle", { who: personName(person) }), body: t("people.makeAdminBody"), confirmLabel: t("people.makeAdmin"), tone: "neutral",
+    })) return;
+    await save(withEntry(lists, person.entry, next));
+  };
+
+  const remove = async (person: Person) => {
+    if (!lists || !await askConfirm({
+      title: t("people.removeTitle", { who: personName(person) }), body: t("people.removeBody"), confirmLabel: t("people.remove"), tone: "danger",
+    })) return;
+    if (!await save(withoutEntry(lists, person.entry))) return;
+    const removedLink = inviteLink(base, person.entry);
+    setLink((shown) => (shown === removedLink ? null : shown));
+  };
+
   if (!canPairDevices(session)) return null;
   return (
     <div data-people-summary="" className="contents">
-      {emailOffered === false && tried && <NoteRow tone="warn">{t("people.notHosted")}</NoteRow>}
+      {linkStaysOnThisComputer(base)
+        ? <NoteRow tone="warn">{t("people.localOnly")}</NoteRow>
+        : emailOffered === false && tried && <NoteRow tone="warn">{t("people.notHosted")}</NoteRow>}
       <ItemRow title={t("people.title")} hint={t("settings.simple.people")}>
         <button type="button" onClick={() => void load()} disabled={loading || busy} className="ui-button">{t("people.refresh")}</button>
         <button type="button" data-settings-open="people-invite" disabled={busy} className="ui-button" onClick={() => { setError(null); setInviting(true); }}>{t("settings.simple.people.invite")}</button>
@@ -198,8 +234,8 @@ export function PeopleSection() {
       <PeopleTable
         people={people}
         busy={busy}
-        onRole={(person, next) => { if (lists) void save(withEntry(lists, person.entry, next)); }}
-        onRemove={(person) => { if (lists) void save(withoutEntry(lists, person.entry)); }}
+        onRole={(person, next) => void changeRole(person, next)}
+        onRemove={(person) => void remove(person)}
         onLink={(person) => setLink(inviteLink(base, person.entry))}
       />
       <AnimatePresence>{inviting && (

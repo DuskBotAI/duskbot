@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
 import { cloudRequestSignature, createCloudPairing, createCloudRequestVerifier } from "../../../../server/cloud-home.ts";
 import { SessionRegistry } from "../../../../server/sessions.ts";
-import { createHomeClient, signCloudRequest } from "./home-client.ts";
+import { createHomeClient, homeFailure, signCloudRequest } from "./home-client.ts";
 
 const dirs: string[] = [];
 afterEach(() => { for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true }); });
@@ -68,4 +68,19 @@ it("sends a link grant beside the entitlement only when it has one", async () =>
   await client.entitle!("https://cloud.example.test", secret, "entitlement-token", "l1.grant");
   await client.entitle!("https://cloud.example.test", secret, "entitlement-token", null);
   expect(bodies).toEqual([{ v: 1, token: "entitlement-token", linkGrant: "l1.grant" }, { v: 1, token: "entitlement-token" }]);
+});
+
+it("keeps a refusal's status and the home's short code, and names timeouts and network failures, never the home's words", async () => {
+  const refusing = createHomeClient({ now: () => at, fetch: async () => Response.json({ error: "entitlement_required" }, { status: 403 }) });
+  const error = await refusing.entitle!("https://home.example.test", secret, "token", "grant").catch((e: unknown) => e);
+  expect(error).toMatchObject({ message: "Cloud home request failed.", status: 403, code: "entitlement_required" });
+  expect(homeFailure(error)).toBe("http_403:entitlement_required");
+  const prose = createHomeClient({ now: () => at, fetch: async () => Response.json({ error: "send the entitlement as JSON (content-type: application/json)" }, { status: 415 }) });
+  expect(homeFailure(await prose.pair("https://home.example.test", secret, { label: "x" }).catch((e: unknown) => e))).toBe("http_415");
+  const slow = createHomeClient({ now: () => at, fetch: async () => { throw Object.assign(new Error("aborted"), { name: "TimeoutError" }); } });
+  expect(homeFailure(await slow.pair("https://home.example.test", secret, { label: "x" }).catch((e: unknown) => e))).toBe("timeout");
+  const down = createHomeClient({ now: () => at, fetch: async () => { throw new TypeError("fetch failed"); } });
+  expect(homeFailure(await down.pair("https://home.example.test", secret, { label: "x" }).catch((e: unknown) => e))).toBe("network");
+  const garbled = createHomeClient({ now: () => at, fetch: async () => new Response("not json") });
+  expect(homeFailure(await garbled.pair("https://home.example.test", secret, { label: "x" }).catch((e: unknown) => e))).toBe("bad_answer");
 });

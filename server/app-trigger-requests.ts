@@ -8,6 +8,7 @@ import { AppTriggerError, type AppTriggerManager } from "./app-triggers.ts";
 import { newId } from "./contracts.ts";
 import { UNDO_STALE } from "./direct-apply.ts";
 import { redactSecretsInText } from "./redact.ts";
+import type { JsonValue } from "./schema.ts";
 
 export interface AppTriggerRequestCard {
   title: string;
@@ -114,7 +115,7 @@ export class AppTriggerRequestService {
     return trigger;
   }
 
-  async submit(args: { botId: string; threadId: string; operation: unknown; from?: { botId: string; name: string; color: string }; canCommit?: () => boolean }): Promise<AppTriggerRequestResult> {
+  async submit(args: { botId: string; threadId: string; operation: unknown; from?: { botId: string; name: string; color: string }; canCommit?: () => boolean; payload?: JsonValue }): Promise<AppTriggerRequestResult> {
     const parsed = operationSchema.safeParse(args.operation);
     if (!parsed.success) throw new AppTriggerError(parsed.error.issues[0]?.message ?? "Invalid automation request");
     const operation = parsed.data as AppTriggerRequestOperation;
@@ -140,7 +141,7 @@ export class AppTriggerRequestService {
         after = await triggers.update(operation.triggerId, { enabled: operation.action === "resume" });
         break;
       case "run_now":
-        runId = (await triggers.runNow(operation.triggerId))?.runId;
+        runId = (await triggers.runNow(operation.triggerId, args.payload))?.runId;
         after = before ?? null;
         break;
       case "delete":

@@ -9,7 +9,8 @@ import type { CheckoutSource, PlanCatalog } from "../data/contracts";
 import { bundleOf, dollars } from "../data/pricing";
 import { useSession } from "../data/session";
 import { Button, ButtonLink, cx } from "../ui/kit";
-import { planSelection, type PaidPlan } from "./plan-sheet";
+import { AnimatePresence } from "../ui/motion";
+import { PlanSheet, planSelection, type PaidPlan } from "./plan-sheet";
 
 /** what dusk cloud does for someone, said the same way everywhere it is offered */
 export const CLOUD_POINTS = [
@@ -53,6 +54,13 @@ export function useQuickCheckout(source: CheckoutSource) {
     setBusy(false);
   };
   return { busy, error, buy };
+}
+
+/** the plan sheet on a plan first (plan, monthly or yearly, region, a work license), then checkout from it */
+export function usePlanChoice(source: CheckoutSource) {
+  const [start, setStart] = useState<PaidPlan | null>(null);
+  const sheet = <AnimatePresence>{start && <PlanSheet key="plan" source={source} start={start} onClose={() => setStart(null)} />}</AnimatePresence>;
+  return { choose: (plan: PaidPlan = "starter") => setStart(plan), sheet };
 }
 
 export const monthlyOf = (catalog: PlanCatalog | null, plan: PaidPlan) => {

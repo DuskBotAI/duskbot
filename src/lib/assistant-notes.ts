@@ -6,7 +6,7 @@ import { activeLocale, t } from "@/lib/i18n";
 import type { LocaleKey } from "@/locales";
 import { api, type Action, type Bot, type ConfigStatus } from "@/state/store";
 import {
-  aboutMeWithNotes, isNotesPrompt, NOTES_MAX_CHARS, looksLikeNotes, notesMemoryFile, notesMemoryText, notesThreadsFile, notesThreadsText, NOTES_PROMPT, parseNotes, type AssistantNotes,
+  aboutMeWithNotes, isNotesPrompt, notesAboutFile, notesAboutText, NOTES_MAX_CHARS, looksLikeNotes, notesMemoryFile, notesMemoryText, notesThreadsFile, notesThreadsText, NOTES_PROMPT, parseNotes, type AssistantNotes,
 } from "../../shared/assistant-notes";
 import { notesNoteFacts, postImportNote } from "./import-note";
 import { arrivalFailed, noteArrival, setNotesWork, type NotesVia } from "./notes-arrival";
@@ -65,7 +65,7 @@ export async function copyNotesPrompt(now = Date.now()): Promise<boolean> {
   if (copied) {
     const watch = notesWatch();
     const live = watch && now <= watch.until;
-    setWatch({ since: live ? watch.since : now, until: now + WATCH_FOR_MS, taken: watch?.taken ?? [] });
+    setWatch({ since: live ? watch.since : now, until: now + WATCH_FOR_MS, taken: watch?.taken ?? [], ...(live && watch.lookedBack ? { lookedBack: true } : {}) });
   }
   return copied;
 }
@@ -76,14 +76,16 @@ export const WATCH_FOR_MS = 3 * 60 * 60_000;
 export const WATCH_AFTER_FILE_MS = 30 * 60_000;
 export const WATCH_EVERY_MS = 4_000;
 
-/** `since`: the first copy; only files saved after it are read. `taken`: files already brought in, by name and time. */
-export interface NotesWatch { since: number; until: number; taken: string[] }
+/** `since`: the first copy; files saved after it are read by themselves. `taken`: files already brought in or turned
+ * down, by name and time. `lookedBack`: the files saved before the copy were looked for, to offer them. */
+export interface NotesWatch { since: number; until: number; taken: string[]; lookedBack?: boolean }
 
 export function notesWatch(): NotesWatch | null {
   try {
     const parsed = JSON.parse(storage()?.getItem(WATCH_KEY) ?? "null") as Partial<NotesWatch> | null;
     return parsed && typeof parsed.since === "number" && typeof parsed.until === "number"
-      ? { since: parsed.since, until: parsed.until, taken: Array.isArray(parsed.taken) ? parsed.taken.filter((one): one is string => typeof one === "string") : [] }
+      ? { since: parsed.since, until: parsed.until, taken: Array.isArray(parsed.taken) ? parsed.taken.filter((one): one is string => typeof one === "string") : [],
+        ...(parsed.lookedBack === true ? { lookedBack: true } : {}) }
       : null;
   } catch {
     return null;
@@ -94,19 +96,88 @@ function setWatch(next: NotesWatch) {
   try { storage()?.setItem(WATCH_KEY, JSON.stringify(next)); } catch {}
 }
 
+interface NotesFile { name: string; modifiedAt: number; text: string }
+
+const fileKey = (file: Pick<NotesFile, "name" | "modifiedAt">) => `${file.name}:${file.modifiedAt}`;
+const isNotesFile = (file: NotesFile) => looksLikeNotes(file.text) && !isNotesPrompt(file.text);
+
+function markTaken(files: readonly NotesFile[], patch: Partial<NotesWatch> = {}) {
+  const latest = notesWatch();
+  if (latest) setWatch({ ...latest, ...patch, taken: [...latest.taken, ...files.map(fileKey)].slice(-50) });
+}
+
+/** A notes file that was in Downloads before the prompt was copied: offered in the first bot's chat, brought in only
+ * when the person says so. The newest one names it; the parts of a split one come in together. */
+export interface NotesOffer { name: string; modifiedAt: number; files: NotesFile[] }
+
+let offer: NotesOffer | null = null;
+const offerListeners = new Set<() => void>();
+
+function setOffer(next: NotesOffer | null) {
+  offer = next;
+  for (const listener of offerListeners) listener();
+}
+
+export const notesOffer = (): NotesOffer | null => offer;
+
+export function useNotesOffer(): NotesOffer | null {
+  return useSyncExternalStore((listener) => { offerListeners.add(listener); return () => offerListeners.delete(listener); }, notesOffer, () => null);
+}
+
+/** "Found dusk-bot-notes.md from Tuesday. Bring it in?": the day's name within a week, else its date. */
+export function notesOfferLine(found: Pick<NotesOffer, "name" | "modifiedAt">, now = Date.now()): string {
+  const saved = new Date(found.modifiedAt);
+  const today = new Date(now);
+  if (saved.toDateString() === today.toDateString()) return t("composer.notes.offerToday", { name: found.name });
+  const when = now - found.modifiedAt < 6 * 86_400_000
+    ? new Intl.DateTimeFormat(activeLocale(), { weekday: "long" }).format(saved)
+    : new Intl.DateTimeFormat(activeLocale(), { month: "short", day: "numeric" }).format(saved);
+  return t("composer.notes.offer", { name: found.name, when });
+}
+
+/** Turned down: never offered again. */
+export function dismissNotesOffer() {
+  if (!offer) return;
+  markTaken(offer.files);
+  setOffer(null);
+}
+
+export async function bringOfferedNotesIn(context: NotesContext): Promise<NotesOutcome | null> {
+  const taking = offer;
+  if (!taking) return null;
+  markTaken(taking.files);
+  setOffer(null);
+  noteArrival("downloads", context.firstBotId);
+  try {
+    return await importNotes(taking.files.map((file) => file.text).join("\n\n"), context, { via: "downloads" });
+  } catch (cause) {
+    arrivalFailed(notesErrorLine(cause));
+    return null;
+  }
+}
+
 /** The notes file another AI saved to Downloads since the prompt was copied, brought in once: each file (or the parts
- * of a split one, together) by its name and time. Null when nothing new is there, or the watch is over. */
+ * of a split one, together) by its name and time. The first look also finds one saved before the copy, and offers it.
+ * Null when nothing new came in, or the watch is over. */
 export async function takeNotesFromDownloads(context: NotesContext, now = Date.now()): Promise<NotesOutcome | null> {
   const watch = notesWatch();
   if (!watch || now > watch.until) return null;
-  const answer = await api<{ files?: Array<{ name: string; modifiedAt: number; text: string }> }>(
-    `/api/setup-import/notes?since=${Math.floor(watch.since)}`, { timeoutMs: 10_000 },
+  const answer = await api<{ files?: NotesFile[] }>(
+    `/api/setup-import/notes?since=${watch.lookedBack ? Math.floor(watch.since) : 1}`, { timeoutMs: 10_000 },
   ).catch(() => null);
-  const fresh = (answer?.files ?? []).filter((file) => !watch.taken.includes(`${file.name}:${file.modifiedAt}`));
+  if (!answer) return null;
+  const unseen = (answer.files ?? []).filter((file) => !watch.taken.includes(fileKey(file)));
+  if (!watch.lookedBack) {
+    const earlier = unseen.filter((file) => file.modifiedAt <= watch.since && isNotesFile(file));
+    const newest = earlier.at(-1);
+    if (newest && !offer) setOffer({ name: newest.name, modifiedAt: newest.modifiedAt, files: earlier });
+    markTaken([], { lookedBack: true });
+  }
+  const fresh = unseen.filter((file) => file.modifiedAt > watch.since);
   if (!fresh.length) return null;
   const latest = notesWatch() ?? watch;
-  setWatch({ ...latest, until: Math.max(latest.until, now + WATCH_AFTER_FILE_MS), taken: [...latest.taken, ...fresh.map((file) => `${file.name}:${file.modifiedAt}`)].slice(-50) });
-  const notes = fresh.filter((file) => looksLikeNotes(file.text) && !isNotesPrompt(file.text));
+  markTaken(fresh, { until: Math.max(latest.until, now + WATCH_AFTER_FILE_MS) });
+  const notes = fresh.filter(isNotesFile);
   if (!notes.length) return null;
   noteArrival("downloads", context.firstBotId);
   try {
@@ -159,6 +230,8 @@ export interface NotesContext {
 /** `failed`: bots that couldn't be made; `lost`: parts that couldn't be saved. */
 export interface NotesOutcome {
   from: string; facts: number; memories: number; bots: number; failed: string[]; lost?: Array<"about" | "memory">; partial: boolean;
+  /** Facts about the person too long for About me, or past its share for one move, kept in the first bot's memory. */
+  aboutInMemory?: number;
   /** Open threads and recurring tasks kept in the first bot's memory. */
   threads?: number;
   botNames?: string[];
@@ -213,6 +286,19 @@ async function mergeTopic(botId: string, path: string, build: (before: string) =
   if (!text || text === before) return false;
   await api(file, { method: "PUT", body: JSON.stringify({ path, text }) });
   return true;
+}
+
+/** What About me can't take, word for word in a topic of the first bot's memory: answers how many weren't there yet. */
+async function saveLongFacts(notes: AssistantNotes, facts: readonly string[], botId: string | null): Promise<number> {
+  if (!botId || !facts.length) return 0;
+  const count = (text: string | null) => (text ?? "").split("\n").filter((line) => line.startsWith("- ")).length;
+  let added = 0;
+  await mergeTopic(botId, notesAboutFile(notes), (before) => {
+    const text = notesAboutText(notes, facts, before);
+    added = count(text) - count(before);
+    return text;
+  });
+  return added;
 }
 
 async function saveMemories(notes: AssistantNotes, botId: string | null): Promise<number> {
@@ -292,9 +378,28 @@ async function joinMovedBots(notes: AssistantNotes, bots: readonly Bot[], movedN
   return joined;
 }
 
+const importing = new Map<string, Promise<NotesOutcome>>();
+
+/** FNV-1a over the text, with its length: the same notes pasted, dropped and found in Downloads at once share a key. */
+function notesKey(text: string): string {
+  let hash = 0x811c9dc5;
+  for (let at = 0; at < text.length; at += 1) hash = Math.imul(hash ^ text.charCodeAt(at), 0x01000193);
+  return `${text.length}:${(hash >>> 0).toString(16)}`;
+}
+
 /** Everything in the notes, each part on its own: About me, the first bot's memory, then a bot for each of the other
- * AI's own assistants. A part that fails leaves the others in; the waiting stops once anything came in. */
-export async function importNotes(text: string, context: NotesContext, options: { via?: NotesVia } = {}): Promise<NotesOutcome> {
+ * AI's own assistants. A part that fails leaves the others in; the waiting stops once anything came in. The same notes
+ * again while they are still coming in join that import rather than start another. */
+export function importNotes(text: string, context: NotesContext, options: { via?: NotesVia } = {}): Promise<NotesOutcome> {
+  const key = notesKey(text);
+  const running = importing.get(key);
+  if (running) return running;
+  const next = importOnce(text, context, options).finally(() => importing.delete(key));
+  importing.set(key, next);
+  return next;
+}
+
+async function importOnce(text: string, context: NotesContext, options: { via?: NotesVia }): Promise<NotesOutcome> {
   const parsed = parseNotes(text);
   // read: the first bot says it got them in its chat, and its working row shows each step until the summary
   const worker = context.chatBotId || context.firstBotId;
@@ -312,7 +417,8 @@ async function bringNotesIn(parsed: AssistantNotes, context: NotesContext, optio
   // the rules pass: noise and near-repeats out; another AI's own notes are already chosen, so the caps are wider
   const seen = aboutLines(context.aboutMe);
   const memories = distillLines(parsed.memories, { cap: NOTES_MEMORY_CAP, seen: [...seen] });
-  const notes = { ...parsed, aboutMe: distillLines(parsed.aboutMe, { cap: NOTES_ABOUT_CAP, seen }).keep, memories: memories.keep };
+  const about = distillLines(parsed.aboutMe, { cap: NOTES_ABOUT_CAP, seen });
+  const notes = { ...parsed, aboutMe: about.keep, memories: memories.keep };
   const outcome: NotesOutcome = { from: notes.from.name, facts: 0, memories: 0, threads: 0, bots: 0, botNames: [], joined: 0, routines: 0, failed: [], lost: [], partial: notes.partial };
   let aboutMe = context.aboutMe;
   step(t("composer.notes.row.memory"));
@@ -321,6 +427,7 @@ async function bringNotesIn(parsed: AssistantNotes, context: NotesContext, optio
     outcome.facts = saved.added;
     aboutMe = saved.text;
   } catch { outcome.lost!.push("about"); }
+  try { outcome.aboutInMemory = await saveLongFacts(notes, about.later, context.firstBotId); } catch { outcome.lost!.push("about"); }
   try { outcome.memories = await saveMemories(notes, context.firstBotId); } catch { outcome.lost!.push("memory"); }
   // passages and the overflow: the first bot's engine condenses them, now or once it has one
   const later = distillChunks(memories.later.length ? [`What ${notes.from.name} remembered:\n${memories.later.map((line) => `- ${line}`).join("\n")}`] : []);
@@ -351,9 +458,9 @@ async function bringNotesIn(parsed: AssistantNotes, context: NotesContext, optio
     outcome.failed.push(...reports.flatMap((one) => one.report.failed));
     outcome.joined = await joinMovedBots(notes, context.bots, preview.moved);
   }
-  const came = outcome.facts || outcome.memories || outcome.threads || outcome.bots || outcome.joined || outcome.routines || outcome.skills;
+  const came = outcome.facts || outcome.aboutInMemory || outcome.memories || outcome.threads || outcome.bots || outcome.joined || outcome.routines || outcome.skills;
   if (came || !(outcome.failed.length || outcome.lost!.length)) stopWaiting();
-  if (came && worker) await postImportNote(worker, { ...notesNoteFacts(outcome), ...(options.via === "downloads" ? { via: "downloads" as const } : {}) });
+  if (worker) await postImportNote(worker, { ...notesNoteFacts(outcome), ...(options.via === "downloads" ? { via: "downloads" as const } : {}), ...(came ? {} : { nothingNew: true }) });
   return outcome;
 }
 
@@ -364,6 +471,7 @@ const count = (n: number, one: LocaleKey, many: LocaleKey) => (n === 1 ? t(one) 
 export function notesOutcomeLine(outcome: NotesOutcome): string {
   const parts = [
     ...(outcome.facts ? [count(outcome.facts, "composer.notes.factsOne", "composer.notes.facts")] : []),
+    ...(outcome.aboutInMemory ? [count(outcome.aboutInMemory, "composer.notes.aboutInMemoryOne", "composer.notes.aboutInMemory")] : []),
     ...(outcome.memories ? [count(outcome.memories, "composer.notes.memoriesOne", "composer.notes.memories")] : []),
     ...(outcome.threads ? [count(outcome.threads, "composer.notes.threadsOne", "composer.notes.threads")] : []),
     ...(outcome.bots ? [count(outcome.bots, "composer.notes.botsOne", "composer.notes.bots")] : []),

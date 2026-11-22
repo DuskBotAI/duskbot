@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import type { Checklist } from "../batch-checklist.ts";
 import type { RuntimeEvent } from "../contracts.ts";
 import type { LimitHoldState } from "../../shared/wire.ts";
-import { AFTER_RESET_MS, AFTER_START_MS, createLimitHold, MAX_HOLD_MS, MAX_RESUMES, refusedStartWaits, resumeNote, UNKNOWN_RESET_RECHECK_MS, type HeldTurn } from "./limit-hold.ts";
+import { AFTER_RESET_MS, AFTER_START_MS, createLimitHold, MAX_HOLD_MS, MAX_RESUMES, OPEN_RECHECK_MS, PROBE_RECHECK_MS, probeEngine, refusedStartWaits, resumeNote, UNKNOWN_RESET_RECHECK_MS, type HeldTurn } from "./limit-hold.ts";
 
 const START = Date.parse("2026-11-17T10:00:00Z");
 const HOUR = 3_600_000;
@@ -42,7 +42,7 @@ function fakeTime() {
   };
 }
 
-function harness(options: { file?: string; time?: ReturnType<typeof fakeTime>; blocked?: Map<string, number | null>; resets?: Map<string, number | null> } = {}) {
+function harness(options: { file?: string; time?: ReturnType<typeof fakeTime>; blocked?: Map<string, number | null>; resets?: Map<string, number | null>; probe?: () => Promise<boolean | null> } = {}) {
   const time = options.time ?? fakeTime();
   const blocked = options.blocked ?? new Map<string, number | null>();
   const resets = options.resets ?? new Map<string, number | null>();
@@ -55,6 +55,7 @@ function harness(options: { file?: string; time?: ReturnType<typeof fakeTime>; b
   let refreshes = 0;
   let list: Checklist | null = null;
   let resumeFails = false;
+  let probes = 0;
   const hold = createLimitHold({
     file: options.file,
     now: time.now,
@@ -69,11 +70,17 @@ function harness(options: { file?: string; time?: ReturnType<typeof fakeTime>; b
     line: (threadId, text) => lines.push({ threadId, text }),
     paused: (threadId, state) => paused.push({ threadId, state }),
     waitEnded: (threadId) => ended.push(threadId),
+    ...(options.probe ? {
+      canProbe: (id: string) => id === "openrouter" && blocked.get(id) !== undefined,
+      probe: () => { probes += 1; return options.probe!(); },
+      release: (id: string) => { blocked.delete(id); },
+    } : {}),
   });
   hold.start();
   return {
     hold, time, lines, paused, resumed, blocked, resets, ended,
     refreshes: () => refreshes,
+    probes: () => probes,
     setEngine: (id: string | undefined) => { engine = id; },
     setBusy: (value: boolean) => { busy = value; },
     setList: (value: Checklist | null) => { list = value; },
@@ -222,6 +229,78 @@ describe("holding a turn at a usage limit", () => {
     await h.time.advance(25 * 24 * HOUR);
     expect(h.resumed).toHaveLength(0);
     expect(h.time.pending()).toHaveLength(1);
+  });
+});
+
+describe("an API-key AI out of credit", () => {
+  it("checks it within minutes, less often after, and carries on as soon as a top-up lets it answer", async () => {
+    let works = false;
+    const h = harness({ probe: async () => works });
+    h.setEngine("openrouter");
+    h.blocked.set("openrouter", START + HOUR);
+    h.hold.hold({ botId: "kai", threadId: "t1", engine: "openrouter", engineName: "OpenRouter", request: "Draft the post" });
+    expect(h.paused).toEqual([{ threadId: "t1", state: {} }]);
+    expect(h.time.pending()).toEqual([PROBE_RECHECK_MS]);
+    await h.time.advance(PROBE_RECHECK_MS);
+    expect(h.probes()).toBe(1);
+    expect(h.refreshes(), "plan usage says nothing about credit").toBe(0);
+    expect(h.resumed).toHaveLength(0);
+    expect(h.time.pending()).toEqual([2 * PROBE_RECHECK_MS]);
+    await h.time.advance(2 * PROBE_RECHECK_MS);
+    expect(h.time.pending()).toEqual([4 * PROBE_RECHECK_MS]);
+    works = true;
+    await h.time.advance(4 * PROBE_RECHECK_MS);
+    expect(h.probes()).toBe(3);
+    expect(h.blocked.has("openrouter"), "the engine's hold ends, so its usage no longer reads At its limit").toBe(false);
+    expect(h.resumed).toHaveLength(1);
+    expect(h.resumed[0]!.note).toContain("Draft the post");
+    h.hold.onEvent(completed("t1", true));
+    expect(h.hold.list()).toEqual([]);
+  });
+
+  it("opening the conversation checks again at once, at most once a minute", async () => {
+    let works = false;
+    const h = harness({ probe: async () => works });
+    h.setEngine("openrouter");
+    h.blocked.set("openrouter", START + HOUR);
+    h.hold.hold({ botId: "kai", threadId: "t1", engine: "openrouter", engineName: "OpenRouter" });
+    expect(h.hold.checkNow("t1")).toBe(true);
+    await h.time.advance(0);
+    expect(h.probes()).toBe(1);
+    expect(h.hold.checkNow("t1"), "not again within a minute").toBe(false);
+    await h.time.advance(OPEN_RECHECK_MS);
+    works = true;
+    expect(h.hold.checkNow("t1")).toBe(true);
+    await h.time.advance(0);
+    expect(h.resumed).toHaveLength(1);
+  });
+
+  it("an engine no call can test keeps waiting on plan usage, and an unknown check answer keeps the wait", async () => {
+    const h = harness({ probe: async () => null });
+    h.blocked.set("claude", START + HOUR);
+    h.hold.hold({ botId: "kai", threadId: "t1", engine: "claude", engineName: "Claude" });
+    expect(h.hold.checkNow("t1")).toBe(false);
+    expect(h.time.pending()).toEqual([UNKNOWN_RESET_RECHECK_MS]);
+    const unknown = harness({ probe: async () => null });
+    unknown.setEngine("openrouter");
+    unknown.blocked.set("openrouter", START + HOUR);
+    unknown.hold.hold({ botId: "kai", threadId: "t2", engine: "openrouter", engineName: "OpenRouter" });
+    await unknown.time.advance(PROBE_RECHECK_MS);
+    expect(unknown.probes()).toBe(1);
+    expect(unknown.resumed).toHaveLength(0);
+    expect(unknown.blocked.has("openrouter")).toBe(true);
+  });
+});
+
+describe("probeEngine", () => {
+  it("is true when the AI answers, false while credit or a limit refuses it, and unknown otherwise", async () => {
+    const asked: Array<{ model?: string }> = [];
+    expect(await probeEngine(async (_prompt, options) => { asked.push({ model: options?.model }); return "OK"; }, "moonshotai/kimi-k2")).toBe(true);
+    expect(asked).toEqual([{ model: "moonshotai/kimi-k2" }]);
+    expect(await probeEngine(async () => { throw new Error('OpenRouter HTTP 402: {"error":{"message":"Insufficient credits"}}'); }, "m")).toBe(false);
+    expect(await probeEngine(async () => { throw new Error("upstream HTTP 429: Too Many Requests"); }, "m")).toBe(false);
+    expect(await probeEngine(async () => { throw new Error("fetch failed: ECONNREFUSED"); }, "m")).toBeNull();
+    expect(await probeEngine(undefined, "m")).toBeNull();
   });
 });
 

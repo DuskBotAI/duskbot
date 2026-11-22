@@ -42,6 +42,7 @@ Write your next message, as you would type it: short, casual, no pleasantries.
 - If it asks for a key or token your brief gives you (a secure card counts), send that key alone as your whole message; you cannot fill in cards here. If your brief has none, say you don't have one.
 - If it says the setup is finished and running and asks nothing more, or it keeps asking nothing new, reply exactly ${DONE}.
 - If it seems stuck, only narrated what it will do, or stopped halfway, nudge once ("go ahead and set it up").
+- Once you have pasted a link or code it gave you into another app, take it as working: never make up errors, status codes or results from that app.
 Reply with the message text only.`;
   return chat(gateway, prompt, 120_000);
 }

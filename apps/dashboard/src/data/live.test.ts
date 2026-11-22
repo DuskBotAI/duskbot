@@ -170,6 +170,8 @@ test("account prepends email, preserves OAuth identities, and maps devices, pref
   const result = accountFromWire(account, 5000, emptyStorage);
   assert.deepEqual(result.identities, [{ provider: "email", label: "me@example.test", linkedAt: 1000 }, { provider: "google", label: "My name", linkedAt: 2000 }, { provider: "apple", label: "", linkedAt: 4000 }]);
   assert.deepEqual(result.devices.map((device) => [device.kind, device.label, device.location, device.current]), [["browser", "Device 0", null, true], ["desktop", "Device 1", null, false], ["phone", "Device 2", null, false]]);
+  const browser = accountFromWire({ ...account, sessions: [{ ...account.sessions[0]!, name: "Browser" }] }, 5000, emptyStorage);
+  assert.equal(browser.devices[0]!.label, "browser", "the server's web session name reads lowercase on the dashboard");
   assert.equal(result.profile.onboarded, false);
   assert.equal(result.profile.avatarUrl, null);
   assert.deepEqual(result.notifications, { cloudStatus: true, product: false });

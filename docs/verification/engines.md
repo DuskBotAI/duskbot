@@ -19,7 +19,11 @@ pnpm control:dusk models --url http://127.0.0.1:PORT
 ```
 
 `doctor.ok` is true only when the endpoint is dusk bot and at least one
-engine is available. The isolated fixture should expose `claude`.
+engine is ready: available, and signed in unless it brings its own key. An
+engine a bot uses that cannot answer is named with its reason, as a problem
+when no engine is ready and as a warning otherwise. The isolated fixture should
+expose `claude`; `PATCH /api/instances/claude` with `{"cli":"/missing/claude"}`
+makes doctor name it with "`claude` CLI not found".
 
 ## Startup engine discovery
 

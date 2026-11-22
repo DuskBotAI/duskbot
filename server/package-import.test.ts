@@ -157,6 +157,19 @@ describe("importing a whole team", () => {
     expect(second.connections[0]!.name).toBe("crm-2");
   });
 
+  it("adds a bot moved in from another app once, however many times its notes come in", async () => {
+    const app = await installation();
+    const { grokMovePlan, readBot } = await import("../shared/grok-import.ts");
+    const plan = grokMovePlan(readBot({ name: "Kiln", instructions: "Run the shop admin." }), { from: { name: "Grok Bot", key: "grok-bot" } });
+    const document = app.parsePackageDocument(plan.document, { trust: "file" });
+    const first = app.importer.importPackageDocument(document, { trust: "file", mode: "add" }, app.deps);
+    const again = app.importer.importPackageDocument(document, { trust: "file", mode: "add" }, app.deps);
+    if (first.alreadyAdded) throw new Error("the first one is new");
+    expect(again).toEqual({ alreadyAdded: true, installId: first.installId });
+    expect(app.store.bots.filter((bot) => bot.installedPackage?.id === plan.packageId)).toHaveLength(1);
+    expect(app.routines.listRoutines().length).toBe(plan.routines);
+  });
+
   it("records a connection the organization's policy refuses and imports the rest", async () => {
     const app = await installation({ refuse: (name) => (name === "crm" ? "Not approved by Acme." : undefined) });
     const result = app.importer.importPackageDocument(app.parsePackageDocument(fixture("full-team.v2.json")), { trust: "file", mode: "add" }, app.deps);

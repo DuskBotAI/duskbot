@@ -191,6 +191,18 @@ describe("bot-first sidebar", () => {
     resetTurnLive();
   });
 
+  it("keeps a working bot's line when a follow-up is queued, and says Queued once it is idle", () => {
+    const said: Bot["messages"] = [{ id: "hi", role: "bot", kind: "text", at: 1, text: "Running long_job.py" }];
+    const leads = { threadId: "leads", title: "Leads", createdAt: 1 };
+    fixture.state = { ...fixture.state, pendingQueued: { leads: [{ queueId: "q", text: "then summarize it" }] } };
+    const candidate: Bot = { ...bot, threadId: "leads", messages: said, unread: false, projects: [], tasks: [{ ...leads, busy: true, activity: "working" }], busy: true };
+    const working = renderToStaticMarkup(createElement(BotListItem, rowProps("comfortable", candidate)));
+    expect(working).toContain("Running long_job.py");
+    expect(working).not.toContain(">Queued<");
+    const idle = renderToStaticMarkup(createElement(BotListItem, rowProps("comfortable", { ...candidate, busy: false, tasks: [{ ...leads, busy: false, activity: "idle" }] })));
+    expect(idle).toContain(">Queued<");
+  });
+
   it("rings a focused row or group chat inside its edge in both modes", () => {
     const group: Group = { id: "room", threadId: "room-thread", name: "Launch", memberIds: [bot.id], messages: [], defaultResponder: { kind: "mentions" }, bulletin: "", unread: false, createdAt: 1 };
     const simple = renderToStaticMarkup(createElement(BotListItem, rowProps("comfortable", { ...bot, tasks: [], projects: [] }))) + renderToStaticMarkup(createElement(GroupListItem, { group, density: "comfortable", onMenu: vi.fn() }));
@@ -211,7 +223,17 @@ describe("bot-first sidebar", () => {
     expect(simple).not.toMatch(/data-bot-actions="atlas"[^>]*class="[^"]*\bgroup-hover:/);
     expect(simple).toContain('class="flex items-baseline justify-between gap-2 pr-7"');
     const read = renderToStaticMarkup(createElement(BotListItem, rowProps("comfortable", { ...candidate, unread: false })));
-    expect(read).toContain('class="flex items-baseline justify-between gap-2 group-has-[:focus-visible]:pr-7 touch:pr-7"');
+    expect(read).toContain('class="flex items-baseline justify-between gap-2 group-has-[:focus-visible]:pr-7 touch:pr-7 max-md:pr-7"');
+  });
+
+  it("keeps room beside a read row's time for its actions wherever they show without a hover, a narrow window included", () => {
+    const read = renderToStaticMarkup(createElement(BotListItem, rowProps("comfortable", { ...bot, tasks: [], projects: [], unread: false })));
+    const button = /data-bot-actions="atlas"[^>]*class="([^"]*)"/.exec(read)?.[1] ?? "";
+    const header = /class="(flex items-baseline justify-between[^"]*)"/.exec(read)?.[1] ?? "";
+    for (const variant of ["group-has-[:focus-visible]", "touch", "max-md"]) {
+      if (button.split(" ").some((name) => name.startsWith(`${variant}:opacity-`))) expect(header.split(" ")).toContain(`${variant}:pr-7`);
+    }
+    expect(button).toContain("max-md:opacity-70");
   });
 
   it("marks an unread Simple group chat with the same top-right dot as a bot row, said once for a screen reader", () => {

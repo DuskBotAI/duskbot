@@ -28,7 +28,7 @@ export const JOB_TOOL_DEFINITION = {
       cwd: { type: "string" },
       env: { type: "object", additionalProperties: { type: "string" } },
       secrets: { type: "object", additionalProperties: { type: "string" } },
-      on_notify: { type: "string", maxLength: 2000, description: "What to do when woken; that run won't see this chat. Use only what a wake carries (telegram_watch: chat, sender, time, id, text)." },
+      on_notify: { type: "string", maxLength: 2000, description: "What to do when woken; that run won't see this chat. Use only what a wake carries (telegram_watch: chat, sender, time, id, text). Alert them on Telegram or Discord with chat_app_bots send." },
       bytes: { type: "integer", minimum: 200, maximum: 16000 },
     },
     required: ["action"],

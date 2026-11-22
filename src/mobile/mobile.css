@@ -145,26 +145,6 @@ html[data-mobile-app] [data-selectable] :is(button, [role="button"]) { -webkit-u
   }
 }
 
-/* a message still on its way: after a beat (a send that lands at once never shows it) it dims and says so, under the
-   bubble and outside its box, so the bubble keeps one size from the composer to the server's copy */
-@keyframes m-sending { to { opacity: 1; } }
-@keyframes m-sending-dim { to { opacity: .6; } }
-.dusk-mobile [data-chat-bubble][data-sending] { position: relative; animation: m-sending-dim .2s ease-out 1.2s forwards; }
-.dusk-mobile [data-chat-bubble][data-sending]::after {
-  content: attr(data-sending);
-  position: absolute;
-  top: 100%;
-  inset-inline-end: 4px;
-  white-space: nowrap;
-  margin-top: 2px;
-  color: var(--color-ink-secondary);
-  font-size: 12px;
-  line-height: 16px;
-  text-align: end;
-  opacity: 0;
-  animation: m-sending .2s ease-out 1.2s forwards;
-}
-
 /* the safe answer to an approval is a real button on a phone, not a bare word beside the filled one */
 .dusk-mobile [data-approval-deny] {
   min-height: 44px;

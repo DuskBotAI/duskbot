@@ -28,6 +28,7 @@ import { freePortBlock, withFreeSignInPort } from "./testing/ports.ts";
 import { openSse } from "./testing/sse.ts";
 import { STARTER_COLORS } from "./bot-look.ts";
 import { DEFAULT_BOT_BODY } from "../shared/body-migration.ts";
+import { DECLINED_BEFORE } from "../shared/declined-sends.ts";
 import { readHandoffs } from "./testing/handoff-rows.ts";
 import { FILE_MAX_BYTES, IMAGE_MAX_BYTES } from "./attachments.ts";
 import { computerPrompt, SIGN_IN_PROMPT } from "./system-prompt.ts";
@@ -11273,6 +11274,66 @@ describe("harness HTTP API", () => {
       const allowRows = rows.filter((row) => row.source === "connector-scope" && row.decision === "auto-approved");
       expect(allowRows.some((row) => row.botId === bot.id && row.tool === "GMAIL_SEND_EMAIL" && row.rule === "connectorTools.gmail")).toBe(true);
       expect(allowRows.some((row) => row.botId === legacy.id && row.tool === "SLACK_POST_MESSAGE" && row.rule === "composio")).toBe(true);
+    } finally {
+      await api("DELETE", `/api/bots/${bot.id}`);
+    }
+  });
+
+  it("holds a connector message on its review card: Send relays the edited call, Don't send tells the bot, a repeat is refused", async () => {
+    expect((await api("PUT", "/api/config", { composio: { apiKey: "" } })).status).toBe(200);
+    const bot = (await api("POST", "/api/bots")).body.bot;
+    connectorRelayCalls.length = 0;
+    const relayed = () => connectorRelayCalls.map((entry) => entry.body).filter((body) => body?.method === "tools/call");
+    try {
+      expect((await api("PATCH", `/api/bots/${bot.id}`, { composio: true, approvalMode: "ask" })).status).toBe(200);
+      const token = await mintTestCapability(BASE, bot.id, bot.threadId, { kind: "connectors" });
+      const call = async (id: number, name: string, args: unknown) => {
+        const response = await fetch(`${BASE}/api/internal/connectors/mcp`, {
+          method: "POST",
+          headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
+          body: JSON.stringify({ jsonrpc: "2.0", id, method: "tools/call", params: { name, arguments: args } }),
+        });
+        return await response.json() as any;
+      };
+      const openCard = async () => {
+        let card: any;
+        await expect.poll(async () => {
+          const messages: any[] = (await api("GET", `/api/threads/${bot.threadId}/messages?limit=100`)).body.messages;
+          card = messages.findLast((row) => row.card?.outboundRequest && !row.card.answered)?.card;
+          return Boolean(card);
+        }, { timeout: 5_000 }).toBe(true);
+        return card;
+      };
+      const respond = (requestId: string, behavior: "allow" | "deny", edits?: unknown) =>
+        api("POST", `/api/threads/${bot.threadId}/respond`, { requestId, behavior, ...(edits ? { edits } : {}) });
+
+      const slack = call(41, "COMPOSIO_MULTI_EXECUTE_TOOL", { tools: [{ tool_slug: "SLACK_SEND_MESSAGE", arguments: { channel: "launch", markdown_text: "Shipping at 5" } }] });
+      const shown = await openCard();
+      expect(shown).toMatchObject({ title: "Send this message?", messageReview: { app: "Slack", to: "#launch", text: "Shipping at 5" } });
+      expect(shown.subtitle).not.toContain("{");
+      expect(relayed()).toHaveLength(0);
+      expect((await respond(shown.requestId, "allow", { text: "Shipping at 6" })).status).toBe(200);
+      expect((await slack).result.content[0].text).toBe("relay-ok");
+      expect(relayed().at(-1).params).toEqual({ name: "COMPOSIO_MULTI_EXECUTE_TOOL", arguments: { tools: [{ tool_slug: "SLACK_SEND_MESSAGE", arguments: { channel: "launch", markdown_text: "Shipping at 6" } }] } });
+
+      const post = { text: "We launched today." };
+      const declined = call(42, "TWITTER_CREATION_OF_A_POST", post);
+      const postCard = await openCard();
+      expect(postCard).toMatchObject({ title: "Post this?", options: ["Post", "Don't send"], messageReview: { app: "X", to: "", text: "We launched today.", post: true } });
+      expect((await respond(postCard.requestId, "deny")).status).toBe(200);
+      const refusal = await declined;
+      expect(refusal.result.isError).toBe(true);
+      expect(refusal.result.content[0].text).toMatch(/the user declined/);
+      const again = await call(43, "TWITTER_CREATION_OF_A_POST", post);
+      expect(again.result.content[0].text).toBe(DECLINED_BEFORE);
+      expect(relayed()).toHaveLength(1);
+
+      const mail = call(44, "GMAIL_SEND_EMAIL", { recipient_email: "ana@example.com", subject: "Friday", body: "See you at 5." });
+      const mailCard = await openCard();
+      expect(mailCard).toMatchObject({ title: "Send this email?", email: { to: ["ana@example.com"], body: "See you at 5." } });
+      expect((await respond(mailCard.requestId, "allow", { body: "See you at 6." })).status).toBe(200);
+      expect((await mail).result.content[0].text).toBe("relay-ok");
+      expect(relayed().at(-1).params.arguments).toEqual({ recipient_email: "ana@example.com", subject: "Friday", body: "See you at 6." });
     } finally {
       await api("DELETE", `/api/bots/${bot.id}`);
     }

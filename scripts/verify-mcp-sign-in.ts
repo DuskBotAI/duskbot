@@ -1,7 +1,8 @@
 // Real MCP panel + server + fake OAuth provider, only in a disposable workspace.
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
-import { mkdirSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { promisify } from "node:util";
 import { launchVerificationServer, runControlDusk } from "./control-dusk.ts";
@@ -15,6 +16,8 @@ let oauth: Awaited<ReturnType<typeof startFakeOAuth>> | undefined;
 let mcp: Awaited<ReturnType<typeof startFakeHttpMcp>> | undefined;
 let ui: MountedPreview | undefined;
 let closeBrowser: (() => Promise<unknown>) | undefined;
+// agent-browser refuses a socket path over 103 bytes, which macOS's per-user temp folder can exceed.
+const sockets = mkdtempSync(join(process.platform === "win32" ? tmpdir() : "/tmp", "dmcp-"));
 let releaseToken!: () => void;
 const tokenPending = new Promise<void>((resolve) => { releaseToken = resolve; });
 try {
@@ -50,7 +53,7 @@ try {
   mkdirSync(temp, { recursive: true });
   const env = {
     HOME: fixture.info.dataDir, USERPROFILE: fixture.info.dataDir, PATH: process.env.PATH,
-    TMPDIR: temp, TEMP: temp, TMP: temp, AGENT_BROWSER_SESSION: `mcp-oauth-${process.pid}`,
+    TMPDIR: temp, TEMP: temp, TMP: temp, AGENT_BROWSER_SESSION: `mcp-oauth-${process.pid}`, AGENT_BROWSER_SOCKET_DIR: sockets,
     AGENT_BROWSER_HEADLESS: "1", AGENT_BROWSER_NO_WEBMCP: "1",
     ...(chrome ? { AGENT_BROWSER_EXECUTABLE_PATH: chrome } : {}),
   };
@@ -123,4 +126,5 @@ try {
   await fixture.close();
   await mcp?.close();
   await oauth?.close();
+  rmSync(sockets, { recursive: true, force: true });
 }

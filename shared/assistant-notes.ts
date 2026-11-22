@@ -347,6 +347,19 @@ export function notesMemoryText(notes: Pick<AssistantNotes, "from" | "memories">
   return `# Notes from ${notes.from.name}\n\nWhat ${notes.from.name} remembered, brought over when you moved.\n\n${all.map((line) => `- ${line}`).join("\n")}\n`;
 }
 
+/** The first bot's topic for facts about the person too long for About me, or past what one move adds there. */
+export function notesAboutFile(notes: Pick<AssistantNotes, "from">): string {
+  return `memory/about-you-from-${notes.from.key}.md`;
+}
+
+/** That topic's text, each fact word for word and once, merged with an earlier paste's; null when there is nothing in it. */
+export function notesAboutText(notes: Pick<AssistantNotes, "from">, facts: readonly string[], before = ""): string | null {
+  const earlier = before.split("\n").filter((line) => line.startsWith("- ")).map((line) => line.slice(2).trim());
+  const all = union([...earlier, ...facts.map((line) => line.replace(/\s*\n\s*/g, " ").trim()).filter(Boolean)]);
+  if (!all.length) return null;
+  return `# About you, from ${notes.from.name}\n\nWhat ${notes.from.name} knew about you that didn't fit in About me, word for word.\n\n${all.map((line) => `- ${line}`).join("\n")}\n`;
+}
+
 /** The first bot's topic for what is still open, things done on a schedule and connected apps. */
 export function notesThreadsFile(notes: Pick<AssistantNotes, "from">): string {
   return `memory/open-threads-from-${notes.from.key}.md`;

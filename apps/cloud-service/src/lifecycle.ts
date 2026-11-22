@@ -13,11 +13,14 @@ import type { SpendInit, SpendLedger } from "./spend.ts";
 import { linkKeys } from "../../dashboard/server/clouds/bootstrap.ts";
 import { ProviderBusyError, ProviderError, ProviderLimitError, type MachineProvider, type MachineImage } from "./provider.ts";
 import type { ReleaseKey } from "./release-signing.ts";
-import { homeBackupKey, homeVolumeScan, type BackupStore } from "./backups.ts";
+import { homeBackupKey, homeVolumeScan, skippedPath, tarWithout, type BackupStore } from "./backups.ts";
+import { STREAM_SKIPPED } from "./home.ts";
 import { volumeLayer } from "./bundle.ts";
 import { DAY_MS, DEFAULT_DELETE_DELAY_DAYS, DEFAULT_RETENTION_DAYS, deletionVerdict, dueNotice, prunableBackups, type Entitlement, type NoticeKind, type Verdict } from "./retention.ts";
 import type { Audit, AuditActor, AuditEntry } from "./audit.ts";
 import { RetryableCloudError } from "../../dashboard/server/clouds/http.ts";
+import { homeFailure } from "../../dashboard/server/clouds/home-client.ts";
+import { ENTITLEMENT_DEFAULT_TTL_MS } from "../../../shared/entitlement.ts";
 import { ManagedCloudError } from "../../dashboard/server/clouds/managed.ts";
 import type { HomeClient, HomePower, StoredCloud } from "../../dashboard/server/clouds/types.ts";
 import type { HomeLifecycleState } from "./state.ts";
@@ -28,6 +31,11 @@ import { createEgressGuard } from "./egress.ts";
 export const OWNER_SLEEP_GRACE_MS = 10_000;
 /** a dashboard view (its live pulse, polled only while the page shows an awake cloud) counts as an open app this long */
 export const VIEW_FRESH_MS = 2 * 60_000;
+const skippedInBackup = skippedPath(STREAM_SKIPPED);
+/** how often a backup being written looks at the disk again, in bytes of tar */
+const DISK_CHECK_BYTES = 128 * 1024 ** 2;
+const ENTITLE_RETRY_MS = [2 * 60_000, 5 * 60_000, 10 * 60_000, 20 * 60_000, 30 * 60_000];
+const ENTITLE_ALERT_TRIES = 3, ENTITLE_ALERT_LEFT_MS = 6 * 3_600_000;
 const MINUTE = 60_000, HOUR = 3_600_000, BACKUP_RETRY_MS = 10 * MINUTE, SETUP_TRIES = 3, RESTORE_TRIES = 3, SETUP_PATIENCE_MS = 6 * HOUR, SETUP_ERROR_RETRY_MS = 6 * HOUR;
 
 export interface ManagedSettings {
@@ -57,12 +65,15 @@ export interface ManagedSettings {
   /** the machine redeems a one-time claim for its secrets, so the provider's API never carries them; off where no machine can reach this service */
   claims: boolean;
   maxBackupBytes: number;
+  /** a backup is skipped (and one being written stopped) rather than leave less than this free on the backup disk, which
+   *  holds this service's database too (DUSK_MANAGED_BACKUP_MIN_FREE_GB) */
+  minFreeBytes: number;
   /** a machine the provider stops finding is lost only after this long of direct 404s and absence from the account's list */
   lostAfterMs: number;
 }
 export const DEFAULT_MANAGED_SETTINGS: ManagedSettings = {
   idleMinutes: 15, leaseSeconds: 2 * 3600, backupEveryMs: 24 * HOUR, backupKeep: 2, retentionDays: DEFAULT_RETENTION_DAYS,
-  deleteDelayDays: DEFAULT_DELETE_DELAY_DAYS, backupTailMs: 30 * DAY_MS, wakeLeadMs: 2 * MINUTE, edgeWakesPerHour: 20, powerReadMs: MINUTE, package: null, requireSigned: false, publicDomain: null, claims: false, maxBackupBytes: 4 * 1024 ** 3, lostAfterMs: 30 * MINUTE,
+  deleteDelayDays: DEFAULT_DELETE_DELAY_DAYS, backupTailMs: 30 * DAY_MS, wakeLeadMs: 2 * MINUTE, edgeWakesPerHour: 20, powerReadMs: MINUTE, package: null, requireSigned: false, publicDomain: null, claims: false, maxBackupBytes: 4 * 1024 ** 3, minFreeBytes: 20 * 1024 ** 3, lostAfterMs: 30 * MINUTE,
 };
 
 /** settings from DUSK_MANAGED_* */
@@ -96,6 +107,7 @@ export function managedSettingsFromEnv(env: NodeJS.ProcessEnv, options: { loopba
     deleteDelayDays: number("DUSK_MANAGED_DELETE_DELAY_DAYS", DEFAULT_DELETE_DELAY_DAYS, 90, DEFAULT_DELETE_DELAY_DAYS),
     backupTailMs: number("DUSK_MANAGED_BACKUP_TAIL_DAYS", 7, 365, 30) * DAY_MS,
     maxBackupBytes: number("DUSK_MANAGED_BACKUP_MAX_MB", 64, 64 * 1024, 4096) * 1024 * 1024,
+    minFreeBytes: number("DUSK_MANAGED_BACKUP_MIN_FREE_GB", 1, 1024, 20) * 1024 ** 3,
     lostAfterMs: number("DUSK_MANAGED_LOST_AFTER_MINUTES", 2, 24 * 60, 30) * MINUTE };
 }
 
@@ -284,13 +296,41 @@ export function createLifecycle(deps: LifecycleDeps) {
     b.upstream = upstream;
     c.origin = settings.publicDomain ? `https://${label(c)}.${settings.publicDomain}` : upstream;
   }
-  /** a hosted home serves no client without a fresh entitlement: pushed when it comes up, refreshed hourly */
+  /** a hosted home serves no client without a fresh entitlement: pushed when it comes up, refreshed hourly. A refused
+   *  refresh is logged with its cause when the cause changes and tried again on a growing interval, not every power read */
   async function entitle(c: StoredCloud, force: boolean) {
     if (!deps.home.entitle || (!force && c.entitledAt !== undefined && now() - c.entitledAt < HOUR)) return;
+    const b = state(c), problem = b.entitleProblem ?? null;
+    if (!force && problem && problem.retryAt > now()) return;
     const token = deps.entitle(c);
     if (!token) return;
-    try { await deps.home.entitle(homeOrigin(c), secret(c), token, deps.linkGrant?.(c) ?? null); }
-    catch { throw new RetryableCloudError("Cloud home refused its entitlement."); }
+    const push = (grant: string | null) => deps.home.entitle!(homeOrigin(c), secret(c), token, grant);
+    const grant = deps.linkGrant?.(c) ?? null;
+    let cause: string | null = null;
+    try { await push(grant); }
+    catch (error) {
+      cause = homeFailure(error);
+      // the link grant only seeds the home's phone relay; the entitlement is what keeps the home serving
+      if (grant) {
+        try { await push(null); console.warn(`managed: cloud ${c.id} refused its entitlement with a link grant (${cause}) and took it without one`); cause = null; }
+        catch (again) { cause = homeFailure(again); }
+      }
+    }
+    if (cause) {
+      const tries = (problem?.tries ?? 0) + 1;
+      const retryAt = now() + ENTITLE_RETRY_MS[Math.min(tries - 1, ENTITLE_RETRY_MS.length - 1)]!;
+      if (problem?.cause !== cause) console.warn(`managed: the entitlement push to ${c.id} failed (${cause}); tried again with a growing wait`);
+      b.entitleProblem = { cause, since: problem?.since ?? now(), tries, retryAt, alerted: problem?.alerted ?? false };
+      const left = c.entitledAt === undefined ? 0 : c.entitledAt + ENTITLEMENT_DEFAULT_TTL_MS - now();
+      if (!b.entitleProblem.alerted && (tries >= ENTITLE_ALERT_TRIES || left < ENTITLE_ALERT_LEFT_MS)) {
+        b.entitleProblem.alerted = true;
+        opsAlert(c, "entitle_failing", cause, `cloud ${c.id}: its entitlement refresh keeps failing (${cause}); the home refuses its clients once the last one runs out`);
+      }
+      deps.save(c);
+      throw new RetryableCloudError("Cloud home refused its entitlement.");
+    }
+    if (problem) console.warn(`managed: the entitlement push to ${c.id} works again after ${problem.tries} failed tries (${problem.cause})`);
+    b.entitleProblem = null;
     c.entitledAt = now(); deps.save(c);
   }
   const latestVerified = (b: HomeLifecycleState) => [...b.backups].reverse().find(g => g.verifiedAt !== null) ?? null;
@@ -318,6 +358,7 @@ export function createLifecycle(deps: LifecycleDeps) {
     const b = state(c), serverId = c.serverId;
     if (!serverId) return false;
     b.lastBackupTryAt = now(); deps.save(c);
+    if (!diskRoomFor(c)) return false;
     // the volume is read from the running home as of now: what it held before this moment is in it
     const takenAt = now(), snapshot = await provider.latestSnapshot(serverId);
     if (!snapshot) { b.backupProblem = "no_snapshot"; deps.save(c); return false; }
@@ -328,7 +369,7 @@ export function createLifecycle(deps: LifecycleDeps) {
     // a chunk or two whatever the volume's size
     const layers: Record<string, number> = {};
     const scan = homeVolumeScan(c.id, (name, bytes) => { const key = volumeLayer(name); layers[key] = (layers[key] ?? 0) + bytes; }), key = keyOf(c);
-    let size = 0, tooLarge = false;
+    let size = 0, nextDiskCheck = DISK_CHECK_BYTES, stopped: "too_large" | "disk_low" | null = null;
     const reader = stream.getReader();
     async function* pieces() {
       for (;;) {
@@ -337,16 +378,20 @@ export function createLifecycle(deps: LifecycleDeps) {
         yield value;
       }
     }
+    const kept = tarWithout(pieces(), skippedInBackup);
     let written: Awaited<ReturnType<BackupStore["writeStream"]>>;
     try {
-      written = await deps.backups.writeStream(c.id, key, pieces(), chunk => {
+      written = await deps.backups.writeStream(c.id, key, kept.stream, chunk => {
         size += chunk.length;
-        if (size > settings.maxBackupBytes) { tooLarge = true; throw new Error("too_large"); }
+        if (size > settings.maxBackupBytes) { stopped = "too_large"; throw new Error(stopped); }
+        if (size >= nextDiskCheck) { nextDiskCheck += DISK_CHECK_BYTES; if (deps.backups.freeBytes() < settings.minFreeBytes) { stopped = "disk_low"; throw new Error(stopped); } }
         scan.push(chunk);
       });
     } catch (error) {
-      if (tooLarge) { await reader.cancel().catch(() => {}); b.backupProblem = "too_large"; deps.save(c); log(c, "backup_skipped", "reconciler", "too_large"); return false; }
-      await reader.cancel().catch(() => {}); throw error;
+      await reader.cancel().catch(() => {});
+      if (stopped === "too_large") { b.backupProblem = "too_large"; deps.save(c); log(c, "backup_skipped", "reconciler", "too_large"); return false; }
+      if (stopped === "disk_low") { diskLow(c); return false; }
+      throw error;
     } finally { reader.releaseLock(); }
     const { plainBytes, ...record } = written, problem = scan.end();
     if (problem) { deps.backups.remove(c.id, record.file); b.backupProblem = problem; deps.save(c); log(c, "backup_refused", "reconciler", problem); return false; }
@@ -364,19 +409,41 @@ export function createLifecycle(deps: LifecycleDeps) {
     const verified = opened.problem === null && opened.sha256 === record.sha256;
     b.backups.push({ ...record, verifiedAt: verified ? now() : null, snapshotAt: takenAt });
     b.backupProblem = verified ? null : "unverified";
-    log(c, "backup", "reconciler", reason, { file: record.file, bytes: record.bytes, verified, ...Object.fromEntries(Object.entries(layers).map(([k, v]) => [`bytes_${k}`, v])) });
+    log(c, "backup", "reconciler", reason, { file: record.file, bytes: record.bytes, verified, bytes_tar: plainBytes, bytes_skipped: kept.stats.skippedBytes, ...Object.fromEntries(Object.entries(layers).map(([k, v]) => [`bytes_${k}`, v])) });
     pruneBackups(c);
     syncBytes(c);
     deps.save(c);
     return verified;
   }
 
+  let diskLowSince: number | null = null;
+  /** room for one more generation of this cloud (its last one's size, at least 256 MiB) over the floor; the operator hears
+   *  once (an incident) when backups start being skipped for room; room again is a plain log line */
+  function diskRoomFor(c: StoredCloud): boolean {
+    const last = state(c).backups.at(-1)?.bytes ?? 0;
+    if (deps.backups.freeBytes() >= settings.minFreeBytes + Math.max(last, 256 * 1024 ** 2)) {
+      if (diskLowSince !== null) { diskLowSince = null; console.log("managed: the backup disk has room again, backups resume"); log(c, "backup_disk_ok", "reconciler", "disk_ok"); }
+      return true;
+    }
+    diskLow(c);
+    return false;
+  }
+  function diskLow(c: StoredCloud) {
+    const b = state(c);
+    b.backupProblem = "disk_low"; deps.save(c);
+    log(c, "backup_skipped", "reconciler", "disk_low", { free: deps.backups.freeBytes() });
+    if (diskLowSince === null) {
+      diskLowSince = now();
+      opsAlert(c, "backup_disk_low", "disk_low", `managed backups: under ${Math.round(settings.minFreeBytes / 1024 ** 3)} GiB free on the backup disk, new backups are skipped until there is room`);
+    }
+  }
+
   /** the generations prunableBackups no longer needs; none while an operator hold is set */
   function pruneBackups(c: StoredCloud) {
     const b = state(c);
     if (b.hold) return;
-    const keep = b.archive && c.serverId === null ? 1 : settings.backupKeep;
-    const drop = prunableBackups(b.backups, { keep, protect: b.restoreFrom ? [b.restoreFrom] : [] });
+    const archived = !!b.archive && c.serverId === null, keep = archived ? 1 : settings.backupKeep;
+    const drop = prunableBackups(b.backups, { keep, protect: b.restoreFrom ? [b.restoreFrom] : [], longHold: !archived });
     for (const old of drop) {
       deps.backups.remove(c.id, old.file); b.backups.splice(b.backups.indexOf(old), 1);
       log(c, "backup_pruned", "reconciler", keep === 1 ? "archived" : "generations", { file: old.file });
@@ -651,15 +718,18 @@ export function createLifecycle(deps: LifecycleDeps) {
     deps.save(c);
   }
 
-  /** backups outlive the machine for a while, then go through the same record check */
+  /** backups outlive the machine for a while, then go through the same record check; a plan stopped for an unpaid charge
+   *  already had its days (TRIAL_DATA_DAYS, or the retention days from the first failure), so its backups go with it */
   function dropBackupsWhenDue(c: StoredCloud) {
     const b = state(c);
-    if (b.deletedAt === null || b.backupsDeleteAfter === null || b.backupsDeleteAfter > now() || !b.backups.length || b.hold) return;
+    if (b.deletedAt === null || b.backupsDeleteAfter === null || !b.backups.length || b.hold) return;
+    const entitlement = deps.entitlement(c);
+    if (b.backupsDeleteAfter > now() && !entitlement.unpaid) return;
     if (!rereadStored(c) || b.hold) return;
     if (deps.entitlement(c).active) { log(c, "delete_refused", "reconciler", "subscribed"); return; }
     for (const g of b.backups.slice()) { deps.backups.remove(c.id, g.file); b.backups.splice(b.backups.indexOf(g), 1); }
     syncBytes(c);
-    log(c, "backups_deleted", "reconciler", b.deletion?.reason ?? "retention_over");
+    log(c, "backups_deleted", "reconciler", entitlement.unpaid ? (entitlement.unpaid.trial ? "trial_unpaid" : "unpaid") : b.deletion?.reason ?? "retention_over");
     deps.save(c);
   }
 
@@ -907,7 +977,7 @@ export function createLifecycle(deps: LifecycleDeps) {
     if (b.leaseAt === null || now() - b.leaseAt >= Math.min(30 * MINUTE, settings.leaseSeconds * 500)) { await provider.lease(c.serverId, settings.leaseSeconds); b.leaseAt = now(); deps.save(c); }
     if (b.lastPowerAt !== null && now() - b.lastPowerAt < settings.powerReadMs) return;
     b.lastPowerAt = now();
-    await entitle(c, false).catch(() => console.warn(`managed: the entitlement refresh for ${c.id} failed; it is tried again`));
+    await entitle(c, false).catch(() => {});
     const power = deps.home.power ? await deps.home.power(homeOrigin(c), secret(c), Math.max(1, Math.round(rails.minIdleMs / MINUTE))).catch(() => null) : null;
     if (await deps.updates?.step(c, { origin: c.origin!, upstream: homeOrigin(c), secret: secret(c), busy: power?.busy ?? null })) { deps.save(c); return; }
     if (!power) { deps.save(c); return; }

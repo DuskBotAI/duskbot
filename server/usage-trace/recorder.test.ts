@@ -60,6 +60,13 @@ describe("trace recorder", () => {
     expect((recorder.settle("ok") as { outcome: object }).outcome).not.toHaveProperty("failure");
   });
 
+  it("counts a Stop an ACP engine did not confirm in time as the person's stop, not a failure", () => {
+    const recorder = createTraceRecorder({ dataDir: dataDir() });
+    recorder.observe(started("acp", "t1", 0, "gemini"));
+    recorder.observe(completed("acp", "t1", 5_100, false, { stopReason: "stop_failed" }));
+    expect(recorder.settle("acp")).toMatchObject({ outcome: { status: "interrupted" } });
+  });
+
   it("times each AI step and tool from the engine's own events and hands the turn to its usage row", async () => {
     const dir = dataDir();
     const recorder = createTraceRecorder({ dataDir: dir });

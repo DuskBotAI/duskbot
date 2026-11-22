@@ -100,10 +100,14 @@ contacts, not sends.
 - **CPU:** no cap (the plan pays for the cores). A dusk cloud above 90% cpu for 6 hours opens one incident a day
   (mining or a runaway loop), so we look before InstaBox does.
 - **Memory:** the home service is held at 80% (soft) and 90% (hard) of the machine, bots at 65% / 75%.
-- **Backups:** daily (`DUSK_MANAGED_BACKUP_HOURS`), 3 kept plus one at least a week older, at most 4 GiB each
-  (`DUSK_MANAGED_BACKUP_MAX_MB`), on the account service's disk. Kept 30 days after a plan ends. Streamed to disk,
-  sealed, hashed and checked a piece at a time (a few MiB of memory whatever the size); upkeep looks after 4 machines
-  at once.
+- **Backups:** daily (`DUSK_MANAGED_BACKUP_HOURS`), the newest of the latest 2 days (`DUSK_MANAGED_BACKUP_KEEP`) plus
+  the oldest while under two weeks older; an archived home keeps only its newest. At most 4 GiB of tar each
+  (`DUSK_MANAGED_BACKUP_MAX_MB`), on the account service's disk. Downloads and caches the home fetches again (package
+  caches, Chrome for Testing, voice models, Chromium caches) are left out, the rest is gzipped, then sealed. Skipped,
+  with one operator alert, while the disk would drop under `DUSK_MANAGED_BACKUP_MIN_FREE_GB` (20) free. Kept 30 days
+  after a plan ends; an unpaid plan's (a trial's after 7 days, a paid plan's 30 days after the failed charge) go with
+  its cloud. Streamed to disk, sealed, hashed and checked a piece at a time (a few MiB of memory whatever the size);
+  upkeep looks after 4 machines at once.
 
 ## 6. Relay (link service, `apps/link-service`, link.dusk.bot)
 

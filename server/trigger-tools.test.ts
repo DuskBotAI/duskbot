@@ -62,21 +62,30 @@ describe("parseTriggerRequest", () => {
       .toMatchObject({ ok: true, kind: "app", operation: { action: "update", triggerId: "a1", changes: { filter: { from: "acme" } } } });
   });
 
-  it("carries a test run to a schedule, and sends an app event or webhook its usual test event", () => {
+  it("carries a test run to a schedule, and asks a webhook or app event for a sample instead of a dry run", () => {
     expect(parseTriggerRequest({ ...source, action: "run_now", triggerId: "r1", test: true }, isSchedule))
       .toEqual({ ok: true, kind: "schedule", forBotId: undefined, proposal: { action: "run_now", routineId: "r1", test: true } });
-    expect(parseTriggerRequest({ ...source, action: "run_now", triggerId: "w1", test: true }, isSchedule))
-      .toEqual({ ok: true, kind: "webhook", forBotId: undefined, operation: { action: "run_now", webhookId: "w1" } });
+    for (const triggerId of ["w1", "a1"]) {
+      for (const extra of [{}, { test: true }]) {
+        const refused = parseTriggerRequest({ ...source, action: "run_now", triggerId, ...extra }, isSchedule);
+        expect(refused).toMatchObject({ ok: false, error: expect.stringContaining("Nothing ran") });
+        expect(refused).toMatchObject({ error: expect.stringContaining("payload, a realistic sample") });
+        expect(refused).toMatchObject({ error: expect.stringContaining("the person's own name and email") });
+      }
+    }
     expect(parseTriggerRequest({ ...source, action: "pause", triggerId: "r1", test: true }, isSchedule)).toMatchObject({ ok: false });
   });
 
-  it("hands a webhook's run_now the bot's sample body, and refuses one elsewhere", () => {
+  it("hands a webhook's or app event's run_now the bot's sample body, and refuses one on a schedule", () => {
     const lead = { data: { fields: [{ label: "Email", value: "maya@loomware.co" }] } };
     expect(parseTriggerRequest({ ...source, action: "run_now", triggerId: "w1", payload: lead }, isSchedule))
       .toEqual({ ok: true, kind: "webhook", forBotId: undefined, operation: { action: "run_now", webhookId: "w1" }, payload: lead });
+    expect(parseTriggerRequest({ ...source, action: "run_now", triggerId: "a1", payload: lead }, isSchedule))
+      .toEqual({ ok: true, kind: "app", forBotId: undefined, operation: { action: "run_now", triggerId: "a1" }, payload: lead });
     expect(parseTriggerRequest({ ...source, action: "run_now", triggerId: "r1", payload: lead }, isSchedule)).toMatchObject({ ok: false, error: expect.stringContaining("webhook") });
     expect(parseTriggerRequest({ ...source, action: "run_now", triggerId: "w1", payload: "hi" }, isSchedule)).toMatchObject({ ok: false });
-    expect(parseTriggerRequest({ ...source, action: "run_now", triggerId: "w1", payload: lead, test: true }, isSchedule)).toMatchObject({ ok: false });
+    expect(parseTriggerRequest({ ...source, action: "run_now", triggerId: "w1", payload: [lead] }, isSchedule)).toMatchObject({ ok: false });
+    expect(parseTriggerRequest({ ...source, action: "run_now", triggerId: "w1", payload: lead, test: true }, isSchedule)).toMatchObject({ ok: false, error: expect.stringContaining("no test") });
     expect(parseTriggerRequest({ ...source, action: "run_now", triggerId: "w1", payload: { big: "x".repeat(40_000) } }, isSchedule)).toMatchObject({ ok: false });
   });
 

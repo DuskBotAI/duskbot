@@ -15,29 +15,34 @@ It never opens the operator's app, server list, credentials or browser profile.
 
 The smoke mounts `RemoteComputerSection`, `ConnectedWorkspacesSettings`, and
 `DesktopWorkspaceSwitcher` with the real styles and `electron/preload.cjs`.
+`ConnectedWorkspacesSettings` is checked on its own: the app's Settings no
+longer mount it.
 It also opens the real app shell against a disposable fake-engine server.
 It checks:
 
-- A full custom HTTPS pairing link, including its 12-character code, reaches
-  `environments:add-from-link` unchanged and never calls companion pairing.
-- Duplicate submissions are blocked while a response is pending.
-- Cancellation, rejection and retry restore a usable form; Electron's error
-  wrapper is removed from the visible message.
-- Desktop companion mode still sends a normalized six-digit code through
-  `desktop-remote:pair`.
+- **Pair with another desktop** opens the companion form, which sends a
+  normalized six-digit code through `desktop-remote:pair`; a rejection shows
+  Electron-free text and leaves the form usable for a retry.
 - The 390px layout has no horizontal document overflow.
-- The hosted-workspace form accepts a hostname/address or pairing link and an
-  optional name. Cancellation retains input; confirmed connections preserve
-  the existing list and exclude the pairing code from saved connection data.
+- The hosted-workspace form, behind **Connect by address**, accepts a
+  hostname/address or a full pairing link (its 12-character code reaches
+  `environments:add-from-link` unchanged) and an optional name. Duplicate
+  submissions are blocked while a response is pending. A cancelled
+  confirmation closes the dialog and keeps the address for the next attempt;
+  confirmed connections preserve the existing list and exclude the pairing
+  code from saved connection data.
 - The production native menu's Connect item requests Settings; its saved
   workspace items dispatch fixed IDs. Settings can switch connections and
   cancel or confirm forgetting just one saved connection.
-- The local app opens Servers as a top-level Settings page, even
-  before local provider onboarding. Native requests also clear stale Settings
-  searches, so the requested page actually becomes visible.
+- In the real app shell, connecting a server opens the guided setup, never
+  Settings. Sharing this computer with a server (the deep link with
+  `share-computer`, or a native request naming a computer) opens Settings at
+  **Connect from elsewhere**, even before local provider onboarding.
 - A page outside the declared local origin receives no saved-list/mutation
-  bridge or Node access. Its workspace bridge contains only `state` (current
-  name, not the list) and `menu` (the user selects in Electron's native menu).
+  bridge or Node access. Its workspace bridge keeps `state` (current name, not
+  the list) and `menu` (the user selects in Electron's native menu); its other
+  methods act only on the person's click, and main refuses them from any page
+  but the rail's own.
 - Computer access starts off, selected folders start read-only, cancelled
   confirmation grants nothing, and Stop sharing immediately updates the state.
 - With the feature flag absent, no sharing controls appear, including through
@@ -50,7 +55,8 @@ It checks:
   revokes the registration. Its cookie is never copied into renderer JavaScript.
 
 The printed evidence directory retains `receipt.json`, `electron.log`, and
-desktop/narrow/in-app screenshots. Successful cleanup removes only the
+desktop/narrow/in-app screenshots. A run without `receipt.json` fails, so an
+Electron window that quits early never counts as a pass. Successful cleanup removes only the
 temporary home, profile and server data. Expected fake IPC rejection messages
 appear in the log.
 

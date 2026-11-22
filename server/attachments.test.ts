@@ -307,6 +307,27 @@ describe("aggregate attachment storage", () => {
     expect(() => saveImage(Buffer.from("b"), "image/png")).not.toThrow();
   });
 
+  it("keeps an image too large for a picture as a file, and refuses bytes that are not the image they claim", async () => {
+    const png = Buffer.concat([Buffer.from("\x89PNG\r\n\x1a\n", "latin1"), Buffer.alloc(64)]);
+    const saved = await saveFile((async function* () {
+      yield png.subarray(0, 5);
+      yield png.subarray(5);
+    })(), "huge-photo.png", "image/png");
+    expect(saved).toMatchObject({ name: "huge-photo.png", mime: "image/png", bytes: png.byteLength });
+    expect(saved.path.endsWith(".png")).toBe(true);
+
+    let chunksRead = 0;
+    await expect(saveFile((async function* () {
+      chunksRead += 1;
+      yield Buffer.from("<html>not a picture</html>");
+      chunksRead += 1;
+      yield Buffer.alloc(1024);
+    })(), "page.png", "image/png")).rejects.toMatchObject({ status: 400 });
+    expect(chunksRead, "refused at the first bytes, before the rest is read").toBe(1);
+    await expect(saveFile((async function* () { yield Buffer.from("GIF8"); })(), "cut-short.gif", "image/gif")).rejects.toMatchObject({ status: 400 });
+    expect(readdirSync(ATTACHMENTS_DIR).every((name) => !name.endsWith(".partial"))).toBe(true);
+  });
+
   it("releases reservations and removes partials after failed uploads", async () => {
     const existing = saveImage(Buffer.from("x"), "image/png");
     truncateSync(existing.path, ATTACHMENTS_MAX_BYTES - 3);

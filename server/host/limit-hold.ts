@@ -1,6 +1,8 @@
 // A one-on-one turn its AI's usage limit refused, with no other AI to carry it, waits for the reset and then carries on
 // by itself on the same AI: the card above the composer says until when, and the chat itself stays as it was. Held turns are saved, so a restart keeps
-// them. A known reset wakes the turn 30 s after it; an unknown one is checked against plan usage every 15 minutes. The
+// them. A known reset wakes the turn 30 s after it; an unknown one is checked against plan usage every 15 minutes. An
+// API-key engine's unknown end (OpenRouter out of credit) shows in no usage, so a quick call to it outside the chat checks
+// it, soon and then less often, and when the person opens the conversation; a top-up ends the wait within minutes. The
 // person's Stop, a new message of theirs, or a change of AI ends the wait. Resumes are bounded: a turn refused again
 // after its reset backs off and is told, and after MAX_RESUMES the wait ends for good.
 import { readFileSync } from "node:fs";
@@ -11,7 +13,8 @@ import { counts, type Checklist } from "../batch-checklist.ts";
 import { quoteInNote } from "../peer-provenance.ts";
 import { RESUME_CAUSE, RESUME_OPENS } from "../limit-resume.ts";
 import { serverLine } from "../server-lines.ts";
-import type { RuntimeEvent } from "../contracts.ts";
+import type { RuntimeEvent, TextGenerationOptions } from "../contracts.ts";
+import { classifyError } from "../drivers/retry.ts";
 import type { LimitHoldState } from "../../shared/wire.ts";
 
 export const AFTER_RESET_MS = 30_000;
@@ -20,6 +23,10 @@ export const MAX_RESUMES = 3;
 /** A weekly window plus a day: past this nothing the engine said is still worth waiting for. */
 export const MAX_HOLD_MS = 8 * 24 * 60 * 60_000;
 const BUSY_RECHECK_MS = 60_000;
+/** The first check of an engine only a call can test; each further one waits twice as long, up to the 15 minutes. */
+export const PROBE_RECHECK_MS = 2 * 60_000;
+/** Opening the conversation checks again at most this often. */
+export const OPEN_RECHECK_MS = 60_000;
 /** A wait that fell due while the app was closed: the engines get a moment to start first. */
 export const AFTER_START_MS = 30_000;
 /** setTimeout's delay is a signed 32-bit number; a longer wait is armed in steps. */
@@ -44,6 +51,10 @@ export interface HeldTurn {
   resuming?: boolean;
   /** The person's request, quoted for the resumed turn. */
   request?: string;
+  /** Checks of an engine only a call can test that found it still refusing; never saved. */
+  checks?: number;
+  checkedAt?: number;
+  checking?: boolean;
 }
 
 export interface HoldInput {
@@ -65,6 +76,12 @@ export interface LimitHoldDeps {
   resetAt(engine: string): number | null;
   /** Reads plan usage again; called at most once per wake of a turn whose reset is unknown. */
   refreshUsage(): Promise<void>;
+  /** Whether a call can tell this engine works again: an API-key engine held without a reset (its credit ran out). */
+  canProbe?(engine: string): boolean;
+  /** Asks the engine once, outside the chat: true when it answers, false when its limit still refuses, null when unknown. */
+  probe?(turn: Readonly<HeldTurn>): Promise<boolean | null>;
+  /** The check found the engine working: its hold ends, so this turn and every other place see it free. */
+  release?(engine: string): void;
   /** The AI the conversation runs on now, or undefined when it is gone. */
   threadEngine(botId: string, threadId: string): string | undefined;
   busy(botId: string, threadId: string): boolean;
@@ -92,6 +109,22 @@ export function resumeNote(held: Pick<HeldTurn, "engineName" | "request">, list:
   const base = `${RESUME_OPENS}${held.engineName}${cause}${asked} ` +
     "Read the conversation, pick up exactly where you left off and finish that request; do not redo anything already done or tell them again what you already told them. This adds no approval for anything else.]";
   return list && counts(list).open > 0 ? `${base}\n${batchNote(list)}` : base;
+}
+
+const PROBE_TIMEOUT_MS = 30_000;
+
+/** One tiny request to the engine on the turn's model: a refusal for want of credit costs nothing, and an answer costs a
+ * few tokens once. True when it answers, false when a limit or credit still refuses it, null for any other failure. */
+export async function probeEngine(generate: ((prompt: string, options?: TextGenerationOptions) => Promise<string>) | undefined, model: string | undefined,
+  timeoutMs = PROBE_TIMEOUT_MS): Promise<boolean | null> {
+  if (!generate) return null;
+  try {
+    await generate("Reply with the single word OK.", { ...(model ? { model } : {}), timeoutMs, signal: AbortSignal.timeout(timeoutMs) });
+    return true;
+  } catch (error) {
+    const reason = classifyError(error instanceof Error ? error : { text: String(error) }).reason;
+    return reason === "quota" || reason === "rate_limited" ? false : null;
+  }
 }
 
 function savedTurn(value: unknown): HeldTurn | null {
@@ -123,7 +156,7 @@ export function createLimitHold(deps: LimitHoldDeps) {
   const save = (): void => {
     if (!deps.file) return;
     try {
-      writeFileAtomic(deps.file, JSON.stringify([...turns.values()].map(({ resuming: _resuming, ...turn }) => turn)), { mode: 0o600 });
+      writeFileAtomic(deps.file, JSON.stringify([...turns.values()].map(({ resuming: _resuming, checks: _checks, checkedAt: _checkedAt, checking: _checking, ...turn }) => turn)), { mode: 0o600 });
     } catch (error) {
       console.error(`limit hold: could not save: ${error instanceof Error ? error.message : String(error)}`);
     }
@@ -156,7 +189,9 @@ export function createLimitHold(deps: LimitHoldDeps) {
     return turn;
   };
 
-  const wakeFor = (resetsAt: number | null, at: number) => (resetsAt !== null && resetsAt > at ? resetsAt + AFTER_RESET_MS : at + UNKNOWN_RESET_RECHECK_MS);
+  const probes = (engine: string) => Boolean(deps.probe && deps.canProbe?.(engine));
+  const wakeFor = (resetsAt: number | null, at: number, turn?: Pick<HeldTurn, "engine" | "checks">) => (resetsAt !== null && resetsAt > at ? resetsAt + AFTER_RESET_MS
+    : at + (turn && probes(turn.engine) ? Math.min(UNKNOWN_RESET_RECHECK_MS, PROBE_RECHECK_MS * 2 ** (turn.checks ?? 0)) : UNKNOWN_RESET_RECHECK_MS));
 
   const pausedLine = (turn: HeldTurn) => deps.paused(turn.threadId, turn.resetsAt !== null ? { resetsAt: turn.resetsAt } : {});
 
@@ -169,16 +204,28 @@ export function createLimitHold(deps: LimitHoldDeps) {
       say(turn.threadId, "server.limitHold.gaveUp", { engine: turn.engineName });
       return;
     }
-    if (turn.resetsAt === null) {
+    const probing = turn.resetsAt === null && probes(turn.engine);
+    if (turn.resetsAt === null && !probing) {
       await deps.refreshUsage().catch(() => undefined);
       if (turns.get(turn.threadId) !== turn) return;
     }
-    const blocked = deps.blockedUntil(turn.engine);
+    let blocked = deps.blockedUntil(turn.engine);
+    if (probing && blocked !== null && blocked > now()) {
+      turn.checking = true;
+      const works = await deps.probe!(turn).catch(() => null);
+      turn.checking = false;
+      turn.checkedAt = now();
+      if (turns.get(turn.threadId) !== turn) return;
+      if (works) {
+        deps.release?.(turn.engine);
+        blocked = deps.blockedUntil(turn.engine);
+      } else turn.checks = (turn.checks ?? 0) + 1;
+    }
     if (blocked !== null && blocked > now()) {
       const known = deps.resetAt(turn.engine);
       const resetsAt = known !== null && known > now() ? known : null;
       const learned = turn.resetsAt === null && resetsAt !== null;
-      Object.assign(turn, { resetsAt: resetsAt ?? turn.resetsAt, wakeAt: wakeFor(resetsAt, now()) });
+      Object.assign(turn, { resetsAt: resetsAt ?? turn.resetsAt, wakeAt: wakeFor(resetsAt, now(), turn) });
       if (turn.resetsAt !== null && turn.resetsAt <= now()) turn.resetsAt = null;
       save();
       arm(turn);
@@ -228,14 +275,14 @@ export function createLimitHold(deps: LimitHoldDeps) {
       }
       if (known && known.engine === input.engine) {
         const before = known.resetsAt;
-        Object.assign(known, { resetsAt: resetsAt ?? known.resetsAt, wakeAt: wakeFor(resetsAt ?? known.resetsAt, at), ...(input.request ? { request: input.request } : {}) });
+        Object.assign(known, { resetsAt: resetsAt ?? known.resetsAt, wakeAt: wakeFor(resetsAt ?? known.resetsAt, at, known), ...(input.request ? { request: input.request } : {}) });
         save();
         arm(known);
         if (before !== known.resetsAt) pausedLine(known);
         return known;
       }
       const turn: HeldTurn = {
-        botId: input.botId, threadId: input.threadId, engine: input.engine, engineName: input.engineName, resetsAt, wakeAt: wakeFor(resetsAt, at), since: at, resumes: 0,
+        botId: input.botId, threadId: input.threadId, engine: input.engine, engineName: input.engineName, resetsAt, wakeAt: wakeFor(resetsAt, at, input), since: at, resumes: 0,
         ...(input.request ? { request: input.request } : {}),
       };
       disarm(input.threadId);
@@ -249,6 +296,16 @@ export function createLimitHold(deps: LimitHoldDeps) {
     /** Ends the wait: the person pressed Stop, sent another message, or chose another way on. */
     cancel(threadId: string): boolean {
       return Boolean(drop(threadId));
+    },
+
+    /** The person opened the conversation: a turn waiting on a limit only a call can see the end of checks it now. */
+    checkNow(threadId: string): boolean {
+      const turn = turns.get(threadId);
+      if (!turn || turn.resuming || turn.checking || turn.resetsAt !== null || !probes(turn.engine)) return false;
+      if (turn.checkedAt !== undefined && now() - turn.checkedAt < OPEN_RECHECK_MS) return false;
+      turn.wakeAt = now();
+      arm(turn);
+      return true;
     },
 
     /** A resume of this conversation's held turn is under way. */

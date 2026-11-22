@@ -6,10 +6,11 @@ vi.mock("./bot-move", () => ({ runBotMove: f.runBotMove }));
 vi.mock("./copy-text", () => ({ copyText: f.copy }));
 vi.mock("./own-profile", () => ({ saveTeamProfile: vi.fn() }));
 import { setLocale } from "@/lib/i18n";
+import type { Action } from "@/state/store";
 import { NOTES_FORMAT } from "../../shared/assistant-notes";
 import { GrokImportError } from "../../shared/grok-import";
 import {
-  copyNotesPrompt, importNotes, looksLikeNotes, notesErrorLine, notesInFiles, notesOutcomeLine, notesWaiting, notesWatch, REMIND_AFTER_MS, scheduleNotesReminder, stopWaiting,
+  bringOfferedNotesIn, copyNotesPrompt, dismissNotesOffer, importNotes, notesOffer, looksLikeNotes, notesErrorLine, notesInFiles, notesOutcomeLine, notesWaiting, notesWatch, REMIND_AFTER_MS, scheduleNotesReminder, stopWaiting,
   takeNotesFromDownloads, WATCH_FOR_MS,
 } from "./assistant-notes";
 
@@ -133,7 +134,71 @@ describe("bringing notes in", () => {
     const said = f.api.mock.calls.filter(([path]) => path === "/api/bots/dusk/import-note").map(([, init]) => JSON.parse(init.body));
     expect(said[0], "first it says it got them").toEqual({ from: ["Claude"], start: true });
     const note = said.at(-1);
-    expect(note).toMatchObject({ from: ["Claude"], facts: 2, threads: 1 });
+    expect(note).toMatchObject({ from: ["Claude"], facts: 2, threads: 1, joined: 1 });
+  });
+
+  it("answers its own \"setting up\" note when nothing in the notes was new, and says when they were cut off", async () => {
+    const topics = new Map<string, string>();
+    f.api.mockImplementation(async (path: string, init?: { method?: string; body?: string }) => {
+      if (path === "/api/config") return { profile: JSON.parse(init!.body!).profile };
+      const read = /^\/api\/bots\/(\w+)\/memory\/file\?path=(.+)$/.exec(path);
+      if (read) return { text: topics.get(decodeURIComponent(read[2]!)) ?? "" };
+      if (path.endsWith("/memory/file") && init?.method === "PUT") topics.set(JSON.parse(init.body!).path, JSON.parse(init.body!).text);
+      return { ok: true };
+    });
+    const said = () => f.api.mock.calls.filter(([path]) => path === "/api/bots/dusk/import-note").map(([, init]) => JSON.parse(init.body));
+    let about = "";
+    const context = () => ({ bots: [], aboutMe: about, team: false, firstBotId: "dusk", dispatch: (action: Action) => { if (action.type === "profileSaved") about = action.profile.aboutMe ?? about; } });
+    const text = notes({ bots: [] });
+    await importNotes(text, context());
+    f.api.mockClear();
+    const again = await importNotes(text, context());
+    expect(notesOutcomeLine(again)).toBe("Nothing new from Claude. It was all here already.");
+    expect(said()).toEqual([{ from: ["Claude"], start: true }, expect.objectContaining({ from: ["Claude"], nothingNew: true, failed: false })]);
+    f.api.mockClear();
+    const cut = `\`\`\`json\n{"format":"${NOTES_FORMAT}","version":1,"from":"Gemini","memories":["Bakes on Sundays.","Grows tomatoes."],"about_me":["Name is Sa`;
+    expect((await importNotes(cut, context())).partial).toBe(true);
+    expect(said().at(-1)).toMatchObject({ from: ["Gemini"], memories: 2, partial: true });
+  });
+
+  it("takes the same notes pasted twice at once as one import", async () => {
+    f.api.mockImplementation(async (path: string, init?: { method?: string; body?: string }) => {
+      if (path === "/api/config") return { profile: JSON.parse(init!.body!).profile };
+      if (path.includes("/memory/file?")) return { text: "" };
+      if (path === "/api/mcp/servers") return { servers: [] };
+      return { ok: true };
+    });
+    f.runBotMove.mockImplementation(async () => [{ report: { bots: [{ id: "r", name: "Recipe helper", routines: 0 }], failed: [] } }]);
+    const context = { bots: [], aboutMe: "", team: false, firstBotId: "dusk", dispatch: vi.fn() };
+    const [first, second] = await Promise.all([importNotes(notes(), context), importNotes(notes(), context, { via: "drop" })]);
+    expect(second).toBe(first);
+    expect(f.runBotMove).toHaveBeenCalledOnce();
+    expect(f.api.mock.calls.filter(([path, init]) => path === "/api/bots/dusk/import-note" && JSON.parse(init.body).start)).toHaveLength(1);
+    await importNotes(notes(), context);
+    expect(f.runBotMove, "once it is done, the same notes may come in again").toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps About me's long facts, and those past its share, word for word in the first bot's memory, and says so", async () => {
+    const syllables = ["ka", "lo", "mi", "ren", "tu", "vash", "or", "bel", "quin", "sa", "dro", "pel", "nix", "gru", "fen", "hol", "zar", "wim", "ju", "po"];
+    const word = (n: number) => `${syllables[n % 20]}${syllables[Math.floor(n / 20) % 20]}${syllables[Math.floor(n / 400) % 20]}`;
+    const words = (from: number, count: number) => Array.from({ length: count }, (_, k) => word(from * 37 + k * 11)).join(" ");
+    const short = Array.from({ length: 82 }, (_, i) => `Fact ${i}: ${words(i, 6)}.`);
+    const long = Array.from({ length: 10 }, (_, i) => `Long fact ${i}: ${words(500 + i * 13, 70)}.`);
+    const topics = new Map<string, string>();
+    f.api.mockImplementation(async (path: string, init?: { method?: string; body?: string }) => {
+      if (path === "/api/config") return { profile: JSON.parse(init!.body!).profile };
+      const read = /^\/api\/bots\/(\w+)\/memory\/file\?path=(.+)$/.exec(path);
+      if (read) return { text: topics.get(decodeURIComponent(read[2]!)) ?? "" };
+      if (path.endsWith("/memory/file") && init?.method === "PUT") topics.set(JSON.parse(init.body!).path, JSON.parse(init.body!).text);
+      return { ok: true };
+    });
+    const outcome = await importNotes(notes({ about_me: [...long, ...short], instructions: "", bots: [] }), { bots: [], aboutMe: "", team: false, firstBotId: "dusk", dispatch: vi.fn() });
+    const kept = topics.get("memory/about-you-from-claude.md")!;
+    for (const fact of [...long, ...short.slice(-2)]) expect(kept).toContain(`- ${fact}\n`);
+    expect(outcome).toMatchObject({ facts: 80, aboutInMemory: 12 });
+    expect(notesOutcomeLine(outcome)).toBe("Brought in from Claude: 80 things about you, 12 more things about you, kept in memory, and 1 memory.");
+    const note = JSON.parse(f.api.mock.calls.findLast(([path]) => path === "/api/bots/dusk/import-note")![1].body);
+    expect(note).toMatchObject({ facts: 80, aboutInMemory: 12 });
   });
 
   it("makes the person's own routines real, paused routines and their skills switched-off skills of the first bot, once", async () => {
@@ -203,6 +268,9 @@ describe("the notes file in Downloads", () => {
     f.copy.mockResolvedValue("copied");
     await copyNotesPrompt(5_000);
     await takeNotesFromDownloads(context(), 6_000);
+    expect(f.api, "the first look also sees a file saved before the copy").toHaveBeenCalledWith("/api/setup-import/notes?since=1", expect.anything());
+    f.api.mockClear();
+    await takeNotesFromDownloads(context(), 7_000);
     expect(f.api).toHaveBeenCalledWith("/api/setup-import/notes?since=5000", expect.anything());
     f.api.mockClear();
     expect(await takeNotesFromDownloads(context(), 5_000 + WATCH_FOR_MS + 1), "the watch ends").toBeNull();
@@ -222,6 +290,34 @@ describe("the notes file in Downloads", () => {
     f.api.mockClear();
     expect(await takeNotesFromDownloads(context(), 4_000), "the same file never twice").toBeNull();
     expect(f.api.mock.calls.filter(([path]) => String(path).includes("/memory/file"))).toEqual([]);
+  });
+
+  it("offers a file saved before the prompt was copied, bringing it in only when asked, once", async () => {
+    f.copy.mockResolvedValue("copied");
+    await copyNotesPrompt(5_000);
+    f.runBotMove.mockResolvedValue([{ report: { bots: [], failed: [] } }]);
+    serve([{ name: "dusk-bot-notes.md", modifiedAt: 1_000, text: notes({ bots: [] }) }]);
+    expect(await takeNotesFromDownloads(context(), 6_000), "not brought in by itself").toBeNull();
+    expect(f.api.mock.calls.filter(([path]) => String(path).includes("/memory/file"))).toEqual([]);
+    expect(notesOffer()).toMatchObject({ name: "dusk-bot-notes.md", modifiedAt: 1_000 });
+    expect(await takeNotesFromDownloads(context(), 7_000)).toBeNull();
+    const outcome = await bringOfferedNotesIn(context());
+    expect(outcome).toMatchObject({ from: "Claude", memories: 1 });
+    expect(notesOffer()).toBeNull();
+    expect(notesWatch()!.taken).toEqual(["dusk-bot-notes.md:1000"]);
+  });
+
+  it("a file offered and turned down is not offered again", async () => {
+    f.copy.mockResolvedValue("copied");
+    await copyNotesPrompt(5_000);
+    serve([{ name: "dusk-bot-notes.md", modifiedAt: 1_000, text: notes({ bots: [] }) }]);
+    await takeNotesFromDownloads(context(), 6_000);
+    dismissNotesOffer();
+    expect(notesOffer()).toBeNull();
+    await copyNotesPrompt(8_000);
+    await takeNotesFromDownloads(context(), 9_000);
+    expect(notesOffer()).toBeNull();
+    expect(f.runBotMove).not.toHaveBeenCalled();
   });
 });
 

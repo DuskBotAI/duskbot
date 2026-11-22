@@ -268,6 +268,7 @@ describe("what the page asks of the person", () => {
 describe("who has the browser", () => {
   it("names each state from this viewer's side", () => {
     expect(controlPill(false, null, "")).toBe("connecting");
+    expect(controlPill(false, null, "", true)).toBe("disconnected");
     expect(controlPill(true, control("unclaimed"), "")).toBe("watching");
     expect(controlPill(true, control("agent"), "")).toBe("bot");
     expect(controlPill(true, control("you"), "")).toBe("yours");

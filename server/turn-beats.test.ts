@@ -182,6 +182,16 @@ describe("turn beats", () => {
     expect(working.posts).toEqual([]);
   });
 
+  it("never asks back on a go-ahead, whose earlier chat the writer cannot see", async () => {
+    const { beats, posts, send, prompts } = setup({ replies: { ack: "ASK: What would you like me to set up?" } });
+    beats.start({ botId: "b", threadId: THREAD, text: "go ahead and set it up", attachments: 0, unattended: false });
+    expect(prompts[0]!.prompt).toContain("a go-ahead or a pointer back");
+    send(event({ type: "turn.started" }));
+    send(event({ type: "content.delta", streamKind: "reasoning_text", delta: "Setting it up." }));
+    await vi.advanceTimersByTimeAsync(ACK_IDLE_MS * 2);
+    expect(posts).toEqual([]);
+  });
+
   it("never acks a silent turn that runs no tool, so no ack is left with nothing after it", async () => {
     const { beats, posts, send } = setup();
     beats.start({ botId: "b", threadId: THREAD, text: "Write three posts for X announcing dark mode", attachments: 0, unattended: false });

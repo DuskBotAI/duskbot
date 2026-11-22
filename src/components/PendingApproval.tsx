@@ -15,8 +15,9 @@ import { reviewedSkillSha256 } from "../../shared/skill-request";
 import { useOwnerOrAdmin } from "@/lib/use-owner-or-admin";
 import { useInboxOrigin } from "./InboxLine";
 import { yourComputerAsk } from "@/lib/your-computer";
-import { draftEdits, draftOf, EmailReviewView, PurchaseSummaryView, useEmailDraft } from "./ReviewCards";
+import { draftEdits, draftOf, EmailReviewView, MessageReviewView, messageDraftEdits, messageDraftOf, PurchaseSummaryView, useEmailDraft } from "./ReviewCards";
 import type { EmailEdits, EmailReview } from "../../shared/email-review";
+import type { MessageEdits, MessageReview } from "../../shared/message-review";
 
 interface ApprovalLabels {
   [tool: string]: LocaleKey;
@@ -152,6 +153,7 @@ function approvalWords(pending: Pending, botName?: string): { line: string; summ
   if (card?.purchase) return { line: t("purchase.title"), detail: "" };
   if (card?.outboundRequest?.purchase) return { line: t("purchase.title"), ...(outbound?.summary ? { summary: outbound.summary } : {}), inline: detail, detail: "" };
   if (card?.email) return { line: t("emailReview.title"), detail: "" };
+  if (card?.messageReview) return { line: t(card.messageReview.post ? "messageReview.postTitle" : "messageReview.title"), detail: "" };
   if (outbound) return { line: outbound.headline, ...(outbound.summary ? { summary: outbound.summary } : {}), detail };
   if (ask) return { line: ask.line, detail };
   // a connected app's call reads as what it does; its raw input folds behind Details
@@ -199,7 +201,7 @@ export const PendingApprovalPanel = memo(function PendingApprovalPanel({
 }) {
   const [open, setOpen] = useState(false);
   const outbound = pending.message.card ? outboundSummary(pending.message.card) : undefined;
-  const review = pending.message.card?.purchase || pending.message.card?.email;
+  const review = pending.message.card?.purchase || pending.message.card?.email || pending.message.card?.messageReview;
   const buys = Boolean(review || pending.message.card?.outboundRequest?.purchase);
   const heldNote = buys ? undefined : outbound?.opaque && pending.heldCode === "approval.held.outbound"
     ? t("approval.opaqueCode")
@@ -261,7 +263,8 @@ export const PendingApprovalPanel = memo(function PendingApprovalPanel({
         <div className="px-4 pt-2">
           {pending.message.card?.purchase
             ? <PurchaseSummaryView purchase={pending.message.card.purchase} />
-            : pending.message.card?.email && <EmailReviewView email={pending.message.card.email} requestId={pending.requestId} editable />}
+            : pending.message.card?.email ? <EmailReviewView email={pending.message.card.email} requestId={pending.requestId} editable />
+            : pending.message.card?.messageReview && <MessageReviewView message={pending.message.card.messageReview} requestId={pending.requestId} editable />}
         </div>
       )}
       {(inline || heldNote || open) && (
@@ -325,7 +328,8 @@ export function PendingApprovalActions({
     : undefined;
   const purchase = pending.message.card?.purchase ?? pending.message.card?.outboundRequest?.purchase;
   const email = pending.message.card?.email;
-  const decide = (behavior: "allow" | "deny", always = false, rememberCommand = false, edits?: EmailEdits) =>
+  const message = pending.message.card?.messageReview;
+  const decide = (behavior: "allow" | "deny", always = false, rememberCommand = false, edits?: EmailEdits | MessageEdits) =>
     dispatch({
       type: "decideRequest",
       threadId,
@@ -344,7 +348,7 @@ export function PendingApprovalActions({
   const marked = (action: string) => (tag ? { [`data-${tag}-action`]: action } : {});
   const showPrimary = part !== "more";
   const showMore = part !== "primary";
-  const always = (durableRequest && !(titled && pending.allowTask)) || purchase || email ? null
+  const always = (durableRequest && !(titled && pending.allowTask)) || purchase || email || message ? null
     : bot && pending.allowKey
       ? { name: t("approval.action.alwaysAllow"), hint: t("approval.action.stopAsking", { name: bot.name, key: pending.allowKey }), run: () => decide("allow", true) }
       : canRememberCommand && pending.commandAllowlist
@@ -354,7 +358,7 @@ export function PendingApprovalActions({
         : !pending.allowKey && pending.allowSession
           ? { name: t("approval.action.alwaysAllowSession"), hint: t("approval.action.alwaysAllowSessionHint"), run: () => decide("allow", true) }
           : null;
-  if ((purchase || email) && part !== "more") return <ReviewActions requestId={pending.requestId} purchase={Boolean(purchase)} email={email} marked={marked} decide={decide} />;
+  if ((purchase || email || message) && part !== "more") return <ReviewActions requestId={pending.requestId} purchase={Boolean(purchase)} email={email} message={message} marked={marked} decide={decide} />;
   const more = showMore && !durableRequest ? [
     <button key="cancel" type="button" onClick={onCancelTurn} className={cardTertiary(CARD_BUTTON_MD)}>
       {t("approval.action.cancelTurn")}
@@ -413,30 +417,33 @@ export function PendingApprovalActions({
   );
 }
 
-/** A purchase's or an email's answers: Cancel or Don't send, Edit for an email, and the one button that goes ahead. */
-function ReviewActions({ requestId, purchase, email, marked, decide }: {
+/** A purchase's, an email's or a message's answers: Cancel or Don't send, Edit for an email or a message, and the one
+ * button that goes ahead. */
+function ReviewActions({ requestId, purchase, email, message, marked, decide }: {
   requestId: string;
   purchase: boolean;
   email?: EmailReview;
+  message?: MessageReview;
   marked: (action: string) => Record<string, string>;
-  decide: (behavior: "allow" | "deny", always?: boolean, rememberCommand?: boolean, edits?: EmailEdits) => void;
+  decide: (behavior: "allow" | "deny", always?: boolean, rememberCommand?: boolean, edits?: EmailEdits | MessageEdits) => void;
 }) {
   const [draft, setDraft] = useEmailDraft(requestId);
-  const edits = email && draft ? draftEdits(email, draft) : null;
+  const edits = draft ? email ? draftEdits(email, draft) : message ? messageDraftEdits(draft) : null : null;
+  const editable = email ? !email.draft : Boolean(message && !message.fixed);
   const allow = cardPrimary(CARD_BUTTON_MD);
   return (
     <>
       <button type="button" {...marked("deny")} data-approval-deny="" onClick={() => { setDraft(null); decide("deny"); }} className={cardTertiary(CARD_BUTTON_MD)}>
         {purchase ? t("approval.action.cancel") : t("emailReview.dontSend")}
       </button>
-      {email && !email.draft && (
-        <button type="button" aria-pressed={Boolean(draft)} onClick={() => setDraft(draft ? null : draftOf(email))} className={cardSecondary(CARD_BUTTON_MD)}>
+      {editable && (
+        <button type="button" aria-pressed={Boolean(draft)} onClick={() => setDraft(draft ? null : email ? draftOf(email) : messageDraftOf(message!))} className={cardSecondary(CARD_BUTTON_MD)}>
           {draft ? t("emailReview.undoEdits") : t("emailReview.edit")}
         </button>
       )}
       <button type="button" {...marked("allow")} data-approval-allow="" onClick={() => { decide("allow", false, false, edits ?? undefined); setDraft(null); }}
         disabled={Boolean(draft && !edits)} className={allow.className} style={allow.style}>
-        {purchase ? t("purchase.confirm") : t("emailReview.send")}
+        {purchase ? t("purchase.confirm") : message ? t(message.post ? "messageReview.post" : "messageReview.send") : t("emailReview.send")}
       </button>
     </>
   );

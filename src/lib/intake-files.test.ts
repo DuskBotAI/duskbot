@@ -1,7 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { TURN_IMAGE_MAX_BYTES as SERVER_TURN_IMAGE_MAX_BYTES, TURN_IMAGE_MAX_COUNT as SERVER_TURN_IMAGE_MAX_COUNT } from "../../server/turn-images";
-import { fitImagesToSlots, IMAGE_MAX_BYTES, imageBytesLeft, imageSlotsLeft, imagesThatFit, intakeFiles, TURN_IMAGE_MAX_BYTES, TURN_IMAGE_MAX_COUNT, type Attachment } from "./composer-attachments";
+import { AttachmentTooLargeError, fitImagesToSlots, IMAGE_MAX_BYTES, imageBytesLeft, imageSlotsLeft, TURN_IMAGE_MAX_BYTES, TURN_IMAGE_MAX_COUNT, type Attachment } from "./composer-attachments";
+import { imagesThatFit, intakeFiles } from "./intake-files";
+import { FILE_MAX_BYTES } from "../../shared/upload-limits";
 
 type Fake = { name: string; size: number; type: string; text: () => Promise<string> };
 const file = (name: string, type: string, size = 10): Fake => ({
@@ -143,18 +145,24 @@ describe("intakeFiles", () => {
     expect(out.notice).toBe(`A message takes up to ${TURN_IMAGE_MAX_COUNT} images, 40 MB in all. 2.png, 3.png weren't attached.`);
   });
 
-  it("lets an oversized image fail on its own without taking the last slot", async () => {
+  it("attaches an image over the image limit as a file, says so, and leaves it out of the image slots", async () => {
+    const uploadImage = vi.fn(upload);
+    const uploadFile = vi.fn(async (f: Fake) => ({ kind: "file" as const, id: `id-${f.name}`, name: f.name, path: `/files/${f.name}`, size: f.size }));
     const out = await intakeFiles([file("huge.png", "image/png", IMAGE_MAX_BYTES + 1), file("ok.png", "image/png")], {
-      allowImages: true,
-      getPath: onDisk,
-      uploadImage: async (f) => {
-        if (f.size > IMAGE_MAX_BYTES) throw new Error(`${f.name} is over 10 MB.`);
-        return upload(f);
-      },
-      imageSlots: 1,
+      allowImages: true, getPath: onDisk, uploadImage, uploadFile, imageSlots: 1,
     });
-    expect(out.attachments.map((a) => "name" in a ? a.name : "")).toEqual(["ok.png"]);
-    expect(out.notice, "the name once, as a sentence").toBe("huge.png is over 10 MB.");
+    expect(out.attachments.map((a) => `${a.kind}:${"name" in a ? a.name : ""}`)).toEqual(["file:huge.png", "image:ok.png"]);
+    expect(uploadImage).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ name: "ok.png" }));
+    expect(out.notice).toBe("huge.png is over 10 MB, so it was attached as a file.");
+  });
+
+  it("names a file over the file limit in one sentence", async () => {
+    const out = await intakeFiles([file("huge.png", "image/png", FILE_MAX_BYTES + 1)], {
+      allowImages: true, getPath: onDisk, uploadImage: upload,
+      uploadFile: async (f) => { throw new AttachmentTooLargeError(f.name, FILE_MAX_BYTES); },
+    });
+    expect(out.attachments).toEqual([]);
+    expect(out.notice).toBe("huge.png is over 25 MB.");
   });
 
   it("splits pasted images by the slots left, passing oversized ones through", () => {

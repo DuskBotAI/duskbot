@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { autoRoutineName, newWhenDraft, nextLocalHour, scheduleFromDraft, whenDraftFor } from "./routine-when";
+import { autoRoutineName, editedSchedule, newWhenDraft, nextLocalHour, scheduleFromDraft, whenDraftFor } from "./routine-when";
 
 const now = new Date(2026, 10, 7, 21, 13).getTime();
 
@@ -37,6 +37,22 @@ describe("the routine editor's when", () => {
     const draft = newWhenDraft(now);
     expect(scheduleFromDraft({ ...draft, preset: "once", date: "2026-11-07", time: "08:00" }, now).error).toBe("routines.inline.error.past");
     expect(scheduleFromDraft({ ...draft, time: "" }, now).error).toBe("routines.inline.error.time");
+    expect(scheduleFromDraft({ ...draft, preset: "hourly", window: { start: "", end: "23:00" } }, now).error).toBe("routines.inline.error.time");
+  });
+
+  it("keeps a saved schedule, and its next run, until the when changes", () => {
+    const hourly = whenDraftFor({ type: "interval", everyMinutes: 60, anchorAt: now + 35 * 60_000, window: { start: "07:00", end: "23:00" } }, now);
+    expect(editedSchedule(hourly, { ...hourly }, now)).toEqual({});
+    expect(editedSchedule(hourly, { ...hourly, window: { start: "07:00", end: "23:00" } }, now)).toEqual({});
+    expect(editedSchedule(hourly, { ...hourly, window: null }, now).schedule).toMatchObject({ type: "interval", window: null });
+    expect(editedSchedule(hourly, { ...hourly, preset: "daily" }, now).schedule).toMatchObject({ type: "daily" });
+    expect(editedSchedule(hourly, { ...hourly, preset: "daily", time: "" }, now).error).toBe("routines.inline.error.time");
+    expect(editedSchedule(hourly, { ...hourly, window: { start: "08:00", end: "23:00" } }, now).schedule).toMatchObject({ type: "interval", window: { start: "08:00" } });
+    const passed = whenDraftFor({ type: "once", at: now - 60_000 }, now);
+    expect(editedSchedule(passed, { ...passed }, now)).toEqual({});
+    const daily = whenDraftFor({ type: "daily", time: "09:00", weekdays: [0, 1, 2, 3, 4, 5, 6] }, now);
+    expect(editedSchedule(daily, { ...daily, preset: "weekly" }, now).schedule).toMatchObject({ type: "daily", weekdays: [daily.day] });
+    expect(editedSchedule(daily, { ...daily, time: "10:00" }, now).schedule).toMatchObject({ time: "10:00" });
   });
 
   it("names a routine from what it does", () => {

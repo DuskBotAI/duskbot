@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { recordEvents } from "../testing/events.ts";
 import { buildTurnContext } from "../turn-context.ts";
 import { instanceConfigs } from "../config.ts";
-import { OpenAICompatDriver } from "./openai-compat.ts";
+import { onThisNetwork, OpenAICompatDriver } from "./openai-compat.ts";
 import { flushNativeLogs } from "./native.ts";
 
 describe("OpenAICompatDriver", () => {
@@ -1258,6 +1258,31 @@ describe("how long a turn waits for a reply", () => {
     for (const bad of [0, 61, 2.5, "10", null]) {
       expect(() => OpenAICompatDriver.decodeConfig({ url: "http://127.0.0.1:11434/v1", replyWaitMinutes: bad })).toThrow(/replyWaitMinutes/);
     }
+  });
+});
+
+describe("onThisNetwork", () => {
+  it("counts loopback, RFC1918 and unique-local IPv6 literals as this network", () => {
+    expect(onThisNetwork("http://localhost:11434")).toBe(true);
+    expect(onThisNetwork("http://127.0.0.1:11434")).toBe(true);
+    expect(onThisNetwork("http://10.1.2.3:8080")).toBe(true);
+    expect(onThisNetwork("http://192.168.1.5:1234")).toBe(true);
+    expect(onThisNetwork("http://172.16.0.9")).toBe(true);
+    expect(onThisNetwork("http://172.31.255.254")).toBe(true);
+    expect(onThisNetwork("http://[fd12:3456::1]:8080")).toBe(true);
+    expect(onThisNetwork("http://ollama.local:11434")).toBe(true);
+  });
+
+  it("does not classify lookalike hostnames or public addresses as this network", () => {
+    expect(onThisNetwork("https://openrouter.ai/api/v1")).toBe(false);
+    expect(onThisNetwork("http://10.evil.com")).toBe(false);
+    expect(onThisNetwork("http://192.168.attacker.net")).toBe(false);
+    expect(onThisNetwork("http://172.16.1.2.evil.com")).toBe(false);
+    expect(onThisNetwork("http://11.0.0.1")).toBe(false);
+    expect(onThisNetwork("http://172.32.0.1")).toBe(false);
+    expect(onThisNetwork("http://192.169.0.1")).toBe(false);
+    expect(onThisNetwork("http://[fe80::1]:8080")).toBe(false);
+    expect(onThisNetwork("http://8.8.8.8/v1")).toBe(false);
   });
 });
 

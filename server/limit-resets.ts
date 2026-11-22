@@ -231,6 +231,28 @@ export class LimitResetClock {
     this.hold(engine, this.now() + UNNAMED_LIMIT_MS, true);
   }
 
+  /** Whether this engine's limit can be read from plan usage; an API-key engine's (OpenRouter's credits) cannot, so
+   * only trying it again tells whether it works. */
+  readsUsage(engine: string): boolean {
+    return this.options.accounts().some((account) => account.id === engine && !account.noUsage);
+  }
+
+  /** The engine is held by a refusal that named no reset, and its usage cannot say when that ends: an account out of
+   * credit, which a top-up ends at any moment. */
+  heldByGuess(engine: string): boolean {
+    return this.guessed.has(engine) && this.blockedUntil(engine) !== null && !this.readsUsage(engine);
+  }
+
+  /** The engine works again (a check got an answer from it, or the person tries it): its guessed hold ends now. */
+  release(engine: string): boolean {
+    if (!this.guessed.has(engine) || !this.refusals.delete(engine)) return false;
+    this.guessed.delete(engine);
+    this.heldAt.delete(engine);
+    this.saveHolds();
+    this.options.onChange?.();
+    return true;
+  }
+
   /** A turn on this engine was refused by its usage limit; `resetsAt` is when the engine said it resets. */
   noteRefusal(engine: string | undefined, resetsAt: number | undefined): void {
     if (!engine || resetsAt === undefined || !Number.isFinite(resetsAt) || resetsAt <= this.now()) return;

@@ -59,13 +59,13 @@ for row in "${SITES[@]}"; do
     # dusk.bot is the waitlist only: every other page, the search index files and the redirect list go; the server
     # sends any page that is not here to /
     pub="$dir/public/landing"
-    find "$pub" -name '*.html' ! -path "$pub/index.html" ! -path "$pub/privacy/index.html" ! -path "$pub/terms/index.html" ! -path "$pub/cookies/index.html" ! -path "$pub/license/index.html" ! -path "$pub/docs/your-own-server/index.html" ! -path "$pub/support/index.html" ! -path "$pub/delete-account/index.html" ! -path "$pub/download/index.html" -delete
+    find "$pub" -name '*.html' ! -path "$pub/index.html" ! -path "$pub/privacy/index.html" ! -path "$pub/terms/index.html" ! -path "$pub/cookies/index.html" ! -path "$pub/license/index.html" ! -path "$pub/docs/your-own-server/index.html" ! -path "$pub/contact/index.html" ! -path "$pub/delete-account/index.html" ! -path "$pub/download/index.html" -delete
     rm -rf "$pub/sitemaps" "$pub/docs/search.json" "$pub/_redirects.json" "$pub/_gone.json"
     find "$pub" -maxdepth 1 -regex '.*/[0-9a-f]\{32\}\.txt' -delete
     find "$pub" -type d -empty -delete
     printf 'User-agent: *\nAllow: /\n\nSitemap: https://dusk.bot/sitemap.xml\n' > "$pub/robots.txt"
     { printf '<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
-      for p in / /privacy /terms /cookies /license /support /delete-account; do printf '  <url><loc>https://dusk.bot%s</loc></url>\n' "$p"; done
+      for p in / /privacy /terms /cookies /license /contact /delete-account; do printf '  <url><loc>https://dusk.bot%s</loc></url>\n' "$p"; done
       printf '</urlset>\n'; } > "$pub/sitemap.xml"
     vars="DUSK_HOME_ONLY=1"
   fi

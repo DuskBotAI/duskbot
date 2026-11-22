@@ -32,6 +32,23 @@ describe("cloud screen connection feedback", () => {
     expect(html).not.toContain('>Open</span>');
   });
 
+  it("shows the picture without an Open action while the live desktop can't open", () => {
+    const html = renderToStaticMarkup(createElement(CloudScreenPreview, {
+      ...defaults, src: "data:image/png;base64,AAAA", canOpen: false,
+    }));
+    expect(html).toContain('alt="Test bot');
+    expect(html).not.toContain("<button");
+    expect(html).not.toContain("live desktop");
+  });
+
+  it("offers the way forward beside Retry preview when retrying can't help", () => {
+    const html = renderToStaticMarkup(createElement(CloudScreenPreview, {
+      ...defaults, error: "VPS is not configured", fix: { label: "Open VPS settings", onClick: vi.fn() },
+    }));
+    expect(html).toContain(">Open VPS settings</button>");
+    expect(html).toContain("Retry preview");
+  });
+
   it("distinguishes starting the computer from waiting for a frame", () => {
     const html = renderToStaticMarkup(createElement(CloudScreenPreview, { ...defaults, starting: true }));
     expect(html).toContain("Starting your bot&#x27;s desktop…");

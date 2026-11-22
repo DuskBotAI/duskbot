@@ -61,6 +61,13 @@ describe("the AI grid", () => {
     expect(tiles[0]!.instance.instanceId).toBe("codex");
   });
 
+  it("never offers an AI whose saved driver this build lacks, falling back to one of its kind it does know", () => {
+    const unknown = (instanceId: string) => ({ ...ai(instanceId, "not-a-real-driver"), unknownDriver: true as const });
+    const tiles = aiTiles([ai("claude", "claudeAgent"), unknown("openaiCompat"), unknown("cursor"), unknown("chatgpt"), ai("codex", "codex")], ready);
+    expect(tiles.map((tile) => [tile.id, tile.instance.instanceId])).toEqual([["chatgpt", "codex"], ["claude", "claude"]]);
+    expect(tiles[0]!.candidates.map((candidate) => candidate.instanceId)).toEqual(["codex"]);
+  });
+
   it("offers the free model only when it is ready", () => {
     expect(freeModel([ai("opencodeGo", "opencodeGo", true, { freeFallback: true })], ready)?.instanceId).toBe("opencodeGo");
     expect(freeModel([ai("opencodeGo", "opencodeGo", false, { freeFallback: true })], ready)).toBeUndefined();

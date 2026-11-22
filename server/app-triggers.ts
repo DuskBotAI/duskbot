@@ -23,6 +23,7 @@ import { BrokerError, type AppTriggerBroker, type BrokerEvent, type BrokerInvent
 import { writeFileAtomic } from "./atomic.ts";
 import { DATA_DIR } from "./config.ts";
 import type { RoutineRunOn } from "./routines.ts";
+import type { JsonValue } from "./schema.ts";
 
 export const DEFAULT_MAX_PENDING_RUNS = 3;
 const MAX_ATTEMPTS = 2_000;
@@ -398,10 +399,19 @@ export class AppTriggerManager {
     return publicTrigger(trigger);
   }
 
-  /** A test event marked as one, sent through the service's real queue when the automation has its copy there. */
-  async runNow(id: string): Promise<{ via: "service" | "here"; runId?: string } | null> {
+  /** A test event marked as one, sent through the service's real queue when the automation has its copy there.
+   *  A bot's sample runs here as a real event, so its steps really happen. */
+  async runNow(id: string, sample?: JsonValue): Promise<{ via: "service" | "here"; runId?: string } | null> {
     const trigger = this.triggers.find((candidate) => candidate.id === id);
     if (!trigger) return null;
+    if (sample && typeof sample === "object" && !Array.isArray(sample)) {
+      const eventId = `sample_${randomUUID()}`;
+      const run = this.options.runs.enqueue({
+        webhookId: trigger.id, webhookName: trigger.name, botId: trigger.botId, runOn: trigger.runOn, deliveryId: eventId, receivedAt: this.now(),
+        eventSource: "app", prompt: eventPrompt(trigger.prompt, eventBlock(trigger, { id: eventId, receivedAt: this.now(), test: false, data: sample })),
+      });
+      return { via: "here", runId: run.id };
+    }
     const data = { dusk_test: true, note: "A test run started from dusk bot." };
     if (trigger.remote.triggerId && trigger.remote.state === "active" && this.options.service().available) {
       try {

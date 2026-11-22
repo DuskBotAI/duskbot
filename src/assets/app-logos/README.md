@@ -13,6 +13,7 @@ person connects.
 - `cloudflare.tile.svg`: simple-icons 16.37.0 `cloudflare` (Cloudflare), #F38020
 - `datadog.tile.svg`: simple-icons 16.37.0 `datadog` (Datadog), #632CA6
 - `figma.tile.svg`: simple-icons 16.37.0 `figma` (Figma), #F24E1E
+- `github.tile.svg`: simple-icons 16.37.0 `github` (GitHub), #181717
 - `gmail.tile.svg`: simple-icons 16.37.0 `gmail` (Gmail), #EA4335
 - `google-calendar.tile.svg`: simple-icons 16.37.0 `googlecalendar` (Google Calendar), #4285F4
 - `google-docs.tile.svg`: simple-icons 16.37.0 `googledocs` (Google Docs), #4285F4

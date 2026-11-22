@@ -1073,6 +1073,12 @@ describe("config status frames", () => {
     expect(status.newBots).toEqual({ effort: "high" });
   });
 
+  it("keeps an unreadable config.json's notice through a live config update, and drops it once the file reads", () => {
+    const problem = { file: "config.json", reason: "invalid JSON at line 8, column 15", lastGood: true };
+    expect(configStatusFromFrame({ configFile: problem } as ConfigStatusFrame).configFile).toEqual(problem);
+    expect(configStatusFromFrame({ configFile: null } as ConfigStatusFrame).configFile).toBeUndefined();
+  });
+
   it("keeps thread capacity and room timeout with the existing config fields", () => {
     expect(
       configStatusFromFrame({
@@ -1451,6 +1457,24 @@ describe("cross-client bot creation", () => {
     });
 
     expect(greeted.bots[0]?.messages).toEqual([greeting]);
+  });
+
+  it("shows the history a later frame brings for a bot announced with an empty page, as test bots seeded into an open app are", () => {
+    const announced = {
+      id: "nova", threadId: "nova-thread", name: "Nova", title: "", description: "", notifications: true, color: "blue", unread: false,
+      modelSelection: { instanceId: "claude", model: "default" }, messages: [] as Message[],
+    } satisfies Bot;
+    const history = [
+      { id: "h1", role: "user", kind: "text", text: "Are we cheaper than the other shops?", at: 1 },
+      { id: "h2", role: "bot", kind: "text", text: "Mostly, yes.", at: 2 },
+    ] satisfies Message[];
+    const empty = reducer(initialState, { type: "botPatched", bot: announced });
+    const restored = reducer(empty, { type: "botPatched", bot: { ...announced, messages: history, hasMore: false, activeLeafId: "h2" } });
+    expect(restored.bots[0]).toMatchObject({ messages: history, hasMore: false, activeLeafId: "h2" });
+
+    const later = { id: "h3", role: "bot", kind: "text", text: "Newer.", at: 3 } satisfies Message;
+    const held = reducer(restored, { type: "botPatched", bot: { ...announced, messages: [later] } });
+    expect(held.bots[0]?.messages, "a transcript already held is never swapped for a frame's page").toEqual(history);
   });
 });
 

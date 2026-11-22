@@ -19,7 +19,12 @@ export class BillingError extends Error {
   status: number; code: BillingErrorCode; url?: string | null; blockers?: DeletionBlocker[];
   constructor(status: number, code: BillingErrorCode, url?: string | null) { super(code); this.status = status; this.code = code; if (url !== undefined) this.url = url; }
 }
+/** which failed charges are charged again on PAYMENT_RETRY_DAYS (DUSK_BILLING_RETRY): none, only plans that were paid
+ *  before, or trial-end charges too */
+export type PaymentRetryMode = "off" | "paid" | "all";
 export interface BillingServiceOptions {
+  /** default off */
+  retry?: PaymentRetryMode;
   store: BillingStore; provider: BillingProvider; clouds: CloudsService; config?: BillingConfig; publicUrl: string; now?: () => number; random?: (bytes: number) => string;
   /** told after a change is stored: an email goes out for each; never throws into billing */
   notify?: (notice: BillingNotice) => void;
@@ -55,6 +60,9 @@ export const RECOVER_WINDOW_MS = 30 * 86_400_000;
 /** new checkout pages one account may open in a short while, under the hourly limit: a person comparing plans opens a
  * few, a script opens one a second */
 export const CHECKOUT_BURST = { count: 5, windowMs: 10 * 60_000 } as const;
+/** days after a failed charge when it is charged again on the saved card (dodo allows 3 manual retries per invoice);
+ *  the last is before a trial's data goes on day 7 */
+export const PAYMENT_RETRY_DAYS = [1, 3, 6] as const;
 /** a plan the operator gave rather than sold: its own checkout source, and what its one payment records */
 export interface OperatorGrant { source: "ops_grant" | "admin_comp"; amountCents?: number }
 const emailOf = (email: string) => email.trim().toLowerCase();
@@ -827,8 +835,48 @@ export function createBillingService(options: BillingServiceOptions) {
   }
   try { healPaymentProblems(); } catch (error) { console.warn(`billing: storing payment problems' fix-by dates failed (${(error as Error).message})`); }
   // the first sweep waits for the service's owner to finish wiring its notices
-  setTimeout(() => { try { dunning(); } catch (error) { console.warn(`billing: the payment reminders failed (${(error as Error).message})`); } }, 1000).unref();
-  const sweepDunning = setInterval(() => { try { dunning(); } catch (error) { console.warn(`billing: the payment reminders failed (${(error as Error).message})`); } }, 10 * 60_000);
+  /** charges a failed renewal again on PAYMENT_RETRY_DAYS while its plan waits for a fix; a charge that goes through
+   *  arrives as the provider's subscription.active, the same as a fixed card */
+  let retrying = false;
+  const retryMode: PaymentRetryMode = options.retry ?? "off";
+  async function retryPayments() {
+    if (!provider.retryPayment || retrying || retryMode === "off") return { sent: 0 };
+    retrying = true; let sent = 0;
+    try {
+      const due = state.subscriptions.filter(sub => retryDue(sub) !== null);
+      for (const sub of due) {
+        const problem = sub.paymentProblem!, attempt = problem.retries ?? 0;
+        const failed = state.invoices.filter(row => row.subscriptionId === sub.id && row.status === "failed" && row.createdAt >= problem.since - 3_600_000).sort((a, b) => b.createdAt - a.createdAt)[0];
+        if (!failed) continue;
+        let answer: Awaited<ReturnType<NonNullable<BillingProvider["retryPayment"]>>>;
+        try { answer = await provider.retryPayment(failed.providerPaymentId); }
+        catch (error) { console.warn(`billing: retrying the failed charge of subscription ${sub.id} failed (${(error as Error).message})`); continue; }
+        const live = state.subscriptions.find(row => row.id === sub.id);
+        if (answer === "later" || !live?.paymentProblem || live.status !== "payment_problem" || live.paymentProblem.since !== problem.since) continue;
+        live.paymentProblem.retries = answer === "sent" ? Math.max(attempt + 1, live.paymentProblem.retries ?? 0) : PAYMENT_RETRY_DAYS.length;
+        if (answer === "sent") live.paymentProblem.retriedAt = now();
+        live.updatedAt = now(); store.commit();
+        if (answer === "sent") { sent++; console.log(`billing: charged subscription ${sub.id} again after its failed payment (retry ${attempt + 1} of ${PAYMENT_RETRY_DAYS.length})`); }
+        else console.log(`billing: no more retries for subscription ${sub.id}: ${answer === "automatic" ? "the provider retries it" : "the provider can't retry it"}`);
+      }
+    } finally { retrying = false; }
+    return { sent };
+  }
+  function retryDue(sub: StoredSubscription) {
+    const problem = sub.paymentProblem, attempt = problem?.retries ?? 0;
+    if (sub.status !== "payment_problem" || !problem || sub.cancelAtPeriodEnd || !sub.providerSubscriptionId || closureFor(sub.accountId)) return null;
+    if (retryMode === "off" || retryMode === "paid" && (problem.trial || unpaidTrial(sub))) return null;
+    if (attempt >= PAYMENT_RETRY_DAYS.length || now() >= problem.fixBy || now() < problem.since + PAYMENT_RETRY_DAYS[attempt] * day) return null;
+    // retries stay spaced from the last one sent, even when several are past due
+    if (attempt > 0 && problem.retriedAt !== undefined && now() < problem.retriedAt + (PAYMENT_RETRY_DAYS[attempt] - PAYMENT_RETRY_DAYS[attempt - 1]) * day) return null;
+    return attempt;
+  }
+  const sweep = () => {
+    try { dunning(); } catch (error) { console.warn(`billing: the payment reminders failed (${(error as Error).message})`); }
+    void retryPayments().catch(error => console.warn(`billing: the payment retries failed (${(error as Error).message})`));
+  };
+  setTimeout(sweep, 1000).unref();
+  const sweepDunning = setInterval(sweep, 10 * 60_000);
   sweepDunning.unref();
   /** `all`: an operator's grant replaces an open checkout the person never paid */
   function expireCheckouts(accountId: string, all = false) {
@@ -1342,7 +1390,12 @@ export function createBillingService(options: BillingServiceOptions) {
     cancel: guarded((account: AccountRef, subscriptionId: string, survey?: CancelSurvey) => setCancel(account, subscriptionId, true, survey)), keep: guarded((account: AccountRef, subscriptionId: string) => setCancel(account, subscriptionId, false)),
     feedback: guarded(feedback), retentionStep: guarded(retentionStep), retentionDiscount: guarded(retentionDiscount), previewChange: guarded(previewChange), change: guarded(change),
     operatorChange: guarded(operatorChange), setPeriodEnd: guarded(setPeriodEnd), moveRenewal: guarded(moveRenewal), endNow: guarded(endNow), mode,
-    updateCard: guarded(async (account: AccountRef, subscriptionId: string, path?: string) => { const url = returnUrl(path), sub = editable(account.id, subscriptionId); return provider.updatePaymentMethod(sub.providerSubscriptionId!, url); }),
+    updateCard: guarded(async (account: AccountRef, subscriptionId: string, path?: string) => {
+      const url = returnUrl(path), sub = editable(account.id, subscriptionId);
+      try { return await provider.updatePaymentMethod(sub.providerSubscriptionId!, url); }
+      catch (error) { console.warn(`billing: the card page for subscription ${sub.id} (${sub.status}) did not open (${(error as Error).message})`); throw error; }
+    }),
+    retryPayments: guarded(retryPayments),
     invoices: guarded(invoices), invoiceDownload: guarded(invoiceDownload), overview: guarded(overview), appState: guarded(appState), close: guarded(() => { clearInterval(retryCloudActions); clearInterval(sweepDeleted); clearInterval(sweepLapsed); clearInterval(sweepDunning); confirmations.clear(); store.close(); }),
   };
 }

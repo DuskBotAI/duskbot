@@ -18,7 +18,9 @@ export type UsageTrigger =
   | { kind: "owner"; email?: string }
   | { kind: "routine"; routineId?: string; label?: string; runId?: string; email?: string }
   | { kind: "bot"; botId?: string; email?: string }
-  | { kind: "helper"; botId?: string; job?: string; email?: string };
+  | { kind: "helper"; botId?: string; job?: string; email?: string }
+  /** A bot's own background work on its own engine, outside any turn: memory upkeep, skill review and the like. */
+  | { kind: "upkeep"; botId?: string; job?: string; email?: string };
 
 export interface UsageRow {
   at: string;
@@ -226,6 +228,8 @@ export function triggerKey(trigger: UsageTrigger): string {
       return `routine:${trigger.routineId ?? trigger.label ?? "unknown"}`;
     case "helper":
       return "helper";
+    case "upkeep":
+      return "upkeep";
     default:
       return "bot";
   }
@@ -241,6 +245,8 @@ export function triggerLabel(trigger: UsageTrigger): string {
       return `Routine: ${trigger.label ?? trigger.routineId ?? "unknown"}`;
     case "helper":
       return "Helper model";
+    case "upkeep":
+      return "Background work";
     default:
       return "Bot to bot";
   }

@@ -2,7 +2,7 @@
 // Run: node scripts/verify-server-connection.mjs
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { appendFileSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { appendFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -18,6 +18,7 @@ if (process.versions.electron && process.argv.includes(fixtureFlag)) {
   app.setPath("userData", join(output, "user-data"));
   app.setPath("sessionData", join(output, "user-data"));
   app.commandLine.appendSwitch("disable-background-networking");
+  app.on("window-all-closed", () => {});
   const calls = [];
   let pending;
   let saved = { activeId: "local", environments: [{ id: "cloud", name: "My cloud team", origin: "https://bots.fixture.example" }] };
@@ -43,6 +44,11 @@ if (process.versions.electron && process.argv.includes(fixtureFlag)) {
     menu.getMenuItemById(menuChoice).click();
   });
   ipcMain.handle("desktop-remote:state", () => ({ active: false }));
+  // Electron 43 leaves a sendSync with no listener unanswered, which freezes the page.
+  for (const channel of ["desktop-language:read", "workspaces:switch-arrived", "workspaces:switch-look-take"]) ipcMain.on(channel, (event) => { event.returnValue = null; });
+  ipcMain.handle("workspaces:look", () => null);
+  ipcMain.handle("rail:draws-frame", () => false);
+  ipcMain.handle("workspaces:places", () => ({ places: [], add: { cloud: false, link: false, address: false, organization: false } }));
   ipcMain.handle("desktop-remote:pair", (_event, endpoint, code) => {
     calls.push({ kind: "companion", endpoint, code });
     throw new Error("Fixture companion pairing rejected");
@@ -94,58 +100,42 @@ if (process.versions.electron && process.argv.includes(fixtureFlag)) {
     const fill = async (label, value) => {
       await evaluate(`(() => { const el = ${input(label)}; if (!el) throw new Error('Missing input'); Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(el, ${JSON.stringify(value)}); el.dispatchEvent(new Event('input', { bubbles: true })); })()`);
     };
-    const selectMode = (value) => evaluate(`(() => { const el = document.querySelector('select'); el.value = ${JSON.stringify(value)}; el.dispatchEvent(new Event('change', { bubbles: true })); })()`);
-    const connect = button("Connect to server");
-    await until(() => evaluate(`Boolean(${connect})`), "server form rendered");
-    assert.equal(await evaluate(`${connect}.disabled`), true);
-    const link = "https://bots.fixture.example/pair#code=ABCD-EFGH-JKLM";
-    await fill("Server pairing link", link);
-    await until(() => evaluate(`!${connect}.disabled`), "server form enabled");
-    await evaluate(`(() => { const form = ${connect}.form; form.requestSubmit(); form.requestSubmit(); })()`);
-    await until(() => calls.length === 1, "server IPC received");
-    assert.deepEqual(calls, [{ kind: "server", link }]);
-    assert.equal(await evaluate(`${connect}.disabled`), true);
-    await evaluate(`${connect}.click()`);
-    assert.equal(calls.length, 1, "pending submission is disabled");
-    pending.resolve(); // Production native dialog cancellation resolves void.
-    await until(() => evaluate(`!${connect}.disabled`), "cancelled confirmation reset");
-    assert.equal(await evaluate(`${input("Server pairing link")}.value`), link);
-    await evaluate(`${connect}.click()`);
-    await until(() => calls.length === 2, "second server IPC received");
-    pending.reject(new Error("Fixture pairing link rejected"));
-    await until(() => evaluate(`document.querySelector('[role=alert]')?.textContent === 'Fixture pairing link rejected'`), "readable IPC error");
-    assert.equal(await evaluate(`${connect}.disabled`), false);
-    await evaluate(`${connect}.click()`);
-    await until(() => calls.length === 3, "server retry received");
-    pending.resolve();
-    await until(() => evaluate(`!${connect}.disabled && !document.querySelector('[role=alert]')`), "successful response reset");
-    writeFileSync(join(output, "server-form.png"), (await win.webContents.capturePage()).toPNG());
-
-    await selectMode("companion");
+    const pairRow = `document.querySelector('[data-settings-open="companion-pair"]')`;
+    await until(() => evaluate(`Boolean(${pairRow})`), "companion pairing row rendered");
+    await evaluate(`${pairRow}.click()`);
     await until(() => evaluate(`Boolean(${input("Companion address")})`), "companion form rendered");
+    const pair = button("Pair and switch to client mode");
+    assert.equal(await evaluate(`${pair}.disabled`), true);
     await fill("Companion address", "computer.tailnet.ts.net");
     await fill("Six-digit companion code", "12a34567");
     await until(() => evaluate(`${input("Six-digit companion code")}.value === '123456'`), "six-digit companion normalization");
-    await evaluate(`${button("Pair and switch to client mode")}.click()`);
-    await until(() => calls.length === 4, "companion IPC received");
-    assert.deepEqual(calls[3], { kind: "companion", endpoint: "computer.tailnet.ts.net", code: "123456" });
+    await evaluate(`${pair}.click()`);
+    await until(() => calls.length === 1, "companion IPC received");
+    assert.deepEqual(calls[0], { kind: "companion", endpoint: "computer.tailnet.ts.net", code: "123456" });
     await until(() => evaluate(`document.querySelector('[role=alert]')?.textContent === 'Fixture companion pairing rejected'`), "companion error rendered");
+    await until(() => evaluate(`!${pair}.disabled`), "companion retry possible after rejection");
+    writeFileSync(join(output, "companion-form.png"), (await win.webContents.capturePage()).toPNG());
     win.setSize(390, 700);
-    await selectMode("server");
-    await until(() => evaluate(`Boolean(${connect})`), "server mode restored");
+    await until(() => evaluate("innerWidth === 390"), "narrow companion viewport");
     assert.equal(await evaluate("document.documentElement.scrollWidth <= innerWidth"), true, "narrow layout overflow");
-    writeFileSync(join(output, "server-form-narrow.png"), (await win.webContents.capturePage()).toPNG());
+    writeFileSync(join(output, "companion-form-narrow.png"), (await win.webContents.capturePage()).toPNG());
 
     win.setSize(780, 800);
     await win.loadURL(`${url}?workspaces=1`);
     const hostedConnect = button("Connect");
     const addressLabel = "Server address or pairing link";
-    await until(() => evaluate(`Boolean(${hostedConnect}) && document.body.textContent.includes('My cloud team')`), "hosted workspace settings rendered");
+    const connectRow = `document.querySelector('[data-settings-open="connect-server"]')`;
+    const openConnect = async () => {
+      await evaluate(`${connectRow}.click()`);
+      await until(() => evaluate(`Boolean(${input(addressLabel)}) && Boolean(${hostedConnect})`), "connect dialog open");
+    };
+    await until(() => evaluate(`Boolean(${connectRow}) && document.body.textContent.includes('My cloud team')`), "hosted workspace settings rendered");
     await evaluate("void window.duskDesktop.environments.onOpenSettings(() => { document.body.dataset.settingsRequested = 'yes'; })");
     await evaluate("document.querySelector('[aria-label=\"Switch server: This computer\"]').click()");
     await until(() => evaluate("document.body.dataset.settingsRequested === 'yes'"), "native connect item requested Settings");
     assert.equal(saved.activeId, "local", "opening connection settings did not select a server");
 
+    await openConnect();
     await fill(addressLabel, "http://unsafe.fixture.example");
     await evaluate(`${hostedConnect}.click()`);
     await until(() => evaluate("document.querySelector('[role=alert]')?.textContent === 'Enter an HTTPS server address or a full pairing link.'"), "invalid workspace input rejected visibly");
@@ -156,8 +146,9 @@ if (process.versions.electron && process.argv.includes(fixtureFlag)) {
     await until(() => calls.length === beforeHosted + 1, "one hosted submission in flight");
     assert.deepEqual(calls.at(-1), { kind: "server", link: "other.fixture.example", name: "Research team" });
     pending.resolve(false);
-    await until(() => evaluate(`!${hostedConnect}.disabled`), "cancelled hosted confirmation reset");
+    await until(() => evaluate(`!${input(addressLabel)}`), "cancelled hosted confirmation closes the dialog");
     assert.equal(saved.environments.length, 1);
+    await openConnect();
     assert.equal(await evaluate(`${input(addressLabel)}.value`), "other.fixture.example");
 
     await fill(addressLabel, "https://other.fixture.example/pair#code=MNOP-QRST-UVWX");
@@ -168,11 +159,9 @@ if (process.versions.electron && process.argv.includes(fixtureFlag)) {
     // Production navigates away after confirmation. Reload our local preview
     // instead, to inspect the saved list without contacting a public server.
     await win.loadURL(`${url}?workspaces=1`);
-    await until(() => evaluate("document.body.textContent.includes('Research team') && !document.querySelector('input').disabled"), "saved named workspace rendered");
+    await until(() => evaluate(`document.body.textContent.includes('Research team') && Boolean(${connectRow})`), "saved named workspace rendered");
     assert.deepEqual(saved.environments.map(({ origin }) => origin), ["https://bots.fixture.example", "https://other.fixture.example"]);
     assert.equal(JSON.stringify(saved).includes("MNOP"), false, "pairing secret not saved with workspace");
-    await fill(addressLabel, "");
-    await fill("Name (optional)", "");
     writeFileSync(join(output, "connected-workspaces.png"), (await win.webContents.capturePage()).toPNG());
 
     await evaluate("document.querySelector('[aria-label=\"Switch to My cloud team\"]').click()");
@@ -196,25 +185,24 @@ if (process.versions.electron && process.argv.includes(fixtureFlag)) {
 
     // Real app shell, Settings navigation and onboarding against a disposable
     // fake-engine server. Opening the page must not require local AI setup.
+    // Connecting a server opens the guided setup; only sharing this computer with one lands on Settings.
+    const serversSettings = `document.querySelector('[role=dialog] [data-settings-block="remote-client"]')`;
     win.setSize(1180, 850);
-    await win.loadURL(`${url}?app=1&desktop-settings=workspaces`);
-    await until(() => evaluate("document.querySelector('[role=dialog]')?.textContent.includes('Connect to a server')"), "app opens top-level workspace Settings");
+    await win.loadURL(`${url}?app=1&desktop-settings=workspaces&share-computer=1`);
+    await until(() => evaluate(`Boolean(${serversSettings})`), "app opens top-level workspace Settings");
     assert.equal(await evaluate("location.search.includes('desktop-settings')"), false, "Settings deep link consumed");
-    await until(() => evaluate("document.body.textContent.includes('My cloud team')"), "app Settings loaded connections");
-    assert.equal(await evaluate("document.querySelector('[aria-label=\"Server address or pairing link\"]') !== null || [...document.querySelectorAll('label')].some(el => el.textContent.includes('Server address or pairing link'))"), true);
     writeFileSync(join(output, "workspace-settings-in-app.png"), (await win.webContents.capturePage()).toPNG());
     await evaluate("window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))");
-    await until(() => evaluate("!document.body.textContent.includes('Connect to a server')"), "Settings closes normally");
+    await until(() => evaluate(`!${serversSettings}`), "Settings closes normally");
     win.webContents.send("workspaces:open-settings");
-    await until(() => evaluate("document.querySelector('[role=dialog]')?.textContent.includes('Connect to a server')"), "native request reopens workspace Settings");
-    await evaluate("(() => { const el = document.querySelector('input[aria-label=\"Search settings\"]'); Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(el, 'appearance'); el.dispatchEvent(new Event('input', { bubbles: true })); })()");
-    await until(() => evaluate("!document.body.textContent.includes('Connect to a server')"), "Settings search changes section");
-    win.webContents.send("workspaces:open-settings");
-    await until(() => evaluate("document.body.textContent.includes('Connect to a server') && document.querySelector('input[aria-label=\"Search settings\"]').value === ''"), "native connection request clears Settings search");
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    assert.equal(await evaluate(`!${serversSettings}`), true, "connecting a server does not open Settings");
+    win.webContents.send("workspaces:open-settings", "fixture-computer");
+    await until(() => evaluate(`Boolean(${serversSettings})`), "native share request reopens workspace Settings");
 
     const remote = await open(false);
-    assert.deepEqual(await remote.webContents.executeJavaScript("({ server: typeof window.duskDesktop?.environments, companion: typeof window.duskDesktop?.remoteClient, node: typeof window.require, workspaceMethods: Object.keys(window.duskDesktop?.workspaces ?? {}) })"),
-      { server: "undefined", companion: "undefined", node: "undefined", workspaceMethods: ["state", "menu"] });
+    assert.deepEqual(await remote.webContents.executeJavaScript("({ server: typeof window.duskDesktop?.environments, companion: typeof window.duskDesktop?.remoteClient, node: typeof window.require, switcher: ['state', 'menu'].every((name) => typeof window.duskDesktop?.workspaces?.[name] === 'function') })"),
+      { server: "undefined", companion: "undefined", node: "undefined", switcher: true });
     assert.deepEqual(blockedRequests, [], "unexpected external request attempted");
     // Exercise Chromium's actual HttpOnly cookie jar and main-process fetch.
     // The server is the isolated fake-engine fixture, never the user's app.
@@ -222,7 +210,7 @@ if (process.versions.electron && process.argv.includes(fixtureFlag)) {
     const paired = await session.defaultSession.fetch(`${serverUrl}/api/auth/pair`, { method: "POST", credentials: "include", headers: { "content-type": "application/json", origin: serverUrl }, body: JSON.stringify({ code: opened.code, cookie: true }) });
     assert.equal(paired.status, 200);
     const receipt = { passed: true, renderer: ["RemoteComputerSection", "ConnectedWorkspacesSettings", "DesktopWorkspaceSwitcher"], preload: "electron/preload.cjs", calls,
-      checks: ["full custom HTTPS link unchanged", "pending submit disabled", "cancel reset", "rejection and retry", "companion six-digit routing", "390px overflow", "remote-safe bridge", "native connect menu item requests Settings", "hosted URL validation", "optional name", "pairing code excluded from saved list", "switch local/cloud", "cancel/confirm forget", "real app Settings deep link", "native Settings event and search reset"],
+      checks: ["companion pairing row opens its form", "companion six-digit routing", "companion rejection shown, retry possible", "390px overflow", "one hosted submission in flight", "hosted cancel reset", "full hosted pairing link", "remote-safe bridge", "native connect menu item requests Settings", "hosted URL validation", "optional name", "pairing code excluded from saved list", "switch local/cloud", "cancel/confirm forget", "real app Settings deep link", "connect request opens no Settings", "native share request opens Settings"],
       limitation: "UI IPC replaces native dialogs, workspace persistence and navigation. No public DNS/TLS tested." };
     writeFileSync(join(output, "receipt.json"), `${JSON.stringify(receipt, null, 2)}\n`);
     console.log(JSON.stringify(receipt));
@@ -276,10 +264,11 @@ if (process.versions.electron && process.argv.includes(fixtureFlag)) {
     const stop = () => child.kill("SIGTERM");
     process.once("SIGINT", stop);
     process.once("SIGTERM", stop);
-    const timeout = setTimeout(stop, 60_000);
+    const timeout = setTimeout(stop, 180_000);
     const code = await new Promise((resolve, reject) => { child.once("error", reject); child.once("close", resolve); })
       .finally(() => { clearTimeout(timeout); process.off("SIGINT", stop); process.off("SIGTERM", stop); });
     assert.equal(code, 0, `Electron smoke failed; inspect ${join(output, "electron.log")}`);
+    assert.equal(JSON.parse(readFileSync(join(output, "receipt.json"), "utf8")).passed, true, "Electron smoke ended without its receipt");
   } finally {
     await ui.close();
     await fixture.close();

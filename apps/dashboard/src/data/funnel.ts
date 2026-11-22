@@ -10,9 +10,9 @@ export function freeTradeoffs(catalog: PlanCatalog, plan: FunnelPlan): Tradeoff[
   const b = bundleOf(catalog, plan);
   const d = b ? desktopOf(catalog, b.desktop) : null;
   const rows: Tradeoff[] = [
-    { topic: "staying on", free: "only while your mac is awake, or on a server you keep running", paid: "always available, with nothing to keep awake" },
-    { topic: "routines", free: "pause while your mac sleeps", paid: "run on time, day and night" },
-    { topic: "machine", free: "shares your mac's cpu and memory", paid: d ? `${d.vcpu} vcpu, ${gb(d.ramGb)} ram and ${gb(d.diskGb)} disk of their own` : "a machine of their own" },
+    { topic: "staying on", free: "only while your computer is awake, or on a server you keep running", paid: "always available, with nothing to keep awake" },
+    { topic: "routines", free: "pause while your computer sleeps", paid: "run on time, day and night" },
+    { topic: "machine", free: "shares your computer's cpu and memory", paid: d ? `${d.vcpu} vcpu, ${gb(d.ramGb)} ram and ${gb(d.diskGb)} disk of their own` : "a machine of their own" },
     { topic: "setup", free: "you install and look after it", paid: "set up in one click" },
   ];
   if (b && b.license !== "personal") rows.push({ topic: "work use", free: "personal use only", paid: "work license included" });

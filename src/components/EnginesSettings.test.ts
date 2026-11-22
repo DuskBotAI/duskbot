@@ -2,8 +2,8 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Bot, InstanceInfo } from "@/state/store";
-import { EnginesSettings } from "./EnginesSettings";
-import { accountActions } from "./EngineAccounts";
+import { EnginesSettings, enginePageOf } from "./EnginesSettings";
+import { accountActions, accountInUse } from "./EngineAccounts";
 import { AntigravityFreeSpace, formatDiskSize } from "./AntigravityFreeSpace";
 
 const fixture = vi.hoisted(() => ({ instances: [] as InstanceInfo[], bots: [] as Bot[], config: undefined as Record<string, unknown> | undefined }));
@@ -390,6 +390,24 @@ describe("Settings → Engines → Claude accounts", () => {
     expect(renderClaude(claude("claude-work", "Work", true))).toContain(">Remove<");
   });
 
+  it("keeps Remove off, with the reason, for the account new bots start on, before anyone confirms", () => {
+    fixture.config = { defaultModelSelection: { instanceId: "claude-work", model: "sonnet" } };
+    try {
+      const html = renderClaude(claude("claude", "Personal", true), claude("claude-work", "Work", true));
+      expect(html).toMatch(/<button[^>]*disabled=""[^>]*title="New bots start on this account\. Pick another model for new bots first\."[^>]*>Remove<\/button>/);
+    } finally {
+      fixture.config = undefined;
+    }
+    expect(accountInUse({ instanceId: "claude-work" }, [{ modelSelection: { instanceId: "claude-work" } }], { instanceId: "claude-work" }))
+      .toBe("1 bot(s) use this account. Pick another model for them first.");
+    expect(accountInUse({ instanceId: "claude-work" }, [], { instanceId: "claude" })).toBeNull();
+  });
+
+  it("opens a Claude account's page by the Claude card it is listed on", () => {
+    const instances = [claude("claude", "Personal", true), claude("claude-work", "Work", true)];
+    expect(enginePageOf(instances, instances[1]!)).toEqual({ page: "engine:claude", title: "Personal" });
+  });
+
   it("shows Claude Code's setup instead of accounts while it is missing", () => {
     const html = renderClaude(claude("claude", "Personal", undefined, { snapshot: { state: "unavailable", reason: "`claude` CLI not found" } }));
     expect(html).not.toContain("data-accounts");
@@ -438,4 +456,19 @@ describe("Settings → AI in Simple mode", () => {
     const html = simple();
     expect(html).toMatch(/data-panel-page="custom-provider"[\s\S]*?Add a custom provider/);
   });
+});
+
+it("offers no Use it for a found engine whose saved driver this build lacks, and says why in plain words", () => {
+  vi.stubGlobal("window", {});
+  vi.stubGlobal("navigator", { userAgent: "Linux" });
+  fixture.bots = [];
+  fixture.instances = [{
+    instanceId: "cursor", driverKind: "not-a-real-driver", displayName: "Cursor", found: true, unknownDriver: true,
+    snapshot: { state: "unavailable", reason: 'unknown driver "not-a-real-driver": kept as configured, unavailable here' },
+    models: { default: "", options: [] },
+  }];
+  const markup = renderToStaticMarkup(createElement(EnginesSettings));
+  expect(markup).toContain("Saved by another version");
+  expect(markup).not.toContain("Use it");
+  expect(markup).not.toContain("unknown driver");
 });

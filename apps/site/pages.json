@@ -5,10 +5,9 @@
   { "name": "pricing", "title": "pricing / dusk bot", "description": "Keep your bots working with your laptop off on dusk cloud, from $20 a month. The app is free for personal use, with every feature." },
   { "name": "about", "title": "about / dusk bot", "description": "Who makes dusk bot and how it is built: AI bots you text like teammates, on the AI you already use, free for personal use." },
   { "name": "contact", "title": "contact / dusk bot", "description": "Write to the people who make dusk bot: help, security reports and privacy requests." },
-  { "name": "support", "title": "help / dusk bot", "description": "Get help with dusk bot, the phone app and your account, and reach a person." },
   { "name": "delete-account", "title": "delete your account / dusk bot", "description": "How to delete your dusk bot account, and what happens to your data." },
   { "name": "brand", "title": "brand / dusk bot", "description": "The dusk bot mark, the bots, the colours and a short description, for writing about dusk bot." },
-  { "name": "m/pair", "title": "link your phone / dusk bot", "description": "Get dusk bot on your iPhone, then link it to your computer with this code.", "scripts": ["phone-link.js"], "styles": ["phone-link.css"], "og": "download", "noindex": true },
-  { "name": "m/signin", "title": "log in on your phone / dusk bot", "description": "Get dusk bot on your iPhone and log in to dusk cloud.", "scripts": ["phone-link.js"], "styles": ["phone-link.css"], "og": "download", "noindex": true },
+  { "name": "m/pair", "title": "link your phone / dusk bot", "description": "Get dusk bot on your phone, then link it to your computer with this code.", "scripts": ["phone-link.js"], "styles": ["phone-link.css"], "og": "download", "noindex": true },
+  { "name": "m/signin", "title": "log in on your phone / dusk bot", "description": "Get dusk bot on your phone and log in to dusk cloud.", "scripts": ["phone-link.js"], "styles": ["phone-link.css"], "og": "download", "noindex": true },
   { "name": "404", "title": "not found / dusk bot", "description": "This page is not here." }
 ]

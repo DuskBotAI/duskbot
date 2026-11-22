@@ -2,7 +2,6 @@ import { randomBytes } from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { DashboardState } from "../store.ts";
 import { createCloudsService } from "../clouds/service.ts";
-import { linkGrantSignerFromEnv, signLinkGrant } from "../link-grant.ts";
 import type { CloudEventKind } from "../clouds/service.ts";
 import { createFakeCloudProvider } from "../clouds/fake-provider.ts";
 import { createFakePoolDriver } from "../clouds/fake-pool-driver.ts";
@@ -132,8 +131,9 @@ export function createBilling(options: BillingOptions) {
   const entitlements = entitlementSignerFromEnv(env, { dataDir: options.dataDir, loopback, now, required: !loopback && (cloudProvider !== "off" || poolDriver !== "off" || managed !== null) });
   const sealer = createSealer(sealKey);
   const aiStash = createAiStash({ store: options.aiStash ?? memoryAiStashStore(now), sealer, now });
-  const linkGrants = linkGrantSignerFromEnv(env, { dataDir: options.dataDir, loopback });
-  const clouds = createCloudsService({ aiStash, entitlements, linkGrant: linkGrants ? cloud => signLinkGrant(cloud.accountId, linkGrants, now()).grant : null, onEvent: options.cloudEvent, onStatus: options.cloudStatus, dataDir: options.dataDir, now, providers: { pool, dedicated }, home, sealer, managed, managedHome: realHome,
+  // known open risk: a home on 0.2.26 exits at start once its phone relay holds a tunnel (its bundled link agent runs as
+  // a command), so entitlement pushes carry no link grant until every home runs a release that loads the hub safely
+  const clouds = createCloudsService({ aiStash, entitlements, onEvent: options.cloudEvent, onStatus: options.cloudStatus, dataDir: options.dataDir, now, providers: { pool, dedicated }, home, sealer, managed, managedHome: realHome,
     workspaces: {
       register({ accountId, name, publicKey }) {
         const id = `ws_${randomBytes(16).toString("base64url")}`;
@@ -150,7 +150,9 @@ export function createBilling(options: BillingOptions) {
   const store = createBillingStore(options.dataDir);
   billingStore = store;
   const mode = billingProvider === "dodo" && dodoMode === "live" ? "live" as const : "test" as const;
-  const service = createBillingService({ store, provider, clouds, config, publicUrl: url.origin, now, notify: options.notify, onLedger: options.onLedger, onRetention: options.onRetention, mode });
+  const retry = env.DUSK_BILLING_RETRY ?? "off";
+  if (retry !== "off" && retry !== "paid" && retry !== "all") throw new Error("Invalid DUSK_BILLING_RETRY.");
+  const service = createBillingService({ store, provider, clouds, config, publicUrl: url.origin, now, notify: options.notify, onLedger: options.onLedger, onRetention: options.onRetention, mode, retry });
   if (options.accountExists) service.scrubDeleted(options.accountExists);
   // a deleted account's clouds left over from before (or by a failed step) are destroyed at start, then every 10 minutes
   service.destroyDeleted();

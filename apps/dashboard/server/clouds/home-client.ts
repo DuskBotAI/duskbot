@@ -8,9 +8,28 @@ export function signCloudRequest(secret: string, timestamp: string, nonce: strin
   return createHmac("sha256", secret).update(`v1\n${timestamp}\n${nonce}\n${method}\n${target}\n${hash}`).digest("base64url");
 }
 
+/** a home's refusal code (`{ "error": "entitlement_required" }`): only a short snake_case token is kept, never prose */
+const HOME_CODE = /^[a-z][a-z0-9_]{1,39}$/;
+
+/** why a request to a home failed, as one log-safe token: "http_403:entitlement_required", "timeout", "network",
+ * "bad_answer" or "failed". Never the home's own words. */
+export function homeFailure(error: unknown): string {
+  const { status, code, kind } = (error ?? {}) as { status?: unknown; code?: unknown; kind?: unknown };
+  if (typeof status === "number") return typeof code === "string" && HOME_CODE.test(code) ? `http_${status}:${code}` : `http_${status}`;
+  return kind === "timeout" || kind === "network" || kind === "bad_answer" ? kind : "failed";
+}
+
+async function refusalCode(response: Response): Promise<string | undefined> {
+  try {
+    const parsed = await boundedJson(response, 1024) as { error?: unknown } | null;
+    return typeof parsed?.error === "string" && HOME_CODE.test(parsed.error) ? parsed.error : undefined;
+  } catch { return undefined; }
+}
+
 export function createHomeClient(options: { fetch?: typeof fetch; now?: () => number; random?: (size: number) => Buffer } = {}): HomeClient {
   const fetcher = options.fetch ?? fetch, now = options.now ?? Date.now, random = options.random ?? randomBytes;
   async function request(origin: string, secret: string, method: string, target: string, body = ""): Promise<unknown> {
+    let kind: "timeout" | "network" | "bad_answer" | undefined;
     try {
       const url = new URL(origin);
       if (origin !== url.origin || url.username || url.password || (url.protocol !== "https:" || !url.hostname.includes("."))) throw new Error();
@@ -20,12 +39,16 @@ export function createHomeClient(options: { fetch?: typeof fetch; now?: () => nu
         method, redirect: "error", signal: AbortSignal.timeout(10_000),
         headers: withLegacyHeaders({ "content-type": "application/json", "x-dusk-cloud-timestamp": timestamp, "x-dusk-cloud-nonce": nonce, "x-dusk-cloud-signature": `v1=${signCloudRequest(secret, timestamp, nonce, method, target, body)}` }),
         ...(method === "POST" ? { body } : {}),
+      }).catch((error: unknown) => {
+        kind = (error as { name?: unknown })?.name === "TimeoutError" ? "timeout" : "network";
+        throw error;
       });
-      if (!response.ok) { await response.body?.cancel(); throw Object.assign(new Error(), { status: response.status }); }
+      if (!response.ok) { const code = await refusalCode(response); throw Object.assign(new Error(), { status: response.status, ...(code ? { code } : {}) }); }
+      kind = "bad_answer";
       return await boundedJson(response, method === "POST" ? 4096 : 65_536);
     } catch (error) {
-      const status = (error as { status?: unknown }).status;
-      throw Object.assign(new Error("Cloud home request failed."), typeof status === "number" ? { status } : {});
+      const { status, code } = error as { status?: unknown; code?: unknown };
+      throw Object.assign(new Error("Cloud home request failed."), typeof status === "number" ? { status, ...(typeof code === "string" ? { code } : {}) } : kind ? { kind } : {});
     }
   }
   return {

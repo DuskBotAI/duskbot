@@ -516,6 +516,13 @@ describe("pastedTextFile", () => {
     }
   });
 
+  it("uploads an image too large for a picture as a file, up to the file limit", () => {
+    const sized = (size: number) => ({ name: "huge-photo.png", type: "image/png", size });
+    expect(pendingFileAttachment(sized(1024))).toBeNull();
+    expect(pendingFileAttachment(sized(10 * 1024 * 1024 + 1))).toMatchObject({ kind: "file", name: "huge-photo.png", uploading: true });
+    expect(() => pendingFileAttachment(sized(25 * 1024 * 1024 + 1))).toThrow(expect.objectContaining({ status: 413 }));
+  });
+
   it("refuses a paste over the file limit before uploading", () => {
     const file = pastedTextFile("a".repeat(25 * 1024 * 1024 + 1));
     expect(() => pendingFileAttachment(file!)).toThrow(expect.objectContaining({ status: 413 }));

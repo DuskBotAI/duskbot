@@ -113,6 +113,10 @@ async function overview(): Promise<{ billing: BillingOverview; clouds: CloudDesk
 const offerFromWire = (preview: ChangePreview): ChangeOffer => ({ timing: preview.timing, todayUsd: preview.chargeNowCents / 100, taxUsd: preview.taxCents / 100,
   effectiveAt: preview.effectiveAt, nextUsd: preview.nextChargeCents / 100, nextAt: preview.nextChargeAt });
 
+let adminHint: boolean | null = null;
+/** what the last /v1/me said about the admin panel, or null when it said nothing (fixtures, an older server) */
+export const meSaysAdmin = () => adminHint;
+
 function subscriptionPath(): string {
   if (!subscriptionId) throw new ApiError("there is no plan to change.", 409, "not_subscribed");
   return `/v1/billing/subscriptions/${encodeURIComponent(subscriptionId)}`;
@@ -125,6 +129,7 @@ export const api = {
   me: async (): Promise<{ account: Account }> => {
     if (FIXTURE) return call("/v1/me");
     const answer = await call<MeAnswer>("/v1/me");
+    adminHint = typeof answer.admin === "boolean" ? answer.admin : null;
     return { account: rememberAccount(answer.account, answer.csrfToken) };
   },
   authProviders: async (): Promise<AuthProviders> => FIXTURE ? call("/v1/auth/providers") : providersFromWire(await call<ProvidersAnswer>("/v1/auth/providers")),

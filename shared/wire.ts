@@ -13,7 +13,7 @@ import type { CredentialTargetId, CUSTOM_SECRET_TARGET, SecretDelivery } from ".
 import type { TeamSetupRequest } from "./team-setup.ts"; import type { DefaultBotFields, HelperIntroField } from "./default-bot.ts";
 import type { SetupCardFields } from "./setup-card.ts"; import type { BugReportField } from "./devs-report-status.ts"; import type { AccessRequestCardField, BotAccessFields } from "./bot-access.ts";
 import type { RoutineRequestCardData } from "./routine-request.ts";
-import type { WebhookRequestCardData } from "./webhook-request.ts"; import type { WaitCardField, WaitLineField } from "./wait-request.ts"; import type { PurchaseCardField } from "./purchase.ts"; import type { EmailCardField } from "./email-review.ts"; import type { ProductsField } from "./products.ts"; import type { OfferField } from "./offer.ts";
+import type { WebhookRequestCardData } from "./webhook-request.ts"; import type { WaitCardField, WaitLineField } from "./wait-request.ts"; import type { PurchaseCardField } from "./purchase.ts"; import type { EmailCardField } from "./email-review.ts"; import type { MessageCardField } from "./message-review.ts"; import type { ProductsField } from "./products.ts"; import type { OfferField } from "./offer.ts";
 import type { AppEventAttempt, AppTrigger, AppTriggerRequestCardData, AppTriggerService } from "./app-triggers.ts";
 import type { ProfileRequestCardData } from "./profile-request.ts";
 import type { PlaceRow } from "./place-view.ts";
@@ -692,7 +692,7 @@ export function nextOpenThread<T extends OpenThreadCandidate>(tasks: readonly T[
   return [listed, open, own].map((candidates) => orderedThreadList(candidates)[0]).find((task) => task !== undefined);
 }
 
-export interface OptionCardData extends WaitCardField, AccessRequestCardField, OutsideWriteCardField, PurchaseCardField, EmailCardField {
+export interface OptionCardData extends WaitCardField, AccessRequestCardField, OutsideWriteCardField, PurchaseCardField, EmailCardField, MessageCardField {
   /** calls: one per outbound call the card covers, in subtitle order. purchase: it buys, books, subscribes or moves money. */
   outboundRequest?: { tool: string; app: string | null; calls?: Array<{ app: string | null; label: string }>; purchase?: true }; /** A card asking to send: `key` hashes exactly what would go out (shared/declined-sends.ts), never the content; `declined`: the person said no, so the same send is refused in this chat until they ask again. */ send?: { key: string; declined?: true };
   /** @deprecated team memory is retired; only older messages carry this. */

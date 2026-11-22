@@ -16,10 +16,12 @@ delayed; a disposable HTTPS loopback server supplies the authorization page,
 never a provider. Its temporary certificate and hostname mapping apply only
 to the fixture's Chromium profile (requires local `openssl`). It checks
 synchronous tab reservation with the opener removed,
-blocked-popup fallback links, reopening without another authorization request,
+the blocked-popup notice with **Open page again** reusing the issued link (in
+the Apps window) or the card's safe link, a fresh request once that link is
+stale or the window was reopened,
 failed-request cleanup/retry, cancellation after modal/card removal or card
-replacement, Reconnect for an app whose only account expired (the old account
-is removed and the link reuses its label), and the connector card asking for a
+replacement, Reconnect for an app whose only account expired, read on a later
+visit (the old account is removed and the link reuses its label), and the connector card asking for a
 label instead of repeating a refused request. Screenshots and `result.json` are written to
 `.dusk-scratch/connected-apps-evidence` (override with `DUSK_UI_EVIDENCE_DIR`).
 

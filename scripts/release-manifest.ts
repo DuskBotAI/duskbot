@@ -8,7 +8,8 @@ import { join } from "node:path";
 import { parseArgs } from "node:util";
 import { parseReleaseKeys, PINNED_RELEASE_KEYS, signRelease, verifyRelease } from "../apps/cloud-service/src/release-signing.ts";
 
-export const INSTALLER = /^DuskBot-\d+\.\d+\.\d+(-[a-z0-9]+)?(-setup)?\.(dmg|zip|exe|AppImage|deb)$|^DuskBot-\d+\.\d+\.\d+-(win-)?(arm64|x64|amd64|x86_64)\.(dmg|zip|AppImage|deb)$/;
+/** the versioned files the apps update from, and the stable names the download page links to (the same bytes) */
+export const INSTALLER = /^DuskBot-\d+\.\d+\.\d+(-[a-z0-9]+)?(-setup)?\.(dmg|zip|exe|AppImage|deb)$|^DuskBot-\d+\.\d+\.\d+-(win-)?(arm64|x64|amd64|x86_64)\.(dmg|zip|AppImage|deb)$|^DuskBot(-intel)?\.dmg$|^DuskBot-setup\.exe$|^DuskBot-amd64\.deb$|^DuskBot\.(AppImage|apk)$/;
 
 export function sha256sums(dir: string): string {
   const files = readdirSync(dir).filter(name => INSTALLER.test(name) && statSync(join(dir, name)).isFile()).sort();

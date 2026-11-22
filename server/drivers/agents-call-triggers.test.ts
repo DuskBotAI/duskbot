@@ -82,6 +82,8 @@ describe("a schedule's confirmation, in the person's words", () => {
     expect(update.text).toMatch(/Tell the person in one plain sentence what changed, saying the time zone as "India time", and that the next run is tomorrow/);
     const paused = await callTool("manage_trigger", { trigger_id: "r-1", action: "pause" }, context({ response: { ok: true, status: 201, body: { result: { resultId: "r-1" }, nextRunAt: null, timeZone: "Asia/Calcutta" } } }).context);
     expect(paused.text).toMatch(/Tell the person in one sentence what will happen\.$/);
+    const hook = await callTool("create_trigger", { when: "webhook", name: "Website leads", instructions: "Add the lead to the sheet." }, context({ response: { ok: true, status: 201, body: { result: { resultId: "r-2" }, nextRunAt: null } } }).context);
+    expect(hook.text).toMatch(/what will happen, and that they can change, pause or stop it by saying so here\.$/);
   });
 });
 
@@ -186,6 +188,22 @@ describe("a test run", () => {
     expect(calls[0]!.body).toEqual({ fromBotId: "scout", fromThreadId: "thread-1", action: "run_now", triggerId: "r-1", test: true });
     expect(started.text).toContain("Started a test run of trigger r-1");
     expect((await callTool("trigger", { action: "pause", trigger_id: "r-1", test: true }, ctx)).text).toBe("test applies only to action=run_now.");
+  });
+
+  it("sends a webhook's or app event's sample through its real steps, and passes on a refused dry run", async () => {
+    const lead = { email: "maya@loomware.co", name: "Maya" };
+    for (const triggerId of ["w-1", "a-1"]) {
+      const { calls, context: ctx } = context();
+      const sent = await callTool("trigger", { action: "run_now", trigger_id: triggerId, payload: lead }, ctx);
+      expect(calls[0]!.body).toEqual({ fromBotId: "scout", fromThreadId: "thread-1", action: "run_now", triggerId, payload: lead });
+      expect(sent.text).toContain(`Sent your sample to trigger ${triggerId}: it runs its real steps`);
+    }
+    const refusal = "Nothing ran: a webhook's run_now runs its real steps on a sample, never a dry run. Call trigger action=run_now again with this trigger_id and payload.";
+    const { context: refused } = context({ response: { ok: false, status: 400, body: { error: refusal } } });
+    const result = await callTool("trigger", { action: "run_now", trigger_id: "w-1", test: true }, refused);
+    expect(result).toMatchObject({ isError: true, text: expect.stringContaining(refusal) });
+    expect(result.text).not.toContain("Started a test run");
+    expect((await callTool("trigger", { action: "pause", trigger_id: "w-1", payload: lead }, refused)).text).toBe("payload applies only to action=run_now on a webhook or app event.");
   });
 });
 

@@ -62,6 +62,25 @@ function publicProvider(def: ModelProviderDef) {
 }
 
 export function createModelProviderRoutes(deps: ModelProviderRouteDeps): RouteHandler {
+  /** a pasted key and the model it is for, checked with one 1-token reply before they are saved: a key the provider
+   *  refuses or a model it does not have is not saved; no credit, a busy or unreachable provider still saves */
+  async function checkBeforeSave(def: ModelProviderDef, body: { key?: string; fields?: { model?: string }; models?: string[] }) {
+    const key = body.key?.trim();
+    if (!key || def.local || def.keyless) return null;
+    const baseUrl = providerBaseUrl(def, body.fields);
+    if (!baseUrl) return null;
+    const model = body.fields?.model?.trim() || body.models?.[0]?.trim() || undefined;
+    const listed = await listProviderModels({ def, baseUrl, key, ...(deps.fetch ? { fetch: deps.fetch } : {}) });
+    const catalog = deps.catalog.get();
+    const fromCatalog = def.catalogId ? Object.keys(catalog.providers[def.catalogId]?.models ?? {}) : [];
+    const found = await keyResult({ listed, wire: def.wire, baseUrl, key, ...(model ? { model } : {}), fallbackModels: fromCatalog, ...(deps.fetch ? { fetch: deps.fetch } : {}) });
+    if (found.result === "wrong_key") return { result: found.result, refusal: { error: `${def.label} did not accept this key. Copy it again from your ${def.label} account and paste it here.`, check: found.result } };
+    if (found.result === "wrong_model") {
+      const instead = found.suggestedModel ? ` Try ${found.suggestedModel}.` : "";
+      return { result: found.result, refusal: { error: `${def.label} does not offer the model ${found.model}.${instead}`, check: found.result, ...(found.suggestedModel ? { suggestedModel: found.suggestedModel } : {}) } };
+    }
+    return { result: found.result, refusal: null };
+  }
   const now = deps.now ?? Date.now;
   let probe: { at: number; running: Promise<Set<string>> } | undefined;
   const running = () => {
@@ -171,13 +190,15 @@ export function createModelProviderRoutes(deps: ModelProviderRouteDeps): RouteHa
       if (!def) return json(res, 404, { error: "Unknown provider." });
       const built = buildConnection(def, body, deps.place);
       if ("error" in built) return json(res, 400, { error: built.error });
+      const checked = await checkBeforeSave(def, body);
+      if (checked?.refusal) return json(res, 400, checked.refusal);
       if (deps.busy.get()) return json(res, 409, { error: "provider settings are already being updated" });
       deps.busy.set(true);
       try {
         const instances = deps.instances();
         instances[built.instanceId] = built.entry;
         await deps.persistProviderInstance(built.instanceId, instances);
-        return json(res, 201, { instanceId: built.instanceId, place: deps.place, instances: await deps.describeInstances() });
+        return json(res, 201, { instanceId: built.instanceId, place: deps.place, instances: await deps.describeInstances(), ...(checked ? { check: checked.result } : {}) });
       } finally {
         deps.busy.set(false);
       }

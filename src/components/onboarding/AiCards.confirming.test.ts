@@ -11,6 +11,7 @@ vi.mock("@/state/store", () => ({ api: async () => ({ instances: f.instances }),
 vi.mock("@/components/EngineSetup", () => ({ EngineSetup: () => null }));
 vi.mock("./SignInPill", () => ({
   ConnectPanel: () => null,
+  revealIfCovered: () => {},
   useConnectFlow: () => ({ state: f.state, target: null, start: vi.fn(), cancel: f.cancel, retry: vi.fn(), openAgain: vi.fn(), submit: vi.fn() }),
 }));
 const { AiCards } = await import("./AiCards");
@@ -49,4 +50,17 @@ it("tells it connected only once its sign-in finished confirming, so the dialog 
   f.state = { stage: "connected", reused: false };
   await show();
   expect(onConnected).toHaveBeenCalledExactlyOnceWith("chatgpt");
+});
+
+it("makes a connected card a button to its accounts where the grid offers that, and leaves it still elsewhere", async () => {
+  f.instances = [codex(true)];
+  const onManage = vi.fn();
+  await act(async () => { root.render(createElement(AiCards, { tested: null, onManage })); });
+  const card = host.querySelector<HTMLElement>("[data-funnel-ai=chatgpt]")!;
+  expect(card.tagName).toBe("BUTTON");
+  expect(card.hasAttribute("data-connected")).toBe(true);
+  await act(async () => { card.click(); });
+  expect(onManage).toHaveBeenCalledExactlyOnceWith(f.instances[0]);
+  await act(async () => { root.render(createElement(AiCards, { tested: null })); });
+  expect(host.querySelector("[data-funnel-ai=chatgpt]")!.tagName).toBe("DIV");
 });

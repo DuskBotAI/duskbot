@@ -644,6 +644,17 @@ export function EngineSetup({
     return <GrokKeyInstead className={className} unframed={unframed} />;
   }
 
+  if (instance.unknownDriver) {
+    return (
+      <div data-engine-unknown-driver className={cn("min-w-0", !unframed && "rounded-xl border border-transparent bg-control/30 p-3", className)}>
+        <div className="text-[13px] font-semibold text-ink">{t("engineSetup.unknownDriver.title")}</div>
+        <p className="mt-1 min-w-0 text-[12px] leading-relaxed text-ink-secondary [overflow-wrap:anywhere]">
+          {t("engineSetup.unknownDriver.body", { driver: instance.driverKind })}
+        </p>
+      </div>
+    );
+  }
+
   if (!install || instance.snapshot.authenticationUnavailableReason) {
     return (
       <div className={cn("min-w-0", !unframed && "rounded-xl border border-transparent bg-control/30 p-3", className)}>

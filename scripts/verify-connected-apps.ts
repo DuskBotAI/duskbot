@@ -102,9 +102,10 @@ try {
     await command("find", "role", "button", "click", "--name", name, "--exact");
   };
   await command("open", preview.previewUrl);
-  await evaluate(`window.__nativeOpen=window.open.bind(window);window.__oauthTrace=[];window.__oauthPages=[];window.__oauthResponses=0;window.__blockOAuth=false;
+  const instrument = () => evaluate(`window.__nativeOpen=window.open.bind(window);window.__oauthTrace=[];window.__oauthPages=[];window.__oauthResponses=0;window.__blockOAuth=false;
     window.open=(url,target)=>{window.__oauthTrace.push({event:'open',url,active:navigator.userActivation.isActive});const page=window.__blockOAuth?null:window.__nativeOpen(url,target);if(page)window.__oauthPages.push(page);return page;};
     const originalFetch=window.fetch.bind(window);window.fetch=(input,init)=>{const auth=String(input).includes('/authorize');if(auth)window.__oauthTrace.push({event:'fetch'});return originalFetch(input,init).then(response=>{if(auth)window.__oauthResponses++;return response;});};`);
+  await instrument();
   const assertReserved = async () => {
     // Native popups become the browser's active tab; inspect the app tab.
     await command("tab", "t1");
@@ -131,59 +132,61 @@ try {
     await command("tab", "t1");
   };
 
+  const pill = (slug: string) => `[data-app-row=${slug}] .ca-pill`;
+  const pillReads = (slug: string, label: string) => wait(`(()=>{const b=document.querySelector(${JSON.stringify(pill(slug))});return b!==null&&!b.disabled&&b.querySelector('span:not([aria-hidden])')?.textContent===${JSON.stringify(label)};})()`);
+  // A sign-in out on its page keeps the row's pill saying Connecting…; a click opens that page again.
+  const pillWaiting = (slug: string) => wait(`(()=>{const b=document.querySelector(${JSON.stringify(pill(slug))});return b!==null&&!b.disabled&&b.hasAttribute('data-pending')&&b.textContent.includes('Open page again');})()`);
+  const closeApps = () => command("find", "role", "button", "click", "--name", "Close", "--exact");
+
   // Settings reserves synchronously even though the returned URL is delayed.
   await click("Settings Apps");
-  await wait("document.querySelector('[data-app-tile=gmail] button[type=button]:not([aria-label]):not(:disabled)')!==null");
-  await command("click", "[data-app-tile=gmail] button[type=button]:not([aria-label])");
-  await command("fill", "[data-app-tile=gmail] form input", "fixture-work");
-  pauseAuthorize(); await command("click", "[data-app-tile=gmail] form button[type=submit]");
+  await pillReads("gmail", "Connect");
+  assert.equal(await evaluate(`document.querySelector(${JSON.stringify(pill("gmail"))}).getAttribute('aria-label')`), "Connect Gmail");
+  pauseAuthorize(); await command("click", pill("gmail"));
   await assertReserved(); assert.equal(attempts, 1); release();
-  await checkLink("[data-app-tile=gmail] a[target=_blank]", 1);
   await checkAuthorizationTab(1);
+  await pillWaiting("gmail");
   await command("screenshot", join(evidence, "settings-authorizing.png"), "--full");
-  // The same real modal remains usable when a later popup is blocked.
+  // The same real window remains usable when a later popup is blocked.
   await evaluate("window.__blockOAuth=true");
-  await command("click", "[data-app-tile=gmail] button[type=button]:not([aria-label])");
-  await wait("document.querySelector('[role=alert]').textContent.includes('blocked')");
-  assert.equal(attempts, 1, "Settings Continue must reuse its issued flow");
-  await checkLink("[data-app-tile=gmail] a[target=_blank]", 1);
-  const beforeSettingsLink = ((await command("tab", "list")).tabs as unknown[]).length;
-  await command("click", "[data-app-tile=gmail] a[target=_blank]");
-  assert.equal(((await command("tab", "list")).tabs as unknown[]).length, beforeSettingsLink + 1);
-  await checkAuthorizationTab(1);
+  await command("click", pill("gmail"));
+  await wait("document.body.textContent.includes(\"The sign-in page didn't open\")");
+  assert.equal(attempts, 1, "Open page again must reuse its issued flow");
   await command("screenshot", join(evidence, "settings-popup-blocked.png"), "--full");
-  // Closing Settings while another toolkit request is pending cancels its tab.
   await evaluate("window.__blockOAuth=false");
-  await command("click", "[data-app-tile=slack] button[type=button]:not([aria-label])");
-  await command("fill", "[data-app-tile=slack] form input", "fixture-slack");
-  pauseAuthorize(); await command("click", "[data-app-tile=slack] form button[type=submit]");
+  await pillWaiting("gmail");
+  await command("click", pill("gmail"));
+  assert.equal(attempts, 1, "Open page again must reuse its issued flow");
+  await checkAuthorizationTab(1);
+  // Closing Settings while another toolkit request is pending cancels its tab.
+  await pillReads("slack", "Connect");
+  pauseAuthorize(); await command("click", pill("slack"));
   await assertReserved(); assert.equal(attempts, 2);
-  await command("find", "role", "button", "click", "--name", "Close plugins", "--exact");
+  await closeApps();
   release();
   await wait("window.__oauthResponses===2&&window.__oauthPages.at(-1).closed");
   assert.equal(await evaluate("document.querySelector('[data-tour=apps-panel]')===null"), true);
   // Reopening loses the memory-only URL, not the unfinished upstream account.
   await click("Settings Apps");
-  await command("find", "role", "button", "click", "--name", "Refresh connection status", "--exact");
-  await wait("document.querySelector('[data-app-tile=gmail]').textContent.includes('fixture-work')");
-  await wait("document.querySelector('[data-app-tile=gmail] button[type=button]:not([aria-label])')?.textContent.trim()==='Check status'");
-  pauseAuthorize(); await command("click", "[data-app-tile=gmail] button[type=button]:not([aria-label])");
+  await pillReads("gmail", "Connect");
+  pauseAuthorize(); await command("click", pill("gmail"));
   await assertReserved(); assert.equal(attempts, 3); assert.equal(requestBodies[2]!.alias, undefined); release();
-  await checkLink("[data-app-tile=gmail] a[target=_blank]", 3); await checkAuthorizationTab(3);
-  // A stale anchor must authorize again without replaying its old alias.
+  await checkAuthorizationTab(3);
+  // A stale URL must authorize again without replaying an old alias.
   await evaluate("window.__realNow=Date.now;Date.now=()=>window.__realNow()+600001");
-  pauseAuthorize(); await command("click", "[data-app-tile=gmail] a[target=_blank]");
+  await pillWaiting("gmail");
+  pauseAuthorize(); await command("click", pill("gmail"));
   await assertReserved(); assert.equal(attempts, 4); assert.equal(requestBodies[3]!.alias, undefined); release();
-  await checkLink("[data-app-tile=gmail] a[target=_blank]", 4); await checkAuthorizationTab(4);
-  await command("find", "role", "button", "click", "--name", "Close plugins", "--exact");
+  await checkAuthorizationTab(4);
+  await closeApps();
   await evaluate("Date.now=window.__realNow");
 
   // Deliberately blocked window.open leaves a native, safe authorization link.
   await evaluate("window.__blockOAuth=true");
-  pauseAuthorize(); await click("Connect securely");
+  pauseAuthorize(); await click("Connect");
   assert.equal(attempts, 5); release();
   await checkLink("[data-tour=connector] a[target=_blank]", 5);
-  await wait("document.body.textContent.includes('blocked')");
+  await wait("document.body.textContent.includes(\"The sign-in page didn't open\")");
   await command("screenshot", join(evidence, "card-popup-blocked.png"), "--full");
   await click("Card authorizing"); await click("Open again");
   assert.equal(attempts, 5, "Open again must reuse the issued flow");
@@ -194,7 +197,7 @@ try {
 
   // A failed request closes only its reserved blank; the real retry can launch.
   await click("Replace card target"); await evaluate("window.__blockOAuth=false");
-  pauseAuthorize(true); await click("Connect securely"); await assertReserved(); release();
+  pauseAuthorize(true); await click("Connect"); await assertReserved(); release();
   await wait("document.body.textContent.includes('Synthetic authorization outage')");
   assert.equal(await evaluate("window.__oauthPages.at(-1).closed"), true);
   await click("Card failed");
@@ -203,32 +206,33 @@ try {
   await checkLink("[data-tour=connector] a[target=_blank]", 7);
 
   // Replacement/unmount cannot late-open the old account after its response.
-  await click("Replace card target"); pauseAuthorize(); await click("Connect securely"); await assertReserved();
+  await click("Replace card target"); pauseAuthorize(); await click("Connect"); await assertReserved();
   await click("Replace card target"); release();
   await wait("window.__oauthResponses===8&&window.__oauthPages.at(-1).closed");
   assert.equal(await evaluate("document.querySelector('[data-tour=connector] a[target=_blank]')===null"), true);
-  pauseAuthorize(); await click("Connect securely"); await assertReserved();
+  pauseAuthorize(); await click("Connect"); await assertReserved();
   await click("Remove card"); release();
   await wait("window.__oauthResponses===9&&window.__oauthPages.at(-1).closed");
   assert.equal(await evaluate("document.querySelector('[data-tour=connector]')===null"), true);
 
   // An app whose only account expired reads as signed out; Reconnect replaces that account under its own label.
   services.gmail = { connected: true, pending: false, status: "EXPIRED", accounts: [{ id: "ca-expired", alias: "fixture-old", status: "EXPIRED" }] };
+  // A later visit: the page starts without the status this one already read.
+  await command("reload");
+  await instrument();
   await click("Settings Apps");
-  await command("find", "role", "button", "click", "--name", "Refresh connection status", "--exact");
-  await wait("document.querySelector('[data-app-tile=gmail]').textContent.includes('Signed out')");
-  assert.equal(await evaluate("document.querySelector('[data-app-tile=gmail] [aria-label=Connected]')===null"), true);
-  assert.equal(await evaluate("document.querySelector('[data-app-tile=gmail] button[type=button]:not([aria-label])').textContent.trim()"), "Reconnect");
+  await pillReads("gmail", "Reconnect");
+  assert.equal(await evaluate("document.querySelector('[data-app-row=gmail] .ca-added')===null"), true);
   await command("screenshot", join(evidence, "settings-reconnect.png"), "--full");
   const traced = await evaluate("window.__oauthTrace.length") as number;
-  pauseAuthorize(); await command("click", "[data-app-tile=gmail] button[type=button]:not([aria-label])");
+  pauseAuthorize(); await command("click", pill("gmail"));
   // The old account is removed before the link is asked for, so the request trails the reserved tab.
   await command("tab", "t1"); await wait(`window.__oauthTrace.length>=${traced + 2}`);
   await assertReserved(); release();
   assert.deepEqual(deletedAccounts, ["ca-expired"]);
   assert.equal(requestBodies.at(-1)!.alias, "fixture-old");
-  await checkLink("[data-app-tile=gmail] a[target=_blank]", 10); await checkAuthorizationTab(10);
-  await command("find", "role", "button", "click", "--name", "Close plugins", "--exact");
+  await checkAuthorizationTab(10);
+  await closeApps();
 
   // A card refused for want of a label asks for one instead of sending the same request again.
   await click("Replace card target"); await click("Card needs label");
@@ -237,10 +241,11 @@ try {
   await command("fill", "[data-tour=connector] input", "fixture-label");
   pauseAuthorize(); await click("Try again"); await assertReserved(); release();
   assert.equal(requestBodies.at(-1)!.alias, "fixture-label");
-  await wait("window.__oauthResponses===11");
+  await wait("window.__oauthResponses===2");
   const errors = await command("errors");
-  assert.deepEqual(errors.errors, []);
-  const result = { ok: true, fixtureUrl: fixture.info.url, logPath: fixture.info.logPath, attempts, evidence, tested: ["Settings synchronous reservation", "Settings blocked-popup fallback and Continue", "Settings close cancels late opening", "Settings pending inventory after reopen", "expired anchor renewal without stale alias", "card blocked-popup fallback", "native safe link navigation", "Open again reuses flow", "failure closes blank and Try again", "replacement and unmount cancel late opening", "expired-only app reconnects under its label", "card asks for a label instead of looping"], limitation: "Synthetic authorize responses in Chromium; no live provider, Safari or Brave acceptance." };
+  // The preview's Vite client logs its hot-reload socket dropping across the page reload.
+  assert.deepEqual((errors.errors as Array<{ text: string }>).filter((error) => !error.text.includes("/@vite/client")), []);
+  const result = { ok: true, fixtureUrl: fixture.info.url, logPath: fixture.info.logPath, attempts, evidence, tested: ["Settings synchronous reservation", "Settings blocked-popup notice and Open page again", "Settings close cancels late opening", "Settings pending inventory after reopen", "expired URL renewal without stale alias", "card blocked-popup fallback", "native safe link navigation", "Open again reuses flow", "failure closes blank and Try again", "replacement and unmount cancel late opening", "expired-only app reconnects under its label", "card asks for a label instead of looping"], limitation: "Synthetic authorize responses in Chromium; no live provider, Safari or Brave acceptance." };
   writeFileSync(join(evidence, "result.json"), JSON.stringify(result, null, 2));
   console.log(JSON.stringify(result));
 } finally {

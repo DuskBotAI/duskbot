@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useId, useRef, type ReactNode, type RefObject } from "react";
+import { createContext, useContext, useEffect, useId, useRef, useState, type ReactNode, type RefObject } from "react";
 import { createPortal } from "react-dom";
 
 import { cn } from "@/lib/cn";
@@ -62,16 +62,16 @@ const FOCUSABLE = "button:not([disabled]), input:not([disabled]), textarea:not([
 /** Set by a sheet with a rail (the bot's settings): a dialog inside it draws as that sheet's pane instead of its own sheet. */
 export const DialogPane = createContext(false);
 
-/** Focus into the dialog on open and back to the opener on close, Escape to close, Tab kept inside. A nested dialog
- * handles its own keys. */
+/** Focus into the dialog on open, unless a field inside already took it with `autoFocus`, and back to the opener on
+ * close; Escape to close, Tab kept inside. A nested dialog handles its own keys. */
 export function useDialogKeys(sheet: RefObject<HTMLElement | null>, onClose: () => void) {
   const close = useRef(onClose);
   close.current = onClose;
+  const [opener] = useState(focusedElement);
 
   useEffect(() => {
-    const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     const root = sheet.current;
-    (root?.querySelector<HTMLElement>("[data-autofocus]") ?? root)?.focus({ preventScroll: true });
+    if (!root?.contains(document.activeElement)) (root?.querySelector<HTMLElement>("[data-autofocus]") ?? root)?.focus({ preventScroll: true });
     const onKey = (event: KeyboardEvent) => {
       const box = sheet.current;
       if (!box || (event.key !== "Escape" && event.key !== "Tab")) return;
@@ -98,9 +98,13 @@ export function useDialogKeys(sheet: RefObject<HTMLElement | null>, onClose: () 
       window.removeEventListener("keydown", onKey);
       if (opener?.isConnected) opener.focus({ preventScroll: true });
     };
-  }, [sheet]);
+  }, [sheet, opener]);
 
   return close;
+}
+
+function focusedElement(): HTMLElement | null {
+  return typeof document !== "undefined" && typeof HTMLElement !== "undefined" && document.activeElement instanceof HTMLElement ? document.activeElement : null;
 }
 
 /** On its own, Grok's form dialog (New login), easing in as bencho's modal does; inside a railed sheet, that sheet's pane. */

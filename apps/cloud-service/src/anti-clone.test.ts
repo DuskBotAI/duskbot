@@ -205,7 +205,7 @@ describe("signed releases", () => {
 
 describe("a service people use refuses an unsafe setup", () => {
   const base = { INSTABOX_API_KEY: `ibk_${"k".repeat(52)}`, DUSK_MANAGED: "1", DUSK_CLOUD_SEAL_KEY: Buffer.alloc(32, 3).toString("base64url"),
-    DUSK_MANAGED_HOME_PACKAGE_URL: "https://packages.example.test/home.tgz", DUSK_MANAGED_HOME_PACKAGE_SHA256: "a".repeat(64) };
+    DUSK_MANAGED_HOME_PACKAGE_URL: "https://packages.example.test/home.tgz", DUSK_MANAGED_HOME_PACKAGE_SHA256: "a".repeat(64), DUSK_MANAGED_BACKUP_MIN_FREE_GB: "1" };
   const make = (env: Record<string, string>) => () => managedCloudFromEnv(env, { dataDir: mkdtempSync(join(tmpdir(), "dusk-env-")), publicUrl: "https://dash.example.com", loopback: false,
     sealKey: Buffer.alloc(32, 3), now: Date.now, subscriptions: () => [] });
   it("needs the provider key, our public domain, the edge token and a signed package", () => {

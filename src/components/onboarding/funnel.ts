@@ -74,6 +74,7 @@ interface AiTileInstance {
   instanceId: string;
   driverKind: string;
   access?: string;
+  unknownDriver?: true;
   snapshot: { state: string; authenticated?: boolean; freeFallback?: boolean; authenticationUnavailableReason?: string };
 }
 
@@ -99,14 +100,15 @@ export interface AiTile<Instance> {
   candidates: Instance[];
 }
 
-/** The grid, in its fixed order, with only the AIs this app can connect here. `usable`: whether one can be connected
+/** The grid, in its fixed order, with only the AIs this app can connect here (never one whose driver this build lacks). `usable`: whether one can be connected
  * here (a ChatGPT plan sign-in a hosted cloud can't take is passed over for the Codex one). */
 export function aiTiles<Instance extends AiTileInstance>(instances: readonly Instance[], ready: (instance: Instance) => boolean,
   usable: (instance: Instance) => boolean = (instance) => !instance.snapshot.authenticationUnavailableReason): AiTile<Instance>[] {
   const tiles: AiTile<Instance>[] = [];
+  const known = instances.filter((instance) => !instance.unknownDriver);
   for (const tile of TILES) {
-    const byId = tile.ids.map((id) => instances.find((instance) => instance.instanceId === id)).filter(Boolean) as Instance[];
-    const byDriver = instances.filter((instance) => tile.drivers.includes(instance.driverKind) && !byId.includes(instance));
+    const byId = tile.ids.map((id) => known.find((instance) => instance.instanceId === id)).filter(Boolean) as Instance[];
+    const byDriver = known.filter((instance) => tile.drivers.includes(instance.driverKind) && !byId.includes(instance));
     const candidates = [...byId, ...byDriver];
     // a signed-in one stands for the tile, else the first that can connect here, else the first of its kind
     const instance = candidates.find(ready) ?? candidates.find(usable) ?? candidates[0];

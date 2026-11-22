@@ -8,7 +8,7 @@ export type WhenPreset = "daily" | "weekdays" | "weekly" | "hourly" | "once" | "
 
 export interface WhenDraft {
   preset: WhenPreset;
-  /** "HH:MM", local. */
+  /** "HH:MM", local; "" while the typed time reads as none. */
   time: string;
   /** Sunday = 0, for "weekly". */
   day: number;
@@ -51,6 +51,26 @@ export function whenDraftFor(schedule: RoutineSchedule | undefined, now = Date.n
   return { ...draft, preset: "keep" };
 }
 
+function sameWindow(a: WhenDraft["window"], b: WhenDraft["window"]): boolean {
+  return a === b || (!!a && !!b && a.start === b.start && a.end === b.end);
+}
+
+function sameWhen(a: WhenDraft, b: WhenDraft): boolean {
+  if (a.preset !== b.preset) return false;
+  switch (a.preset) {
+    case "keep": return true;
+    case "hourly": return sameWindow(a.window, b.window);
+    case "once": return a.date === b.date && a.time === b.time;
+    case "weekly": return a.day === b.day && a.time === b.time;
+    default: return a.time === b.time;
+  }
+}
+
+/** The schedule an edit saves: none while the draft still says the saved one, so its anchor and next run stay. */
+export function editedSchedule(saved: WhenDraft, draft: WhenDraft, now = Date.now()): ReturnType<typeof scheduleFromDraft> {
+  return sameWhen(saved, draft) ? {} : scheduleFromDraft(draft, now);
+}
+
 /** The next local hour's start: an hourly routine runs on the hour. */
 export function nextLocalHour(now = Date.now()): number {
   const date = new Date(now);
@@ -62,7 +82,8 @@ export function nextLocalHour(now = Date.now()): number {
 export function scheduleFromDraft(draft: WhenDraft, now = Date.now()): { schedule?: RoutineScheduleInput; error?: LocaleKey } {
   if (draft.preset === "keep") return {};
   if (draft.preset === "hourly") {
-    if (draft.window && !(TIME.test(draft.window.start) && TIME.test(draft.window.end) && draft.window.start < draft.window.end)) return { error: "routines.inline.error.hours" };
+    if (draft.window && !(TIME.test(draft.window.start) && TIME.test(draft.window.end))) return { error: "routines.inline.error.time" };
+    if (draft.window && draft.window.start >= draft.window.end) return { error: "routines.inline.error.hours" };
     return { schedule: { type: "interval", everyMinutes: 60, anchorAt: nextLocalHour(now), weekdays: null, ...(draft.window === undefined ? {} : { window: draft.window }), endsAt: null } };
   }
   if (!TIME.test(draft.time)) return { error: "routines.inline.error.time" };

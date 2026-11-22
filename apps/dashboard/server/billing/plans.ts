@@ -78,10 +78,10 @@ export const BILLING_CONFIG: BillingConfig = {
   trial: null,
   // free $0, plus $20 (a cloud machine), pro $50 (a bigger one and a work license for one person), team $119; the starter id sells as Plus
   bundles: [
-    { id: "free", label: "Free", cart: { license: { kind: "none" }, desktop: { kind: "none" } }, highlights: ["Your bots, on your computer", "Personal use", "No subscription"] },
-    { id: "starter", label: "Plus", cart: { license: { kind: "none" }, desktop: { kind: "shared_s", region: "fsn1" } }, highlights: ["Your bots work in dusk cloud", "2 vCPU, 4 GB RAM, 20 GB disk", "Always available, wakes in seconds"] },
-    { id: "pro", label: "Pro", cart: { license: { kind: "solo" }, desktop: { kind: "shared_m", region: "fsn1" } }, highlights: ["4 vCPU, 8 GB RAM, 60 GB disk", "Always available, priority wake", "Work license for one person"] },
-    { id: "team", label: "Team", cart: { license: { kind: "team", members: 2 }, desktop: { kind: "dedicated", region: "fsn1", spec: { vcpu: 8, ramGb: 16, diskGb: 160 } } }, highlights: ["Dedicated 8 vCPU, 16 GB RAM, 160 GB disk", "Always available, priority wake", "Team license, 2 seats"] },
+    { id: "free", label: "Free", cart: { license: { kind: "none" }, desktop: { kind: "none" } }, highlights: ["your bots, on your computer", "personal use", "no subscription"] },
+    { id: "starter", label: "Plus", cart: { license: { kind: "none" }, desktop: { kind: "shared_s", region: "fsn1" } }, highlights: ["your bots work in dusk cloud", "2 vcpu, 4 gb ram, 20 gb disk", "always available, wakes in seconds"] },
+    { id: "pro", label: "Pro", cart: { license: { kind: "solo" }, desktop: { kind: "shared_m", region: "fsn1" } }, highlights: ["4 vcpu, 8 gb ram, 60 gb disk", "always available, priority wake", "work license for one person"] },
+    { id: "team", label: "Team", cart: { license: { kind: "team", members: 2 }, desktop: { kind: "dedicated", region: "fsn1", spec: { vcpu: 8, ramGb: 16, diskGb: 160 } } }, highlights: ["dedicated 8 vcpu, 16 gb ram, 160 gb disk", "always available, priority wake", "team license, 2 seats"] },
   ],
   regions: [{ id: "fsn1", label: "Falkenstein", country: "DE" }, { id: "nbg1", label: "Nuremberg", country: "DE" }, { id: "hel1", label: "Helsinki", country: "FI" }, { id: "ash", label: "Ashburn", country: "US" }, { id: "hil", label: "Hillsboro", country: "US" }, { id: "sin", label: "Singapore", country: "SG" }],
   defaultRegion: "fsn1", poolRegions: ["fsn1"],

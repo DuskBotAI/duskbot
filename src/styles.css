@@ -202,7 +202,7 @@ a.link-pill:focus-visible {
   --color-accent-border: #459ffe;
   /* the ring a keyboard user follows: a neutral grey at 3:1 on every surface,
      never the accent or a browser blue */
-  --color-focus: #6d6d6d;
+  --color-focus: #767676;
   --color-accent-text: #7fc0ff;
   --color-bubble-user: #5a5a5a;
   --color-success: #38d591;
@@ -381,7 +381,7 @@ a.link-pill:focus-visible {
   --color-accent: #a05f25;        /* #b06a2c darkened → 5.05:1 */
   --color-accent-border: #b06a2c; /* the original tone lives on as the border */
   --color-accent-text: #96551f;   /* for links on a light ground, 5.81:1 */
-  --color-focus: #8a8884;
+  --color-focus: #83817d;
   --color-accent-ink: #ffffff;
   --color-bubble-user: #f2e9dc;   /* your own messages in the badge beige */
   --color-bubble-user-ink: #1a1a18;   /* = ink: unchanged */
@@ -542,7 +542,7 @@ a.link-pill:focus-visible {
   --color-accent: #11736d;        /* deep teal, carries white at 5.68:1 */
   --color-accent-border: #14807a;
   --color-accent-text: #0d5f5a;   /* 7.5:1 on a card */
-  --color-focus: #798685;
+  --color-focus: #6d7a79;
   --color-accent-ink: #ffffff;
   --color-bubble-user: #cfe4e1;
   --color-bubble-user-ink: #14201f;   /* = ink: unchanged */
@@ -669,7 +669,7 @@ a.link-pill:focus-visible {
   --color-accent: #355f8a;
   --color-accent-border: #4978a6;
   --color-accent-text: #2c5680;
-  --color-focus: #82868c;
+  --color-focus: #75797f;
   --color-accent-ink: #ffffff;
   --color-bubble-user: #e1e6ed;
   --color-bubble-user-ink: #1d2229;   /* = ink: unchanged */
@@ -955,7 +955,7 @@ a.link-pill:focus-visible {
   --color-accent: #116dd2;        /* sand-bg-accent-primary */
   --color-accent-border: #116dd2; /* the switch blue, as in light */
   --color-accent-text: #4d9bff;   /* sand-text-accent-primary */
-  --color-focus: #6d6d6d;
+  --color-focus: #727272;
   --color-accent-ink: #ffffff;
   --color-bubble-user: #3b3b3b;   /* sand-fill-bubble-user (#f5f5f52e) on the thread */
   --color-bubble-user-ink: #f5f5f5;
@@ -1021,7 +1021,7 @@ a.link-pill:focus-visible {
   --color-accent: #1a7a48;
   --color-accent-border: #1f8a52;
   --color-accent-text: #176b3f;
-  --color-focus: #878c89;
+  --color-focus: #7b807d;
   --color-accent-ink: #ffffff;
   --color-composer: #ffffff;
   --color-composer-ring: #e3e9e4;
@@ -1087,7 +1087,7 @@ a.link-pill:focus-visible {
   --color-accent: #7f52f0;
   --color-accent-border: #8b5cf6;
   --color-accent-text: #6d28d9;
-  --color-focus: #8a837c;
+  --color-focus: #857e77;
   --color-accent-ink: #ffffff;
   --color-composer: #ffffff;
   --color-composer-ring: #1b1613;
@@ -1150,7 +1150,7 @@ a.link-pill:focus-visible {
   --color-accent: #ff7f1f;
   --color-accent-border: #ff8f3a;
   --color-accent-text: #ffa060;
-  --color-focus: #706a6a;
+  --color-focus: #726c6c;
   --color-accent-ink: #1d0e02;
   --color-bubble-user: #3d2818;
   --color-bubble-user-ink: #fff1e2;
@@ -1322,6 +1322,25 @@ a.link-pill:focus-visible {
 /* Arabic and Hebrew script needs the taller line the rest of the app gives it. */
 [data-chat-bubble="simple"] .chat-md [dir="rtl"] {
   line-height: 1.75;
+}
+/* a message still on its way: after a beat (a send that lands at once never shows it) it dims and says so, under the
+   bubble and outside its box, so the bubble keeps one size from the composer to the server's copy */
+@keyframes m-sending { to { opacity: 1; } }
+@keyframes m-sending-dim { to { opacity: .6; } }
+[data-chat-bubble][data-sending] { position: relative; animation: m-sending-dim .2s ease-out 1.2s forwards; }
+[data-chat-bubble][data-sending]::after {
+  content: attr(data-sending);
+  position: absolute;
+  top: 100%;
+  inset-inline-end: 4px;
+  white-space: nowrap;
+  margin-top: 2px;
+  color: var(--color-ink-secondary);
+  font-size: 12px;
+  line-height: 16px;
+  text-align: end;
+  opacity: 0;
+  animation: m-sending .2s ease-out 1.2s forwards;
 }
 
 .chat-code-actions > button:focus-visible {

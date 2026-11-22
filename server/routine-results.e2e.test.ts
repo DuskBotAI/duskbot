@@ -44,6 +44,11 @@ it("runs every routine in the bot's main chat as an ordinary turn, with no run c
     }
     const lines = await messages(main);
     expect(lines.filter((message) => message.routineStart?.name === "Persistent report")).toHaveLength(2);
+    const started = lines.find((message) => message.routineStart)!;
+    expect(started.routineStart).toEqual({ name: "Persistent report", routineId: routine.id });
+    const resent = await api("POST", `/api/bots/${bot.id}/messages/${started.id}/edit`, { text: started.text, threadId: main }, 409);
+    expect(resent.error).toMatch(/run the routine again/);
+    expect((await api("GET", "/api/routines")).runs.filter((run: any) => run.routineId === routine.id)).toHaveLength(2);
     expect(lines.filter((message) => message.role === "bot" && message.kind === "text" && message.text === "hello from fake claude")).toHaveLength(2);
     expect(lines.some((message) => message.automation || message.kind === "routine.run")).toBe(false);
     const saved = await currentBot(bot.id);

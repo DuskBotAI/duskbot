@@ -1,14 +1,17 @@
 // Backups of each home's volume, kept off the provider in storage only this service writes: a home never holds a credential
 // that reaches it. Each generation is one file, written once (O_EXCL) and never changed: AES-256-GCM over the volume's tar,
-// keyed per cloud from a secret only this service holds (homeBackupKey): nothing on the home can open one. Only the
-// retention reconciler removes one (lifecycle.ts).
+// gzipped first (OMBB3; OMBB2 files are the plain tar), keyed per cloud from a secret only this service holds (homeBackupKey):
+// nothing on the home can open one. Only the retention reconciler removes one (lifecycle.ts).
 import { CLOUD_HOME } from "../../../electron/legacy-names.mjs";
 import { createCipheriv, createDecipheriv, createHash, hkdfSync, randomBytes } from "node:crypto";
-import { chmodSync, closeSync, existsSync, fstatSync, linkSync, mkdirSync, openSync, readdirSync, readSync, rmSync, statSync, writeSync } from "node:fs";
+import { chmodSync, closeSync, existsSync, fstatSync, linkSync, mkdirSync, openSync, readdirSync, readSync, rmSync, statfsSync, statSync, writeSync } from "node:fs";
 import { open } from "node:fs/promises";
 import { join } from "node:path";
+import { Readable } from "node:stream";
+import { pipeline } from "node:stream/promises";
+import { createGunzip, createGzip, gunzipSync, gzipSync } from "node:zlib";
 
-const MAGIC = Buffer.from("OMBB2\n");
+const MAGIC = Buffer.from("OMBB2\n"), MAGIC_GZIP = Buffer.from("OMBB3\n");
 
 /** a cloud's backup key: HKDF over this service's backup secret, bound to the cloud id */
 export function homeBackupKey(secret: Buffer, cloudId: string): Buffer {
@@ -139,9 +142,79 @@ export function homeVolumeScan(cloudId: string, onEntry?: (name: string, size: n
   };
 }
 
+/** a tar path (`data/...`) under one of `entries` (relative to `data/`, `*` matching across `/` as GNU tar's --exclude does) */
+export function skippedPath(entries: readonly string[]): (path: string) => boolean {
+  const any = entries.map(e => e.split("*").map(part => part.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join(".*")).join("|");
+  const pattern = new RegExp(`^data/(?:${any})(?:/|$)`);
+  return path => entries.length > 0 && pattern.test(path.replace(/^\.\//, ""));
+}
+
+/** META: entries that only describe the next one (GNU long name and long link, pax): they go wherever it goes */
+const META = new Set(["L", "K", "x"]), META_MAX = 1 << 20;
+
+/** a tar stream without the entries `skip` names (and hard links into them), the rest byte for byte. Past anything it
+ *  cannot read the stream passes through whole, for the volume check after it to judge */
+export function tarWithout(source: AsyncIterable<Uint8Array>, skip: (path: string) => boolean) {
+  const stats = { skippedEntries: 0, skippedBytes: 0 };
+  async function* run(): AsyncGenerator<Buffer> {
+    let held = Buffer.alloc(0), pending: Buffer[] = [], longName: string | null = null, longLink: string | null = null;
+    let left = 0, keep = true, through = false, meta: { type: string; body: Buffer[]; size: number } | null = null;
+    for await (const piece of source) {
+      if (through) { yield Buffer.from(piece); continue; }
+      let buf = held.length ? Buffer.concat([held, piece]) : Buffer.from(piece), at = 0;
+      const out: Buffer[] = [];
+      while (at < buf.length && !through) {
+        if (left > 0) {
+          const n = Math.min(left, buf.length - at), part = buf.subarray(at, at + n);
+          if (meta) { meta.body.push(part); pending.push(part); } else if (keep) out.push(part); else stats.skippedBytes += n;
+          left -= n; at += n;
+          if (left === 0 && meta) {
+            const text = Buffer.concat(meta.body).subarray(0, meta.size).toString("utf8");
+            if (meta.type === "L") longName = text.replace(/\0.*$/s, "");
+            else if (meta.type === "K") longLink = text.replace(/\0.*$/s, "");
+            else { longName = /\d+ path=([^\n]*)\n/.exec(text)?.[1] ?? longName; longLink = /\d+ linkpath=([^\n]*)\n/.exec(text)?.[1] ?? longLink; }
+            meta = null;
+          }
+          continue;
+        }
+        if (buf.length - at < 512) break;
+        const h = buf.subarray(at, at + 512);
+        const field = (s: number, l: number) => h.subarray(s, s + l).toString("utf8").replace(/\0.*$/s, "");
+        let check = 0;
+        for (let i = 0; i < 512; i++) check += i >= 148 && i < 156 ? 32 : h[i]!;
+        if (h.every(b => b === 0) || parseInt(field(148, 8).trim() || "0", 8) !== check) { out.push(...pending, buf.subarray(at)); pending = []; at = buf.length; through = true; break; }
+        const size = parseInt(field(124, 12).trim() || "0", 8), type = field(156, 1) || "0", blocks = Math.ceil(size / 512) * 512;
+        at += 512;
+        if (META.has(type)) {
+          if (size > META_MAX) { out.push(...pending, h, buf.subarray(at)); pending = []; at = buf.length; through = true; break; }
+          pending.push(h); meta = { type, body: [], size }; left = blocks;
+          continue;
+        }
+        const prefix = field(345, 155), name = longName ?? (prefix ? `${prefix}/${field(0, 100)}` : field(0, 100)), link = longLink ?? field(157, 100);
+        longName = null; longLink = null;
+        keep = !skip(name) && !(type === "1" && skip(link));
+        if (keep) out.push(...pending, h); else { stats.skippedEntries++; stats.skippedBytes += 512 + pending.reduce((n, p) => n + p.length, 0); }
+        pending = []; left = blocks;
+      }
+      held = Buffer.from(buf.subarray(at));
+      buf = Buffer.alloc(0);
+      for (const part of out) if (part.length) yield part;
+    }
+    const rest = [...pending, held].filter(p => p.length);
+    for (const part of rest) yield part;
+  }
+  return { stream: run(), stats };
+}
+
+/** OMBB3: the tar gzipped before it is sealed; OMBB2 (plain tar) still opens */
+const GZIP_LEVEL = 6;
+/** an OMBB3 file's format is authenticated with its cloud, so its header cannot be swapped for another format's */
+const aadOf = (cloudId: string, format: "plain" | "gzip") => Buffer.from(format === "gzip" ? `${cloudId}\ngzip` : cloudId);
+const formatOf = (head: Buffer): "plain" | "gzip" | null => head.equals(MAGIC) ? "plain" : head.equals(MAGIC_GZIP) ? "gzip" : null;
+
 const CHUNK = 1 << 20;
 
-export function createBackupStore(options: { dir: string; now?: () => number }) {
+export function createBackupStore(options: { dir: string; now?: () => number; freeBytes?: () => number }) {
   const now = options.now ?? Date.now;
   mkdirSync(options.dir, { recursive: true, mode: 0o700 });
   const dirOf = (cloudId: string) => { if (!CLOUD_ID.test(cloudId)) throw new Error("Invalid cloud id."); return join(options.dir, cloudId); };
@@ -160,13 +233,14 @@ export function createBackupStore(options: { dir: string; now?: () => number }) 
       mkdirSync(dir, { recursive: true, mode: 0o700 });
       const file = `${String(at).padStart(13, "0")}-${randomBytes(4).toString("hex")}.ombb`, path = join(dir, file), part = join(dir, `.${file}.part`);
       const iv = randomBytes(IV_BYTES), cipher = createCipheriv("aes-256-gcm", key, iv), hash = createHash("sha256");
-      cipher.setAAD(Buffer.from(cloudId));
+      cipher.setAAD(aadOf(cloudId, "gzip"));
       const fh = await open(part, "wx", 0o600);
       let bytes = 0, plainBytes = 0;
       const put = async (piece: Buffer) => { if (!piece.length) return; hash.update(piece); bytes += piece.length; for (let off = 0; off < piece.length;) off += (await fh.write(piece, off, piece.length - off)).bytesWritten; };
+      async function* plain() { for await (const chunk of source) { inspect(chunk); plainBytes += chunk.length; yield chunk; } }
       try {
-        await put(Buffer.concat([MAGIC, iv]));
-        for await (const chunk of source) { inspect(chunk); plainBytes += chunk.length; await put(cipher.update(chunk)); }
+        await put(Buffer.concat([MAGIC_GZIP, iv]));
+        await pipeline(Readable.from(plain()), createGzip({ level: GZIP_LEVEL }), async (zipped: AsyncIterable<Buffer>) => { for await (const z of zipped) await put(cipher.update(z)); });
         await put(cipher.final()); await put(cipher.getAuthTag());
         await fh.sync(); await fh.close();
         chmodSync(part, 0o400); linkSync(part, path);
@@ -187,19 +261,31 @@ export function createBackupStore(options: { dir: string; now?: () => number }) 
         if (size < MAGIC.length + IV_BYTES + TAG_BYTES) return { problem: "unreadable", sha256: null };
         const head = Buffer.alloc(MAGIC.length + IV_BYTES), tag = Buffer.alloc(TAG_BYTES);
         await fh.read(head, 0, head.length, 0); await fh.read(tag, 0, TAG_BYTES, size - TAG_BYTES);
-        if (!head.subarray(0, MAGIC.length).equals(MAGIC)) return { problem: "unreadable", sha256: null };
+        const format = formatOf(head.subarray(0, MAGIC.length));
+        if (!format) return { problem: "unreadable", sha256: null };
         const decipher = createDecipheriv("aes-256-gcm", key, head.subarray(MAGIC.length));
-        decipher.setAAD(Buffer.from(cloudId)); decipher.setAuthTag(tag);
+        decipher.setAAD(aadOf(cloudId, format)); decipher.setAuthTag(tag);
         const scan = homeVolumeScan(cloudId), bodyEnd = size - TAG_BYTES;
+        const unzip = format === "gzip" ? createGunzip() : null;
+        let unzipFailed = false;
+        unzip?.on("data", (chunk: Buffer) => scan.push(chunk)).on("error", () => { unzipFailed = true; });
+        const feed = async (opened: Buffer) => {
+          if (!unzip) { scan.push(opened); return; }
+          if (!unzipFailed && !unzip.write(opened)) await new Promise<void>(resolve => { unzip.once("drain", resolve); unzip.once("error", () => resolve()); });
+        };
         hash.update(head);
         for (let pos = head.length; pos < bodyEnd;) {
           const { bytesRead } = await fh.read(buf, 0, Math.min(CHUNK, bodyEnd - pos), pos);
           if (bytesRead === 0) return { problem: "unreadable", sha256: null };
           const sealed = buf.subarray(0, bytesRead);
-          hash.update(sealed); scan.push(decipher.update(sealed)); pos += bytesRead;
+          hash.update(sealed); await feed(Buffer.from(decipher.update(sealed))); pos += bytesRead;
         }
         hash.update(tag);
-        try { scan.push(decipher.final()); } catch { return { problem: "unreadable", sha256: hash.digest("hex") }; }
+        let last: Buffer;
+        try { last = decipher.final(); } catch { unzip?.destroy(); return { problem: "unreadable", sha256: hash.digest("hex") }; }
+        await feed(last);
+        if (unzip && !unzipFailed) await new Promise<void>(resolve => { unzip.once("end", resolve); unzip.once("error", () => resolve()); unzip.end(); });
+        if (unzipFailed) return { problem: "unreadable", sha256: hash.digest("hex") };
         return { problem: scan.end(), sha256: hash.digest("hex") };
       } finally { await fh.close(); }
     },
@@ -209,8 +295,8 @@ export function createBackupStore(options: { dir: string; now?: () => number }) 
       mkdirSync(dir, { recursive: true, mode: 0o700 });
       const file = `${String(at).padStart(13, "0")}-${randomBytes(4).toString("hex")}.ombb`, path = join(dir, file);
       const iv = randomBytes(IV_BYTES), cipher = createCipheriv("aes-256-gcm", key, iv);
-      cipher.setAAD(Buffer.from(cloudId));
-      const body = Buffer.concat([cipher.update(tar), cipher.final()]), sealed = Buffer.concat([MAGIC, iv, body, cipher.getAuthTag()]);
+      cipher.setAAD(aadOf(cloudId, "gzip"));
+      const body = Buffer.concat([cipher.update(gzipSync(tar, { level: GZIP_LEVEL })), cipher.final()]), sealed = Buffer.concat([MAGIC_GZIP, iv, body, cipher.getAuthTag()]);
       const fd = openSync(path, "wx", 0o600);
       try { writeSync(fd, sealed); } finally { closeSync(fd); }
       chmodSync(path, 0o400);
@@ -221,12 +307,15 @@ export function createBackupStore(options: { dir: string; now?: () => number }) 
       const path = pathOf(cloudId, file), fd = openSync(path, "r");
       let sealed: Buffer;
       try { const size = fstatSync(fd).size; sealed = Buffer.alloc(size); let read = 0; while (read < size) read += readSync(fd, sealed, read, size - read, read); } finally { closeSync(fd); }
-      if (sealed.length < MAGIC.length + IV_BYTES + TAG_BYTES || !sealed.subarray(0, MAGIC.length).equals(MAGIC)) throw new Error("Invalid backup.");
+      const format = sealed.length < MAGIC.length + IV_BYTES + TAG_BYTES ? null : formatOf(sealed.subarray(0, MAGIC.length));
+      if (!format) throw new Error("Invalid backup.");
       const iv = sealed.subarray(MAGIC.length, MAGIC.length + IV_BYTES), tag = sealed.subarray(sealed.length - TAG_BYTES);
       const decipher = createDecipheriv("aes-256-gcm", key, iv);
-      decipher.setAAD(Buffer.from(cloudId)); decipher.setAuthTag(tag);
-      try { return Buffer.concat([decipher.update(sealed.subarray(MAGIC.length + IV_BYTES, sealed.length - TAG_BYTES)), decipher.final()]); }
+      decipher.setAAD(aadOf(cloudId, format)); decipher.setAuthTag(tag);
+      let opened: Buffer;
+      try { opened = Buffer.concat([decipher.update(sealed.subarray(MAGIC.length + IV_BYTES, sealed.length - TAG_BYTES)), decipher.final()]); }
       catch { throw new Error("Backup failed its integrity check."); }
+      return format === "gzip" ? gunzipSync(opened) : opened;
     },
     sha256(cloudId: string, file: string): string | null {
       const path = pathOf(cloudId, file);
@@ -235,6 +324,8 @@ export function createBackupStore(options: { dir: string; now?: () => number }) 
       try { for (let n; (n = readSync(fd, chunk, 0, chunk.length, null)) > 0;) hash.update(chunk.subarray(0, n)); } finally { closeSync(fd); }
       return hash.digest("hex");
     },
+    /** bytes free to an unprivileged writer on the disk this store is on */
+    freeBytes(): number { if (options.freeBytes) return options.freeBytes(); const fs = statfsSync(options.dir); return fs.bavail * fs.bsize; },
     list(cloudId: string): string[] { const dir = dirOf(cloudId); return existsSync(dir) ? readdirSync(dir).filter(f => FILE.test(f)).sort() : []; },
     clouds(): string[] { return readdirSync(options.dir).filter(name => CLOUD_ID.test(name) && statSync(join(options.dir, name)).isDirectory()); },
     /** called only by the retention reconciler after its gate */

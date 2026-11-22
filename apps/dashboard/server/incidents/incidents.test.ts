@@ -11,6 +11,7 @@ import { emailConfig } from "../email/templates.ts";
 import { CSRF_HEADER } from "../../../../shared/account-api.ts";
 import { fingerprint, maskText, clientText, routeOf, stackFrames, topFrame } from "./fingerprint.ts";
 import { createIncidents, RULES } from "./index.ts";
+import { incidentEmail } from "./email.ts";
 import { memoryIncidentStore, recordUpdate } from "./store.ts";
 import { tapConsole } from "./process.ts";
 import { ERRORS_PER_HOUR, MAX_ERROR_BYTES } from "./routes.ts";
@@ -70,6 +71,16 @@ describe("incident store", () => {
 });
 
 describe("alert throttling", () => {
+  it("mails markup from a reported page as text, never as html", () => {
+    const at = Date.parse("2026-11-16T12:00:00Z");
+    const incident = { id: "a".repeat(20), env: "production", source: "admin", name: "<img src=x onerror=alert(1)>", message: "<script>alert(document.cookie)</script>",
+      route: "/admin/<b>", status: null, stack: ["at <script>x</script> (a.js)"], version: null, os: null, path: "/admin/\"><script>y</script>", requestId: null,
+      count: 1, firstSeen: at, lastSeen: at, notifiedAt: null, mutedUntil: null };
+    const { html } = incidentEmail(emailConfig({}, { publicUrl: "https://dusk.bot" }), { kind: "new", env: "production", incidents: [incident], panelUrl: "https://dusk.bot/admin/health" });
+    expect(html).not.toMatch(/<script|<img src=x|<b>/i);
+    expect(html).toContain("&lt;script&gt;alert(document.cookie)&lt;/script&gt;");
+  });
+
   it("mails a new problem once and never again while it is open; repeats only count", async () => {
     const { time, mailer, incidents, store } = setup();
     for (let n = 0; n < 5; n++) incidents.report({ source: "server", name: "TypeError", message: `x is undefined for siddz.dev@gmail.com`, stack: stackAt(10 + n), route: "/v1/billing/checkout", requestId: "req_1234" });

@@ -1,5 +1,6 @@
 import { COMPUTER_HELPER_APP, permissionHolder } from "../../shared/your-computer";
 import { t } from "./i18n";
+import { MAC_PERMISSIONS, type MacPermissionStatus } from "./mac-permissions";
 
 export type MacCuaPermission = "screen" | "accessibility";
 
@@ -30,4 +31,12 @@ export function macCuaPermissionMessage(permissions: MacCuaPermission[], reason?
   return t("computer.mac.permission.requiredOne", {
     permission: permissions[0] === "screen" ? "Screen Recording" : "Accessibility",
   });
+}
+
+/** The one System Settings pane to open: System Settings shows a single pane, so a second one would hide the first. */
+export function macPermissionPaneToOpen(reason: unknown, status: MacPermissionStatus | null): MacCuaPermission {
+  const reported = missingMacCuaPermissions(reason);
+  const missing = MAC_PERMISSIONS.find((kind) => reported.includes(kind))
+    ?? (status?.supported ? MAC_PERMISSIONS.find((kind) => status[kind] !== "granted") : undefined);
+  return missing ?? "accessibility";
 }

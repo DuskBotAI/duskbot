@@ -138,4 +138,24 @@ describe("link previews", () => {
     expect(await previews.get(`https://x.com/duskbot/status/${id}`)).toMatchObject({ title: "dusk bot (@duskbot)", siteName: "X", video: true });
     expect(asked.some((href) => href.startsWith("https://x.com/"))).toBe(false);
   });
+
+  it("builds at most a bounded handful of previews at once", async () => {
+    const gates: Array<() => void> = [];
+    const request: PinnedRequest = async (_url) => {
+      await new Promise<void>((release) => gates.push(release));
+      return { status: 200, location: null, type: "text/html", body: fixture("article.html"), truncated: false };
+    };
+    const resolve = async (_host: string): Promise<LookupAddress[]> => [{ address: "93.184.215.14", family: 4 }];
+    const dir = mkdtempSync(join(tmpdir(), "dusk-link-preview-"));
+    dirs.push(dir);
+    const previews = createLinkPreviews({ dir, net: { resolve, request }, now: () => 1_000_000 });
+    const builds = Array.from({ length: 12 }, (_, n) => previews.get(`https://many.example/${n}`));
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(gates.length).toBe(6);
+    const releaseAll = async () => {
+      while (gates.length) { gates.shift()!(); await new Promise((resolve) => setImmediate(resolve)); }
+    };
+    await releaseAll(); await releaseAll();
+    expect((await Promise.all(builds)).filter(Boolean)).toHaveLength(12);
+  });
 });

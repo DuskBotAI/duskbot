@@ -43,7 +43,7 @@ it("traces a person's message to the Chief through the teammate it delegated to 
       title: "Launch the new pricing page by Friday", source: "owner", timed: true, running: false, errors: 0,
       bots: [{ id: chief.id, name: "Clive" }, { id: researcher.id, name: "Researcher" }],
     });
-    for (const other of list.roots.filter((one) => one.id !== root.id)) expect(other).toMatchObject({ source: "bot", tools: 0, bots: [{ id: chief.id, name: "Clive" }] });
+    for (const other of list.roots.filter((one) => one.id !== root.id)) expect(other).toMatchObject({ source: "upkeep", job: expect.any(String), tools: 0, bots: [{ id: chief.id, name: "Clive" }] });
     const sum = (key: "tools" | "steps" | "input" | "output") => list.roots.reduce((total, one) => total + one[key], 0);
     expect(list.totals).toMatchObject({ tools: sum("tools"), steps: sum("steps"), input: sum("input"), output: sum("output") });
 

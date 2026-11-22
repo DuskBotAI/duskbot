@@ -55,14 +55,23 @@ async function open(plan: boolean) {
   const context = await browser.newContext({ viewport: { width: 1100, height: 900 } });
   const page = await context.newPage();
   const errors: string[] = [];
-  page.on("pageerror", (error: Error) => errors.push(error.message));
+  // The preview's Vite client throws when its hot-reload socket drops across a page reload.
+  page.on("pageerror", (error: Error) => { if (!error.stack?.includes("/@vite/client")) errors.push(error.message); });
   await page.goto(ui.previewUrl);
   assert.equal(await page.evaluate(async (code: string) => (await fetch("/api/auth/pair", { method: "POST", headers: { "content-type": "application/json" },
     body: JSON.stringify({ code, cookie: true, label: "X card fixture" }) })).status, pairing.code), 200);
   await page.reload();
   const card = page.locator('[data-app-tile="x"]');
-  await card.waitFor();
+  await showX(page, card);
   return { page, card, errors };
+}
+
+async function showX(page: any, card: any) {
+  await page.getByRole("combobox", { name: "Search across apps and skills", exact: true }).fill("twitter");
+  await page.getByRole("option", { name: "X (Twitter)", exact: true }).waitFor();
+  assert.equal(await page.getByRole("option", { name: "Twitter", exact: true }).count(), 0, "the managed install's dead Twitter app is gone");
+  await page.getByRole("option", { name: "X (Twitter)", exact: true }).click();
+  await card.waitFor();
 }
 
 const shot = async (page: any, card: any, name: string) => {
@@ -76,13 +85,12 @@ try {
   // Neither a key nor a plan: add a treg key.
   const own = await open(false);
   await state(own.card, "none");
-  assert.equal(await own.page.locator('[data-app-tile="twitter"]').count(), 0, "the managed install's dead Twitter tile is gone");
   await own.card.getByText("Add your treg key", { exact: true }).waitFor();
   assert.equal(await own.card.locator('a[href="https://treg.to"]').count(), 1);
   await shot(own.page, own.card, "1-no-key");
   await own.card.getByRole("textbox", { name: "treg key" }).fill(OWN_KEY);
   await own.card.getByRole("button", { name: "Save", exact: true }).click();
-  await own.card.getByText("treg is working ✓ Balance: $4.25.", { exact: true }).waitFor();
+  await own.card.getByText("Treg is working ✓ Balance: $4.25.", { exact: true }).waitFor();
   await state(own.card, "own");
   await own.card.getByText("Using your treg key", { exact: true }).waitFor();
   await shot(own.page, own.card, "2-own-key");
@@ -105,7 +113,10 @@ try {
   await plan.card.getByRole("button", { name: "Remove key", exact: true }).click();
   await state(plan.card, "included");
   usedUp = true;
-  await plan.page.getByRole("button", { name: "Refresh connection status", exact: true }).click();
+  // A later visit: the server keeps the relay's usage for 30 s and the window has no refresh of its own.
+  await plan.page.waitForTimeout(31_000);
+  await plan.page.reload();
+  await showX(plan.page, plan.card);
   await plan.card.getByText(/This month's included X calls are used up/).waitFor();
   assert.equal(await plan.card.getByRole("textbox", { name: "treg key" }).count(), 1);
   await shot(plan.page, plan.card, "5-used-up");

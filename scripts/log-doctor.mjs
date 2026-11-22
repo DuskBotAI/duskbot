@@ -154,7 +154,7 @@ export function trailLine(event) {
   if (Number(event.status) >= 400) return { text: `trail ${event.ev}: ${what} answered ${event.status}`, hint: Number(event.status) >= 500 ? "error" : null };
   const streaming = /stream|events|wait|websockify/.test(String(event.kind ?? "")) || /\/events\b|\/wait\b|websockify/.test(where) || /stream\.(?:end|close)$/.test(event.ev);
   if (Number(event.ms) > SLOW_MS && !streaming) return { text: `trail ${event.ev}: slow ${what} (over ${SLOW_MS / 1000} s, via ${event.via ?? "?"})`, hint: null, warn: true };
-  if (/\.(?:retry|lost|fail|failed|error|drop)$/.test(event.ev) || event.ok === false) return { text: `trail ${event.ev}: ${event.reason ?? event.msg ?? event.error ?? what}`, hint: "error" };
+  if (/\.(?:retry|lost|fail|failed|error|drop)$/.test(event.ev) || event.ok === false) return { text: `trail ${event.ev}: ${event.reason ?? event.msg ?? event.error ?? event.stop ?? what}`, hint: "error" };
   return null;
 }
 

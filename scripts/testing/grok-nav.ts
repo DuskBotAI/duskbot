@@ -142,7 +142,7 @@ export async function closeBotPanel(ui: Ui): Promise<void> {
     await expect.poll(async () => (await ui("eval", "--js", "Boolean(document.querySelector('[data-settings-sheet]'))")).result).toBe(false);
   }
   if ((await ui("eval", "--js", "Boolean(document.getElementById('bot-panel'))")).result === true) {
-    await ui("eval", "--js", "document.querySelector('#bot-panel button[aria-label=\"Close\"]').click(); true");
+    await ui("eval", "--js", "document.querySelector('#bot-panel button[aria-label=\"Close panel\"]').click(); true");
     await expect.poll(async () => (await ui("eval", "--js", "Boolean(document.getElementById('bot-panel'))")).result, { timeout: 10_000 }).toBe(false);
   }
 }

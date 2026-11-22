@@ -42,6 +42,8 @@ const PURCHASE = {
   items: [{ name: "Breville Crystal Clear Kettle 1.7L", quantity: 1, price: "$49.95" }, { name: "Descaling tablets, 12 pack", quantity: 2, price: "$7.50" }],
 };
 const EMAIL = { app: "Gmail", to: ["sam@example.com"], subject: "Friday works", body: "Hi Sam,\n\nFriday works for the kettle delivery. Anytime after 2pm is fine; just ring the bell.\n\nThanks,\nAlex" };
+const SLACK_MESSAGE = { app: "Slack", to: "#launch", text: "Heads up: the kettle shipment lands Friday after 2pm. I'll post the tracking link here once it ships.", reply: true as const };
+const X_POST = { app: "X", to: "", text: "Our new kettle line is live today. Clear water window, 1.7L, boils in under 4 minutes.", post: true as const, attachments: 2 };
 const EMAIL_ARGS = { user_id: "me", recipient_email: "sam@example.com", subject: EMAIL.subject, body: EMAIL.body };
 
 function widget(name: string, settled?: WidgetPayload["settled"]): Message {
@@ -167,6 +169,34 @@ const RAW_SCENARIOS: GalleryScenario[] = [
       user("Email Sam that Friday works for the kettle delivery."),
       bot("Here is the email. Send it as it is, or edit it first."),
       row("options", { card: { title: "Send this email?", subtitle: "", options: ["Send email", "Don't send"], requestId: "gallery-email", tool: "GMAIL_SEND_EMAIL", email: EMAIL, outboundRequest: { tool: "GMAIL_SEND_EMAIL", app: "Gmail" } } }),
+    ],
+  },
+  {
+    id: "message-review",
+    title: "A Slack message waiting on Send, with Edit",
+    messages: () => [
+      user("Tell the launch channel the kettles land Friday."),
+      bot("Here is the message. Send it as it is, or edit it first."),
+      row("options", { card: { title: "Send this message?", subtitle: "", options: ["Send", "Don't send"], requestId: "gallery-message", tool: "SLACK_SEND_MESSAGE", messageReview: SLACK_MESSAGE, outboundRequest: { tool: "SLACK_SEND_MESSAGE", app: "Slack" } } }),
+    ],
+  },
+  {
+    id: "post-review",
+    title: "A public X post waiting on Post",
+    messages: () => [
+      user("Post about the kettle launch on X with the two photos."),
+      bot("Here is the post."),
+      row("options", { card: { title: "Post this?", subtitle: "", options: ["Post", "Don't send"], requestId: "gallery-post", tool: "TWITTER_CREATION_OF_A_POST", messageReview: X_POST, outboundRequest: { tool: "TWITTER_CREATION_OF_A_POST", app: "X" } } }),
+    ],
+  },
+  {
+    id: "message-records",
+    title: "A sent Slack message and a post the person said no to, kept as records",
+    messages: () => [
+      row("options", { card: { title: "Send this message?", subtitle: "", options: [], requestId: "gallery-m1", tool: "SLACK_SEND_MESSAGE", messageReview: SLACK_MESSAGE, answered: "allow" } }),
+      bot("Posted in #launch."),
+      row("options", { card: { title: "Post this?", subtitle: "", options: [], requestId: "gallery-m2", tool: "TWITTER_CREATION_OF_A_POST", messageReview: X_POST, answered: "deny" } }),
+      bot("Okay, I didn't post it."),
     ],
   },
   {

@@ -53,7 +53,7 @@ const pageOrigin = `http://127.0.0.1:${(pageServer.address() as AddressInfo).por
 const OWNER = { fromId: 501, from: "Maya" };
 // a person's form or store reaches the bot from the internet, as on dusk cloud or a desktop with Remote access on: the
 // server advertises this public origin, and the eval's own posts to it go to the server's local receiver
-const PUBLIC_HOOKS = "https://hooks.dusk-eval.example";
+const PUBLIC_HOOKS = "https://hooks.dusk.bot";
 const localHook = (url: string, srv: StressServer) => url.replace(PUBLIC_HOOKS, `http://127.0.0.1:${Number(new URL(srv.url).port) + 1}`);
 const pairCodes = (said: string) => [...said.matchAll(/start=([\w-]{4,64})/g), ...said.matchAll(/\/start\s+([\w-]{4,64})/g)].map((m) => m[1]!);
 

@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { DECLINED_BEFORE, declinedBefore, sendKey } from "../shared/declined-sends.ts";
 
 import { draftSent, editedEmailArguments, editedEmailReview, emailReviewOf, type EmailEdits, type EmailReview } from "../shared/email-review.ts";
+import { editedMessageArguments, editedMessageReview, messageReviewOf, type MessageEdits, type MessageReview } from "../shared/message-review.ts";
 import type { ConnectorCall, OutboundPolicy } from "../shared/outbound.ts";
 import { DEFAULT_OUTBOUND_POLICY, OUTBOUND_DEFAULT_CAP } from "../shared/outbound.ts";
 import type { Notification } from "../shared/notification.ts";
@@ -13,7 +14,7 @@ import { appendDecision } from "./decision-log.ts";
 import { buildNotification } from "./notify.ts";
 import { serverLine } from "./server-lines.ts";
 import type { OutboundCounts } from "./outbound-counts.ts";
-import type { OutboundRequestService } from "./outbound-requests.ts";
+import type { CardEdits, OutboundRequestService } from "./outbound-requests.ts";
 import { outboundCard } from "./outbound-requests.ts";
 import type { BotRecord, GroupRecord, Store } from "./store.ts";
 import { turnWaitedOnPerson } from "./waiting-on-person.ts";
@@ -43,17 +44,23 @@ const PURCHASE_TITLE = serverLine(undefined, "server.purchase.title");
 const PURCHASE_OPTIONS = ["Confirm purchase", "Cancel"];
 const EMAIL_TITLE = serverLine(undefined, "server.emailReview.title");
 const EMAIL_OPTIONS = ["Send email", "Don't send"];
+const MESSAGE_TITLE = serverLine(undefined, "server.messageReview.title");
+const POST_TITLE = serverLine(undefined, "server.messageReview.postTitle");
+const MESSAGE_OPTIONS = ["Send", "Don't send"];
+const POST_OPTIONS = ["Post", "Don't send"];
 const SEND_TITLE = "Send on your behalf?";
 
-/** What the card asks: a purchase to confirm, an email to review, or any other send. */
-type CardAsk = { kind: "purchase" } | { kind: "email"; email: EmailReview } | { kind: "draft"; draftId: string } | { kind: "send" };
+/** What the card asks: a purchase to confirm, an email or a message to review, or any other send. */
+type CardAsk = { kind: "purchase" } | { kind: "email"; email: EmailReview } | { kind: "draft"; draftId: string } | { kind: "message"; message: MessageReview } | { kind: "send" };
 
 function cardAsk(calls: ConnectorCall[]): CardAsk {
   if (calls.some((call) => isPurchaseTool(call.slug))) return { kind: "purchase" };
   const email = emailReviewOf(calls);
   if (email) return { kind: "email", email };
   const draftId = draftSent(calls);
-  return draftId ? { kind: "draft", draftId } : { kind: "send" };
+  if (draftId) return { kind: "draft", draftId };
+  const message = messageReviewOf(calls);
+  return message ? { kind: "message", message } : { kind: "send" };
 }
 
 /** How many sends a day go out on their own, or null when each waits on the card. At Full access a bot with no sending
@@ -78,8 +85,12 @@ function emailText(email: EmailReview): string {
   return `${head.filter(Boolean).join("\n")}\n\n${email.body}`;
 }
 
-type CardInput = Pick<OptionCardData, "title" | "subtitle" | "options" | "email" | "purchase" | "send"> & { outboundRequest: NonNullable<OptionCardData["outboundRequest"]> };
-type Asked = { ok: true; messageId: string; edits: EmailEdits | null } | { ok: false; text: string };
+function messageText(message: MessageReview): string {
+  return `${message.to ? `To ${message.to}\n\n` : ""}${message.text}`;
+}
+
+type CardInput = Pick<OptionCardData, "title" | "subtitle" | "options" | "email" | "messageReview" | "purchase" | "send"> & { outboundRequest: NonNullable<OptionCardData["outboundRequest"]> };
+type Asked = { ok: true; messageId: string; edits: CardEdits | null } | { ok: false; text: string };
 
 export interface OutboundHold {
   /** A send spends the day's allowance (Full access with no rule of its own, or "allow") or waits on the "Send on your behalf?" card. `fullAccess`: the turn runs at Full access.
@@ -103,7 +114,7 @@ export function createOutboundHold(deps: OutboundHoldDeps): OutboundHold {
 
   async function askOnCard(bot: OutboundHoldBot, threadId: string, tool: string, summary: string, active: () => boolean, input: CardInput): Promise<Asked> {
     const owner = connectorThread(bot.id, threadId);
-    const held = outboundRequests.open({ botId: bot.id, threadId, tool, timeoutMs: holdMs });
+    const held = outboundRequests.open({ botId: bot.id, threadId, tool, timeoutMs: holdMs, reviews: input.messageReview ? "message" : "email" });
     const card = store.appendMessage(threadId, {
       role: "bot",
       kind: "options",
@@ -154,15 +165,13 @@ export function createOutboundHold(deps: OutboundHoldDeps): OutboundHold {
   }
 
   /** The person's edits, written into the call that goes out and onto the card that stays in the chat. */
-  function applyEdits(threadId: string, messageId: string, call: ConnectorCall, email: EmailReview, edits: EmailEdits): void {
-    const edited = editedEmailArguments(call, edits);
+  function applyEdits(threadId: string, messageId: string, call: ConnectorCall, edited: Record<string, unknown> | null, shown: Pick<OptionCardData, "email" | "messageReview" | "subtitle">): void {
     if (!edited) return;
     const args = call.arguments as Record<string, unknown>;
     for (const key of Object.keys(args)) if (!(key in edited)) delete args[key];
     Object.assign(args, edited);
-    const shown = editedEmailReview(email, edits);
     const card = store.messagesFor(threadId).find((message) => message.id === messageId)?.card;
-    if (card) store.patchMessage(threadId, messageId, { card: { ...card, email: shown, subtitle: emailText(shown) } });
+    if (card) store.patchMessage(threadId, messageId, { card: { ...card, ...shown } });
   }
 
   return {
@@ -198,11 +207,21 @@ export function createOutboundHold(deps: OutboundHoldDeps): OutboundHold {
         ? { title: PURCHASE_TITLE, subtitle: summary, options: PURCHASE_OPTIONS, outboundRequest }
         : email
           ? { title: EMAIL_TITLE, subtitle: emailText(email), options: EMAIL_OPTIONS, email, outboundRequest }
+          : ask.kind === "message"
+            ? { title: ask.message.post ? POST_TITLE : MESSAGE_TITLE, subtitle: messageText(ask.message), options: ask.message.post ? POST_OPTIONS : MESSAGE_OPTIONS, messageReview: ask.message, outboundRequest }
           : { title: SEND_TITLE, subtitle: summary, options: ["Allow", "Deny"], outboundRequest };
       const asked = await askOnCard(currentSender, threadId, outboundTool, summary, active, { ...card, send: { key: sent } });
       if (!asked.ok) return refuseOutbound(asked.text);
       if (ask.kind === "draft" && asked.edits) return refuseOutbound("dusk bot did not send this: a saved draft goes out as saved, and the person changed it on the card. Update the draft with their changes first, then send it again.");
-      if (ask.kind === "email" && asked.edits) applyEdits(threadId, asked.messageId, outboundCalls[0]!, ask.email, asked.edits);
+      if (ask.kind === "message" && asked.edits && ask.message.fixed) return refuseOutbound("dusk bot did not send this: its text is formatted for the app, and the person changed it on the card. Write it again with their changes, then send it.");
+      if (ask.kind === "email" && asked.edits) {
+        const shown = editedEmailReview(ask.email, asked.edits as EmailEdits);
+        applyEdits(threadId, asked.messageId, outboundCalls[0]!, editedEmailArguments(outboundCalls[0]!, asked.edits as EmailEdits), { email: shown, subtitle: emailText(shown) });
+      }
+      if (ask.kind === "message" && asked.edits) {
+        const shown = editedMessageReview(ask.message, asked.edits as MessageEdits);
+        applyEdits(threadId, asked.messageId, outboundCalls[0]!, editedMessageArguments(outboundCalls[0]!, asked.edits as MessageEdits), { messageReview: shown, subtitle: messageText(shown) });
+      }
       return { ok: true, approved: true };
     },
     reserve({ bot: fresh, threadId, tool: outboundTool, calls: outboundCalls, opaque, fullAccess, approved: outboundApproved }) {

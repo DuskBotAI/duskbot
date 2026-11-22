@@ -22,6 +22,7 @@ const fixture = vi.hoisted(() => ({
     ],
   },
   actions: { attio: { actions: ["Create record", "Find person"] } } as Record<string, { actions: string[]; triggers?: string[] }>,
+  mcpServers: [] as Array<{ name: string; enabled: boolean }> | null,
 }));
 
 vi.mock("@/state/store", async (original) => {
@@ -48,7 +49,7 @@ vi.mock("@/lib/connector-poll", () => ({ pollConnector: (_before: unknown, _read
 // sealing has its own tests (src/lib/sealed-send.test.ts): here the patch the key step asked to save is what the server gets
 vi.mock("@/lib/sealed-send", () => ({ putConfig: (patch: unknown) => fixture.api("/api/config", { method: "PUT", body: JSON.stringify(patch) }) }));
 vi.mock("@/lib/logins", () => ({ listLogins: async () => ({ logins: [], onePassword: { connected: false } }) }));
-vi.mock("@/lib/mcp-servers", () => ({ useMcpServers: () => ({ servers: [], error: false, refresh: async () => [] }) }));
+vi.mock("@/lib/mcp-servers", () => ({ useMcpServers: () => ({ servers: fixture.mcpServers, error: false, refresh: async () => fixture.mcpServers ?? [] }) }));
 vi.mock("../McpServersPanel", () => ({ McpServersPanel: () => null }));
 vi.mock("../XCard", () => ({ XCard: () => null }));
 vi.mock("../EmailCard", () => ({ EmailCard: () => null }));
@@ -95,6 +96,7 @@ beforeEach(async () => {
 });
 
 afterEach(() => {
+  fixture.mcpServers = [];
   fixture.memory = null;
   fixture.inventory = null;
   act(() => root.unmount());
@@ -851,10 +853,40 @@ describe("the Connect Apps window", () => {
     expect(dialog().querySelector('[data-app-row="asana"]')?.textContent, "the badge updates in place").toContain("Connected");
   });
 
+  it("waits for the MCP server list before it draws home, so connected servers lead from the first frame", async () => {
+    act(() => root.unmount());
+    fixture.mcpServers = null;
+    fixture.memory = { services: {}, authoritative: true };
+    fixture.inventory = Promise.resolve({ services: {}, authoritative: true });
+    const props = { page: { kind: "home" } as const, nonce: 8, onClose, onTemplates: vi.fn() };
+    const render = () => root.render(createElement(ConnectAppsWindow, props));
+    root = createRoot(document.body.appendChild(document.createElement("div")));
+    await act(async () => { render(); });
+    await flush();
+    fixture.mcpServers = [{ name: "notes", enabled: true }];
+    await act(async () => { render(); });
+    await flush();
+    expect(titles()[0]).toBe("Connected");
+    expect(dialog().querySelector("#ca-section-connected")?.closest("section")?.querySelector('[data-app-row="mcp:notes"]')).not.toBeNull();
+  });
+
   it("adds any MCP server from the Custom MCP row", async () => {
     const custom = dialog().querySelector('[data-app-row="custom-mcp"]')!;
     expect(custom.textContent).toContain("Custom MCP");
     await act(async () => { custom.querySelector<HTMLButtonElement>(".ca-pill")!.click(); });
+    expect(dialog().querySelector("[data-detail-hero-title]")?.textContent).toBe("Custom MCP");
+  });
+
+  it.each(["notes", "broken"])("lists every custom MCP server on Your plugins, the ones that are off too, and opens Custom MCP from %s", async (opened) => {
+    act(() => root.unmount());
+    fixture.mcpServers = [{ name: "notes", enabled: true }, { name: "broken", enabled: false }];
+    root = createRoot(document.body.appendChild(document.createElement("div")));
+    await act(async () => { root.render(createElement(ConnectAppsWindow, { page: { kind: "yours" }, nonce: 7, onClose, onTemplates: vi.fn() })); });
+    await flush();
+    expect(dialog().querySelector('[data-app-row="mcp:notes"]')?.textContent).toContain("Connected");
+    const off = dialog().querySelector('[data-app-row="mcp:broken"]');
+    expect(off?.textContent, "a server that failed its test is still listed, as off").toContain("Off");
+    await act(async () => { dialog().querySelector<HTMLElement>(`[data-app-row="mcp:${opened}"] :is(button, [role=button])`)!.click(); });
     expect(dialog().querySelector("[data-detail-hero-title]")?.textContent).toBe("Custom MCP");
   });
 
@@ -883,5 +915,26 @@ describe("the Connect Apps window", () => {
     expect(document.activeElement).toBe(document.body);
     await act(async () => { document.body.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true })); });
     expect(onClose).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("connected apps that could not be read", () => {
+  const reopen = async () => {
+    act(() => root.unmount());
+    root = createRoot(document.body.appendChild(document.createElement("div")));
+    await act(async () => { root.render(createElement(ConnectAppsWindow, { page: { kind: "home" }, nonce: 2, onClose, onTemplates: vi.fn() })); });
+    await flush();
+  };
+
+  it("says it could not check, never 0 connected, and Try again reads them again", async () => {
+    fixture.inventory = Promise.resolve({ services: {}, authoritative: false });
+    await reopen();
+    expect(dialog().querySelector(".ca-head")?.textContent).toContain("Couldn't check your apps");
+    expect(dialog().querySelector(".ca-head")?.textContent).not.toContain("0 connected");
+    fixture.inventory = Promise.resolve({ services: fixture.connected, authoritative: true });
+    await act(async () => { button("Try again")!.click(); });
+    await flush();
+    expect(button("Your plugins")?.textContent).toContain("1 connected");
+    expect(dialog().querySelector(".ca-head")?.textContent).not.toContain("Couldn't check");
   });
 });

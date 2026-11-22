@@ -45,6 +45,7 @@ import { BotLimitPopup } from "@/components/BotLimitPopup";
 import { CloudAsleepStrip } from "@/components/CloudAsleepStrip";
 import { useCloudLastSeen, useHeldSend } from "@/lib/cloud-last-seen";
 import { LiveConnectionStrip } from "@/components/LiveConnectionStrip";
+import { ConfigFileStrip } from "@/components/ConfigFileStrip";
 import { CloudSendStrip } from "@/components/CloudSendStrip";
 import { CloudMoveOffer } from "@/components/CloudMoveOffer";
 import { HomeLine } from "@/components/HomeLine";
@@ -87,7 +88,7 @@ import { useBrowserPanelReveal } from "@/hooks/use-browser-panel-reveal";
 import { AppEmptyMain } from "@/components/AppEmptyMain";
 import { BootCover } from "@/components/BootCover";
 import { t } from "@/lib/i18n";
-import { loadingLine } from "@/lib/app-loading";
+import { loadingLine, useLoadGaveUp } from "@/lib/app-loading";
 import { useAiSwitchKeeper } from "@/lib/ai-switch";
 import { SESSION_ENDED_REASON, useSessionEnded } from "@/lib/session-ended";
 import { PairPage } from "./pair/PairPage";
@@ -166,7 +167,8 @@ function Shell({ viewer }: { viewer: WelcomeViewer | null }) {
   const cloudAddOpened = useRef(false);
   cloudAddOpened.current ||= Boolean(state.cloudAdd);
   const menuButtonRef = useRef<HTMLButtonElement>(null);
-  const loading = loadingLine({ connected: state.connected, hydrated: state.hydrated === true, developer: import.meta.env.DEV });
+  const unreachable = useLoadGaveUp(state.loadFailed === true);
+  const loading = loadingLine({ connected: state.connected, hydrated: state.hydrated === true, developer: import.meta.env.DEV, unreachable });
   const group = state.groups.find((g) => g.id === state.selectedId);
   const bot = group ? undefined : (state.bots.find((b) => b.id === state.selectedId) ?? state.bots[0]);
   const macFrom = useMacEmpty();
@@ -310,6 +312,7 @@ function Shell({ viewer }: { viewer: WelcomeViewer | null }) {
   const strips = <>
     <CloudAsleepStrip />
     <LiveConnectionStrip connected={state.connected} hydrated={state.hydrated === true} />
+    <ConfigFileStrip />
     <CloudSendStrip cloudHome={state.config?.cloudHome === true} />
     <HomeLine />
     <AppNotices quiet={paletteOpen || drawerOpen} viewer={viewer} />
@@ -325,7 +328,7 @@ function Shell({ viewer }: { viewer: WelcomeViewer | null }) {
       <button
         type="button"
         ref={menuButtonRef}
-        aria-label="Open bot list"
+        aria-label={t("app.openBotList")}
         aria-expanded={drawerOpen}
         onClick={() => setDrawerOpen(true)}
         className="absolute left-3 top-3 z-30 rounded-md p-1.5 text-ink-secondary hover:bg-raised hover:text-ink max-md:top-2.5 max-md:flex max-md:size-10 max-md:items-center max-md:justify-center max-md:rounded-full max-md:border max-md:border-transparent max-md:bg-card max-md:p-0 max-md:text-ink md:hidden"

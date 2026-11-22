@@ -258,6 +258,8 @@ const ld = (data) => `<script type="application/ld+json">${JSON.stringify(data).
 
 // page: its name (home, download, docs ...); at: its address on the site; section: the nav item it sits under;
 // kind: extra classes on <main>; scripts, styles: more files after the shared ones; jsonld: structured data for search engines
+// email_off: cloudflare's scrape shield email obfuscation leaves addresses between these comments as written, so crawlers
+// and pages without js see hello@dusk.bot instead of [email protected]
 export function layout({ title, description, body, page, at, section = page, og = section, ogImage: ogFile, ogType = 'website', ogAlt, kind = '', scripts = [], styles = [], jsonld = [], noindex = false }) {
   const home = page === 'home';
   const card = ogFile ? { wide: ogFile, alt: ogAlt } : ogCard(og);
@@ -299,6 +301,7 @@ export function layout({ title, description, body, page, at, section = page, og 
 ${css.map((file) => `<link rel="stylesheet" href="${stamped(file)}">`).join('\n')}${jsonld.map((data) => `\n${ld(data)}`).join('')}
 </head>
 <body${home ? ' class="is-home"' : ''}>
+<!--email_off-->
 <a class="skip" href="#main">skip to the page</a>
 <header class="bar">${brand}<nav aria-label="main">${links(NAV)}<a class="cta" href="${APP_URL}/">sign in</a></nav><details class="menu"><summary><span class="vh">menu</span><span class="burger" aria-hidden="true"><i></i><i></i><i></i></span></summary><nav aria-label="every page">${links(MENU)}<a class="cta" href="${APP_URL}/">sign in</a></nav></details></header>
 <main id="main" class="${home ? 'home' : `inner${kind ? ' ' + kind : ''}`}">
@@ -312,6 +315,7 @@ ${FOOT.map(foot).join('\n')}
 <p class="foot-fine"><span data-dusk>made at dusk. the bots did most of it.</span>${home ? ' the bots, chats and numbers shown on this page are samples.' : ''}</p>
 </footer>
 ${trackerTag()}${tail}
+<!--/email_off-->
 </body>
 </html>
 `;

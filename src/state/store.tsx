@@ -21,12 +21,12 @@ import { isNotificationFeedAction, reduceNotificationFeed, type NotificationFeed
 import { bumpThreadUpdatedAt, mergeTaskStamps, rewindThreadUpdatedAt } from "./thread-stamps";
 import { botOpensTo, openBot, openThread, visibleNotificationThread } from "./thread-navigation";
 import { patchGroupTask } from "./thread-edits";
-import { optimisticMessageId, optimisticUserMessage, sendAnswerLost, sendArrived, sendReconciled } from "./optimistic-send";
+import { optimisticMessageId, optimisticUserMessage, sendAnswerLost, sendArrived, sendNotDelivered, sendReconciled } from "./optimistic-send";
 import { dropSentTurn, followSendReceipt, noteSentTurn } from "./sent-turn";
 import { applySendReceipt } from "./send-receipt";
 import { foldSnapshotOntoStreamed, patchedGroups, roomAnswers, snapshotPatch } from "./room-frames";
 import { savedStateAction, type SavedOwner, type SavedSnapshot } from "./saved-state";
-import { heldTranscript, keepBotNavigation, keepGroupNavigation, navigatedSince, openElsewhere, visibleMessages } from "./snapshot-navigation";
+import { firstLivePage, heldTranscript, keepBotNavigation, keepGroupNavigation, navigatedSince, openElsewhere, visibleMessages } from "./snapshot-navigation";
 import { createTranscriptCache, indexedDbShelf, reconcileTranscript, type CachedTranscript } from "./transcript-cache";
 import { TranscriptShelfScope } from "./transcript-scope";
 export { shownTranscript, visibleMessages } from "./snapshot-navigation";
@@ -66,7 +66,7 @@ import { parseComputerHelp } from "@/lib/computer-control";
 import { answerResponse, dismissResponse } from "@/lib/card-answer";
 import { forgetLiveTurns, forgetStopPress, noteRuntimeTurn, sendStop } from "@/lib/stop-turn"; import { forgetTurnStatuses } from "@/state/turn-status"; import { forgetLiveReplies } from "@/state/live-reply";
 import { readLastConversation, rememberConversation } from "@/lib/last-conversation";
-import { readLastBotSection, rememberBotSection } from "@/lib/last-bot-section";
+import { readBotPanelOpen, readLastBotSection, rememberBotPanelOpen, rememberBotSection } from "@/lib/last-bot-section";
 import { readOnArrival, showNotification } from "@/lib/notify";
 import { randomUuid } from "@/lib/random-uuid";
 import { callReplyEvent, callReplyOwner, callReplyStream, speechOwner, spokenReplyStream } from "@/lib/spoken-reply-stream";
@@ -84,7 +84,7 @@ import { useTranscriptCache } from "./use-transcript-cache";
 export type { MausColor } from "@/lib/mascot";
 export type { RoutineRunCardData } from "../../shared/routine-run";
 
-export interface OptionCardData extends Pick<WireOptionCard, "fixedOptions" | "webhookRequest" | "appTriggerRequest" | "yourComputer" | "waitRequest" | "stopped" | "accessRequest" | "mcpRequest" | "appAction" | "email" | "purchase" | "allowTask"> {
+export interface OptionCardData extends Pick<WireOptionCard, "fixedOptions" | "webhookRequest" | "appTriggerRequest" | "yourComputer" | "waitRequest" | "stopped" | "accessRequest" | "mcpRequest" | "appAction" | "email" | "messageReview" | "purchase" | "allowTask"> {
   title: string;
   subtitle: string;
   options: string[];
@@ -430,7 +430,7 @@ export type { BrowserEngineSummary, BrowserProfile, ConfigStatus, ManagedPolicyS
 // A section left out here is wiped from state.config whenever a config frame lands.
 export type ConfigStatusFrame = Pick<
   ConfigStatus,
-  "xai" | "mistral" | "cerebras" | "groq" | "greenference" | "meta" | "deepseek" | "xResearch" | "treg" | "anthropic" | "openai" | "openrouter" | "openaiCompat" | "composio" | "box" | "vps" | "rooms" | "mcp" | "threads" | "automaticRecovery" | "cacheKeepWarm" | "localVm" | "opencodeGo" | "tts" | "decider" | "helpers" | "imageGen" | "live" | "savedKeys" | "profile" | "language" | "talkingStyle" | "computerName" | "newBots" | "features" | "onboarding" | "browserEngine" | "browserProfiles" | "managedPolicy" | "cloudHome" | "team" | "workspaceBanner"
+  "configFile" | "xai" | "mistral" | "cerebras" | "groq" | "greenference" | "meta" | "deepseek" | "xResearch" | "treg" | "anthropic" | "openai" | "openrouter" | "openaiCompat" | "composio" | "box" | "vps" | "rooms" | "mcp" | "threads" | "automaticRecovery" | "cacheKeepWarm" | "localVm" | "opencodeGo" | "tts" | "decider" | "helpers" | "imageGen" | "live" | "savedKeys" | "profile" | "language" | "talkingStyle" | "computerName" | "newBots" | "features" | "onboarding" | "browserEngine" | "browserProfiles" | "managedPolicy" | "cloudHome" | "team" | "workspaceBanner"
 >;
 
 export function configStatusFromFrame(frame: ConfigStatusFrame): ConfigStatus {
@@ -466,7 +466,7 @@ export function configStatusFromFrame(frame: ConfigStatusFrame): ConfigStatus {
     browserEngine: frame.browserEngine,
     browserProfiles: frame.browserProfiles,
     managedPolicy: frame.managedPolicy,
-    ...(frame.cloudHome ? { cloudHome: true } : {}), ...(frame.team ? { team: frame.team } : {}), ...(frame.workspaceBanner ? { workspaceBanner: frame.workspaceBanner } : {}),
+    ...(frame.configFile ? { configFile: frame.configFile } : {}), ...(frame.cloudHome ? { cloudHome: true } : {}), ...(frame.team ? { team: frame.team } : {}), ...(frame.workspaceBanner ? { workspaceBanner: frame.workspaceBanner } : {}),
   };
 }
 
@@ -716,7 +716,7 @@ export type Action =
       reviewedSha256?: string;
       alwaysAllow?: { botId: string; key: string };
       always?: boolean;
-      rememberCommand?: boolean; edits?: import("../../shared/email-review").EmailEdits;
+      rememberCommand?: boolean; edits?: import("../../shared/email-review").EmailEdits | import("../../shared/message-review").MessageEdits;
       onError?: (message: string) => void;
     }
   | { type: "newTask"; botId: string; projectId?: string; cwd?: string; onCreated?: () => void; onError?: (message: string) => void }
@@ -1225,7 +1225,7 @@ export function reducer(state: AppState, action: Action): AppState {
         // Old approvals must never be sent to the replacement thread while its transcript loads.
         messages: switchedThread ? [] : b.messages,
         hasMore: switchedThread ? undefined : b.hasMore,
-        transcriptStale: switchedThread ? undefined : b.transcriptStale,
+        transcriptStale: switchedThread ? undefined : b.transcriptStale, ...(switchedThread ? {} : firstLivePage(before, action.bot)),
       }));
       return reconcileModelVariantSessions(patched);
     }
@@ -2071,14 +2071,9 @@ export const StoreContext = createContext<{
   refreshModels: (instanceId: string) => Promise<void>;
 } | null>(null);
 
-/** Grok Bot keeps its info pane open across reloads (`sand.infoPane.open`): only the person closes it. */
-export const BOT_PANEL_OPEN_KEY = "duskbot.botPanelOpen.v1";
-
 function restoreBotSettingsSection(state: AppState): AppState {
   const section = readLastBotSection();
-  let panelOpen = false;
-  try { panelOpen = globalThis.localStorage?.getItem(BOT_PANEL_OPEN_KEY) === "1"; } catch {}
-  const restored = panelOpen ? { ...state, settingsOpen: true } : state;
+  const restored = readBotPanelOpen() ? { ...state, settingsOpen: true } : state;
   return section ? { ...restored, botSettingsSection: section, botSettingsSectionStored: true } : restored;
 }
 
@@ -2142,7 +2137,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     };
   }, []);
   useEffect(() => {
-    try { globalThis.localStorage?.setItem(BOT_PANEL_OPEN_KEY, state.settingsOpen ? "1" : "0"); } catch {}
+    rememberBotPanelOpen(state.settingsOpen);
   }, [state.settingsOpen]);
   useEffect(() => {
     if (state.settingsOpen && state.botSettingsExpandAccordion) rememberBotSection(state.botSettingsSection);
@@ -2496,7 +2491,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             .then(() => sendReconciled((signal) => api(`/api/bots/${action.botId}/messages`, {
                 method: "POST", signal,
                 body: JSON.stringify({ text: action.text, replyToId: action.replyToId, threadId, sendId, ...(action.dataContext ? { dataContext: action.dataContext } : {}), ...(action.pointed?.length ? { pointed: action.pointed } : {}), ...(action.mode === "goal" ? { mode: "goal" } : {}), ...(action.followUp ? { followUp: action.followUp } : {}), ...(action.mentions?.length ? { mentions: action.mentions } : {}), ...(action.voiceCall ? { voiceCall: action.voiceCall } : {}) }),
-              }), arrived, undefined, threadId ? { threadId, sendId, text: action.text, replyToId: action.replyToId, channelMode: action.mode } : undefined)))
+              }).catch((error: unknown) => { if (threadId && sendNotDelivered(error)) dropSentTurn(threadId, sendId); throw error; }), arrived, undefined, threadId ? { threadId, sendId, text: action.text, replyToId: action.replyToId, channelMode: action.mode } : undefined)))
             .then((sent) => {
               outbox?.release(sendId);
               if (threadId) followSendReceipt(sent, threadId, sendId);

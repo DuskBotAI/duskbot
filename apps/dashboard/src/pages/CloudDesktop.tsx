@@ -24,13 +24,14 @@ import { ResizeDialog } from "./resize-sheet";
 import { useNow } from "../lib/now";
 import { useAccountUsage } from "../data/usage";
 import { MoveGuide } from "./cloud-card";
+import { computerWord } from "../lib/downloads";
 
 /** no dusk cloud yet: the one pitch, then the sizes it comes in */
 function Empty() {
   const { catalog } = useCloud();
   return (
     <div className="flex flex-col gap-4">
-      <CloudPitch title="keep your bots working" body="dusk cloud keeps your bots available, even while your mac sleeps." link={{ to: "/workspaces#add", label: "use my own server instead" }} />
+      <CloudPitch title="keep your bots working" body={`dusk cloud keeps your bots available, even while your ${computerWord()} sleeps.`} link={{ to: "/workspaces#add-server", label: "use my own server instead" }} />
       <Card className="enter" style={{ ["--i" as string]: 1 }} aria-labelledby="sizes-title">
         <SectionTitle id="sizes-title" action={<Link to="/billing" className="text-link inline-flex h-8 items-center text-13">plans and billing</Link>}>plans</SectionTitle>
         {catalog ? (

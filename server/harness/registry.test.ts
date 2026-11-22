@@ -83,8 +83,17 @@ describe("ProviderRegistry", () => {
     expect(described.snapshot.state).toBe("unavailable");
     expect(described.snapshot.reason).toContain("from-the-future");
     expect(described.displayName).toBe("Tomorrow");
+    expect(described).toMatchObject({ unknownDriver: true });
     expect(described.models.options).toHaveLength(0);
     expect(registry.cliTarget("mystery")).toEqual({ driverKind: "from-the-future", cli: null });
+  });
+
+  it("names an unknown driver's engine after the built-in engine for its id, never after the driver", async () => {
+    const registry = new ProviderRegistry([makeFakeDriver({ kind: "cursorAgent" }).driver]);
+    await registry.load({ cursor: { driver: "not-a-real-driver" }, chatgpt: { driver: "not-a-real-driver" }, mine: { driver: "not-a-real-driver" } });
+
+    const names = Object.fromEntries((await registry.describe()).map((d) => [d.instanceId, d.displayName]));
+    expect(names).toEqual({ cursor: "Fake cursorAgent", chatgpt: "ChatGPT plan", mine: "mine" });
   });
 
   it("downgrades a config-decode failure to a shadow with the error as reason", async () => {
@@ -95,6 +104,7 @@ describe("ProviderRegistry", () => {
     expect(registry.get("broken")).toBeNull();
     const [described] = await registry.describe();
     expect(described.snapshot).toMatchObject({ state: "unavailable", reason: "fake: bad config" });
+    expect(described).not.toHaveProperty("unknownDriver");
   });
 
   it("downgrades a create() rejection to a shadow without touching siblings", async () => {

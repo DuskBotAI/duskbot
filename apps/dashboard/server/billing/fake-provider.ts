@@ -3,6 +3,7 @@ import { BillingProviderError } from "./types.ts";
 import type { ApplyDiscountInput, BillingProvider, ChangePlanInput, ChangeQuote, CreateCheckoutInput } from "./types.ts";
 import { signWebhook, verifyWebhook } from "./webhook-signature.ts";
 
+type RetryAnswer = "sent" | "later" | "automatic" | "refused";
 const id = (prefix: string) => `${prefix}${randomBytes(16).toString("base64url")}`;
 export function createFakeBillingProvider(options: { secret?: string; now?: () => number } = {}) {
   const secret = options.secret ?? `whsec_${randomBytes(32).toString("base64")}`, now = options.now ?? Date.now;
@@ -13,7 +14,7 @@ export function createFakeBillingProvider(options: { secret?: string; now?: () =
   const completed = new Map<string, ReturnType<typeof signWebhook>[]>();
   const cancelCalls: Array<{ subscriptionId: string; cancel: boolean }> = [], changeCalls: ChangePlanInput[] = [];
   const cancelNowCalls: string[] = [], refundCalls: Array<{ paymentId: string; reason: string }> = [], discountCalls: ApplyDiscountInput[] = [];
-  const charges: Array<{ subscriptionId: string; cents: number }> = [], cancelScheduledCalls: string[] = [];
+  const charges: Array<{ subscriptionId: string; cents: number }> = [], cancelScheduledCalls: string[] = [], retryCalls: string[] = [];
   function sign(eventId: string, body: Buffer | string | object) { return signWebhook(secret, eventId, Buffer.isBuffer(body) || typeof body === "string" ? body : JSON.stringify(body), now()); }
   function delivery(type: string, data: object) { return sign(id("evt_"), { business_id: "fake_business", type, timestamp: new Date(now()).toISOString(), data }); }
   function next(time: number, interval: "month" | "year") {
@@ -51,6 +52,8 @@ export function createFakeBillingProvider(options: { secret?: string; now?: () =
   const provider = {
     name: "fake" as const, secret, sessions, subscriptions, payments, cancelCalls, changeCalls, cancelNowCalls, refundCalls, discountCalls, charges, cancelScheduledCalls,
     failChangePlan: false as boolean | "refused", failDiscount: false, paymentUrl: null as string | null,
+    retryCalls, retryAnswer: "sent" as RetryAnswer,
+    async retryPayment(this: { retryAnswer: RetryAnswer }, paymentId: string): Promise<RetryAnswer> { retryCalls.push(paymentId); return this.retryAnswer; },
     async createCheckout(input: CreateCheckoutInput) { const sessionId = id("fake_"); sessions.set(sessionId, structuredClone(input)); return { sessionId, url: `https://test.checkout.dodopayments.com/session/${sessionId}` }; },
     async updatePaymentMethod(subscriptionId: string, _returnUrl: string) { return { url: `https://test.checkout.dodopayments.com/fake_card_${encodeURIComponent(subscriptionId)}` }; },
     verifyWebhook: (headers, body) => verifyWebhook(secret, headers, body, now()),

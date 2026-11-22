@@ -330,7 +330,7 @@ export class BrowserRuntime {
   private applyViewport?: ApplyViewport;
   private launch?: BrowserLaunch;
   private relayCommand?: RelayCommand;
-  private steps?: Pick<BrowserSteps, "before" | "after" | "signIn" | "note" | "forget" | "recentFrame" | "personTook">;
+  private steps?: Pick<BrowserSteps, "before" | "after" | "signIn" | "note" | "forget" | "recentFrame" | "personTook"> & Partial<Pick<BrowserSteps, "alive">>;
   private lanes = new BrowserLanes(({ call, waitedMs, holder }) => trail("browser.lane.busy", { call, waitedMs, holder: holder?.call ?? null, heldMs: holder ? Date.now() - holder.since : null }));
   private threadTabs = new ThreadTabs();
   /** The page size people's views want; the agent-browser live view sets it, and every bot call applies it first. */
@@ -579,6 +579,7 @@ export class BrowserRuntime {
         if (this.gate(session).owner !== null) throw this.taken(session);
       }
       phases.launchMs = performance.now() - launchStarted;
+      const aliveBefore = method === "tools/call" && ctx && toolName !== undefined ? await this.steps?.alive?.({ session, spec }) : undefined;
       try {
         if (method === "tools/call" && ctx && toolName !== undefined) {
           await this.threadTabs.front(session, ctx, toolName, (name, args) => entry.client.rpc("tools/call", { name, arguments: args }, Math.max(1, Math.min(followUpMs(), 10_000))));
@@ -604,6 +605,7 @@ export class BrowserRuntime {
           stopped: () => gate.owner !== null || gate.uncertain || gate.closing,
           alive: () => { try { beforeDispatch?.(); return true; } catch { return false; } },
           resize: () => this.pageSizes.again(session),
+          aliveBefore,
         } : null;
         const stepsStarted = performance.now();
         const stepState = call ? await this.steps!.before(call) : null;

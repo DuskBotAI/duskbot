@@ -1,19 +1,19 @@
 {
  "/": {
-  "hash": "b0bd75036d1a3920",
-  "lastmod": "2026-11-16"
+  "hash": "c51edad08ee53063",
+  "lastmod": "2026-11-22"
  },
  "/download": {
-  "hash": "22063fce2ba9528a",
-  "lastmod": "2026-11-20"
+  "hash": "b120230631e78e15",
+  "lastmod": "2026-11-21"
  },
  "/waitlist": {
   "hash": "799f5ae949bf1d86",
   "lastmod": "2026-11-15"
  },
  "/pricing": {
-  "hash": "d5b7219b0fdff3a9",
-  "lastmod": "2026-11-13"
+  "hash": "50a47d9d8388fe17",
+  "lastmod": "2026-11-22"
  },
  "/about": {
   "hash": "26530c36407d3de5",
@@ -22,10 +22,6 @@
  "/contact": {
   "hash": "16afcc8f87790aef",
   "lastmod": "2026-11-12"
- },
- "/support": {
-  "hash": "dabb1fceb2161596",
-  "lastmod": "2026-11-14"
  },
  "/delete-account": {
   "hash": "1e94c4bb50d0fc1b",
@@ -80,8 +76,8 @@
   "lastmod": "2026-11-13"
  },
  "/docs/phone": {
-  "hash": "c2d235adfa20fdfd",
-  "lastmod": "2026-11-17"
+  "hash": "b67099de01b61d10",
+  "lastmod": "2026-11-22"
  },
  "/docs/your-own-server": {
   "hash": "dfcb12d8ac206ec4",

@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { AlertTriangle, Loader2, Shield } from "../icons";
 import { useDesktopCapabilities } from "./DesktopCapabilities";
-import { macCuaPermissionMessage, missingMacCuaPermissions } from "@/lib/mac-cua-permissions";
+import { macCuaPermissionMessage, macPermissionPaneToOpen, missingMacCuaPermissions } from "@/lib/mac-cua-permissions";
+import { macPermissionsBridge } from "@/lib/mac-permissions";
 import { MacCuaRecoveryActions } from "./MacCuaRecoveryActions";
 import { t } from "@/lib/i18n";
 import { friendlyError } from "@/lib/plain-error";
@@ -30,8 +31,8 @@ export function MacLocalControl() {
     setError(null);
     setAwaitingGrant(true);
     try {
-      await window.duskDesktop?.permOpenSettings?.("accessibility");
-      await window.duskDesktop?.permOpenSettings?.("screen");
+      const status = await macPermissionsBridge()?.status().catch(() => null) ?? null;
+      await window.duskDesktop?.permOpenSettings?.(macPermissionPaneToOpen(reason, status));
     } catch (reason) {
       setAwaitingGrant(false);
       setError(friendlyError(reason));
@@ -40,19 +41,21 @@ export function MacLocalControl() {
 
   useEffect(() => {
     if (!awaitingGrant) return;
-    let used = false;
-    const onFocus = () => {
-      if (used) return;
-      if (document.visibilityState !== "visible") return;
-      used = true;
+    let left = false;
+    const onLeave = () => { left = true; };
+    const onReturn = () => {
+      if (document.visibilityState !== "visible") { left = true; return; }
+      if (!left) return;
       setAwaitingGrant(false);
       void retry();
     };
-    window.addEventListener("focus", onFocus);
-    document.addEventListener("visibilitychange", onFocus);
+    window.addEventListener("blur", onLeave);
+    window.addEventListener("focus", onReturn);
+    document.addEventListener("visibilitychange", onReturn);
     return () => {
-      window.removeEventListener("focus", onFocus);
-      document.removeEventListener("visibilitychange", onFocus);
+      window.removeEventListener("blur", onLeave);
+      window.removeEventListener("focus", onReturn);
+      document.removeEventListener("visibilitychange", onReturn);
     };
   }, [awaitingGrant]);
 
@@ -64,7 +67,7 @@ export function MacLocalControl() {
       <div className="flex items-start gap-3">
         <Shield size={15} className="mt-0.5 shrink-0 text-ink/[0.56]" />
         <div className="min-w-0 flex-1">
-          <div className="text-[13px] font-medium leading-[18px] text-ink">Allow control of this computer</div>
+          <div className="text-[13px] font-medium leading-[18px] text-ink">{t("computer.mac.permission.title")}</div>
           <p className="mt-0.5 text-[12px] leading-4 text-ink/[0.56]">
             {permissionMessage ?? t("computer.mac.permission.generic")}
           </p>
@@ -84,7 +87,7 @@ export function MacLocalControl() {
                 disabled={pending}
                 className="ui-button ui-button-primary h-6! min-h-6! px-2.5! text-[12px]! leading-4!"
               >
-                Open System Settings
+                {t("computer.mac.permission.openSettings")}
               </button>
             )}
             <button
@@ -94,7 +97,7 @@ export function MacLocalControl() {
               className="ui-button h-6! min-h-6! px-2.5! text-[12px]! leading-4!"
             >
               {pending && <Loader2 size={13} className="animate-spin" />}
-              Retry
+              {t("computer.mac.permission.retry")}
             </button>
           </div>
         </div>

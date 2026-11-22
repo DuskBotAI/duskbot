@@ -29,7 +29,7 @@ export const SHA = "a".repeat(64);
 export const BACKUP_SECRET = Buffer.alloc(32, 9);
 
 export async function homeFixture(options: { costProfile?: ProviderCostProfile; retentionDays?: number; setupPolls?: number; settings?: Partial<ManagedSettings>; releaseKeys?: ReleaseKey[]; edgeToken?: string;
-  entitlements?: { sign(cloud: StoredCloud): string }; release?: () => HomeRelease | null; updatePolicy?: PolicySource } = {}) {
+  entitlements?: { sign(cloud: StoredCloud): string }; linkGrant?: (cloud: StoredCloud) => string | null; release?: () => HomeRelease | null; updatePolicy?: PolicySource } = {}) {
   const dataDir = mkdtempSync(join(tmpdir(), "dusk-home-")); cleanup.push(() => rmSync(dataDir, { recursive: true, force: true }));
   let at = Date.UTC(2026, 10, 9, 12);
   const now = () => at;
@@ -47,14 +47,15 @@ export async function homeFixture(options: { costProfile?: ProviderCostProfile; 
   const power: HomePower = { idle: false, busy: ["recent-activity"], lastActivityAt: null, nextDueAt: null, wokeAt: at };
   const update: HomeUpdateReport = { version: null, selfTest: null, runs: [] };
   const home = { update: vi.fn(async () => ({ ...update, runs: [...update.runs] })), healthy: vi.fn(async () => true), pair: vi.fn(async () => ({ code: "ABCD-EFGH-JKLM", expiresAt: at + 300_000 })),
-    power: vi.fn(async () => ({ ...power })), entitle: vi.fn(async (_origin: string, _secret: string, _token: string) => ({ expiresAt: at + DAY_MS })), sleep: vi.fn(async () => ({ ok: power.idle, nextDueAt: power.nextDueAt })), plan: vi.fn(async () => {}) };
+    power: vi.fn(async () => ({ ...power })), entitle: vi.fn(async (_origin: string, _secret: string, _token: string, _grant?: string | null) => ({ expiresAt: at + DAY_MS })), sleep: vi.fn(async () => ({ ok: power.idle, nextDueAt: power.nextDueAt })), plan: vi.fn(async () => {}) };
   const subscriptions: StoredSubscription[] = [];
   const notices: Array<{ cloudId: string; kind: string; at: number | null; link?: string }> = [];
   const alerts: string[] = [];
   const audit = createAudit({ dataDir, now, alert: entry => alerts.push(`${entry.action}:${entry.reason}`) });
-  const backups = createBackupStore({ dir: join(dataDir, "managed-backups"), now });
+  const disk = { free: 1024 ** 4 };
+  const backups = createBackupStore({ dir: join(dataDir, "managed-backups"), now, freeBytes: () => disk.free });
   const workspaces = { register: vi.fn(() => "workspace-1"), lastReportAt: vi.fn(() => null), remove: vi.fn() };
-  const service = createCloudsService({ dataDir, now, home, ...(options.entitlements ? { entitlements: options.entitlements } : {}), sealer: createSealer(Buffer.alloc(32, 7)), workspaces,
+  const service = createCloudsService({ dataDir, now, home, ...(options.entitlements ? { entitlements: options.entitlements } : {}), ...(options.linkGrant ? { linkGrant: options.linkGrant } : {}), sealer: createSealer(Buffer.alloc(32, 7)), workspaces,
     providers: { dedicated: createFakeCloudProvider(), pool: { ...createFakeCloudProvider(), suspend: async () => {}, resume: async () => {} } },
     config: { adminOrigin: "https://admin.example.test", dashboardUrl: "https://dash.example.test", image: "ghcr.io/example/home:1", poolQuota: (_k, spec, botComputers) => ({ ...spec, netMbps: 1, pids: 1, botComputers }) },
     managed: createManagedCloud({ provider, backups, audit, kinds: ["shared_s", "shared_m", "dedicated"], backupSecret: BACKUP_SECRET,
@@ -85,7 +86,7 @@ export async function homeFixture(options: { costProfile?: ProviderCostProfile; 
     power.idle = true; power.busy = [];
     await settle(c, x => x.status === "sleeping", 60, 5 * 60_000);
   }
-  return { api, provider, service, home, power, update, subscriptions, notices, alerts, audit, backups, dataDir, paid, settle, asleep, workspaces,
+  return { api, provider, service, home, power, update, subscriptions, notices, alerts, audit, backups, disk, dataDir, paid, settle, asleep, workspaces,
     advance(ms: number) { at += ms; }, now };
 }
 

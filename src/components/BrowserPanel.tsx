@@ -53,7 +53,7 @@ export function LiveBrowser({ bot, signIn, page }: { bot: Bot; signIn?: BrowserS
   const [takeStatus, setTakeStatus] = useState<BrowserTakeStatus>("");
   const [error, setError] = useState("");
   const [starting, setStarting] = useState(false);
-  const [gone, setGone] = useState(false);
+  const [gone, setGone] = useState<{ reason: string } | null>(null);
   const [asleep, setAsleep] = useState<"" | "asleep" | "waking">("");
   const [kept, setKept] = useState(false);
   const [showProfiles, setShowProfiles] = useState(false);
@@ -84,8 +84,8 @@ export function LiveBrowser({ bot, signIn, page }: { bot: Bot; signIn?: BrowserS
   const signInOpen = state.computerControl?.[bot.id]?.help?.place === "browser";
   const scopedThread = browserScope(state.config?.team, bot.threadId).threadId;
   keepNow.current = kept || signInOpen;
-  const profileName = bot.browserProfile === "guest" ? "temporary browser"
-    : state.config?.browserProfiles?.find((profile) => profile.id === bot.browserProfile)?.name ?? `${bot.name}’s own browser`;
+  const profileName = bot.browserProfile === "guest" ? t("browser.panel.profileTemporary")
+    : state.config?.browserProfiles?.find((profile) => profile.id === bot.browserProfile)?.name ?? t("browser.panel.profileOwn", { name: bot.name });
   useEffect(() => { if (showProfiles) profilesDialog.current?.showModal(); else profilesDialog.current?.close(); }, [showProfiles]);
   useEffect(() => {
     browserControl.current?.hold(showTyping);
@@ -93,7 +93,7 @@ export function LiveBrowser({ bot, signIn, page }: { bot: Bot; signIn?: BrowserS
   }, [showTyping]);
 
   const reconnect = useCallback(() => {
-    setGone(false);
+    setGone(null);
     setError("");
     setFallback(false);
     setAttempt((value) => value + 1);
@@ -104,7 +104,7 @@ export function LiveBrowser({ bot, signIn, page }: { bot: Bot; signIn?: BrowserS
     setTabs([]);
     setNav(stream ? NO_NAV : { ...NO_NAV, canGoBack: true, canGoForward: true });
     setStarting(false);
-    setGone(false);
+    setGone(null);
     setAsleep("");
     pageNow.current = null;
   }, [bot.id, bot.browserProfile, scopedThread, attempt, stream]);
@@ -228,7 +228,7 @@ export function LiveBrowser({ bot, signIn, page }: { bot: Bot; signIn?: BrowserS
       setMaximized(false);
     }
     const request = leaving ? document.exitFullscreen() : panel.current?.requestFullscreen();
-    void request?.catch(() => setError(leaving ? "Could not leave full screen. Press Esc instead." : "Full screen is unavailable in this browser."));
+    void request?.catch(() => setError(t(leaving ? "browser.panel.exitFullscreenFailed" : "browser.panel.fullscreenUnavailable")));
   };
   const toggleMaximize = () => {
     if (fullscreen && document.fullscreenElement === panel.current) {
@@ -255,7 +255,7 @@ export function LiveBrowser({ bot, signIn, page }: { bot: Bot; signIn?: BrowserS
   const restart = async () => {
     if (!(await askConfirm({ title: t("confirm.browserRestartTitle"), body: t("confirm.browserRestartBody"), confirmLabel: t("confirm.restart"), tone: "neutral" }))) return;
     setError("");
-    if (!clientRef.current?.send({ type: "restart" })) setError("The browser view is not connected. Reconnect it, then try again.");
+    if (!clientRef.current?.send({ type: "restart" })) setError(t("browser.panel.viewNotConnected"));
   };
   const wake = () => {
     if (connected && clientRef.current?.send({ type: "wake" })) setAsleep("waking");
@@ -263,7 +263,7 @@ export function LiveBrowser({ bot, signIn, page }: { bot: Bot; signIn?: BrowserS
   };
   const togglePip = () => {
     if (floating === bot.id) { closeBrowserPictureInPicture(); return; }
-    void openBrowserPictureInPicture({ botId: bot.id, seed: surface.current?.canvas() ?? null }).catch(() => setError("Picture in picture is unavailable here."));
+    void openBrowserPictureInPicture({ botId: bot.id, seed: surface.current?.canvas() ?? null }).catch(() => setError(t("browser.panel.pipUnavailable")));
   };
 
   const heldElsewhere = control?.controller === "another-viewer";
@@ -289,6 +289,7 @@ export function LiveBrowser({ bot, signIn, page }: { bot: Bot; signIn?: BrowserS
       tabs={tabs}
       nav={nav}
       connected={connected}
+      disconnected={gone !== null}
       control={control}
       takeStatus={takeStatus}
       hint={t(kept || signInOpen ? "browser.control.keptHint" : "browser.control.yoursHint", { name: bot.name })}
@@ -337,10 +338,10 @@ export function LiveBrowser({ bot, signIn, page }: { bot: Bot; signIn?: BrowserS
           onClient={onClient}
           onControl={onControl}
           onMessage={onMessage}
-          onConnectedChange={(next) => { setConnected(next); if (next) { setStarting(false); setGone(false); setError(""); } }}
+          onConnectedChange={(next) => { setConnected(next); if (next) { setStarting(false); setGone(null); setError(""); } }}
           onFirstFrame={() => setStarting(false)}
-          onUnauthorized={() => { if (stream) setFallback(true); else setGone(true); }}
-          onGone={() => setGone(true)}
+          onUnauthorized={() => { if (stream) setFallback(true); else setGone({ reason: "" }); }}
+          onGone={(reason) => setGone({ reason: reason ?? "" })}
           onClose={(code, reason) => { if (code === 1013 && reason) setError(reason); }}
           onLeave={() => address.current?.focus()}
         />
@@ -349,6 +350,7 @@ export function LiveBrowser({ bot, signIn, page }: { bot: Bot; signIn?: BrowserS
         <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-card/95 p-6 text-center text-[13px] text-ink-secondary">
           {asleep ? <Moon size={24} /> : heldElsewhere ? <Hand size={24} /> : gone ? <Globe size={24} /> : <Loader2 size={24} className="animate-spin" />}
           <span>{asleep ? t("browser.panel.asleep") : heldElsewhere ? BROWSER_HELD_ELSEWHERE : gone ? t("browser.panel.disconnected") : !starting ? t("browser.panel.opening") : stream ? "Starting the browser…" : t("browser.live.botBusy", { name: bot.name })}</span>
+          {!asleep && !heldElsewhere && gone?.reason ? <span className="max-w-sm text-[12px]">{gone.reason}</span> : null}
           {asleep ? <button type="button" disabled={asleep === "waking"} className="rounded-lg border border-transparent px-3 py-1.5 text-[12px] text-ink hover:bg-inset disabled:opacity-60" onClick={wake}>{t(asleep === "waking" ? "browser.panel.waking" : "browser.panel.wake")}</button>
             : gone ? <button type="button" className="rounded-lg border border-transparent px-3 py-1.5 text-[12px] text-ink hover:bg-inset" onClick={reconnect}>{t("browser.panel.reconnect")}</button> : null}
         </div>

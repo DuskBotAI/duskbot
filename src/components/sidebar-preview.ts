@@ -11,7 +11,7 @@ import { plainPreviewText } from "@/lib/plain-preview";
 import { isAutoApprovalChip } from "../../shared/auto-approval";
 import { isClientCancellation, isStoppedTurnName } from "../../shared/client-cancel";
 import { roomWorkingPreview } from "@/lib/room-threads";
-import { openPersonWait } from "../../shared/person-wait";
+import { openPersonWait, restingOnPerson, type PersonWait } from "../../shared/person-wait";
 
 function isAutoApprovalReceipt(message: { kind: string; tool?: { name?: string } }): boolean {
   return message.kind === "activity" && isAutoApprovalChip(message.tool?.name);
@@ -62,10 +62,26 @@ function quotedLine(messages: readonly Message[], last: Message): Message {
   return last;
 }
 
-/** What a waiting row quotes: the open question itself, not a line the bot said after it. */
+/** The ask a bot's chat rests on: while a turn runs, any open card; once it ends, only the ones that outlive it. */
+export function openWait(bot: Pick<Bot, "busy">, visible: Message[]): PersonWait | undefined {
+  return bot.busy ? openPersonWait(visible) : restingOnPerson(visible);
+}
+
+/** What an open ask says it needs, in the person's words, or "" when it names nothing. */
+export function askLine(wait: PersonWait): string {
+  const name = plainPreviewText(wait.label);
+  if (!name) return "";
+  if (wait.kind === "sign-in") return t("ambient.ask.signIn", { name });
+  if (wait.kind === "password") return t("ambient.ask.password", { name });
+  if (wait.kind === "connect") return t("ambient.ask.connect", { name });
+  if (wait.kind === "review") return t("ambient.ask.review", { name });
+  return name;
+}
+
+/** What a waiting row quotes: the open ask itself (a question, a sign-in, an approval), never a line the bot said after it. */
 export function waitingLine(bot: Bot, visible: Message[], instances: InstanceInfo[]): string {
-  const wait = openPersonWait(visible);
-  return wait?.kind === "question" && wait.label.trim() ? plainPreviewText(wait.label) : lastLine(bot, visible, instances);
+  const wait = openWait(bot, visible);
+  return (wait && askLine(wait)) || lastLine(bot, visible, instances);
 }
 
 /** The conversation's newest line as a preview shows it, whatever the bot is doing now. */

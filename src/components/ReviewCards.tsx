@@ -5,6 +5,7 @@ import { t } from "@/lib/i18n";
 import { openExternalLink } from "@/lib/app-links";
 import type { Message, OptionCardData } from "@/state/store";
 import type { EmailEdits, EmailReview } from "../../shared/email-review";
+import type { MessageEdits, MessageReview } from "../../shared/message-review";
 import type { PurchaseSummary } from "../../shared/purchase";
 import type { ProductsCard } from "../../shared/products";
 
@@ -45,6 +46,11 @@ export function draftEdits(email: EmailReview, draft: EmailDraft): EmailEdits | 
   };
 }
 
+export const messageDraftOf = (message: MessageReview): EmailDraft => ({ to: message.to, subject: "", body: message.text });
+
+/** The edit a message draft makes, or null when its text is empty. */
+export const messageDraftEdits = (draft: EmailDraft): MessageEdits | null => draft.body.trim() ? { text: draft.body } : null;
+
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="flex min-w-0 gap-3 text-[13px] leading-5">
@@ -73,6 +79,23 @@ export function EmailReviewView({ email, requestId, editable }: { email: EmailRe
           <p dir="auto" tabIndex={0} aria-label={t("emailReview.body")} className="max-h-60 overflow-auto whitespace-pre-wrap break-words pt-1.5 text-[14px] leading-[21px] text-ink">{email.body}</p>
         </>
       )}
+    </div>
+  );
+}
+
+export function MessageReviewView({ message, requestId, editable }: { message: MessageReview; requestId?: string; editable?: boolean }) {
+  const [draft, setDraft] = useEmailDraft(requestId ?? "");
+  const editing = editable && draft;
+  return (
+    <div data-message-review="" className="space-y-1.5 rounded-[14px] bg-(--card-code-fill) px-3.5 py-3">
+      {message.to ? <Row label={t("messageReview.to")}>{message.to}</Row> : <Row label={t("messageReview.on")}>{message.app}</Row>}
+      {message.reply && <p className="text-[13px] leading-5 text-ink-tertiary">{t("messageReview.reply")}</p>}
+      {editing ? (
+        <textarea aria-label={t("messageReview.text")} dir="auto" rows={6} value={draft.body} onChange={(event) => setDraft({ ...draft, body: event.target.value })} className={cn(FIELD, "max-h-72 resize-y")} />
+      ) : (
+        <p dir="auto" tabIndex={0} aria-label={t("messageReview.text")} className="max-h-60 overflow-auto whitespace-pre-wrap break-words pt-1.5 text-[14px] leading-[21px] text-ink">{message.text}</p>
+      )}
+      {message.attachments ? <p className="text-[13px] leading-5 text-ink-secondary">{t(message.attachments === 1 ? "messageReview.attachments.one" : "messageReview.attachments", { count: message.attachments })}</p> : null}
     </div>
   );
 }
@@ -111,7 +134,7 @@ export function PurchaseSummaryView({ purchase }: { purchase: PurchaseSummary })
   );
 }
 
-/** What a settled purchase or email card says happened. */
+/** What a settled purchase, email or message card says happened. */
 function reviewOutcome(card: OptionCardData): { done: boolean; line: string } {
   const allowed = card.answered === "allow" && !card.expired;
   if (card.purchase) {
@@ -121,13 +144,19 @@ function reviewOutcome(card: OptionCardData): { done: boolean; line: string } {
   return { done: allowed, line: t(allowed ? "emailReview.sent" : card.answered === "unavailable" || card.expired ? "emailReview.expired" : "emailReview.notSent") };
 }
 
-/** A purchase or email card once answered: what was bought or sent, kept in the chat as the record. */
+function recordTitle(card: OptionCardData): string {
+  if (card.purchase) return t("purchase.recordTitle", { merchant: card.purchase.merchant });
+  if (card.messageReview) return t(card.messageReview.post ? "messageReview.postRecordTitle" : "messageReview.recordTitle", { app: card.messageReview.app });
+  return t("emailReview.recordTitle", { app: card.email?.app ?? "" });
+}
+
+/** A purchase, email or message card once answered: what was bought or sent, kept in the chat as the record. */
 export function ReviewRecord({ card }: { card: OptionCardData }) {
   const outcome = reviewOutcome(card);
   return (
-    <div data-review-record={card.purchase ? "purchase" : "email"} className="w-full max-w-[460px] space-y-2 rounded-[20px] bg-panel p-3">
-      <p className="px-1 text-[14px] font-semibold leading-5 text-ink">{card.purchase ? t("purchase.recordTitle", { merchant: card.purchase.merchant }) : t("emailReview.recordTitle", { app: card.email?.app ?? "" })}</p>
-      {card.purchase ? <PurchaseSummaryView purchase={card.purchase} /> : card.email ? <EmailReviewView email={card.email} /> : null}
+    <div data-review-record={card.purchase ? "purchase" : card.messageReview ? "message" : "email"} className="w-full max-w-[460px] space-y-2 rounded-[20px] bg-panel p-3">
+      <p className="px-1 text-[14px] font-semibold leading-5 text-ink">{recordTitle(card)}</p>
+      {card.purchase ? <PurchaseSummaryView purchase={card.purchase} /> : card.email ? <EmailReviewView email={card.email} /> : card.messageReview ? <MessageReviewView message={card.messageReview} /> : null}
       <p className="flex items-center gap-1.5 px-1 text-[13px] text-ink-secondary">
         {outcome.done ? <Check size={14} className="text-success" aria-hidden="true" /> : <X size={14} aria-hidden="true" />}
         {outcome.line}
@@ -137,7 +166,7 @@ export function ReviewRecord({ card }: { card: OptionCardData }) {
 }
 
 export const showsReviewRecord = (card: OptionCardData | undefined): boolean =>
-  Boolean(card && (card.purchase || card.email) && (card.answered || card.expired || card.dismissed));
+  Boolean(card && (card.purchase || card.email || card.messageReview) && (card.answered || card.expired || card.dismissed));
 
 /** Products a bot found, side by side: photo, name, price, shop and a link. Photos load once the person asks. */
 export function ProductsMessage({ message }: { message: Message }) {

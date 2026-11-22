@@ -14,13 +14,13 @@ export function createDodoProvider(options: DodoProviderOptions): BillingProvide
     if (url.protocol !== "http:" || url.hostname !== "127.0.0.1" || url.username || url.password || url.pathname !== "/" || url.search || url.hash) throw new BillingProviderError("refused");
   }
   const requestFetch = options.fetch ?? fetch, now = options.now ?? Date.now;
-  async function request(path: string, method: string, body?: unknown, pdf = false): Promise<{ contentType: string; body: Buffer } | null> {
-    const controller = new AbortController(), timer = setTimeout(() => controller.abort(), 15_000);
+  async function request(path: string, method: string, body?: unknown, pdf = false, timeoutMs = 15_000): Promise<{ contentType: string; body: Buffer } | null> {
+    const controller = new AbortController(), timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
       const response = await requestFetch(`${base.replace(/\/$/, "")}${path}`, { method, redirect: "error", signal: controller.signal,
         headers: { authorization: `Bearer ${options.apiKey}`, "content-type": "application/json", accept: pdf ? "application/pdf" : "application/json" }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
       if (pdf && response.status === 404) { await response.body?.cancel(); return null; }
-      if (!response.ok) { await response.body?.cancel(); throw new BillingProviderError(response.status >= 500 ? "unavailable" : "refused"); }
+      if (!response.ok) throw new BillingProviderError(response.status >= 500 ? "unavailable" : "refused", `${response.status} ${await errorCode(response)}`.trim());
       const cap = pdf ? 5 * 1024 * 1024 : 256 * 1024;
       if (Number(response.headers.get("content-length")) > cap) { await response.body?.cancel(); throw new BillingProviderError("refused"); }
       const chunks: Uint8Array[] = []; let size = 0;
@@ -38,11 +38,19 @@ export function createDodoProvider(options: DodoProviderOptions): BillingProvide
       const contentType = response.headers.get("content-type")?.split(";")[0].trim() ?? "application/octet-stream";
       if (pdf && contentType !== "application/pdf") throw new BillingProviderError("refused");
       return { contentType, body: Buffer.concat(chunks) };
-    } catch (error) { if (error instanceof BillingProviderError) throw error; throw new BillingProviderError("unavailable"); }
+    } catch (error) { if (error instanceof BillingProviderError) throw error; throw new BillingProviderError("unavailable", controller.signal.aborted ? "timeout" : "network"); }
     finally { clearTimeout(timer); }
   }
-  async function json(path: string, body?: unknown) {
-    const result = await request(path, "POST", body);
+  async function getJson(path: string) {
+    const result = await request(path, "GET");
+    try {
+      const data: unknown = JSON.parse(result!.body.toString("utf8"));
+      if (!data || typeof data !== "object" || Array.isArray(data)) throw new Error();
+      return data as Record<string, unknown>;
+    } catch { throw new BillingProviderError("refused"); }
+  }
+  async function json(path: string, body?: unknown, timeoutMs?: number) {
+    const result = await request(path, "POST", body, false, timeoutMs);
     try {
       const data: unknown = JSON.parse(result!.body.toString("utf8"));
       if (!data || typeof data !== "object" || Array.isArray(data)) throw new Error();
@@ -56,6 +64,21 @@ export function createDodoProvider(options: DodoProviderOptions): BillingProvide
       if (url.protocol !== "https:" || url.hostname !== host || url.port || url.username || url.password) throw new Error();
       return url.href;
     } catch { throw new BillingProviderError("refused"); }
+  }
+  /** the newest unpaid payment page of a subscription from the last hour, if dodo still has one open */
+  async function openPaymentLink(subscriptionId: string, host: string): Promise<string | null> {
+    const result = await request(`/payments?subscription_id=${encodeURIComponent(subscriptionId)}&page_size=10`, "GET");
+    const data: unknown = JSON.parse(result!.body.toString("utf8"));
+    const items = data && typeof data === "object" ? (data as { items?: unknown }).items : null;
+    if (!Array.isArray(items)) return null;
+    const recent = items.filter((item): item is Record<string, unknown> => !!item && typeof item === "object"
+      && !["succeeded", "failed", "cancelled"].includes(String(item.status)) && Date.parse(String(item.created_at)) >= now() - 3_600_000)
+      .sort((a, b) => Date.parse(String(b.created_at)) - Date.parse(String(a.created_at)));
+    for (const item of recent) {
+      const full = await getJson(`/payments/${encodeURIComponent(String(item.payment_id))}`);
+      if (typeof full.payment_link === "string") { try { return allowedUrl(full.payment_link, host); } catch {} }
+    }
+    return null;
   }
   const prefix = options.mode === "test" ? "test." : "";
   // dodo sends a scheduled change only with full_immediately; prevent_change keeps the old plan until a charge goes through
@@ -84,9 +107,32 @@ export function createDodoProvider(options: DodoProviderOptions): BillingProvide
       if (typeof result.session_id !== "string" || !result.session_id) throw new BillingProviderError("refused");
       return { sessionId: result.session_id, url: allowedUrl(result.checkout_url, `${prefix}checkout.dodopayments.com`) };
     },
+    // on an on_hold subscription dodo charges the dues while it answers, which can take longer than other calls; a call
+    // that failed may still have made that payment, and dodo refuses a second one until it settles (2026-11)
     async updatePaymentMethod(subscriptionId, returnUrl) {
-      const result = await json(`/subscriptions/${encodeURIComponent(subscriptionId)}/update-payment-method`, { type: "new", return_url: returnUrl });
-      return { url: allowedUrl(result.payment_link, `${prefix}checkout.dodopayments.com`) };
+      const host = `${prefix}checkout.dodopayments.com`;
+      try {
+        const result = await json(`/subscriptions/${encodeURIComponent(subscriptionId)}/update-payment-method`, { type: "new", return_url: returnUrl }, 45_000);
+        return { url: allowedUrl(result.payment_link, host) };
+      } catch (error) {
+        const open = await openPaymentLink(subscriptionId, host).catch(() => null);
+        if (open) return { url: open };
+        throw error;
+      }
+    },
+    async retryPayment(paymentId) {
+      const path = `/payments/${encodeURIComponent(paymentId)}/retry`, state = await getJson(path);
+      if (typeof state.next_automatic_retry_at === "string") return "automatic";
+      if (state.can_retry !== true) {
+        const cooling = state.reason !== "MANUAL_RETRY_LIMIT_REACHED" || typeof state.retry_available_at === "string";
+        return typeof state.reason === "string" && WAIT_REASONS.has(state.reason) && cooling ? "later" : "refused";
+      }
+      try { await request(path, "POST"); }
+      catch (error) {
+        if (error instanceof BillingProviderError && error.code === "refused" && [...WAIT_REASONS].some(reason => error.message.includes(reason))) return "later";
+        throw error;
+      }
+      return "sent";
     },
     verifyWebhook: (headers, body) => verifyWebhook(options.webhookSecret, headers, body, now()),
     async cancelAtPeriodEnd(id, cancel) { await request(`/subscriptions/${encodeURIComponent(id)}`, "PATCH", { cancel_at_next_billing_date: cancel }); },
@@ -154,4 +200,14 @@ export function checkoutName(own: string | null | undefined, email: string): str
   const words = local.split(/[._\-\s]+/).map(word => word.replace(/[^\p{L}]/gu, "")).filter(word => word.length > 1);
   const guess = clean(words.map(word => word[0]!.toUpperCase() + word.slice(1).toLowerCase()).join(" "));
   return guess.length >= 2 ? guess : null;
+}
+
+/** dodo's manual retry refusals that clear on their own: a payment still in flight, an open card page, the cooldown */
+const WAIT_REASONS = new Set(["MANUAL_RETRY_IN_FLIGHT", "PREVIOUS_PAYMENT_PENDING", "MANUAL_RETRY_LIMIT_REACHED"]);
+/** the `code` of a refused call's JSON body, for the log; never the body itself */
+async function errorCode(response: Response): Promise<string> {
+  try {
+    const text = (await response.text()).slice(0, 4096), code = (JSON.parse(text) as { code?: unknown }).code;
+    return typeof code === "string" && /^[A-Z0-9_]{2,64}$/.test(code) ? code : "";
+  } catch { return ""; }
 }

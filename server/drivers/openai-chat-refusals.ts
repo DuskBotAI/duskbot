@@ -93,7 +93,10 @@ export function refusedToolCallFailure(error: RejectedToolCallError, earlierStep
 export function completionError(json: ProviderBody, label: string): ChatProtocolError | null {
   const message = providerError(json);
   if (!message) return null;
-  const text = `provider returned a ${label}: ${message.slice(0, 200)}`;
+  // OpenRouter and other gateways put the upstream's HTTP status in error.code of a mid-stream error chunk
+  const code = object(json.error)?.code;
+  const status = typeof code === "number" && Number.isInteger(code) && code >= 400 && code <= 599 ? ` (status ${code})` : "";
+  const text = `provider returned a ${label}${status}: ${message.slice(0, 200)}`;
   const refusal = toolCallRefusal(json.error);
   return refusal ? new RejectedToolCallError(text, refusal) : new ChatProtocolError(text);
 }

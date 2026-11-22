@@ -334,6 +334,11 @@ it("refuses an older desktop's Start fresh account delete, so a local reset neve
   expect(f.billing.clouds.get(cloudId)).not.toMatchObject({ ended: true });
 });
 
+it("refuses to start with a DUSK_BILLING_RETRY it does not know", async () => {
+  vi.stubEnv("DUSK_BILLING_RETRY", "yes");
+  await expect(fixture()).rejects.toThrow("Invalid DUSK_BILLING_RETRY.");
+});
+
 it("offers no trial without DUSK_TRIAL_DAYS", async () => {
   const f = await fixture(); await f.signIn();
   const publicConfig = await f.request("/api/public/config");

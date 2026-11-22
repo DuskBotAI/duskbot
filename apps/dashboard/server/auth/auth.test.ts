@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createDashboardApp, type DashboardAppOptions } from "../app.ts";
 import { AUTH_LIMITS, HANDOFF_OUTSTANDING, HANDOFF_TTL_MS, REVIEW_LIMITS, reviewAccountFromEnv } from "./index.ts";
-import { memoryMailer } from "./mail.ts";
+import { MailDeliveryError, memoryMailer } from "./mail.ts";
 import { createCloudAccountClient } from "../../../../electron/cloud-account.mjs";
 import { verifyLinkGrant } from "../../../link-service/src/grant.mjs";
 import { entitlementPublicKey } from "../../../../shared/entitlement.ts";
@@ -94,7 +94,7 @@ describe("local account service", () => {
     const second = await login();
     expect(second.created).toBe(false);
     expect(second.account.id).toBe(first.account.id);
-    expect(await body(call("/v1/me", undefined, browserHeaders(second)))).toEqual({ account: second.account, csrfToken: second.csrfToken });
+    expect(await body(call("/v1/me", undefined, browserHeaders(second)))).toEqual({ account: second.account, csrfToken: second.csrfToken, admin: false });
     const view = await body<AccountAnswer>(call("/v1/account", undefined, browserHeaders(second)));
     expect(view.identities).toEqual([]);
     expect(view.sessions).toHaveLength(2);
@@ -1039,9 +1039,19 @@ describe("local account service", () => {
     } finally { client.close(); }
   });
 
-  it("fails mail delivery generically without exposing mailer errors", async () => {
+  it("answers a sign-in email that did not go out with a plain sentence, never the mailer's own words", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     restart({ mailer: { async send() { throw new Error("private provider details"); } } });
     const response = await call("/v1/auth/start", { email });
-    expect(response.status).toBe(502); expect(await response.json()).toEqual({ error: "Request failed.", code: "failed" });
+    expect(response.status).toBe(503);
+    expect(await response.json()).toEqual({ error: "We couldn't send your code just now. Try again in a few minutes, or sign in with Google or Apple.", code: "mail_unavailable" });
+    restart({ mailer: { async send() { throw new MailDeliveryError(null, "resend and brevo at their caps"); } } });
+    expect(await (await call("/v1/auth/start", { email })).json()).toMatchObject({ code: "mail_unavailable" });
+    restart({ mailer: { async send() { throw new MailDeliveryError(422, "http 422 validation_error"); } } });
+    const refused = await call("/v1/auth/start", { email });
+    expect(refused.status).toBe(400); expect(await refused.json()).toMatchObject({ code: "email_undeliverable" });
+    expect(warn.mock.calls.flat()).toEqual(expect.arrayContaining(["auth: a sign-in email was not sent (resend and brevo at their caps)", "auth: a sign-in email was not sent (http 422 validation_error)"]));
+    expect(JSON.stringify(warn.mock.calls)).not.toContain("private provider details");
+    warn.mockRestore();
   });
 });

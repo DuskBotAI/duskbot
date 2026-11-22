@@ -4,7 +4,7 @@ import { cn } from "@/lib/cn";
 import { activeLocale, documentLanguage, t } from "@/lib/i18n";
 import { listenLiveFrames } from "@/lib/live-events";
 import { formatTokens, hasFiniteCost, headlineTokens } from "@/lib/usage";
-import { fetchTraces, formatCost, formatDuration, USAGE_PERIODS, usageExportHref, usagePeriodRange, type UsagePeriod } from "@/lib/usage-trace";
+import { fetchTraces, formatCost, formatDuration, traceRootTitle, USAGE_PERIODS, usageExportHref, usagePeriodRange, type UsagePeriod } from "@/lib/usage-trace";
 import { api, useStore } from "@/state/store";
 import type { LocaleKey } from "@/locales";
 import type { TraceList, TraceRootSummary } from "../../shared/usage-trace";
@@ -61,6 +61,7 @@ export function usageGroupLabel(groupBy: UsageGroupBy, group: Pick<UsageGroup, "
   if (groupBy !== "user") return group.label;
   if (group.key === "owner") return t("usage.history.owner");
   if (group.key === "bot") return t("usage.history.botToBot");
+  if (group.key === "upkeep") return t("usage.history.upkeep");
   if (group.key.startsWith("routine:")) return t("usage.history.routine", { name: group.label.replace(/^Routine: /, "") });
   return group.label;
 }
@@ -137,7 +138,7 @@ function startedLabel(at: number): string {
 
 export function RunRow({ root, onOpen }: { root: TraceRootSummary; onOpen: () => void }) {
   const { state } = useStore();
-  const title = root.title || t(`trace.source.${root.source}`, { bot: root.bots[0]?.name ?? "" });
+  const title = traceRootTitle(root);
   return (
     <li>
       <button type="button" onClick={onOpen} className={cn(rowCls, "grid w-full cursor-pointer grid-cols-[auto_minmax(0,1fr)_auto] text-start hover:bg-ink/[0.035] focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-focus")} data-testid="usage-run">

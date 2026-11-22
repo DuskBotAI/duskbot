@@ -341,6 +341,26 @@ describe("LimitResetClock and the turns that follow a refusal", () => {
     expect(instance.blockedUntil("claude"), "the guess runs out on its own").toBeNull();
   });
 
+  it("an API-key AI out of credit (OpenRouter's 402) is held only by a guess that a working check or a person's try ends, clearing At its limit", () => {
+    const instance = new LimitResetClock({ accounts: () => accounts, now: () => NOW });
+    instance.noteRuntimeEvent("openrouter", started("t1"));
+    instance.noteRuntimeEvent(undefined, { ...refused("t1"), limit: "engine" } as RuntimeEvent);
+    expect(instance.blockedUntil("openrouter")).toBe(NOW + UNNAMED_LIMIT_MS);
+    expect(instance.report().engines).toEqual([expect.objectContaining({ engine: "openrouter", blocked: true })]);
+    expect(instance.readsUsage("openrouter")).toBe(false);
+    expect(instance.heldByGuess("openrouter")).toBe(true);
+    expect(instance.release("openrouter")).toBe(true);
+    expect(instance.blockedUntil("openrouter")).toBeNull();
+    expect(instance.report().engines.some((limit) => limit.engine === "openrouter" && limit.blocked)).toBe(false);
+
+    instance.noteLimit("claude", undefined);
+    expect(instance.heldByGuess("claude"), "a plan whose usage says when it resets is never tried early").toBe(false);
+    instance.noteRefusal("openrouter", NOW + HOUR);
+    expect(instance.heldByGuess("openrouter"), "nor is a reset the engine named").toBe(false);
+    expect(instance.release("openrouter")).toBe(false);
+    expect(instance.blockedUntil("openrouter")).toBe(NOW + HOUR);
+  });
+
   it("keeps a refusal's hold through a restart, so a new conversation does not go to the limited engine first", () => {
     const dir = mkdtempSync(join(tmpdir(), "dusk-limit-holds-"));
     try {

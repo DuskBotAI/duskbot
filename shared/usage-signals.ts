@@ -170,6 +170,10 @@ const CODE_REASONS: ReadonlyArray<[RegExp, UsageReason]> = [
   [/^(?:internalServerError|serverOverloaded|responseTooManyFailedAttempts|overloaded_error|api_error|server_error|upstream_outage|free_busy)$/, "provider_down"],
   [/^(?:httpConnectionFailed|responseStreamConnectionFailed|responseStreamDisconnected)$/, "network"],
   [/^(?:free_timeout)$/, "timeout"],
+  [/^finish_content_filter$/, "refused"],
+  [/^finish_error$/, "provider_down"],
+  [/^reasoning_leak$/, "no_reply"],
+  [/^(?:tool_call_malformed|tools_unavailable)$/, "tool"],
   [/^(?:free_no_reply|free_empty|free_error)$/, "no_reply"],
   [/^crashed$/, "crashed"],
   [/^cli_missing$/, "cli_missing"],
@@ -177,8 +181,19 @@ const CODE_REASONS: ReadonlyArray<[RegExp, UsageReason]> = [
 // a turn's stop reason, when it is a bare token and the words said nothing
 const STOP_REASONS: Readonly<Record<string, UsageReason>> = {
   exit_before_result: "cli_exit_early", spawn_error: "cli_missing", auth_required: "auth", quota: "quota", no_reply: "no_reply", provider_safety: "refused",
-  max_tokens: "context", refusal: "refused", tool_error: "tool",
+  max_tokens: "context", refusal: "refused", tool_error: "tool", empty_turn: "no_reply", incomplete_action: "no_reply", api_error: "provider_down",
 };
+// an SDK's or provider's error class named in the failure, when nothing else in it says why
+const CLASS_REASONS: ReadonlyArray<[RegExp, UsageReason]> = [
+  [/^(?:ServiceUnavailable|InternalServer|BadGateway|GatewayTimeout|Overloaded|Upstream|KVTransfer)Error$/, "provider_down"],
+  [/^(?:RateLimit|TooManyRequests)Error$/, "rate_limit"],
+  [/^(?:Authentication|PermissionDenied|Unauthorized)Error$/, "auth"],
+  [/^(?:APIConnection|Connection)Error$/, "network"],
+  [/^(?:APITimeout|Timeout|RequestTimeout)Error$/, "timeout"],
+  [/^(?:ContextWindowExceeded|ContextLength)Error$/, "context"],
+  [/^(?:BadRequest|UnprocessableEntity)Error$/, "bad_request"],
+  [/^ModelNotFoundError$/, "model_not_found"],
+];
 
 const STATUS = /\bHTTP (\d{3})\b|\(status (\d{3})\b|\bstatus(?: code)?[:= ]+(\d{3})\b|^API Error:? (\d{3})\b|"status(?:Code)?"\s*:\s*(\d{3})\b|\b(\d{3}) (?:Bad Request|Unauthorized|Payment Required|Forbidden|Not Found|Request Timeout|Payload Too Large|Unprocessable Entity|Too Many Requests|Internal Server Error|Bad Gateway|Service Unavailable|Gateway Timeout)\b/i;
 const EXIT = /\bexited (?:with code )?(-?\d{1,3}|null)\b/;
@@ -267,6 +282,8 @@ function reasonOf(line: string, hint: string | undefined): UsageReason {
   if (EXIT.test(line) || /exited (?:unexpectedly|SIG)/.test(line)) return "cli_exit_early";
   if (CRASH_WORDS.test(line) || /\bspawn\b/i.test(line)) return "crashed";
   if (/\btool\b/i.test(line)) return "tool";
+  const errorClass = ERROR_CLASS.exec(line)?.[1] ?? (hint?.endsWith("Error") ? hint : undefined);
+  if (errorClass) for (const [pattern, reason] of CLASS_REASONS) if (pattern.test(errorClass)) return reason;
   return "unknown";
 }
 

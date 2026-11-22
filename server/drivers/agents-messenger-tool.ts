@@ -11,7 +11,7 @@ export async function callMessengerTool(_name: string, args: Json, context: Tool
 
 export const MESSENGER_TOOL_DEFINITION = {
   name: MESSENGER_TOOL,
-  description: "Telegram and Discord bot accounts for this bot, set up from a BotFather or Discord bot token the person pasted. status: what is connected, who may reach it, who was turned away. connect: link that token (leave token out; dusk bot takes it from what the person pasted). allow / remove_access: a person or group by name from status, or by id. disconnect: stop using that Telegram or Discord bot. send: text to the person's own chat with it once claimed, also from automations and job wake-ups.",
+  description: "Telegram and Discord bot accounts for this bot, set up from a BotFather or Discord bot token the person pasted. status: what is connected, who may reach it, who was turned away. connect: link that token (leave token out; dusk bot takes it from what the person pasted). allow / remove_access: a person or group by name from status, or by id. disconnect: stop using that Telegram or Discord bot. send: text to the person's own chat with it once claimed; automations and job wake-ups alert them with it.",
   inputSchema: {
     type: "object",
     additionalProperties: false,

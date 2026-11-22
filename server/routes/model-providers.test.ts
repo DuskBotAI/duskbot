@@ -157,4 +157,25 @@ describe("model provider routes", () => {
     const { call: callOffline } = await serve({ fetch: offline as unknown as typeof fetch });
     expect((await callOffline("POST", "/api/model-providers/models", { provider: "groq", key: "k" })).body).toEqual({ ok: false, reason: "unreachable", result: "unreachable" });
   });
+
+  it("check a pasted key and its model with one 1-token reply before saving, and save no key or model the provider refuses", async () => {
+    let probe: { status: number; body: unknown } = { status: 401, body: { error: { message: "Invalid API Key gsk_wrong" } } };
+    const provider = vi.fn(async (url: string | URL | Request) => {
+      if (String(url).endsWith("/models")) return Response.json({ data: [{ id: "llama-3.3-70b-versatile" }, { id: "llama-3.1-8b-instant" }] });
+      return Response.json(probe.body, { status: probe.status });
+    });
+    const { call, persisted } = await serve({ fetch: provider as unknown as typeof fetch });
+    const wrongKey = await call("POST", "/api/model-providers/connect", { provider: "groq", key: "gsk_wrong" });
+    expect(wrongKey).toMatchObject({ status: 400, body: { check: "wrong_key", error: expect.stringContaining("did not accept this key") } });
+    expect(wrongKey.text).not.toContain("gsk_wrong");
+    probe = { status: 404, body: { error: { message: "The model `llama-3.3-70b` does not exist", code: "model_not_found" } } };
+    const wrongModel = await call("POST", "/api/model-providers/connect", { provider: "groq", key: "gsk_ok", models: ["llama-3.3-70b"] });
+    expect(wrongModel).toMatchObject({ status: 400, body: { check: "wrong_model", suggestedModel: "llama-3.3-70b-versatile", error: "Groq does not offer the model llama-3.3-70b. Try llama-3.3-70b-versatile." } });
+    expect(persisted).toEqual([]);
+    probe = { status: 429, body: { error: { message: "You exceeded your current quota", code: "insufficient_quota" } } };
+    expect(await call("POST", "/api/model-providers/connect", { provider: "groq", key: "gsk_ok", models: ["llama-3.3-70b-versatile"] })).toMatchObject({ status: 201, body: { check: "no_credit" } });
+    probe = { status: 200, body: {} };
+    expect(await call("POST", "/api/model-providers/connect", { provider: "groq", key: "gsk_ok", models: ["llama-3.3-70b-versatile"] })).toMatchObject({ status: 201, body: { check: "works" } });
+    expect(persisted).toHaveLength(2);
+  });
 });

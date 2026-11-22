@@ -26,7 +26,7 @@ import { useCaptionChrome } from "@/components/DesktopCapabilities";
 import { usePageVisible } from "@/lib/page-visible";
 import { listenLiveFrames } from "@/lib/live-events";
 import { CloudScreenPreview } from "./CloudScreenPreview";
-import { isRemoteScreenshotContention } from "@/lib/remote-desktop";
+import { isRemoteScreenshotContention, isRemoteScreenshotUnconfigured } from "@/lib/remote-desktop";
 import { useDesktopCapabilities } from "./DesktopCapabilities";
 import { BotRoutines } from "./routines/BotRoutines";
 import { BrowserPanel } from "./BrowserPanel";
@@ -47,7 +47,7 @@ import {
 } from "@/lib/local-computer";
 import { moveBetweenTabs, PANEL_TABS, panelTabProps, scrollTabsWithWheel, TAB_PANEL_FOCUS, tabPanelProps } from "./computer-panel-tabs";
 import { releaseComputerPanelFocus, useComputerPanelEntry } from "@/lib/computer-panel-focus";
-import { PANEL_MAX_WIDTH, PANEL_MIN_WIDTH, useComputerPanelResize } from "./computer-panel-resize";
+import { useComputerPanelResize } from "./computer-panel-resize";
 import {
   computerPanelTabs,
   readComputerPanelView,
@@ -150,7 +150,7 @@ export function ComputerPanel({
 }) {
   useComputerAnalytics(profileBot.id, visible);
   const { dragProps } = useCaptionChrome();
-  const { panelWidth, separatorRef, separatorWidth, onSeparatorKeyDown, onResizeStart, onResizeMove, onResizeEnd } = useComputerPanelResize();
+  const { panelWidth, separator } = useComputerPanelResize();
   const { state, dispatch, flushBotPatches } = useStore();
   const liveTask = profileBot.tasks?.find((task) => task.threadId === profileBot.threadId);
   const livePin = personPin(liveTask);
@@ -256,6 +256,7 @@ export function ComputerPanel({
   const [containerState, setContainerState] = useState<string | null>(null);
   const [polledFrame, setPolledFrame] = useState<{ png: string; mime: string } | null>(null);
   const [previewError, setPreviewError] = useState<Error | string | null>(null);
+  const previewUnconfigured = previewError instanceof ApiError && isRemoteScreenshotUnconfigured(previewError);
   const [previewRefreshing, setPreviewRefreshing] = useState(false);
   const [previewRetry, setPreviewRetry] = useState(0);
   const [vmFrame, setVmFrame] = useState<string | null>(null);
@@ -288,9 +289,15 @@ export function ComputerPanel({
   const [decodedDesktop, setDecodedDesktop] = useState<{ key: string; ready: boolean } | null>(null);
   const [screenAspect, setScreenAspect] = useState(COMPUTER_SCREEN_ASPECT);
   const desktopDecoded = decodedDesktop?.key === viewerConnectionKey && decodedDesktop.ready;
+  /** The live view failed for this computer and has not shown a frame since; its automatic retries keep it set. */
+  const [liveDownKey, setLiveDownKey] = useState<string | null>(null);
   // a dropped live watch comes back by itself, sooner after a blip and less often while it stays down
   const liveRetries = useRef(0);
-  useEffect(() => { if (desktopDecoded) liveRetries.current = 0; }, [desktopDecoded]);
+  useEffect(() => { if (desktopDecoded) { liveRetries.current = 0; setLiveDownKey(null); } }, [desktopDecoded]);
+  const retryLiveView = () => {
+    liveRetries.current = 0;
+    setLivePreviewFailed(null);
+  };
   useEffect(() => {
     if (livePreviewFailed === null || livePreviewFailed !== viewerConnectionKey) return;
     const wait = LIVE_RETRY_MS[Math.min(liveRetries.current, LIVE_RETRY_MS.length - 1)];
@@ -648,6 +655,7 @@ export function ComputerPanel({
     viewerClose: null,
   });
   const liveHere = takeover.here && Boolean(liveTarget) && viewerLoads;
+  const liveDown = Boolean(liveTarget) && !desktopDecoded && (!viewerLoads || liveDownKey === viewerConnectionKey);
 
   const liveLocal = useLiveScreen((Boolean(fullscreen) || inline) && phase === "local" && !isLinux && computerStatusCurrent && pageVisible, inline && !takeover.expanded ? LIVE_FPS.preview : LIVE_FPS.full);
   const localStreaming = (Boolean(fullscreen) || inline) && (liveLocal.status === "live" || liveLocal.status === "starting");
@@ -895,6 +903,7 @@ export function ComputerPanel({
   const desktopUnreachable = () => {
     setDecodedDesktop(null);
     setLivePreviewFailed(viewerConnectionKey);
+    setLiveDownKey(viewerConnectionKey);
     setRetry(value => value + 1);
     if (takeover.here) {
       takeover.leave();
@@ -1326,19 +1335,8 @@ export function ComputerPanel({
       style={{ width: panelWidth }}
     >
       <div
-        ref={separatorRef}
-        role="separator"
-        aria-orientation="vertical"
+        {...separator}
         aria-label={t("computer.resizeAria")}
-        aria-valuemin={PANEL_MIN_WIDTH}
-        aria-valuemax={PANEL_MAX_WIDTH}
-        aria-valuenow={separatorWidth ?? undefined}
-        tabIndex={0}
-        onKeyDown={onSeparatorKeyDown}
-        onPointerDown={onResizeStart}
-        onPointerMove={onResizeMove}
-        onPointerUp={onResizeEnd}
-        onPointerCancel={onResizeEnd}
         className="absolute inset-y-0 left-0 z-10 w-1.5 cursor-col-resize hover:bg-accent/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus max-md:hidden"
       />
       {/* ml-1.5 keeps the drag region clear of the resize handle: a later drag region in the DOM wins. */}
@@ -1421,11 +1419,15 @@ export function ComputerPanel({
               src={frameSrc}
               name={bot.name}
               error={panelErrorText(previewError)}
+              fix={previewUnconfigured && placeSeat.role === "admin"
+                ? { label: t(vpsStatus?.configured ? "computer.openVpsSettings" : "vpsLink.add"), onClick: openConnectionSettings }
+                : undefined}
               refreshing={previewRefreshing}
               retry={previewRetry}
               starting={phase === "starting"}
               opening={pending === "join"}
               disabled={controlPending}
+              canOpen={!liveDown}
               onOpen={() => void takeControl()}
               onRetry={(discardFrame) => {
                 setLivePreviewFailed(null);
@@ -1568,7 +1570,7 @@ export function ComputerPanel({
           </div>
         )}
 
-        {(cloudPreviewReady || phase === "vm") && (
+        {(cloudPreviewReady || phase === "vm") && !previewUnconfigured && (
           <div className="mt-3 flex gap-2" data-testid="computer-actions">
             {!control.held && !bannerTakesControl && (
               <button
@@ -1576,7 +1578,7 @@ export function ComputerPanel({
                 onClick={() => void takeControl()}
                 disabled={controlPending || pending === "join" || !desktopDecoded}
                 className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-accent py-2 text-[13px] font-medium text-accent-ink hover:brightness-110 disabled:opacity-50"
-                title={t("computer.takeControlTitle")}
+                title={t(liveDown ? "computer.liveDown" : "computer.takeControlTitle")}
               >
                 {pending === "join" ? <Loader2 size={14} className="animate-spin" /> : <Hand size={14} />}
                 {t("computer.takeControl")}
@@ -1585,9 +1587,9 @@ export function ComputerPanel({
             <button
               type="button"
               onClick={() => takeover.setExpanded(true)}
-              disabled={pending === "join" || (!control.held && controlPending) || (phase === "vm" && !liveTarget)}
+              disabled={pending === "join" || (!control.held && controlPending) || (phase === "vm" && !liveTarget) || liveDown}
               className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-control py-2 text-[13px] text-ink hover:bg-raised-hover disabled:opacity-50"
-              title={t("computer.openLiveDesktop")}
+              title={t(liveDown ? "computer.liveDown" : "computer.openLiveDesktop")}
             >
               <Maximize2 size={14} />
               {t("computer.fullScreen")}
@@ -1602,6 +1604,16 @@ export function ComputerPanel({
               >
                 {pending === "sleep" ? <Loader2 size={14} className="animate-spin" /> : <Moon size={14} />}
                 {t("vm.cloud.sleep")}
+              </button>
+            )}
+          </div>
+        )}
+        {(cloudPreviewReady || phase === "vm") && liveDown && (
+          <div role="status" className="mt-2 flex items-center justify-between gap-2 text-[12px] text-ink-secondary">
+            <span>{t("computer.liveDown")}</span>
+            {viewerLoads && (
+              <button type="button" onClick={retryLiveView} className="shrink-0 rounded-md bg-control px-3 py-1.5 text-ink hover:bg-raised-hover">
+                {t("computer.retryLive")}
               </button>
             )}
           </div>

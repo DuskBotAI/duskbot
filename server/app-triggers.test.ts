@@ -83,6 +83,17 @@ describe("AppTriggerManager", () => {
     expect(instance?.trigger_config).toEqual({ query: "from:acme.com subject:(order)" });
   });
 
+  it("runs a bot's sample event here through the real steps, with no test marker", async () => {
+    const triggers = manager();
+    const trigger = await gmailTrigger(triggers);
+    const result = await triggers.runNow(trigger.id, { subject: "Order #9", sender: "me@example.com" });
+    expect(result).toMatchObject({ via: "here", runId: expect.any(String) });
+    const [run] = runsOf(trigger.id);
+    expect(run).toMatchObject({ eventSource: "app", deliveryId: expect.stringMatching(/^sample_/) });
+    expect(run!.prompt).toContain("Order #9");
+    expect(run!.prompt).not.toContain("TEST EVENT");
+  });
+
   it("acks an event only after its run is saved: a failure before the save brings the same event back once", async () => {
     const triggers = manager();
     const trigger = await gmailTrigger(triggers);

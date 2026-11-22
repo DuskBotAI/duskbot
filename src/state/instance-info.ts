@@ -56,4 +56,6 @@ export interface InstanceInfo {
   freeUpSpace?: boolean; replyWaitMinutes?: number; modelsUnconfirmed?: true;
   /** Found on this computer, never chosen: listed, never used on its own until the person says so. */
   found?: true;
+  /** Its saved driver is one this build doesn't have (a typo, or a config from another version): kept, never usable here. */
+  unknownDriver?: true;
 }

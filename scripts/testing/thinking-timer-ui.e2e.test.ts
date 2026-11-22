@@ -1,10 +1,12 @@
-// The Thinking readout counts from the server's turn-start stamp (for a group,
-// its speaker's claim), not from when the conversation was last selected.
+// The working line is anchored to the server's turn-start stamp (for a group,
+// its speaker's claim), not to when the conversation was last selected: back
+// on a turn that has run a while, it says what is happening at once instead of
+// starting the turn's opening quiet over. It never counts seconds.
 // Needs the pinned agent-browser binary: runs when one resolves (tools
 // directory, DUSK_AGENT_BROWSER_PATH or PATH) or DUSK_UI_E2E=1 asks for the
 // verified download; otherwise skipped.
 import { spawn } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -13,7 +15,7 @@ import { afterAll, afterEach, describe, expect, it } from "vitest";
 import { resolveAgentBrowserBinary } from "../../server/browser-engine.ts";
 import { removeTempDir, waitForExit } from "../../server/testing/cleanup.ts";
 import { runControlDusk } from "../control-dusk.ts";
-import { agentBrowser, sessionEnv, UI_TOOLS_DIR, type UiHandle } from "./control-dusk-ui.ts";
+import { UI_TOOLS_DIR } from "./control-dusk-ui.ts";
 import { fixtureApi } from "./preview-fixture.ts";
 
 const ROOT = fileURLToPath(new URL("../..", import.meta.url));
@@ -87,14 +89,24 @@ function launch(args: string[]): Promise<Launched> {
 const ui = (verb: string, handle: string, ...args: string[]) =>
   runControlDusk(["ui", verb, "--ui", handle, ...args]) as Promise<Record<string, any>>;
 
-/** "42s" / "1m 05s" → seconds, so the readout can be compared to the stamp. */
-function elapsedSeconds(text: string): number {
-  const minutes = /^(\d+)m (\d{2})s$/.exec(text);
-  if (minutes) return Number(minutes[1]) * 60 + Number(minutes[2]);
-  const seconds = /^(\d+)s$/.exec(text);
-  if (seconds) return Number(seconds[1]);
-  return -1;
-}
+/** A seconds count as the old readout wrote it ("42s", "1m 05s"): the line and its tooltip never show one. */
+const SECONDS = /\b\d+s\b|\b\d+m \d{2}s\b/;
+
+/** In the page: clicks `click` (if given), then waits for the working line to have words, and says how long that took
+ * and what the line and its tooltip read. A fresh turn's line is quiet for STATUS_QUIET_MS (1.8 s at least) first. */
+const wordsAfter = (click: string | null) => `new Promise((done) => {
+  ${click ? `document.querySelector(${JSON.stringify(click)}).click();` : ""}
+  const start = performance.now();
+  const read = () => {
+    const line = document.querySelector('.turn-presence [data-turn-status]');
+    const words = line?.textContent?.trim() ?? "";
+    if (words || performance.now() - start > 15000) {
+      const tip = document.querySelector('.turn-presence [title]')?.getAttribute('title') ?? "";
+      done({ ms: Math.round(performance.now() - start), words, tip });
+    } else setTimeout(read, 20);
+  };
+  read();
+})`;
 
 async function waitUntil<T>(probe: () => Promise<T>, timeoutMs: number, what: string): Promise<T> {
   const deadline = Date.now() + timeoutMs;
@@ -132,28 +144,11 @@ describe("the thinking timer stays anchored across a thread switch", () => {
     if (ownsEvidenceDir) await removeTempDir(evidenceDir);
   });
 
-  run("counts from the server's turn-start stamp, not from the re-selection", async () => {
+  run("keeps the working line on the server's turn-start stamp across a re-selection, and never counts seconds", async () => {
     launched = await launch(["--mode", "hang"]); // the turn never settles; the bot stays busy
     const { info } = launched;
     const api = fixtureApi(info.url);
     const evaluate = async (js: string) => (await ui("eval", info.ui, "--js", js)).result;
-    // A 1:1 chat's status line is Grok's rotating phrase; the elapsed time is in its tooltip, as a person reads it.
-    // Leaving the line repaints it, so each hover shows the time as of that hover.
-    const handle = JSON.parse(readFileSync(info.ui, "utf8")) as UiHandle;
-    const hover = (selector: string) => agentBrowser(handle.binary, sessionEnv(handle), ["hover", selector]);
-    const until = (probe: string) => evaluate(`new Promise((done) => {
-      const end = performance.now() + 3000;
-      const read = () => { const value = ${probe}; value || performance.now() > end ? done(value || null) : setTimeout(read, 50); };
-      read();
-    })`);
-    const timerText = async () => {
-      if (!await evaluate("Boolean(document.querySelector('.turn-presence > div'))")) return null;
-      await hover('textarea[aria-label="Message Pepper"]');
-      await until("!document.querySelector('[role=tooltip]')");
-      await hover(".turn-presence > div");
-      const tip = await until("document.querySelector('[role=tooltip]:not([data-ending])')?.textContent") as string | null;
-      return tip?.split(" · ").find((part) => /^(?:\d+m \d{2}s|\d+s)$/.test(part)) ?? null;
-    };
     // The simple sidebar lists bots, not threads: a person leaves Pepper's busy conversation by opening another bot
     // and comes back through Pepper's row, which reopens the same conversation.
     const rowOf = (botId: string) => `[data-sidebar-bot-row="${botId}"]`;
@@ -181,24 +176,21 @@ describe("the thinking timer stays anchored across a thread switch", () => {
     expect(stamp).toBeGreaterThanOrEqual(sentAt - 2_000);
     expect(stamp).toBeLessThanOrEqual(Date.now() + 2_000);
 
-    const first = await waitUntil(timerText, 15_000, "the thinking readout to appear");
-    expect(elapsedSeconds(first)).toBeGreaterThanOrEqual(0);
+    const first = await evaluate(wordsAfter(null)) as { ms: number; words: string; tip: string };
+    expect(first.words, "the working line has words").not.toBe("");
+    expect(`${first.words} ${first.tip}`).not.toMatch(SECONDS);
     await new Promise((done) => setTimeout(done, Math.max(0, stamp + 10_000 - Date.now())));
-    const beforeSwitch = await timerText();
-    expect(elapsedSeconds(beforeSwitch)).toBeGreaterThanOrEqual(Math.floor((Date.now() - stamp) / 1000) - 2);
 
     await selectRow(otherBot);
     await waitUntil(() => isCurrent(otherBot), 10_000, "the other bot to become current");
     await new Promise((done) => setTimeout(done, 3_000));
-    await selectRow(info.botId);
+    // A line that restarted at the re-selection would sit through a fresh turn's quiet (1.8 s at least) first.
+    const resumed = await evaluate(wordsAfter(rowOf(info.botId))) as { ms: number; words: string; tip: string };
     await waitUntil(() => isCurrent(info.botId), 10_000, "Pepper's busy conversation to become current again");
     expect((await api("GET", "/api/bots")).bots.find((bot: any) => bot.id === info.botId).threadId).toBe(busyThread);
-
-    // A restart would show single digits after a 13+ second turn.
-    const resumed = await waitUntil(timerText, 10_000, "the thinking readout to appear again");
-    const away = (Date.now() - stamp) / 1000;
-    expect(elapsedSeconds(resumed)).toBeGreaterThanOrEqual(Math.floor(away) - 3);
-    expect(elapsedSeconds(resumed)).toBeGreaterThanOrEqual(10);
+    expect(resumed.words, "the working line has words again").not.toBe("");
+    expect(resumed.ms, "words at once on a turn that has run a while").toBeLessThan(1_500);
+    expect(`${resumed.words} ${resumed.tip}`).not.toMatch(SECONDS);
 
     expect(await taskOf(busyThread)).toMatchObject({ busy: true, turnStartedAt: stamp });
 
@@ -212,27 +204,11 @@ describe("the thinking timer stays anchored across a thread switch", () => {
     expect(existsSync(info.dataDir)).toBe(false);
   }, LAUNCH_TIMEOUT_MS + 120_000);
 
-  run("counts a group's turn from the speaking member's claim, resuming after a switch away", async () => {
+  run("keeps a group's working line on the speaking member's claim after a switch away, and never counts seconds", async () => {
     launched = await launch(["--mode", "hang"]); // the group's turn never settles either
     const { info } = launched;
     const api = fixtureApi(info.url);
     const evaluate = async (js: string) => (await ui("eval", info.ui, "--js", js)).result;
-    // the elapsed time is in the status row's tooltip (969f4d85f), read the way the 1:1 test above reads it
-    const handle = JSON.parse(readFileSync(info.ui, "utf8")) as UiHandle;
-    const hover = (selector: string) => agentBrowser(handle.binary, sessionEnv(handle), ["hover", selector]);
-    const until = (probe: string) => evaluate(`new Promise((done) => {
-      const end = performance.now() + 3000;
-      const read = () => { const value = ${probe}; value || performance.now() > end ? done(value || null) : setTimeout(read, 50); };
-      read();
-    })`);
-    const timerText = async () => {
-      if (!await evaluate("Boolean(document.querySelector('.turn-presence > div'))")) return null;
-      await hover('textarea[aria-label="Message Timer group"]');
-      await until("!document.querySelector('[role=tooltip]')");
-      await hover(".turn-presence > div");
-      const tip = await until("document.querySelector('[role=tooltip]:not([data-ending])')?.textContent") as string | null;
-      return tip?.split(" · ").find((part) => /^(?:\d+m \d{2}s|\d+s)$/.test(part)) ?? null;
-    };
     const botsState = () => api("GET", "/api/bots");
     const groupState = async () => (await botsState()).groups.find((row: any) => row.id === groupId);
 
@@ -267,23 +243,20 @@ describe("the thinking timer stays anchored across a thread switch", () => {
     expect(stamp).toBeGreaterThanOrEqual(sentAt - 2_000);
     expect(stamp).toBeLessThanOrEqual(Date.now() + 2_000);
 
-    const first = await waitUntil(timerText, 15_000, "the group's thinking readout to appear");
-    expect(elapsedSeconds(first)).toBeGreaterThanOrEqual(0);
+    const first = await evaluate(wordsAfter(null)) as { ms: number; words: string; tip: string };
+    expect(first.words, "the group's working line has words").not.toBe("");
+    expect(`${first.words} ${first.tip}`).not.toMatch(SECONDS);
     await new Promise((done) => setTimeout(done, Math.max(0, stamp + 10_000 - Date.now())));
-    const beforeSwitch = await timerText();
-    expect(elapsedSeconds(beforeSwitch)).toBeGreaterThanOrEqual(Math.floor((Date.now() - stamp) / 1000) - 2);
 
     await selectRow(soloRow);
     await waitUntil(() => isCurrentRow(soloRow), 10_000, "the 1:1 thread to become current");
     await new Promise((done) => setTimeout(done, 3_000));
-    await selectRow(groupRow);
+    // A line that restarted at the re-selection would sit through a fresh turn's quiet (1.8 s at least) first.
+    const resumed = await evaluate(wordsAfter(groupRow)) as { ms: number; words: string; tip: string };
     await waitUntil(() => isCurrentRow(groupRow), 10_000, "the group to become current again");
-
-    // A restart would show single digits after a 13+ second turn.
-    const resumed = await waitUntil(timerText, 10_000, "the group's thinking readout to appear again");
-    const away = (Date.now() - stamp) / 1000;
-    expect(elapsedSeconds(resumed)).toBeGreaterThanOrEqual(Math.floor(away) - 3);
-    expect(elapsedSeconds(resumed)).toBeGreaterThanOrEqual(10);
+    expect(resumed.words, "the group's working line has words again").not.toBe("");
+    expect(resumed.ms, "words at once on a turn that has run a while").toBeLessThan(1_500);
+    expect(`${resumed.words} ${resumed.tip}`).not.toMatch(SECONDS);
 
     expect(await groupState()).toMatchObject({ busyBotId: info.botId, turnStartedAt: stamp });
 

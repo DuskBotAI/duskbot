@@ -116,9 +116,11 @@ export function noticeLabel(text: string): string | undefined {
 }
 
 /** The status line's "now": the engine's own report when it made one, else what the server just said about the turn (it
- * is waiting for memory, say), else the tool call still running in the chat, else nothing, and the line shows its timer alone. */
+ * is waiting for memory, say), else the tool call still running in the chat, else nothing, and the line shows its timer alone.
+ * A first reply's wait is never the "now": the chat holds that row back while the turn runs, so no line may name it. */
 export function turnNowPhrases(status: LiveStatus | null, message?: Message): LiveActivityPhrases | null {
   if (status) return liveStatusPhrases(status);
+  if (message?.tool?.rescue) return null;
   const notice = message?.kind === "activity" && message.tool?.name.startsWith("notice:") ? noticeLabel(message.tool.name.slice("notice:".length)) : undefined;
   if (notice) return { phase: `notice:${notice}`, phrases: [notice] };
   if (message?.kind !== "activity" || !message.tool || message.tool.ok !== undefined || message.comm) return null;

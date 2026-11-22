@@ -11,13 +11,15 @@ import { appLink, openApp } from "../lib/app-link";
 import { ago, longDate } from "../lib/format";
 import { Link, navigate } from "../lib/router";
 import { DOWNLOAD_URL } from "../lib/usage";
+import { computerWord, desktopName } from "../lib/downloads";
+import { siteUrl } from "../lib/site";
 import { Field, Modal } from "../ui/controls";
 import { Button, ButtonLink, Card, FreshnessTag, PageHeader, SectionTitle, Skeleton } from "../ui/kit";
 import { RowMenu, Table, Td, Th, type MenuItem } from "../ui/table";
 import { KIND_LABEL } from "../ui/Shell";
 import { SkyEmpty } from "../ui/Sky";
 import { CloudStatus, prewarm, regionName, tierName, workspaceIcon } from "./cloud-bits";
-import { monthlyOf, Points, useQuickCheckout } from "./cloud-offer";
+import { monthlyOf, Points, usePlanChoice } from "./cloud-offer";
 import { CommandButton, LoadError } from "./common";
 import { MachineView } from "./Machine";
 import { useNow } from "../lib/now";
@@ -92,6 +94,7 @@ function Step({ n, title, children }: { n: number; title: ReactNode; children?: 
 
 export function WorkspacesPage() {
   const { workspaces, workspacesError, refresh } = useSession();
+  const computer = computerWord(), desktop = desktopName();
   const { clouds } = useCloud();
   const rank = (w: WorkspaceSummary) => (cloudForWorkspace(clouds, w.id) ? 0 : w.kind === "vps" ? 2 : 1);
   const sorted = [...(workspaces ?? [])].sort((a, b) => rank(a) - rank(b));
@@ -105,21 +108,27 @@ export function WorkspacesPage() {
               <thead><tr><Th>name</Th><Th className="max-md:hidden">type</Th><Th className="max-sm:w-[120px]">status</Th><Th className="max-lg:hidden">version</Th><Th className="max-lg:hidden">connected</Th><Th className="w-0 max-sm:w-11"><span className="sr-only">more</span></Th></tr></thead>
               <tbody>{sorted.map((w) => <WorkspaceRow key={w.id} w={w} cloud={cloudForWorkspace(clouds, w.id)} />)}</tbody>
             </Table>
-          ) : <p className="py-2 text-14 text-ink-3">no workspaces yet. connect your mac or get dusk cloud below.</p>}
+          ) : <p className="py-2 text-14 text-ink-3">no workspaces yet. connect your {computer} or get dusk cloud below.</p>}
         </section>
         <section id="add" className="enter mt-6 scroll-mt-20" style={{ ["--i" as string]: 2 }}>
           <Card>
             <SectionTitle>add a workspace</SectionTitle>
             <div className="grid min-w-0 gap-6 md:grid-cols-2 md:gap-0">
               <div className="min-w-0 md:pr-6">
-                <h3 className="mb-5 text-14 font-medium text-ink">your mac</h3>
+                <h3 className="mb-5 text-14 font-medium text-ink">your {computer}</h3>
                 <ol className="flex flex-col gap-5">
-                  <Step n={1} title="download dusk bot for mac"><ButtonLink to={DOWNLOAD_URL} external size="sm" className="mt-1.5">download</ButtonLink></Step>
+                  <Step n={1} title={desktop ? `download dusk bot for ${desktop}` : "download dusk bot"}><ButtonLink to={DOWNLOAD_URL} external size="sm" className="mt-1.5">download</ButtonLink></Step>
                   <Step n={2} title="sign in with this account">it shows up here by itself a few seconds later.</Step>
-                  <Step n={3} title="keep it awake">your bots run while the mac is on.</Step>
+                  <Step n={3} title="keep it awake">your bots run while the {computer} is on.</Step>
+                </ol>
+                <h3 id="add-server" className="mb-5 mt-10 scroll-mt-20 text-14 font-medium text-ink">your own server</h3>
+                <ol className="flex flex-col gap-5">
+                  <Step n={1} title="ask the app for a line">in dusk bot, open the menu at the top of the sidebar, choose add a cloud or your own server, then your own server.</Step>
+                  <Step n={2} title="paste it on the server">ubuntu 22.04 or 24.04 with 2 gb of memory or more. the line works once, and the app shows each step.</Step>
+                  <Step n={3} title="move your bots over">sign in to your ai from the app, never on the server. it shows up here once it is linked.<a href={siteUrl("/docs/your-own-server")} className="text-link mt-1.5 flex h-8 w-fit items-center">read the server guide</a></Step>
                 </ol>
               </div>
-              <CloudColumn hasCloud={Boolean(clouds?.length)} />
+              <CloudColumn hasCloud={Boolean(clouds?.length)} computer={computer} />
             </div>
           </Card>
         </section>
@@ -128,21 +137,21 @@ export function WorkspacesPage() {
   );
 }
 
-/** the second way to run bots: dusk cloud, so they keep working when the mac sleeps */
-function CloudColumn({ hasCloud }: { hasCloud: boolean }) {
+/** the other way to run bots: dusk cloud, so they keep working when the computer sleeps */
+function CloudColumn({ hasCloud, computer }: { hasCloud: boolean; computer: string }) {
   const { catalog } = useCloud();
-  const { busy, error, buy } = useQuickCheckout("dash_workspaces");
+  const { choose, sheet } = usePlanChoice("dash_workspaces");
   const from = monthlyOf(catalog, "starter");
   return (
     <div className="min-w-0 max-md:pt-6 md:pl-6">
       <h3 className="mb-2 text-14 font-medium text-ink">dusk cloud</h3>
-      <p className="mb-5 text-14 text-ink-3">your bots on a computer we run, so they keep going when your mac sleeps.{from ? ` from ${from} a month.` : ""}</p>
+      <p className="mb-5 text-14 text-ink-3">your bots on a computer we run, so they keep going when your {computer} sleeps.{from ? ` from ${from} a month.` : ""}</p>
       <Points />
-      {error && <p role="alert" className="mt-4 text-14 text-bad">{error}</p>}
+      {sheet}
       <div className="mt-6 flex flex-wrap gap-2">
         {hasCloud
           ? <ButtonLink to="/cloud" variant="primary">open dusk cloud</ButtonLink>
-          : <Button variant="primary" onClick={() => void buy("starter")} disabled={busy || !catalog}>{busy ? "opening checkout" : "get dusk cloud"}</Button>}
+          : <Button variant="primary" onClick={() => choose("starter")} disabled={!catalog}>get dusk cloud</Button>}
         <ButtonLink to="/billing">compare plans</ButtonLink>
       </div>
     </div>

@@ -221,6 +221,23 @@ describe("a v1 live view whose stream dropped", () => {
     expect(host.textContent).not.toContain("Browser disconnected");
   });
 
+  it("shows the server's reason when it gives up, and its pill and address say disconnected, not connecting", async () => {
+    fixture.state.config.browserEngine = { kind: "engine", engine: "agent-browser" };
+    await render();
+    await emit("error", { retryable: false, message: "The browser stream could not start." });
+    expect(host.textContent).toContain("Browser disconnected");
+    expect(host.textContent).toContain("The browser stream could not start.");
+    const pill = host.querySelector<HTMLButtonElement>("[data-pill]")!;
+    expect(pill.dataset.pill).toBe("disconnected");
+    expect(pill.getAttribute("aria-label")).toBe("Disconnected");
+    expect(pill.querySelector(".animate-spin")).toBeNull();
+    expect(host.querySelector<HTMLInputElement>('[aria-label="Browser address"]')!.placeholder).toBe("Disconnected");
+    await act(async () => button("Reconnect").click());
+    await flush();
+    expect(host.querySelector<HTMLButtonElement>("[data-pill]")!.dataset.pill).toBe("connecting");
+    expect(host.textContent).not.toContain("The browser stream could not start.");
+  });
+
   it("says the browser closed after it sat unused, and opens a new view only when asked", async () => {
     fixture.state.config.browserEngine = { kind: "engine", engine: "agent-browser" };
     await render();

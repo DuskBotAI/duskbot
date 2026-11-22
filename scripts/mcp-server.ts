@@ -581,6 +581,14 @@ function records(value: unknown): Array<Record<string, any>> {
   return Array.isArray(value) ? value.filter(isRecord) : [];
 }
 
+const QUOTED_ABSOLUTE_PATH = /([`'"])(?:~|[A-Za-z]:)?[\\/][^`'"]*[\\/]([^`'"\\/]+)\1/g;
+const ABSOLUTE_PATH = /(^|[\s`'"(])(?:~|[A-Za-z]:)?[\\/](?:[^\s`'"()\\/]+[\\/])+([^\s`'"()\\/]+)/g;
+
+/** An engine's status line with each absolute path cut to its last part. */
+export function withoutLocalPaths(text: string): string {
+  return text.replace(QUOTED_ABSOLUTE_PATH, "$1$2$1").replace(ABSOLUTE_PATH, "$1$2");
+}
+
 function projectTask(task: Record<string, any>, activeThreadId: unknown) {
   return {
     taskId: task.threadId,
@@ -1154,7 +1162,11 @@ export async function handleToolCall(
           instanceId: instance.instanceId,
           driverKind: instance.driverKind,
           displayName: instance.displayName,
-          snapshot: { state: instance.snapshot?.state },
+          snapshot: {
+            state: instance.snapshot?.state,
+            ...(typeof instance.snapshot?.reason === "string" ? { reason: withoutLocalPaths(instance.snapshot.reason) } : {}),
+            ...(typeof instance.snapshot?.authenticated === "boolean" ? { authenticated: instance.snapshot.authenticated } : {}),
+          },
           models: instance.models,
           capabilities: instance.capabilities,
           access: instance.access,

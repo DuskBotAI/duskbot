@@ -31,13 +31,18 @@ export const INSTABOX_HOME_VOLUME = "data";
 /** entries of /data that are the platform's (the machine user's home, TMPDIR, its own state, swap) or a step's scratch:
  *  never in a backup, never replaced by a restore */
 export const PLATFORM_ENTRIES = ["home", "tmp", "workspace", "config", "state", "swapfile", "lost+found", ".instabox*", ".omb-restore.*", ".omb-old.*"] as const;
+/** downloads the server fetches again when missing: agent-browser's and the launcher's Chrome for Testing, local voice models */
+const REDOWNLOADED = [".agent-browser/browsers", `${CLOUD_HOME.dataName}/tools/chrome`, ".cache/duskbot"];
 const BROWSER_PROFILE_CACHES = ["Cache", "Code Cache", "GPUCache", "GrShaderCache", "ShaderCache", "GraphiteDawnCache", "DawnGraphiteCache", "DawnWebGPUCache",
   "Service Worker/CacheStorage", "Service Worker/ScriptCache", "component_crx_cache", "optimization_guide_model_store"];
 /** caches under /data that their owner fills again on demand (package managers, the server's scratch, Chromium's caches
  *  inside a profile, never its cookies or storage): never in a backup. tar and find match `*` across `/` here */
 export const BACKUP_CACHES = [".npm", ".cache/pip", ".cache/uv", ".cache/node-gyp", ".cache/yarn", ".cache/pnpm", ".bun/install/cache", ".local/share/pnpm/store",
-  ...["tmp", ".tmp", "cache", ".cache"].map(e => `${CLOUD_HOME.dataName}/${e}`),
+  ...REDOWNLOADED, ...["tmp", ".tmp", "cache", ".cache"].map(e => `${CLOUD_HOME.dataName}/${e}`),
   ...BROWSER_PROFILE_CACHES.map(e => `${CLOUD_HOME.dataName}/agent-browser-profiles/*/${e}`)] as const;
+/** BACKUP_CACHES as this service drops them from any home's tar, old snapshot scripts too. pnpm's store stays: tar stores
+ *  a hard-linked file once, so a project's node_modules may hold only links into it */
+export const STREAM_SKIPPED = BACKUP_CACHES.filter(e => e !== ".local/share/pnpm/store");
 // the launcher runs only root's code (codeTrustProblem); the whole Node distribution, npm with it: the server installs
 // engine CLIs with npm into its own data folder (engine-install.ts)
 const ROOT = CLOUD_HOME.root, APP = `${ROOT}/app`, BIN = `${ROOT}/bin`, NODE_DIR = `${ROOT}/node`;

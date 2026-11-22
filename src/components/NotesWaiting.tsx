@@ -7,7 +7,7 @@ import { CircleAlert, X } from "../icons";
 import type { LocaleKey } from "@/locales";
 import { localSetupImport } from "@/lib/setup-import";
 import { arrivalFailed, dismissArrival, noteArrival, useNotesArrival, useNotesWork, type NotesVia } from "@/lib/notes-arrival";
-import { copyNotesPrompt, importNotes, notesWatch, takeNotesFromDownloads, WATCH_EVERY_MS, isNotesPrompt, notesErrorLine, notesOutcomeLine, scheduleNotesReminder, stopWaiting, useNotesWaiting } from "@/lib/assistant-notes";
+import { bringOfferedNotesIn, dismissNotesOffer, notesOfferLine, useNotesOffer, copyNotesPrompt, importNotes, notesWatch, takeNotesFromDownloads, WATCH_EVERY_MS, isNotesPrompt, notesErrorLine, notesOutcomeLine, scheduleNotesReminder, stopWaiting, useNotesWaiting } from "@/lib/assistant-notes";
 import { myDefaultBot, useViewerEmail } from "@/lib/default-bot";
 import { t } from "@/lib/i18n";
 import { systemNotificationsAllowed } from "@/lib/notify";
@@ -86,11 +86,13 @@ const cardClass = "mb-2 flex items-center gap-2 rounded-[14px] bg-ink/[0.04] py-
 const xClass = "grid size-7 shrink-0 place-items-center rounded-full text-ink-tertiary transition-colors hover:bg-ink/[0.06] hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus motion-reduce:transition-none";
 
 /** Above the message box: while notes are on their way (first bot's chat only), "waiting" with the prompt again and a
- * way to stop; once they come into this chat, that they came, for a few seconds, then nothing. */
+ * way to stop; a notes file already in Downloads before the prompt was copied, offered; once they come into this chat,
+ * that they came, for a few seconds, then nothing. */
 export function NotesWaitingLine({ botId }: { botId: string | undefined }) {
-  const { state } = useStore();
+  const { state, dispatch } = useStore();
   const waiting = useNotesWaiting();
   const arrival = useNotesArrival();
+  const offered = useNotesOffer();
   const first = myDefaultBot(state.bots, useViewerEmail());
   // while the first bot works through them, its chat says how it goes: no waiting card under that
   const working = useNotesWork(first?.id);
@@ -109,6 +111,21 @@ export function NotesWaitingLine({ botId }: { botId: string | undefined }) {
           : <span aria-hidden="true" className="funnel-wait inline-block size-1.5 shrink-0 rounded-full bg-ink/60" />}
         <span className="min-w-0 flex-1 text-pretty">{arrival.failed ?? t(GOT[arrival.via])}</span>
         <button type="button" data-notes-dismiss="" onClick={dismissArrival} aria-label={t("composer.notes.dismiss")} title={t("composer.notes.dismiss")} className={xClass}>
+          <X size={14} aria-hidden="true" />
+        </button>
+      </div>
+    );
+  }
+  if (offered && !working && botId === first?.id) {
+    const bring = () => void bringOfferedNotesIn({ bots: state.bots, aboutMe: state.config?.profile?.aboutMe ?? "", team: Boolean(state.config?.team), firstBotId: first.id, dispatch });
+    return (
+      <div data-notes-offer="" role="status" aria-live="polite" className={cardClass}>
+        <span className="min-w-0 flex-1 text-pretty">{notesOfferLine(offered)}</span>
+        <button type="button" data-notes-bring="" onClick={bring}
+          className="shrink-0 rounded-full px-2 py-1 text-ink transition-colors hover:bg-ink/[0.06] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus motion-reduce:transition-none">
+          {t("composer.notes.offerBring")}
+        </button>
+        <button type="button" data-notes-dismiss="" onClick={dismissNotesOffer} aria-label={t("composer.notes.offerDismiss")} title={t("composer.notes.offerDismiss")} className={xClass}>
           <X size={14} aria-hidden="true" />
         </button>
       </div>

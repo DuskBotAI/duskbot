@@ -7,6 +7,7 @@ import { createJsonStore } from "../billing/json-store.ts";
 import { dedicatedUserData, linkKeys, originFor, poolBootstrap } from "./bootstrap.ts";
 import { PoolFullError } from "./pool.ts";
 import { RetryableCloudError } from "./http.ts";
+import { homeFailure } from "./home-client.ts";
 
 /** what a Team Cloud is called on its machine (DUSK_CLOUD_TEAM_NAME: 1 to 80 characters, no control characters) */
 export function teamName(value: string) { return value.replace(/[\p{Cc}]/gu, " ").replace(/\s+/g, " ").trim().slice(0, 80) || "team"; }
@@ -69,6 +70,7 @@ interface State { v: 1; clouds: StoredCloud[] }
 /** dusk cloud machines looked after at once in one upkeep pass: enough that one slow backup does not stall the rest, few
  *  enough to stay gentle on the shared box (each backup streams through a small buffer) and on the provider's start limits */
 const UPKEEP_CONCURRENCY = 4;
+const PAIR_RETRY_MS = [15_000, 30_000, 60_000, 120_000];
 const failureOf = (error: unknown) => error instanceof Error ? `${error.name}: ${error.message}`.replace(/\s+/g, " ").slice(0, 300) : String(error).slice(0, 300);
 const sameSpec = (a: MachineSpec, b: MachineSpec) => a.vcpu === b.vcpu && a.ramGb === b.ramGb && a.diskGb === b.diskGb;
 const sameQuota = (a: SlotQuota | undefined, b: SlotQuota) => a && (Object.keys(b) as Array<keyof SlotQuota>).every(k => a[k] === b[k]);
@@ -140,10 +142,24 @@ export function createCloudsService(options: CloudsServiceOptions): CloudsServic
   }
   function get(id: string) { return store.state.clouds.find(c => c.id === id) ?? null; }
   function requireCloud(id: string) { const cloud = get(id); if (!cloud) throw new CloudError(404, "not_found"); return cloud; }
+  /** a home that just refused a pairing is not asked again until its wait is over: an app retrying every few seconds
+   *  gets the same 503 from here instead of a call to the home each time */
+  const pairRefusals = new Map<string, { cause: string; tries: number; until: number }>();
   async function pairCloud(c: StoredCloud, member?: TeamMemberClaim) {
     if (c.status !== "running" || !c.origin || c.suspended !== null || c.ended || c.destroyAt !== null && c.destroyAt <= now()) throw new CloudError(409, "unavailable");
+    const refused = pairRefusals.get(c.id);
+    if (refused && refused.until > now()) throw new CloudError(503, "cloud_unreachable", "Your cloud did not answer. Try again in a minute.");
     const claims = c.team && member ? { label: "dusk bot app (Team Cloud)", team: c.team, member } : { label: "dusk bot app (Cloud)" };
-    const result = await (c.backend ? options.managedHome ?? home : home).pair(c.origin, sealer.unseal(c.bootstrapSecret), { ...claims, ttlSeconds: 300 });
+    let result: { code: string; expiresAt: number };
+    try {
+      result = await (c.backend ? options.managedHome ?? home : home).pair(c.origin, sealer.unseal(c.bootstrapSecret), { ...claims, ttlSeconds: 300 });
+    } catch (error) {
+      const cause = homeFailure(error), tries = (refused?.tries ?? 0) + 1;
+      if (refused?.cause !== cause) console.warn(`clouds: pairing with cloud ${c.id} failed (${cause})`);
+      pairRefusals.set(c.id, { cause, tries, until: now() + PAIR_RETRY_MS[Math.min(tries - 1, PAIR_RETRY_MS.length - 1)]! });
+      throw new CloudError(503, "cloud_unreachable", "Your cloud did not answer. Try again in a minute.");
+    }
+    if (refused) { console.warn(`clouds: pairing with cloud ${c.id} works again after ${refused.tries} failed tries (${refused.cause})`); pairRefusals.delete(c.id); }
     // the cloud's link public key: the app checks its cloud's sealed Mac jobs against it (docs/cloud-uses-mac.md)
     return { origin: c.origin, code: result.code, expiresAt: result.expiresAt, ...(c.linkPublicKey ? { linkKey: c.linkPublicKey } : {}) };
   }
@@ -221,7 +237,7 @@ export function createCloudsService(options: CloudsServiceOptions): CloudsServic
     const token = signEntitlement(c);
     if (!token) return;
     try { await home.entitle(c.origin, sealer.unseal(c.bootstrapSecret), token, options.linkGrant?.(c) ?? null); c.entitledAt = now(); save(c); }
-    catch { console.warn(`clouds: the entitlement push to ${c.id} failed; it is tried again`); }
+    catch (error) { console.warn(`clouds: the entitlement push to ${c.id} failed (${homeFailure(error)}); it is tried again`); }
   }
   function succeeded(c: StoredCloud) { c.attempts = 0; c.nextAttemptAt = 0; c.poolFullSince = undefined; c.error = null; save(c); }
   async function reconcileCloud(c: StoredCloud) {

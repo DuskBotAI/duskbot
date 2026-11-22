@@ -13,7 +13,7 @@ const out = join(dirname(fileURLToPath(import.meta.url)), "../src/assets/app-log
 /** id -> simple-icons slug */
 const MARKS = {
   "1password": "1password", atlassian: "atlassian", brevo: "brevo", cloudflare: "cloudflare", datadog: "datadog",
-  figma: "figma", gmail: "gmail", "google-calendar": "googlecalendar", "google-docs": "googledocs",
+  figma: "figma", github: "github", gmail: "gmail", "google-calendar": "googlecalendar", "google-docs": "googledocs",
   "google-drive": "googledrive", "google-slides": "googleslides", hubspot: "hubspot", "hugging-face": "huggingface",
   intercom: "intercom", linear: "linear", notion: "notion", posthog: "posthog", postman: "postman", semrush: "semrush",
   sentry: "sentry", "shopify-merchant": "shopify", stripe: "stripe", supabase: "supabase", vercel: "vercel", x: "x",

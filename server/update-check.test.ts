@@ -141,9 +141,11 @@ describe("desktop update check", () => {
     const dir = mkdtempSync(join(tmpdir(), "dusk-release-"));
     writeFileSync(join(dir, "DuskBot-0.1.150-arm64.dmg"), "mac");
     writeFileSync(join(dir, "DuskBot-0.1.150-setup.exe"), "win");
+    writeFileSync(join(dir, "DuskBot.dmg"), "mac");
+    writeFileSync(join(dir, "DuskBot.apk"), "android");
     writeFileSync(join(dir, "notes.txt"), "ignored");
     const sums = sha256sums(dir);
-    expect(sums.trim().split("\n").map((line) => line.split("  ")[1])).toEqual(["DuskBot-0.1.150-arm64.dmg", "DuskBot-0.1.150-setup.exe"]);
+    expect(sums.trim().split("\n").map((line) => line.split("  ")[1])).toEqual(["DuskBot-0.1.150-arm64.dmg", "DuskBot-0.1.150-setup.exe", "DuskBot.apk", "DuskBot.dmg"]);
     vi.stubEnv("DUSK_RELEASE_PUBLIC_KEYS", `${testKey.kid}:${testKey.x}`);
     const manifest = releaseManifest(sums, "0.1.150", signingKey);
     vi.unstubAllEnvs();

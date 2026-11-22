@@ -3,7 +3,7 @@ import { AnimatePresence } from "motion/react";
 import { createPortal } from "react-dom";
 import { Check, Copy } from "../../icons";
 
-import { automationSentence, automationsFrom, automationStatus, AUTOMATION_FIX_LABEL, nextWhen, plainWhen, runLine, type Automation, type AutomationFix } from "@/lib/automations";
+import { automationSentence, automationsFrom, automationStatus, AUTOMATION_FIX_LABEL, lastWhen, nextWhen, plainWhen, runLine, type Automation, type AutomationFix } from "@/lib/automations";
 import { appWhen } from "@/lib/app-automations";
 import { useAppTriggers } from "@/lib/app-triggers";
 import { botAccentScope } from "@/lib/bot-accent";
@@ -15,11 +15,13 @@ import { routineRunsOn } from "@/lib/routine-display";
 import { fetchForecast, forecastLine, forecastWarning, lessOften, pauseLine, periodLine, useLoaded } from "@/lib/spend";
 import { phoneApp } from "@/lib/store-app";
 import { formatCost } from "@/lib/usage-trace";
-import { isRoutineProblemRun, type Routine, type RoutineRunOn } from "@/lib/routines";
+import { isRoutineProblemRun, type Routine, type RoutineRun, type RoutineRunOn } from "@/lib/routines";
 import { hoursLine, liveStrip, probeLine } from "@/lib/routine-display";
 import { saveWebhookCredential, webhookCredentialStore } from "@/lib/webhook-credentials";
+import { recentDeliveries } from "@/lib/webhooks";
 import { SheetPush } from "@/mobile/SheetPush";
 import { api, useStore, type Bot } from "@/state/store";
+import { ROUTINE_RUNS_WINDOW_MS } from "@/state/routine-runs";
 import { useAllAutomationActions } from "../automations/app-actions";
 import { AppEventEditor } from "../automations/AppEventEditor";
 import { WebhookEditor } from "../WebhookTrigger";
@@ -106,6 +108,7 @@ export function BotRoutines({ bot, defaultRunOn, label = true }: { bot: Bot; def
           automation={shown.automation}
           routine={shown.routine}
           actions={actions}
+          focusEdit={false}
           onEdit={() => setEditing(shown.automation.id)}
         />
       </div>
@@ -127,10 +130,15 @@ export function BotRoutines({ bot, defaultRunOn, label = true }: { bot: Bot; def
     </SheetPush>
   ) : null;
 
+  const loadFailed = state.routinesLoadState === "error";
   if (automations.length === 0 && editing !== "new") {
     return (
       <>
-        <PanelEmpty data-panel-empty="routines">{t("botPanel.routines.empty")}</PanelEmpty>
+        {loadFailed
+          ? <RoutinesLoadFailed />
+          : state.routinesLoadState === "ready"
+            ? <PanelEmpty data-panel-empty="routines">{t("botPanel.routines.empty")}</PanelEmpty>
+            : <PanelEmpty data-panel-empty="routines-loading">{t("botPanel.routines.loading")}</PanelEmpty>}
         {phonePush}
       </>
     );
@@ -138,6 +146,7 @@ export function BotRoutines({ bot, defaultRunOn, label = true }: { bot: Bot; def
   return (
     <>
       <Card label={label ? t("botPanel.ui.botSettingsSimpleRoutines") : undefined} anchor="routines">
+        {loadFailed && <RoutinesLoadFailed />}
         {automations.map((automation) => (
           <AutomationRow
             key={automation.id}
@@ -159,6 +168,24 @@ export function BotRoutines({ bot, defaultRunOn, label = true }: { bot: Bot; def
   );
 }
 
+function RoutinesLoadFailed() {
+  const { dispatch } = useStore();
+  const [trying, setTrying] = useState(false);
+  const retry = () => {
+    const since = Date.now() - ROUTINE_RUNS_WINDOW_MS;
+    setTrying(true);
+    void api<{ routines: Routine[]; runs: RoutineRun[] }>(`/api/routines?since=${since}`)
+      .then(({ routines, runs }) => dispatch({ type: "routinesHydrated", routines, runs, since }), () => {})
+      .finally(() => setTrying(false));
+  };
+  return (
+    <div role="alert" data-panel-empty="routines-error" className="flex flex-col items-center gap-2.5 px-4 py-4">
+      <p className="text-pretty text-center text-[13px] leading-[18px] tracking-[0.015em] text-ink/[0.56]">{t("botPanel.routines.loadError")}</p>
+      <button type="button" className={buttonCls} disabled={trying} onClick={retry}>{t("botPanel.routines.retry")}</button>
+    </div>
+  );
+}
+
 function AutomationRow({ bot, automation, routine, open, editing, phone, onOpen, onClose, onEdit }: {
   bot: Bot;
   automation: Automation;
@@ -172,6 +199,7 @@ function AutomationRow({ bot, automation, routine, open, editing, phone, onOpen,
 }) {
   const { dispatch } = useStore();
   const actions = useAllAutomationActions();
+  const [backFromForm, setBackFromForm] = useState(false);
   const status = automationStatus(automation);
   const done = status.state === "done";
   const when = whenLine(automation);
@@ -216,10 +244,10 @@ function AutomationRow({ bot, automation, routine, open, editing, phone, onOpen,
       {!phone && (
         <>
           <AnimatePresence>{open && !(editing && automation.kind !== "schedule") && (
-            <GrokDialog key="routine" data-panel-modal="routine" title={name} onClose={onClose}>
+            <GrokDialog key="routine" data-panel-modal="routine" title={name} onClose={() => { setBackFromForm(false); onClose(); }}>
               {editing && routine
-                ? <RoutineForm bot={bot} routine={routine} onDone={() => onEdit(false)} />
-                : <AutomationDetail id={detailId} bot={bot} automation={automation} routine={routine} actions={actions} onEdit={() => onEdit(true)} />}
+                ? <RoutineForm bot={bot} routine={routine} onDone={() => { setBackFromForm(true); onEdit(false); }} />
+                : <AutomationDetail id={detailId} bot={bot} automation={automation} routine={routine} actions={actions} focusEdit={backFromForm} onEdit={() => onEdit(true)} />}
             </GrokDialog>
           )}</AnimatePresence>
           {editing && automation.kind !== "schedule" && <ForeignEditor automation={automation} onClose={() => onEdit(false)} />}
@@ -241,12 +269,13 @@ function ForeignEditor({ automation, onClose }: { automation: Automation; onClos
   );
 }
 
-function AutomationDetail({ id, bot, automation, routine, actions, onEdit }: {
+function AutomationDetail({ id, bot, automation, routine, actions, focusEdit, onEdit }: {
   id: string;
   bot: Bot;
   automation: Automation;
   routine?: Routine;
   actions: ReturnType<typeof useAllAutomationActions>;
+  focusEdit: boolean;
   onEdit: () => void;
 }) {
   const { state, dispatch } = useStore();
@@ -273,6 +302,7 @@ function AutomationDetail({ id, bot, automation, routine, actions, onEdit }: {
   const addressCopied = actions.copied === automation.id || (automation.addressId !== undefined && actions.copied === automation.addressId);
   const status = automationStatus(automation);
   const runs = automation.runs.filter((run) => run.status !== "queued" || Boolean(run.attention?.trim())).slice(0, RECENT_RUNS);
+  const deliveries = useMemo(() => automation.kind === "webhook" ? recentDeliveries(state.webhookAttempts, automation.id) : null, [automation.kind, automation.id, state.webhookAttempts]);
   const roomGoal = routine?.target === "room-goal";
   const worksOn = routineRunsOn({ roomGoal, runOn: routine?.runOn ?? automation.appTrigger?.runOn, computer: bot.computer, cloudHome: state.config?.cloudHome === true });
   const resultsTo = roomGoal
@@ -378,6 +408,21 @@ function AutomationDetail({ id, bot, automation, routine, actions, onEdit }: {
             </ul>
           )}
         </Fact>
+        {deliveries && (
+          <Fact term={t("automations.panel.deliveries")}>
+            {deliveries.length === 0 ? <span className="text-ink-secondary">{t("automations.panel.noDeliveries")}</span> : (
+              <ul className="m-0 mt-0.5 flex list-none flex-col p-0" data-webhook-deliveries="">
+                {deliveries.map((delivery) => (
+                  <li key={delivery.id} data-webhook-delivery={delivery.ok ? "ok" : "refused"} className="flex items-baseline gap-1.5 py-0.5">
+                    <span className="shrink-0 text-ink-secondary">{lastWhen(delivery.at)}</span>
+                    <span className={cn("shrink-0", delivery.ok ? "text-success" : "text-danger")} aria-hidden="true">{delivery.ok ? "✓" : "✗"}</span>
+                    <span className="min-w-0 truncate">{t(delivery.key)}{delivery.count ? <span className="text-ink-secondary"> · {t("automations.delivery.count", { count: delivery.count })}</span> : null}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Fact>
+        )}
       </dl>
       {notes.map((note) => <p key={note} className="m-0 text-[12px] leading-4 text-warning">{note}</p>)}
       {status.state === "needs-you" && (status.fix === "answer" || status.fix === "sign-in" || status.fix === "usage" || status.fix === "reconnect") && (
@@ -408,7 +453,7 @@ function AutomationDetail({ id, bot, automation, routine, actions, onEdit }: {
                 {upperFirst(actions.busy === `test:${automation.id}` ? t("automations.starting") : t("automations.test"))}
               </button>
             )}
-            <button type="button" data-routine-action="edit" onClick={onEdit} className={buttonCls}>{upperFirst(t("automations.edit"))}</button>
+            <button type="button" data-routine-action="edit" autoFocus={focusEdit} onClick={onEdit} className={buttonCls}>{upperFirst(t("automations.edit"))}</button>
             <button type="button" data-routine-action="delete" disabled={busy} onClick={() => setConfirming(true)} className={buttonCls}>{upperFirst(t("common.delete"))}</button>
           </>
         )}

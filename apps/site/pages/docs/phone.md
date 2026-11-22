@@ -10,7 +10,7 @@ your bots keep running where they live. your phone is a window onto them: send m
 
 ## get the app
 
-on an iphone, get [dusk bot from the app store](https://apps.apple.com/app/id6834725640). the android app is on its way to google play.
+on an iphone, get [dusk bot from the app store](https://apps.apple.com/app/id6834725640). on android, download the app from [dusk.bot/download](/download#android): it's an .apk, not on google play yet, so your phone may ask you to allow installs from your browser.
 
 ## dusk cloud: just sign in
 
@@ -20,13 +20,13 @@ open the app and sign in with the same email you use for [dusk cloud](/docs/dusk
 
 1. on your computer, open the menu under your name and choose **connect your phone**.
 2. choose **to this computer**, or **to the cloud** if you have [dusk cloud](/docs/dusk-cloud).
-3. scan the code with your iphone's camera. it opens in the dusk bot app; confirm the computer's name.
+3. scan the code with your phone's camera. it opens in the dusk bot app; confirm the computer's name.
 
 {{include ui-pair}}
 
 can't scan? the same screen offers a code to type into the app, a nearby list on your wi-fi, or tailscale.
 
-> note: the code only opens in the app. scanned without it, nothing happens. on android, until google play has the app, open your cloud's address in chrome, pair it with a code from **settings**, **phone**, **pair another computer**, then choose **install app**. the browser version doesn't send notifications.
+> note: the code only opens in the app. scanned without it, nothing happens.
 
 ## your computer has to be awake
 

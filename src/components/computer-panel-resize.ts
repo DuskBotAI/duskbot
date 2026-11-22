@@ -1,7 +1,7 @@
-import { useEffect, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
+import { useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
 
 const PANEL_WIDTH_KEY = "dusk-computer-panel-width";
-export const PANEL_MIN_WIDTH = 360;
+const PANEL_MIN_WIDTH = 360;
 export const PANEL_MAX_WIDTH = 960;
 const PANEL_DEFAULT_WIDTH = 400;
 const PANEL_RESIZE_STEP = 40;
@@ -48,23 +48,25 @@ export function useComputerPanelResize() {
       return next;
     });
   };
-  const separatorRef = useRef<HTMLDivElement>(null);
-  const [separatorWidth, setSeparatorWidth] = useState<number | null>(null);
-  useEffect(() => {
-    const panel = separatorRef.current?.closest("aside");
-    if (!panel) return;
-    const read = () => setSeparatorWidth(panel.offsetWidth);
-    read();
-    const observer = new ResizeObserver(read);
-    observer.observe(panel);
-    return () => observer.disconnect();
-  }, []);
   const onSeparatorKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (event.ctrlKey || event.metaKey || event.altKey) return;
     const widen = event.key === "ArrowLeft" ? PANEL_RESIZE_STEP : event.key === "ArrowRight" ? -PANEL_RESIZE_STEP : null;
-    if (widen === null || separatorWidth === null) return;
+    if (widen === null) return;
     event.preventDefault();
     onResizeBy(widen);
   };
-  return { panelWidth, separatorRef, separatorWidth, onSeparatorKeyDown, onResizeStart, onResizeMove, onResizeEnd };
+  const separator = {
+    role: "separator",
+    "aria-orientation": "vertical",
+    "aria-valuemin": PANEL_MIN_WIDTH,
+    "aria-valuemax": PANEL_MAX_WIDTH,
+    "aria-valuenow": panelWidth,
+    tabIndex: 0,
+    onKeyDown: onSeparatorKeyDown,
+    onPointerDown: onResizeStart,
+    onPointerMove: onResizeMove,
+    onPointerUp: onResizeEnd,
+    onPointerCancel: onResizeEnd,
+  } as const;
+  return { panelWidth, separator };
 }

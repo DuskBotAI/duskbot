@@ -36,6 +36,19 @@ describe("sidebar previews", () => {
     expect(waitingLine(bot, [closing], [])).toBe("Setup's done. Want me to plan another trip?");
   });
 
+  it("names a pending sign-in, password or app card over every newer bot reply until it is answered", () => {
+    const signIn = message({ kind: "signin", signIn: { site: "X", url: "https://x.com/login" } } as unknown as Partial<Message>);
+    const later = [message({ text: "Checked the feed." }), message({ role: "user", text: "Anything new?" }), message({ text: "Nothing left for today." })];
+    expect(waitingLine(bot, [signIn, ...later], [])).toBe("Sign in to X");
+    expect(waitingLine({ ...bot, busy: true } as Bot, [signIn, ...later], [])).toBe("Sign in to X");
+    const done = { ...signIn, signIn: { site: "X", url: "https://x.com/login", done: true } } as Message;
+    expect(waitingLine(bot, [done, ...later], [])).toBe("Nothing left for today.");
+    const secret = message({ kind: "secret", secret: { label: "the Stripe key" } } as unknown as Partial<Message>);
+    expect(waitingLine(bot, [secret, ...later], [])).toBe("Needs the Stripe key");
+    const connect = message({ kind: "connector", connector: { label: "Gmail", status: "needed", resumeKey: "gmail" } } as unknown as Partial<Message>);
+    expect(waitingLine(bot, [connect, ...later], [])).toBe("Connect Gmail");
+  });
+
   it("shows nothing for a conversation that holds only screen frames", () => {
     expect(botPreview(bot, [screen(), screen()], [])).toBe("");
     expect(lastPreviewable([screen(), message({ kind: "compaction" })])).toBeUndefined();

@@ -182,7 +182,7 @@ export function WorkspaceBackupSettings() {
         saveLabel={busy === "export" ? t("backup.exporting") : t("settings.w6c.backup.exportTitle")} canSave={exportReady} busy={busy !== null} error={error ?? undefined}
         onSave={exportBackup} onClose={() => { setExportOpen(false); setExportPassword(""); setConfirmPassword(""); }}>
         <FormField label={t("backup.exportPassword")}>
-          <input type="password" autoComplete="new-password" minLength={12} maxLength={1024} required disabled={disabled} placeholder={t("settings.w6c.backup.passwordPlaceholder")} value={exportPassword} onChange={(event) => setExportPassword(event.target.value)} className={textFieldCls} />
+          <input type="password" autoFocus autoComplete="new-password" minLength={12} maxLength={1024} required disabled={disabled} placeholder={t("settings.w6c.backup.passwordPlaceholder")} value={exportPassword} onChange={(event) => setExportPassword(event.target.value)} className={textFieldCls} />
         </FormField>
         <FormField label={t("backup.confirmPassword")}>
           <input type="password" autoComplete="new-password" minLength={12} maxLength={1024} required disabled={disabled} value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} className={textFieldCls} />
@@ -192,7 +192,7 @@ export function WorkspaceBackupSettings() {
         saveLabel={busy === "preview" ? t("backup.validating") : t("backup.validate")} canSave={Boolean(importPassword)} busy={busy !== null} error={error ?? undefined}
         onSave={previewBackup} onClose={closeImport}>
         <FormField label={t("backup.importPassword")}>
-          <input type="password" autoComplete="off" maxLength={1024} required disabled={disabled} value={importPassword} onChange={(event) => setImportPassword(event.target.value)} className={textFieldCls} />
+          <input type="password" autoFocus autoComplete="off" maxLength={1024} required disabled={disabled} value={importPassword} onChange={(event) => setImportPassword(event.target.value)} className={textFieldCls} />
         </FormField>
       </FormDialog>}</AnimatePresence>
       <AnimatePresence>{preview && <FormDialog key="backup-restore" data-panel-modal="backup-restore" title={t("backup.preview")} description={t("backup.replaceWarning")} width={460}

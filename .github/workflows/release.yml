@@ -637,9 +637,9 @@ jobs:
             exit 0
           fi
           mkdir -p site
-          cp assets/DuskBot-"$VERSION"-* site/
+          cp assets/DuskBot-"$VERSION"-* assets/DuskBot{.dmg,-intel.dmg,-setup.exe,-amd64.deb,.AppImage} site/
           node src/scripts/release-manifest.ts site --version "$VERSION"
-          find site -maxdepth 1 -name 'DuskBot-*' -delete
+          find site -maxdepth 1 -name 'DuskBot*' -delete
           cat site/SHA256SUMS
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: hashFiles('site/latest.json') != ''

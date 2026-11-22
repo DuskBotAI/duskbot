@@ -6,7 +6,7 @@ import { resolveAgentBrowserBinary } from "../../server/browser-engine.ts";
 import { waitForExit } from "../../server/testing/cleanup.ts";
 import { runControlDusk } from "../control-dusk.ts";
 import { UI_TOOLS_DIR } from "./control-dusk-ui.ts";
-import { openBotSheet } from "./grok-nav.ts";
+import { closeBotPanel, openBotSheet } from "./grok-nav.ts";
 
 const ROOT = fileURLToPath(new URL("../..", import.meta.url));
 const enabled = Boolean(resolveAgentBrowserBinary({ dataDir: UI_TOOLS_DIR, env: process.env })) || process.env.DUSK_UI_E2E === "1";
@@ -150,7 +150,8 @@ interface SavedBot { id: string; name: string; toolScope?: { allow?: string[]; d
         } return fetch(input, init);
       }; return true;
     })()`);
-    await closeSheet();
+    // in a window too narrow to dock it, the bot's panel dims the chat behind it: a person closes it to reach the header
+    await closeBotPanel(ui);
     await click("Duplicate selected bot");
     await expect.poll(() => evaluate("window.scopeAtCreation")).toEqual({ allow: ["native:*"], deny: [] });
     expect(await evaluate("window.duplicateCreation.settings.toolScope")).toEqual({ allow: ["native:*"], deny: [] });

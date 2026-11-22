@@ -11,9 +11,9 @@ let root: Root;
 let width = 0;
 
 function Panel() {
-  const { panelWidth, separatorRef, onSeparatorKeyDown } = useComputerPanelResize();
+  const { panelWidth, separator } = useComputerPanelResize();
   width = panelWidth;
-  return createElement("aside", null, createElement("div", { ref: separatorRef, role: "separator", tabIndex: 0, onKeyDown: onSeparatorKeyDown }));
+  return createElement("aside", { style: { width: panelWidth } }, createElement("div", separator));
 }
 
 const press = (key: string) => act(() => {
@@ -45,6 +45,18 @@ describe("the computer panel's resize edge", () => {
     press("ArrowRight");
     expect(width).toBe(PANEL_MAX_WIDTH - 40);
     expect(localStorage.getItem("dusk-computer-panel-width")).toBe(String(PANEL_MAX_WIDTH - 40));
+  });
+
+  it("announces the width it resizes to, after the panel's contents are remounted too", () => {
+    act(() => root.render(createElement(Panel)));
+    const valueNow = () => host.querySelector("[role=separator]")!.getAttribute("aria-valuenow");
+    expect(valueNow()).toBe("400");
+    act(() => root.render(createElement("div", null, createElement(Panel))));
+    press("ArrowLeft");
+    press("ArrowLeft");
+    press("ArrowLeft");
+    expect(width).toBe(520);
+    expect(valueNow()).toBe("520");
   });
 
   it("ignores a stored width outside the bounds", () => {

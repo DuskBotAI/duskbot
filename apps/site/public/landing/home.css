@@ -143,6 +143,8 @@
 /* the models people already pay for, each in a near-neutral box; the logo carries the colour */
 .hero .m { display: inline-flex; align-items: center; gap: 5px; height: 25px; padding: 0 8px 0 6px; border-radius: 7px; margin: 0 1px; vertical-align: middle; line-height: 1; white-space: nowrap; font-size: 15px; font-weight: 550; color: var(--ink); background: color-mix(in oklab, var(--wash) 95%, var(--t)); }
 .hero .m .logo { width: 15px; height: 15px; }
+.hero a.quiet { color: inherit; text-decoration: none; }
+.stage-go { position: absolute; inset: 0; }
 .hero a.m { text-decoration: none; transition: background-color 0.2s ease; }
 @media (hover: hover) and (pointer: fine) { .hero a.m:hover { background: color-mix(in oklab, var(--wash) 78%, var(--t)); } }
 .hero .m-chatgpt { --t: #c2ecfc; } .hero .m-claude { --t: #ffc4dd; } .hero .m-gemini { --t: #d0cefb; } .hero .m-grok { --t: #fff3a0; }

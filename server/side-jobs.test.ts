@@ -197,7 +197,7 @@ describe("the setup card's answers", () => {
     await jobs.text("setup-suggestions", "api")!.generateText("p");
     await jobs.text("setup-suggestions", "pi")!.generateText("p");
     expect(booked.map((entry) => entry.row.threadId)).toEqual([expect.stringMatching(/^setup-suggestions-/), expect.stringMatching(/^setup-suggestions-/)]);
-    expect(booked.map((entry) => entry.row.trigger)).toEqual([{ kind: "bot", botId: "api" }, { kind: "helper", botId: "pi", job: "setup-suggestions" }]);
+    expect(booked.map((entry) => entry.row.trigger)).toEqual([{ kind: "upkeep", botId: "api", job: "setup-suggestions" }, { kind: "helper", botId: "pi", job: "setup-suggestions" }]);
   });
 });
 
@@ -367,16 +367,16 @@ describe("what a helper call is booked as", () => {
     expect(state.booked[0]).toMatchObject({ row: { input: 0, output: 0, costUsd: null }, tokensReported: false });
   });
 
-  it("leaves the bot's own background calls booked as they were, and its own summary unbooked", async () => {
+  it("books the bot's own background calls as its upkeep, with the job named, and leaves its own summary unbooked", async () => {
     const { jobs, state } = setup();
     await jobs.text("memory", "claude")!.generateText("p");
     await jobs.text("skill-review", "claude")!.generateText("p");
     await jobs.text("compaction", "claude")!.generateText("p");
     await jobs.text("memory", "codex")!.generateText("p");
     expect(state.booked.map((entry) => entry.row)).toEqual([
-      expect.objectContaining({ botId: "claude", instanceId: "claude", driverKind: "claudeAgent", threadId: expect.stringMatching(/^memory-/), trigger: { kind: "bot", botId: "claude" } }),
-      expect.objectContaining({ botId: "claude", instanceId: "claude", threadId: expect.stringMatching(/^skill-review-/), trigger: { kind: "bot", botId: "claude" } }),
-      expect.objectContaining({ botId: "codex", instanceId: "codex", driverKind: "codex", model: "codex-own", threadId: expect.stringMatching(/^memory-/), trigger: { kind: "bot", botId: "codex" } }),
+      expect.objectContaining({ botId: "claude", instanceId: "claude", driverKind: "claudeAgent", threadId: expect.stringMatching(/^memory-/), trigger: { kind: "upkeep", botId: "claude", job: "memory" } }),
+      expect.objectContaining({ botId: "claude", instanceId: "claude", threadId: expect.stringMatching(/^skill-review-/), trigger: { kind: "upkeep", botId: "claude", job: "skill-review" } }),
+      expect.objectContaining({ botId: "codex", instanceId: "codex", driverKind: "codex", model: "codex-own", threadId: expect.stringMatching(/^memory-/), trigger: { kind: "upkeep", botId: "codex", job: "memory" } }),
     ]);
   });
 });

@@ -38,6 +38,9 @@ export interface StepCall {
   stopped(): boolean;
   alive(): boolean;
   resize(): Promise<void>;
+  /** Whether the browser was up before the call's own tab step ran: agent-browser's tab_list starts a dead Chrome again
+   * and reports it as reused, so a relaunch is only seen against this reading. */
+  aliveBefore?: boolean | null;
 }
 
 export interface Box { x: number; y: number; w: number; h: number }
@@ -360,6 +363,14 @@ export class BrowserSteps {
 
   private target(call: { session: string; spec: SessionSpec }): RelayTarget { return relayTarget(call.spec, call.session); }
 
+  /** Never throws. Whether the browser is up; null when that can't be read. */
+  async alive(call: { session: string; spec: SessionSpec }): Promise<boolean | null> {
+    try {
+      const probe = await this.ports.probe(this.target(call));
+      return probe ? probe.connected : (this.ports.isTripped(call.session) ? null : false);
+    } catch { return null; }
+  }
+
   /** Never throws. */
   async before(call: StepCall): Promise<StepState> {
     const steps = this.session(call.session);
@@ -374,6 +385,7 @@ export class BrowserSteps {
       const probe = await this.ports.probe(target);
       state.aliveBefore = probe ? probe.connected : (this.ports.isTripped(call.session) ? null : false);
       state.noDaemon = !probe && state.aliveBefore === false;
+      if (call.aliveBefore === false) state.aliveBefore = false;
       if (!probe?.connected || !state.action) return state;
       const read = this.reader(target, probe.port);
       state.late = await this.health.read(call.session, read, call.ctx?.threadId ?? null);

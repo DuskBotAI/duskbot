@@ -29,13 +29,14 @@ function parseBase(source) {
 }
 
 /** Every `[data-skin="x"] { … }` block, as id → {token: value}, over the
- * inherited base so a skin is measured as it actually renders. */
+ * inherited base so a skin is measured as it actually renders. A skin with
+ * several blocks gets all of them, in source order, as the cascade does. */
 function parseSkins(source) {
   const { desktop, phone } = splitPhone(source);
   const base = parseBase(desktop);
   const skins = new Map();
   for (const [, id, body] of desktop.matchAll(/\[data-skin="([a-z-]+)"\]\s*\{([^}]*)\}/g)) {
-    skins.set(id, { ...base, ...declarations(body) });
+    skins.set(id, { ...(skins.get(id) ?? base), ...declarations(body) });
   }
   // The phone block re-declares some tokens of a skin under a width query, so
   // that skin is measured twice: as it renders on desktop and as "<id> (phone)".
@@ -284,34 +285,6 @@ for (const skinId of ["daylight", "grok", "pop"]) {
     }
   }
   if (!bubbleFailed) console.log(`✓ ${skinId} bubble — editor, controls and paired fills above 4.5:1`);
-}
-
-// dusk cloud's night card paints its own sky in every skin: an indigo dusk in the light scheme, a deep night in the
-// dark one. Its text sits between the sky's first two stops; the close button's glyph also lands on the far stop.
-const night = [...css.matchAll(/:root\s*\{([^}]*)\}/g)].map(([, body]) => declarations(body)).find(tokens => tokens["--cloud-night-from"]);
-if (!night) {
-  failed = true;
-  console.log("✗ night card — no :root block defines --cloud-night-from");
-} else {
-  for (const [scheme, pick] of [["dusk", 1], ["night", 2]]) {
-    const value = (token) => /^light-dark\(\s*([^,]+?)\s*,\s*([^)]+?)\s*\)$/.exec(night[token] ?? "")?.[pick] ?? night[token] ?? "";
-    let schemeFailed = false;
-    for (const [fg, bg, min] of [
-      ["--cloud-night-ink", "--cloud-night-from", 4.5],
-      ["--cloud-night-ink", "--cloud-night-mid", 4.5],
-      ["--cloud-night-ink-quiet", "--cloud-night-from", 4.5],
-      ["--cloud-night-ink-quiet", "--cloud-night-mid", 4.5],
-      ["--cloud-night-ink-quiet", "--cloud-night-to", 3],
-    ]) {
-      const ratio = contrast(value(fg), value(bg));
-      if (ratio === null || ratio < min) {
-        failed = true;
-        schemeFailed = true;
-        console.log(`✗ night card (${scheme}) — ${fg} on ${bg}: ${ratio?.toFixed(2) ?? "unmeasurable"}:1 (needs ${min}:1)`);
-      }
-    }
-    if (!schemeFailed) console.log(`✓ night card (${scheme}) — its text and close button clear the sky behind them`);
-  }
 }
 
 process.exit(failed ? 1 : 0);

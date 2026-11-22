@@ -16,6 +16,7 @@ import { routineUsageReport, type UsageReportInput } from "./routine-usage-repor
 import { listTriggers, triggerTarget } from "./trigger-tools.ts";
 import { addressFor, addressRefusal, routineAddress } from "./webhook-address.ts";
 import type { WebhookManager } from "./webhooks.ts";
+import type { JsonValue } from "./schema.ts";
 
 type Bot = RosterMember & {
   color: string; composio?: boolean;
@@ -226,6 +227,8 @@ export function createAppTriggerHost(deps: AppTriggerHostDeps) {
     operation: { action: string; trigger?: unknown; triggerId?: string; changes?: unknown };
     forBot?: { botId: string; name: string };
     sender?: { botId: string; name: string; color: string };
+    /** run_now: the bot's sample event, run through the real steps. */
+    payload?: JsonValue;
   }): Promise<void> {
     // Its events would stream the owner's app data into a conversation someone else drives.
     if (input.guestDriven) return json(res, 403, { error: GUEST_REFUSAL });
@@ -236,7 +239,7 @@ export function createAppTriggerHost(deps: AppTriggerHostDeps) {
       return json(res, 403, { error: `${owner.name} has not been given access to ${appLabel(app)}. Ask the person to allow it under the bot's Access settings; do not retry until they have.` });
     }
     try {
-      const applied = await requests.submit({ botId: input.from.id, threadId: input.threadId, operation: { ...input.operation, forBot: input.forBot }, from: input.sender, canCommit: input.canCommit });
+      const applied = await requests.submit({ botId: input.from.id, threadId: input.threadId, operation: { ...input.operation, forBot: input.forBot }, from: input.sender, canCommit: input.canCommit, ...(input.payload !== undefined ? { payload: input.payload } : {}) });
       deps.audit({ threadId: input.threadId, requestId: applied.requestId, botId: input.from.id, botName: input.from.name,
         tool: applied.action === "create" ? "create_trigger" : "manage_trigger", summary: applied.summary });
       return json(res, 201, applied);

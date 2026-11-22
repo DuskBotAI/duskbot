@@ -12,7 +12,7 @@ export async function postImportNote(botId: string, facts: ImportNoteFacts): Pro
 
 export function notesNoteFacts(outcome: NotesOutcome): ImportNoteFacts {
   return {
-    from: [outcome.from], bots: outcome.botNames ?? [], facts: outcome.facts, memories: outcome.memories, threads: outcome.threads ?? 0,
-    routines: outcome.routines ?? 0, skills: outcome.skills ?? 0, failed: outcome.failed.length > 0 || Boolean(outcome.lost?.length),
+    from: [outcome.from], bots: outcome.botNames ?? [], joined: outcome.joined ?? 0, facts: outcome.facts, aboutInMemory: outcome.aboutInMemory ?? 0, memories: outcome.memories, threads: outcome.threads ?? 0,
+    routines: outcome.routines ?? 0, skills: outcome.skills ?? 0, failed: outcome.failed.length > 0 || Boolean(outcome.lost?.length), partial: outcome.partial,
   };
 }

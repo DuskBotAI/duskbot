@@ -506,10 +506,10 @@ describe("hosted dashboard service", () => {
     const html = "<head><script>document.documentElement.dataset.theme = 'light';</script><script type=\"module\" src=\"/assets/a.js\"></script></head>";
     const policy = pagePolicy(html);
     const hash = createHash("sha256").update("document.documentElement.dataset.theme = 'light';").digest("base64");
-    expect(policy).toContain(`script-src 'self' 'sha256-${hash}';`);
+    expect(policy).toContain(`script-src 'self' 'sha256-${hash}' https://static.cloudflareinsights.com;`);
     expect(policy).not.toContain("unsafe-eval");
     expect(policy).toContain("frame-ancestors 'none'");
-    expect(policy).toContain("connect-src 'self'");
+    expect(policy).toContain("connect-src 'self' https://cloudflareinsights.com;");
   });
 
   it("answers a health check while its data folder is writable", async () => {
@@ -567,7 +567,7 @@ describe("hosted dashboard service", () => {
     const fallback = await page("/claim");
     expect(await fallback.text()).toContain("dashboard fixture");
     expect(fallback.headers.get("content-security-policy")).toBe(pagePolicy("<!doctype html><title>dashboard fixture</title>"));
-    expect(fallback.headers.get("content-security-policy")).toContain("script-src 'self'; ");
+    expect(fallback.headers.get("content-security-policy")).toContain("script-src 'self' https://static.cloudflareinsights.com; ");
     expect(fallback.headers.get("x-frame-options")).toBe("DENY");
     expect(fallback.headers.get("referrer-policy")).toBe("no-referrer");
     expect(fallback.headers.get("x-robots-tag")).toBe("noindex, nofollow");

@@ -2,7 +2,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import type { TraceDetail, TraceTurn } from "../../shared/usage-trace";
-import { formatDuration, groupLabel, timeAxis, toolLabel, traceBadges, traceRows, usagePeriodRange } from "./usage-trace";
+import { formatDuration, groupLabel, timeAxis, toolLabel, traceBadges, traceRootTitle, traceRows, usagePeriodRange } from "./usage-trace";
 
 vi.mock("@/state/store", async (original) => {
   const actual = await original<typeof import("@/state/store")>();
@@ -66,6 +66,7 @@ describe("trace helpers", () => {
   it("names the groupings that are not a person in plain words", () => {
     expect(usageGroupLabel("user", { key: "owner", label: "this computer" })).toBe("This computer");
     expect(usageGroupLabel("user", { key: "bot", label: "bot to bot" })).toBe("Bot to bot");
+    expect(usageGroupLabel("user", { key: "upkeep", label: "Background work" })).toBe("Background work");
     expect(usageGroupLabel("user", { key: "routine:r1", label: "Routine: Morning digest" })).toBe("Routine: Morning digest");
     expect(usageGroupLabel("user", { key: "user:ada@example.test", label: "ada@example.test" })).toBe("ada@example.test");
     expect(usageGroupLabel("routine", { key: "manual", label: "not from a routine" })).toBe("Not from a routine");
@@ -96,5 +97,18 @@ describe("trace helpers", () => {
     expect(html).toMatch(/text-danger[^>]*>Search the web/);
     expect(html).toContain("trace-bar-error");
     expect(html.match(/role="treeitem"/g)).toHaveLength(7);
+  });
+});
+
+describe("traceRootTitle", () => {
+  const bots = [{ id: "p", name: "Pepper" }];
+  it("names a bot's background job by what it was, never as work picked up from a teammate", () => {
+    expect(traceRootTitle({ title: "", source: "upkeep", job: "memory", bots })).toBe("Pepper updating its memory");
+    expect(traceRootTitle({ title: "", source: "helper", job: "skill-review", bots })).toBe("Pepper reviewing its skills");
+    expect(traceRootTitle({ title: "", source: "upkeep", job: "turn-beat", bots })).toBe("Background work for Pepper");
+  });
+  it("keeps what was asked, and the teammate wording for real hand-offs", () => {
+    expect(traceRootTitle({ title: "Check the inbox", source: "upkeep", job: "memory", bots })).toBe("Check the inbox");
+    expect(traceRootTitle({ title: "", source: "bot", bots })).toBe("Work Pepper picked up from a teammate");
   });
 });

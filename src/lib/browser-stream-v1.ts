@@ -191,6 +191,7 @@ export function createLiveStreamClient(botId: string, events: PreviewStreamEvent
   let size = initialSize;
   /** The size on its way to the open view; a newer one waits for its answer. */
   let sizing: { width: number; height: number } | null = null;
+  let dropReason = "";
 
   const dropped = (live: EventSource, retryable: boolean) => {
     live.close();
@@ -206,7 +207,7 @@ export function createLiveStreamClient(botId: string, events: PreviewStreamEvent
     if (delay === undefined) {
       stopped = true;
       revivable = retryable;
-      events.onGone?.();
+      events.onGone?.(dropReason || undefined);
       return;
     }
     retry = setTimeout(connect, delay);
@@ -262,6 +263,7 @@ export function createLiveStreamClient(botId: string, events: PreviewStreamEvent
     listen("ready", (data) => {
       if (typeof data.viewerId !== "string" || !data.viewerId) return;
       viewerId = data.viewerId;
+      dropReason = "";
       inputBatch = Number.isSafeInteger(data.inputBatch) ? Math.max(1, Math.min(Number(data.inputBatch), 64)) : 1;
       resume.viewer = "";
       events.onConnectedChange(true);
@@ -307,7 +309,10 @@ export function createLiveStreamClient(botId: string, events: PreviewStreamEvent
           const data = JSON.parse(event.data) as { retryable?: unknown; message?: unknown; asleep?: unknown };
           retryable = data.retryable === true;
           if (data.asleep === true) events.onMessage?.({ type: "asleep" });
-          else if (typeof data.message === "string") events.onMessage?.({ type: "notice", message: data.message });
+          else if (typeof data.message === "string") {
+            dropReason = data.message;
+            events.onMessage?.({ type: "notice", message: data.message });
+          }
         } catch {}
       }
       dropped(live, retryable);

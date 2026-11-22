@@ -127,12 +127,42 @@ describe("dodo HTTP provider fixture", () => {
     }
   });
   it("bounds responses and never leaks credentials or response bodies", async () => {
-    status = 500; reply = { error: `private ${apiKey}` };
-    await expect(provider().createCheckout(input)).rejects.toMatchObject({ code: "unavailable", message: "unavailable" });
+    status = 500; reply = { error: `private ${apiKey}`, code: `private ${apiKey}` };
+    await expect(provider().createCheckout(input)).rejects.toMatchObject({ code: "unavailable", message: "500" });
+    status = 422; reply = { code: "SUBSCRIPTION_INACTIVE", message: `private ${apiKey}` };
+    await expect(provider().cancelNow("sub")).rejects.toMatchObject({ code: "refused", message: "422 SUBSCRIPTION_INACTIVE" });
     status = 200; reply = { value: "x".repeat(256 * 1024) };
     await expect(provider().createCheckout(input)).rejects.toMatchObject({ code: "refused" });
     contentType = "application/pdf"; reply = Buffer.alloc(5 * 1024 * 1024 + 1);
     await expect(provider().invoicePdf("large")).rejects.toMatchObject({ code: "refused" });
+  });
+  it("a card page that fails on an on_hold plan hands back the open page dodo already made, else the error", async () => {
+    const recent = new Date().toISOString();
+    server.removeAllListeners("request");
+    server.on("request", (req, res) => {
+      requests.push({ method: req.method!, url: req.url!, auth: req.headers.authorization, body: null });
+      const send = (code: number, body: unknown) => { res.writeHead(code, { "content-type": "application/json" }); res.end(JSON.stringify(body)); };
+      if (req.url!.endsWith("/update-payment-method")) return send(422, { code: "PREVIOUS_PAYMENT_PENDING" });
+      if (req.url!.startsWith("/payments?")) return send(200, { items: [{ payment_id: "pay_old", status: "cancelled", created_at: recent }, { payment_id: "pay_open", status: "requires_payment_method", created_at: recent }] });
+      if (req.url === "/payments/pay_open") return send(200, { payment_id: "pay_open", payment_link: "https://test.checkout.dodopayments.com/open" });
+      send(404, {});
+    });
+    expect(await provider().updatePaymentMethod("sub_1", "https://dashboard.test/billing")).toEqual({ url: "https://test.checkout.dodopayments.com/open" });
+    expect(requests.map(row => row.url)).toEqual(["/subscriptions/sub_1/update-payment-method", "/payments?subscription_id=sub_1&page_size=10", "/payments/pay_open"]);
+    server.removeAllListeners("request");
+    server.on("request", (req, res) => { res.writeHead(req.url!.startsWith("/payments?") ? 200 : 422, { "content-type": "application/json" }); res.end(JSON.stringify(req.url!.startsWith("/payments?") ? { items: [] } : { code: "SUBSCRIPTION_INACTIVE" })); });
+    await expect(provider().updatePaymentMethod("sub_1", "https://dashboard.test/billing")).rejects.toMatchObject({ code: "refused", message: "422 SUBSCRIPTION_INACTIVE" });
+  });
+  it("retries a failed renewal only when dodo can and isn't already retrying it", async () => {
+    reply = { can_retry: true, reason: null, next_automatic_retry_at: null };
+    expect(await provider().retryPayment!("pay_1")).toBe("sent");
+    expect(requests.map(row => `${row.method} ${row.url}`)).toEqual(["GET /payments/pay_1/retry", "POST /payments/pay_1/retry"]);
+    reply = { can_retry: false, reason: null, next_automatic_retry_at: "2026-11-23T00:00:00Z" }; expect(await provider().retryPayment!("pay_1")).toBe("automatic");
+    reply = { can_retry: false, reason: "PREVIOUS_PAYMENT_PENDING", next_automatic_retry_at: null }; expect(await provider().retryPayment!("pay_1")).toBe("later");
+    reply = { can_retry: false, reason: "MANUAL_RETRY_LIMIT_REACHED", retry_available_at: "2026-11-23T00:00:00Z" }; expect(await provider().retryPayment!("pay_1")).toBe("later");
+    reply = { can_retry: false, reason: "MANUAL_RETRY_LIMIT_REACHED", retry_available_at: null }; expect(await provider().retryPayment!("pay_1")).toBe("refused");
+    reply = { can_retry: false, reason: "MANUAL_RETRY_HARD_DECLINE" }; expect(await provider().retryPayment!("pay_1")).toBe("refused");
+    expect(requests.filter(row => row.method === "POST")).toHaveLength(1);
   });
   it("reads one page of past records for the backfill and refuses a reply without items", async () => {
     reply = { items: [{ payment_id: "pay_1" }, "junk", null, { payment_id: "pay_2" }] };

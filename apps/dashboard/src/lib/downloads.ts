@@ -16,6 +16,11 @@ export function detectOs(): Platform | "unknown" {
   return "unknown";
 }
 
+export const computerWord = (): "mac" | "computer" => (detectOs() === "macos" ? "mac" : "computer");
+
+const OS_NAME: Partial<Record<Platform, string>> = { macos: "mac", windows: "windows", linux: "linux" };
+export const desktopName = (): string | null => { const os = detectOs(); return os === "unknown" ? null : OS_NAME[os] ?? null; };
+
 export type ReleaseState = "out" | "soon" | "unknown";
 
 let asked: Promise<ReleaseState> | null = null;

@@ -20,7 +20,7 @@ describe("trust controls in the real renderer", () => {
     await waitForExit(child, { graceMs: 30_000 });
   });
 
-  (enabled ? it : it.skip)("saves outbound limits, app limits and backup AIs from the bot's settings pages", async () => {
+  (enabled ? it : it.skip)("saves outbound limits and app limits from the bot's settings pages, and turns its Backup AI off and on", async () => {
     let output = "", errors = "";
     let info!: FixtureInfo;
     const launcher = new URL("./control-dusk-ui.ts", import.meta.url).href;
@@ -105,18 +105,27 @@ describe("trust controls in the real renderer", () => {
     await expect.poll(async () => (await saved()).connectorScopes, { timeout: 10_000 }).toEqual({ apps: { gmail: "write" } });
     await click("Limit this bot to specific apps");
     await expect.poll(async () => (await saved()).connectorScopes, { timeout: 10_000 }).toBeUndefined();
-    // Seed a saved chain without any real account/auth or execution. The
-    // bot's Backup AIs page must remove it via the existing bot patch queue.
+    // Backup is automatic for every bot; its Advanced settings have one Backup AI switch (off: the bot waits for its own
+    // AI). A list set before stays as it was until the switch turns it off. Seeded without any real account or execution;
+    // the switch writes through the existing bot patch queue.
     const seeded = await fetch(`${info.url}/api/bots/${bot.id}`, {
       method: "PATCH", headers: { "content-type": "application/json" },
       body: JSON.stringify({ fallback: [{ instanceId: bot.modelSelection.instanceId, model: bot.modelSelection.model }] }),
     });
     expect(seeded.ok).toBe(true);
-    await sheetPage(ui, "backups");
-    await expect.poll(snapshot, { timeout: 10_000 }).toContain("Used in order when the main AI fails.");
-    expect(await snapshot()).toContain('list "Backup AIs"');
-    await clickByName(ui, /^Remove .+ from backups$/, "button");
+    const backupSwitch = "document.querySelector('[data-panel-row=backup-ai] [role=switch]')";
+    // back out of the sheet's pages to the panel's Advanced tab, which holds the switch
+    const live = "document.querySelector('[data-settings-sheet] .settings-wipe-layer:not([data-wipe-out])')";
+    for (let step = 0; step < 4 && await evaluate(`Boolean(${live}?.querySelector('[data-bot-page]'))`); step++) {
+      await evaluate(`${live}.querySelector('[data-settings-back]').click(); true`);
+      await new Promise((resolve) => setTimeout(resolve, 400));
+    }
+    await expect.poll(() => evaluate(`${backupSwitch}?.getAttribute('aria-checked') ?? null`), { timeout: 10_000 }).toBe("true");
+    await evaluate(`${backupSwitch}.click(); true`);
     await expect.poll(async () => (await saved()).fallback, { timeout: 10_000 }).toEqual([]);
+    await expect.poll(() => evaluate(`${backupSwitch}.getAttribute('aria-checked')`), { timeout: 10_000 }).toBe("false");
+    await evaluate(`${backupSwitch}.click(); true`);
+    await expect.poll(async () => (await saved()).fallback, { timeout: 10_000 }).toBeUndefined();
     expect((await saved()).modelSelection).toEqual(bot.modelSelection);
     await ui("press", "--keys", "Escape");
 

@@ -14,6 +14,7 @@ import { DuskModelCatalog } from "../model-catalog/dusk-models.ts";
 import { refreshStaleModelLists } from "../startup-model-catalog.ts";
 export { engineMemory } from "../engine-memory.ts";
 import { clientInstall } from "../contracts.ts";
+import { DEFAULT_FLEET } from "../instance-fleets.ts";
 import type {
   AnyProviderDriver,
   EngineAccess,
@@ -33,6 +34,7 @@ export interface ShadowInstance {
   cli: string | undefined;
   shadow: true;
   reason: string;
+  unknownDriver?: true;
 }
 
 export type RegistryEntry =
@@ -185,15 +187,17 @@ export class ProviderRegistry {
     await this.dispose(instanceId);
     const driver = this.driversByKind.get(entry.driver);
     if (!driver) {
+      const builtIn = DEFAULT_FLEET[instanceId];
       return {
         instanceId,
         shadow: {
           instanceId,
           driverKind: entry.driver,
-          displayName: entry.displayName,
+          displayName: entry.displayName ?? builtIn?.displayName ?? this.driversByKind.get(builtIn?.driver ?? "")?.metadata.displayName ?? instanceId,
           cli: cliOfRaw(entry.config),
           shadow: true,
           reason: `unknown driver "${entry.driver}": kept as configured, unavailable here`,
+          unknownDriver: true,
         },
       };
     }
@@ -536,6 +540,7 @@ export class ProviderRegistry {
             cli: entry.shadow.cli,
             cliDefault: cliDefaultOf(driver),
             cliCandidates: candidatesFor(driver),
+            ...(entry.shadow.unknownDriver ? { unknownDriver: true as const } : {}),
           };
         }
         const inst = entry.live;

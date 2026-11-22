@@ -57,7 +57,7 @@ export function useFilePreview(path: string, name: string, message?: MessageAtta
       setOpen(true);
     },
     dialog: kind && open && message
-      ? <TableDialog title={name} returnFocus={opener.current} onClose={() => setOpen(false)}>
+      ? <TableDialog title={name} closeLabel={t(kind === "table" ? "table.close" : "filePreview.close")} returnFocus={opener.current} onClose={() => setOpen(false)}>
         {kind === "html"
           ? <HtmlFileContent key={key} path={path} name={name} message={message} />
           : kind === "pdf" ? <PdfFileContent key={key} path={path} message={message} />
@@ -143,7 +143,7 @@ function PreviewLoading({ page }: { page: boolean }) {
   return <div role="status" className="flex items-center justify-center gap-2 p-12 text-sm text-ink-secondary"><LoaderCircle size={16} className="animate-spin" />{t(page ? "html.loading" : "filePreview.loading")}</div>;
 }
 
-const SOURCE_CLASS = "h-[72dvh] overflow-auto rounded-lg border border-transparent bg-inset p-3 text-[12px] leading-5 whitespace-pre-wrap break-words text-ink";
+const SOURCE_CLASS = "max-h-[72dvh] overflow-auto rounded-lg border border-transparent bg-inset p-3 text-[12px] leading-5 whitespace-pre-wrap break-words text-ink";
 
 function HtmlFileContent({ path, name, message }: { path: string; name: string; message: MessageAttachmentContext }) {
   const { source, error, reload } = useFileText(path, message);
@@ -185,7 +185,7 @@ export function TextFileContent({ path, name, message, markdown }: { path: strin
     </div>
     {save.state === "failed" && <p role="alert" className="text-end text-[12px] text-danger">{save.reason}</p>}
     {formatted
-      ? <div data-file-preview="markdown" data-selectable="" className="h-[72dvh] overflow-auto rounded-lg bg-inset px-4 py-3 text-[15px] leading-6 text-ink">
+      ? <div data-file-preview="markdown" data-selectable="" className="max-h-[72dvh] overflow-auto rounded-lg bg-inset px-4 py-3 text-[15px] leading-6 text-ink">
         <Suspense fallback={<PreviewLoading page={false} />}><ChatMarkdown text={source} /></Suspense>
       </div>
       : <pre data-file-preview="text" data-selectable="" className={`${SOURCE_CLASS} font-mono`}>{source}</pre>}

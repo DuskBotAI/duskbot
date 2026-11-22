@@ -7,14 +7,13 @@ import { stateForBot } from "@/lib/mascot";
 import { t } from "@/lib/i18n";
 import { turnNowPhrases } from "@/lib/live-activity";
 import { pendingApprovals, type Pending } from "@/components/PendingApproval";
-import { lastLine, lastPreviewable, sidebarPreviewMessages, waitingLine } from "@/components/sidebar-preview";
+import { lastLine, lastPreviewable, openWait, sidebarPreviewMessages, waitingLine } from "@/components/sidebar-preview";
 import { plainPreviewText } from "@/lib/plain-preview";
 import { workingThreadId } from "@/components/SidebarWorkingStep";
 import { toolLabel, titledCard } from "@/components/ApprovalCard";
 import { lowerFirst } from "@/lib/lower-first";
 import { answersInOneTap, cardQuestions } from "@/components/QuestionCard";
 import { isQuestionCard } from "@/lib/question-card";
-import { openPersonWait, restingOnPerson, type PersonWait } from "../../shared/person-wait";
 import { ambientLabels } from "./labels";
 import type { AmbientBot, AmbientMessage, AmbientSnapshot, AmbientStatus, AmbientStep, AmbientViewing, AmbientWait } from "./types";
 import { liveReply, shownReplyText } from "@/state/live-reply";
@@ -58,12 +57,6 @@ export function questionOf(visible: Message[]): { card: NonNullable<Message["car
   return { card, choices: fits ? choices : null, custom: Boolean(only && only.custom !== false && (fits || !choices)) };
 }
 
-/** The ask a bot's chat rests on: a question, an approval, a sign-in, a password, an app to connect or a proposal. An
- * intro's suggestions, a plain reply or anything already answered waits on nobody. */
-export function openWait(bot: Pick<Bot, "busy">, visible: Message[]): PersonWait | undefined {
-  return bot.busy ? openPersonWait(visible) : restingOnPerson(visible);
-}
-
 /** Whether the bot waits on the person: a question, an approval or a card of choices in any of its chats. */
 export function waitsOnPerson(bot: Bot, visible: Message[] = sidebarPreviewMessages(bot)): boolean {
   return bot.activity === "waiting-on-you" || (bot.tasks ?? []).some((task) => task.activity === "waiting-on-you") || openAsksOf(bot) > 0 || pendingApprovals(visible).length > 0 || Boolean(openWait(bot, visible));
@@ -104,17 +97,6 @@ function streamingOf(threadId: string): { streaming?: string } {
   return text ? { streaming: plainPreviewText(shownReplyText(text)).slice(-STREAM_CHARS) } : {};
 }
 
-/** What a wait without a card of its own says it needs, in the person's words. */
-function askLine(wait: PersonWait): string {
-  const name = plainPreviewText(wait.label);
-  if (!name) return "";
-  if (wait.kind === "sign-in") return t("ambient.ask.signIn", { name });
-  if (wait.kind === "password") return t("ambient.ask.password", { name });
-  if (wait.kind === "connect") return t("ambient.ask.connect", { name });
-  if (wait.kind === "review") return t("ambient.ask.review", { name });
-  return "";
-}
-
 /** The newest turn was started by a routine: its run card is the newest thing, or the newest person row is its start. */
 export function fromRoutine(visible: readonly Message[]): boolean {
   const newest = visible.at(-1);
@@ -134,7 +116,7 @@ export function ambientBot(bot: Bot, instances: InstanceInfo[], turnLive: (threa
   const inPlace = approvals.find(answerableInPlace);
   const wait = status === "needs-you" ? openWait(bot, visible) : undefined;
   const detail = status === "needs-you"
-    ? inPlace ? t("ambient.wantsTo", { action: lowerFirst(toolLabel(inPlace.tool)) }) : (wait && askLine(wait)) || waitingLine(bot, visible, instances)
+    ? inPlace ? t("ambient.wantsTo", { action: lowerFirst(toolLabel(inPlace.tool)) }) : waitingLine(bot, visible, instances)
     : bot.busy ? turnNowPhrases(live.status, workingOn === bot.threadId ? newest : undefined)?.phrases[0] ?? t("chat.activity.thinking") : "";
   const question = status === "needs-you" ? questionOf(visible) : null;
   const waits: AmbientWait | null = status !== "needs-you" ? null : question ? "question" : approvals.length ? "approval" : wait?.kind ?? "other";

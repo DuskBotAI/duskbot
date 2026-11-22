@@ -13,21 +13,28 @@ import { SettingRow, Switch } from "./SettingsPrimitives";
 import { SettingsSelect } from "./SettingsSelect";
 
 export function NotificationRows() {
+  const [permission, setPermission] = useNotificationPermission();
+  const silenced = soundsSilenced(permission);
   return (
     <>
-      <DeviceNotificationsRow />
-      <NotificationSoundsRow />
-      <NotificationSoundPickerRow />
+      <DeviceNotificationsRow permission={permission} onPermission={setPermission} />
+      <NotificationSoundsRow silenced={silenced} />
+      <NotificationSoundPickerRow silenced={silenced} />
     </>
   );
 }
 
 const currentPermission = (): NotificationPermission => (typeof Notification !== "undefined" ? Notification.permission : "default");
 
-/** A browser shows nothing until it is asked from a click; the person may also change the site permission elsewhere. */
-export function DeviceNotificationsRow() {
+/** The ping plays with a system notification, so where this device may show them but has not been allowed to, it never
+ * plays. Without system notifications (macOS desktop) the app's own ping still plays. */
+export function soundsSilenced(permission: NotificationPermission): boolean {
+  return typeof Notification !== "undefined" && systemNotificationsAllowed() && permission !== "granted";
+}
+
+/** The site permission, read again when the window comes back: the person may change it elsewhere. */
+function useNotificationPermission() {
   const [permission, setPermission] = useState(currentPermission);
-  const enabled = useFinishedNotifications();
   useEffect(() => {
     const refresh = () => {
       if (document.visibilityState === "visible") setPermission(currentPermission());
@@ -39,6 +46,12 @@ export function DeviceNotificationsRow() {
       document.removeEventListener("visibilitychange", refresh);
     };
   }, []);
+  return [permission, setPermission] as const;
+}
+
+/** A browser shows nothing until it is asked from a click. */
+export function DeviceNotificationsRow({ permission, onPermission }: { permission: NotificationPermission; onPermission: (next: NotificationPermission) => void }) {
+  const enabled = useFinishedNotifications();
   if (typeof Notification === "undefined" || !systemNotificationsAllowed()) return null;
 
   const blocked = permission === "denied";
@@ -46,7 +59,7 @@ export function DeviceNotificationsRow() {
     if (permission === "granted") return setFinishedNotifications(!enabled);
     const next = await requestNotificationPermission();
     if (!next) return;
-    setPermission(next);
+    onPermission(next);
     if (next === "granted") setFinishedNotifications(true);
   };
 
@@ -66,12 +79,13 @@ export function DeviceNotificationsRow() {
   );
 }
 
-function NotificationSoundsRow() {
+function NotificationSoundsRow({ silenced }: { silenced: boolean }) {
   const enabled = useNotificationSounds();
   return (
-    <SettingRow icon="speaker" title={t("settings.notificationSound.playTitle")}>
+    <SettingRow icon="speaker" title={t("settings.notificationSound.playTitle")} subtitle={silenced ? t("settings.notificationSound.needsNotifications") : undefined}>
       <Switch
-        checked={enabled}
+        checked={enabled && !silenced}
+        disabled={silenced}
         aria-label={t("settings.notificationSound.playTitle")}
         onClick={() => {
           setNotificationSounds(!enabled);
@@ -91,7 +105,7 @@ const SOUND_LABELS: Record<UiSoundName, LocaleKey> = {
 };
 
 /** Grok's ping picker: which of its five pings plays, heard once as it is chosen. Hidden while sounds are off. */
-export function NotificationSoundPickerRow() {
+export function NotificationSoundPickerRow({ silenced = false }: { silenced?: boolean }) {
   const enabled = useNotificationSounds();
   const [sound, setSound] = useState<UiSoundName>(chosenSound);
   if (!enabled) return null;
@@ -99,6 +113,7 @@ export function NotificationSoundPickerRow() {
     <SettingRow icon="note" title={t("settings.notificationSound.title")}>
       <SettingsSelect
         value={sound}
+        disabled={silenced}
         aria-label={t("settings.notificationSound.title")}
         options={UI_SOUND_NAMES.map((name) => ({ value: name, label: t(SOUND_LABELS[name]) }))}
         onChange={(event) => {

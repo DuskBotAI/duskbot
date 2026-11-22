@@ -25,7 +25,7 @@ export interface RichTableProps {
 }
 
 /** The native modal supplies focus containment, Escape, an inert background and focus restoration. */
-export function TableDialog(props: { title: string; onClose: () => void; children: ReactNode; returnFocus: HTMLElement | null }) {
+export function TableDialog(props: { title: string; closeLabel?: string; onClose: () => void; children: ReactNode; returnFocus: HTMLElement | null }) {
   const phone = phoneBridge();
   const opened = useRef(false);
   useEffect(() => {
@@ -36,7 +36,7 @@ export function TableDialog(props: { title: string; onClose: () => void; childre
   return phone ? null : <ModalTableDialog {...props} />;
 }
 
-function ModalTableDialog({ title, onClose, children, returnFocus }: { title: string; onClose: () => void; children: ReactNode; returnFocus: HTMLElement | null }) {
+function ModalTableDialog({ title, closeLabel = t("table.close"), onClose, children, returnFocus }: { title: string; closeLabel?: string; onClose: () => void; children: ReactNode; returnFocus: HTMLElement | null }) {
   const ref = useRef<HTMLDialogElement>(null);
   const id = useId();
   useEffect(() => {
@@ -50,7 +50,7 @@ function ModalTableDialog({ title, onClose, children, returnFocus }: { title: st
       className="m-auto flex max-h-[94dvh] w-[min(96vw,1400px)] max-w-none flex-col overflow-hidden rounded-2xl border border-transparent bg-panel p-0 text-ink shadow-2xl backdrop:bg-black/55">
       <header className="flex shrink-0 items-center justify-between gap-3 border-b border-transparent px-4 py-3">
         <h2 id={id} className="min-w-0 truncate text-sm font-medium">{title}</h2>
-        <button type="button" autoFocus onClick={onClose} className="table-action" aria-label={t("table.close")}><X size={16} /></button>
+        <button type="button" autoFocus onClick={onClose} className="table-action" aria-label={closeLabel}><X size={16} /></button>
       </header>
       <div className="min-h-0 overflow-auto p-3 sm:p-5">{children}</div>
     </dialog>, document.body,

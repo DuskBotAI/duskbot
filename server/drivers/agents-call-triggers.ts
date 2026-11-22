@@ -343,7 +343,7 @@ function addressText(r: Json): string {
   if (typeof r.addressRefused === "string") return `\n\nIts address: ${r.addressRefused}`;
   if (!jsonRecord(r.address)) return "";
   if (typeof r.address.unavailable === "string") return `\n\nIts address: ${r.address.unavailable}`;
-  return `\n\nIts private address: ${JSON.stringify(r.address, null, 2)}\n\nIt is on now and waits for calls. Test it once before you say it works: trigger action=run_now with this trigger_id and payload, a sample shaped as that app posts it, with the person's own name and email, so its real steps run end to end (the row lands, the email reaches them).`;
+  return `\n\nIts private address, for you to paste into that app's setup yourself: ${JSON.stringify(r.address, null, 2)}\n\nNever write it in your reply: when the person pastes it into the app, tell them to use Copy address on this automation's card. It is on now and waits for calls. Test it once before you say it works: trigger action=run_now with this trigger_id and payload, a sample shaped as that app posts it, with the person's own name and email, so its real steps run end to end (the row lands, the email reaches them); then tell them it is live and what the test did.`;
 }
 
 /** What the bot should say about a schedule it just set: what it assumed, with the time zone and the next run in words. */
@@ -355,6 +355,7 @@ function closingWords(r: Json, action: string): string {
     return `In a sentence or two of plain words, tell the person what you set up and what you assumed: when it runs, saying the time zone as "${plain}", never as a zone id; where its results will appear (here in this chat); what each run covers; that the first run is ${next}; and that they can change, pause or stop it by saying so here.`;
   }
   if (next && (action === "update" || action === "resume")) return `Tell the person in one plain sentence what changed, saying the time zone as "${plain}", and that the next run is ${next}.`;
+  if (action === "create") return "Tell the person in a sentence or two what will happen, and that they can change, pause or stop it by saying so here.";
   return "Tell the person in one sentence what will happen.";
 }
 
@@ -416,7 +417,7 @@ export async function callTriggerTool(name: string, args: Json, context: ToolCal
   if (error) return { text: error, isError: true };
   if (args.test === true && action !== "run_now") return { text: "test applies only to action=run_now.", isError: true };
   const test = action === "run_now" && args.test === true;
-  if (args.payload !== undefined && action !== "run_now") return { text: "payload applies only to action=run_now on a webhook.", isError: true };
+  if (args.payload !== undefined && action !== "run_now") return { text: "payload applies only to action=run_now on a webhook or app event.", isError: true };
   const payload = action === "run_now" && args.payload !== undefined ? { payload: args.payload } : {};
   const body: Json = { action, triggerId, ...(forBotId ? { forBotId } : {}), ...(test ? { test: true } : {}), ...payload };
   if (action === "update") {

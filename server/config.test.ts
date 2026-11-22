@@ -15,7 +15,7 @@ import { cacheUntilConfigChanges,
   instanceConfigs,
   isValidSshAlias,
   loadBrowserProfileIdAliases,
-  loadConfig,
+  loadConfig, configFileProblem,
   localVmIdleTimeoutMinutes,
   localVmMaxInstances,
   localVmMode,
@@ -720,20 +720,71 @@ describe("a config.json saved with a byte order mark", () => {
     }
   });
 
-  it("keeps a config.json it cannot read beside the one a save writes", () => {
-    const path = join(DATA_DIR, "config.json");
-    mkdirSync(DATA_DIR, { recursive: true });
-    const damaged = '{"xai":{"key":"xai-fixture"},"mcpServers":{"notes":';
-    writeFileSync(path, damaged);
-    const asides = () => readdirSync(DATA_DIR).filter((name) => name.startsWith("config.json.unreadable-"));
-    try {
-      saveConfig({ rooms: { turnTimeoutMinutes: 25 } });
-      expect(JSON.parse(readFileSync(path, "utf8"))).toMatchObject({ rooms: { turnTimeoutMinutes: 25 } });
-      expect(asides().map((name) => readFileSync(join(DATA_DIR, name), "utf8"))).toEqual([damaged]);
-    } finally {
-      rmSync(path, { force: true });
-      for (const name of asides()) rmSync(join(DATA_DIR, name), { force: true });
-    }
+  describe("a hand edit that breaks config.json", () => {
+    const path = () => join(DATA_DIR, "config.json");
+    const lastGood = () => `${path()}.last-good`;
+    const broken = '{\n  "xai": { "key": "xai-fixture-secret" }\n  "rooms": { "turnTimeoutMinutes": 40 }\n}\n';
+    const clean = () => {
+      for (const name of readdirSync(DATA_DIR).filter((entry) => entry.startsWith("config.json"))) rmSync(join(DATA_DIR, name), { force: true });
+      loadConfig();
+    };
+    let warn: ReturnType<typeof vi.spyOn>;
+    beforeEach(() => {
+      mkdirSync(DATA_DIR, { recursive: true });
+      clean();
+      warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    });
+    afterEach(() => {
+      warn.mockRestore();
+      clean();
+    });
+
+    it("starts from the last good copy, says where the file broke without quoting it, and leaves the file as it was", () => {
+      writeFileSync(path(), JSON.stringify({ rooms: { turnTimeoutMinutes: 25 } }));
+      expect(loadConfig().rooms).toEqual({ turnTimeoutMinutes: 25 });
+      expect(configFileProblem()).toBeNull();
+      expect(JSON.parse(readFileSync(lastGood(), "utf8"))).toEqual({ rooms: { turnTimeoutMinutes: 25 } });
+
+      writeFileSync(path(), broken);
+      expect(loadConfig().rooms).toEqual({ turnTimeoutMinutes: 25 });
+      expect(configFileProblem()).toEqual({ file: "config.json", reason: "invalid JSON at line 3, column 3", lastGood: true });
+      expect(readFileSync(path(), "utf8")).toBe(broken);
+      const logged = warn.mock.calls.map((call: unknown[]) => String(call[0])).join("\n");
+      expect(logged).toContain("using its last good copy");
+      expect(logged).not.toContain("xai-fixture-secret");
+    });
+
+    it("keeps a setting saved meanwhile in the last good copy, never in the broken file", () => {
+      writeFileSync(path(), JSON.stringify({ language: "de" }));
+      loadConfig();
+      writeFileSync(path(), broken);
+      saveConfig({ rooms: { turnTimeoutMinutes: 30 } });
+      expect(readFileSync(path(), "utf8")).toBe(broken);
+      expect(JSON.parse(readFileSync(lastGood(), "utf8"))).toEqual({ language: "de", rooms: { turnTimeoutMinutes: 30 } });
+      expect(loadConfig()).toMatchObject({ language: "de", rooms: { turnTimeoutMinutes: 30 } });
+      expect(readdirSync(DATA_DIR).filter((name) => name.startsWith("config.json.unreadable-"))).toEqual([]);
+    });
+
+    it("treats a file that parses but holds a setting of the wrong kind the same way: a save still takes effect", () => {
+      const wrongKind = JSON.stringify({ rooms: { turnTimeoutMinutes: "soon" } });
+      writeFileSync(path(), JSON.stringify({ rooms: { turnTimeoutMinutes: 25 } }));
+      loadConfig();
+      writeFileSync(path(), wrongKind);
+      expect(loadConfig().rooms).toEqual({ turnTimeoutMinutes: 25 });
+      expect(configFileProblem()).toMatchObject({ lastGood: true });
+      saveConfig({ language: "de" });
+      expect(readFileSync(path(), "utf8")).toBe(wrongKind);
+      expect(loadConfig()).toMatchObject({ language: "de", rooms: { turnTimeoutMinutes: 25 } });
+    });
+
+    it("uses the defaults and says so when there is no earlier copy, and is quiet again once the file is fixed", () => {
+      writeFileSync(path(), broken);
+      expect(loadConfig().rooms).toBeUndefined();
+      expect(configFileProblem()).toEqual({ file: "config.json", reason: "invalid JSON at line 3, column 3", lastGood: false });
+      writeFileSync(path(), JSON.stringify({ rooms: { turnTimeoutMinutes: 40 } }));
+      expect(loadConfig().rooms).toEqual({ turnTimeoutMinutes: 40 });
+      expect(configFileProblem()).toBeNull();
+    });
   });
 
   it("keeps the account name the profile copied beside the rest of the profile, so a later rename on the account follows", () => {
@@ -2187,6 +2238,7 @@ describe("loadConfig with an unusable config.json", () => {
   beforeEach(() => {
     mkdirSync(DATA_DIR, { recursive: true });
     rmSync(path, { force: true });
+    rmSync(`${path}.last-good`, { force: true });
     warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     loadConfig(); // reset the once-per-problem memory with a clean run
     warn.mockClear();
@@ -2194,6 +2246,7 @@ describe("loadConfig with an unusable config.json", () => {
   afterEach(() => {
     warn.mockRestore();
     rmSync(path, { force: true });
+    rmSync(`${path}.last-good`, { force: true });
   });
 
   it("stays quiet on a first run with no file", () => {
@@ -2257,8 +2310,8 @@ describe("a value derived from config.json", () => {
     const when = new Date(Date.now() - minutesAgo * 60_000);
     utimesSync(path, when, when);
   };
-  beforeEach(() => { mkdirSync(DATA_DIR, { recursive: true }); rmSync(path, { force: true }); });
-  afterEach(() => { rmSync(path, { force: true }); });
+  beforeEach(() => { mkdirSync(DATA_DIR, { recursive: true }); rmSync(path, { force: true }); rmSync(`${path}.last-good`, { force: true }); });
+  afterEach(() => { rmSync(path, { force: true }); rmSync(`${path}.last-good`, { force: true }); });
 
   it("reads config.json once while the file is unchanged", () => {
     writeSettled({ members: ["one@example.test"] });

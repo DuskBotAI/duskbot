@@ -117,6 +117,42 @@ describe("composer drafts", () => {
     expect(failedComposerSends(draftId)).toEqual([]);
   });
 
+  it("keeps an outbox send through a reload until it is sent or discarded", async () => {
+    const store = memoryStore();
+    vi.stubGlobal("localStorage", store);
+    const draftId = "bot:reload:thread-c";
+    const file = fileAttachment("notes.txt", "/tmp/notes.txt", 12);
+    const unsent = { kind: "image" as const, id: "blob", path: "", name: "shot.png", size: 3, mime: "image/png", uploading: true };
+    const revision = draftRevision(draftId);
+    markDraftEdited(draftId);
+    setDraft(store, draftId, "something newer");
+    expect(recoverFailedComposerSend({
+      draftId, revision, sendId: "send-reload", text: "the failed words", requestText: "the failed words",
+      attachments: [file, unsent], threadId: "thread-c", channelMode: "goal", mentions: ["bot-b"],
+    })).toBe("outbox");
+
+    vi.resetModules();
+    const reloaded = await import("../src/lib/drafts.ts");
+    const [kept] = reloaded.failedComposerSends(draftId);
+    expect(kept).toMatchObject({
+      sendId: "send-reload", text: "the failed words", threadId: "thread-c", channelMode: "goal", mentions: ["bot-b"], attachments: [file],
+    });
+
+    reloaded.forgetFailedComposerSend(draftId, kept!.id);
+    vi.resetModules();
+    expect((await import("../src/lib/drafts.ts")).failedComposerSends(draftId)).toEqual([]);
+  });
+
+  it("ignores malformed stored outbox sends", async () => {
+    const store = memoryStore();
+    vi.stubGlobal("localStorage", store);
+    store.setItem("dusk-draft-failed-sends", JSON.stringify({ "bot:x": [{ id: "a", text: "no send id" }, "junk"], "bot:y": "junk" }));
+    vi.resetModules();
+    const reloaded = await import("../src/lib/drafts.ts");
+    expect(reloaded.failedComposerSends("bot:x")).toEqual([]);
+    expect(reloaded.failedComposerSends("bot:y")).toEqual([]);
+  });
+
   it("keeps reply targets isolated by task", () => {
     rememberReplyDraft("thread-reply-a", "message-a");
     rememberReplyDraft("thread-reply-b", "message-b");

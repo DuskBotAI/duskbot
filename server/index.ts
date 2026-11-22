@@ -32,7 +32,7 @@ import { botAvatarUrlFromStoredPath } from "../shared/bot-avatar.ts";
 import { BOT_PROFILE_LIMITS } from "../shared/bot-profile.ts";
 import { ERROR_DUMP_REFUSAL, sendsErrorDump, withoutEchoedPrompt } from "../shared/failed-turn.ts"; import { failedTurnRow } from "./failed-turn-row.ts";
 import { plainComputerFailure } from "../shared/computer-unreachable.ts";
-import { routinePromptName } from "../shared/routine-run.ts";
+import { routinePromptName, routineStartMark, routineStartOf } from "../shared/routine-run.ts";
 import { assistantTranscript, errorTranscript } from "../shared/client-cancel.ts"; import { PersonStops, stoppedTurnRow } from "./person-stops.ts"; import { LiveTurns } from "./live-turns.ts"; import { askedElsewhereAt, personClock, previousPersonMessageAt } from "./turn-gap.ts";
 import { phonePairingLink } from "../shared/pairing-link.ts"; import { personTagNames, withoutPersonTags } from "../shared/person-mention.ts";
 import { canWorkOnCloud, type CloudEngine } from "../shared/cloud-computer.ts";
@@ -192,7 +192,7 @@ import {
   DATA_DIR, EVENTS_DIR,
   onConfigSaved,
   CLAUDE_API_INSTANCE,
-  openCodeProviderKeys,
+  openCodeProviderKeys, configFileProblem,
 } from "./config.ts";
 import { serveStatic } from "./static-files.ts";
 import { startUpkeep } from "./host/start-upkeep.ts";
@@ -657,7 +657,7 @@ import { createNotificationRoutes } from "./routes/notifications.ts";
 import { createTodayRoutes } from "./routes/today.ts"; import { createInboxRoutes } from "./routes/inbox.ts"; import { createSidebarSectionRoutes } from "./routes/sidebar-sections.ts";
 import { createToolTimingRoute, createUsageRoutes } from "./routes/usage.ts"; import { createSpendRoutes } from "./routes/spend.ts"; import { createSpend } from "./spend.ts"; import { createRoutineGuard, DRY_RUN_REFUSAL } from "./host/routine-guard.ts"; import { testRunMounts } from "./dry-run-mounts.ts"; import { createRoutineHost } from "./host/routine-quiet-host.ts"; import { appLabel, reconnectCard, signedOutApps } from "./host/routine-auth.ts";
 import { createReconnectResume } from "./host/reconnect-resume.ts"; import { mcpServerLabel } from "./remote-mcp-label.ts"; import { tokenApp as tokenAppSpec } from "../shared/app-tokens.ts";
-import { createFinishGuard } from "./host/finish-guard.ts"; import { createDeliverableCheck } from "./host/deliverable-check.ts"; import { createOpenAsks } from "./host/open-asks.ts"; import { createTurnWorkers } from "./host/turn-workers.ts"; import { runsCommands } from "./bot-reach.ts"; import { forwardedAsks } from "./host/forwarded-ask.ts"; import { createLimitHold, refusedStartWaits } from "./host/limit-hold.ts"; import { createBatchContinue } from "./host/batch-continue.ts"; import { checklistDir, readChecklist } from "./batch-checklist.ts"; import { createChecklistRoutes } from "./routes/checklist.ts"; import { createActionReceipts } from "./host/action-receipts.ts"; import { createDocumentRoutes } from "./routes/bot-documents.ts"; import { BotDocuments } from "./bot-documents.ts"; import { carryIntoNextTurn } from "./drivers/openai-chat-carry.ts";
+import { createFinishGuard } from "./host/finish-guard.ts"; import { createDeliverableCheck } from "./host/deliverable-check.ts"; import { createOpenAsks } from "./host/open-asks.ts"; import { createTurnWorkers } from "./host/turn-workers.ts"; import { runsCommands } from "./bot-reach.ts"; import { forwardedAsks } from "./host/forwarded-ask.ts"; import { createLimitHold, probeEngine, refusedStartWaits } from "./host/limit-hold.ts"; import { createBatchContinue } from "./host/batch-continue.ts"; import { checklistDir, readChecklist } from "./batch-checklist.ts"; import { createChecklistRoutes } from "./routes/checklist.ts"; import { createActionReceipts } from "./host/action-receipts.ts"; import { createDocumentRoutes } from "./routes/bot-documents.ts"; import { BotDocuments } from "./bot-documents.ts"; import { carryIntoNextTurn } from "./drivers/openai-chat-carry.ts";
 import { createBrowserLoops } from "./host/browser-loops.ts"; import { createBotMessageRoutes } from "./routes/bot-messages.ts";
 import { clearInternalTurn, isInternalTurn, markInternalTurn } from "./internal-turns.ts"; import { createFirstReplyRescue } from "./first-reply-rescue.ts"; import { createTurnBeats } from "./turn-beats.ts"; import { createSideReplies, repliesWhileWorking, type SideRequest, type SideSendFacts } from "./host/side-replies.ts";
 import { createReactionRoutes } from "./routes/reactions.ts";
@@ -8703,7 +8703,7 @@ async function beginTurn(
   else { clearInternalTurn(threadId); doneNotice.personTurnStarted(threadId); }
   if (answer.quiet) quietTurnThreads.add(threadId);
   else quietTurnThreads.delete(threadId);
-  if (resolvedImages.text.trim() && !opts?.cardContinuation && !opts?.replyTo?.reactedWith && opts?.automationSource === undefined) {
+  if (resolvedImages.text.trim() && !opts?.cardContinuation && !opts?.replyTo?.reactedWith && opts?.automationSource === undefined && routinePromptName(resolvedImages.text) === null) {
     const titled = store.titleTaskFromFirstMessage(bot.id, resolvedImages.text, threadId);
     const snippet = titled?.title;
     if (titled && snippet && !titled.openedBy?.botId && llmThreadTitlesEnabled(cfg) && instance.generateText) {
@@ -8737,6 +8737,7 @@ async function beginTurn(
 
   let userMessage = opts?.userMessage;
   if (opts?.editedMessageId) {
+    if (routineStartOf(store.messagesFor(threadId).find((message) => message.id === opts.editedMessageId) ?? { role: "" })) throw Object.assign(new Error("a routine run's prompt is not a message to send again: run the routine again instead"), { status: 409, code: "routine_line" });
     const edited = store.branchMessage(threadId, opts.editedMessageId, text, opts.sendId, opts.sender, opts.dataContext);
     if (!edited) throw Object.assign(new Error("only a user text message can be edited"), { status: 400 });
     store.patchTask(bot.id, threadId, { rewound: true });
@@ -8757,7 +8758,7 @@ async function beginTurn(
           sender: opts?.sender,
           ...spokenLineFields(opts?.via, opts?.callId),
           ...(opts?.relayed ? { relayed: true } : {}),
-          ...(opts?.automationSource !== undefined ? { routineStart: { name: activeRoutineRunForThread(threadId)?.routineName ?? routinePromptName(text) ?? "" } } : {}),
+          ...(opts?.automationSource !== undefined ? { routineStart: routineStartMark(activeRoutineRunForThread(threadId), text) } : {}),
         });
   }
   const personLine = !opts?.coordination && !opts?.cardContinuation && !opts?.automationSource && !opts?.compactOnly
@@ -9518,6 +9519,7 @@ async function beginTurn(
       const clock = takesTurnClock(userTurnText) && !introTurns.has(threadId) ? personClock(Date.now(), personTimeZone(proactive.brief.timeZone()), previousPersonMessageAt(activeMessages, userMessage.id), askedElsewhereAt(store.bot(bot.id)?.tasks, threadId)) + habitReminder(chatMessageCount(activeMessages), userTurnText) + nearLimitNote(limitClock.limit(instanceId), engineName(instanceId), personTimeZone(proactive.brief.timeZone())) : "";
       const shareNote = skillsHost.shareNote(bot, threadId, Boolean(privateWorkspace));
       const startupRecovery = (opts?.automaticRecoveryIndex ?? 0) < startupBackups(liveBot ?? bot, cfg.automaticRecovery).length;
+      if (opts?.automationSource === undefined && !opts?.commsDepth && !opts?.cardContinuation && limitClock.heldByGuess(instanceId)) limitClock.release(instanceId); // a person's own message tries an AI out of credit again: a top-up ends that at any moment
       const held = limitTakeover.heldAtStart(bot, { instanceId, model }, startupRecovery); // a limit or a sign-out already known: straight to an AI that can carry on, with the reset only when one was named
       if (held) throw held.scope === "signed-out" ? new TurnAuthenticationRefusedError(`signed-out-${randomUUID()}`, `${engineName(instanceId)} is signed out.`, true) : new TurnUsageLimitRefusedError(`limit-${randomUUID()}`, held.scope === "provider" ? `${engineName(instanceId)} did not answer a few minutes ago.` : `${engineName(instanceId)} is at its usage limit.`, held.resetsAt, held.scope, true);
       const dispatch = await guardTurnDispatch(shareNote.after(quickFallback.sendTurn(instance, {
@@ -9858,7 +9860,7 @@ async function stopBotForEmergencyApprovalDowngrade(botId: string): Promise<void
 const engineName = (engine: string) => engineLabel(engine, registry.get(engine) ?? undefined);
 const limitClock = new LimitResetClock({ file: join(DATA_DIR, "limit-holds.json"), usageFile: join(DATA_DIR, "limit-usage.json"), accounts: () => planAccountsFromInstances(instanceConfigs(cfg)), onChange: () => routines?.retimeLimitResets(),
   waiting: () => Boolean(routines?.listRoutines().some((routine) => routine.enabled && routine.schedule.type === "limit_reset")) }); const limitTakeover = createLimitTakeover({ file: join(DATA_DIR, "limit-notices.json"), limitMode: (botId) => store.bot(botId)?.limitMode ?? "wait", holdsFile: join(DATA_DIR, "limit-takeover-holds.json"), configs: () => instanceConfigs(cfg), context: selectionContext, blockedUntil: (engine) => limitClock.blockedUntil(engine), resetAt: (engine) => limitClock.resetAt(engine), enabled: () => quotaSwitchEnabled(), where: CLOUD_HOME ? "on the Cloud" : "on this computer", signedOutNow: (id) => registry.knownSnapshot(id)?.authenticated === false, signedOutNoticed: () => registry.forgetSnapshots(), engineName, engines: () => selectableInstances(registry.instances().map((engine) => ({ instanceId: engine.instanceId, driverKind: engine.driverKind, displayName: engine.displayName, enabled: engine.enabled, access: registry.access(engine.instanceId), models: engine.models, snapshot: registry.knownSnapshot(engine.instanceId) ?? { state: "unavailable" as const, reason: "not read yet" }, capabilities: engine.adapter.capabilities }))), chosen: (botId) => [...(store.bot(botId)?.fallback ?? []), ...(cfg.automaticRecovery?.backup ? [cfg.automaticRecovery.backup] : [])], automatic: (botId, from, engines) => { const bot = store.bot(botId); return bot && !cfg.automaticRecovery?.backup ? automaticBackups(bot, engines, from, selectionContext) : []; }, signedOutChosen: (botId) => { const bot = store.bot(botId); if (!bot) return []; const pick = testedAi.appPick(botId); return [...startupBackups(bot, cfg.automaticRecovery), ...(pick ? [pick] : [])]; }, tell: (about, text) => notify(buildNoticeNotification(about, store.bot(about.id)?.threadId ?? "", text)), record: (failover) => limitFailovers.record(failover) });
-const limitHold = createLimitHold({ file: join(DATA_DIR, "limit-held-turns.json"), blockedUntil: (engine) => limitClock.blockedUntil(engine), resetAt: (engine) => limitClock.resetAt(engine), refreshUsage: () => limitClock.refresh(true),
+const limitHold = createLimitHold({ file: join(DATA_DIR, "limit-held-turns.json"), blockedUntil: (engine) => limitClock.blockedUntil(engine), resetAt: (engine) => limitClock.resetAt(engine), refreshUsage: () => limitClock.refresh(true), canProbe: (engine) => limitClock.heldByGuess(engine) && Boolean(registry.get(engine)?.generateText), release: (engine) => void limitClock.release(engine), probe: (turn) => { const selection = store.projectBotForTask(turn.botId, turn.threadId)?.modelSelection, instance = registry.get(turn.engine); return selection?.instanceId === turn.engine && instance?.generateText ? probeEngine(instance.generateText.bind(instance), selection.model) : Promise.resolve(null); },
   threadEngine: (botId, threadId) => (store.taskByThread(botId, threadId) ? store.projectBotForTask(botId, threadId)?.modelSelection.instanceId : undefined),
   busy: (botId, threadId) => threadBusy(botId, threadId) || hasQueuedSteeredMessages(botId, threadId),
   checklist: (botId, threadId) => { const dir = checklistDir(TASK_WORKSPACES_DIR, botId, threadId); return dir ? readChecklist(dir) : null; },
@@ -9868,7 +9870,7 @@ const limitHold = createLimitHold({ file: join(DATA_DIR, "limit-held-turns.json"
   paused: (threadId, state) => { const failed = store.messagesFor(threadId).slice(-50).findLast((row) => row.kind === "activity" && row.tool?.name.startsWith("error:")); if (failed?.tool) store.patchMessage(threadId, failed.id, { tool: { ...failed.tool, limitHold: state } }); },
   waitEnded: (threadId) => { for (const row of store.messagesFor(threadId).slice(-200)) if (row.tool?.limitHold) store.patchMessage(threadId, row.id, { tool: { ...row.tool, limitHold: undefined } }); },
   language: threadLanguage });
-bus.subscribe((event: RuntimeEvent) => { if (!shouldIgnoreProviderEvent(event)) limitHold.onEvent(event); });
+bus.subscribe((event: RuntimeEvent) => { if (!shouldIgnoreProviderEvent(event)) limitHold.onEvent(event); }); onThreadSeen((threadId) => void limitHold.checkNow(threadId));
 const limitFailovers = new LimitFailovers({ file: join(DATA_DIR, "limit-failovers.json"), blockedUntil: (engine) => limitClock.blockedUntil(engine), signedOut: (engine) => limitTakeover.stillSignedOut(engine), engineName,
   threadModel: (botId, threadId) => store.projectBotForTask(botId, threadId)?.modelSelection ?? null,
   note: (threadId, line) => store.appendMessage(threadId, { role: "bot", kind: "activity", tool: { name: `recovery: ${line}`, ok: true } }),
@@ -12907,7 +12909,7 @@ function configStatus() {
   const eventLogMaxBytes = threadEventLogMaxBytes(cfg);
   const eventLogRetentionDays = threadEventLogRetentionDays(cfg);
   return {
-    cloudStarter: cloudPlanTier.starter(), botLimit: botLimit.limit(), waitingForRoom: engineMemory.waiting(), xai: keyStatus(cfg.xai?.key),
+    configFile: configFileProblem(), cloudStarter: cloudPlanTier.starter(), botLimit: botLimit.limit(), waitingForRoom: engineMemory.waiting(), xai: keyStatus(cfg.xai?.key),
     mistral: keyStatus(cfg.mistral?.key),
     cerebras: keyStatus(cfg.cerebras?.key),
     groq: keyStatus(cfg.groq?.key), greenference: keyStatus(cfg.greenference?.key),
@@ -12938,7 +12940,7 @@ function configStatus() {
     mcp: { callTimeoutMinutes: mcpCallTimeoutMinutes(cfg) },
     automaticRecovery: cfg.automaticRecovery ?? { enabled: false },
     cacheKeepWarm: cacheKeepWarmSettings(cfg),
-    newBots: cfg.newBots?.effort ? { effort: cfg.newBots.effort } : {},
+    newBots: cfg.newBots?.effort ? { effort: cfg.newBots.effort } : {}, ...(cfg.defaultModelSelection ? { defaultModelSelection: cfg.defaultModelSelection } : {}),
     threads: {
       maxConcurrentPerBot: maxConcurrentBotThreads(cfg, botThreadsHost(cloudPlanTier.starter())),
       ...(eventLogMaxBytes !== null ? { eventLogMaxBytes } : {}),
@@ -14637,7 +14639,7 @@ const handleRequestInner = async (req: IncomingMessage, res: ServerResponse) => 
           return json(res, persistence.status, { error: persistence.error });
         }
         const sender = owner.group ? { botId: from.id, name: from.name, color: from.color } : undefined;
-        if (request.kind === "app") return appTriggers.submit(res, json, { ...triggerContext, operation: request.operation, forBot, sender });
+        if (request.kind === "app") return appTriggers.submit(res, json, { ...triggerContext, operation: request.operation, forBot, sender, ...(request.payload !== undefined ? { payload: request.payload } : {}) });
         if (request.kind === "webhook") {
           // Its calls start the owner's bot: a turn the Cloud's owner did not drive cannot add or change one.
           if (cloudGuestDriven(fromThreadId)) return json(res, 403, { error: "Only the Cloud's owner can set up or change webhook triggers. Tell the person to ask from their own conversation." });
@@ -16644,6 +16646,7 @@ const handleRequestInner = async (req: IncomingMessage, res: ServerResponse) => 
   } catch (e) {
     if (isDiskFull(e)) return json(res, 507, { error: "The disk is full, so this could not be saved. Free up some space, then try again.", code: "disk_full" });
     const status = (e as any)?.status ?? 500;
+    if ((e as { status?: unknown })?.status === undefined) console.error(`unhandled error on ${method} ${path}:`, e);
     const candidateCode = (e as { code?: unknown })?.code;
     const code = typeof candidateCode === "string" && ["guarded_busy", "guarded_branch", "guarded_permissions", "guarded_request_changed", "guarded_request_untracked", "outside_workspace", "no_ai", BOT_LIMIT_CODE].includes(candidateCode)
       ? candidateCode : undefined;
@@ -16733,6 +16736,12 @@ if (CLOUD_HOME) registerCloudPower(cloudPower = createCloudPower({ dataDir: DATA
   ...workProbes, job: () => jobs.busy(), nextDueAt: () => { const due = [routines?.nextDueAt() ?? null, botWaits.nextWakeAt()].filter((at): at is number => at !== null); return due.length ? Math.min(...due) : null; }, upcoming: () => routines?.upcoming() ?? [],
  } })); if (!DESKTOP_MANAGED) updateState = createUpdateHost({ dataDir: DATA_DIR, version: serverVersion(), log: (line) => console.log(line), health: () => Array.isArray(store.bots), browser: async () => (builtInBrowserEnabled(cfg) ? (await chromeLauncher.binary()).path : null), connected: async () => { if (!composio.configured(cfg)) return null; const services = await composio.connectedServices(cfg); return { gmail: services.gmail?.connected === true, googlecalendar: services.googlecalendar?.connected === true }; }, relay: (payload, session, signal) => composio.relayMcp(cfg, payload as never, session, undefined, signal), runs: () => routines?.listRuns() ?? [] }); // the Mac app's server never updates itself
 
+server.on("error", (error: NodeJS.ErrnoException) => {
+  console.error(error.code === "EADDRINUSE"
+    ? `dusk bot cannot listen on 127.0.0.1:${PORT}: the port is already in use, often by another dusk bot server on the same host. Stop that program, or set DUSK_PORT to another port.`
+    : `dusk bot's server failed to listen on 127.0.0.1:${PORT}: ${error.message}`);
+  process.exit(1);
+});
 server.listen(PORT, "127.0.0.1", async () => {
   engineProgressReady = true;
   companyRuntimeReady();
@@ -16776,6 +16785,9 @@ if (TUNNEL_SOCKET) {
   if (process.platform !== "win32") rmSync(TUNNEL_SOCKET, { force: true });
   tunnelListener = createServer(IDLE_HTTP_SERVER, gzipTunnelReplies(handleRequest));
   upgrades.attach(tunnelListener, handleRequest);
+  tunnelListener.on("error", (error: NodeJS.ErrnoException) => {
+    console.error(`dusk bot's tunnel listener failed on ${TUNNEL_SOCKET}: ${error.message}`);
+  });
   tunnelListener.listen(TUNNEL_SOCKET, () => {
     console.log(`duskbot tunnel listener on ${TUNNEL_SOCKET}`);
   });

@@ -184,7 +184,7 @@ export function ConnectAppsWindow({ page: requested, nonce, onClose, onTemplates
     ? t("policy.managedBy", { organization: policy.organizationName }) : null, [policy]);
 
   const cards = useMemo(() => new Map((connectors.cards ?? []).map((card) => [card.slug, card])), [connectors.cards]);
-  const ready = (connectors.ready && remote.settled) || waited;
+  const ready = (connectors.ready && remote.settled && mcpServers !== null) || waited;
   const entries = useMemo<AppEntry[]>(() => {
     const own = nativeEntries();
     const catalog = (connectors.cards ?? [])
@@ -386,9 +386,9 @@ export function ConnectAppsWindow({ page: requested, nonce, onClose, onTemplates
     ];
     return names.length ? names.join(", ") : entry.description;
   };
+  const openEntry = (entry: AppEntry) => go({ kind: "detail", id: entry.kind === "custom" ? CUSTOM_MCP : entry.id });
   const row = (entry: AppEntry) => (
-    <AppRow key={entry.id} entry={entry} subtitle={subtitleOf(entry)} action={rowAction(entry)}
-      onOpen={() => go({ kind: "detail", id: entry.kind === "custom" ? CUSTOM_MCP : entry.id })} />
+    <AppRow key={entry.id} entry={entry} subtitle={subtitleOf(entry)} action={rowAction(entry)} onOpen={() => openEntry(entry)} />
   );
 
   const label = (category: Category) => t(CATEGORY_LABEL[category]);
@@ -613,21 +613,18 @@ export function ConnectAppsWindow({ page: requested, nonce, onClose, onTemplates
       return <AppPage model={model} />;
     }
     if (page.kind === "yours") {
-      const servers = (mcpServers ?? []).filter((server) => !byId.has(`mcp:${server.name}`) && !remote.ownsServer(server.name) && !HOSTED_MCP_APPS.some((app) => server.name === app.id || server.name.startsWith(`${app.id}-`)));
-      const serverEntry = (name: string): AppEntry => ({ id: `mcp:${name}`, kind: "native", label: name, description: t("connectApps.mcpServer"), categories: [], icon: { glyph: "server" } });
+      const offServers = entries.filter((entry) => entry.kind === "custom" && !isConnected.has(entry.id));
       return (
         <div className="ca-yours @container">
           <h1 className="ca-title ps-2" data-detail-hero-title="">{t("connectApps.manage")}</h1>
             <Group title={t("connectApps.installed")}>
-              {connected.length || servers.length
+              {connected.length || offServers.length
                 ? <div className="grid grid-cols-1 gap-x-2 gap-y-0.5 @xl:grid-cols-2">
                   {connected.map((entry) => (
-                    <AppRow key={entry.id} entry={entry} subtitle={entry.description} action={{ kind: "status", label: t("apps.connected"), tone: "connected" }} onOpen={() => go({ kind: "detail", id: entry.id })} />
+                    <AppRow key={entry.id} entry={entry} subtitle={entry.description} action={{ kind: "status", label: t("apps.connected"), tone: "connected" }} onOpen={() => openEntry(entry)} />
                   ))}
-                  {servers.map((server) => (
-                    <AppRow key={server.name} entry={serverEntry(server.name)} subtitle={t("connectApps.mcpServer")}
-                      action={server.enabled ? { kind: "status", label: t("apps.connected"), tone: "connected" } : { kind: "status", label: t("connectApps.off"), tone: "quiet" }}
-                      onOpen={() => go({ kind: "detail", id: MCP_PAGE })} />
+                  {offServers.map((entry) => (
+                    <AppRow key={entry.id} entry={entry} subtitle={entry.description} action={{ kind: "status", label: t("connectApps.off"), tone: "quiet" }} onOpen={() => openEntry(entry)} />
                   ))}
                 </div>
                 : <p className="ca-note">{t("connectApps.nothingInstalled")}</p>}
@@ -708,15 +705,22 @@ export function ConnectAppsWindow({ page: requested, nonce, onClose, onTemplates
                   <div className="ca-home">
                     <div className="ca-head">
                       <h2 className="ca-title" id="ca-title">{t("connectApps.title")}</h2>
-                      <button type="button" className="ca-installed" aria-label={t("connectApps.yours")} onClick={() => go({ kind: "yours" })}>
-                        {connected.length > 0 && (
-                          <span className="ca-stack" aria-hidden="true">
-                            {connected.slice(0, 4).map((entry) => <span key={entry.id}><AppTile entry={entry} size={18} /></span>)}
-                          </span>
-                        )}
-                        <span>{t("apps.connectedCount", { count: connected.length })}</span>
-                        <span data-chevron="" aria-hidden="true" className="inline-flex"><Icon name="chevron-right" size={12} /></span>
-                      </button>
+                      {connectors.stale && connected.length === 0 ? (
+                        <div className="ca-unchecked" role="alert">
+                          <span>{t("connectApps.unchecked")}</span>
+                          <button type="button" className="ca-pill" onClick={connectors.reload}>{t("connectApps.retry")}</button>
+                        </div>
+                      ) : (
+                        <button type="button" className="ca-installed" aria-label={t("connectApps.yours")} onClick={() => go({ kind: "yours" })}>
+                          {connected.length > 0 && (
+                            <span className="ca-stack" aria-hidden="true">
+                              {connected.slice(0, 4).map((entry) => <span key={entry.id}><AppTile entry={entry} size={18} /></span>)}
+                            </span>
+                          )}
+                          <span>{t("apps.connectedCount", { count: connected.length })}</span>
+                          <span data-chevron="" aria-hidden="true" className="inline-flex"><Icon name="chevron-right" size={12} /></span>
+                        </button>
+                      )}
                     </div>
                     <div className="ca-controls">
                       <div className="ca-search-row">

@@ -16,9 +16,9 @@ export const fixtureCatalog: PlanCatalog = {
   ],
   bundles: [
     { id: "free", name: "free", monthly: 0, license: "personal", members: 1, desktop: "none", blurb: "Your bots, on your computer", features: ["Your bots, on your computer", "Personal use", "No subscription"] },
-    { id: "starter", name: "plus", monthly: 20, license: "personal", members: 1, desktop: "shared-s", blurb: "dusk cloud, always available", features: ["Your bots work in dusk cloud", "2 vCPU, 4 GB RAM, 20 GB disk", "Always available, wakes in seconds"] },
-    { id: "pro", name: "pro", monthly: 50, license: "starter", members: 1, desktop: "shared-m", recommended: true, blurb: "A bigger machine, priority wake and a work license", features: ["4 vCPU, 8 GB RAM, 60 GB disk", "Always available, priority wake", "Work license for one person"] },
-    { id: "team", name: "team", monthly: 119, license: "team", members: 2, desktop: "dedicated", blurb: "A dedicated machine and a team license", features: ["Dedicated 8 vCPU, 16 GB RAM, 160 GB disk", "Always available, priority wake", "Team license, 2 seats"] },
+    { id: "starter", name: "plus", monthly: 20, license: "personal", members: 1, desktop: "shared-s", blurb: "dusk cloud, always available", features: ["your bots work in dusk cloud", "2 vcpu, 4 gb ram, 20 gb disk", "always available, wakes in seconds"] },
+    { id: "pro", name: "pro", monthly: 50, license: "starter", members: 1, desktop: "shared-m", recommended: true, blurb: "A bigger machine, priority wake and a work license", features: ["4 vcpu, 8 gb ram, 60 gb disk", "always available, priority wake", "work license for one person"] },
+    { id: "team", name: "team", monthly: 119, license: "team", members: 2, desktop: "dedicated", blurb: "A dedicated machine and a team license", features: ["dedicated 8 vcpu, 16 gb ram, 160 gb disk", "always available, priority wake", "team license, 2 seats"] },
   ],
   poolRegions: ["eu-central"],
   regions: [

@@ -40,11 +40,12 @@ export function openBot(
   dispatch: (action: Action) => void,
   bot: Pick<NotificationThreadOwner, "id" | "threadId" | "mainThreadId" | "tasks"> & { yourAccess?: string },
   threadsShown = false,
-) {
-  if (openOwnTeamChat(dispatch, bot, (threadId) => openBotThread(dispatch, bot, threadId, threadsShown))) return;
+): string | null {
+  if (openOwnTeamChat(dispatch, bot, (threadId) => openBotThread(dispatch, bot, threadId, threadsShown))) return null;
   const opened = botOpensTo(bot, threadsShown);
   if (opened === bot.threadId) dispatch({ type: "select", id: bot.id });
   else openBotThread(dispatch, bot, opened, threadsShown);
+  return opened;
 }
 
 const threadStamp = (task: RowThread) => task.updatedAt ?? task.createdAt ?? 0;
@@ -67,15 +68,16 @@ export function workingThread(bot: Pick<NotificationThreadOwner, "threadId" | "m
 
 /** A click on a bot's row or tile opens the thread its mark is about, else the one it is working in; with neither, or with
  * that thread already on screen, the bot as ever. Every other way into a bot is `openBot`. On a team a bot's row is the
- * person's own chat. */
+ * person's own chat. Returns the thread it opened, or null for a team's own chat. */
 export function openBotRow(
   dispatch: (action: Action) => void,
   bot: Pick<NotificationThreadOwner, "id" | "threadId" | "mainThreadId" | "tasks"> & { yourAccess?: string },
   onScreen: boolean,
-) {
+): string | null {
   const marked = teamChats() ? null : markedThread(bot) ?? workingThread(bot);
-  if (!marked || marked === botOpensTo(bot) || (onScreen && marked === bot.threadId)) openBot(dispatch, bot);
-  else openBotThread(dispatch, bot, marked);
+  if (!marked || marked === botOpensTo(bot) || (onScreen && marked === bot.threadId)) return openBot(dispatch, bot);
+  openBotThread(dispatch, bot, marked);
+  return marked;
 }
 
 /** With threads hidden the switch alone selects the bot, so the thread left behind keeps its unread mark. */

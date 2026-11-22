@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const fixture = vi.hoisted(() => ({ requests: [] as Array<[string, string | undefined, unknown]>, failImport: "", failSkill: "" }));
+const fixture = vi.hoisted(() => ({ requests: [] as Array<[string, string | undefined, unknown]>, failImport: "", failSkill: "", here: "" }));
 
 vi.mock("@/state/store", () => ({
   api: vi.fn(async (path: string, init: { method?: string; body?: string }) => {
@@ -8,6 +8,7 @@ vi.mock("@/state/store", () => ({
     fixture.requests.push([path, init.method, body]);
     if (path.startsWith("/api/teams/import")) {
       if (fixture.failImport && body.package.name === fixture.failImport) throw new Error("no room");
+      if (body.package.name === fixture.here) return { alreadyAdded: true, installId: "earlier" };
       return { bots: [{ id: `id-${body.package.name}`, name: body.package.name, threadId: "t1" }], routines: [], connections: [] };
     }
     if (fixture.failSkill && path.endsWith(`/skills/${fixture.failSkill}`)) throw new Error("no");
@@ -33,6 +34,7 @@ beforeEach(() => {
   fixture.requests.length = 0;
   fixture.failImport = "";
   fixture.failSkill = "";
+  fixture.here = "";
 });
 
 describe("the preview", () => {
@@ -79,6 +81,13 @@ describe("the import", () => {
     fixture.failImport = "Desk";
     const report = await runGrokMove(previewGrokMove(bots(DESK, { name: "Lobby", instructions: "x" }), facts()), vi.fn());
     expect(report.failed).toEqual(["Desk"]);
+    expect(report.bots.map((bot) => bot.name)).toEqual(["Lobby"]);
+  });
+
+  it("names a Bot the server already has, from an import that ran at the same time, as moved, not failed", async () => {
+    fixture.here = "Desk";
+    const report = await runGrokMove(previewGrokMove(bots(DESK, { name: "Lobby", instructions: "x" }), facts()), vi.fn());
+    expect(report).toMatchObject({ moved: ["Desk"], failed: [] });
     expect(report.bots.map((bot) => bot.name)).toEqual(["Lobby"]);
   });
 

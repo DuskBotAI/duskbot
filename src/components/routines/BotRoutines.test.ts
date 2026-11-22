@@ -75,7 +75,7 @@ beforeEach(() => {
     if (next.type === "routineDeleted") fixture.state.routines = routines.filter((item) => item.id !== next.routineId);
     if (next.type === "routinePatched" || next.type === "routineDeleted") render();
   });
-  fixture.state = { hydrated: true, bots: [scout], groups: [], routines: [routine], webhooks: [], routineRuns: [], routinesFocus: { nonce: 0 }, config: {} };
+  fixture.state = { hydrated: true, bots: [scout], groups: [], routines: [routine], webhooks: [], webhookAttempts: [], routineRuns: [], routinesLoadState: "ready", routinesFocus: { nonce: 0 }, config: {} };
   applyAppTriggerSnapshot({ triggers: [], attempts: [], service: { available: true, plan: "desktop", eventsPerDay: 500, eventsToday: 0 } });
 });
 afterEach(() => { root?.unmount(); root = null; document.body.innerHTML = ""; copied.texts = []; });
@@ -138,6 +138,20 @@ describe("a bot's routines in its panel", () => {
     await vi.waitFor(() => expect(sheet().querySelector("form")).toBeNull());
     expect(writes()).toEqual([["/api/routines/routine-1", "PATCH", { name: "Monthly summary", prompt: "Send me a summary of my inbox." }]]);
     expect(row("routine-1").textContent).toContain("Monthly summary");
+  });
+
+  it("gives focus back to the sheet's Edit after saving or cancelling, so one Escape closes only the sheet", async () => {
+    fixture.api.mockImplementation(async (_path: unknown, init: unknown) => ({ routine: { ...routine, ...JSON.parse((init as { body: string }).body), updatedAt: now + 1 } }));
+    mount();
+    open("routine-1");
+    flushSync(() => action("routine-1", "edit").click());
+    flushSync(() => sheet().querySelector<HTMLButtonElement>("button[type=submit]")!.click());
+    await vi.waitFor(() => expect(sheet().querySelector("form")).toBeNull());
+    expect(document.activeElement).toBe(action("routine-1", "edit"));
+    flushSync(() => action("routine-1", "edit").click());
+    const cancel = [...sheet().querySelectorAll<HTMLButtonElement>("form button[type=button]")].find((button) => button.textContent === "Cancel")!;
+    flushSync(() => cancel.click());
+    expect(document.activeElement).toBe(action("routine-1", "edit"));
   });
 
   it("says what is missing instead of saving a one-time routine in the past", () => {
@@ -213,6 +227,29 @@ describe("a bot's routines in its panel", () => {
     await vi.waitFor(() => expect(fixture.api).toHaveBeenCalledWith("/api/app-triggers/acme/test", expect.objectContaining({ method: "POST" })));
   });
 
+  it("lists a webhook's recent deliveries, refused ones with why, and never a refused delivery's body", () => {
+    fixture.state.webhooks = [webhook];
+    const attempt = (id: string, at: number, extra: Record<string, unknown>) => ({ id, webhookId: "hook-1", receivedAt: now - at, ...extra });
+    fixture.state.webhookAttempts = [
+      attempt("a1", 60_000, { outcome: "accepted", statusCode: 202, preview: "{\"lead\":\"ok\"}" }),
+      attempt("a2", 50_000, { outcome: "rejected", statusCode: 401, reason: "Invalid webhook URL or secret (2 requests)" }),
+      attempt("a3", 40_000, { outcome: "rejected", statusCode: 400, reason: "Invalid JSON webhook body", preview: "PRIVATE-BODY" }),
+      attempt("a4", 30_000, { outcome: "rejected", statusCode: 413, reason: "Webhook body is too large" }),
+      { id: "other", webhookId: "hook-2", receivedAt: now, outcome: "rejected", statusCode: 401 },
+    ];
+    mount();
+    open("hook-1");
+    const lines = [...sheet().querySelectorAll<HTMLElement>("[data-webhook-delivery]")];
+    expect(lines.map((line) => line.dataset.webhookDelivery)).toEqual(["refused", "refused", "refused", "ok"]);
+    const text = lines.map((line) => line.textContent).join("\n");
+    expect(text).toContain("Refused: too large");
+    expect(text).toContain("Refused: not valid JSON");
+    expect(text).toContain("Refused: wrong or missing secret · 2 requests");
+    expect(text).toContain("Accepted");
+    expect(sheet().textContent).not.toContain("PRIVATE-BODY");
+    expect(sheet().textContent).not.toContain("Invalid webhook URL");
+  });
+
   it("opens the routine a chat card names, straight into its form when asked", async () => {
     mount();
     fixture.state.routinesFocus = { routineId: "routine-1", edit: true, nonce: 1 };
@@ -271,5 +308,43 @@ describe("a bot's routines in its panel", () => {
       delete document.documentElement.dataset.mobileApp;
       shell.remove();
     }
+  });
+});
+
+describe("a bot's routines that have not loaded", () => {
+  const panelText = () => container.textContent ?? "";
+  const empty = "Ask it in chat to set one up";
+
+  it("says it has none only once the list has loaded", () => {
+    fixture.state.routines = [];
+    fixture.state.routinesLoadState = "loading";
+    mount();
+    expect(panelText()).not.toContain(empty);
+    expect(panelText()).toContain("Loading routines");
+    fixture.state.routinesLoadState = "ready";
+    render();
+    expect(panelText()).toContain(empty);
+  });
+
+  it("says the list failed, not that there are none, and Try again reloads it", async () => {
+    fixture.state.routines = [];
+    fixture.state.routinesLoadState = "error";
+    fixture.api.mockResolvedValue({ routines: [routine], runs: [] });
+    mount();
+    expect(panelText()).not.toContain(empty);
+    expect(container.querySelector("[role=alert]")!.textContent).toContain("Couldn't load routines");
+    const retry = [...container.querySelectorAll("button")].find((button) => button.textContent === "Try again")!;
+    flushSync(() => retry.click());
+    await vi.waitFor(() => expect(fixture.dispatch).toHaveBeenCalledWith(expect.objectContaining({ type: "routinesHydrated", routines: [routine], runs: [] })));
+    expect(String(fixture.api.mock.calls[0]![0])).toMatch(/^\/api\/routines\?since=\d+$/);
+  });
+
+  it("still says so above the bot's webhooks when its routines failed", () => {
+    fixture.state.routines = [];
+    fixture.state.webhooks = [webhook];
+    fixture.state.routinesLoadState = "error";
+    mount();
+    expect(row("hook-1")).not.toBeNull();
+    expect(container.querySelector("[role=alert]")!.textContent).toContain("Couldn't load routines");
   });
 });

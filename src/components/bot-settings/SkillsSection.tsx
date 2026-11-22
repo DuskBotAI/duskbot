@@ -48,6 +48,8 @@ export function useManagedSkills(bot: Bot) {
   const [loading, setLoading] = useState(true);
   const [working, setWorking] = useState("");
   const [error, setError] = useState("");
+  const [loadFailed, setLoadFailed] = useState(false);
+  const listed = useRef(false);
   const [reviewing, setReviewing] = useState<{ skill: ManagedSkill; text: string } | null>(null);
   const assignmentBusy = useRef(false);
 
@@ -66,8 +68,12 @@ export function useManagedSkills(bot: Bot) {
       setAssignedSkills(result.assignedSkills ?? []);
       setAddFromLibrary("");
       setError("");
+      listed.current = true;
+      setLoadFailed(false);
     } catch (cause) {
-      if (!cancelled?.()) setError(friendlyError(cause, "could not load learned skills."));
+      if (cancelled?.()) return;
+      setError(friendlyError(cause, "could not load learned skills."));
+      if (!listed.current) setLoadFailed(true);
     } finally {
       if (!cancelled?.()) setLoading(false);
     }
@@ -75,6 +81,8 @@ export function useManagedSkills(bot: Bot) {
 
   useEffect(() => {
     let cancelled = false;
+    listed.current = false;
+    setLoadFailed(false);
     setLoading(true);
     setReviewing(null);
     void refresh(() => cancelled);
@@ -162,7 +170,7 @@ export function useManagedSkills(bot: Bot) {
   };
 
   return {
-    skills, staged, loading, working, setWorking, error, setError, reviewing, setReviewing, refresh, toggle, enableReviewed,
+    skills, staged, loading, loadFailed, working, setWorking, error, setError, reviewing, setReviewing, refresh, toggle, enableReviewed,
     libraryPool, addFromLibrary, setAddFromLibrary, assignmentBusy, putAssignments, addToBot,
   };
 }
@@ -367,7 +375,7 @@ export function SkillsSection({ bot }: { bot: Bot }) {
   const featureEnabled = skillAuthoringEnabled(state.config);
   const libraryOn = skillsLibraryEnabled(state.config);
   const {
-    skills, staged, loading, working, setWorking, error, setError, reviewing, setReviewing, refresh, toggle, enableReviewed,
+    skills, staged, loading, loadFailed, working, setWorking, error, setError, reviewing, setReviewing, refresh, toggle, enableReviewed,
     libraryPool, addFromLibrary, setAddFromLibrary, assignmentBusy, putAssignments, addToBot,
   } = useManagedSkills(bot);
   const [viewing, setViewing] = useState<{ name: string; text: string } | null>(null);
@@ -547,6 +555,11 @@ export function SkillsSection({ bot }: { bot: Bot }) {
 
         {loading ? (
           <div className="mt-3 text-[12px] text-ink-secondary">{t("skills.loading")}</div>
+        ) : loadFailed ? (
+          <div role="alert" className="mt-3 flex items-center gap-3 text-[12px] text-warning">
+            <span>{t("botPanel.skills.loadFailed")}</span>
+            <button type="button" onClick={() => void refresh()} className="rounded-lg bg-raised px-3 py-1 text-[12px] font-medium text-ink">{t("botPanel.skills.retry")}</button>
+          </div>
         ) : skills.length === 0 ? (
           <div className="mt-3 text-[12px] text-ink-secondary">{t("skills.empty")}</div>
         ) : (
@@ -604,7 +617,7 @@ export function SkillsSection({ bot }: { bot: Bot }) {
             {staged.length} proposal{staged.length === 1 ? " is" : "s are"} waiting for a decision in chat.
           </div>
         )}
-        {error && <div role="alert" className="mt-2 text-[12px] text-danger">{error}</div>}
+        {error && !loadFailed && <div role="alert" className="mt-2 text-[12px] text-danger">{error}</div>}
       </div>
 
       <WriteCommandCard bot={bot} taken={skills.map((skill) => skill.name)} onSaved={() => void refresh()} />

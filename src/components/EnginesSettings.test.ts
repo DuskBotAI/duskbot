@@ -240,12 +240,20 @@ describe("Settings → Engines → setup cards", () => {
     fixture.instances = [{
       instanceId: "agy", displayName: "Antigravity", driverKind: "antigravityAgent", cliDefault: "agy",
       snapshot: { state: "available", authenticated: false }, models: { default: "model", options: [] },
+      authentication: { method: "paste-code", signOut: true },
       install: { managed: { label: "install Antigravity", downloadBytes: 10 } },
     }];
     const html = renderToStaticMarkup(createElement(EnginesSettings));
     expect(html).toContain("Sign in with Google");
+    expect(html).not.toContain("Sign in to Claude");
+    expect(html).not.toContain("Anthropic");
     expect(html).toContain("Set up");
     expect(html).toContain("CLI path and updates");
+    fixture.instances[0].snapshot = { state: "available", authenticated: true, account: { email: "user@example.test" } };
+    const connected = renderToStaticMarkup(createElement(EnginesSettings));
+    expect(connected).toContain("user@example.test");
+    expect(connected).not.toContain("Claude connected");
+    fixture.instances[0].snapshot = { state: "available", authenticated: false };
     fixture.instances[0].access = "custom";
     expect(renderToStaticMarkup(createElement(EnginesSettings))).not.toContain("Sign in with Google");
   });

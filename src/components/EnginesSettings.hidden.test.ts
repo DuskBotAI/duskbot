@@ -4,12 +4,24 @@ import { flushSync } from "react-dom";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const fixture = vi.hoisted(() => ({ hidden: [] as Array<{ instanceId: string; displayName: string }>, calls: [] as Array<{ path: string; body?: unknown }>, refresh: vi.fn() }));
+const fixture = vi.hoisted(() => ({
+  instances: [] as Array<Record<string, unknown>>,
+  hidden: [] as Array<{ instanceId: string; displayName: string }>,
+  calls: [] as Array<{ path: string; body?: unknown }>,
+  refresh: vi.fn(),
+  dispatch: vi.fn(),
+  apiReply: null as ((path: string, body?: unknown) => unknown) | null,
+}));
 vi.mock("@/state/store", async (original) => ({
   ...await original<typeof import("@/state/store")>(),
-  useStore: () => ({ state: { instances: [] }, refreshInstances: fixture.refresh }),
+  useStore: () => ({ state: { instances: fixture.instances, bots: [] }, dispatch: fixture.dispatch, refreshInstances: fixture.refresh, refreshModels: vi.fn() }),
   api: async (path: string, init?: RequestInit) => {
-    fixture.calls.push({ path, ...(init?.body ? { body: JSON.parse(String(init.body)) } : {}) });
+    const body = init?.body ? JSON.parse(String(init.body)) : undefined;
+    fixture.calls.push({ path, ...(body !== undefined ? { body } : {}) });
+    if (fixture.apiReply) {
+      const custom = fixture.apiReply(path, body);
+      if (custom !== undefined) return custom;
+    }
     if (path === "/api/instances/hidden") return { instances: fixture.hidden };
     fixture.hidden = [];
     return { instances: [] };
@@ -23,8 +35,11 @@ let root: Root;
 let host: HTMLElement;
 const settle = () => new Promise((done) => setTimeout(done, 0));
 beforeEach(() => {
+  fixture.instances = [];
   fixture.calls = [];
+  fixture.apiReply = null;
   fixture.refresh.mockReset();
+  fixture.dispatch.mockReset();
   host = document.createElement("div");
   document.body.append(host);
   root = createRoot(host);
@@ -126,6 +141,92 @@ describe("a provider's own page in Settings", () => {
     await settle();
     expect(back).toHaveBeenCalledTimes(1);
     expect(host.querySelector("[data-simple-engine]")).toBeNull();
+  });
+
+  it("opens a newly added Antigravity account's page and starts Google sign-in right away", async () => {
+    const { SubPageContext } = await import("./ListRows");
+    const { EnginesSettings } = await import("./EnginesSettings");
+    const primary = {
+      instanceId: "antigravity", driverKind: "antigravityAgent", displayName: "Antigravity", cliDefault: "agy",
+      snapshot: { state: "available", authenticated: true, account: { email: "primary@example.test" } },
+      models: { default: "gemini", options: [] },
+      authentication: { method: "paste-code", signOut: true },
+      install: { managed: { label: "Install official Antigravity", downloadBytes: 1024 } },
+    };
+    const added = {
+      instanceId: "antigravity-college", driverKind: "antigravityAgent", displayName: "College", cliDefault: "agy",
+      snapshot: { state: "available", authenticated: false },
+      models: { default: "gemini", options: [] },
+      authentication: { method: "paste-code", signOut: true },
+      install: { managed: { label: "Install official Antigravity", downloadBytes: 1024 } },
+    };
+    fixture.instances = [primary];
+    const openExternal = vi.fn(async () => {});
+    const previousDesktop = (window as unknown as { duskDesktop?: unknown }).duskDesktop;
+    (window as unknown as { duskDesktop?: unknown }).duskDesktop = { openExternal };
+    fixture.apiReply = (path) => {
+      if (path === "/api/instances/antigravity-accounts") {
+        fixture.instances = [primary, added];
+        return { instanceId: added.instanceId, instances: fixture.instances };
+      }
+      if (path === "/api/instances/antigravity-college/auth/start") {
+        return { auth: { phase: "waiting", flowId: "flow-1", authorizationUrl: "https://accounts.google.com/o/oauth2/auth?client_id=test" } };
+      }
+      return undefined;
+    };
+
+    try {
+      let currentAt: string | undefined = "engine:antigravity";
+      const opened: Array<{ id: string; title: string }> = [];
+      const renderAt = () => createElement(
+        SubPageContext.Provider,
+        {
+          value: {
+            at: currentAt,
+            open: (id, title) => {
+              opened.push({ id, title });
+              currentAt = id;
+            },
+            back: () => { currentAt = undefined; },
+          },
+        },
+        createElement(EnginesSettings, { simple: true, more: { id: "m", open: false, onToggle: () => {} } }),
+      );
+
+      flushSync(() => root.render(renderAt()));
+      expect(host.textContent).toContain("primary@example.test");
+      expect(host.textContent).not.toContain("Claude connected");
+
+      flushSync(() => host.querySelector<HTMLButtonElement>('[data-add-account-row="/api/instances/antigravity-accounts"]')!.click());
+      const input = document.querySelector<HTMLInputElement>('[data-add-account="/api/instances/antigravity-accounts"] input')!;
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
+      flushSync(() => {
+        setter.call(input, "College");
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+      });
+      const submit = document.querySelector<HTMLButtonElement>('[data-panel-modal="add-account"] button[type="submit"]')!;
+      flushSync(() => submit.click());
+      await settle();
+
+      expect(fixture.calls).toContainEqual({
+        path: "/api/instances/antigravity-accounts",
+        body: { displayName: "College", sourceInstanceId: "antigravity" },
+      });
+      expect(opened).toEqual([{ id: "engine:antigravity-college", title: "College" }]);
+
+      // Re-render on the navigated page and verify Google paste-code sign-in starts automatically.
+      flushSync(() => root.render(renderAt()));
+      await settle();
+
+      expect(fixture.calls).toContainEqual({ path: "/api/instances/antigravity-college/auth/start" });
+      expect(openExternal).toHaveBeenCalledWith("https://accounts.google.com/o/oauth2/auth?client_id=test");
+      expect(host.textContent).toContain("Sign in to College");
+      expect(host.textContent).toContain("Open Google sign-in again");
+      expect(host.textContent).not.toContain("Sign in to Claude");
+      expect(host.textContent).not.toContain("Found on this computer");
+    } finally {
+      (window as unknown as { duskDesktop?: unknown }).duskDesktop = previousDesktop;
+    }
   });
 });
 

@@ -86,6 +86,7 @@ it("adds independent accounts, switches a bot between their models, and preserve
     const id = created.body.instanceId as string; ids.push(id);
     const instance = created.body.instances.find((row: any) => row.instanceId === id);
     expect(instance).toMatchObject({ displayName: displayName.trim(), driverKind: "antigravityAgent", cli, authentication: { method: "paste-code", signOut: true }, snapshot: { authenticated: false } });
+    expect(instance.found).toBeUndefined();
     expect(existsSync(cliTokenPath(id))).toBe(false);
     expect(existsSync(tokenPath(id))).toBe(false);
     expect(JSON.stringify(instance)).not.toMatch(/synthetic-do-not-copy|refresh_token|client_secret/);
@@ -93,6 +94,7 @@ it("adds independent accounts, switches a bot between their models, and preserve
   expect(new Set(ids).size).toBe(2);
   const saved = JSON.parse(readFileSync(join(home, "config.json"), "utf8"));
   for (const id of ids) {
+    expect(saved.instances[id].chosen).toBe(true);
     expect(saved.instances[id].config).toEqual({ cli });
     expect(saved.instances[id]).not.toHaveProperty("environment");
     writeFileSync(cliTokenPath(id), JSON.stringify({ token: { access_token: "synthetic", expiry: "2099-01-01T00:00:00Z" } }));

@@ -334,7 +334,14 @@ export function DisconnectProvider({ instance }: { instance: InstanceInfo }) {
   );
 }
 
-function EngineRow({ instance, bare = false }: { instance: InstanceInfo; bare?: boolean }) {
+function EngineRow({ instance, bare = false, autoSignIn = false, onAutoSignIn, onAntigravityAdded }: {
+  instance: InstanceInfo;
+  bare?: boolean;
+  autoSignIn?: boolean;
+  onAutoSignIn?: () => void;
+  onAntigravityAdded?: (instanceId: string) => void;
+}) {
+  const { open } = useSubPage();
   const policy = instance.policy && <NoteRow><span className="text-ink">{t("policy.managedBy", { organization: instance.policy.organizationName })}</span> · {instance.policy.reason}</NoteRow>;
   if (instance.readOnly) return <EngineCard instance={instance} bare={bare}>
     <RowsCard>
@@ -346,12 +353,12 @@ function EngineRow({ instance, bare = false }: { instance: InstanceInfo; bare?: 
 
   const signedIn = engineReady(instance) && instance.snapshot.authenticated === true && (
     instance.authentication?.method === "device-code" ? t(DEVICE_SIGN_IN_COPY[deviceSignInProvider(instance.driverKind)].connectedAccount)
-      : instance.authentication?.method === "paste-code" ? t("engineSetup.claude.connectedAccount") : null);
+      : instance.authentication?.method === "paste-code" && instance.driverKind === "claudeAgent" ? t("engineSetup.claude.connectedAccount") : null);
   return (
     <EngineCard instance={instance} bare={bare}>
       <FoundProvider instance={instance} />
       {policy && <RowsCard>{policy}</RowsCard>}
-      {!engineReady(instance) && <EngineSetup instance={instance} intent={instance.access === "custom" ? "inject" : "cloud"} unframed rows={bare} />}
+      {!engineReady(instance) && <EngineSetup instance={instance} intent={instance.access === "custom" ? "inject" : "cloud"} unframed rows={bare} autoSignIn={bare && autoSignIn} onAutoSignIn={onAutoSignIn} />}
       {engineReady(instance) && <ApiKeyEngineManage instance={instance} />}
       {/* The setup panel that first said so is gone once the engine is Ready. */}
       {engineReady(instance) && <AppCopyNotice instance={instance} />}
@@ -366,7 +373,12 @@ function EngineRow({ instance, bare = false }: { instance: InstanceInfo; bare?: 
       {instance.driverKind === "antigravityAgent" && (
         <RowsCard>
           {instance.snapshot.authenticated && <ItemRow title={instance.snapshot.account?.email ?? t("engineSetup.antigravity.emailUnavailable")} />}
-          <AddAccount label={t("engineSetup.antigravity.addAccount")} endpoint="/api/instances/antigravity-accounts" extra={{ sourceInstanceId: instance.instanceId }} onAdded={() => {}} />
+          <AddAccount label={t("engineSetup.antigravity.addAccount")} endpoint="/api/instances/antigravity-accounts" extra={{ sourceInstanceId: instance.instanceId }}
+            onAdded={(instanceId, displayName) => {
+              if (!bare) return;
+              onAntigravityAdded?.(instanceId);
+              open(`engine:${instanceId}`, displayName);
+            }} />
           {instance.snapshot.authenticated === true && instance.authentication?.signOut === true && <AntigravityAccountAction instance={instance} action="signOut" />}
           {instance.instanceId.startsWith("antigravity-") && <AntigravityAccountAction instance={instance} action="remove" />}
         </RowsCard>
@@ -485,6 +497,7 @@ export function enginePageOf(instances: readonly InstanceInfo[], instance: Insta
 
 export function EnginesSettings({ simple = false, more }: { simple?: boolean; more?: { id: string; open: boolean; onToggle: () => void } }) {
   const { state } = useStore();
+  const [autoSignInId, setAutoSignInId] = useState<string | null>(null);
   // Leaving Settings ends the "now uses the copy dusk bot installed" lines.
   useEffect(() => forgetAppCopySwitches, []);
   const listed = listedEngines(state.instances);
@@ -508,7 +521,10 @@ export function EnginesSettings({ simple = false, more }: { simple?: boolean; mo
         <AccountsCard group={group} accounts={groups.get(group)!} bare={bare}
           advanced={<>{!bare && <FoundProvider instance={instance} />}<EngineAdvanced instance={instance} /><DisconnectProvider instance={instance} /></>} />
       </>
-      : <EngineRow instance={instance} bare={bare} />;
+      : <EngineRow instance={instance} bare={bare}
+        autoSignIn={autoSignInId === instance.instanceId}
+        onAutoSignIn={() => setAutoSignInId((current) => current === instance.instanceId ? null : current)}
+        onAntigravityAdded={setAutoSignInId} />;
   };
 
   if (simple && more) return <SimpleEngines rows={rows} isReady={isReady} renderEngine={renderEngine} more={more} />;

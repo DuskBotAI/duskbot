@@ -27,7 +27,7 @@ export function createAntigravityAccountRoutes(deps: AntigravityAccountRouteDeps
       const instanceId = `antigravity-${randomUUID()}`;
       const cli = (source.config as { cli?: unknown } | undefined)?.cli;
       // Only share the runtime. Each instance gets its own Google profile.
-      instances[instanceId] = { driver: "antigravityAgent", displayName: parsed.data.displayName,
+      instances[instanceId] = { driver: "antigravityAgent", displayName: parsed.data.displayName, chosen: true,
         config: typeof cli === "string" && cli ? { cli } : {} };
       await deps.persist(instanceId, instances);
       return json(res, 201, { instanceId, instances: await deps.describe() });

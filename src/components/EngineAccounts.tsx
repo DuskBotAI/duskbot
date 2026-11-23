@@ -256,7 +256,7 @@ export function AddAccount({ label, endpoint, extra, folder: offerFolder = false
   endpoint: string;
   extra?: Record<string, unknown>;
   folder?: boolean;
-  onAdded: (instanceId: string) => void;
+  onAdded: (instanceId: string, displayName: string) => void;
 }) {
   const { dispatch } = useStore();
   const [open, setOpen] = useState(false);
@@ -266,17 +266,23 @@ export function AddAccount({ label, endpoint, extra, folder: offerFolder = false
   const [error, setError] = useState<string | null>(null);
 
   const add = async () => {
-    if (saving || !name.trim()) return;
+    const displayName = name.trim();
+    if (saving || !displayName) return;
     setSaving(true);
     setError(null);
     try {
-      const body = { displayName: name.trim(), ...extra, ...(offerFolder && folder.trim() ? { configDir: folder.trim() } : {}) };
+      const body = { displayName, ...extra, ...(offerFolder && folder.trim() ? { configDir: folder.trim() } : {}) };
       const created = await api(endpoint, { method: "POST", body: JSON.stringify(body) });
       if (Array.isArray(created.instances)) dispatch({ type: "instances", instances: created.instances });
       setOpen(false);
       setName("");
       setFolder("");
-      if (typeof created.instanceId === "string") onAdded(created.instanceId);
+      if (typeof created.instanceId === "string") {
+        const added = Array.isArray(created.instances)
+          ? (created.instances as InstanceInfo[]).find((entry) => entry.instanceId === created.instanceId)
+          : undefined;
+        onAdded(created.instanceId, added?.displayName ?? displayName);
+      }
     } catch (cause) {
       setError(friendlyError(cause));
     } finally {

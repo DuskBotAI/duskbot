@@ -93,6 +93,35 @@ describe("managed engine setup errors", () => {
     expect(markup).toContain("Sign in with Google");
     expect(markup).not.toContain("install official Antigravity");
   });
+
+  it("uses Google sign-in instead of Claude sign-in when Antigravity authenticates via paste-code", () => {
+    const withManaged: InstanceInfo = {
+      ...managed({ state: "available", authenticated: false, version: "1.5.13" }),
+      instanceId: "antigravity-college",
+      displayName: "College",
+      authentication: { method: "paste-code", signOut: true },
+    };
+    for (const engine of [withManaged, { ...withManaged, install: { docsUrl: "https://antigravity.google/docs/getting-started" } }]) {
+      const markup = render(engine);
+      expect(markup).toContain("Sign in to College");
+      expect(markup).toContain("Sign in with Google");
+      expect(markup).not.toContain("Sign in to Claude");
+      expect(markup).not.toContain("Anthropic");
+      expect(markup).not.toContain("Claude Code");
+    }
+    const claude: InstanceInfo = {
+      ...instance({ state: "available", authenticated: false, version: "2.1.0" }),
+      instanceId: "claude",
+      driverKind: "claudeAgent",
+      displayName: "Claude",
+      authentication: { method: "paste-code", signOut: true },
+      install: { signInCommand: "claude auth login" },
+    };
+    const claudeMarkup = render(claude);
+    expect(claudeMarkup).toContain("Sign in to Claude");
+    expect(claudeMarkup).toContain("Anthropic");
+    expect(claudeMarkup).not.toContain("Sign in with Google");
+  });
 });
 
 it("says in plain words that an engine saved with a driver this build lacks can't be used, never the server's log line", () => {

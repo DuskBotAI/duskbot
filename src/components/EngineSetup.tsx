@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { AlertTriangle, Check, Copy, Download, ExternalLink, KeyRound, Loader2, LogIn, TerminalSquare, X } from "../icons";
 import { api, type InstanceInfo, useStore } from "@/state/store";
 import { cn } from "@/lib/cn";
@@ -307,13 +307,19 @@ export function EngineWarningNotice({
   );
 }
 
-function ManagedEngineSetup({ instance, signInOnly }: { instance: InstanceInfo; signInOnly: boolean }) {
+function ManagedEngineSetup({ instance, signInOnly, autoStart = false, onAutoStart }: {
+  instance: InstanceInfo;
+  signInOnly: boolean;
+  autoStart?: boolean;
+  onAutoStart?: () => void;
+}) {
   const { refreshInstances, refreshModels } = useStore();
   const [busy, setBusy] = useState<"install" | "signin" | "complete" | "check" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [flow, setFlow] = useState<{ flowId: string; authorizationUrl: string } | null>(null);
   const [callbackUrl, setCallbackUrl] = useState("");
-  const managed = instance.install!.managed!;
+  const autoStarted = useRef(false);
+  const managed = instance.install?.managed;
 
   useEffect(() => {
     if (!flow || instance.snapshot.authenticated) return;
@@ -350,6 +356,13 @@ function ManagedEngineSetup({ instance, signInOnly }: { instance: InstanceInfo; 
     else window.open(auth.authorizationUrl, "_blank", "noopener,noreferrer");
   });
 
+  useEffect(() => {
+    if (!autoStart || !signInOnly || autoStarted.current) return;
+    autoStarted.current = true;
+    onAutoStart?.();
+    void signIn();
+  }, [autoStart, signInOnly]);
+
   const pasteCode = instance.authentication?.method === "paste-code";
 
   const complete = () => run("complete", async () => {
@@ -370,6 +383,7 @@ function ManagedEngineSetup({ instance, signInOnly }: { instance: InstanceInfo; 
   });
 
   if (!signInOnly) {
+    if (!managed) return null;
     return (
       <div className="mt-3 min-w-0">
         <button
@@ -580,6 +594,8 @@ export function EngineSetup({
   quiet = false,
   onHost = false,
   rows = false,
+  autoSignIn = false,
+  onAutoSignIn,
 }: {
   instance: InstanceInfo;
   className?: string;
@@ -591,6 +607,9 @@ export function EngineSetup({
   onHost?: boolean;
   /** Settings' engine page: an install drawn as rows of one card */
   rows?: boolean;
+  /** Start sign-in automatically once mounted (e.g. right after adding a new account). */
+  autoSignIn?: boolean;
+  onAutoSignIn?: () => void;
 }) {
   const { state } = useStore();
   const [checked, setChecked] = useState(false);
@@ -602,7 +621,8 @@ export function EngineSetup({
   const signInOnly = intent === "cloud" && needsSignIn(instance);
   const deviceSignIn = signInOnly && instance.authentication?.method === "device-code";
   const browserSignIn = signInOnly && instance.authentication?.method === "browser-pkce";
-  const pasteSignIn = signInOnly && instance.authentication?.method === "paste-code";
+  const pasteSignIn = signInOnly && instance.authentication?.method === "paste-code" && instance.driverKind === "claudeAgent";
+  const managedSignIn = signInOnly && (Boolean(install?.managed) || (instance.driverKind === "antigravityAgent" && (instance.authentication?.method === "paste-code" || instance.authentication?.method === "browser")));
   const provider = deviceSignInProvider(instance.driverKind);
   const command = signInOnly ? signInCommand : undefined;
   const title = signInOnly
@@ -615,7 +635,7 @@ export function EngineSetup({
       ? t(DEVICE_SIGN_IN_COPY[provider].description)
       : pasteSignIn
       ? t("engineSetup.claude.description")
-      : install?.managed
+      : managedSignIn
       ? t("engineSetup.managedSignIn")
       : t("engineSetup.terminalSignInCheck")
     : intent === "inject"
@@ -671,7 +691,7 @@ export function EngineSetup({
     return <AppCopySetup instance={instance} className={className} unframed={unframed} />;
   }
 
-  if (rows && !deviceSignIn && !browserSignIn && !pasteSignIn && !install.managed) {
+  if (rows && !deviceSignIn && !browserSignIn && !pasteSignIn && !install.managed && !managedSignIn) {
     return <EngineSetupRows instance={instance} title={title} description={description} command={command ?? null}
       signInOnly={signInOnly} cloudHome={cloudHome} />;
   }
@@ -705,13 +725,13 @@ export function EngineSetup({
         <ClaudeSignIn key={instance.instanceId} instanceId={instance.instanceId} />
       ) : install.server && !signInOnly ? (
         <ServerEngineInstall instance={instance} mode="install" />
-      ) : install.managed ? (
-        <ManagedEngineSetup instance={instance} signInOnly={signInOnly} />
+      ) : install.managed || managedSignIn ? (
+        <ManagedEngineSetup key={instance.instanceId} instance={instance} signInOnly={signInOnly} autoStart={autoSignIn} onAutoStart={onAutoSignIn} />
       ) : command ? (
         <CommandRow command={command} actionLabel={t("engineSetup.openSignIn")} allowTerminal={!cloudHome} />
       ) : null}
 
-      {signInOnly && signInCommand && !deviceSignIn && !browserSignIn && !pasteSignIn && !install.managed && (
+      {signInOnly && signInCommand && !deviceSignIn && !browserSignIn && !pasteSignIn && !install.managed && !managedSignIn && (
         <div className="mt-3 pt-2">
           <RefreshEngines key={instance.instanceId} onChecked={() => setChecked(true)} />
         </div>

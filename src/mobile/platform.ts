@@ -4,6 +4,7 @@ import type { MobileOpenTarget } from "../../shared/mobile-link";
 import type { TurnActivityAttributes, TurnActivityState } from "../../shared/phone-activity";
 import type { NativeAction } from "./phone-actions";
 import { friendlyError } from "@/lib/plain-error";
+import { copyText } from "@/lib/copy-text";
 import type { GlassBridge } from "./native-glass";
 import type { MenuBridge } from "./native-menu";
 import type { SystemControls } from "@/lib/system-control";
@@ -400,13 +401,7 @@ export function webPlatform(): MobilePlatform {
       try { return await navigator.clipboard?.readText() ?? null; } catch { return null; }
     },
     async writeClipboard(text) {
-      try {
-        if (navigator.clipboard?.writeText) {
-          await navigator.clipboard.writeText(text);
-          return true;
-        }
-      } catch {}
-      return false;
+      return (await copyText(text)) === "copied";
     },
     openExternal: async (url) => { window.open(url, "_blank", "noopener"); },
     share: typeof navigator !== "undefined" && "share" in navigator

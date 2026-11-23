@@ -308,6 +308,17 @@ const NO_JOIN: BubbleJoin = { above: false, below: false };
 type RoomItem = { kind: "message"; message: Message } | { kind: "run"; messages: Message[] };
 const roomItemRows = (item: RoomItem): readonly Message[] => item.kind === "run" ? item.messages : [item.message];
 const noneTransparent = () => false;
+function visibleRoomRow(m: Message, showToolCalls: boolean): boolean {
+  if (isCancelledTranscriptRow(m) || m.kind === "compaction") return false;
+  if (m.kind === "activity") return Boolean(m.tool && roomActivityVisible(m, showToolCalls));
+  if (m.kind === "screen" || m.kind === "digest") return showToolCalls;
+  if (m.kind === "options" && m.card && (m.card.answered || m.card.dismissed) && !settledCardStays(m.card)) {
+    return showsSettledChange(m.card);
+  }
+  if (m.kind === "text" && m.role !== "user" && !m.attachments?.length && isPureLeakedBotText(m.text)) return false;
+  return true;
+}
+
 const hiddenRuns = (item: RoomItem) => item.kind === "run";
 
 export const Transcript = memo(function Transcript({
@@ -943,6 +954,8 @@ export function GroupView({ group: room }: { group: Group }) {
     });
   }, [trailing, group.messages, group.id, group.threadId, members, dispatch]);
 
+  const showToolCalls = showToolCallsEnabled(state.config);
+  const isVisibleRoomRow = useCallback((message: Message) => visibleRoomRow(message, showToolCalls), [showToolCalls]);
   const {
     scrollRef,
     clipRef,
@@ -964,6 +977,7 @@ export function GroupView({ group: room }: { group: Group }) {
     pinOn: [group.busyBotId, group.working, composerDock.pad],
     transcriptShown: !setupPending,
     hasMore: group.hasMore,
+    isVisible: isVisibleRoomRow,
   });
   useTimestampPeek(scrollRef);
   // the status line keeps its slot at the end of the room whether it shows or not, so it never moves a row

@@ -1050,7 +1050,8 @@ export function ChatView({ bot: profile }: { bot: Bot }) {
   const lookups = useMemo(() => transcriptLookups(allMessages, messages), [allMessages, messages]);
   const liveTools = useLiveToolIds(messages, bot);
   const showToolCalls = showToolCallsEnabled(state.config);
-  const latestVisibleIndex = useMemo(() => messages.findLastIndex((message) => !hiddenChatRow(message, bot.id, showToolCalls)), [messages, bot.id, showToolCalls]);
+  const isVisibleRow = useCallback((message: Message) => !hiddenChatRow(message, bot.id, showToolCalls), [bot.id, showToolCalls]);
+  const latestVisibleIndex = useMemo(() => messages.findLastIndex(isVisibleRow), [messages, isVisibleRow]);
   const focus = state.focusMessage?.threadId === bot.threadId ? state.focusMessage : null;
 
   const {
@@ -1073,7 +1074,7 @@ export function ChatView({ bot: profile }: { bot: Bot }) {
     messages,
     pinOn: [bot.busy, composerDock.pad],
     hasMore: bot.hasMore,
-    latestVisibleIndex: latestVisibleIndex >= 0 ? latestVisibleIndex : undefined,
+    isVisible: isVisibleRow,
   });
   useTimestampPeek(scrollRef);
 

@@ -85,20 +85,25 @@ vi.mock("@/hooks/use-arrival-flow", () => ({ useArrivalFlow: () => {} }));
 
 import { useTranscriptViewport } from "./use-transcript-viewport";
 
-type Row = { id: string; role?: "user" | "bot" };
+type Row = { id: string; role?: "user" | "bot"; hidden?: boolean };
 const rows = (count: number, from = 0): Row[] => Array.from({ length: count }, (_, index) => ({ id: `m${from + index}` }));
 
 const ROW = 50;
 class Scroller {
   rows = 0;
   ids: string[] = [];
+  heights: Map<string, number> | null = null;
   extra = 0;
   scrollTop = 0;
   clientHeight = 400;
   clientWidth = 400;
   calls: ScrollToOptions[] = [];
+  private heightOf(id: string) {
+    return this.heights?.get(id) ?? ROW;
+  }
   get scrollHeight() {
-    return this.rows * ROW + this.extra;
+    if (!this.heights) return this.rows * ROW + this.extra;
+    return this.ids.reduce((sum, id) => sum + this.heightOf(id), 0) + this.extra;
   }
   get bottom() {
     return Math.max(0, this.scrollHeight - this.clientHeight);
@@ -111,8 +116,15 @@ class Scroller {
     return { top: 0, bottom: this.clientHeight };
   }
   private row(index: number) {
-    const top = index * ROW - this.scrollTop;
-    return { dataset: { mid: this.ids[index] }, firstElementChild: null, getBoundingClientRect: () => ({ top, bottom: top + ROW, height: ROW, width: 1 }) };
+    const id = this.ids[index]!;
+    const height = this.heightOf(id);
+    let offset = index * ROW;
+    if (this.heights) {
+      offset = 0;
+      for (let i = 0; i < index; i++) offset += this.heightOf(this.ids[i]!);
+    }
+    const top = offset - this.scrollTop;
+    return { dataset: { mid: id }, firstElementChild: null, getBoundingClientRect: () => ({ top, bottom: top + height, height, width: 1 }) };
   }
   querySelectorAll() {
     return this.ids.map((_, index) => this.row(index));
@@ -127,6 +139,7 @@ type Props = Parameters<typeof useTranscriptViewport<Row>>[0];
 let scroller: Scroller;
 let frames: FrameRequestCallback[];
 let keyListeners: Set<(event: Partial<KeyboardEvent>) => void>;
+let intersectionCallbacks: Array<(entries: Array<{ isIntersecting: boolean }>) => void>;
 let observers: number;
 let dispatched: unknown[];
 
@@ -140,8 +153,10 @@ function mount(initial: Partial<Props> = {}) {
   const commit = () => {
     result.scrollRef.current = scroller as unknown as HTMLDivElement;
     result.transcriptRef.current = {} as HTMLDivElement;
-    scroller.rows = result.windowedMessages.length;
-    scroller.ids = result.windowedMessages.map((row) => row.id);
+    result.topSentinelRef.current = {} as HTMLDivElement;
+    const drawn = props.isVisible ? result.windowedMessages.filter(props.isVisible) : result.windowedMessages;
+    scroller.rows = drawn.length;
+    scroller.ids = drawn.map((row) => row.id);
     scroller.scrollTop = Math.min(scroller.scrollTop, scroller.bottom);
   };
   const flushFrames = () => {
@@ -171,6 +186,7 @@ beforeEach(() => {
   scroller = new Scroller();
   frames = [];
   keyListeners = new Set();
+  intersectionCallbacks = [];
   observers = 0;
   dispatched = [];
   store.state.focusMessage = null;
@@ -189,7 +205,9 @@ beforeEach(() => {
     disconnect() {}
   });
   vi.stubGlobal("IntersectionObserver", class {
-    constructor() {}
+    constructor(callback: (entries: Array<{ isIntersecting: boolean }>) => void) {
+      intersectionCallbacks.push(callback);
+    }
     observe() {}
     disconnect() {}
   });
@@ -729,5 +747,88 @@ describe("transcript viewport", () => {
     });
 
     expect(dispatched).toEqual([{ type: "loadOlderMessages", threadId: "thread" }]);
+  });
+
+  it("windows by visible rows so hidden tool calls never starve the viewport or inflate laterCount (#205)", () => {
+    const isVisible = (row: Row) => !row.hidden;
+    const thread: Row[] = [
+      ...rows(40),
+      { id: "ask", role: "user" },
+      ...Array.from({ length: 150 }, (_, i) => ({ id: `tool${i}`, role: "bot" as const, hidden: true })),
+      { id: "reply1", role: "bot" },
+      { id: "reply2", role: "bot" },
+    ];
+    const view = mount({ messages: thread, isVisible });
+    expect(view.current.hiddenCount).toBe(0);
+    expect(view.current.laterCount).toBe(0);
+    expect(view.current.windowedMessages.filter(isVisible)).toHaveLength(43);
+    expect(view.current.windowedMessages.map((r) => r.id)).toContain("m0");
+    expect(view.current.windowedMessages.at(-1)?.id).toBe("reply2");
+
+    // In a longer thread, paging counts only visible rows, never hidden tool steps.
+    const longThread: Row[] = [];
+    for (let i = 0; i < 200; i++) {
+      longThread.push({ id: `v${i}`, role: i % 2 === 0 ? "user" : "bot" });
+      longThread.push({ id: `h${i}a`, role: "bot", hidden: true });
+      longThread.push({ id: `h${i}b`, role: "bot", hidden: true });
+    }
+    const longView = mount({ messages: longThread, isVisible });
+    expect(longView.current.windowedMessages.filter(isVisible)).toHaveLength(120);
+    expect(longView.current.hiddenCount).toBe(80);
+    expect(longView.current.laterCount).toBe(0);
+
+    longView.act(() => longView.current.showEarlier());
+    expect(longView.current.hiddenCount).toBe(20);
+    expect(longView.current.laterCount).toBe(60);
+    expect(longView.current.windowedMessages.filter(isVisible)).toHaveLength(120);
+
+    longView.act(() => longView.current.showLater());
+    expect(longView.current.hiddenCount).toBe(80);
+    expect(longView.current.laterCount).toBe(0);
+  });
+
+  it("anchors forward paging to the bottom visible row and does not ping-pong back to pageEarlier (#205)", () => {
+    const thread = rows(240);
+    // Tall bubbles in the oldest page (unmounted by pageLater) and short tool chips in the newer pages.
+    scroller.heights = new Map(thread.map((row, index) => [row.id, index < 60 ? 200 : 10]));
+    store.state.focusMessage = { threadId: "thread", messageId: "m10", nonce: 1, consumed: false };
+    const view = mount({ messages: thread });
+    expect(view.current.windowedMessages[0]?.id).toBe("m0");
+    expect(view.current.laterCount).toBe(120);
+
+    // Scroll to the bottom of [m0..m119] (rows m80..m119 visible, each 10px = 400px viewport), then click Show later.
+    scroller.scrollTop = scroller.bottom;
+    view.act(() => view.current.showLater());
+
+    expect(view.current.windowedMessages[0]?.id).toBe("m60");
+    expect(view.current.laterCount).toBe(60);
+    // m119 was at the bottom of the 400px viewport (top=390); after unmounting m0..m59 it stays at top=390 -> scrollTop=200.
+    expect(scroller.scrollTop).toBe(200);
+
+    // Even though scrollTop=200 is inside AUTO_EXPAND_TOP_THRESHOLD (250), neither IntersectionObserver nor a
+    // non-upward scroll event may bounce the window back to m0..m119.
+    view.act(() => {
+      for (const callback of intersectionCallbacks) callback([{ isIntersecting: true }]);
+      view.current.scrollHandlers.onScroll();
+    });
+    expect(view.current.windowedMessages[0]?.id).toBe("m60");
+    expect(view.current.laterCount).toBe(60);
+
+    // An explicit upward gesture re-enables paging earlier as expected.
+    view.act(() => view.current.scrollHandlers.onWheel({ deltaY: -40 } as never));
+    expect(view.current.windowedMessages[0]?.id).toBe("m0");
+    expect(view.current.laterCount).toBe(120);
+  });
+
+  it("pages forward on mobile touch swipe down toward newer rows", () => {
+    store.state.focusMessage = { threadId: "thread", messageId: "m10", nonce: 1, consumed: false };
+    const view = mount({ messages: rows(300) });
+    expect(view.current.laterCount).toBe(180);
+    scroller.scrollTop = scroller.bottom;
+    view.act(() => {
+      view.current.scrollHandlers.onTouchStart({ touches: [{ clientY: 300 }] } as never);
+      view.current.scrollHandlers.onTouchMove({ touches: [{ clientY: 220 }] } as never);
+    });
+    expect(view.current.laterCount).toBe(120);
   });
 });

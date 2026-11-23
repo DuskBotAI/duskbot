@@ -4,7 +4,7 @@ import { cn } from "@/lib/cn";
 import { chiefFor, chiefStepFits, createChiefPatch, myDefaultBot, stageIntro, useViewerEmail } from "@/lib/default-bot";
 import { completionPatch, computerAiIds, firstRunPatch, markWelcomeFinished, resumeBeat, showWelcome, type BeatId } from "@/lib/onboarding";
 import { clearWelcomeDraft, readWelcomeDraft, saveWelcomeDraft } from "@/lib/welcome-draft";
-import { looksLikeNotes } from "@/lib/assistant-notes";
+import { looksLikeIntake } from "@/lib/assistant-notes";
 import { greetingName } from "../../../shared/greeting-name";
 import { usePlaceSetupOpen } from "@/lib/place-setup";
 import { api, useStore, type ModelSelection } from "@/state/store";
@@ -270,7 +270,7 @@ export function WelcomeFlow({
   const takeNotes = useNotesIntake();
   const onPaste = (event: ReactClipboardEvent<HTMLDivElement>) => {
     const pasted = event.clipboardData.getData("text/plain");
-    if (!looksLikeNotes(pasted)) return;
+    if (!looksLikeIntake(pasted)) return;
     event.preventDefault();
     takeNotes(pasted, setNotesLine);
   };

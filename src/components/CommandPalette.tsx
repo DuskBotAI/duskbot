@@ -25,6 +25,8 @@ import { openSettings } from "@/lib/open-settings";
 import { settingsCommands } from "./palette-commands";
 
 const FORMER_PLACE_WORD = "workspace";
+import { openGrokMove } from "@/lib/grok-bot-move";
+import { localSetupImport } from "@/lib/setup-import";
 
 /** A row's 49px and the 2px gap under it. */
 const ROW_STEP = 51;
@@ -172,6 +174,10 @@ export function CommandPalette({ onOpenChange }: { onOpenChange?: (open: boolean
     { id: "shortcuts", name: t("sidebar.menu.shortcuts"), detail: t("settings.w6.group.help"), also: t("palette.also.shortcuts"), icon: "keyboard", run: () => dispatch({ type: "toggleShortcuts", open: true }) },
     ...settingsCommands().map(({ target, ...command }): Command => ({ ...command, run: () => dispatch(openSettings(target)) })),
     ...(currentBot ? [{ id: "bot-settings", name: t("sidebar.grok.botSettings"), detail: currentBot.name, icon: "settings-gear" as const, run: () => openBotSettingsPage(dispatch, currentBot.id) }] : []),
+    ...(localSetupImport(state.config?.cloudHome === true)
+      ? [{ id: "grok-move", name: t("grokBotMove.palette"), detail: t("grokBotMove.app"), also: "import bring migrate", icon: "arrow-bracket-to-down" as const, run: () => openGrokMove() }]
+      : []),
+    { id: "bring-in", name: t("settings.import.rowTitle"), detail: t("grokBotMove.paletteDetail"), also: "import bring migrate move chatgpt claude gemini", icon: "arrow-bracket-to-down", run: () => dispatch(settings("import")) },
     { id: "connect-apps", name: t("sidebar.connectApps"), detail: t("palette.connectApps.detail"), also: t("palette.also.connectApps"), icon: "storefront", run: () => dispatch(settings("apps")) },
     { id: "theme-system", name: t("palette.theme", { theme: t("settings.language.system") }), detail: appearance, also: t("palette.also.theme"), icon: "display", run: () => applySkinChoice("system") },
     { id: "theme-dark", name: t("palette.theme", { theme: t("settings.theme.dark") }), detail: appearance, also: t("palette.also.theme"), icon: "moon", run: () => applySkinChoice(THEME_SKINS.dark) },

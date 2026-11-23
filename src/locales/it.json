@@ -2273,7 +2273,6 @@
   "onboarding.import.review": "{names}: disattivate finché non controlli cosa ha trovato la scansione, nelle impostazioni Abilità di un bot.",
   "onboarding.import.conflict": "Saltate {names}: c'è già un'abilità diversa con questo nome.",
   "onboarding.import.toolConflict": "Saltati {names}: c'è già un server MCP diverso con questo nome.",
-  "onboarding.import.failed": "Non siamo riusciti a portare {names}. Riprova più tardi da Impostazioni → Generale → Importazione.",
   "onboarding.import.filesLeftOut": "I file grandi o non di testo nelle cartelle delle abilità sono rimasti fuori.",
   "onboarding.import.limit": "{names} non ci stanno: il tuo elenco di server MCP è pieno.",
   "onboarding.import.policy": "La tua organizzazione non consente {names}.",

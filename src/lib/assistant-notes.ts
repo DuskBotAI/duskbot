@@ -15,8 +15,12 @@ import { GrokImportError } from "../../shared/grok-import";
 import { copyText } from "./copy-text";
 import type { SaveFacts } from "./grok-move";
 import { saveTeamProfile } from "./own-profile";
+import { looksLikeGrokExport } from "./grok-bot-move";
 
 export { isNotesPrompt, looksLikeNotes };
+
+/** What the chat and the bring screens take in instead of sending: notes from another AI, or an export a Grok Bot wrote of itself. */
+export const looksLikeIntake = (text: string) => looksLikeNotes(text) || looksLikeGrokExport(text);
 
 const KEY = "dusk.notesWaiting";
 export const REMIND_AFTER_MS = 15 * 60_000;
@@ -366,7 +370,7 @@ async function joinMovedBots(notes: AssistantNotes, bots: readonly Bot[], movedN
   for (const bot of notes.bots.filter((one) => movedNames.includes(one.name))) {
     try {
       const plan = grokMovePlan(bot, { from: notes.from });
-      const here = bots.find((one) => one.installedPackage?.id === plan.packageId);
+      const here = bots.find((one) => [plan.packageId, ...plan.legacyPackageIds].includes(one.installedPackage?.id ?? ""));
       if (!here) continue;
       const memories = { from: notes.from, memories: [...bot.memories] };
       const files = Object.entries(bot.memoryFiles ?? {});
@@ -450,7 +454,7 @@ async function bringNotesIn(parsed: AssistantNotes, context: NotesContext, optio
       bots: context.bots, servers: new Set(servers.map((server) => server.name)), timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone, from: notes.from,
     });
     const saveFacts = aboutMeSaver({ ...context, aboutMe });
-    const reports = await runBotMove({ apps: [{ app: notes.from.name, where: "", from: notes.from, preview, channels: [], unreadable: [] }], grokWaiting: [] }, context.dispatch, (_done, name) => step(t("composer.notes.row.bot", { name })), saveFacts);
+    const reports = await runBotMove({ apps: [{ app: notes.from.name, where: "", from: notes.from, preview, channels: [], unreadable: [] }] }, context.dispatch, (_done, name) => step(t("composer.notes.row.bot", { name })), saveFacts);
     const moved = reports.flatMap((one) => one.report.bots);
     outcome.bots = moved.length;
     outcome.botNames = moved.map((bot) => bot.name);
@@ -492,8 +496,8 @@ export function notesErrorLine(cause: unknown): string {
   return t("composer.notes.error.failed");
 }
 
-/** Every `.json`, `.md` or `.txt` file among dropped or picked files that holds notes, read whole and joined, so the
- * parts of a split answer come in together; null for none. */
+/** Every `.json`, `.md` or `.txt` file among dropped or picked files that holds notes or a Grok Bot's export, read whole
+ * and joined, so the parts of a split answer come in together; null for none. */
 export async function notesInFiles(files: readonly Pick<File, "name" | "size" | "text">[]): Promise<{ text: string; names: string[] } | null> {
   const found: Array<{ name: string; text: string }> = [];
   let size = 0;
@@ -501,7 +505,7 @@ export async function notesInFiles(files: readonly Pick<File, "name" | "size" | 
     if (!/\.(?:json|md|markdown|txt)$/i.test(file.name) || file.size > NOTES_MAX_CHARS || size + file.size > NOTES_MAX_CHARS) continue;
     try {
       const text = await file.text();
-      if (looksLikeNotes(text) && !isNotesPrompt(text)) {
+      if (looksLikeIntake(text) && !isNotesPrompt(text)) {
         found.push({ name: file.name, text });
         size += file.size;
       }

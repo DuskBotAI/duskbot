@@ -17,7 +17,7 @@ vi.mock("@/state/store", () => ({
 }));
 
 import { GROK_EXPORT_FORMAT, parseGrokExport } from "../../shared/grok-import";
-import { foundExports, previewGrokMove, runGrokMove, type GrokPreviewFacts } from "./grok-move";
+import { previewGrokMove, runGrokMove, type GrokPreviewFacts } from "./grok-move";
 
 const bots = (...list: unknown[]) => parseGrokExport(JSON.stringify({ format: GROK_EXPORT_FORMAT, bots: list }));
 const facts = (over: Partial<GrokPreviewFacts> = {}): GrokPreviewFacts => ({ bots: [], servers: new Set(), timeZone: "UTC", ...over });
@@ -98,18 +98,3 @@ describe("the import", () => {
   });
 });
 
-describe("files found on this computer", () => {
-  const file = (name: string, list: unknown, modifiedAt = 1) => ({ name, modifiedAt, text: JSON.stringify({ format: GROK_EXPORT_FORMAT, bots: list }) });
-
-  it("joins each Bot's files, keeps the newest copy, and a refused file spoils nothing else", () => {
-    const found = foundExports([
-      file("grok-bot-export-drew (1).json", [{ name: "Drew", title: "Newest", memories: ["a"] }], 5),
-      file("grok-bot-export-drew.json", [{ name: "Drew", title: "Older", memories: ["a"] }], 1),
-      file("grok-bot-export-eve.json", [{ name: "Eve" }], 2),
-      file("grok-bot-export-bad.json", [{ name: "Bad", api_key: "x" }], 3),
-    ]);
-    expect(found.bots.map((bot) => bot.name).sort()).toEqual(["Drew", "Eve"]);
-    expect(found.bots.find((bot) => bot.name === "Drew")).toMatchObject({ title: "Newest", memories: ["a"] });
-    expect(found.refused).toEqual([{ file: "grok-bot-export-bad.json", error: expect.stringContaining("passwords or keys") }]);
-  });
-});

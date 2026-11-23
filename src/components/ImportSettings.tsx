@@ -1,6 +1,6 @@
-// Settings → general → bring in from other apps: what this computer holds (bots from OpenClaw, Hermes Agent and Grok
-// bot's saved files, and the AI tools' memory, skills, tools and instructions), each with its own Bring in, then the
-// first run's one prompt for AIs online, and what comes in when its answer is pasted or dropped here.
+// Settings → general → bring in from other apps: Grok Bot's bots (the move's own row), what this computer holds (bots
+// from OpenClaw and Hermes Agent, and the AI tools' memory, skills, tools and instructions), each with its own Bring in,
+// then the first run's one prompt for AIs online, and what comes in when its answer is pasted or dropped here.
 import { useEffect, useMemo, useState } from "react";
 
 import { track } from "@/lib/analytics";
@@ -12,6 +12,7 @@ import { useStore } from "@/state/store";
 import type { SetupDetection } from "../../shared/setup-import";
 import { useBotMove } from "./BringBots";
 import { BringIn, useBringChoice } from "./BringIn";
+import { GrokMoveRow } from "./grok-move/GrokMoveEntry";
 
 const LOOK_MS = 4_000;
 
@@ -30,7 +31,7 @@ export function ImportSettings({ client = setupImportApi }: { client?: SetupImpo
   }, [client, local]);
   const finds = useMemo<LocalFind[] | null>(() => {
     if (!local) return [];
-    return move.plan && detection !== undefined ? localFinds(move.plan, detection, { grokExports: true }) : null;
+    return move.plan && detection !== undefined ? localFinds(move.plan, detection) : null;
   }, [local, move.plan, detection]);
   // a bringing in that finished before this page opened is not this visit's: what is still here is looked at afresh
   useEffect(() => forgetBringRun(), []);
@@ -45,7 +46,8 @@ export function ImportSettings({ client = setupImportApi }: { client?: SetupImpo
   return (
     <section data-import-section="bring" className="flex flex-col gap-4 px-1 pt-1">
       <p className="m-0 text-pretty text-[13px] leading-[18px] text-ink-secondary">{choice.found ? t("bring.sub") : t("bring.subNone")}</p>
-      <BringIn finds={finds} choice={choice} grokWaiting={move.plan?.grokWaiting ?? []} run={run} onImport={(find) => bring([find])} />
+      <GrokMoveRow local={local} />
+      <BringIn finds={finds} choice={choice} run={run} onImport={(find) => bring([find])} />
     </section>
   );
 }

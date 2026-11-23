@@ -50,7 +50,7 @@ export const VITEST_SUBSETS = {
       "server/server-lines.test.ts", "server/host/devs-reports.test.ts", "server/automation-reports.test.ts", "server/incidents.test.ts",
       "server/routine-run-card.test.ts", "server/connector-card-text.test.ts", "server/host/secret-cards.test.ts",
       "server/notify.test.ts", "server/room-lines.test.ts", "server/post-to-room.test.ts",
-      "server/teammate-lines.test.ts", "server/cloud-send-arrived.test.ts", "scripts/ci-workflow.test.ts", "scripts/pre-push-check.test.ts",
+      "server/teammate-lines.test.ts", "server/cloud-send-arrived.test.ts", "server/grok-bot-move.test.ts", "scripts/ci-workflow.test.ts", "scripts/pre-push-check.test.ts",
       "server/host/wait-words.test.ts", "electron/accounts-e2e.test.mjs", "scripts/testing/send-confirmation.e2e.test.ts",
       "scripts/testing/team-own-chat.e2e.test.ts", "shared/app-prefs.test.ts", "shared/failure-plan.test.ts",
       "scripts/testing/analytics-docs.test.ts"],

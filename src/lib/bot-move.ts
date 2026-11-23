@@ -1,29 +1,21 @@
 import { api, type Action, type Bot } from "@/state/store";
 import { moveFrom, readBotLook, EMPTY_LOOK, type BotLook } from "../../shared/bot-move";
-import { GROK_FROM, type GrokBot, type MoveFrom } from "../../shared/grok-import";
-import { foundExports, previewGrokMove, runGrokMove, type GrokLook, type GrokPreview, type GrokReport, type SaveFacts } from "./grok-move";
+import type { GrokBot, MoveFrom } from "../../shared/grok-import";
+import { previewGrokMove, runGrokMove, type GrokPreview, type GrokReport, type SaveFacts } from "./grok-move";
 
 export const BOTS_LOOK_TIME_BOX_MS = 2_500;
 
-/** What this computer holds: other apps' bots, and what Grok Bot left (exports in Downloads, its roster's names). */
+/** What this computer holds: other apps' bots. Grok Bot's move is its own (grok-bot-move.ts). */
 export interface BotMoveLook {
   bots: BotLook;
-  grok: GrokLook;
 }
 
-export const NOTHING: BotMoveLook = { bots: EMPTY_LOOK, grok: { files: [], bots: [] } };
+export const NOTHING: BotMoveLook = { bots: EMPTY_LOOK };
 
 /** Settles within `ms`: a slow or failed look reads as nothing found, never as an error in the way. */
-export async function lookForOtherBots(ms = BOTS_LOOK_TIME_BOX_MS, options: { downloads?: boolean } = {}): Promise<BotMoveLook> {
-  const signal = AbortSignal.timeout(ms);
-  const [bots, grok] = await Promise.all([
-    api<unknown>("/api/setup-import/bots", { signal, timeoutMs: ms }).then(readBotLook, () => EMPTY_LOOK),
-    api<Partial<GrokLook> | null>(`/api/setup-import/grok${options.downloads === false ? "?downloads=0" : ""}`, { signal, timeoutMs: ms }).then(
-      (look) => ({ files: Array.isArray(look?.files) ? look.files : [], bots: Array.isArray(look?.bots) ? look.bots : [] }),
-      () => ({ files: [], bots: [] }),
-    ),
-  ]);
-  return { bots, grok };
+export async function lookForOtherBots(ms = BOTS_LOOK_TIME_BOX_MS): Promise<BotMoveLook> {
+  const bots = await api<unknown>("/api/setup-import/bots", { signal: AbortSignal.timeout(ms), timeoutMs: ms }).then(readBotLook, () => EMPTY_LOOK);
+  return { bots };
 }
 
 export interface AppMove {
@@ -38,8 +30,6 @@ export interface AppMove {
 
 export interface BotMovePlan {
   apps: AppMove[];
-  /** Grok Bot's bots with no export yet: they need its own move, one message per bot. */
-  grokWaiting: string[];
 }
 
 /** The same bot kept in two apps (one persona run in both Hermes Agent and OpenClaw, say) comes over once: the copy
@@ -68,14 +58,7 @@ export function planBotMove(look: BotMoveLook, facts: { bots: readonly Pick<Bot,
     return { app: found.app, where: found.where, from, channels: found.channels, unreadable: found.unreadable,
       preview: previewGrokMove(found.bots.filter((bot) => kept.has(bot)), { ...facts, from }, names, servers, planned) };
   });
-  const exports = foundExports(look.grok.files);
-  if (exports.bots.length) {
-    apps.push({ app: GROK_FROM.name, where: "~/Downloads", from: GROK_FROM, channels: [], unreadable: exports.refused.map((one) => one.file),
-      preview: previewGrokMove(exports.bots, facts, names, servers, planned) });
-  }
-  const exported = new Set(exports.bots.map((bot) => bot.name.toLowerCase()));
-  return { apps: apps.filter((app) => app.preview.plans.length || app.preview.moved.length || app.preview.unreadable.length),
-    grokWaiting: look.grok.bots.filter((name) => !exported.has(name.toLowerCase())) };
+  return { apps: apps.filter((app) => app.preview.plans.length || app.preview.moved.length || app.preview.unreadable.length) };
 }
 
 export const movable = (plan: BotMovePlan) => plan.apps.reduce((total, app) => total + app.preview.plans.length, 0);

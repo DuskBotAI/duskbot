@@ -208,7 +208,7 @@ describe("bringing in what other AIs and agent apps hold, on a real server", () 
     const { plantHermes, plantOpenClawList } = await planters();
     plantOpenClawList(fixture.info.dataDir);
     plantHermes(fixture.info.dataDir);
-    const look = await lookForOtherBots(10_000, { downloads: false });
+    const look = await lookForOtherBots(10_000);
     expect(look.bots.apps.map((app) => app.app).sort()).toEqual(["Hermes Agent", "OpenClaw"]);
     const plan = planBotMove(look, { bots: await bots() as never, servers: new Set(), timeZone: "Europe/Lisbon" });
     const finds = localFinds(plan, null);
@@ -222,6 +222,6 @@ describe("bringing in what other AIs and agent apps hold, on a real server", () 
     expect(await persona((await bot("Hermes")).id)).toContain("honest about what you don't know");
     expect(await aboutMe(), "what Hermes knew about the person").toMatch(/Works nights; never message before noon/);
     const molty = await bot("Molty");
-    expect((await routines()).filter((one) => one.botId === molty.id).map((one) => one.name)).toEqual(expect.arrayContaining(["Molty: Morning brief"]));
+    expect((await routines()).filter((one) => one.botId === molty.id).map((one) => one.name)).toEqual(expect.arrayContaining(["Morning brief"]));
   }, 120_000);
 });

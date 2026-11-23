@@ -203,7 +203,7 @@ opens the same step later, and says when nothing is found or everything is alrea
 |---|---|---|
 | OpenClaw (and Clawdbot, Moltbot) | `~/.openclaw` (`$OPENCLAW_STATE_DIR`, `~/.openclaw-<profile>`, `~/.clawdbot`, `~/.moltbot`, `~/.moldbot`); `agents.list` (2026.3) or `agents.entries` (2026.11) in the JSON5 config; each workspace | one bot per agent: SOUL.md as its soul, IDENTITY.md's name, creature and vibe; MEMORY.md, USER.md, AGENTS.md, TOOLS.md and the newest 30 daily notes as memory; workspace and shared skills; HEARTBEAT.md as a 30-minute routine; cron jobs from `cron/jobs.json` or the `cron_jobs` table of `state/openclaw.sqlite` |
 | Hermes Agent | `~/.hermes` (`$HERMES_HOME`) and each real `profiles/<name>` | one bot per profile: SOUL.md plus the chosen personality as its soul, `memories/MEMORY.md` and `USER.md` (§ entries) as memory, its own skills (not the bundled ones in `.bundled_manifest`), `cron/jobs.json` |
-| Grok Bot | exports in `~/Downloads`, its roster's names | exports move as before; bots without one are named with a link to the move in Grok bot itself |
+| Grok Bot | exports in `~/Downloads` (parsed on the server), its roster's live bot names | exports move as before; bots without one are named with a link to the move in Grok bot itself. The direct move is [Move from Grok Bot](grok-move.md) |
 | your earlier dusk bot | a `~/.openmausbot` or `~/.opengrokbot` left beside the data folder in use | each bot but the helper and hidden ones, with its memory, skills and routines |
 
 Every bot moves as a package (`trust: "file"`): new bots beside any already here (a taken name is numbered), skills

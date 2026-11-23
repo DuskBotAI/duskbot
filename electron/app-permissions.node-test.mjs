@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { readFileSync } from "node:fs";
-import { appPermissionAllowed, appPermissionHandlers, emailDraftUrl, externalLinkUrl, externalWebUrl, remoteClipboardWriteAllowed } from "./app-permissions.mjs";
+import { appPermissionAllowed, appPermissionHandlers, emailDraftUrl, externalLinkUrl, externalWebUrl, grokPromptLink, ownExternalLinkUrl, remoteClipboardWriteAllowed } from "./app-permissions.mjs";
+import { grokExportRequest, grokPromptUrl } from "../shared/grok-move.ts";
 import { cloudPlanSnapshot, createCloudAccountClient } from "./cloud-account.mjs";
 import { myCloudOrigin, rememberedCloudHome } from "./cloud-home.mjs";
 
@@ -98,7 +99,8 @@ test("an email link opens only as a draft to one address with a subject and a bo
 test("both external-link entry points use the policy and IPC retains the local-origin gate", () => {
   const main = readFileSync(new URL("./main.mjs", import.meta.url), "utf8");
   assert.match(main, /ipcMain\.handle\("desktop:open-external", localOnly\("desktop:open-external"/);
-  assert.match(main, /shell\.openExternal\(externalLinkUrl\(rawUrl\)\)/);
+  assert.match(main, /shell\.openExternal\(ownExternalLinkUrl\(rawUrl\)\)/);
+  assert.doesNotMatch(main, /shell\.openExternal\(ownExternalLinkUrl\(url\)\)/);
   assert.match(main, /shell\.openExternal\(externalLinkUrl\(url\)\)/);
   assert.doesNotMatch(main, /shell\.openExternal\(externalWebUrl\(/);
 });
@@ -549,4 +551,22 @@ test("the active remote server's page may show notifications and go fullscreen, 
   assert.equal(ask(onRemote()), false, "no active remote: at once");
   assert.equal(ask(onRemote(), state.main, "fullscreen"), false, "no active remote: no fullscreen");
   for (const requesting of ["about:blank", "data:text/html,x", ""]) assert.equal(ask(onRemote({ requestingUrl: requesting })), false, `${requesting || "(empty)"}`);
+});
+
+test("the app's own pages may open Grok Bot's prompt link, and only that exact shape; window.open never may", () => {
+  const rosterId = "00000000-0000-4000-8000-000000000001";
+  const url = grokPromptUrl(rosterId, grokExportRequest({ rosterId, name: "Nova" }));
+  assert.ok(url);
+  assert.equal(grokPromptLink(url), url);
+  assert.equal(ownExternalLinkUrl(url), url);
+  assert.throws(() => externalLinkUrl(url), /Only web/);
+  assert.equal(ownExternalLinkUrl("https://example.com/help"), "https://example.com/help");
+  for (const bad of [
+    "grokbot://app/v1/settings?id=x", "grokbot://app/v1/prompt?id=a/b&text=hi", "grokbot://app/v1/prompt?id=ok&text=hi&send=1",
+    "grokbot://app/v1/prompt?text=hi&id=ok", "grokbot://app/v1/prompt?id=ok&text=a#b", "grokbot://app/v1/prompt?id=ok&text=a%20b c",
+    `grokbot://app/v1/prompt?id=ok&text=${"a".repeat(2100)}`, "GROKBOT://app/v1/prompt?id=ok&text=hi", "grokbot://evil/v1/prompt?id=ok&text=hi",
+  ]) {
+    assert.equal(grokPromptLink(bad), null, bad);
+    assert.throws(() => ownExternalLinkUrl(bad), /Only web|web address/, bad);
+  }
 });

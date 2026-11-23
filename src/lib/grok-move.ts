@@ -1,41 +1,7 @@
-import { t } from "@/lib/i18n";
 import { addTemplate } from "@/lib/template-add";
 import { api, type Action, type Bot } from "@/state/store";
-import type { LocaleKey } from "@/locales";
 import { takeImportName } from "../../shared/import-name";
-import { factsTopic, GrokImportError, grokMovePlan, mergeGrokBots, parseGrokExport, type GrokBot, type GrokMovePlan, type MoveFrom } from "../../shared/grok-import";
-
-/** What the desktop app found on this computer. */
-export interface GrokLook {
-  files: Array<{ name: string; modifiedAt: number; text: string }>;
-  bots: string[];
-}
-
-/** A refusal or an unreadable reply, in the person's words. */
-export function grokErrorText(cause: unknown): string {
-  if (!(cause instanceof GrokImportError)) return cause instanceof Error ? cause.message : String(cause);
-  return t(`grokMove.error.${cause.code}` as LocaleKey, { keys: cause.keys.join(", ") });
-}
-
-export interface FoundExports {
-  bots: GrokBot[];
-  refused: Array<{ file: string; error: string }>;
-}
-
-/** Every file found, joined by Bot: a split export comes together and a saved-twice one counts once. A refused file says
- * why and costs the others nothing. Oldest first, so the newest copy wins. */
-export function foundExports(files: GrokLook["files"]): FoundExports {
-  const refused: FoundExports["refused"] = [];
-  const bots = [...files].sort((a, b) => a.modifiedAt - b.modifiedAt).flatMap((file) => {
-    try {
-      return parseGrokExport(file.text);
-    } catch (cause) {
-      refused.push({ file: file.name, error: grokErrorText(cause) });
-      return [];
-    }
-  });
-  return { bots: mergeGrokBots(bots), refused };
-}
+import { factsTopic, grokMovePlan, type GrokBot, type GrokMovePlan, type MoveFrom } from "../../shared/grok-import";
 
 export interface GrokPreview {
   /** `addedAs`: the Bot's name here, numbered when it is taken. `channelRef`: its old app's chat-app bots, which the
@@ -61,7 +27,7 @@ export function previewGrokMove(bots: readonly GrokBot[], facts: GrokPreviewFact
   for (const bot of bots) {
     try {
       const plan = grokMovePlan(bot, { timeZone: facts.timeZone, takenServers: servers, ...(facts.from ? { from: facts.from } : {}) });
-      if (installed.has(plan.packageId)) {
+      if ([plan.packageId, ...plan.legacyPackageIds].some((id) => installed.has(id))) {
         preview.moved.push(plan.name);
         continue;
       }
@@ -109,7 +75,7 @@ export async function runGrokMove(preview: GrokPreview, dispatch: (action: Actio
   for (const plan of preview.plans) {
     onBot?.(plan);
     try {
-      const added = await addTemplate(plan.document, dispatch);
+      const added = await addTemplate(plan.document, dispatch, { select: false });
       if (added.alreadyAdded) {
         report.moved.push(plan.name);
         continue;

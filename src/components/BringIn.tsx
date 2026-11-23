@@ -4,8 +4,8 @@
 import { useEffect, useId, useMemo, useState, type ReactNode } from "react";
 import { Check, CircleAlert, Copy, ChevronDown } from "../icons";
 import { cn } from "@/lib/cn";
-import { activeLocale, t } from "@/lib/i18n";
-import { copyNotesPrompt, looksLikeNotes, notesInFiles } from "@/lib/assistant-notes";
+import { t } from "@/lib/i18n";
+import { copyNotesPrompt, looksLikeIntake, notesInFiles } from "@/lib/assistant-notes";
 import { NOTES_PROMPT } from "../../shared/assistant-notes";
 import { amountLine, bringFocus, broughtIds, knowsLine, memorySource, type BringRun, type LocalFind } from "@/lib/first-run-import";
 import { MausAvatar } from "./Avatar";
@@ -28,8 +28,6 @@ function FindMark({ find, size = 18 }: { find: LocalFind; size?: number }) {
   if (/grok/.test(name)) return <GrokBotMark size={size} />;
   return <PixelIcon name="laptop" size={size} />;
 }
-
-const listFormat = (parts: string[]) => new Intl.ListFormat(activeLocale(), { style: "long", type: "conjunction" }).format(parts);
 
 type RowState = "idle" | "working" | "done";
 
@@ -143,10 +141,10 @@ function How({ n, children }: { n: number; children: ReactNode }) {
   );
 }
 
-/** For AIs that live online (Grok bot, ChatGPT, Claude, Gemini): three steps around a prompt to copy. Its answer comes
+/** For AIs that live online (ChatGPT, Claude, Gemini, any other): three steps around a prompt to copy. Its answer comes
  * in when it is pasted or dropped here or into any chat, or saved to Downloads; the first bot's chat waits for it.
  * `folded`: below this computer's finds (Settings), it is one quiet line until asked for. */
-export function BringPrompt({ grokWaiting, folded = false, titled = false }: { grokWaiting: readonly string[]; folded?: boolean; titled?: boolean }) {
+export function BringPrompt({ folded = false, titled = false }: { folded?: boolean; titled?: boolean }) {
   const promptId = useId();
   const notes = useNotesHere();
   const [copy, setCopy] = useState<"idle" | "copied" | "failed">("idle");
@@ -186,12 +184,6 @@ export function BringPrompt({ grokWaiting, folded = false, titled = false }: { g
           </pre>
         </div>
       </div>
-      {grokWaiting.length > 0 && (
-        <p data-bring-grok="" className="mb-0 mt-3 ps-9 text-pretty text-[12px] leading-4 text-ink-tertiary">
-          {t("bring.grokLine", { names: listFormat([...grokWaiting]) })}{" "}
-          <button type="button" data-bring-grok-copy="" onClick={() => void copyPrompt()} className="rounded text-ink-secondary underline decoration-ink/25 underline-offset-2 hover:text-ink hover:decoration-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus">{t("bring.grokCopy")}</button>
-        </p>
-      )}
     </div>
   );
 
@@ -226,7 +218,7 @@ function useNotesHere(): { said: { line: string; state: "working" | "done" | "fa
     let depth = 0;
     const paste = (event: ClipboardEvent) => {
       const pasted = event.clipboardData?.getData("text/plain") ?? "";
-      if (!looksLikeNotes(pasted)) return;
+      if (!looksLikeIntake(pasted)) return;
       event.preventDefault();
       event.stopPropagation();
       takeNotes(pasted, say, "paste");
@@ -246,7 +238,7 @@ function useNotesHere(): { said: { line: string; state: "working" | "done" | "fa
       depth = 0;
       setOver(false);
       void notesInFiles(Array.from(event.dataTransfer?.files ?? [])).then((notes) => {
-        if (notes) takeNotes(notes.text, say, "drop");
+        if (notes) takeNotes(notes.text, say, "drop", null, notes.names.join(", "));
         else say(t("composer.notes.error.notExport"), "failed");
       });
     };
@@ -271,17 +263,17 @@ function upFront(others: readonly LocalFind[], source: LocalFind | null): LocalF
 /** What this computer holds, each with its own Bring in, and the prompt for AIs online below. `step`: the first run's
  * bring step, where only the strongest finds show until Show more and the prompt stays open under its own label;
  * Settings lists every find and folds the prompt to one line. */
-export function BringIn({ finds, choice, grokWaiting, run, onImport, step = false }: {
+export function BringIn({ finds, choice, run, onImport, step = false, lead }: {
   /** null while still looking. */
   finds: readonly LocalFind[] | null;
   choice: BringChoice;
-  /** Grok bot's bots on this computer with nothing saved yet, by name: they move through the prompt, like an AI online. */
-  grokWaiting: readonly string[];
   /** The bringing in, once started (useBringRun). */
   run: BringRun;
   /** One app's own Bring in. */
   onImport?: (find: LocalFind) => void;
   step?: boolean;
+  /** Above everything else here: the Grok Bot card (GrokMoveCard). */
+  lead?: ReactNode;
 }) {
   const brought = broughtIds(run);
   const busy = run.kind === "working";
@@ -298,6 +290,7 @@ export function BringIn({ finds, choice, grokWaiting, run, onImport, step = fals
 
   return (
     <div data-bring-in="" className="w-full">
+      {lead}
       {finds === null && <p role="status" data-bring-looking="" className="mb-6 text-[13px] leading-[18px] text-ink-tertiary">{t("bring.looking")}</p>}
       {source && (
         <MemorySource find={source} state={rowState(source)} busy={busy} said={said}
@@ -319,7 +312,7 @@ export function BringIn({ finds, choice, grokWaiting, run, onImport, step = fals
           {!sourceLast && run.kind !== "idle" && <RunLine run={run} />}
         </section>
       )}
-      {(finds !== null || step) && <BringPrompt grokWaiting={grokWaiting} folded={found && !step} titled={found && step} />}
+      {(finds !== null || step) && <BringPrompt folded={found && !step} titled={found && step} />}
     </div>
   );
 }

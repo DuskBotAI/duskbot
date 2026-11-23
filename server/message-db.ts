@@ -174,6 +174,11 @@ export function memoryStoreDb(): DatabaseSync {
   return db();
 }
 
+/** The open database for the Grok Bot move's records (grok-bot-move-store.ts), which keeps its own tables. */
+export function moveStateDb(): DatabaseSync {
+  return db();
+}
+
 /** One prepared statement per SQL text for the life of the open database. */
 function prepared(sql: string): StatementSync {
   const database = db();

@@ -107,7 +107,7 @@ beforeEach(() => {
     if (path === "/api/dashboard/usage-signals") { if (init?.body) f.improve.push(JSON.parse(init.body)); return init?.body ? JSON.parse(init.body) : { enabled: true }; }
     if (path === "/api/mobile/devices") return { devices: [] };
     if (path === "/api/setup-import/bots") return { apps: [] };
-    if (path === "/api/setup-import/grok") return { files: [], bots: [] };
+    if (path === "/api/setup-import/grok") return { exports: [], bots: [] };
     return path === "/api/instances" ? { instances: f.state.instances } : JSON.parse(init?.body ?? "{}");
   });
   f.state = { hydrated: true, instances: [claude(true, "passed")], config: { onboarding: EMPTY_ONBOARDING, profile: { name: "" } }, bots: [maus], cloudAdd: null };

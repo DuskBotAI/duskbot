@@ -2610,7 +2610,6 @@
   "onboarding.import.review": "{names}：保持关闭，直到你在机器人的「技能」设置中查看过扫描结果。",
   "onboarding.import.conflict": "已跳过 {names}：这里已有同名的其他技能。",
   "onboarding.import.toolConflict": "已跳过 {names}：这里已有同名的其他 MCP 服务器。",
-  "onboarding.import.failed": "无法导入 {names}。请稍后在「设置 → 通用 → 导入」中重试。",
   "onboarding.import.filesLeftOut": "技能文件夹中的大文件和非文本文件已略过。",
   "onboarding.import.limit": "{names} 未能添加：你的 MCP 服务器列表已满。",
   "onboarding.import.policy": "你的组织不允许 {names}。",

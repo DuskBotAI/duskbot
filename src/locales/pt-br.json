@@ -2295,7 +2295,6 @@
   "onboarding.import.review": "{names}: desativadas até você conferir o que a verificação encontrou, nas configurações de Habilidades de um bot.",
   "onboarding.import.conflict": "Pulamos {names}: já existe aqui outra habilidade com esse nome.",
   "onboarding.import.toolConflict": "Pulamos {names}: já existe aqui outro servidor MCP com esse nome.",
-  "onboarding.import.failed": "Não foi possível trazer {names}. Tente novamente mais tarde em Configurações → Geral → Import.",
   "onboarding.import.filesLeftOut": "Arquivos grandes ou que não são de texto nas pastas de habilidades ficaram de fora.",
   "onboarding.import.limit": "Não houve espaço para {names}: sua lista de servidores MCP está cheia.",
   "onboarding.import.policy": "Sua organização não permite {names}.",

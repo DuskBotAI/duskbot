@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { GROK_EXPORT_FORMAT, GROK_EXPORT_PROMPT, GROK_NOTES_FILE, GrokImportError, grokMovePlan, mergeGrokBots, parseGrokExport, type GrokBot } from "./grok-import.ts";
+import { GROK_EXPORT_FORMAT, GROK_EXPORT_PROMPT, GROK_NOTES_FILE, GrokImportError, grokMovePlan, keyLikeHost, mergeGrokBots, parseGrokExport, type GrokBot } from "./grok-import.ts";
 import { parsePackageDocument } from "./package-format.ts";
 
 const TOKEN = "sk-abcdefghijklmnopqrstuvwx";
@@ -88,7 +88,7 @@ describe("reading what a Bot wrote", () => {
     expect(bot).toMatchObject({ name: "Old", instructions: "Be old.", memories: ["a"] });
     const moved = grokMovePlan(bot!, { timeZone: "UTC" });
     expect(moved.skills.map((skill) => skill.folder)).toEqual(["s"]);
-    expect(moved.document.package.routines!.map((routine) => routine.name)).toEqual(["Old: r"]);
+    expect(moved.document.package.routines!.map((routine) => routine.name)).toEqual(["r"]);
     expect(moved.apps).toBe(1);
   });
 
@@ -174,22 +174,22 @@ describe("what comes over", () => {
     expect(moved.skills.map((skill) => [skill.name, skill.on])).toEqual([["Fine", true], ["Risky", false]]);
   });
 
-  it("creates scheduled routines paused, named <Bot>: <routine>, keeping schedule, zone and skills", () => {
+  it("creates scheduled routines paused, named as they were, keeping schedule, zone and skills", () => {
     const moved = plan();
     const [watch, monday] = moved.document.package.routines!;
-    expect(watch).toMatchObject({ name: "Account Health: Morning watch list", enabledAfterInstall: false, schedule: { type: "cron", expression: "0 8 * * 1-5", timeZone: "America/New_York" } });
+    expect(watch).toMatchObject({ name: "Morning watch list", enabledAfterInstall: false, schedule: { type: "cron", expression: "0 8 * * 1-5", timeZone: "America/New_York" } });
     expect(watch!.prompt).toContain("Use these skills: weekly-account-health.");
-    expect(monday).toMatchObject({ name: "Account Health: Monday check", enabledAfterInstall: false, schedule: { timeZone: "America/Los_Angeles" } });
+    expect(monday).toMatchObject({ name: "Monday check", enabledAfterInstall: false, schedule: { timeZone: "America/Los_Angeles" } });
   });
 
   it("keeps two different routines sharing a name apart", () => {
     const routines = [{ name: "Reminder", instruction: "One.", schedule_cron: "0 9 * * *" }, { name: "Reminder", instruction: "Two.", schedule_cron: "0 9 * * *" }];
-    expect(plan({ name: "Desk", routines }).document.package.routines!.map((routine) => routine.name)).toEqual(["Desk: Reminder", "Desk: Reminder (2)"]);
+    expect(plan({ name: "Desk", routines }).document.package.routines!.map((routine) => routine.name)).toEqual(["Reminder", "Reminder (2)"]);
   });
 
   it("creates nothing for any event, webhooks included: each is saved in a notes file with its trigger and instruction", () => {
     const moved = plan();
-    expect(moved.document.package.routines!.map((routine) => routine.name)).toEqual(["Account Health: Morning watch list", "Account Health: Monday check"]);
+    expect(moved.document.package.routines!.map((routine) => routine.name)).toEqual(["Morning watch list", "Monday check"]);
     const notes = moved.document.package.agents[0]!.seed!.memory[GROK_NOTES_FILE]!;
     expect(notes).toContain("## Escalations");
     expect(notes).toContain("- Trigger: slack");
@@ -212,7 +212,7 @@ describe("what comes over", () => {
       { name: "Nothing", trigger: "schedule", schedule_cron: "0 9 * * *" },
     ] });
     const routines = moved.document.package.routines!;
-    expect(routines.map((routine) => routine.name)).toEqual(["T: Bad zone", "T: Words"]);
+    expect(routines.map((routine) => routine.name)).toEqual(["Bad zone", "Words"]);
     expect(routines[0]).toMatchObject({ schedule: { timeZone: "Europe/Berlin" } });
     expect(moved.notes).toBe(1);
     expect(moved.document.package.agents[0]!.seed!.memory[GROK_NOTES_FILE]).toContain("## Vague");
@@ -236,7 +236,7 @@ describe("what comes over", () => {
   it("a malformed item costs only itself", () => {
     const moved = plan({ name: "M", skills: ["just a name", { name: "Good", instructions: "x" }, 7], routines: [null, { name: "Good r", instruction: "y", schedule_cron: "0 9 * * *" }], apps: [3, { name: "Gmail" }], memories: [{}, "kept"] });
     expect(moved.skills.map((skill) => skill.folder)).toEqual(["good"]);
-    expect(moved.document.package.routines!.map((routine) => routine.name)).toEqual(["M: Good r"]);
+    expect(moved.document.package.routines!.map((routine) => routine.name)).toEqual(["Good r"]);
     expect(moved).toMatchObject({ memories: 1, apps: 1 });
   });
 
@@ -257,5 +257,53 @@ describe("what comes over", () => {
   it("merges the same Bot across files by name, whatever the case", () => {
     const bot = (name: string, memories: string[]): GrokBot => ({ name, title: "", description: "", instructions: "", memories, userFacts: [], skills: [], routines: [], apps: [] });
     expect(mergeGrokBots([bot("Desk", ["a"]), bot("desk", ["a", "b"]), bot("Other", [])]).map((item) => [item.name, item.memories])).toEqual([["Desk", ["a", "b"]], ["Other", []]]);
+  });
+});
+
+describe("one Grok Bot, one bot here, whatever path it takes (MIG-06)", () => {
+  it("keeps its id when its instructions change, and still knows the id an earlier version gave it", () => {
+    const one = plan({ name: "Desk", instructions: "Answer the door." });
+    const two = plan({ name: "desk", instructions: "Answer the door, then tidy." });
+    expect(two.packageId).toBe(one.packageId);
+    expect(one.legacyPackageIds).toHaveLength(1);
+    expect(one.legacyPackageIds[0]).not.toBe(two.legacyPackageIds[0]);
+    const notes = grokMovePlan(parseGrokExport(JSON.stringify({ format: GROK_EXPORT_FORMAT, bots: [{ name: "Desk", memories: ["x"] }] }))[0]!, { from: { name: "Grok Bot", key: "grok-bot" } });
+    expect(notes.packageId).toBe(one.packageId);
+  });
+});
+
+describe("routines that cannot land as they were are named (MIG-09)", () => {
+  const routines = [
+    { name: "Lisbon", instruction: "a", schedule_cron: "0 9 * * *", timezone: "Europe/Lisbon", paused: true },
+    { name: "Mars", instruction: "b", schedule_cron: "0 9 1 * *", timezone: "Mars/Olympus" },
+    { name: "Words", instruction: "c", schedule_text: "Sundays at 6pm" },
+    { name: "Ping", instruction: "d", trigger: "slack" },
+    { name: "Zoneless", instruction: "e", schedule_cron: "0 7 * * *" },
+  ];
+  it("says which zone a routine moved to, and keeps whether it was on there", () => {
+    const moved = plan({ name: "Desk", routines });
+    expect(moved.pausedRoutines).toEqual([{ name: "Lisbon", wasOn: false }, { name: "Mars", wasOn: true }, { name: "Zoneless", wasOn: true }]);
+    expect(moved.routineNotes).toEqual([
+      { name: "Mars", reason: "zone", wasOn: true, scheduledIn: "Europe/Berlin" },
+      { name: "Words", reason: "words", wasOn: true },
+      { name: "Ping", reason: "event", wasOn: true },
+    ]);
+  });
+  it("with exact zones, schedules only in the zone it gave and leaves the rest for the person", () => {
+    const moved = grokMovePlan(parseGrokExport(JSON.stringify({ format: GROK_EXPORT_FORMAT, bots: [{ name: "Desk", routines }] }))[0]!, { timeZone: "Europe/Berlin", exactZones: true });
+    expect(moved.document.package.routines?.map((routine) => routine.schedule)).toEqual([expect.objectContaining({ timeZone: "Europe/Lisbon" })]);
+    expect(moved.routineNotes.map((note) => [note.name, note.reason])).toEqual([["Mars", "zone"], ["Words", "words"], ["Ping", "event"], ["Zoneless", "zone"]]);
+  });
+});
+
+describe("a capability host is treated as a key (MIG-22)", () => {
+  it("does not carry an address whose host is a long random label", () => {
+    expect(keyLikeHost("prod-3f9a1c7e5b2d4a60.relay.example")).toBe(true);
+    expect(keyLikeHost("mcp.linear.app")).toBe(false);
+    expect(keyLikeHost("mcp-server-v2.example.com")).toBe(false);
+    const moved = plan({ name: "Desk", apps: [{ name: "Relay", mcp_url: "https://prod-3f9a1c7e5b2d4a60.relay.example/mcp" }, { name: "Linear", mcp_url: "https://mcp.linear.app/mcp" }] });
+    expect(moved.document.package.connections?.map((connection) => connection.mcp.url)).toEqual(["https://mcp.linear.app/mcp"]);
+    expect(plan({ name: "Desk", apps: [{ name: "Linear", mcp_url: "https://mcp.linear.app/mcp" }] }).apps).toBe(1);
+    expect(grokMovePlan(parseGrokExport(JSON.stringify({ format: GROK_EXPORT_FORMAT, bots: [{ name: "Desk", apps: [{ name: "Linear", mcp_url: "https://mcp.linear.app/mcp" }] }] }))[0]!, { appNamesOnly: true }).document.package.connections).toBeUndefined();
   });
 });

@@ -5,6 +5,7 @@ import { createPageSchema, wideSchema } from "./testing/oversized-tool-schema.ts
 import { schemaBytes, toolSchemaProfile } from "./tool-schema-profile.ts";
 
 const MOONSHOT = toolSchemaProfile("moonshot")!;
+const ANTIGRAVITY = toolSchemaProfile("antigravity")!;
 
 // Verbatim from `cua-driver describe browser_prepare`, cua-driver 0.22.1: strict providers reject its root anyOf.
 const BROWSER_PREPARE_0_22_1 = {
@@ -217,5 +218,35 @@ describe("a tool list under a provider's schema profile", () => {
     expect(tools[0]).toEqual(small);
     expect(schemaBytes(tools[1].inputSchema)).toBeLessThanOrEqual(12_000);
     expect(lines).toHaveLength(1);
+  });
+
+  it("strips non-RE2 patterns for Antigravity without altering descriptions or clean tools", () => {
+    const lines: string[] = [];
+    const lookahead = {
+      name: "get_repository",
+      description: "Fetch a repository.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          owner: { type: "string", pattern: "^[a-z0-9](?:[a-z0-9]|-(?=[a-z0-9])){0,38}$" },
+          repo: { type: "string", pattern: "^[a-z0-9._-]+$" },
+        },
+        required: ["owner", "repo"],
+      },
+    };
+    const fitted = fitToolList([small, lookahead], ANTIGRAVITY, (line) => lines.push(line)) as Array<Record<string, any>>;
+    expect(fitted[0]).toBe(small);
+    expect(fitted[1]!.description).toBe("Fetch a repository.");
+    expect(fitted[1]!.inputSchema).toEqual({
+      type: "object",
+      properties: {
+        owner: { type: "string" },
+        repo: { type: "string", pattern: "^[a-z0-9._-]+$" },
+      },
+      required: ["owner", "repo"],
+    });
+    expect(lines).toEqual([
+      'removed 1 unsupported regex pattern from tool "get_repository"\'s parameters for Antigravity',
+    ]);
   });
 });

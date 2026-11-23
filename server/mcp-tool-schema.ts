@@ -76,13 +76,19 @@ export function fitToolList(tools: readonly unknown[], profile: ToolSchemaProfil
     const rooted = providerSafeInputSchema(tool.inputSchema);
     const fit = fitToolSchema(rooted, profile);
     const name = toolName(tool);
+    if (fit.outcome === "kept") {
+      fitted.push(fit.schema === tool.inputSchema ? tool : { ...tool, inputSchema: fit.schema });
+      continue;
+    }
+    if (fit.outcome === "sanitized") {
+      const noun = fit.droppedPatterns === 1 ? "pattern" : "patterns";
+      log(`removed ${fit.droppedPatterns} unsupported regex ${noun} from tool "${name}"'s parameters for ${profile.provider}`);
+      fitted.push({ ...tool, inputSchema: fit.schema });
+      continue;
+    }
     const limit = `${profile.provider}'s ${profile.maxSchemaBytes}-byte limit for one tool`;
     if (fit.outcome === "dropped") {
       log(`left out tool "${name}": its parameters are ${fit.from} bytes and still ${fit.bytes} at their shortest, over ${limit}`);
-      continue;
-    }
-    if (fit.outcome === "kept") {
-      fitted.push(fit.schema === tool.inputSchema ? tool : { ...tool, inputSchema: fit.schema });
       continue;
     }
     const what = { trimmed: "shortened the descriptions in", loosened: "left nested fields out of", minimal: "kept only the top-level fields of" }[fit.outcome];

@@ -5,10 +5,11 @@ import { DATA_TOOLS } from "./data/tools.ts";
 import bridgedAgents from "./drivers/agents-catalog-goldens/bridged.tools-list.json" with { type: "json" };
 import fullAgents from "./drivers/agents-catalog-goldens/full.tools-list.json" with { type: "json" };
 import { createPageSchema, wideSchema } from "./testing/oversized-tool-schema.ts";
-import { fitToolSchema, schemaBytes, toolSchemaProfile, toolSchemaProfileFor, type ToolSchemaProfile } from "./tool-schema-profile.ts";
+import { fitToolSchema, isRe2Compatible, schemaBytes, toolSchemaProfile, toolSchemaProfileFor, type ToolSchemaProfile } from "./tool-schema-profile.ts";
 
 type Json = Record<string, unknown>;
 const MOONSHOT = toolSchemaProfile("moonshot")!;
+const ANTIGRAVITY = toolSchemaProfile("antigravity")!;
 const isObject = (value: unknown): value is Json => Boolean(value) && typeof value === "object" && !Array.isArray(value);
 
 /** What Moonshot's validator (walle, MFJS) rejects in a fitted schema: an untyped subschema, a `required` name with no
@@ -141,12 +142,135 @@ describe("fitting a tool schema to Moonshot's per-tool limit", () => {
   });
 });
 
+describe("fitting a tool schema to Antigravity's RE2 regex rules", () => {
+  it("recognises valid Go RE2 patterns and rejects Perl-only or invalid syntax", () => {
+    for (const valid of [
+      "^[a-z0-9](?:[a-z0-9]|-[a-z0-9]){0,38}$",
+      "^[a-z0-9-]+$",
+      "(?i)^[a-z]+$",
+      "(?P<owner>[a-z0-9-]+)/(?P<repo>[a-z0-9._-]+)",
+      "^[[:alpha:]_][[:alnum:]_-]*$",
+      "^[(?=]+$",
+      "^\\(?=literal$",
+      "^\\Q(?=literal)\\E$",
+      "^\\p{L}+$",
+      "^\\pL+$",
+      "^a+?$",
+      "^[]a]$",
+    ]) {
+      expect([valid, isRe2Compatible(valid)]).toEqual([valid, true]);
+    }
+
+    for (const invalid of [
+      "^[a-z0-9](?:[a-z0-9]|-(?=[a-z0-9])){0,38}$",
+      "^(?!admin)[a-z]+$",
+      "(?<=@)[a-z]+",
+      "(?<!foo)bar",
+      "(?<owner>[a-z]+)",
+      "(?>abc)",
+      "^([a-z]+)-\\1$",
+      "^(?P<a>[a-z]+)-\\k<a>$",
+      "^[a-z]++$",
+      "^a*+$",
+      "^a{1,5}+$",
+      "^[\\u0041-\\u005A]+$",
+      "^\\u{1F600}$",
+      "^\\p{Script=Latin}+$",
+      "^foo\\Z$",
+      "^[\\b]+$",
+      "^[]$",
+      "^[^]$",
+      "^a{1001}$",
+      "^a{5,2}$",
+      "^(unclosed",
+    ]) {
+      expect([invalid, isRe2Compatible(invalid)]).toEqual([invalid, false]);
+    }
+  });
+
+  it("keeps RE2-compatible schemas untouched and strips unsupported pattern and patternProperties without mutating input", () => {
+    const clean = {
+      type: "object",
+      properties: { owner: { type: "string", pattern: "^[a-z0-9-]+$" } },
+      required: ["owner"],
+    };
+    const kept = fitToolSchema(clean, ANTIGRAVITY);
+    expect(kept.outcome).toBe("kept");
+    if (kept.outcome === "kept") expect(kept.schema).toBe(clean);
+
+    const original = {
+      type: "object",
+      properties: {
+        owner: {
+          type: "string",
+          description: "Repository owner.",
+          pattern: "^[a-z0-9](?:[a-z0-9]|-(?=[a-z0-9])){0,38}$",
+          minLength: 1,
+        },
+        repo: { type: "string", pattern: "^[a-z0-9._-]+$" },
+        labels: {
+          type: "object",
+          patternProperties: {
+            "^(?!_)[a-z]+$": { type: "string" },
+            "^ok_[0-9]+$": { type: "string", pattern: "^(?<=v)[0-9]+$" },
+          },
+          additionalProperties: false,
+        },
+      },
+      $defs: {
+        slug: { type: "string", pattern: "^(?!-)[a-z-]+$" },
+      },
+      required: ["owner", "repo"],
+    };
+    const snapshot = JSON.stringify(original);
+    const fit = fitToolSchema(original, ANTIGRAVITY);
+    expect(JSON.stringify(original)).toBe(snapshot);
+    expect(fit.outcome).toBe("sanitized");
+    if (fit.outcome !== "sanitized") return;
+    expect(fit.droppedPatterns).toBe(4);
+    expect(fit.schema).toEqual({
+      type: "object",
+      properties: {
+        owner: { type: "string", description: "Repository owner.", minLength: 1 },
+        repo: { type: "string", pattern: "^[a-z0-9._-]+$" },
+        labels: {
+          type: "object",
+          patternProperties: {
+            "^ok_[0-9]+$": { type: "string" },
+          },
+          additionalProperties: true,
+        },
+      },
+      $defs: {
+        slug: { type: "string" },
+      },
+      required: ["owner", "repo"],
+    });
+  });
+
+  it("removes patternProperties entirely when every key is non-RE2", () => {
+    const schema = {
+      type: "object",
+      patternProperties: { "^(?!_)[a-z]+$": { type: "string" } },
+      additionalProperties: false,
+    };
+    const fit = fitToolSchema(schema, ANTIGRAVITY);
+    expect(fit.outcome).toBe("sanitized");
+    if (fit.outcome !== "sanitized") return;
+    expect(fit.schema).toEqual({ type: "object", additionalProperties: true });
+  });
+});
+
 describe("which turns carry a schema profile", () => {
   it("is Kimi Code's engine, Moonshot's own endpoint, or a Moonshot model on OpenRouter", () => {
     expect(toolSchemaProfileFor({ engine: "kimiAgent" })).toBe(MOONSHOT);
     expect(toolSchemaProfileFor({ url: "https://api.moonshot.ai/v1" })).toBe(MOONSHOT);
     expect(toolSchemaProfileFor({ url: "https://api.moonshot.cn/v1", model: "kimi-k2.6" })).toBe(MOONSHOT);
     expect(toolSchemaProfileFor({ url: "https://openrouter.ai/api/v1", model: "moonshotai/kimi-k2.6" })).toBe(MOONSHOT);
+  });
+
+  it("is Antigravity's engine for RE2 regex sanitization", () => {
+    expect(toolSchemaProfileFor({ engine: "antigravityAgent" })).toBe(ANTIGRAVITY);
   });
 
   it("is no other engine or endpoint, so their tool lists are unchanged", () => {
@@ -168,7 +292,7 @@ describe("dusk bot's own tools", () => {
   ];
 
   it.each(catalogs)("fit every profile as written: %s", (_name, tools) => {
-    const profiles: ToolSchemaProfile[] = [MOONSHOT];
+    const profiles: ToolSchemaProfile[] = [MOONSHOT, ANTIGRAVITY];
     for (const profile of profiles) {
       for (const tool of tools) expect([tool.name, fitToolSchema(tool.inputSchema as Json, profile).outcome]).toEqual([tool.name, "kept"]);
     }

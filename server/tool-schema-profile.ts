@@ -2,16 +2,18 @@
 // still validates every call against its own full schema.
 type Json = Record<string, unknown>;
 
-export type ToolSchemaProfileId = "moonshot";
+export type ToolSchemaProfileId = "moonshot" | "antigravity";
 
 export interface ToolSchemaProfile {
   id: ToolSchemaProfileId;
   /** The provider as the person knows it, for log lines and the note a shortened tool carries. */
   provider: string;
-  maxSchemaBytes: number;
-  maxDepth: number;
+  maxSchemaBytes?: number;
+  maxDepth?: number;
   /** The engine inlines local `$ref`s before it sends, so the inlined form is what the provider measures. */
-  measureInlined: boolean;
+  measureInlined?: boolean;
+  /** The engine validates `pattern` and `patternProperties` with Go's RE2 regex engine and rejects unsupported Perl syntax. */
+  re2Patterns?: boolean;
 }
 
 const PROFILES: Record<ToolSchemaProfileId, ToolSchemaProfile> = {
@@ -20,6 +22,9 @@ const PROFILES: Record<ToolSchemaProfileId, ToolSchemaProfile> = {
   // https://github.com/morluto/rea/issues/3654. Depth 30 is walle's default (https://github.com/MoonshotAI/walle/blob/main/conf.go).
   // Kimi Code inlines every local $ref first (normalizeKimiToolSchema in MoonshotAI/kimi-code packages/kosong).
   moonshot: { id: "moonshot", provider: "Kimi", maxSchemaBytes: 12_000, maxDepth: 30, measureInlined: true },
+  // Antigravity's Go ACP server compiles every MCP tool's JSON Schema regexes with Go's RE2 engine during toolbox
+  // initialization, failing the entire turn when any enabled server uses Perl-only syntax such as lookaheads (`(?=`).
+  antigravity: { id: "antigravity", provider: "Antigravity", re2Patterns: true },
 };
 
 export const TOOL_SCHEMA_PROFILE_ENV = "DUSK_TOOL_SCHEMA_PROFILE";
@@ -39,12 +44,13 @@ function hostOf(url: string | undefined): string {
 const MOONSHOT_HOST = /(?:^|\.)(?:moonshot\.ai|moonshot\.cn|kimi\.com|kimi\.ai)$/;
 const OPENROUTER_HOST = /(?:^|\.)openrouter\.ai$/;
 
-/** Kimi Code always reaches Moonshot. Any other engine does when its endpoint is Moonshot's own, or when OpenRouter may
- * route one of Moonshot's models to Moonshot's endpoint. */
+/** Kimi Code always reaches Moonshot (as do Moonshot's own endpoint and Moonshot models on OpenRouter).
+ * Antigravity's Go ACP server validates MCP tool regexes with Go's RE2 engine. */
 export function toolSchemaProfileFor(target: { engine?: string; url?: string; model?: string }): ToolSchemaProfile | undefined {
   const host = hostOf(target.url);
   if (target.engine === "kimiAgent" || MOONSHOT_HOST.test(host)) return PROFILES.moonshot;
   if (OPENROUTER_HOST.test(host) && /^moonshotai\//i.test(target.model ?? "")) return PROFILES.moonshot;
+  if (target.engine === "antigravityAgent") return PROFILES.antigravity;
   return undefined;
 }
 
@@ -133,8 +139,234 @@ function inlineRefs(schema: Json): Json | undefined {
   }
 }
 
+const RE2_POSIX_CLASSES = new Set([
+  "alnum", "alpha", "ascii", "blank", "cntrl", "digit", "graph",
+  "lower", "print", "punct", "space", "upper", "word", "xdigit",
+]);
+const RE2_SIMPLE_ESCAPES = new Set(["a", "f", "n", "r", "t", "v", "d", "D", "s", "S", "w", "W"]);
+const RE2_BOUNDARY_ESCAPES = new Set(["A", "b", "B", "z"]);
+const RE2_SHORT_UNICODE = new Set(["L", "M", "N", "P", "S", "Z", "C"]);
+const RE2_MAX_REPEAT = 1000;
+
+function parseRe2Escape(pattern: string, index: number, inClass: boolean): number {
+  const ch = pattern[index + 1];
+  if (ch === undefined) return -1;
+  if (RE2_SIMPLE_ESCAPES.has(ch)) return index + 2;
+  if (!inClass && RE2_BOUNDARY_ESCAPES.has(ch)) return index + 2;
+  if (!inClass && ch === "Q") {
+    const end = pattern.indexOf("\\E", index + 2);
+    return end >= 0 ? end + 2 : pattern.length;
+  }
+  if (ch === "x") {
+    if (pattern[index + 2] === "{") {
+      const match = /^([0-9a-fA-F]+)\}/.exec(pattern.slice(index + 3));
+      if (!match || Number.parseInt(match[1]!, 16) > 0x10ffff) return -1;
+      return index + 3 + match[0].length;
+    }
+    return /^[0-9a-fA-F]{2}/.test(pattern.slice(index + 2)) ? index + 4 : -1;
+  }
+  if (ch === "p" || ch === "P") {
+    const next = pattern[index + 2];
+    if (next === undefined) return -1;
+    if (next === "{") {
+      const match = /^\^?([A-Za-z][A-Za-z0-9_]*)\}/.exec(pattern.slice(index + 3));
+      return match ? index + 3 + match[0].length : -1;
+    }
+    return RE2_SHORT_UNICODE.has(next) ? index + 3 : -1;
+  }
+  if (ch >= "0" && ch <= "7") {
+    // Go's regexp/syntax rejects a single non-zero digit escape (\1..\7) as a backreference, while \0 or 2-3 octal digits <= 0o377 are octal.
+    const octal = /^[0-7]{1,3}/.exec(pattern.slice(index + 1))![0];
+    if (ch !== "0" && octal.length === 1) return -1;
+    return Number.parseInt(octal, 8) <= 0o377 ? index + 1 + octal.length : -1;
+  }
+  if ((ch >= "8" && ch <= "9") || (ch >= "a" && ch <= "z") || (ch >= "A" && ch <= "Z")) return -1;
+  return index + 2;
+}
+
+/** Whether `pattern` uses only syntax accepted by Go's RE2 (`regexp.Compile` in Perl mode). */
+export function isRe2Compatible(pattern: string): boolean {
+  let i = 0;
+  let parenDepth = 0;
+  let canQuantify = false;
+  let afterQuantifier = false;
+
+  while (i < pattern.length) {
+    const ch = pattern[i]!;
+    if (ch === "\\") {
+      const next = parseRe2Escape(pattern, i, false);
+      if (next < 0) return false;
+      i = next;
+      canQuantify = true;
+      afterQuantifier = false;
+      continue;
+    }
+    if (ch === "[") {
+      i += 1;
+      if (pattern[i] === "^") i += 1;
+      let first = true;
+      let closed = false;
+      while (i < pattern.length) {
+        if (pattern[i] === "]" && !first) {
+          i += 1;
+          closed = true;
+          break;
+        }
+        first = false;
+        if (pattern[i] === "\\") {
+          const next = parseRe2Escape(pattern, i, true);
+          if (next < 0) return false;
+          i = next;
+          continue;
+        }
+        if (pattern[i] === "[" && pattern[i + 1] === ":") {
+          const close = pattern.indexOf(":]", i + 2);
+          if (close < 0) return false;
+          const raw = pattern.slice(i + 2, close);
+          const name = raw.startsWith("^") ? raw.slice(1) : raw;
+          if (!RE2_POSIX_CLASSES.has(name)) return false;
+          i = close + 2;
+          continue;
+        }
+        i += 1;
+      }
+      if (!closed) return false;
+      canQuantify = true;
+      afterQuantifier = false;
+      continue;
+    }
+    if (ch === "(") {
+      if (pattern[i + 1] === "?") {
+        if (pattern.startsWith("(?:", i)) {
+          parenDepth += 1;
+          i += 3;
+          canQuantify = false;
+          afterQuantifier = false;
+          continue;
+        }
+        const named = /^\(\?P<[A-Za-z0-9_]+>/.exec(pattern.slice(i));
+        if (named) {
+          parenDepth += 1;
+          i += named[0].length;
+          canQuantify = false;
+          afterQuantifier = false;
+          continue;
+        }
+        const flags = /^\(\?(?:[imsU]+(?:-[imsU]*)?|-[imsU]+)([:)])/.exec(pattern.slice(i));
+        if (flags) {
+          if (flags[1] === ":") parenDepth += 1;
+          i += flags[0].length;
+          canQuantify = false;
+          afterQuantifier = false;
+          continue;
+        }
+        return false;
+      }
+      parenDepth += 1;
+      i += 1;
+      canQuantify = false;
+      afterQuantifier = false;
+      continue;
+    }
+    if (ch === ")") {
+      if (parenDepth === 0) return false;
+      parenDepth -= 1;
+      i += 1;
+      canQuantify = true;
+      afterQuantifier = false;
+      continue;
+    }
+    if (ch === "|") {
+      i += 1;
+      canQuantify = false;
+      afterQuantifier = false;
+      continue;
+    }
+    if (ch === "*" || ch === "+" || ch === "?") {
+      if (afterQuantifier) {
+        if (ch !== "?") return false;
+        afterQuantifier = false;
+        canQuantify = false;
+        i += 1;
+        continue;
+      }
+      if (!canQuantify) return false;
+      canQuantify = false;
+      afterQuantifier = true;
+      i += 1;
+      continue;
+    }
+    if (ch === "{") {
+      const repeat = /^\{(\d+)(?:,(\d*))?\}/.exec(pattern.slice(i));
+      if (repeat) {
+        if (!canQuantify) return false;
+        const min = Number(repeat[1]);
+        const max = repeat[2] === undefined ? min : repeat[2] === "" ? undefined : Number(repeat[2]);
+        if (min > RE2_MAX_REPEAT || (max !== undefined && (max > RE2_MAX_REPEAT || max < min))) return false;
+        i += repeat[0].length;
+        canQuantify = false;
+        afterQuantifier = true;
+        continue;
+      }
+    }
+    i += 1;
+    canQuantify = true;
+    afterQuantifier = false;
+  }
+
+  return parenDepth === 0;
+}
+
+function hasNonRe2Pattern(schema: Json): boolean {
+  let found = false;
+  walk(schema, 0, (node) => {
+    if (found) return;
+    if (typeof node.pattern === "string" && !isRe2Compatible(node.pattern)) {
+      found = true;
+      return;
+    }
+    if (isObject(node.patternProperties)) {
+      for (const key of Object.keys(node.patternProperties)) {
+        if (!isRe2Compatible(key)) {
+          found = true;
+          return;
+        }
+      }
+    }
+  });
+  return found;
+}
+
+function stripNonRe2Patterns(schema: Json): number {
+  let dropped = 0;
+  walk(schema, 0, (node) => {
+    if (typeof node.pattern === "string" && !isRe2Compatible(node.pattern)) {
+      delete node.pattern;
+      dropped += 1;
+    }
+    if (isObject(node.patternProperties)) {
+      let removedHere = 0;
+      for (const key of Object.keys(node.patternProperties)) {
+        if (!isRe2Compatible(key)) {
+          delete node.patternProperties[key];
+          removedHere += 1;
+          dropped += 1;
+        }
+      }
+      if (removedHere > 0) {
+        if (node.additionalProperties === false) node.additionalProperties = true;
+        if (Object.keys(node.patternProperties).length === 0) delete node.patternProperties;
+      }
+    }
+  });
+  return dropped;
+}
+
 function fits(schema: Json, profile: ToolSchemaProfile): boolean {
-  return schemaBytes(schema) <= profile.maxSchemaBytes && schemaDepth(schema) <= profile.maxDepth;
+  if (profile.re2Patterns && hasNonRe2Pattern(schema)) return false;
+  if (profile.maxSchemaBytes !== undefined && schemaBytes(schema) > profile.maxSchemaBytes) return false;
+  if (profile.maxDepth !== undefined && schemaDepth(schema) > profile.maxDepth) return false;
+  return true;
 }
 
 /** Words for people and tooling: none of them constrains a value. */
@@ -228,10 +460,12 @@ function topLevelOnly(schema: Json, descriptionChars: number): Json {
   return { type: "object", properties, ...(required.length ? { required } : {}), additionalProperties: true };
 }
 
-/** kept: as the server sent it. trimmed: every field and constraint kept, fewer words. loosened: fields deeper in are
+/** kept: as the server sent it. sanitized: unsupported regex patterns removed, all fields kept.
+ * trimmed: every field and constraint kept, fewer words. loosened: fields deeper in are
  * left to the tool's description. minimal: only the top-level fields. dropped: not even those fit. */
 export type SchemaFit =
   | { outcome: "kept"; schema: Json; bytes: number }
+  | { outcome: "sanitized"; schema: Json; bytes: number; from: number; droppedPatterns: number }
   | { outcome: "trimmed" | "loosened" | "minimal"; schema: Json; bytes: number; from: number }
   | { outcome: "dropped"; bytes: number; from: number };
 
@@ -243,6 +477,10 @@ export function fitToolSchema(schema: Json, profile: ToolSchemaProfile): SchemaF
   const fitted = (outcome: "trimmed" | "loosened" | "minimal", form: Json): SchemaFit => ({ outcome, schema: form, bytes: schemaBytes(form), from });
 
   const working = structuredClone(measured ?? schema);
+  const droppedPatterns = profile.re2Patterns ? stripNonRe2Patterns(working) : 0;
+  if (droppedPatterns > 0 && fits(working, profile)) {
+    return { outcome: "sanitized", schema: working, bytes: schemaBytes(working), from, droppedPatterns };
+  }
   if (measured) {
     stripAnnotations(working);
     if (fits(working, profile)) return fitted("trimmed", working);

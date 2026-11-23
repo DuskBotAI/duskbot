@@ -362,6 +362,37 @@ describe("remote MCP tool directory", () => {
     expect((await request("tools/list")).result.tools).toEqual(tools);
   });
 
+  it("strips non-RE2 regex patterns under the antigravity profile while keeping valid patterns", async () => {
+    const tools = [{
+      name: "get_repository",
+      description: "Fetch a repository.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          owner: { type: "string", pattern: "^[a-z0-9](?:[a-z0-9]|-(?=[a-z0-9])){0,38}$" },
+          repo: { type: "string", pattern: "^[a-z0-9._-]+$" },
+        },
+        required: ["owner", "repo"],
+      },
+    }];
+    fake = await startFakeHttpMcp({ tools });
+    start(mcpStdioServer(spec(fake.url))!, { ...process.env, [TOOL_SCHEMA_PROFILE_ENV]: "antigravity" });
+    await initialize();
+    const [repo] = (await request("tools/list")).result.tools;
+    expect(repo).toEqual({
+      name: "get_repository",
+      description: "Fetch a repository.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          owner: { type: "string" },
+          repo: { type: "string", pattern: "^[a-z0-9._-]+$" },
+        },
+        required: ["owner", "repo"],
+      },
+    });
+  });
+
   it("lists no more of a remote server's tools than its share of the model's tool limit", async () => {
     const tools = ["a", "b", "c"].map((name) => ({ name, inputSchema: { type: "object" } }));
     fake = await startFakeHttpMcp({ tools });

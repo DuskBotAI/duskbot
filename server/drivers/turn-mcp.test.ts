@@ -108,6 +108,14 @@ describe("the MCP servers a Kimi Code turn gets", () => {
     }
   });
 
+  it("carry Antigravity's RE2 schema profile on every server, with the person's stdio server behind the gate", () => {
+    const servers = acpMcpServers(withRemote(), { engine: "antigravityAgent" });
+    expect(servers.map((server) => server.name)).toEqual(["agents", "browser", "data", "notes", "docs"]);
+    for (const server of servers) expect([server.name, env(server)[TOOL_SCHEMA_PROFILE_ENV]]).toEqual([server.name, "antigravity"]);
+    expect((servers[3] as { args: string[] }).args).toEqual([SPAWNED_PROXIES.mcpGate]);
+    expect((servers[4] as { args: string[] }).args).toEqual([SPAWNED_PROXIES.mcpRemote]);
+  });
+
   it("are unchanged for every other engine", () => {
     for (const engine of [undefined, "opencodeGo", "grokAgent", "qwenAgent"]) {
       const servers = acpMcpServers(withRemote(), { engine });

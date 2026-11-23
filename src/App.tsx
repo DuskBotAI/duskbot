@@ -93,6 +93,7 @@ import { useAiSwitchKeeper } from "@/lib/ai-switch";
 import { SESSION_ENDED_REASON, useSessionEnded } from "@/lib/session-ended";
 import { PairPage } from "./pair/PairPage";
 import { FeedbackHost } from "./components/FeedbackDialog";
+import { GrokMoveHost } from "./components/grok-move/GrokMoveDialog";
 import { useDesktopOutbox } from "./state/desktop-outbox";
 
 function Shell({ viewer }: { viewer: WelcomeViewer | null }) {
@@ -431,6 +432,7 @@ function Application({ children }: { children?: ReactNode }) {
           <Shell viewer={viewer} />
         </ThreadRefsProvider>
         <WelcomeGate viewer={viewer} />
+        <GrokMoveHost />
         <LateCloudPlan viewer={viewer} />
         <BotsElsewhere />
         <IslandIntroHost />

@@ -80,6 +80,7 @@ Use only mapped, tested commands:
 - [Phone web app installation and safe areas](phone-web-app.md)
 - [Phone sync: pairing, relay and companion routes](mobile-sync.md)
 - [Welcome flow](onboarding.md)
+- [Move from Grok Bot](grok-move.md)
 - [Channels](channels.md)
 - [In-chat team coordination](room-coordination.md)
 - [Question cards: a teammate's question, in its chat and the person's inbox](question-cards.md)

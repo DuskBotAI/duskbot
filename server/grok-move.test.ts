@@ -74,7 +74,7 @@ describe("a moved Bot, through the real package path", () => {
     expect(bot.approvalMode ?? null).not.toBe("auto");
 
     expect(result.routines).toHaveLength(1);
-    expect(app.routines.listRoutines()[0]).toMatchObject({ name: "Desk: Open up", enabled: false, botId: bot.id, schedule: { type: "cron", expression: "0 8 * * 1-5", timeZone: "Asia/Tokyo" } });
+    expect(app.routines.listRoutines()[0]).toMatchObject({ name: "Open up", enabled: false, botId: bot.id, schedule: { type: "cron", expression: "0 8 * * 1-5", timeZone: "Asia/Tokyo" } });
 
     // The package path leaves it off; the move switches on what the scan passed, through the bot's own skill route.
     expect(app.skills.listSkills(bot.id).filter((skill) => skill.name === "greet").map((skill) => skill.enabled)).toEqual([false]);
@@ -85,7 +85,7 @@ describe("a moved Bot, through the real package path", () => {
     expect(memory).not.toContain("Lives in Tokyo");
     expect(result.facts).toEqual(["Lives in Tokyo"]);
     expect(app.workspace.readMemoryTopic(bot.id, "grok-bot-event-routines.md")).toContain("Answer it.");
-    expect(app.routines.listRoutines().map((routine) => routine.name)).toEqual(["Desk: Open up"]);
+    expect(app.routines.listRoutines().map((routine) => routine.name)).toEqual(["Open up"]);
 
     expect(app.mcp.servers).toEqual({ linear: { type: "http", url: "https://mcp.linear.app/mcp", headers: { Authorization: "" }, enabled: false } });
     expect(bot.mcpServers).toEqual(["linear"]);
@@ -98,7 +98,8 @@ describe("a moved Bot, through the real package path", () => {
     const second = app.move({ ...DESK, name: "Lobby", apps: [] });
     expect(first.section).not.toBe(second.section);
     expect(app.store.bots.filter((bot) => ["Desk", "Lobby"].includes(bot.name)).map((bot) => bot.name).sort()).toEqual(["Desk", "Lobby"]);
-    expect(app.routines.listRoutines().map((routine) => routine.name).sort()).toEqual(["Desk: Open up", "Lobby: Open up"]);
+    expect(app.routines.listRoutines().map((routine) => routine.name)).toEqual(["Open up", "Open up"]);
+    expect(app.routines.listRoutines().map((routine) => routine.botId).sort()).toEqual([first.bots[0]!.id, second.bots[0]!.id].sort());
     expect(app.routines.listRoutines().map((routine) => routine.enabled)).toEqual([false, false]);
   });
 });

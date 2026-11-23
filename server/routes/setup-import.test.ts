@@ -95,7 +95,9 @@ describe("the setup import routes", () => {
     expect((await local.call("POST", "/api/setup-import/grok", { body: {} })).status).toBe(405);
     const found = await local.call("GET", "/api/setup-import/grok");
     expect(found.headers.get("cache-control")).toBe("no-store");
-    expect(await found.json()).toMatchObject({ files: [{ name: "grok-bot-export-drew.json", text: "reply" }], bots: [] });
+    const answer = await found.text();
+    expect(JSON.parse(answer)).toMatchObject({ exports: [{ name: "grok-bot-export-drew.json", refused: { code: "notExport" } }], bots: [] });
+    expect(answer).not.toContain("reply");
   });
 
   it("hands out other agent apps' bots only to the owner's own loopback there", async () => {

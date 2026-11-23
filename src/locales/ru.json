@@ -2362,7 +2362,6 @@
   "onboarding.import.review": "{names}: выключены, пока вы не проверите результаты сканирования в настройках навыков бота.",
   "onboarding.import.conflict": "Пропущено: {names} — навык с таким названием уже существует, но с другим содержимым.",
   "onboarding.import.toolConflict": "Пропущено: {names} — здесь уже есть другой сервер MCP с таким именем.",
-  "onboarding.import.failed": "Не удалось перенести {names}. Попробуйте позже через Настройки → Общие → Импорт.",
   "onboarding.import.filesLeftOut": "Крупные и нетекстовые файлы из папок навыков не переносились.",
   "onboarding.import.limit": "{names} не поместились: ваш список серверов MCP заполнен.",
   "onboarding.import.policy": "Ваша организация не разрешает {names}.",

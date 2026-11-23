@@ -6,7 +6,6 @@ import type { LocaleKey } from "@/locales";
 import { api, type Action, type ConfigStatus } from "@/state/store";
 import type { ActivitySource, MemoryTopics, SetupDetection, SetupSource } from "../../shared/setup-import";
 import { movable, planCounts, runBotMove, type AppMove, type BotMovePlan } from "./bot-move";
-import { GROK_FROM } from "../../shared/grok-import";
 import { aboutMeSaver } from "./assistant-notes";
 import { postImportNote } from "./import-note";
 import { BRING_NOTICE, dismissNotice } from "./notices";
@@ -110,20 +109,17 @@ function botActivity(app: AppMove): ActivitySource | null {
 }
 
 /** What this computer holds, one find per app, best first: how much it holds weighed by how lately it was used. A tool
- * whose agents came in as bots (Claude Code's, Gemini CLI's) is one find with both. Grok bot's exports already saved in
- * Downloads are a find only with `grokExports` (Settings, which may read Downloads); otherwise they are left to its
- * prompt. */
-export function localFinds(plan: BotMovePlan | null, detection: SetupDetection | null, options: { grokExports?: boolean; now?: number } = {}): LocalFind[] {
+ * whose agents came in as bots (Claude Code's, Gemini CLI's) is one find with both. */
+export function localFinds(plan: BotMovePlan | null, detection: SetupDetection | null, options: { now?: number } = {}): LocalFind[] {
   const now = options.now ?? Date.now();
   const activity = detection?.activity ?? {};
   const usage = detection?.usage ?? {};
   const found: Array<{ find: Omit<LocalFind, "summary" | "amount" | "score" | "strong">; amount: SourceAmount }> = [];
   for (const app of plan?.apps ?? []) {
-    if (!app.preview.plans.length || (app.from.key === GROK_FROM.key && !options.grokExports)) continue;
+    if (!app.preview.plans.length) continue;
     const counts = planCounts(app);
     const source = botActivity(app);
-    // a Grok bot export was saved on purpose, just now or lately
-    const lastUsed = app.from.key === GROK_FROM.key ? now : source ? activity[source] ?? null : null;
+    const lastUsed = source ? activity[source] ?? null : null;
     found.push({ find: { id: `bots:${app.from.key}`, app: app.app, bots: app, lastUsed, activeDays: source ? usage[source] ?? 0 : null },
       amount: { notes: 0, skills: counts.skills, tools: 0, bots: counts.bots, memories: counts.memories + (counts.facts ?? 0), routines: counts.routines } });
   }
@@ -224,7 +220,7 @@ export async function bringChosen(finds: readonly LocalFind[], context: {
   }
   if (apps.length) {
     try {
-      const plan: BotMovePlan = { apps, grokWaiting: [] };
+      const plan: BotMovePlan = { apps };
       if (movable(plan)) {
         const saveFacts = aboutMeSaver({ aboutMe: context.aboutMe ?? "", team: Boolean(context.team), dispatch: context.dispatch });
         const reports = await runBotMove(plan, context.dispatch, undefined, context.aboutMe === undefined ? undefined : saveFacts);

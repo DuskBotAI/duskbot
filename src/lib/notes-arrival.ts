@@ -17,6 +17,8 @@ export interface NotesArrival {
   at: number;
   /** Set when reading it failed: the card says so instead. */
   failed?: string;
+  /** Set when it was taken in at once (a Grok Bot's export): what came. */
+  done?: string;
 }
 
 let arrival: NotesArrival | null = null;
@@ -46,6 +48,13 @@ export function noteArrival(via: NotesVia, botId: string | null, now = Date.now(
 /** They couldn't be read: the card says why for ARRIVAL_FAILED_MS. */
 export function arrivalFailed(line: string, now = Date.now()): void {
   arrival = { via: arrival?.via ?? "paste", botId: arrival?.botId ?? null, at: now, failed: line };
+  hideAfter(ARRIVAL_FAILED_MS);
+  changed();
+}
+
+/** It was taken in: the card says what came for ARRIVAL_FAILED_MS, so it can be read. */
+export function arrivalDone(line: string, now = Date.now()): void {
+  arrival = { via: arrival?.via ?? "paste", botId: arrival?.botId ?? null, at: now, done: line };
   hideAfter(ARRIVAL_FAILED_MS);
   changed();
 }

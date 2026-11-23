@@ -258,7 +258,7 @@ export interface InstalledPackageMetadata {
   /** org only: "<publisher slug>/<package id>" */
   ref?: string;
   /** org only: the release bytes that were applied */
-  sha256?: string;
+  sha256?: string; origin?: import("./grok-move.ts").PackageOrigin;
 }
 
 /** One service's connector tool grant: `"*"` widens to every tool on the

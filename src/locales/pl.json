@@ -2334,7 +2334,6 @@
   "onboarding.import.review": "{names}: wyłączone, dopóki nie sprawdzisz wyników skanowania w ustawieniach umiejętności bota.",
   "onboarding.import.conflict": "Pominięto: {names}; istnieje już inna umiejętność o tej nazwie.",
   "onboarding.import.toolConflict": "Pominięto: {names}; istnieje już inny serwer MCP o tej nazwie.",
-  "onboarding.import.failed": "Nie udało się przenieść: {names}. Spróbuj ponownie później w Ustawieniach → Ogólne → Import.",
   "onboarding.import.filesLeftOut": "Duże pliki i pliki inne niż tekstowe w folderach umiejętności zostały pominięte.",
   "onboarding.import.limit": "Brak miejsca dla: {names}; lista serwerów MCP jest pełna.",
   "onboarding.import.policy": "Twoja organizacja nie zezwala na następujące elementy: {names}.",

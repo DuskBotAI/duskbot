@@ -2384,7 +2384,6 @@
   "onboarding.import.review": "{names}：スキャンで見つかった内容を、ボットのスキル設定で確認するまでオフになっています。",
   "onboarding.import.conflict": "{names}をスキップしました：同じ名前の別のスキルがすでにあります。",
   "onboarding.import.toolConflict": "{names}をスキップしました：同じ名前の別のMCPサーバーがすでにあります。",
-  "onboarding.import.failed": "{names}を取り込めませんでした。あとで「設定 → 一般 → インポート」からもう一度お試しください。",
   "onboarding.import.filesLeftOut": "スキルフォルダ内の大きなファイルやテキスト以外のファイルは除外されました。",
   "onboarding.import.limit": "{names}は追加できませんでした：MCPサーバーのリストがいっぱいです。",
   "onboarding.import.policy": "お使いの組織では、{names}は許可されていません。",

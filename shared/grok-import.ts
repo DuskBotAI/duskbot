@@ -330,18 +330,21 @@ function fitBytes(text: string, max: number): string {
 
 const CLOCK_TRIGGERS = new Set(["", "schedule", "scheduled", "time", "cron", "interval"]);
 
-/** The schedule in the routine's own zone, or the person's when it names one nothing here can read, from its cron or its
- * words when those are a cron. Null for anything else: a routine with no readable clock. */
-function routineSchedule(routine: GrokRoutine, timeZone: string): PackageRoutineSchedule | null {
+/** How a routine with a clock was read: in the zone it gave (`own`), or in the person's because it gave `none` or one
+ * nothing here can read (`unknown`). Null for anything else: a routine with no readable clock. */
+interface ReadSchedule { schedule: PackageRoutineSchedule; zone: "own" | "none" | "unknown" }
+
+function routineSchedule(routine: GrokRoutine, timeZone: string): ReadSchedule | null {
   if (routine.schedule) {
     const own = packageRoutineScheduleSchema.safeParse(routine.schedule);
-    if (own.success) return own.data;
+    if (own.success) return { schedule: own.data, zone: "own" };
   }
   if (!CLOCK_TRIGGERS.has(routine.trigger)) return null;
   for (const expression of [routine.cron, routine.when].filter(Boolean)) {
-    for (const zone of [routine.timeZone || timeZone, timeZone]) {
+    for (const zone of routine.timeZone ? [routine.timeZone, timeZone] : [timeZone]) {
       try {
-        return normalizeCronSchedule({ type: "cron", expression, timeZone: zone });
+        const schedule = normalizeCronSchedule({ type: "cron", expression, timeZone: zone });
+        return { schedule, zone: !routine.timeZone ? "none" : zone === routine.timeZone ? "own" : "unknown" };
       } catch {
         // the next zone, then the words
       }
@@ -365,6 +368,13 @@ function skillEntry(skill: GrokSkill, name: string): { name: string; description
 const SECRET_QUERY_PARAM = /key|token|secret|pass|auth|sig|session|credential/i;
 /** A path segment this long and mixed reads as a key: such an address cannot be carried without carrying the key. */
 const KEY_LIKE_SEGMENT = /^(?=.*\d)(?=.*[a-zA-Z])[A-Za-z0-9_-]{24,}$/;
+/** Security: part of a host name this long and mixed (`prod-3f9a1c7e5b2d4a60.relay.example`) is a capability, not a
+ * name: whoever knows the host can use the server, so it is treated as a key. */
+const KEY_LIKE_HOST_PART = /^(?=[a-z0-9]*\d)(?=[a-z0-9]*[a-z])[a-z0-9]{12,}$/i;
+
+export function keyLikeHost(hostname: string): boolean {
+  return hostname.split(".").some((label) => KEY_LIKE_SEGMENT.test(label) || label.split(/[-_]/).some((part) => KEY_LIKE_HOST_PART.test(part)));
+}
 
 /** A remote server address with any key taken out, or null when it can't be carried without one. `https` only: a Bot's
  * export has no business pointing at this computer or at a plain-text address. */
@@ -383,7 +393,7 @@ function serverAddress(raw: string): string | null {
   }
   const text = url.toString();
   const redactedEarlier = /«redacted|%C2%ABredacted/i.test(text);
-  return redactedEarlier || redactSecretsInText(text) !== text || url.pathname.split("/").some((part) => KEY_LIKE_SEGMENT.test(part)) ? null : text;
+  return redactedEarlier || redactSecretsInText(text) !== text || keyLikeHost(url.hostname) || url.pathname.split("/").some((part) => KEY_LIKE_SEGMENT.test(part)) ? null : text;
 }
 
 const VALID_HEADER = /^[!#$%&'*+.^_`|~0-9A-Za-z-]{1,128}$/;
@@ -394,9 +404,16 @@ export const GROK_NOTES_FILE = "memory/grok-bot-event-routines.md";
 export interface MoveFrom { name: string; key: string }
 export const GROK_FROM: MoveFrom = { name: "Grok Bot", key: "grok-bot" };
 
+/** A routine that did not land exactly as it was there: `zone` was given in a time zone nothing here can read (or none),
+ * `words` had a schedule only in words, `event` starts on something happening. `scheduledIn` is the zone it was set to
+ * instead, when it was created at all. */
+export interface GrokRoutineNote { name: string; reason: "zone" | "words" | "event"; wasOn: boolean; scheduledIn?: string }
+
 export interface GrokMovePlan {
   name: string;
   packageId: string;
+  /** The id a Grok Bot moved by an earlier version was given (its name and instructions), still known as moved. */
+  legacyPackageIds: string[];
   document: PackageDocument;
   /** `folder` is the skill's name here. `on`: the skill scan passed it, so the move switches it on. */
   skills: Array<{ folder: string; name: string; on: boolean }>;
@@ -413,6 +430,9 @@ export interface GrokMovePlan {
   distill: string[];
   /** Noise, repeats and near-repeats left out of its memory and facts. */
   dropped: number;
+  /** Each routine created, paused, and whether it was on there. */
+  pausedRoutines: Array<{ name: string; wasOn: boolean }>;
+  routineNotes: GrokRoutineNote[];
 }
 
 
@@ -450,7 +470,18 @@ function eventNotes(name: string, from: MoveFrom, routines: readonly GrokRoutine
 
 /** One Grok Bot (or a bot from another app, `from`) as one bot in a openmaus.package v2 file, and how much of it comes
  * over. `takenServers` holds server names already here: one of those is skipped, never overwritten or shared. */
-export function grokMovePlan(bot: GrokBot, options: { timeZone?: string; takenServers?: ReadonlySet<string>; from?: MoveFrom } = {}): GrokMovePlan {
+export interface GrokMovePlanOptions {
+  timeZone?: string;
+  takenServers?: ReadonlySet<string>;
+  from?: MoveFrom;
+  /** A routine is scheduled only in the zone it gave: one with none, or one nothing here can read, is left for the
+   * person to set rather than moved to `timeZone`. */
+  exactZones?: boolean;
+  /** No server address is carried: apps come over as names to connect again. */
+  appNamesOnly?: boolean;
+}
+
+export function grokMovePlan(bot: GrokBot, options: GrokMovePlanOptions = {}): GrokMovePlan {
   const timeZone = options.timeZone?.trim() || "UTC";
   const from = options.from ?? GROK_FROM;
   const grok = from.key === GROK_FROM.key;
@@ -477,20 +508,28 @@ export function grokMovePlan(bot: GrokBot, options: { timeZone?: string; takenSe
   const routineNames = new Set<string>();
   const routines: NonNullable<PackageDocument["package"]["routines"]> = [];
   const unscheduled: GrokRoutine[] = [];
+  const routineNotes: GrokRoutineNote[] = [];
+  const pausedRoutines: GrokMovePlan["pausedRoutines"] = [];
   for (const [index, routine] of bot.routines.entries()) {
     if (!routine.instruction) continue;
-    const schedule = routineSchedule(routine, timeZone);
-    if (!schedule) {
+    const read = routineSchedule(routine, timeZone);
+    const note = (reason: GrokRoutineNote["reason"], scheduledIn?: string) =>
+      routineNotes.push({ name: oneLine(routine.name) || "routine", reason, wasOn: !routine.paused, ...(scheduledIn ? { scheduledIn } : {}) });
+    if (!read || (options.exactZones && read.zone !== "own")) {
+      note(read ? "zone" : CLOCK_TRIGGERS.has(routine.trigger) ? "words" : "event");
       unscheduled.push(routine);
       continue;
     }
+    const schedule = read.schedule;
+    if (read.zone === "unknown") note("zone", timeZone);
     if (routines.length >= MAX_ROUTINES) continue;
     const label = oneLine(routine.name) || "routine";
-    const base = clip(`${name}: ${label}`, 74);
+    const base = clip(label, 74);
     let jobName = base;
     for (let n = 2; routineNames.has(jobName); n += 1) jobName = `${base} (${n})`;
     routineNames.add(jobName);
     routineLabels.push(label);
+    pausedRoutines.push({ name: label, wasOn: !routine.paused });
     const usesSkills = routine.skills.flatMap((skill) => skillSlugs.get(skill.toLowerCase()) ?? []);
     routines.push({
       key: uniqueSlug(label, `routine-${index + 1}`, routineKeys),
@@ -527,7 +566,7 @@ export function grokMovePlan(bot: GrokBot, options: { timeZone?: string; takenSe
   let apps = 0;
   for (const app of bot.apps) {
     const label = clip(app.name, 100);
-    const address = app.mcpUrl ? serverAddress(app.mcpUrl) : null;
+    const address = app.mcpUrl && !options.appNamesOnly ? serverAddress(app.mcpUrl) : null;
     const proposed = slug(`${/^[a-z]/i.test(label) ? "" : "server-"}${label}`, 25) || `server-${connections.length + 1}`;
     if (address && options.takenServers?.has(proposed)) continue;
     apps += 1;
@@ -542,16 +581,16 @@ export function grokMovePlan(bot: GrokBot, options: { timeZone?: string; takenSe
 
   const description = bot.description.trim();
   const summary = clip(description || bot.title || `${name}, brought over from ${from.name}.`, 2_000);
-  // Grok Bot's ids predate other apps and stay as they were, so a bot moved before is still known as moved. Any other
-  // app's bot is known by its app and name: moved again after an edit there, it is still the bot already here.
-  const hash = shortHash(grok ? `${name}\n${soul}` : `${from.key}\n${name.toLowerCase()}`);
+  // A bot is known by its app and name: moved again after an edit there, or by another path, it is still the bot here.
+  const hash = shortHash(`${from.key}\n${name.toLowerCase()}`);
   const fullSoul = importedSoul({
     name, title: bot.title, description, instructions: soul, from: from.name,
     topics: Object.keys(seed).filter((path) => path !== "MEMORY.md"),
     skills: planned.map((skill) => skill.name), routines: routineLabels, apps: bot.apps.map((app) => app.name),
     aboutMe: memory.facts.length > 0,
   }, BOT_PROFILE_LIMITS.soul);
-  const packageId = `${agentKey}-${hash.toString(16).padStart(8, "0").slice(0, 6)}`;
+  const idFor = (value: number) => `${agentKey}-${value.toString(16).padStart(8, "0").slice(0, 6)}`;
+  const packageId = idFor(hash);
   const draft: PackageDocument = {
     format: PACKAGE_FORMAT,
     version: PACKAGE_VERSION,
@@ -602,7 +641,8 @@ export function grokMovePlan(bot: GrokBot, options: { timeZone?: string; takenSe
     }
   }
   return {
-    name, packageId, document, skills: planned, routines: routines.length,
+    name, packageId, legacyPackageIds: grok ? [idFor(shortHash(`${name}\n${soul}`))].filter((id) => id !== packageId) : [],
+    document, skills: planned, routines: routines.length, pausedRoutines, routineNotes,
     notes: seed[notesFile] ? unscheduled.length : 0,
     memories: (notesPlanted ? memory.count : 0) + memoryFiles,
     apps,
@@ -614,7 +654,7 @@ export function grokMovePlan(bot: GrokBot, options: { timeZone?: string; takenSe
 
 /** A schedule another AI described for one of the person's own routines (pasted notes): its cron in its zone, else none. */
 export function notesRoutineSchedule(routine: { cron?: string; when?: string; timeZone?: string }, timeZone: string): PackageRoutineSchedule | null {
-  return routineSchedule({ name: "", instruction: "", trigger: "", cron: routine.cron ?? "", when: routine.when ?? "", timeZone: routine.timeZone ?? "", paused: false, skills: [], details: "" }, timeZone);
+  return routineSchedule({ name: "", instruction: "", trigger: "", cron: routine.cron ?? "", when: routine.when ?? "", timeZone: routine.timeZone ?? "", paused: false, skills: [], details: "" }, timeZone)?.schedule ?? null;
 }
 
 /** One of the person's own skills as a SKILL.md for a bot already here, under a name not in `taken`; null when it can't be one. */

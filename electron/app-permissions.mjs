@@ -132,6 +132,21 @@ export function externalLinkUrl(rawUrl) {
   return typeof rawUrl === "string" && /^\s*mailto:/i.test(rawUrl) ? emailDraftUrl(rawUrl) : externalWebUrl(rawUrl);
 }
 
+/** Grok Bot 1.1's prompt link (grokbot://app/v1/prompt?id=<bot>&text=<one line>) opens that bot with the text typed in an
+ * empty message box and never sends it. Its parser drops a link that breaks its rules, so only that exact shape passes:
+ * the text as encodeURIComponent writes it, so no second parameter can ride along. */
+const GROK_PROMPT_LINK = /^grokbot:\/\/app\/v1\/prompt\?id=[A-Za-z0-9_-]{1,128}&text=[A-Za-z0-9\-_.!~*'()%]{1,1900}$/;
+
+export function grokPromptLink(rawUrl) {
+  return typeof rawUrl === "string" && rawUrl.length <= 2048 && GROK_PROMPT_LINK.test(rawUrl) && !/[#\\]/.test(rawUrl) ? rawUrl : null;
+}
+
+/** The app's own pages (the desktop:open-external bridge, owner pages only): the shared policy, plus Grok Bot's prompt
+ * link for "Move from Grok Bot". Security: never window.open, so no page in the window can drive Grok Bot. */
+export function ownExternalLinkUrl(rawUrl) {
+  return grokPromptLink(rawUrl) ?? externalLinkUrl(rawUrl);
+}
+
 export function externalWebUrl(rawUrl) {
   if (typeof rawUrl !== "string") throw new Error("A web address is required");
   let url;

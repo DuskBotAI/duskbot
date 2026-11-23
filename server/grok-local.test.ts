@@ -3,7 +3,9 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { lookForGrokBot, lookForNotes, NOTES_FILE_MAX, removeOldCursorSignIn } from "./grok-local.ts";
+import { lookForGrokBot, lookForNotes, NOTES_FILE_MAX, readGrokChat, readGrokPhoto, readGrokProfile, removeOldCursorSignIn } from "./grok-local.ts";
+import { GROK_EXPORT_MAX_CHARS } from "../shared/grok-import.ts";
+import { GROK_CACHE, plantGrokProfile, sliceFile, SYNTHETIC_BOTS } from "./testing/grok-bot-profile.ts";
 import { thisMachine, type SetupFs, type SetupMachine } from "./setup-import.ts";
 
 const homes: string[] = [];
@@ -83,10 +85,10 @@ describe("what the desktop app finds about Grok Bot", () => {
 
   it("works without the app, and with an unreadable or foreign cache", () => {
     const empty = fixtureHome();
-    expect(lookForGrokBot(machineAt(empty.home))).toEqual({ files: [], bots: [] });
+    expect(lookForGrokBot(machineAt(empty.home))).toEqual({ exports: [], bots: [] });
     const broken = fixtureHome();
     broken.put(slice("roster.last-roster"), "not json");
-    expect(lookForGrokBot(machineAt(broken.home))).toEqual({ files: [], bots: [] });
+    expect(lookForGrokBot(machineAt(broken.home))).toEqual({ exports: [], bots: [] });
     const foreign = fixtureHome();
     foreign.put(slice("roster.last-roster"), JSON.stringify({ value: { rows: "nope" } }));
     expect(lookForGrokBot(machineAt(foreign.home)).bots).toEqual([]);
@@ -104,8 +106,9 @@ describe("what the desktop app finds about Grok Bot", () => {
     put("Downloads/grok-bot-export-binary.exe", SECRET);
     const machine = machineAt(home);
     const look = lookForGrokBot(machine);
-    expect(look.files.map((file) => file.name)).toEqual(["grok-bot-export (1).md", "grok-bot-export-drew.json"]);
-    expect(look.files.map((file) => file.text)).toEqual(["newest", "older"]);
+    expect(look.exports.map((file) => file.name)).toEqual(["grok-bot-export (1).md", "grok-bot-export-drew.json"]);
+    expect(look.exports.map((file) => file.refused?.code)).toEqual(["notExport", "notExport"]);
+    expect(JSON.stringify(look)).not.toContain("newest");
     for (const path of [other, elsewhere, target]) expect(machine.opened).not.toContain(path);
   });
 
@@ -145,7 +148,71 @@ describe("notes another AI saved to Downloads", () => {
     expect(lookForNotes(machineAt(home), 1)).toEqual([]);
     const exported = put("Downloads/grok-bot-export-desk.json", "{}");
     const machine = machineAt(home);
-    expect(lookForGrokBot(machine, { downloads: false }).files).toEqual([]);
+    expect(lookForGrokBot(machine, { downloads: false }).exports).toEqual([]);
     expect(machine.opened).not.toContain(exported);
+  });
+});
+
+describe("the exports in Downloads, parsed on the server (MIG-21, MIG-08)", () => {
+  it("answers parsed bots and refusals, never the text, and names an oversized file", () => {
+    const { home, put } = fixtureHome();
+    put("Downloads/grok-bot-export-good.json", JSON.stringify({ format: "grok-bot-export", version: 1, bots: [{ name: "Drew", instructions: "Plan things." }] }));
+    put("Downloads/grok-bot-export-keys.json", JSON.stringify({ format: "grok-bot-export", version: 1, bots: [{ name: "Key", api_key: SECRET }] }));
+    put("Downloads/grok-bot-export-big.json", "x".repeat(GROK_EXPORT_MAX_CHARS + 1));
+    const look = lookForGrokBot(machineAt(home));
+    const byName = Object.fromEntries(look.exports.map((file) => [file.name, file]));
+    expect(byName["grok-bot-export-good.json"]!.bots?.map((bot) => bot.name)).toEqual(["Drew"]);
+    expect(byName["grok-bot-export-keys.json"]!.refused).toEqual({ code: "credentials", keys: ["bots[0].api_key"] });
+    expect(byName["grok-bot-export-big.json"]!.refused?.code).toBe("tooLarge");
+    expect(JSON.stringify(look)).not.toContain(SECRET);
+  });
+});
+
+describe("the synthetic Grok Bot profile, read slice by slice", () => {
+  it("reads the roster, chats, routine names, app names and photos, and nothing else", () => {
+    const { home } = fixtureHome();
+    const never = plantGrokProfile(home);
+    const machine = machineAt(home);
+    const profile = readGrokProfile(machine);
+    expect(profile.bots.map((bot) => [bot.name, bot.removed])).toEqual(SYNTHETIC_BOTS.map((bot) => [bot.name, Boolean(bot.removed)]));
+    expect(profile.apps).toEqual(["Calendar", "Notebook"]);
+    const nova = profile.bots[0]!;
+    const chat = readGrokChat(machine, profile, nova.rosterId);
+    if (!chat || "problem" in chat) throw new Error("no chat");
+    expect(chat.earlier).toBe(true);
+    expect(chat.lines.length).toBe(201);
+    expect(chat.lines.filter((line) => line.placeholder).map((line) => line.placeholder!.kind)).toContain("voice");
+    expect(chat.lines.some((line) => line.text.includes("sk-live-not-real"))).toBe(false);
+    expect(chat.routines).toEqual([{ name: "Monday plan", on: true }, { name: "Friday wrap", on: false }]);
+    expect(readGrokChat(machine, profile, SYNTHETIC_BOTS[6]!.id)).toMatchObject({ problem: { slice: "chat", code: "newerFormat" } });
+    const photo = readGrokPhoto(machine, profile, nova);
+    expect(photo && "mime" in photo ? photo.mime : null).toBe("image/png");
+    for (const path of never) expect(machine.opened).not.toContain(path);
+    expect(machine.opened.every((path) => path.includes("sand-client-persistence") || path.includes("roster-avatars"))).toBe(true);
+  });
+
+  it("degrades one slice at a time: a newer roster names the problem, a missing photo costs only the photo", () => {
+    const { home, put } = fixtureHome();
+    plantGrokProfile(home);
+    put(sliceFile("roster.last-roster"), JSON.stringify({ schemaVersion: 9, value: { rows: [] } }));
+    const profile = readGrokProfile(machineAt(home));
+    expect(profile.bots).toEqual([]);
+    expect(profile.problems).toEqual([expect.objectContaining({ slice: "roster", code: "newerFormat" })]);
+    expect(profile.apps).toEqual(["Calendar", "Notebook"]);
+  });
+
+  it("refuses a cache folder that is a link", () => {
+    const { home } = fixtureHome();
+    const real = join(home, "elsewhere");
+    plantGrokProfile(real);
+    mkdirSync(join(home, "Library", "Application Support", "Grok Bot"), { recursive: true });
+    symlinkSync(join(real, GROK_CACHE), join(home, GROK_CACHE));
+    expect(readGrokProfile(machineAt(home)).found).toBe(false);
+  });
+
+  it("lists live bots once each for the older bring step (MIG-13)", () => {
+    const { home } = fixtureHome();
+    plantGrokProfile(home);
+    expect(lookForGrokBot(machineAt(home), { downloads: false }).bots).toEqual(["Nova", "Quill", "Rivet", "Tally", "Juno"]);
   });
 });

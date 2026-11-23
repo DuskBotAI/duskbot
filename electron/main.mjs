@@ -51,7 +51,7 @@ const startupTrace = createStartupTrace({ log: line => slog(line), onMark: name 
 let desktopTray = null;
 import { collisionFreeDownloadPath, defaultSaveName, openHtmlCopy, openLogsFolder, revealDownloadWhenDone, revealInFolder, withSavableFile } from "./save-file.mjs";
 import { desktopViewerPermissionAllowed } from "./desktop-viewer-permissions.mjs";
-import { appPermissionHandlers, externalLinkUrl } from "./app-permissions.mjs";
+import { appPermissionHandlers, externalLinkUrl, ownExternalLinkUrl } from "./app-permissions.mjs";
 import { appFrameNavigationAllowed } from "./app-frame-guard.mjs";
 import { writeClipboardText } from "./clipboard-write.mjs";
 import {
@@ -2699,7 +2699,7 @@ ipcMain.handle("desktop:focus-window", localOnly("desktop:focus-window", (event)
 }));
 // Links resolved after Chromium's click gesture ended would be blocked as popups via window.open.
 ipcMain.handle("desktop:open-external", localOnly("desktop:open-external", async (_event, rawUrl) => {
-  await shell.openExternal(externalLinkUrl(rawUrl));
+  await shell.openExternal(ownExternalLinkUrl(rawUrl));
   return true;
 }));
 

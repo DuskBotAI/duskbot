@@ -43,7 +43,7 @@ export function ComposerAttachments({
   allowImages?: boolean;
   onNotice: (notice: string | null) => void;
   /** A dropped file of notes another AI wrote: brought in, not attached. */
-  onNotes?: (text: string) => void;
+  onNotes?: (text: string, files: string) => void;
   onPendingChange?: (pending: boolean) => void;
   onDraggingChange?: (dragging: boolean) => void;
   uploadImage: (file: File) => Promise<Attachment | null>;
@@ -90,7 +90,7 @@ export function ComposerAttachments({
       let files = Array.from(e.dataTransfer?.files ?? []);
       const notes = callbacks.current.onNotes ? await notesInFiles(files) : null;
       if (notes) {
-        callbacks.current.onNotes?.(notes.text);
+        callbacks.current.onNotes?.(notes.text, notes.names.join(", "));
         files = files.filter((file) => !notes.names.includes(file.name));
         if (!files.length) return;
       }

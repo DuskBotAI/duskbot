@@ -110,11 +110,10 @@ describe("bots from other apps, through the real package path", () => {
       const routines = app.routines.listRoutines();
       expect(routines.every((routine) => !routine.enabled)).toBe(true);
       expect(routines.map((routine) => [routine.name, routine.schedule.type]).sort()).toEqual([
-        ["Hermes: Ping", "interval"], ["Hermes: Standup", "cron"], ["Ledger: Month end", "daily"],
-        ["Molty: Heartbeat", "interval"], ["Molty: Morning brief", "cron"], ["Molty: Wake", "cron"], ["Scout: News sweep", "interval"],
+        ["Heartbeat", "interval"], ["Month end", "daily"], ["Morning brief", "cron"], ["News sweep", "interval"], ["Ping", "interval"], ["Standup", "cron"], ["Wake", "cron"],
       ]);
-      expect(routines.find((routine) => routine.name === "Hermes: Standup")!.schedule).toMatchObject({ expression: "30 13 * * 1-5", timeZone: "Asia/Kolkata" });
-      expect(routines.find((routine) => routine.name === "Hermes: Standup")!.prompt).toContain("Use these skills: standup.");
+      expect(routines.find((routine) => routine.name === "Standup")!.schedule).toMatchObject({ expression: "30 13 * * 1-5", timeZone: "Asia/Kolkata" });
+      expect(routines.find((routine) => routine.name === "Standup")!.prompt).toContain("Use these skills: standup.");
       expect(JSON.stringify([app.store.bots, routines])).not.toContain(SENTINEL);
 
       const count = app.store.bots.length;

@@ -14,6 +14,8 @@ export const KEEP_WORDS: ReadonlySet<string> = new Set([
   "January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December",
   "English", "Japanese", "German", "French", "Spanish", "Italian", "Portuguese", "Russian", "Polish", "Turkish", "Ukrainian",
   "Vietnamese", "Chinese", "Korean", "Hindi",
+  // key caps
+  "Enter",
   "Halloween",
 ]);
 
@@ -23,7 +25,7 @@ export const KEEP_PHRASES: readonly string[] = [
   "Screen Recording", "Speech Recognition", "Microphone and Speech Recognition", "Dictation in System Settings → Keyboard", "Dictation in System Settings",
   "Authorization: Bearer", "Authorization, with Bearer", "Gmail, Calendar",
   "Home Screen", "App Store", "Google Play", "Apple Pay", "Google Pay", "G Pay", "Mac mini",
-  "Dusk Bot", "Claude Code", "Hermes Agent", "Kimi Code", "Fish Audio", "LM Studio", "Google AI Studio", "Hacker News", "Vercel AI Gateway",
+  "Dusk Bot", "Grok Bot", "Claude Code", "Hermes Agent", "Kimi Code", "Fish Audio", "LM Studio", "Google AI Studio", "Hacker News", "Vercel AI Gateway",
   "Cloudflare Workers AI", "OpenCode Zen, Go", "OpenCode Zen and Go", "DeepSeek Harness", "Grok Imagine", "Muse Wonder", "Wispr Flow",
   "Cua Driver", "VS Code", "Node.js", "Wi-Fi", "Gmail, Calendar or Drive", "Outlook, Calendar or OneDrive", "Google Drive",
   "1Password", "AirPods Pro", "Google Calendar", "Google Sheets", "Google Docs", "Google Meet", "Microsoft Teams", "X Developer",
@@ -87,6 +89,7 @@ const FRAGMENT_KEYS = new RegExp(`^(${[
   "automations\\.(time|source|skip)\\.\\w+", "automations\\.app\\.(from|about|labeled|mentioning|in)", "cloudSetup\\.ready\\.(today|tomorrow)",
   "connectApps\\.account\\.fallback", "settings\\.updates\\.thisServer", "automations\\.does\\.default", "cloudBuy\\.big\\.perMonth(Trial)?",
   "server\\.(runs\\.state|incidents\\.where|reports\\.(when|why))\\.\\w+",
+  "grokBotMove\\.(chip|got|need|slice\\.(chat|photo))\\.\\w+", "grokBotMove\\.result\\.(profile|picture)",
   "server\\.(connect\\.thisApp|rooms\\.sameName\\.chief|teammates\\.(room|handedWork)|mcp\\.card\\.(newKey|newClientSecret))",
 ].join("|")})$`);
 

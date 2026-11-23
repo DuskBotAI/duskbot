@@ -3,11 +3,13 @@
 // for a few seconds and goes; the first bot says it got them, works through them on its working row, and ends with its
 // summary. Nothing about the import is ever said inside the message box.
 import { useCallback, useEffect, useRef, useState } from "react";
-import { CircleAlert, X } from "../icons";
+import { Check, CircleAlert, X } from "../icons";
 import type { LocaleKey } from "@/locales";
 import { localSetupImport } from "@/lib/setup-import";
-import { arrivalFailed, dismissArrival, noteArrival, useNotesArrival, useNotesWork, type NotesVia } from "@/lib/notes-arrival";
-import { bringOfferedNotesIn, dismissNotesOffer, notesOfferLine, useNotesOffer, copyNotesPrompt, importNotes, notesWatch, takeNotesFromDownloads, WATCH_EVERY_MS, isNotesPrompt, notesErrorLine, notesOutcomeLine, scheduleNotesReminder, stopWaiting, useNotesWaiting } from "@/lib/assistant-notes";
+import { arrivalDone, arrivalFailed, dismissArrival, noteArrival, useNotesArrival, useNotesWork, type NotesVia } from "@/lib/notes-arrival";
+import { acceptLine, grokMoveApi, grokMoveChanged, isGrokRequest, looksLikeGrokExport } from "@/lib/grok-bot-move";
+import { bringOfferedNotesIn, dismissNotesOffer, notesOfferLine, useNotesOffer, copyNotesPrompt, importNotes, notesWatch, takeNotesFromDownloads, WATCH_EVERY_MS, isNotesPrompt, looksLikeNotes, notesErrorLine, notesOutcomeLine, scheduleNotesReminder, stopWaiting, useNotesWaiting } from "@/lib/assistant-notes";
+import { listOf } from "./grok-move/parts";
 import { myDefaultBot, useViewerEmail } from "@/lib/default-bot";
 import { t } from "@/lib/i18n";
 import { systemNotificationsAllowed } from "@/lib/notify";
@@ -15,14 +17,33 @@ import { useStore } from "@/state/store";
 
 export type NotesSay = (line: string, state: "working" | "done" | "failed") => void;
 
+/** An export a Grok Bot wrote of itself goes to the bot it is for (the move's accept-export), never into a chat or the notes import. */
+function takeGrokExport(text: string, say: NotesSay | undefined, via: NotesVia, here: string | null, file?: string) {
+  if (isGrokRequest(text)) {
+    if (say) say(t("grokBotMove.problem.request"), "failed");
+    else { noteArrival(via, here); arrivalFailed(t("grokBotMove.problem.request")); }
+    return;
+  }
+  if (say) say(t("grokBotMove.accepting"), "working");
+  else noteArrival(via, here);
+  void grokMoveApi.accept({ text, ...(file ? { file } : {}) }).then((result) => {
+    grokMoveChanged();
+    const { line, failed } = acceptLine(result, listOf);
+    if (say) say(line, failed ? "failed" : "done");
+    else if (failed) arrivalFailed(line);
+    else arrivalDone(line);
+  }, (cause: unknown) => (say ? say(notesErrorLine(cause), "failed") : arrivalFailed(notesErrorLine(cause))));
+}
+
 /** Takes a pasted or dropped block. A chat passes no `say`: the card above its message box and the first bot's chat
  * say how it goes. A screen of its own (the bring step) passes `say` to hear "bringing in…", then the outcome. */
 export function useNotesIntake() {
   const { state, dispatch } = useStore();
   const firstBotId = myDefaultBot(state.bots, useViewerEmail())?.id ?? null;
-  return useCallback((text: string, say?: NotesSay, via: NotesVia = "paste", chatBot?: string | null) => {
+  return useCallback((text: string, say?: NotesSay, via: NotesVia = "paste", chatBot?: string | null, file?: string) => {
     // the chat it was pasted or dropped into; a group's or none is the first bot's
     const here = (chatBot && state.bots.some((bot) => bot.id === chatBot) ? chatBot : null) ?? firstBotId;
+    if (looksLikeGrokExport(text) && !looksLikeNotes(text)) return takeGrokExport(text, say, via, here, file);
     if (isNotesPrompt(text)) {
       if (say) say(t("composer.notes.error.prompt"), "failed");
       else { noteArrival(via, here); arrivalFailed(t("composer.notes.error.prompt")); }
@@ -105,11 +126,12 @@ export function NotesWaitingLine({ botId }: { botId: string | undefined }) {
   if (!botId) return null;
   if (arrival && (arrival.botId ?? first?.id) === botId) {
     return (
-      <div data-notes-arrived={arrival.failed ? "failed" : arrival.via} role="status" aria-live="polite" className={cardClass}>
+      <div data-notes-arrived={arrival.failed ? "failed" : arrival.done ? "done" : arrival.via} role="status" aria-live="polite" className={cardClass}>
         {arrival.failed
           ? <CircleAlert size={14} aria-hidden="true" className="shrink-0" />
-          : <span aria-hidden="true" className="funnel-wait inline-block size-1.5 shrink-0 rounded-full bg-ink/60" />}
-        <span className="min-w-0 flex-1 text-pretty">{arrival.failed ?? t(GOT[arrival.via])}</span>
+          : arrival.done ? <Check size={14} aria-hidden="true" className="shrink-0 text-ink" />
+            : <span aria-hidden="true" className="funnel-wait inline-block size-1.5 shrink-0 rounded-full bg-ink/60" />}
+        <span className="min-w-0 flex-1 text-pretty">{arrival.failed ?? arrival.done ?? t(GOT[arrival.via])}</span>
         <button type="button" data-notes-dismiss="" onClick={dismissArrival} aria-label={t("composer.notes.dismiss")} title={t("composer.notes.dismiss")} className={xClass}>
           <X size={14} aria-hidden="true" />
         </button>

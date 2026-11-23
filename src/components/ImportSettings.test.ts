@@ -1,14 +1,15 @@
 // @vitest-environment happy-dom
-// Settings → general → bring in from other apps: what this computer holds (BringIn), then the first run's prompt for AIs online.
+// Settings → general → bring in from other apps: the Grok Bot row, what this computer holds (BringIn), then the first run's
+// prompt for AIs online.
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { setLocale } from "@/lib/i18n";
 import { bringRunNow, resetBringRunForTests } from "@/lib/first-run-import";
-import { GROK_EXPORT_FORMAT } from "../../shared/grok-import";
 import type { SetupDetection } from "../../shared/setup-import";
 
-const f = vi.hoisted(() => ({ state: {} as Record<string, unknown>, dispatch: vi.fn(), api: vi.fn() }));
+const f = vi.hoisted(() => ({ state: {} as Record<string, unknown>, dispatch: vi.fn(), api: vi.fn(),
+  grok: { detect: {} as unknown, waiting: { bots: [], waiting: 0 } as unknown, last: null as unknown } }));
 vi.mock("@/state/store", () => ({ useStore: () => ({ state: f.state, dispatch: f.dispatch }), api: f.api }));
 vi.mock("@/state/api", () => ({ api: f.api }));
 vi.mock("@/lib/analytics", () => ({ track: vi.fn() }));
@@ -21,7 +22,8 @@ const maus = { id: "maus", name: "Dusk", defaultBot: {}, messages: [] };
 const molty = { source: "openclaw", app: "OpenClaw", where: "~/.openclaw", channels: [], unreadable: [], bots: [{
   name: "Molty", title: "", description: "", instructions: "Be helpful.", memories: ["Sam's sister is Ana."], userFacts: [], skills: [], routines: [], apps: [],
 }] };
-const grokFile = { name: "grok-bot-export-drew.json", modifiedAt: 1, text: JSON.stringify({ format: GROK_EXPORT_FORMAT, bots: [{ name: "Drew", instructions: "Hi." }] }) };
+const grokBot = (rosterId: string, name: string, here?: boolean) => ({ rosterId, name, label: name, description: "", hasDescription: false, look: { color: "blue" },
+  removed: false, chat: { messages: 3, earlier: false, readable: true }, routines: 0, ...(here ? { here: { botId: `b-${rosterId}`, name } } : {}) });
 const SETUP: SetupDetection = { skills: [{ name: "pdf", source: "claudeCode" }], tools: [] };
 
 let host: HTMLDivElement, root: Root;
@@ -44,10 +46,14 @@ beforeEach(() => {
   resetBringRunForTests();
   f.state = { bots: [maus], config: { profile: {} } };
   f.dispatch = vi.fn();
+  f.grok = { detect: { available: true, found: false, bots: [], apps: [], problems: [], running: false, waiting: 0 }, waiting: { bots: [], waiting: 0 }, last: null };
   f.api.mockReset();
   f.api.mockImplementation(async (path: string, init?: { body?: string; method?: string }) => {
     if (path === "/api/setup-import/bots") return { apps: [molty] };
-    if (path.startsWith("/api/setup-import/grok")) return { files: [grokFile], bots: ["Drew", "Eggbot"] };
+    if (path === "/api/setup-import/grok/move/detect") return f.grok.detect;
+    if (path === "/api/setup-import/grok/move/waiting") return f.grok.waiting;
+    if (path === "/api/setup-import/grok/move/progress") return f.grok.last;
+    if (path.startsWith("/api/setup-import/grok")) throw new Error("the old Grok Bot look is gone");
     if (path === "/api/mcp/servers") return { servers: [] };
     if (path.startsWith("/api/teams/import")) return { bots: [{ id: `id-${JSON.parse(init!.body!).package.name}`, name: JSON.parse(init!.body!).package.name }], routines: [] };
     return {};
@@ -63,23 +69,24 @@ afterEach(async () => {
 });
 
 describe("Settings → bring in from other apps", () => {
-  it("lists everything this computer holds, Grok bot's saved files included, with the prompt for AIs online folded below", async () => {
+  it("lists everything this computer holds, with the prompt for AIs online folded below", async () => {
     await show();
-    expect(f.api.mock.calls.map(([path]) => path), "Settings may read Downloads, unlike the first run").toContain("/api/setup-import/grok");
+    expect(f.api.mock.calls.map(([path]) => path), "Grok Bot is its own move's, never the old look").not.toContain("/api/setup-import/grok");
+    expect(host.querySelector("[data-grok-entry]"), "no Grok Bot on this Mac: no row").toBeNull();
     expect(host.querySelector("[data-bring-hero]"), "nothing here is really used: no memory source").toBeNull();
     expect([...host.querySelectorAll("[data-bring-find]")].map((row) => row.getAttribute("data-bring-find")).sort(), "everything is reachable here")
-      .toEqual(["bots:grok-bot", "bots:openclaw", "setup:claudeCode"]);
+      .toEqual(["bots:openclaw", "setup:claudeCode"]);
     expect(host.querySelector('[data-bring-import="bots:openclaw"]')?.getAttribute("aria-label")).toBe("Import from OpenClaw");
     expect(host.querySelector("[data-bring-more], [data-bring-memory]"), "no Show more, no notes checkbox").toBeNull();
     const online = host.querySelector<HTMLButtonElement>("[data-bring-online]")!;
-    expect(online.textContent, "below what is here, the prompt is one quiet line").toBe("From Grok bot, ChatGPT, Claude or Gemini");
+    expect(online.textContent, "below what is here, the prompt is one quiet line").toBe("From ChatGPT, Claude, Gemini or another AI");
     expect(online.getAttribute("aria-expanded")).toBe("false");
     await act(async () => { online.click(); });
     expect(online.getAttribute("aria-expanded")).toBe("true");
     expect(button("Copy the prompt")).toBeTruthy();
     expect(host.querySelector("[data-bring-ai], [data-bring-paste], textarea"), "no AI to pick, no answer box").toBeNull();
-    expect(host.querySelector("[data-bring-grok]")?.textContent, "a Grok bot bot with nothing saved yet goes through the prompt").toContain("Eggbot in Grok bot");
-    for (const old of ["Move from Grok bot", "Start import", "Copy prompt", "Look for bots"]) expect(button(old), old).toBeUndefined();
+    expect(host.querySelector("[data-bring-grok]"), "Grok Bot's bots no longer go through the prompt").toBeNull();
+    for (const old of ["Copy the prompt for Grok Bot", "Start import", "Copy prompt", "Look for bots"]) expect(button(old), old).toBeUndefined();
     expect(host.querySelector("[data-import-section=grok], [data-import-section=notes], [data-import-section=apps], [data-import-section=bots]")).toBeNull();
     expect(host.querySelector("[data-bring-skip], [data-bring-next]"), "no funnel buttons").toBeNull();
   });
@@ -145,5 +152,40 @@ describe("Settings → bring in from other apps", () => {
     await settle();
     expect(host.querySelector("[data-bring-notes]")).not.toBeNull();
     expect(host.querySelector("[data-bring-notes]")?.textContent).toMatch(/ChatGPT|notes/);
+  });
+
+  it("has a row for Grok Bot: its bots one press from the move, then the bots still to send the rest, then already here", async () => {
+    f.grok.detect = { available: true, found: true, bots: [grokBot("g1", "Nova"), grokBot("g2", "Quill"), grokBot("g3", "Rivet", true)], apps: [], problems: [], running: false, waiting: 0 };
+    await show();
+    const opened = vi.fn((event: Event) => event);
+    window.addEventListener("dusk:open-grok-move", opened);
+    const row = () => host.querySelector("[data-grok-entry=settings]")!;
+    expect(row().textContent).toContain("3 bots, ready to move here. 1 already here.");
+    expect(host.querySelector("[data-import-section]")!.firstElementChild?.nextElementSibling, "first, under the page's line").toBe(row());
+    await act(async () => { button("Move them")!.click(); });
+    expect(opened).toHaveBeenCalledTimes(1);
+
+    await act(async () => root.unmount());
+    root = createRoot(host);
+    f.grok.detect = { ...(f.grok.detect as object), bots: [grokBot("g1", "Nova", true), grokBot("g2", "Quill", true)] };
+    f.grok.last = { moveId: "m", state: "done", startedAt: 1, done: 2, total: 2, bots: [] };
+    f.grok.waiting = { bots: [], waiting: 2 };
+    await show();
+    expect(row().textContent, "asked bots are awaited, across restarts").toContain("Waiting for 2 bots to send the rest.");
+    await act(async () => { button("Open")!.click(); });
+    expect(opened).toHaveBeenCalledTimes(2);
+
+    await act(async () => root.unmount());
+    root = createRoot(host);
+    f.grok.waiting = { bots: [], waiting: 0 };
+    await show();
+    expect(row().textContent, "after a move, already here rather than nothing found").toContain("2 bots, already here.");
+    window.removeEventListener("dusk:open-grok-move", opened);
+  });
+
+  it("away from the desktop app, says in one line why Grok Bot's bots cannot move from here", async () => {
+    await show({ local: false });
+    expect(host.querySelector("[data-grok-entry=notDesktop]")?.textContent).toBe("Bots move straight from Grok Bot only in the desktop app, on the Mac where Grok Bot is. Here, use the prompt below.");
+    expect(f.api.mock.calls.filter(([path]) => String(path).includes("/grok/"))).toEqual([]);
   });
 });

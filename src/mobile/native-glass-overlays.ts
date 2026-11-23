@@ -89,13 +89,12 @@ export function cssPx(root: HTMLElement, expression: string): number {
 }
 
 export function isGlassDark(): boolean {
-  if (typeof document === "undefined") return false;
-  const html = document.documentElement;
-  if (html.dataset.skin === "grok-dark") return true;
-  if (html.dataset.skin === "grok-light") return false;
-  const shell = html.querySelector<HTMLElement>(".dusk-mobile");
-  if (shell?.dataset.scheme === "dark") return true;
-  if (shell?.dataset.scheme === "light") return false;
+  const html = typeof document === "undefined" ? null : document.documentElement;
+  if (html?.dataset?.skin === "grok-dark") return true;
+  if (html?.dataset?.skin === "grok-light") return false;
+  const shell = html?.querySelector?.<HTMLElement>(".dusk-mobile");
+  if (shell?.dataset?.scheme === "dark") return true;
+  if (shell?.dataset?.scheme === "light") return false;
   return globalThis.matchMedia?.("(prefers-color-scheme: dark)").matches === true;
 }
 

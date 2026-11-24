@@ -1,7 +1,9 @@
 // A routine's script check (RoutineProbe kind "script"): one command line run without any AI, its output compared
-// with the last run's. Only dusk bot's base environment reaches it, never its keys; under sandbox-exec on macOS and
-// bubblewrap on Linux it writes only to a scratch folder and reads none of the person's keys. It runs bare only where
-// neither exists; a bwrap the kernel refuses fails the check instead.
+// with the last run's or, with `post`, posted as the bot's reply. Only dusk bot's base environment reaches it, never its
+// keys. Security: under sandbox-exec on macOS and bubblewrap on Linux it writes only to a scratch folder and reads none
+// of the person's keys; it runs bare only where neither exists, and a bwrap the kernel refuses fails the check instead.
+// With `access: "full"` (set only through the person's card) it runs with no fence at all, as the server's user, able
+// to read and write whatever that user can; a test run (dry run) still runs it inside the fence.
 import { spawn } from "node:child_process";
 import { existsSync, mkdirSync, realpathSync, statSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
@@ -112,10 +114,10 @@ export function runCheckScript(command: string, options: { env?: NodeJS.ProcessE
   });
 }
 
-/** How a routine's script check runs: outside the fence only with `access: "full"`, and for the routine's own time limit
- * when it has one. */
-export function scriptRunOptions(routine: Pick<Routine, "probe" | "timeoutMinutes">): { sandbox: boolean; timeoutMs: number } {
-  return { sandbox: routine.probe?.access !== "full", timeoutMs: routine.timeoutMinutes ? routine.timeoutMinutes * 60_000 : SCRIPT_TIMEOUT_MS };
+/** How a routine's script check runs: outside the fence only with `access: "full"` and never in a test run; a posting
+ * script for the routine's own time limit when it has one. */
+export function scriptRunOptions(routine: Pick<Routine, "probe" | "timeoutMinutes">, dryRun = false): { sandbox: boolean; timeoutMs: number } {
+  return { sandbox: dryRun || routine.probe?.access !== "full", timeoutMs: routine.probe?.post && routine.timeoutMinutes ? routine.timeoutMinutes * 60_000 : SCRIPT_TIMEOUT_MS };
 }
 
 export const SCRIPT_REFUSALS = {

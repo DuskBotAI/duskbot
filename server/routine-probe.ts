@@ -158,7 +158,7 @@ export interface RoutineProbesDeps {
   now?: () => number;
   fetch?: (url: string) => Promise<PublicPage>;
   /** Runs a script check's command; absent, script checks fail with NO_SCRIPTS. */
-  script?: (routine: Routine, command: string) => Promise<ScriptResult>;
+  script?: (routine: Routine, command: string, dryRun: boolean) => Promise<ScriptResult>;
   /** Once per streak, at its STUCK_AFTER-th failed read: the person hears it, so a probe that cannot read never looks
    * quiet for long. */
   failed?(routine: Routine, sentence: string, count: number): void;
@@ -182,10 +182,10 @@ export function createRoutineProbes(deps: RoutineProbesDeps) {
   const host = (url: string) => { try { return new URL(url).hostname; } catch { return url; } };
   const where = (probe: RoutineProbe) => probe.kind === "script" ? "its script" : host(probe.url);
 
-  async function read(routine: Routine, probe: RoutineProbe): Promise<ProbeReading | { error: string } | { asleep: true }> {
+  async function read(routine: Routine, probe: RoutineProbe, dryRun: boolean): Promise<ProbeReading | { error: string } | { asleep: true }> {
     if (probe.kind === "script") {
       if (!deps.script) return { error: NO_SCRIPTS };
-      const result = await deps.script(routine, probe.command ?? "");
+      const result = await deps.script(routine, probe.command ?? "", dryRun);
       if (!result.ok) return { error: result.error };
       return wakeAsked(result.output) === false ? { asleep: true } : scriptReading(result.output);
     }
@@ -225,7 +225,16 @@ export function createRoutineProbes(deps: RoutineProbesDeps) {
       // a run already holds a change: it is that run's to answer
       if (kept?.pending && Object.keys(kept.pending).length) return { held: true };
       if (!context.manual && kept?.retryAt !== undefined && now() < kept.retryAt) return { held: true, ...(kept.trouble ? { trouble: kept.trouble } : {}) };
-      const reading = await read(routine, probe);
+      const reading = await read(routine, probe, context.dryRun === true);
+      if (probe.kind === "script" && probe.post) {
+        const post = "error" in reading ? { error: reading.error } : "asleep" in reading ? "" : scriptPost(reading.text!);
+        kept ??= state[routine.id] = { url: from, kind: probe.kind, value: "", at: now() };
+        if (!post) { kept.at = now(); save(); return {}; }
+        const key = `${KEY_PREFIX}${randomUUID()}`;
+        kept.pending = { [key]: { at: now(), value: "" } };
+        save();
+        return { run: { key, prompt: routine.prompt, post } };
+      }
       if ("error" in reading) {
         const sentence = `Couldn't check ${where(probe)}: ${reading.error}`;
         kept ??= state[routine.id] = { url: from, kind: probe.kind, value: "", at: now() };
@@ -239,15 +248,6 @@ export function createRoutineProbes(deps: RoutineProbesDeps) {
       if ("asleep" in reading) {
         if (kept) { kept.at = now(); save(); }
         return {};
-      }
-      if (probe.kind === "script" && probe.post) {
-        const post = scriptPost(reading.text!);
-        kept ??= state[routine.id] = { url: from, kind: probe.kind, value: "", at: now() };
-        if (!post) { kept.at = now(); save(); return {}; }
-        const key = `${KEY_PREFIX}${randomUUID()}`;
-        kept.pending = { [key]: { at: now(), value: reading.value } };
-        save();
-        return { run: { key, prompt: routine.prompt, post } };
       }
       const last = probe.kind === "script" ? reading.text!.slice(0, LAST_KEPT) : undefined;
       const seen = reading.items?.map((item) => item.id);

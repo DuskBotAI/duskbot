@@ -136,7 +136,7 @@ export interface RoutineRun {
   access?: RoutineAccess;
   deliver?: RoutineDelivery;
   checkKey?: string;
-  /** A posting script's output: the run's reply as written, posted with no AI turn. */ post?: string;
+  /** A posting script's output: the run's reply as written, posted with no AI turn; or why the script failed. */ post?: string | { error: string };
   createdAt: number;
   seenAt?: number;
 }
@@ -204,7 +204,7 @@ export type RoutineRequestOwner = Pick<RoutineRequestReceipt, "requestId" | "mes
 
 /** What a routine's checks found: items for one AI run, a sentence while an app cannot be read, and the next time they
  * have something to do on time. */
-export interface RoutineCheckResult { run?: { prompt: string; key: string; /** Posted as the reply, with no AI turn. */ post?: string }; trouble?: string; wakeAt?: number; /** It read nothing: a run holds its last change, or none may start now. */ held?: true }
+export interface RoutineCheckResult { run?: { prompt: string; key: string; /** Posted as the reply, with no AI turn; an error fails the run. */ post?: string | { error: string } }; trouble?: string; wakeAt?: number; /** It read nothing: a run holds its last change, or none may start now. */ held?: true }
 
 export interface RoutineChecks {
   /** Runs a routine's checks. With `hold` they may do only what needs no AI, and their items wait. */
@@ -1174,7 +1174,7 @@ export class RoutineManager {
     this.checking.add(key);
     let result: RoutineCheckResult;
     try {
-      result = await hook.check(cloneRoutine(routine), { manual: manual !== undefined, ...(hold ? { hold } : {}), ...(scheduled ? { scheduled } : {}) });
+      result = await hook.check(cloneRoutine(routine), { manual: manual !== undefined, ...(hold ? { hold } : {}), ...(scheduled ? { scheduled } : {}), ...(this.runs.find((run) => run.id === manual)?.dryRun ? { dryRun: true as const } : {}) });
     } catch (error) {
       console.error(`routines: the checks of ${routineId} failed`, error);
       result = { trouble: "The checks could not run; they try again at the next check." };
@@ -1273,7 +1273,7 @@ export class RoutineManager {
 
   /** A run whose script wrote its reply: posted with no AI turn, and complete like a turn that said it. */
   private postRun(run: RoutineRun, threadId: string): void {
-    const text = run.post!; delete run.post;
+    const text = run.post!; delete run.post; if (typeof text !== "string") return this.failThread(threadId, text.error);
     if (!this.options.postReply) return this.failThread(threadId, "This server cannot post a script's output as a reply", { cause: "refused" });
     Object.assign(run, { status: "completed", output: redactSecretsInText(text).trim().slice(0, 2_000), attention: undefined, error: undefined, finishedAt: this.now() } satisfies Partial<RoutineRun>);
     try { this.options.postReply(run.botId, threadId, text, cloneRun(run)); } catch (error) { return this.rejectResult(run.id, error instanceof Error ? error.message : String(error)); }

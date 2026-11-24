@@ -85,7 +85,7 @@ export function createRoutineHost(deps: RoutineHostDeps) {
     dataDir: deps.dataDir,
     fetch: (url) => fetchPublicPage(url, loopback && url.startsWith(`${loopback}/`) ? { allow: () => true } : {}),
     // Security: a Cloud home runs no script checks; its routines can be written by people who do not own the machine.
-    ...(deps.cloudHome ? {} : { script: (routine: Routine, command: string) => runCheckScript(command, scriptRunOptions(routine)) }),
+    ...(deps.cloudHome ? {} : { script: (routine: Routine, command: string, dryRun: boolean) => runCheckScript(command, scriptRunOptions(routine, dryRun)) }),
     failed: (routine, sentence, count) => {
       const thread = resultsThread(routine);
       deps.tell(routine.botId, thread, serverLine(deps.language(thread), "server.routine.probeStuck", { routine: routine.name, count, reason: sentence }));

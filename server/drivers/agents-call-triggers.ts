@@ -290,7 +290,7 @@ function routineCheck(raw: unknown, clear: unknown): { probe?: Json | null; erro
   const kind = value.kind;
   if (kind === "script") {
     if (typeof value.command !== "string" || !value.command.trim()) return { error: "A script check needs command: one shell command line." };
-    return { probe: { kind, url: "", command: value.command.trim() } };
+    return { probe: { kind, url: "", command: value.command.trim(), ...(value.post !== undefined ? { post: value.post } : {}), ...(value.access !== undefined ? { access: value.access } : {}) } };
   }
   if (kind !== "page" && kind !== "feed" && kind !== "price") return { error: "check.kind must be page, feed, price or script." };
   if (typeof value.url !== "string" || !value.url.trim()) return { error: `A ${kind} check needs url: the full https address.` };

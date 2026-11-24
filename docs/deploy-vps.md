@@ -254,6 +254,18 @@ Adjust the account, home, and PATH if yours differ; Node 24 must be available on
 that PATH. The service runs the installed CLI directly, so a restart uses the
 same release without an npm install prompt or an implicit upgrade.
 
+### Time zone
+
+A server clock is usually UTC. A `daily` routine at 18:00, or a bot's "current
+time", then follows UTC and not your day. Pick one:
+
+- Add `Environment=DUSK_ADOPT_TIME_ZONE=1` under `[Service]`. The server then
+  tells time in the zone your app reports, and follows you when you travel.
+- Or add `Environment=TZ=Area/City` (for example `TZ=Asia/Kolkata`) to fix one
+  zone.
+
+If both are set, `TZ` wins and the app's zone is ignored.
+
 ## Update
 
 - **Paths A and C with the service above:** choose the new published version,

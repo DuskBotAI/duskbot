@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
@@ -8,7 +8,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { json, readBody } from "../harness/http.ts";
 import { TIME_ZONE_FILE } from "../time-zone.ts";
 import { dispatchRoutes } from "./table.ts";
-import { createTimeZoneRoutes } from "./time-zone.ts";
+import { adoptsOwnerTimeZone, createTimeZoneRoutes } from "./time-zone.ts";
 
 const servers: Server[] = [];
 const dirs: string[] = [];
@@ -45,6 +45,27 @@ describe("/api/time-zone", () => {
     expect(await (await put(base, { timeZone: "Asia/Kolkata" })).json()).toEqual({ timeZone: "Asia/Kolkata", changed: false });
     expect(changed).toHaveBeenCalledTimes(1);
     expect(await (await fetch(`${base}/api/time-zone`)).json()).toEqual({ timeZone: "Asia/Kolkata", adopts: true });
+  });
+
+  it("decides who adopts: a Cloud home always, a self-hosted server only when it opts in and TZ is unset, a desktop never", () => {
+    const optIn = { DUSK_ADOPT_TIME_ZONE: "1" };
+    expect(adoptsOwnerTimeZone({ cloudHome: true, desktop: false, env: {} })).toBe(true);
+    expect(adoptsOwnerTimeZone({ cloudHome: false, desktop: false, env: optIn })).toBe(true);
+    expect(adoptsOwnerTimeZone({ cloudHome: false, desktop: false, env: { ...optIn, TZ: "Europe/Paris" } })).toBe(false);
+    expect(adoptsOwnerTimeZone({ cloudHome: false, desktop: true, env: optIn })).toBe(false);
+    expect(adoptsOwnerTimeZone({ cloudHome: false, desktop: false, env: {} })).toBe(false);
+    expect(adoptsOwnerTimeZone({ cloudHome: false, desktop: false, env: { DUSK_ADOPT_TIME_ZONE: "true" } })).toBe(false);
+  });
+
+  it("on an opted-in self-hosted server, PUT saves the zone and a restart adopts it", async () => {
+    vi.stubEnv("DUSK_ADOPT_TIME_ZONE", "1");
+    vi.stubEnv("TZ", "");
+    const adopts = adoptsOwnerTimeZone({ cloudHome: false, desktop: false, env: process.env });
+    expect(adopts).toBe(true);
+    const { base, changed, dataDir } = await serve(adopts);
+    expect((await put(base, { timeZone: "Asia/Kolkata" })).status).toBe(200);
+    expect(changed).toHaveBeenCalledExactlyOnceWith("Asia/Kolkata");
+    expect(JSON.parse(readFileSync(join(dataDir, TIME_ZONE_FILE), "utf8"))).toEqual({ version: 1, timeZone: "Asia/Kolkata" });
   });
 
   it("refuses an offset or an abbreviation", async () => {

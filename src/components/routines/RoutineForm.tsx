@@ -117,7 +117,7 @@ export function RoutineForm({ bot, routine, defaultRunOn, onDone }: {
   const [error, setError] = useState("");
   const patchWhen = (next: Partial<WhenDraft>) => setWhen((current) => ({ ...current, ...next }));
 
-  const showCatchUp = when.preset !== "once" && routine?.schedule.type !== "limit_reset";
+  const showCatchUp = when.preset !== "once" && routine?.schedule.type !== "once" && routine?.schedule.type !== "limit_reset";
   const presetOptions = [
     ...(when.preset === "keep" && routine ? [{ value: "keep" as const, label: upperFirst(plainWhen(routine.schedule)) }] : []),
     ...PRESETS.map((preset) => ({ value: preset, label: upperFirst(t(`routines.inline.preset.${preset}`)) })),

@@ -1034,7 +1034,7 @@ export class RoutineManager {
               if (late > catchUpMs && routine.schedule.type !== "limit_reset") {
                 run.status = "missed";
                 run.finishedAt = now;
-                run.error = missedError(catchUpMs);
+                run.error = missedError(routine);
               }
               scheduledRuns.push(run);
             } else {
@@ -1257,7 +1257,7 @@ export class RoutineManager {
         delete run.failReason; this.settleFailure(run, routineFailure(run.error, event.stopReason), { ...this.failureFacts.get(run.id), stopReason: event.stopReason });
         return cloneRun(run);
       }
-      this.failureFacts.delete(run.id); if (run.failReason) { this.failRun(run, run.failReason); queueMicrotask(() => this.tickInBackground()); return cloneRun(run); }
+      this.failureFacts.delete(run.id); const failReason = run.failReason; delete run.failReason; if (failReason) { this.failRun(run, failReason); queueMicrotask(() => this.tickInBackground()); return cloneRun(run); }
       const waitsOnTeammates = this.options.hasPendingDelegations?.(event.threadId) === true, handoffRefused = waitsOnTeammates ? null : this.options.refusedHandoff?.(event.threadId);
       if (handoffRefused) { this.failRun(Object.assign(run, { partial: Boolean(run.output) || undefined }), handoffRefused); queueMicrotask(() => this.tickInBackground()); return cloneRun(run); }
       if (waitsOnTeammates) this.wait(run, "Waiting for work it handed on to finish");

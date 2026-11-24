@@ -794,12 +794,28 @@ describe("cron routines use the existing persistent scheduler", () => {
     it("0 never starts late: the overdue time is missed and the next one is scheduled", async () => {
       const h = harness(start);
       const routine = h.manager.create({ ...everyMinute(), catchUpMinutes: 0 });
-      h.setNow(routine.nextRunAt! + 60_000);
+      h.setNow(routine.nextRunAt! + 2 * 60_000);
       await h.manager.tick(); await h.manager.tick();
       expect(h.started).toHaveLength(0);
       expect(h.manager.listRuns()).toHaveLength(1);
       expect(h.manager.listRuns()[0]).toMatchObject({ scheduledFor: routine.nextRunAt, status: "missed" });
       expect(h.manager.listRoutines()[0].nextRunAt).toBeGreaterThan(h.manager.listRuns()[0].scheduledFor);
+    });
+
+    it("0 still starts a run the due clock reaches a few milliseconds after its time", async () => {
+      const h = harness(start);
+      const routine = h.manager.create({ ...everyMinute(), catchUpMinutes: 0 });
+      h.setNow(routine.nextRunAt! + 5);
+      await h.manager.tick(); await h.manager.tick();
+      expect(h.manager.listRuns()[0]).toMatchObject({ scheduledFor: routine.nextRunAt, status: "running" });
+    });
+
+    it("0 counts from the end of an around window, where a Cloud home wakes for it", async () => {
+      const h = harness(start);
+      const routine = h.manager.create({ ...everyMinute(), timing: "around", catchUpMinutes: 0 });
+      h.setNow(routine.nextRunAt! + 29 * 60_000);
+      await h.manager.tick(); await h.manager.tick();
+      expect(h.manager.listRuns()[0]).toMatchObject({ scheduledFor: routine.nextRunAt, status: "running" });
     });
 
     it.each([

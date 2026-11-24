@@ -1,17 +1,28 @@
 // When routines next need this machine: the desktop's keep-awake (`wakeHold`) and a Cloud home's sleep check
 // (server/cloud-power.ts). Pure over RoutineManager's routines and runs.
 import type { Routine, RoutineRun } from "./routines.ts";
+import { DUE_CLOCK_MS } from "./due-timer.ts";
 import { flexOf } from "./routine-quiet.ts";
 import { nextOccurrence } from "./routine-schedules.ts";
 import { activeMs, QUESTION_WAIT_MS } from "./routine-waits.ts";
 
 export const CATCH_UP_MS = 12 * 60 * 60_000;
-/** How late a missed run may still start. A once routine and a limit reset keep the 12 hours. */
-export const catchUpMsOf = (routine: Pick<Routine, "schedule" | "catchUpMinutes">) =>
-  routine.catchUpMinutes === undefined || routine.schedule.type === "once" || routine.schedule.type === "limit_reset" ? CATCH_UP_MS : routine.catchUpMinutes * 60_000;
-export const missedError = (catchUpMs: number) => catchUpMs === CATCH_UP_MS
-  ? "This computer was offline for more than 12 hours after the scheduled time"
-  : `This computer could not start the run within ${catchUpMs / 60_000} minutes of the scheduled time`;
+type CatchUp = Pick<Routine, "schedule" | "catchUpMinutes" | "timing" | "checks">;
+const ownCatchUp = (routine: CatchUp) =>
+  routine.schedule.type === "once" || routine.schedule.type === "limit_reset" ? undefined : routine.catchUpMinutes;
+/** How late after its time a missed run may still start. A routine's own window counts from the end of its "around"
+ * window, plus one due-clock tick, so a run that starts on time is never missed. A once routine and a limit reset keep
+ * the 12 hours. */
+export const catchUpMsOf = (routine: CatchUp) => {
+  const minutes = ownCatchUp(routine);
+  return minutes === undefined ? CATCH_UP_MS : minutes * 60_000 + flexOf(routine) + DUE_CLOCK_MS;
+};
+export const missedError = (routine: CatchUp) => {
+  const minutes = ownCatchUp(routine);
+  return minutes === undefined
+    ? "This computer was offline for more than 12 hours after the scheduled time"
+    : `This computer could not start the run within ${minutes} minutes of the scheduled time`;
+};
 
 type Due = Pick<Routine, "enabled" | "nextRunAt" | "checks" | "wakeAt" | "checkedAt"> & Partial<Pick<Routine, "timing" | "schedule">>;
 /** The latest a run may start: its time, or the end of its window when it may move. */

@@ -432,7 +432,7 @@ it("a plan upgrade resizes the machine in place: its disk kept, booted on the ne
   expect(machine.vcpus).toBe(2);
   f.service.managed!.resizeNow(c);
   for (let n = 0; n < 20 && !(c.status === "running" && !f.service.managed!.resizing(c)); n++) { c.nextAttemptAt = 0; await f.service.reconcile(); }
-  expect(c).toMatchObject({ status: "running", spec: { vcpu: 4, ramGb: 8, diskGb: 80 } });
+  expect(c).toMatchObject({ status: "running", spec: { vcpu: 4, ramGb: 8, diskGb: 20 } });
   expect(c.serverId).toBe(machine.id);
   expect([machine.vcpus, machine.memMiB]).toEqual([4, 8192]);
   expect(machine.volume.get(`data/${CLOUD_HOME.dataName}/kept.json`)!.toString()).toBe("kept");

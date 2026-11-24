@@ -39,7 +39,7 @@ const DISK_CHECK_BYTES = 128 * 1024 ** 2;
 const ENTITLE_RETRY_MS = [2 * 60_000, 5 * 60_000, 10 * 60_000, 20 * 60_000, 30 * 60_000];
 const ENTITLE_ALERT_LEFT_MS = 6 * 3_600_000;
 const when = (at: number) => `${new Date(at).toISOString().slice(0, 16).replace("T", " ")} utc`;
-const MINUTE = 60_000, HOUR = 3_600_000, BACKUP_RETRY_MS = 10 * MINUTE, SETUP_TRIES = 3, RESTORE_TRIES = 3, SETUP_PATIENCE_MS = 6 * HOUR, SETUP_ERROR_RETRY_MS = 6 * HOUR;
+const MINUTE = 60_000, HOUR = 3_600_000, BACKUP_RETRY_MS = 10 * MINUTE, SETUP_TRIES = 3, RESTORE_TRIES = 3, SETUP_PATIENCE_MS = 6 * HOUR, SETUP_ERROR_RETRY_MS = 6 * HOUR, FINAL_WAKES_BEFORE_ARCHIVE = 3;
 
 export interface ManagedSettings {
   /** the shortest idle before any stop, in minutes (DUSK_MANAGED_IDLE_MINUTES); the power policy decides past it */
@@ -886,7 +886,9 @@ export function createLifecycle(deps: LifecycleDeps) {
       if (s.state === "stopped") {
         c.status = "stopped";
         await retiredStep(c);
-        if (covered && !b.hold && c.suspended === null && verdict.earliestAt !== null) return archiveEnded(c);
+        // a home whose final backup keeps failing is archived anyway: the snapshot is the whole home, newer than any backup
+        const backupStuck = !covered && (b.finalWakes ?? 0) >= FINAL_WAKES_BEFORE_ARCHIVE;
+        if ((covered || backupStuck) && !b.hold && c.suspended === null && verdict.earliestAt !== null) return archiveEnded(c);
         // asleep with no final backup as new as its data: woken once to take it (a start costs nothing, only seconds)
         // each such wake that brought no backup doubles the wait to the next, up to a day: a home whose backup cannot succeed
         // (too large, refused) is not woken every few minutes until the operator looks. the wait also runs from the wake

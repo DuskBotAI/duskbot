@@ -102,10 +102,27 @@ it("moves a managed cloud between placements, and only a managed one", () => {
   f.service.activate(c.id, "sub", poolPlan);
   expect(c.backend).toBe("managed"); expect(f.service.movable?.(c.id, dedicatedPlan)).toBe(true);
   f.service.changePlan(c.id, { ...dedicatedPlan, spec: { vcpu: 8, ramGb: 16, diskGb: 160 } });
-  expect(c).toMatchObject({ placement: "dedicated", kind: "dedicated", desiredSpec: { vcpu: 8, ramGb: 16, diskGb: 160 } });
+  expect(c).toMatchObject({ placement: "dedicated", kind: "dedicated", desiredSpec: { vcpu: 8, ramGb: 16, diskGb: 20 } });
   const plain = fixture(), other = plain.order(poolPlan); plain.service.activate(other.id, "sub", poolPlan);
   expect(plain.service.movable?.(other.id, dedicatedPlan)).toBe(false);
   expect(() => plain.service.changePlan(other.id, dedicatedPlan)).toThrow(CloudError);
+});
+it("gives a new managed cloud a 20 GiB disk on every plan, and keeps the disk of one set up larger", () => {
+  const kinds = ["shared_s", "shared_m", "dedicated"] as const;
+  const backend = { kinds, fresh: () => ({}), reconcile: async () => {}, retryAt: () => null, view: () => ({}), afterPass: async () => {}, resizing: () => false, close() {} } as unknown as ManagedCloud;
+  const f = fixture({ managed: { kinds, create: () => backend } });
+  const pro: DesktopPlan = { kind: "shared_m", placement: "pool", spec: { vcpu: 4, ramGb: 8, diskGb: 60 }, botComputers: 5 };
+  const team: DesktopPlan = { ...dedicatedPlan, spec: { vcpu: 8, ramGb: 16, diskGb: 160 } };
+  for (const plan of [poolPlan, pro, team]) {
+    const c = f.order(plan); f.service.activate(c.id, `sub-${plan.kind}`, plan);
+    expect(c).toMatchObject({ spec: { ...plan.spec, diskGb: 20 }, desiredSpec: { ...plan.spec, diskGb: 20 } });
+  }
+  const older = f.order(pro); f.service.activate(older.id, "sub-older", pro);
+  older.spec = { ...pro.spec }; older.desiredSpec = { ...pro.spec };
+  f.service.changePlan(older.id, team);
+  expect(older.desiredSpec).toEqual({ vcpu: 8, ramGb: 16, diskGb: 60 });
+  f.service.changePlan(older.id, poolPlan);
+  expect(older.desiredSpec).toEqual({ vcpu: 2, ramGb: 4, diskGb: 60 });
 });
 it("looks after dusk cloud machines a few at a time, so one slow step does not hold up the rest", async () => {
   const kinds = ["shared_s", "shared_m", "dedicated"] as const;

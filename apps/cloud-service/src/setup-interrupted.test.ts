@@ -85,15 +85,19 @@ it("a home cut off mid-setup is never woken for a final backup and is deleted on
   expect(f.api.deletes()).toHaveLength(1);
 });
 
-it("a home whose final backup cannot succeed is woken for it ever less often, not every ten minutes", async () => {
+it("a home whose final backup cannot succeed is woken for it a few times, ever less often, then archived as a snapshot", async () => {
   const f = await homeFixture({ settings: { maxBackupBytes: 10 } });
   const { c, sub } = await f.paid();
   end(f, sub);
   for (let n = 0; n < 6 * 24 * 3; n++) { f.advance(10 * 60_000); c.nextAttemptAt = 0; await f.service.reconcile(); }
   const wakes = f.audit.entries(c.id).filter(e => e.action === "wake" && e.reason === "final_backup").length;
-  expect(wakes).toBeGreaterThan(1);
-  expect(wakes).toBeLessThanOrEqual(10);
+  expect(wakes).toBe(3);
   expect(c.managed!.backupProblem).toBe("too_large");
+  expect(c.managed!.archive).toMatchObject({ serverId: null });
+  expect(f.api.snapshots.has(c.managed!.archive!.snapshotId)).toBe(true);
+  expect(c.serverId).toBeNull();
+  expect(f.api.machines.size).toBe(0);
+  expect(c.status).toBe("stopped");
   // a backup stopped part way leaves nothing on disk
   expect(f.backups.list(c.id)).toEqual([]);
 });

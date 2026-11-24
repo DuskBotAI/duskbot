@@ -75,6 +75,9 @@ interface State { v: 1; clouds: StoredCloud[] }
 const UPKEEP_CONCURRENCY = 4;
 const UPKEEP_STEP_WAIT_MS = 20_000;
 const PAIR_RETRY_MS = [15_000, 30_000, 60_000, 120_000];
+/** InstaBox bills /data while a machine sleeps and creates every size with 20 GiB (GET /v1/usage machineSpecs, 2026-11-24);
+ *  a managed home gets that whatever its plan, and one set up larger keeps its disk */
+const MANAGED_DISK_GB = 20;
 const failureOf = (error: unknown) => error instanceof Error ? `${error.name}: ${error.message}`.replace(/\s+/g, " ").slice(0, 300) : String(error).slice(0, 300);
 const sameSpec = (a: MachineSpec, b: MachineSpec) => a.vcpu === b.vcpu && a.ramGb === b.ramGb && a.diskGb === b.diskGb;
 const sameQuota = (a: SlotQuota | undefined, b: SlotQuota) => a && (Object.keys(b) as Array<keyof SlotQuota>).every(k => a[k] === b[k]);
@@ -179,7 +182,8 @@ export function createCloudsService(options: CloudsServiceOptions): CloudsServic
   function applyPlan(c: StoredCloud, plan: DesktopPlan) {
     if (!movable(c, plan)) throw new CloudError(409, "placement_change_unavailable");
     c.placement = plan.placement; c.kind = plan.kind; c.botComputers = plan.botComputers;
-    c.desiredSpec = { ...plan.spec, diskGb: Math.max(c.spec.diskGb, plan.spec.diskGb) };
+    const disk = managed?.kinds.includes(plan.kind) ? MANAGED_DISK_GB : plan.spec.diskGb;
+    c.desiredSpec = { ...plan.spec, diskGb: managed?.kinds.includes(plan.kind) && c.status === "checkout" ? disk : Math.max(c.spec.diskGb, disk) };
   }
   function kick() { void service.reconcile().catch(() => {}); }
   // a wake is a few provider steps (resume, ready, start, health): followed every second, not every 15 s, until it answers

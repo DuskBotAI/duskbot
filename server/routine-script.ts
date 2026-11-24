@@ -68,7 +68,7 @@ const linuxFence = () => {
   if (linuxBox === undefined) { const found = whichOnPath("bwrap"); linuxBox = found ? { bwrap: found, works: probeBwrap(found) } : null; }
   return linuxBox;
 };
-export const BWRAP_REFUSED = "bubblewrap is installed but this computer will not let it make the namespaces a script check runs in (on Ubuntu 24.04, reinstall dusk bot so it loads its AppArmor profile for bwrap).";
+export const BWRAP_REFUSED = "bubblewrap is installed but this computer will not let it make the namespaces a script check runs in (on Ubuntu 24.04 it needs an AppArmor profile for bwrap: https://github.com/DuskBotAI/duskbot/blob/main/docs/deploy-vps.md#ubuntu-2404-script-check-sandbox).";
 
 export function runCheckScript(command: string, options: { env?: NodeJS.ProcessEnv; cwd?: string; timeoutMs?: number; sandbox?: boolean } = {}): Promise<ScriptResult> {
   const source = options.env ?? process.env;
@@ -115,9 +115,10 @@ export function runCheckScript(command: string, options: { env?: NodeJS.ProcessE
 }
 
 /** How a routine's script check runs: outside the fence only with `access: "full"` and never in a test run; a posting
- * script for the routine's own time limit when it has one. */
+ * script, and a full-access script outside a test run, for the routine's own time limit when it has one. */
 export function scriptRunOptions(routine: Pick<Routine, "probe" | "timeoutMinutes">, dryRun = false): { sandbox: boolean; timeoutMs: number } {
-  return { sandbox: dryRun || routine.probe?.access !== "full", timeoutMs: routine.probe?.post && routine.timeoutMinutes ? routine.timeoutMinutes * 60_000 : SCRIPT_TIMEOUT_MS };
+  const sandbox = dryRun || routine.probe?.access !== "full";
+  return { sandbox, timeoutMs: (routine.probe?.post || !sandbox) && routine.timeoutMinutes ? routine.timeoutMinutes * 60_000 : SCRIPT_TIMEOUT_MS };
 }
 
 export const SCRIPT_REFUSALS = {

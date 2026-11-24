@@ -138,11 +138,19 @@ describe("the checks' daily AI runs", () => {
 });
 
 describe("how a script check runs", () => {
-  it("leaves the fence only with access full outside a test run, and a posting script takes the routine's time limit", () => {
+  it("leaves the fence only with access full outside a test run, and a posting or full-access script takes the routine's time limit", () => {
     const full = { ...postingProbe, access: "full" as const };
+    const readOnly = { kind: "script" as const, url: "", command: "x" };
     expect(scriptRunOptions({ probe: postingProbe })).toEqual({ sandbox: true, timeoutMs: SCRIPT_TIMEOUT_MS });
+    expect(scriptRunOptions({ probe: full })).toEqual({ sandbox: false, timeoutMs: SCRIPT_TIMEOUT_MS });
     expect(scriptRunOptions({ probe: full, timeoutMinutes: 5 })).toEqual({ sandbox: false, timeoutMs: 5 * 60_000 });
     expect(scriptRunOptions({ probe: full, timeoutMinutes: 5 }, true)).toEqual({ sandbox: true, timeoutMs: 5 * 60_000 });
-    expect(scriptRunOptions({ probe: { kind: "script", url: "", command: "x" }, timeoutMinutes: 5 })).toEqual({ sandbox: true, timeoutMs: SCRIPT_TIMEOUT_MS });
+    expect(scriptRunOptions({ probe: readOnly, timeoutMinutes: 5 })).toEqual({ sandbox: true, timeoutMs: SCRIPT_TIMEOUT_MS });
+  });
+
+  it("a full-access check that only wakes the AI takes the time limit, but not in a test run", () => {
+    const wakeCheck = { kind: "script" as const, url: "", command: "x", access: "full" as const };
+    expect(scriptRunOptions({ probe: wakeCheck, timeoutMinutes: 5 })).toEqual({ sandbox: false, timeoutMs: 5 * 60_000 });
+    expect(scriptRunOptions({ probe: wakeCheck, timeoutMinutes: 5 }, true)).toEqual({ sandbox: true, timeoutMs: SCRIPT_TIMEOUT_MS });
   });
 });

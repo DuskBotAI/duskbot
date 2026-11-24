@@ -5,6 +5,14 @@ import { flexOf } from "./routine-quiet.ts";
 import { nextOccurrence } from "./routine-schedules.ts";
 import { activeMs, QUESTION_WAIT_MS } from "./routine-waits.ts";
 
+export const CATCH_UP_MS = 12 * 60 * 60_000;
+/** How late a missed run may still start. A once routine and a limit reset keep the 12 hours. */
+export const catchUpMsOf = (routine: Pick<Routine, "schedule" | "catchUpMinutes">) =>
+  routine.catchUpMinutes === undefined || routine.schedule.type === "once" || routine.schedule.type === "limit_reset" ? CATCH_UP_MS : routine.catchUpMinutes * 60_000;
+export const missedError = (catchUpMs: number) => catchUpMs === CATCH_UP_MS
+  ? "This computer was offline for more than 12 hours after the scheduled time"
+  : `This computer could not start the run within ${catchUpMs / 60_000} minutes of the scheduled time`;
+
 type Due = Pick<Routine, "enabled" | "nextRunAt" | "checks" | "wakeAt" | "checkedAt"> & Partial<Pick<Routine, "timing" | "schedule">>;
 /** The latest a run may start: its time, or the end of its window when it may move. */
 const latestOf = (routine: Due): number | null => routine.nextRunAt == null ? null : routine.nextRunAt + (routine.schedule ? flexOf(routine as Pick<Routine, "timing" | "schedule" | "checks">) : 0);

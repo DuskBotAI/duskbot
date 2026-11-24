@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { RoutineProbe } from "../shared/routines.ts";
-import { CHECK_BOOT_HOLD_MS } from "./routine-check-pacing.ts";
+import { CHECK_BOOT_HOLD_MS, type RoutineCheckContext } from "./routine-check-pacing.ts";
 import { createRoutineProbes } from "./routine-probe.ts";
 import { scriptRunOptions, SCRIPT_TIMEOUT_MS, type ScriptResult } from "./routine-script.ts";
 import { RoutineManager, type Routine, type RoutineChecks, type RoutineManagerOptions } from "./routines.ts";
@@ -45,24 +45,32 @@ describe("a posting script check", () => {
     }
   });
 
-  it("is a failed check when the script fails, never quiet", async () => {
+  it("starts a run that fails with the script's error when the script fails, never quiet", async () => {
     const probes = probesPrinting(() => ({ ok: false, error: "The script stopped with exit code 2." }));
-    expect(await probes.check(posting, { manual: false })).toEqual({ trouble: "Couldn't check its script: The script stopped with exit code 2." });
+    expect((await probes.check(posting, { manual: false })).run?.post).toEqual({ error: "The script stopped with exit code 2." });
+  });
+
+  it("runs the script inside the fence in a test run", async () => {
+    const asked: boolean[] = [];
+    const probes = createRoutineProbes({ dataDir: tempDir(), now: () => START, script: async (_routine, _command, dryRun) => { asked.push(dryRun); return { ok: true, output: "x" }; } });
+    await probes.check({ ...posting, probe: { ...postingProbe, access: "full" } }, { manual: true, dryRun: true });
+    expect(asked).toEqual([true]);
   });
 });
 
 describe("a run with a post", () => {
-  function manager(options: Partial<RoutineManagerOptions> = {}) {
+  function manager(options: Partial<RoutineManagerOptions> = {}, post: string | { error: string } = "Line one\n\nLine two") {
     let now = START;
     const startTurn = vi.fn(async () => {});
-    const checks: RoutineChecks = { check: async () => ({ run: { key: "probe:k", prompt: "p", post: "Line one\n\nLine two" } }), release: () => {}, settled: () => {} };
+    const contexts: RoutineCheckContext[] = [];
+    const checks: RoutineChecks = { check: async (_routine, context) => { contexts.push(context); return { run: { key: "probe:k", prompt: "p", post } }; }, release: () => {}, settled: () => {} };
     const routines = new RoutineManager({
       file: join(tempDir(), "routines.json"), now: () => now, botState: () => "ready",
       createTask: () => ({ threadId: "thread-1" }), startTurn, checks, ...options,
     });
-    routines.create({ name: "Prices", prompt: "p", botId: "b", schedule: { type: "interval", everyMinutes: 60, anchorAt: START + HOUR }, probe: { kind: "script", url: "", command: "report" } });
+    const routine = routines.create({ name: "Prices", prompt: "p", botId: "b", schedule: { type: "interval", everyMinutes: 60, anchorAt: START + HOUR }, probe: { kind: "script", url: "", command: "report" } });
     return {
-      routines, startTurn,
+      routines, startTurn, contexts, routine,
       async hour() { now += CHECK_BOOT_HOLD_MS + HOUR; await routines.tick(); await settle(); },
     };
   }
@@ -76,6 +84,22 @@ describe("a run with a post", () => {
     expect(h.routines.listRuns()[0]).toMatchObject({ status: "completed", output: "Line one\n\nLine two" });
   });
 
+  it("fails with the script's error and posts nothing", async () => {
+    const postReply = vi.fn();
+    const h = manager({ postReply }, { error: "The script ran longer than 60 seconds." });
+    await h.hour();
+    expect(postReply).not.toHaveBeenCalled();
+    expect(h.startTurn).not.toHaveBeenCalled();
+    expect(h.routines.listRuns()[0]).toMatchObject({ status: "failed", error: expect.stringMatching(/^The script ran longer than 60 seconds\./) });
+  });
+
+  it("tells the check a test run is one", async () => {
+    const h = manager({ postReply: () => {} });
+    h.routines.runNow(h.routine.id, undefined, true);
+    await h.hour();
+    expect(h.contexts.filter((context) => context.dryRun)).toEqual([expect.objectContaining({ manual: true })]);
+  });
+
   it("fails with a clear message when the server cannot post", async () => {
     const h = manager();
     await h.hour();
@@ -85,8 +109,11 @@ describe("a run with a post", () => {
 });
 
 describe("how a script check runs", () => {
-  it("leaves the fence only with access full, and takes the routine's time limit", () => {
+  it("leaves the fence only with access full outside a test run, and a posting script takes the routine's time limit", () => {
+    const full = { ...postingProbe, access: "full" as const };
     expect(scriptRunOptions({ probe: postingProbe })).toEqual({ sandbox: true, timeoutMs: SCRIPT_TIMEOUT_MS });
-    expect(scriptRunOptions({ probe: { ...postingProbe, access: "full" }, timeoutMinutes: 5 })).toEqual({ sandbox: false, timeoutMs: 5 * 60_000 });
+    expect(scriptRunOptions({ probe: full, timeoutMinutes: 5 })).toEqual({ sandbox: false, timeoutMs: 5 * 60_000 });
+    expect(scriptRunOptions({ probe: full, timeoutMinutes: 5 }, true)).toEqual({ sandbox: true, timeoutMs: 5 * 60_000 });
+    expect(scriptRunOptions({ probe: { kind: "script", url: "", command: "x" }, timeoutMinutes: 5 })).toEqual({ sandbox: true, timeoutMs: SCRIPT_TIMEOUT_MS });
   });
 });

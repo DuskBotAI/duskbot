@@ -904,6 +904,8 @@
   "toolDetail.previewHint": "Shortened, automatically redacted preview. Review before sharing.",
   "toolDetail.tool": "Tool",
   "toolStep.runCommand": "Run a command",
+  "toolStep.waitForBackgroundTask": "Waiting for a background task",
+  "toolStep.checkBackgroundTask": "Checking a background task",
   "toolStep.readFile": "Read a file",
   "toolStep.writeFile": "Write a file",
   "toolStep.editFile": "Edit a file",

@@ -56,6 +56,13 @@ describe("sidebar previews", () => {
 
   const step = (name: string) => message({ kind: "activity", tool: { name, ok: true } } as Partial<Message>);
 
+  it.each([
+    ["Run schedule", "Waiting for a background task"],
+    ["Run manage_task", "Checking a background task"],
+  ])("shows a friendly sidebar preview for %s", (name, label) => {
+    expect(botPreview(bot, [step(name)], [])).toBe(label);
+  });
+
   it("quotes the bot when its newest line is a step that went fine", () => {
     const visible = [message({ role: "user", text: "Tidy my inbox" }), message({ text: "Archived 31 newsletters." }), step("Bash")];
     expect(botPreview(bot, visible, [])).toBe("Archived 31 newsletters.");

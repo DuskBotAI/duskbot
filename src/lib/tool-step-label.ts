@@ -43,6 +43,10 @@ const STEP_KEYS: Record<string, LocaleKey> = {
   computer_batch: "toolStep.useComputer",
   todowrite: "toolStep.updatePlan",
   update_plan: "toolStep.updatePlan",
+  schedule: "toolStep.waitForBackgroundTask",
+  "run schedule": "toolStep.waitForBackgroundTask",
+  manage_task: "toolStep.checkBackgroundTask",
+  "run manage_task": "toolStep.checkBackgroundTask",
   task: "toolStep.askHelper",
   agent: "toolStep.askHelper",
   think: "toolStep.think",
@@ -87,12 +91,12 @@ function stepWords(tool: StepTool): string {
   if (tool.label) return tool.label;
   // Codex and ACP title a command's chip with the command line; only a command carries a summary.
   if (tool.summary) return t("toolStep.runCommand");
-  if (/\s/.test(name)) return name;
   // Claude names a call mcp__agents__tool; the chat runtime names it agents_tool.
   const bare = name.replace(/^mcp__.+?__(?=.)/, "").replace(/^agents_(?=.)/, "");
-  if (/(?:^|_)browser_/i.test(bare)) return t("toolStep.useBrowser");
   const key = STEP_KEYS[bare.toLowerCase()];
   if (key) return t(key);
+  if (/\s/.test(name)) return name;
+  if (/(?:^|_)browser_/i.test(bare)) return t("toolStep.useBrowser");
   const composio = composioActionPhrase(bare);
   if (composio) return sentence(composio);
   const words = bare

@@ -136,6 +136,7 @@ export interface RoutineRun {
   access?: RoutineAccess;
   deliver?: RoutineDelivery;
   checkKey?: string;
+  /** A posting script's output: the run's reply as written, posted with no AI turn. */ post?: string;
   createdAt: number;
   seenAt?: number;
 }
@@ -203,7 +204,7 @@ export type RoutineRequestOwner = Pick<RoutineRequestReceipt, "requestId" | "mes
 
 /** What a routine's checks found: items for one AI run, a sentence while an app cannot be read, and the next time they
  * have something to do on time. */
-export interface RoutineCheckResult { run?: { prompt: string; key: string }; trouble?: string; wakeAt?: number; /** It read nothing: a run holds its last change, or none may start now. */ held?: true }
+export interface RoutineCheckResult { run?: { prompt: string; key: string; /** Posted as the reply, with no AI turn. */ post?: string }; trouble?: string; wakeAt?: number; /** It read nothing: a run holds its last change, or none may start now. */ held?: true }
 
 export interface RoutineChecks {
   /** Runs a routine's checks. With `hold` they may do only what needs no AI, and their items wait. */
@@ -237,6 +238,7 @@ export interface RoutineManagerOptions {
     triggerSource: RoutineRunTrigger,
     onDispatchError: (message: string) => void,
   ) => Promise<void>;
+  /** Posts a completed run's reply as the bot's own message in `threadId`, in place of a turn. */ postReply?: (botId: string, threadId: string, text: string, run: RoutineRun) => void;
   startGoal?: (
     groupId: string | undefined,
     threadId: string,
@@ -1147,23 +1149,12 @@ export class RoutineManager {
               this.failThread(task.threadId, "Room goal routines are unavailable");
               continue;
             }
-            await this.options.startGoal(
-              run.groupId,
-              task.threadId,
-              prompt,
-              run.botId,
-              run.id,
-              (message) => this.failThread(task.threadId, message, { cause: "refused" }),
-            );
+            await this.options.startGoal(run.groupId, task.threadId, prompt, run.botId, run.id, (message) => this.failThread(task.threadId, message, { cause: "refused" }));
+          } else if (run.post !== undefined) {
+            this.postRun(run, task.threadId);
           } else {
-            await this.options.startTurn(
-              run.botId,
-              task.threadId,
-              composeExecutionPrompt({ id: run.routineId, name: run.routineName, trigger: triggerSource, runOn: run.runOn ?? "maus", dryRun: run.dryRun }, prompt, run.attachments, continuityCarry(run, this.routines, this.runs), run.retried, routineMemory(run, this.routines, this.runs)),
-              run.runOn ?? "maus",
-              triggerSource,
-              (message) => this.failThread(task.threadId, message, { cause: "refused" }),
-            );
+            const execution = composeExecutionPrompt({ id: run.routineId, name: run.routineName, trigger: triggerSource, runOn: run.runOn ?? "maus", dryRun: run.dryRun }, prompt, run.attachments, continuityCarry(run, this.routines, this.runs), run.retried, routineMemory(run, this.routines, this.runs));
+            await this.options.startTurn(run.botId, task.threadId, execution, run.runOn ?? "maus", triggerSource, (message) => this.failThread(task.threadId, message, { cause: "refused" }));
           }
         } catch (error) {
           this.failThread(task.threadId, error instanceof Error ? error.message : String(error), dispatchRefusal(error));
@@ -1214,7 +1205,7 @@ export class RoutineManager {
             resultsThreadId: resolveRoutineResultsThread(current, this.options.resolveResultsThread, allocations, this.now(), run.sourceThreadId),
           });
           if (run.timeoutMinutes === undefined) delete run.timeoutMinutes;
-          Object.assign(run, { prompt: result.run.prompt, checkKey: result.run.key });
+          Object.assign(run, { prompt: result.run.prompt, checkKey: result.run.key }, result.run.post === undefined ? {} : { post: result.run.post });
         } else if (queued && !result.trouble) {
           Object.assign(queued, { status: "completed", output: "Nothing new since the last check", report: { state: "quiet" }, finishedAt: this.now() } satisfies Partial<RoutineRun>);
         }
@@ -1278,6 +1269,15 @@ export class RoutineManager {
     this.emitRun(run);
     if (event.type === "turn.completed") queueMicrotask(() => this.tickInBackground());
     return cloneRun(run);
+  }
+
+  /** A run whose script wrote its reply: posted with no AI turn, and complete like a turn that said it. */
+  private postRun(run: RoutineRun, threadId: string): void {
+    const text = run.post!; delete run.post;
+    if (!this.options.postReply) return this.failThread(threadId, "This server cannot post a script's output as a reply", { cause: "refused" });
+    Object.assign(run, { status: "completed", output: redactSecretsInText(text).trim().slice(0, 2_000), attention: undefined, error: undefined, finishedAt: this.now() } satisfies Partial<RoutineRun>);
+    try { this.options.postReply(run.botId, threadId, text, cloneRun(run)); } catch (error) { return this.rejectResult(run.id, error instanceof Error ? error.message : String(error)); }
+    this.ownerNotices = this.ownerNotices.filter((notice) => notice.botId !== run.botId); this.saveLater(); this.emitRun(run); queueMicrotask(() => this.tickInBackground());
   }
 
   /** A completed run whose answer its consumer could not use: it fails like any run, so its items go back. */

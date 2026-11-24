@@ -7,7 +7,7 @@ import { CHECK_BOOT_HOLD_MS } from "./routine-check-pacing.ts";
 import { continuityCarry } from "./routine-execution.ts";
 import { createRoutineProbes, NO_SCRIPTS, sectionOf, withProbes } from "./routine-probe.ts";
 import { cleanProbe } from "./routine-quiet.ts";
-import { bwrapArgs, runCheckScript, sandboxProfile, scriptCheckGate, setsScript, wakeAsked } from "./routine-script.ts";
+import { bwrapArgs, runCheckScript, sandboxProfile, scriptCheckGate, setsFullAccess, setsScript, wakeAsked } from "./routine-script.ts";
 import { RoutineManager, type RoutineRun } from "./routines.ts";
 import type { PublicPage } from "./wait-probes.ts";
 
@@ -128,16 +128,19 @@ describe("check parts", () => {
 
   it("lets only the owner's own request set a script check, through a card after outside content or at an ask-first level", () => {
     const turn = { owned: true, room: false, guest: false, depth: 0, handedOff: false, outsideDriven: false, routineRun: false, personStarted: true, asksFirst: false };
-    const clean = { readOutside: false, fullAccess: false };
+    const clean = { readOutside: false, fullAccess: false, unfenced: false };
     expect(scriptCheckGate(turn, false, clean)).toEqual({ apply: true });
     expect(scriptCheckGate(turn, true, clean)).toEqual({ refused: expect.stringMatching(/dusk cloud/) });
     expect(scriptCheckGate({ ...turn, routineRun: true }, false, clean)).toEqual({ refused: expect.stringMatching(/Only the person/) });
     expect(scriptCheckGate({ ...turn, outsideDriven: true }, false, clean)).toEqual({ refused: expect.stringMatching(/Only the person/) });
-    expect(scriptCheckGate(turn, false, { readOutside: true, fullAccess: false })).toEqual({ card: true });
-    expect(scriptCheckGate(turn, false, { readOutside: true, fullAccess: true })).toEqual({ apply: true });
+    expect(scriptCheckGate(turn, false, { ...clean, readOutside: true })).toEqual({ card: true });
+    expect(scriptCheckGate(turn, false, { ...clean, readOutside: true, fullAccess: true })).toEqual({ apply: true });
+    expect(scriptCheckGate(turn, false, { ...clean, fullAccess: true, unfenced: true })).toEqual({ card: true });
     expect(scriptCheckGate({ ...turn, asksFirst: true }, false, clean)).toEqual({ card: true });
     expect(setsScript({ action: "create", routine: { probe: { kind: "script" } } })).toBe(true);
     expect(setsScript({ action: "update", changes: { probe: { kind: "page" } } })).toBe(false);
+    expect(setsFullAccess({ action: "update", changes: { probe: { kind: "script", access: "full" } } })).toBe(true);
+    expect(setsFullAccess({ action: "create", routine: { probe: { kind: "script" } } })).toBe(false);
   });
 });
 

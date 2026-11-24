@@ -1,18 +1,27 @@
 // GET/PUT /api/time-zone: the zone this server tells time in (server/time-zone.ts). Both need admin scope (request-auth's
-// default), so only the owner's own devices change it. Anywhere but a Cloud home the computer's clock is already the
-// person's, and PUT is refused.
+// default), so only the owner's own devices change it. A Cloud home adopts its owner's zone, and so does a self-hosted
+// server that opts in (adoptsOwnerTimeZone). On a desktop, or a server with TZ set, the clock is already the person's,
+// and PUT is refused.
 import { adoptSavedTimeZone, currentTimeZone, knownTimeZone, useTimeZone } from "../time-zone.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 
+/** Whether this server takes its owner's zone from their app. A Cloud home always does. A self-hosted server does when
+ * DUSK_ADOPT_TIME_ZONE=1 and TZ is unset, so a TZ the host sets wins. A desktop never does. Read it before
+ * adoptSavedTimeZone, which writes TZ. */
+export function adoptsOwnerTimeZone({ cloudHome, desktop, env }: { cloudHome: boolean; desktop: boolean; env: NodeJS.ProcessEnv }): boolean {
+  if (cloudHome) return true;
+  return !desktop && env.DUSK_ADOPT_TIME_ZONE === "1" && !env.TZ;
+}
+
 export interface TimeZoneRouteDeps {
-  /** Only a Cloud home adopts its owner's zone. */
+  /** True when the owner's app sets this server's zone (see adoptsOwnerTimeZone). */
   adopts: boolean;
   dataDir: string;
   /** After the zone changed: routines move their local times and clients are told. */
   changed(zone: string): void;
 }
 
-/** On a Cloud home it also adopts the zone saved last time; index.ts builds it before routines start. */
+/** When it adopts, it also adopts the zone saved last time; index.ts builds it before routines start. */
 export function createTimeZoneRoutes(deps: TimeZoneRouteDeps): RouteHandler {
   if (deps.adopts) adoptSavedTimeZone(deps.dataDir);
   return async ({ req, res, path, method, json, readBody }) => {

@@ -419,6 +419,11 @@ export async function callTriggerTool(name: string, args: Json, context: ToolCal
     const { ok, body } = await context.client.apiResponse(REQUEST_ROUTE, { method: "POST", body: JSON.stringify({ action: "note", note: args.note }) });
     return ok ? { text: String(body.text ?? "Saved.") } : { text: String(body.error ?? "The note was not saved."), isError: true };
   }
+  if (name === "trigger" && args.action === "fail") {
+    if (typeof args.reason !== "string" || !args.reason.trim()) return { text: "trigger action=fail needs reason: one line saying why this run could not do its job.", isError: true };
+    const { ok, body } = await context.client.apiResponse(REQUEST_ROUTE, { method: "POST", body: JSON.stringify({ action: "fail", reason: args.reason }) });
+    return ok ? { text: String(body.text ?? "Marked.") } : { text: String(body.error ?? "The run was not marked as failed."), isError: true };
+  }
   if (name === "trigger" && args.action === "create") {
     if (args.trigger_id !== undefined && args.trigger_id !== null) return { text: "trigger_id is for a trigger that exists; leave it out to create one.", isError: true };
     return createTrigger(args, forBotId, context);

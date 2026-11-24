@@ -676,8 +676,9 @@ const TOOL_DEFINITIONS = [
       type: "object",
       additionalProperties: false,
       properties: {
-        action: { type: "string", enum: ["create", "update", "pause", "resume", "run_now", "email", "note"] },
+        action: { type: "string", enum: ["create", "update", "pause", "resume", "run_now", "email", "note", "fail"] },
         note: { type: "string", maxLength: 4000, description: "action=note: notes for this automation's next run." },
+        reason: { type: "string", maxLength: 200, description: "action=fail: one line saying why this run could not do its job. Only inside a run of an automation." },
         trigger_id: { type: "string", description: "Not for create: the id from trigger_info." },
         when: {
           type: "string",

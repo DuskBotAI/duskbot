@@ -1,6 +1,8 @@
-// A Cloud home tells time in its owner's zone (server/time-zone.ts), or "every day at 9 AM" picked here would run at 9 AM
-// UTC. The owner's own app gives it this device's zone whenever they differ, the way a laptop's clock follows its owner.
-// Nothing shows; a failure is tried again on the next connect.
+// A Cloud home, or a self-hosted server started with DUSK_ADOPT_TIME_ZONE=1, tells time in its owner's zone
+// (server/time-zone.ts), or "every day at 9 AM" picked here would run at 9 AM UTC. The server decides: GET /api/time-zone
+// says `adopts`, and only then does the owner's own app give it this device's zone whenever they differ, the way a
+// laptop's clock follows its owner. Any other server costs one background read. Nothing shows; a failure is tried again
+// on the next connect.
 import { useEffect } from "react";
 
 import type { WelcomeViewer } from "@/lib/onboarding";
@@ -26,7 +28,7 @@ export async function syncCloudTimeZone(zone: string | null, request: typeof api
 
 export function CloudTimeZoneSync({ viewer }: { viewer: WelcomeViewer | null }) {
   const { state } = useStore();
-  const due = Boolean(viewer?.cloudHome && viewer.canSave && state.connected);
+  const due = Boolean(viewer?.canSave && state.connected);
   useEffect(() => {
     if (due) void syncCloudTimeZone(deviceTimeZone()).catch(() => {});
   }, [due]);

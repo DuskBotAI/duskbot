@@ -129,7 +129,7 @@ export interface RoutineRun {
   finishedAt?: number;
   output?: string;
   attention?: string;
-  error?: string; partial?: boolean;
+  error?: string; partial?: boolean; /** trigger action=fail: when the run's turn ends well, the run fails with this reason. */ failReason?: string;
   cost?: number | null;
   denials?: string[];
   report?: RoutineRunReport;
@@ -408,6 +408,7 @@ export class RoutineManager {
   /** A Cloud home's sleep check (server/routine-due.ts). */
   hasActiveRuns(): boolean { return activeRunsOf(this.runs, this.now()); }
   nextDueAt(): number | null { return nextDueOf(this.routines, this.runs, this.now()); } /** The runs due in the next day, for a Cloud home's power report. */ upcoming() { return upcomingOf(this.routines, this.runs, this.now()); }
+  /** trigger action=fail: the running run ends as failed with this reason when its turn ends well; false when it is not running. */ failOnTurnEnd(runId: string, reason: string): boolean { const run = this.runs.find((candidate) => candidate.id === runId && ["running", "waiting"].includes(candidate.status)); if (!run) return false; run.failReason = reason; this.saveLater(); return true; }
   setNotes(routineId: string, notes: string): Routine | null { this.assertWritable(); const routine = this.routines.find((candidate) => candidate.id === routineId), text = notes.trim().slice(0, ROUTINE_NOTES_MAX); if (!routine) return null; this.commitMutation(() => { if (text) routine.notes = text; else delete routine.notes; }); return cloneRoutine(routine); }
 
   listRuns(from?: number, to?: number): RoutineRun[] {
@@ -1253,10 +1254,10 @@ export class RoutineManager {
       if (event.cost != null) run.cost = (run.cost ?? 0) + event.cost;
       if (event.denials?.length) run.denials = [...new Set([...(run.denials ?? []), ...event.denials])];
       if (!event.ok) {
-        this.settleFailure(run, routineFailure(run.error, event.stopReason), { ...this.failureFacts.get(run.id), stopReason: event.stopReason });
+        delete run.failReason; this.settleFailure(run, routineFailure(run.error, event.stopReason), { ...this.failureFacts.get(run.id), stopReason: event.stopReason });
         return cloneRun(run);
       }
-      this.failureFacts.delete(run.id);
+      this.failureFacts.delete(run.id); if (run.failReason) { this.failRun(run, run.failReason); queueMicrotask(() => this.tickInBackground()); return cloneRun(run); }
       const waitsOnTeammates = this.options.hasPendingDelegations?.(event.threadId) === true, handoffRefused = waitsOnTeammates ? null : this.options.refusedHandoff?.(event.threadId);
       if (handoffRefused) { this.failRun(Object.assign(run, { partial: Boolean(run.output) || undefined }), handoffRefused); queueMicrotask(() => this.tickInBackground()); return cloneRun(run); }
       if (waitsOnTeammates) this.wait(run, "Waiting for work it handed on to finish");

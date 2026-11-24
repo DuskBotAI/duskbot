@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { loadRoutine } from "./routine-load.ts";
 import { composeExecutionPrompt, routineMemory } from "./routine-execution.ts";
-import { routineNoteRequest, ROUTINE_NOTE_MESSAGES } from "./routine-notes.ts";
+import { routineFailRequest, routineNoteRequest, ROUTINE_NOTE_MESSAGES } from "./routine-notes.ts";
 import { selfSpawnRefusal } from "./routine-bot-guard.ts";
 import type { Routine, RoutineRun } from "./routines.ts";
 
@@ -88,5 +88,23 @@ describe("a routine run never sets up its own automation again", () => {
     expect(selfSpawnRefusal(null, own, { instructions: own })).toBeNull();
     expect(selfSpawnRefusal({ ...scheduled, triggerSource: "webhook" }, own, { instructions: own })).toBeNull();
     expect(selfSpawnRefusal(scheduled, own, undefined)).toBeNull();
+  });
+});
+
+describe("trigger action=fail", () => {
+  const marked: Array<[string, string]> = [];
+  const mark = (runId: string, reason: string) => { marked.push([runId, reason]); return true; };
+
+  it("marks the run with a one-line reason", () => {
+    expect(routineFailRequest({ action: "fail", reason: "  ERROR|token\n expired  " }, run("x", T0, { status: "running" }), mark)?.status).toBe(200);
+    expect(marked).toEqual([["x", "ERROR|token expired"]]);
+    expect(routineFailRequest({ action: "note" }, null, mark)).toBeNull();
+  });
+
+  it("is refused outside a run of an automation, with an empty reason, or when the run is over", () => {
+    expect(routineFailRequest({ action: "fail", reason: "x" }, null, mark)).toMatchObject({ status: 403, body: { error: ROUTINE_NOTE_MESSAGES.failNotInRun } });
+    expect(routineFailRequest({ action: "fail", reason: " \n " }, run("x", T0), mark)).toMatchObject({ status: 400, body: { error: ROUTINE_NOTE_MESSAGES.failReason } });
+    expect(routineFailRequest({ action: "fail" }, run("x", T0), mark)?.status).toBe(400);
+    expect(routineFailRequest({ action: "fail", reason: "x" }, run("x", T0), () => false)?.status).toBe(409);
   });
 });

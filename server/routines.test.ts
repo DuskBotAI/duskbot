@@ -269,6 +269,34 @@ describe("bounded scheduled overlap and run health", () => {
     expect(h.manager.listRoutines()[0].failureStreak).toBe(1);
   });
 
+  it("ends a run its bot marked failed with the reason, counts it as a failure, and leaves an unmarked run done", async () => {
+    const h = harness(start);
+    const routine = h.manager.create({ ...input(), enabled: false });
+    h.manager.runNow(routine.id); await h.manager.tick();
+    finish(h, "thread-1", true);
+    expect(h.manager.listRuns()[0]).toMatchObject({ status: "completed" });
+    h.manager.runNow(routine.id); await h.manager.tick();
+    const marked = h.manager.listRuns().find(run => run.threadId === "thread-2")!;
+    expect(h.manager.failOnTurnEnd(marked.id, "ERROR|token expired")).toBe(true);
+    finish(h, "thread-2", true);
+    expect(h.manager.listRuns().find(run => run.threadId === "thread-2")).toMatchObject({ status: "failed", error: "ERROR|token expired" });
+    expect(h.failed).toHaveLength(1);
+    expect(h.manager.listRoutines()[0].failureStreak).toBe(1);
+    expect(h.manager.failOnTurnEnd(marked.id, "again")).toBe(false);
+  });
+
+  it("lets an engine error win over a failure reason the bot set", async () => {
+    const h = harness(start);
+    const routine = h.manager.create({ ...input(), enabled: false });
+    h.manager.runNow(routine.id); await h.manager.tick();
+    h.manager.failOnTurnEnd(h.manager.listRuns()[0].id, "bank sync broken");
+    finish(h, "thread-1", false);
+    const run = h.manager.listRuns()[0];
+    expect(run.status).toBe("failed");
+    expect(run.error).not.toContain("bank sync broken");
+    expect(run).not.toHaveProperty("failReason");
+  });
+
   it("derives failures from completed receipts, ignoring repeated events and intermediate successful turns", async () => {
     const h = harness(start);
     const routine = h.manager.create({ ...input(), enabled: false });

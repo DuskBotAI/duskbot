@@ -395,3 +395,31 @@ path in the `maus` shell before starting `serve`. After a Chrome update, copy th
 new version and update both the AppArmor profile and service environment; the
 root-owned copy is not updated by the browser installer. Keep
 `kernel.apparmor_restrict_unprivileged_userns=1`.
+
+### Ubuntu 24.04 script check sandbox
+
+On Ubuntu 24.04, read-only script checks fail with "bubblewrap is installed but
+this computer will not let it make the namespaces a script check runs in" until
+AppArmor lets `bwrap` make user namespaces. `install.sh` writes this profile for
+you. On a manual install, save it as the root-owned
+`/etc/apparmor.d/duskbot-bwrap`. Checks with `access: "full"` run outside the
+sandbox and do not need it.
+
+```text
+abi <abi/4.0>,
+include <tunables/global>
+
+profile duskbot-bwrap /usr/bin/bwrap flags=(unconfined) {
+  userns,
+
+  include if exists <local/duskbot-bwrap>
+}
+```
+
+Load the profile:
+
+```sh
+sudo apparmor_parser -r /etc/apparmor.d/duskbot-bwrap
+```
+
+Keep `kernel.apparmor_restrict_unprivileged_userns=1`.

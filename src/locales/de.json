@@ -323,6 +323,8 @@
   "server.routine.cronWeekdays": "Werktags um {time}, {zone}",
   "server.routine.cronWeekly": "{day} um {time}, {zone}",
   "server.routine.scriptCheck": "Vor jedem Lauf führt es das auf deinem Computer aus und weckt den Bot nur, wenn sich die Ausgabe ändert: {command}",
+  "server.routine.scriptPost": "Bei jedem Lauf führt es das auf deinem Computer aus und postet die Ausgabe als Antwort des Bots, ohne die KI: {command}",
+  "server.routine.scriptFullAccess": "Es läuft mit vollem Zugriff auf diesem Computer, außerhalb der schreibgeschützten Sperre, und kann deine Dateien ändern.",
   "server.notify.workingFor": "{who}, arbeitet für {other}",
   "server.notify.approval": "{who} braucht eine Freigabe",
   "server.notify.question": "{who} hat eine Frage",

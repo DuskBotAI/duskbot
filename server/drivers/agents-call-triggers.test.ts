@@ -252,6 +252,13 @@ describe("a schedule's plain check in the trigger tool", () => {
     expect((calls[1]!.body as { routine: unknown }).routine).toMatchObject({ continuity: false, probe: { kind: "page", url: "https://status.example/", selector: "#state" } });
   });
 
+  it("keeps a script check's post and access", async () => {
+    const { calls, context: ctx } = context();
+    await callTool("trigger", { action: "create", when: "schedule", name: "Prices", instructions: "Post the prices.",
+      schedule: { type: "interval", every_minutes: 60 }, check: { kind: "script", command: "./prices.sh", post: true, access: "full" } }, ctx);
+    expect((calls[0]!.body as { routine: unknown }).routine).toMatchObject({ probe: { kind: "script", url: "", command: "./prices.sh", post: true, access: "full" } });
+  });
+
   it("removes a check with clear_check and refuses a check without what it reads", async () => {
     const { calls, context: ctx } = context();
     await callTool("trigger", { action: "update", trigger_id: "r-1", clear_check: true }, ctx);

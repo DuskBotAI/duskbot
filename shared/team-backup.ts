@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { mascotFaceColorSchema } from "./bot-avatar.ts";
-
+import { MAX_CATCH_UP_MINUTES } from "./routines.ts";
 import { CONNECTOR_SLUG_PATTERN, CONNECTOR_TOOL_NAME_PATTERN, MAUS_COLOR_NAMES } from "./wire.ts";
 import { parseToolScope, type ToolScope } from "./tool-scope.ts";
 import { withCurrentFormat } from "../electron/legacy-names.mjs";
@@ -137,6 +137,7 @@ const backupSchema = z.object({
     runOn: z.enum(["maus", "cloud"]), schedule,
     durationMinutes: z.number().finite().positive(),
     timeoutMinutes: z.number().int().min(5).max(240).optional(),
+    catchUpMinutes: z.number().int().min(0).max(MAX_CATCH_UP_MINUTES).optional(),
     checks: z.array(z.enum(["calendar", "mail", "runs"])).max(3).optional(),
     access: z.literal("read-and-draft").optional(),
     deliver: z.literal("brief").optional(),

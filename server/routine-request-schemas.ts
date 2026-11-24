@@ -2,6 +2,7 @@
 import { z } from "zod";
 
 import { normalizeCronSchedule } from "../shared/routine-schedule.ts";
+import { MAX_CATCH_UP_MINUTES } from "../shared/routines.ts";
 import type { JsonValue } from "./schema.ts";
 
 export const TIME = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
@@ -78,6 +79,7 @@ export const routineToolDefinitionSchema = z.object({
   runOn: z.enum(["maus", "cloud"]).optional(),
   durationMinutes: z.number().optional(),
   timeoutMinutes: z.number().nullable().optional(),
+  catchUpMinutes: z.number().nullable().optional(),
   continuity: z.boolean().optional(),
   overlap: z.enum(["skip", "queue"]).optional(),
   runOnStartup: z.boolean().optional(),
@@ -85,9 +87,9 @@ export const routineToolDefinitionSchema = z.object({
 }).strict();
 
 export const routineToolChangesSchema = routineToolDefinitionSchema
-  .omit({ timeoutMinutes: true, probe: true })
+  .omit({ timeoutMinutes: true, catchUpMinutes: true, probe: true })
   .partial()
-  .extend({ timeoutMinutes: z.number().nullable().optional(), probe: probeSchema.nullable().optional() })
+  .extend({ timeoutMinutes: z.number().nullable().optional(), catchUpMinutes: z.number().nullable().optional(), probe: probeSchema.nullable().optional() })
   .strict()
   .refine(
   (changes) => Object.values(changes).some((value) => value !== undefined),
@@ -208,17 +210,19 @@ export const storedDefinitionSchema = z.object({
   runOn: z.enum(["maus", "cloud"]),
   durationMinutes: z.number().int().min(5).max(240),
   timeoutMinutes: z.number().int().min(5).max(240).optional(),
+  catchUpMinutes: z.number().int().min(0).max(MAX_CATCH_UP_MINUTES).optional(),
   continuity: z.boolean().optional(),
   overlap: z.enum(["skip", "queue"]).optional(),
   runOnStartup: z.boolean().optional(),
   probe: probeSchema.optional(),
 }).strict();
 export const storedChangesSchema = storedDefinitionSchema
-  .omit({ schedule: true, timeoutMinutes: true, probe: true })
+  .omit({ schedule: true, timeoutMinutes: true, catchUpMinutes: true, probe: true })
   .partial()
   .extend({
     schedule: storedScheduleChangesSchema.optional(),
     timeoutMinutes: z.number().int().min(5).max(240).nullable().optional(),
+    catchUpMinutes: z.number().int().min(0).max(MAX_CATCH_UP_MINUTES).nullable().optional(),
     probe: probeSchema.nullable().optional(),
   })
   .strict()

@@ -7,6 +7,7 @@ import { normalizeCronSchedule, nextCronRuns } from "../shared/routine-schedule.
 import { newId } from "./contracts.ts";
 import { UNDO_STALE, type DirectApply, type DirectApplyCheck } from "./direct-apply.ts";
 import { redactSecretsInText } from "./redact.ts";
+import { MAX_CATCH_UP_MINUTES } from "../shared/routines.ts";
 import { parseJson, schemaIssue, type JsonObject, type JsonValue } from "./schema.ts";
 import {
   cronRule, ENGINE_ID, intervalWindowMinutes, namedTime, jsonObjectSchema, MAX_DATE_MS, ROUTINE_ID, routineProposalSchema, routineRequestCardDataSchema, storedScheduleSchema,
@@ -219,6 +220,14 @@ function timeout(value: number | null | undefined): number | null | undefined {
   return value;
 }
 
+function catchUp(value: number | null | undefined): number | null | undefined {
+  if (value == null) return value;
+  if (!Number.isInteger(value) || value < 0 || value > MAX_CATCH_UP_MINUTES) {
+    throw new RoutineRequestError(`catchUpMinutes must be a whole number from 0 to ${MAX_CATCH_UP_MINUTES}`);
+  }
+  return value;
+}
+
 function intervalWeekdays(values: string[]): number[] {
   const weekdays = values.map((day) => {
     const number = WEEKDAY_NUMBER[day.toLowerCase() as keyof typeof WEEKDAY_NUMBER];
@@ -361,6 +370,7 @@ function normalizeScheduleChanges(
 const requestProbe = (value: unknown) => { try { return cleanProbe(value)!; } catch (error) { throw new RoutineRequestError(error instanceof Error ? error.message : String(error)); } };
 function normalizeDefinition(input: RoutineToolDefinitionInput, now: number, ownEngine?: string): RoutineRequestDefinition {
   const timeoutMinutes = timeout(input.timeoutMinutes);
+  const catchUpMinutes = catchUp(input.catchUpMinutes);
   return {
     name: text(input.name, "name", 80),
     instructions: text(input.instructions, "instructions", 20_000),
@@ -368,6 +378,7 @@ function normalizeDefinition(input: RoutineToolDefinitionInput, now: number, own
     runOn: runOn(input.runOn),
     durationMinutes: duration(input.durationMinutes),
     ...(timeoutMinutes == null ? {} : { timeoutMinutes }),
+    ...(catchUpMinutes == null ? {} : { catchUpMinutes }),
     ...(input.continuity === true ? { continuity: true } : {}),
     ...(input.overlap === "queue" ? { overlap: "queue" as const } : {}),
     ...(input.runOnStartup === true ? { runOnStartup: true } : {}), ...(input.probe ? { probe: requestProbe(input.probe) } : {}),
@@ -382,6 +393,7 @@ function normalizeChanges(input: RoutineToolChangesInput, now: number, ownEngine
   if (input.runOn !== undefined) changes.runOn = runOn(input.runOn);
   if (input.durationMinutes !== undefined) changes.durationMinutes = duration(input.durationMinutes);
   if (input.timeoutMinutes !== undefined) changes.timeoutMinutes = timeout(input.timeoutMinutes);
+  if (input.catchUpMinutes !== undefined) changes.catchUpMinutes = catchUp(input.catchUpMinutes);
   if (input.continuity !== undefined) changes.continuity = input.continuity === true;
   if (input.overlap !== undefined) changes.overlap = input.overlap;
   if (input.runOnStartup !== undefined) changes.runOnStartup = input.runOnStartup === true; if (input.probe !== undefined) changes.probe = input.probe === null ? null : requestProbe(input.probe);
@@ -624,19 +636,23 @@ function effectiveDefinition(operation: RoutineRequestOperation, manager: Routin
     runOn: existing.runOn,
     durationMinutes: existing.durationMinutes,
     ...(existing.timeoutMinutes === undefined ? {} : { timeoutMinutes: existing.timeoutMinutes }),
+    ...(existing.catchUpMinutes === undefined ? {} : { catchUpMinutes: existing.catchUpMinutes }),
     ...(existing.continuity ? { continuity: true } : {}),
     ...(existing.overlap ? { overlap: existing.overlap } : {}),
     ...(existing.runOnStartup ? { runOnStartup: true } : {}), ...(existing.probe ? { probe: existing.probe } : {}),
   };
   if (operation.action !== "update") return base;
-  const { schedule, timeoutMinutes, probe, ...changes } = operation.changes;
+  const { schedule, timeoutMinutes, catchUpMinutes, probe, ...changes } = operation.changes;
   const merged: RoutineRequestDefinition = {
     ...base,
     ...changes,
     ...(schedule === undefined ? {} : { schedule: effectiveSchedule(base.schedule, schedule) }),
   };
   if (timeoutMinutes === null) delete merged.timeoutMinutes;
-  else if (timeoutMinutes !== undefined) merged.timeoutMinutes = timeoutMinutes; if (probe === null) delete merged.probe; else if (probe !== undefined) merged.probe = probe;
+  else if (timeoutMinutes !== undefined) merged.timeoutMinutes = timeoutMinutes;
+  if (catchUpMinutes === null) delete merged.catchUpMinutes;
+  else if (catchUpMinutes !== undefined) merged.catchUpMinutes = catchUpMinutes;
+  if (probe === null) delete merged.probe; else if (probe !== undefined) merged.probe = probe;
   if (runsOnce(merged.schedule)) delete merged.runOnStartup;
   return merged;
 }
@@ -709,6 +725,7 @@ function cardCopy(
         : []),
       `Runs on: ${destination}`,
       `Run limit: ${definition.timeoutMinutes === undefined ? "No limit" : `${definition.timeoutMinutes} minutes`}`,
+      ...(definition.catchUpMinutes === undefined ? [] : [`Late start: ${definition.catchUpMinutes === 0 ? "Never, a missed run is skipped" : `Up to ${definition.catchUpMinutes} minutes after its time`}`]),
       `Continuity: ${definition.continuity ? "Carries the previous run's report into the next run" : "Each run starts fresh"}`, ...(definition.probe?.kind === "script" ? [(definition.probe.post ? serverLine(undefined, "server.routine.scriptPost", { command: redactSecretsInText(definition.probe.command ?? "") }) : serverLine(undefined, "server.routine.scriptCheck", { command: redactSecretsInText(definition.probe.command ?? "") })), ...(definition.probe.access === "full" ? [serverLine(undefined, "server.routine.scriptFullAccess")] : [])] : []),
       `While busy: ${definition.overlap === "queue" ? "Queue one scheduled run; skip further occurrences until it starts" : "Skip overlapping scheduled occurrences"}`,
       ...(definition.runOnStartup || (operation.action === "update" && operation.changes.runOnStartup !== undefined)
@@ -736,6 +753,7 @@ function inputFromDefinition(definition: RoutineRequestDefinition, botId: string
     schedule: asSchedule(definition.schedule, now),
     durationMinutes: definition.durationMinutes,
     ...(definition.timeoutMinutes === undefined ? {} : { timeoutMinutes: definition.timeoutMinutes }),
+    ...(definition.catchUpMinutes === undefined ? {} : { catchUpMinutes: definition.catchUpMinutes }),
     ...(definition.continuity ? { continuity: true } : {}),
     ...(definition.overlap === "queue" ? { overlap: "queue" as const } : {}),
     ...(definition.runOnStartup ? { runOnStartup: true } : {}), ...(definition.probe ? { probe: definition.probe } : {}),
@@ -754,6 +772,7 @@ function updateFromChanges(
   if (changes.runOn !== undefined) patch.runOn = changes.runOn;
   if (changes.durationMinutes !== undefined) patch.durationMinutes = changes.durationMinutes;
   if (changes.timeoutMinutes !== undefined) patch.timeoutMinutes = changes.timeoutMinutes;
+  if (changes.catchUpMinutes !== undefined) patch.catchUpMinutes = changes.catchUpMinutes;
   if (changes.continuity !== undefined) patch.continuity = changes.continuity;
   if (changes.overlap !== undefined) patch.overlap = changes.overlap;
   if (changes.runOnStartup !== undefined) patch.runOnStartup = changes.runOnStartup; if (changes.probe !== undefined) patch.probe = changes.probe;
@@ -828,6 +847,7 @@ function revalidateOperation(operation: RoutineRequestOperation, manager: Routin
         || routine.runOn !== definition.runOn || routine.prompt !== definition.instructions
         || routine.durationMinutes !== definition.durationMinutes
         || routine.timeoutMinutes !== definition.timeoutMinutes
+        || routine.catchUpMinutes !== definition.catchUpMinutes
         || Boolean(routine.continuity) !== Boolean(definition.continuity)
         || (routine.overlap ?? "skip") !== (definition.overlap ?? "skip")
         || Boolean(routine.runOnStartup) !== Boolean(definition.runOnStartup) || !isDeepStrictEqual(routine.probe ?? null, definition.probe ?? null)
@@ -913,6 +933,7 @@ function routineSnapshot(routine: Routine): RoutineRequestSnapshot | undefined {
     runOn: routine.runOn,
     durationMinutes: routine.durationMinutes,
     ...(routine.timeoutMinutes === undefined ? {} : { timeoutMinutes: routine.timeoutMinutes }),
+    ...(routine.catchUpMinutes === undefined ? {} : { catchUpMinutes: routine.catchUpMinutes }),
     ...(routine.continuity ? { continuity: true } : {}),
     ...(routine.overlap === "queue" ? { overlap: "queue" as const } : {}),
     ...(routine.runOnStartup ? { runOnStartup: true } : {}), ...(routine.probe ? { probe: routine.probe } : {}),
@@ -935,6 +956,7 @@ function restorePatch(before: RoutineRequestSnapshot, now: number): Partial<Rout
       : schedule,
     durationMinutes: before.durationMinutes,
     timeoutMinutes: before.timeoutMinutes ?? null,
+    catchUpMinutes: before.catchUpMinutes ?? null,
     continuity: before.continuity === true,
     overlap: before.overlap ?? "skip",
     runOnStartup: before.runOnStartup === true, probe: before.probe ?? null,
@@ -1167,6 +1189,7 @@ export class RoutineRequestService {
             schedule: asSchedule(before.schedule, now),
             durationMinutes: before.durationMinutes,
             ...(before.timeoutMinutes === undefined ? {} : { timeoutMinutes: before.timeoutMinutes }),
+            ...(before.catchUpMinutes === undefined ? {} : { catchUpMinutes: before.catchUpMinutes }),
             ...(before.continuity ? { continuity: true } : {}),
             ...(before.overlap === "queue" ? { overlap: "queue" as const } : {}),
             ...(before.runOnStartup ? { runOnStartup: true } : {}),

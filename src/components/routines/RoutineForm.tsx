@@ -112,10 +112,12 @@ export function RoutineForm({ bot, routine, defaultRunOn, onDone }: {
   const [timing, setTiming] = useState<"exact" | "around">(routine ? (routine.timing === "around" ? "around" : "exact") : "around");
   const [probe, setProbe] = useState<RoutineProbe | null>(routine?.probe ?? null);
   const [watching, setWatching] = useState(Boolean(routine?.probe));
+  const [catchUp, setCatchUp] = useState(routine?.catchUpMinutes === undefined ? "" : String(routine.catchUpMinutes));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const patchWhen = (next: Partial<WhenDraft>) => setWhen((current) => ({ ...current, ...next }));
 
+  const showCatchUp = when.preset !== "once" && routine?.schedule.type !== "limit_reset";
   const presetOptions = [
     ...(when.preset === "keep" && routine ? [{ value: "keep" as const, label: upperFirst(plainWhen(routine.schedule)) }] : []),
     ...PRESETS.map((preset) => ({ value: preset, label: upperFirst(t(`routines.inline.preset.${preset}`)) })),
@@ -133,9 +135,11 @@ export function RoutineForm({ bot, routine, defaultRunOn, onDone }: {
     const kept = routine?.probe;
     const unchanged = watching && kept && probe && probe.kind === kept.kind && probe.url.trim() === kept.url;
     const watched = unchanged ? {} : watching && probe?.url.trim() ? { probe: { kind: probe.kind, url: probe.url.trim() } } : kept ? { probe: null } : {};
+    const lateStart = catchUp.trim() ? { catchUpMinutes: Number(catchUp) } : routine?.catchUpMinutes === undefined ? {} : { catchUpMinutes: null };
+    const late = showCatchUp ? lateStart : {};
     const body: Partial<RoutineInput> = routine
-      ? { name: named, prompt: what, ...(schedule ? { schedule } : {}), ...timed, ...watched, ...(schedule && !routine.enabled && isDone(routine) ? { enabled: true } : {}) }
-      : { name: named, prompt: what, botId: bot.id, enabled: true, schedule, ...timed, ...watched, ...(defaultRunOn ? { runOn: defaultRunOn } : {}) };
+      ? { name: named, prompt: what, ...(schedule ? { schedule } : {}), ...timed, ...watched, ...late, ...(schedule && !routine.enabled && isDone(routine) ? { enabled: true } : {}) }
+      : { name: named, prompt: what, botId: bot.id, enabled: true, schedule, ...timed, ...watched, ...late, ...(defaultRunOn ? { runOn: defaultRunOn } : {}) };
     setSaving(true);
     setError("");
     try {
@@ -227,6 +231,23 @@ export function RoutineForm({ bot, routine, defaultRunOn, onDone }: {
           className={cn(fieldCls, "mt-1 h-auto max-h-[40vh] min-h-[4.75rem] w-full resize-none py-1.5 [field-sizing:content]")}
         />
       </div>
+      {showCatchUp && (
+        <div data-routine-catch-up="">
+          <label htmlFor={`${id}-catch-up`} className={labelCls}>{upperFirst(t("routines.catchUp.label"))}</label>
+          <input
+            id={`${id}-catch-up`}
+            type="number"
+            inputMode="numeric"
+            min={0}
+            step={1}
+            value={catchUp}
+            placeholder={t("routines.catchUp.placeholder")}
+            onChange={(event) => setCatchUp(event.target.value)}
+            className={cn(fieldCls, "mt-1 w-[7.5rem]")}
+          />
+          <p className="m-0 mt-1 text-[12px] leading-4 text-ink-secondary">{t("routines.catchUp.hint")}</p>
+        </div>
+      )}
       {when.preset !== "once" && (
         <div data-routine-probe="">
           {phoneApp() ? (

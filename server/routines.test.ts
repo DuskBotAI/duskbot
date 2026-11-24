@@ -760,6 +760,62 @@ describe("cron routines use the existing persistent scheduler", () => {
     expect(h.manager.listRoutines()[0].nextRunAt).toBe(start + 20 * 3_600_000 + 60_000);
   });
 
+  describe("catchUpMinutes", () => {
+    const everyMinute = () => input({ ...monthly, expression: "* * * * *" });
+
+    it("0 never starts late: the overdue time is missed and the next one is scheduled", async () => {
+      const h = harness(start);
+      const routine = h.manager.create({ ...everyMinute(), catchUpMinutes: 0 });
+      h.setNow(routine.nextRunAt! + 60_000);
+      await h.manager.tick(); await h.manager.tick();
+      expect(h.started).toHaveLength(0);
+      expect(h.manager.listRuns()).toHaveLength(1);
+      expect(h.manager.listRuns()[0]).toMatchObject({ scheduledFor: routine.nextRunAt, status: "missed" });
+      expect(h.manager.listRoutines()[0].nextRunAt).toBeGreaterThan(h.manager.listRuns()[0].scheduledFor);
+    });
+
+    it.each([
+      [30, "running"],
+      [90, "missed"],
+    ])("60 starts a run %s minutes late only inside the window", async (late, status) => {
+      const h = harness(start);
+      const routine = h.manager.create({ ...everyMinute(), catchUpMinutes: 60 });
+      h.setNow(routine.nextRunAt! + late * 60_000);
+      await h.manager.tick(); await h.manager.tick();
+      expect(h.started).toHaveLength(status === "running" ? 1 : 0);
+      expect(h.manager.listRuns()).toHaveLength(1);
+      expect(h.manager.listRuns()[0]).toMatchObject({ scheduledFor: routine.nextRunAt, status });
+    });
+
+    it("unset keeps twelve hours", async () => {
+      const h = harness(start);
+      const routine = h.manager.create(everyMinute());
+      expect(routine).not.toHaveProperty("catchUpMinutes");
+      h.setNow(routine.nextRunAt! + 11 * 3_600_000);
+      await h.manager.tick(); await h.manager.tick();
+      expect(h.manager.listRuns()[0]).toMatchObject({ status: "running" });
+    });
+
+    it("never changes a once routine: it keeps twelve hours", async () => {
+      const h = harness(start);
+      const routine = h.manager.create({ ...input({ ...monthly, expression: "* * * * *" }), schedule: { type: "once", at: start + 60_000 }, catchUpMinutes: 0 });
+      h.setNow(routine.nextRunAt! + 30 * 60_000);
+      await h.manager.tick(); await h.manager.tick();
+      expect(h.manager.listRuns()[0]).toMatchObject({ status: "running" });
+    });
+
+    it("an update sets it and null clears it; bad values are refused", () => {
+      const h = harness(start);
+      const routine = h.manager.create(everyMinute());
+      expect(h.manager.update(routine.id, { catchUpMinutes: 45 })).toMatchObject({ catchUpMinutes: 45 });
+      expect(h.manager.update(routine.id, { name: "Renamed" })).toMatchObject({ catchUpMinutes: 45 });
+      expect(h.manager.update(routine.id, { catchUpMinutes: null })).not.toHaveProperty("catchUpMinutes");
+      for (const bad of [-1, 1.5, 10_081]) {
+        expect(() => h.manager.create({ ...everyMinute(), catchUpMinutes: bad })).toThrow(/0 to 10080/);
+      }
+    });
+  });
+
   it("does not accumulate cron work while a previous run is queued or active", async () => {
     const h = harness(start); h.setBot("busy");
     const routine = h.manager.create(input({ ...monthly, expression: "* * * * *" }));

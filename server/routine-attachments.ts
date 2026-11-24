@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import type { RoutineContextAttachment } from "../shared/routines.ts";
+import { MAX_CATCH_UP_MINUTES, type RoutineContextAttachment } from "../shared/routines.ts";
 
 const MAX_ATTACHMENTS = 50;
 const attachmentSchema = z.object({
@@ -56,6 +56,22 @@ export function cleanTimeoutMinutes(value: unknown): number | undefined {
     throw new Error("Run limit must be a whole number from 5 to 240 minutes");
   }
   return value;
+}
+
+export function cleanCatchUpMinutes(value: unknown): number | undefined {
+  if (value == null) return undefined;
+  if (typeof value !== "number" || !Number.isInteger(value) || value < 0 || value > MAX_CATCH_UP_MINUTES) {
+    throw new Error(`Catch-up time must be a whole number from 0 to ${MAX_CATCH_UP_MINUTES} minutes`);
+  }
+  return value;
+}
+
+export function loadCatchUpMinutes(value: unknown): number | undefined {
+  try {
+    return cleanCatchUpMinutes(value);
+  } catch {
+    return undefined;
+  }
 }
 
 export function loadTimeoutMinutes(value: unknown): number | undefined {

@@ -56,6 +56,8 @@ export interface RoutineRequestDefinition {
   durationMinutes: number;
   /** Optional safety cap for active work. Missing means no timeout. */
   timeoutMinutes?: number;
+  /** Cron, daily and interval routines: minutes after its time a missed run may still start; 0 never starts late. */
+  catchUpMinutes?: number;
   /** Carry the previous run's report into the next run. */
   continuity?: boolean;
   /** Skip by default, or keep at most one scheduled run waiting. */
@@ -67,13 +69,15 @@ export interface RoutineRequestDefinition {
 }
 
 export type RoutineRequestChanges =
-  & Omit<Partial<RoutineRequestDefinition>, "schedule" | "timeoutMinutes" | "probe">
+  & Omit<Partial<RoutineRequestDefinition>, "schedule" | "timeoutMinutes" | "catchUpMinutes" | "probe">
   & {
     /** `null` removes the check. */
     probe?: RoutineProbe | null;
     schedule?: RoutineRequestScheduleChanges;
     /** `null` removes an existing safety cap. */
     timeoutMinutes?: number | null;
+    /** `null` removes the window, back to the 12-hour default. */
+    catchUpMinutes?: number | null;
   };
 
 /** Another bot in the proposer's section that this proposal targets: a

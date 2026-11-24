@@ -434,6 +434,7 @@ function runImport(source: ImportSource, options: PackageImportOptions, deps: Pa
         schedule: routine.schedule,
         durationMinutes: routine.durationMinutes,
         ...(timeoutMinutes === undefined ? {} : { timeoutMinutes }),
+        ...(routine.catchUpMinutes === undefined ? {} : { catchUpMinutes: routine.catchUpMinutes }),
         ...(routine.overlap ? { overlap: routine.overlap } : {}),
         ...(routine.continuity && routine.room === undefined ? { continuity: true } : {}),
         ...(routine.runOnStartup ? { runOnStartup: true } : {}),

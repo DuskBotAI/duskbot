@@ -10,6 +10,7 @@ import { z } from "zod";
 import { BOT_PROFILE_LIMITS, fitsOnOneLine } from "./bot-profile.ts";
 import { redactSecretsInText } from "./redact.ts";
 import { normalizeCronSchedule } from "./routine-schedule.ts";
+import { MAX_CATCH_UP_MINUTES } from "./routines.ts";
 import { MAUS_COLOR_NAMES } from "./wire.ts";
 import { isSkillName, parseSkillMd, scanSkillText, SKILL_FILE_MAX_BYTES } from "./skill-md.ts";
 
@@ -366,6 +367,8 @@ const routineSchema = z.object({
   schedule: packageRoutineScheduleSchema,
   durationMinutes: z.number().int().min(5).max(240),
   timeoutMinutes: z.number().int().min(1).max(1_440).optional(),
+  /** Cron, daily and interval routines: minutes after its time a missed run may still start. 0 never starts late. */
+  catchUpMinutes: z.number().int().min(0).max(MAX_CATCH_UP_MINUTES).optional(),
   overlap: z.enum(["skip", "queue"]).optional(),
   continuity: z.boolean().optional(),
   /** Also run once each time dusk bot starts. Repeating routines only. */
@@ -817,8 +820,9 @@ export function downgradeToV1(document: PackageDocument):
       dropped.push(`routines[${routine.key}]`);
       return [];
     }
-    const { room: _room, continuity, runOnStartup, ...kept } = routine;
+    const { room: _room, continuity, runOnStartup, catchUpMinutes, ...kept } = routine;
     if (continuity !== undefined) dropped.push(`routines[${routine.key}].continuity`);
+    if (catchUpMinutes !== undefined) dropped.push(`routines[${routine.key}].catchUpMinutes`);
     if (runOnStartup !== undefined) dropped.push(`routines[${routine.key}].runOnStartup`);
     return [{ ...kept, enabledAfterInstall: false as const }];
   });

@@ -77,12 +77,13 @@ export const roomReleaseValues = (room: PackageRoom): Record<RoomPart, unknown> 
       : { kind: room.defaultResponder.kind },
 });
 
-/** Run on startup appears only when set, so installs from before it keep their hash. */
+/** Run on startup and the catch-up window appear only when set, so installs from before it keep their hash. */
 export function scheduleValue(routine: {
   runOn: string;
   schedule: unknown;
   durationMinutes: number;
   timeoutMinutes?: number | null;
+  catchUpMinutes?: number | null;
   overlap?: string | null;
   continuity?: boolean | null;
   runOnStartup?: boolean | null;
@@ -95,6 +96,7 @@ export function scheduleValue(routine: {
     overlap: routine.overlap ?? "skip",
     continuity: routine.continuity === true,
     ...(routine.runOnStartup === true ? { runOnStartup: true } : {}),
+    ...(routine.catchUpMinutes == null ? {} : { catchUpMinutes: routine.catchUpMinutes }),
   };
 }
 

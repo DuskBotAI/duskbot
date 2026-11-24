@@ -149,7 +149,7 @@ export function createSpendLedger(options: {
     record(c: string, init: () => SpendInit, ev: SpendEvent): SpendView {
       const { b, t } = book(c, init);
       write(t, c, ev); applySpend(b, ev);
-      if (ev.e === "start" && b.unplanned === options.reserveStarts) alertOnce(c, b, "reserve", `cloud ${c}: ${b.unplanned} starts this month were not ours to choose (failures, provider stops, rebuilds); it stays up for the rest of ${b.month}`);
+      if (ev.e === "start" && worst > 0 && b.unplanned === options.reserveStarts) alertOnce(c, b, "reserve", `cloud ${c}: ${b.unplanned} starts this month were not ours to choose (failures, provider stops, rebuilds); it stays up for the rest of ${b.month}`);
       const v = view(b);
       if (v.slackCents < worst) alertOnce(c, b, "slack", `cloud ${c}: under one start of room left below its ${b.month} ceiling`);
       return v;

@@ -193,7 +193,8 @@ export function createLifecycle(deps: LifecycleDeps) {
   };
   const dayOf = (at: number) => new Date(at).toISOString().slice(0, 10);
   /** awake time with a reason: work of any kind, a run or check due soon, a wake for the person's own routines (that
-   *  whole stretch), staying up for a run ahead, or the person using it in the last half hour or with the app open */
+   *  whole stretch), staying up for a run ahead, the person using it in the last half hour or with the app open, or a
+   *  Team Cloud, which its home never lets sleep */
   const EXPLAINED_BUSY = new Set(["turn", "run", "job", "live-call", "computer", "maintenance", "due-soon", "recent-work", "focus"]);
   const EXPLAINED_STAY = new Set(["run_soon_cheaper_awake", "cheaper_awake_until_run", "routine_due", "work_buffer"]);
   const explained = (b: HomeLifecycleState, power: HomePower) =>
@@ -206,7 +207,7 @@ export function createLifecycle(deps: LifecycleDeps) {
     const b = state(c), at = now(), day = dayOf(at);
     const t = b.awakeDay && b.awakeDay.day === day ? b.awakeDay : null;
     if (b.awakeDay && b.awakeDay.day !== day && b.awakeDay.awakeMs - b.awakeDay.workMs > 12 * HOUR) b.flaggedDay = { day: b.awakeDay.day, awakeMs: b.awakeDay.awakeMs, workMs: b.awakeDay.workMs };
-    const dt = t ? Math.max(0, Math.min(at - t.at, 5 * MINUTE)) : 0, work = explained(b, power);
+    const dt = t ? Math.max(0, Math.min(at - t.at, 5 * MINUTE)) : 0, work = Boolean(c.team) || explained(b, power);
     b.awakeDay = { day, at, awakeMs: (t?.awakeMs ?? 0) + dt, workMs: (t?.workMs ?? 0) + (work ? dt : 0) };
   };
   const rails = deps.rails ?? DEFAULT_RAILS;

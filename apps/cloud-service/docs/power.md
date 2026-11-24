@@ -151,7 +151,8 @@ With N = 5 reserve starts (the breaker's 3 failures, a probe, one lost-machine r
 stop of ours paid for, and `reserve = W * max(0, N - k)`:
 
 - **A stop** (the policy's) needs `k < N` and `slack >= reserve + W`: the start that ends the sleep is paid for and the
-  reserve is whole. Past N such starts in a month the home is not stopped again that month (`cost_reserve_used`).
+  reserve is whole. Past N such starts in a month the home is not stopped again that month (`cost_reserve_used`),
+  unless starts are free (W = 0, InstaBox's included pool): then there is nothing to reserve and the count holds nothing up.
   An owner's stop needs `slack >= W`. A plan's end, a suspension or a hold stop without asking: a stop never costs.
 - **A start we choose** (a routine's pre-wake) needs `slack - W >= reserve`.
 - **A start somebody waits for** (a wake, a create, a rebuild, a resize) needs only `slack >= W`.

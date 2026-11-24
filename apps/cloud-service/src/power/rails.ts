@@ -136,11 +136,11 @@ const affordableAt = (v: SpendView, need: number, now: number) =>
   v.gainCentsPerHour > 1e-9 ? Math.min(now + 6 * HOUR, now + Math.ceil((need - v.slackCents) / v.gainCentsPerHour * HOUR)) : now + HOUR;
 
 /** a stop is allowed only when the start after it is already paid for and the reserve is whole; `owner`: the owner asked,
- *  which only needs the start back paid for */
+ *  which only needs the start back paid for. Free starts (W = 0) leave nothing to reserve, so unchosen starts never hold a home up */
 export function costStopRefusal(v: SpendView | null | undefined, now: number, owner = false): Refusal | null {
   if (!v) return null;
   if (owner) return v.slackCents >= v.worstStartCents ? null : { reason: "cost_ceiling", recheckAt: affordableAt(v, v.worstStartCents, now) };
-  if (v.unplanned >= v.reserveStarts) return { reason: "cost_reserve_used", recheckAt: now + HOUR };
+  if (v.worstStartCents > 0 && v.unplanned >= v.reserveStarts) return { reason: "cost_reserve_used", recheckAt: now + HOUR };
   const need = reserveCents(v) + v.worstStartCents;
   return v.slackCents >= need ? null : { reason: "cost_ceiling", recheckAt: Math.max(now + MINUTE, affordableAt(v, need, now)) };
 }

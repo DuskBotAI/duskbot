@@ -487,6 +487,21 @@ it("charges every start to the home's monthly book, and keeps a home up once the
   expect(f.audit.entries(c.id).filter(e => e.action === "cost_ceiling_alert").map(e => e.reason)).toEqual(["reserve"]);
 });
 
+it("free starts keep no reserve: a home the provider restarted five times still sleeps once idle", async () => {
+  const f = await homeFixture();
+  const { c } = await f.paid();
+  for (let n = 0; n < 5; n++) {
+    f.api.machines.get(c.serverId!)!.state = "stopped";
+    f.api.machines.get(c.serverId!)!.ready = false;
+    await f.settle(c, c => c.status === "running" && f.api.machines.get(c.serverId!)!.state === "running", 20, 30_000);
+  }
+  f.advance(5 * 60_000); f.power.idle = true; f.power.busy = [];
+  for (let n = 0; n < 20 && c.status === "running"; n++) { c.nextAttemptAt = 0; await f.service.reconcile(); f.advance(5 * 60_000); }
+  expect(c.status).toBe("sleeping");
+  expect(c.managed!.stayReason).not.toBe("cost_reserve_used");
+  expect(f.audit.entries(c.id).filter(e => e.action === "cost_ceiling_alert")).toHaveLength(0);
+});
+
 it("the operator deletes an ended plan's cloud at once, through the same final backup and delete, never a paid one", async () => {
   const f = await homeFixture();
   const { c, sub } = await f.paid();
@@ -610,6 +625,17 @@ it("a routine due while asleep: the cloud wakes before it, stays up while the ru
   await f.settle(c, c => c.status === "sleeping", 60, 60_000);
   expect(f.now() - done).toBeLessThan(15 * 60_000);
 });
+
+it("never flags a Team Cloud's day: its home refuses every sleep by design", async () => {
+  const f = await homeFixture();
+  const { c } = await f.paid();
+  c.team = { id: "team_1", name: "Team" };
+  f.power.idle = false; f.power.busy = ["team"];
+  const midnight = Math.ceil((f.now() + 1) / 86_400_000) * 86_400_000, day = 86_400_000;
+  while (f.now() < midnight + day + 5 * 60_000) { f.advance(5 * 60_000); c.nextAttemptAt = 0; await f.service.reconcile(); }
+  expect(c.status).toBe("running");
+  expect(f.audit.entries(c.id).filter(e => e.action === "awake_without_work")).toHaveLength(0);
+}, 120_000);
 
 it("never flags a day the person's own routines and checks kept the cloud up", async () => {
   const f = await homeFixture();

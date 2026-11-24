@@ -89,6 +89,10 @@ describe("the rails' cost rule", () => {
     expect(costStopRefusal(view(7), 0, true)).toBeNull();
     expect(costStopRefusal(view(6.9), 0, true)?.reason).toBe("cost_ceiling");
   });
+  it("free starts reserve nothing: unchosen starts never hold a home up", () => {
+    expect(costStopRefusal({ ...view(0, 9), worstStartCents: 0 }, 0)).toBeNull();
+    expect(costStopRefusal({ ...view(1000, 5), worstStartCents: 0.01 }, 0)?.reason).toBe("cost_reserve_used");
+  });
   it("a person's start may use the reserve, a start we choose may not, a second machine needs its compute too", () => {
     expect(costStartRefusal(view(7), "wake", 0)).toBeNull();
     expect(costStartRefusal(view(6.9), "recover", 0)?.reason).toBe("cost_ceiling");

@@ -80,6 +80,7 @@ const assignmentSchema = z.object({
   carrying: z.array(z.string()).optional(),
   approved: z.boolean().optional(),
   batchKey: z.string().optional(),
+  selfJob: z.boolean().optional(),
   version: z.literal(1),
 });
 

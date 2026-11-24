@@ -66,6 +66,8 @@ export interface HandoffView {
   cards?: string[];
   continuation?: { note: string; handoffPath?: string; count: number };
   goalRunId?: string;
+  /** A job the bot opened on itself whose result resumes the conversation that opened it (Assignment.selfJob). */
+  selfJob?: boolean;
 }
 
 export interface BeginTurnRequest {
@@ -105,6 +107,9 @@ export interface HandoffOptions {
   rework?: boolean;
   requestBatchKey?: string;
   doneWhen?: string;
+  /** start_thread with report_back: the requesting bot hands this to itself in the fresh thread `target` names. The runtime
+   * admits it only from the requesting conversation's own turn and outside rooms (runtime/tree.ts selfJobProblem). */
+  selfJob?: boolean;
 }
 
 export type RoomAddress = Pick<HandoffView, "groupId" | "threadId" | "botId">;

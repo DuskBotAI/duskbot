@@ -448,7 +448,7 @@
     },
     {
       "name": "start_thread",
-      "description": "Open a separate job on yourself: one conversation with its own history and its own run, shown to the person as a row under you, without switching the person's selected conversation. Use it only when the user requests independent jobs (for example one review per pull request, \"review each pull request\", one thread per pull request) instead of doing them inside this conversation. The title becomes the row's name, so make it short and specific, and write it as #Title when you mention it to the person; give complete instructions, since the run will not see this conversation. You can open at most five per turn; a self-opened job cannot open more jobs. This is not a teammate handoff: use coordinate_bots for teammates (thread \"new\" opens a fresh thread on them) and their automatic replies. If a call is refused, do not retry it: say what you still wanted opened.",
+      "description": "Open a separate job on yourself: one conversation with its own history and its own run, shown to the person as a row under you, without switching the person's selected conversation. Use it for long work the person asked for, so they can keep chatting with you here, and when they request independent jobs (for example one review per pull request). With report_back (the default) its result comes back to this conversation automatically and resumes you here, like a teammate's reply; in a room, or with report_back false, it stays in that thread. The title becomes the row's name, so make it short and specific, and write it as #Title when you mention it to the person; give complete instructions, since the run will not see this conversation. You can open at most five per turn; a self-opened job cannot open more jobs. This is not a teammate handoff: use coordinate_bots for teammates (thread \"new\" opens a fresh thread on them). If a call is refused, do not retry it: say what you still wanted opened.",
       "inputSchema": {
         "type": "object",
         "additionalProperties": false,
@@ -460,6 +460,10 @@
           "message": {
             "type": "string",
             "description": "The complete first message of the thread: everything the run needs, since it will not see this conversation."
+          },
+          "report_back": {
+            "type": "boolean",
+            "description": "Optional, default true: its result returns here and resumes you. false: the person reads it in that thread."
           },
           "folder": {
             "type": "string",

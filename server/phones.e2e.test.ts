@@ -273,7 +273,7 @@ const runOf = async (id: string) => (await api("GET", "/api/routines")).body.run
 const opened = (agentsToken: string, fromThreadId: string, message: string) => launched(message, async () => {
   const response = await fetch(url + "/api/internal/threads", {
     method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${agentsToken}` },
-    body: JSON.stringify({ fromBotId: chief.id, fromThreadId, title: message.slice(0, 40), message, depth: 0 }),
+    body: JSON.stringify({ fromBotId: chief.id, fromThreadId, title: message.slice(0, 40), message, depth: 0, reportBack: false }),
   });
   expect(response.status).toBe(201);
   expect((await response.json() as { state?: string }).state).toBe("running");

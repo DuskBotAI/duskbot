@@ -198,6 +198,15 @@ describe("importing a whole team", () => {
     expect(app.snapshot()).toBe(before);
   });
 
+  it("keeps a routine's catch-up window, including 0", async () => {
+    const app = await installation();
+    const input = fixture("full-team.v2.json");
+    input.package.routines[0].catchUpMinutes = 0;
+    const result = app.importer.importPackageDocument(app.parsePackageDocument(input), { trust: "file", mode: "add" }, app.deps);
+    if (result.alreadyAdded) throw new Error("unexpected");
+    expect(result.routines[0]!.catchUpMinutes).toBe(0);
+  });
+
   it("brings a run limit the routine store cannot hold into range and says so", async () => {
     const app = await installation();
     const input = fixture("full-team.v2.json");

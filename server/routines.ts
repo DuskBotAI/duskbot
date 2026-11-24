@@ -7,7 +7,7 @@ import type { RuntimeEvent } from "./contracts.ts";
 import { OwnedFile } from "./atomic.ts"; import { saveSoon } from "./save-batch.ts";
 import { redactSecretsInText } from "./redact.ts";
 import { withoutEchoedPrompt } from "../shared/failed-turn.ts";
-import { activeRunsOf, enabledHereOf, nextDueOf, schedulerDueOf, upcomingOf, wakeHoldOf } from "./routine-due.ts"; import { dropQuietFields, nextTicks, quietPatch, stripOf } from "./routine-quiet.ts";
+import { activeRunsOf, catchUpMsOf, enabledHereOf, missedError, nextDueOf, schedulerDueOf, upcomingOf, wakeHoldOf } from "./routine-due.ts"; import { dropQuietFields, nextTicks, quietPatch, stripOf } from "./routine-quiet.ts";
 import { startDueTimer, type DueTimer } from "./due-timer.ts";
 import type { GroupGoalRunStatus } from "../shared/group-goal-run.ts";
 import type { RoutineRequestOperation } from "../shared/routine-request.ts";
@@ -58,7 +58,7 @@ export interface Routine extends RoutineQuietFields {
   enabled: boolean;
   schedule: RoutineSchedule;
   durationMinutes: number;
-  timeoutMinutes?: number;
+  timeoutMinutes?: number; catchUpMinutes?: number;
   attachments?: RoutineContextAttachment[];
   continuity?: boolean; notes?: string;
   overlap?: "skip" | "queue";
@@ -177,7 +177,7 @@ export interface RoutineInput extends RoutineQuietInput {
   enabled?: boolean;
   schedule: RoutineScheduleInput;
   durationMinutes?: number;
-  timeoutMinutes?: number | null;
+  timeoutMinutes?: number | null; catchUpMinutes?: number | null;
   attachments?: RoutineContextAttachment[];
   continuity?: boolean;
   overlap?: "skip" | "queue";
@@ -276,7 +276,7 @@ export interface RoutineManagerOptions {
   heldAfterWake?: () => boolean; held?: (run: RoutineRun) => string | null; decorate?: (routine: Routine) => Partial<Routine>; /** How much earlier than its time a run may start (a Cloud home folding an "around" run into its wake). */ earlyMs?: (routine: Routine) => number;
 }
 
-const CATCH_UP_MS = 12 * 60 * 60_000, WAKE_HORIZON_MS = 60 * 60_000;
+const WAKE_HORIZON_MS = 60 * 60_000;
 export const ROUTINE_RESTARTED = "dusk bot restarted while this routine was running";
 const MAX_RUNS = 2_000;
 export class RoutineManager {
@@ -566,7 +566,7 @@ export class RoutineManager {
       enabled: patch.enabled ?? routine.enabled,
       schedule: patch.schedule ? mergeScheduleUpdate(routine.schedule, patch.schedule) : routine.schedule,
       durationMinutes: patch.durationMinutes ?? routine.durationMinutes,
-      timeoutMinutes: Object.hasOwn(patch, "timeoutMinutes") ? patch.timeoutMinutes : routine.timeoutMinutes,
+      timeoutMinutes: Object.hasOwn(patch, "timeoutMinutes") ? patch.timeoutMinutes : routine.timeoutMinutes, catchUpMinutes: Object.hasOwn(patch, "catchUpMinutes") ? patch.catchUpMinutes : routine.catchUpMinutes,
       attachments: patch.attachments ?? routine.attachments,
       continuity: patch.continuity ?? routine.continuity,
       overlap: Object.hasOwn(patch, "overlap") ? patch.overlap : routine.overlap,
@@ -604,9 +604,8 @@ export class RoutineManager {
       if (!clean.access) delete routine.access;
       if (!clean.deliver) delete routine.deliver; dropQuietFields(routine, clean);
       if (!clean.checks) for (const key of ["checks", "checkedAt", "checkTrouble", "wakeAt"] as const) delete routine[key];
-      if (Object.hasOwn(patch, "timeoutMinutes") && patch.timeoutMinutes == null) {
-        delete routine.timeoutMinutes;
-      }
+      if (Object.hasOwn(patch, "timeoutMinutes") && patch.timeoutMinutes == null) delete routine.timeoutMinutes;
+      if (clean.catchUpMinutes === undefined) delete routine.catchUpMinutes;
       if (patch.enabled === false) {
         for (const run of this.runs) {
           if (run.routineId !== routine.id || run.status !== "queued") continue;
@@ -957,7 +956,7 @@ export class RoutineManager {
       routine.enabled && routine.runOnStartup && routine.schedule.type !== "once" &&
       (routine.schedule.type !== "interval" || routine.schedule.endsAt === undefined || now <= routine.schedule.endsAt));
     const marked = flagged.filter((routine) =>
-      !(routine.nextRunAt != null && routine.nextRunAt <= now && now - routine.nextRunAt <= CATCH_UP_MS) &&
+      !(routine.nextRunAt != null && routine.nextRunAt <= now && now - routine.nextRunAt <= catchUpMsOf(routine)) &&
       !this.runs.some((run) => run.routineId === routine.id && ["queued", "running", "waiting"].includes(run.status)));
     if (marked.length === 0 && launchId === undefined) return true;
     const previousLaunchId = this.startupLaunchId;
@@ -1000,7 +999,7 @@ export class RoutineManager {
         : now >= this.bootedAt + CHECK_BOOT_HOLD_MS && [routine.nextRunAt, routine.wakeAt].some((at) => at != null && at <= now));
       // An unanswered wait gives way to its routine's next occurrence, which would otherwise be skipped behind it.
       for (const routine of this.routines.filter(isDue)) {
-        if (routine.checks || runsOnce(routine.schedule) || now - routine.nextRunAt! > CATCH_UP_MS) continue;
+        if (routine.checks || runsOnce(routine.schedule) || now - routine.nextRunAt! > catchUpMsOf(routine)) continue;
         const stale = this.runs.filter((run) => run.routineId === routine.id && supersededBy(routine.nextRunAt!, run, this.options.handedOffWorkLive));
         for (const run of stale) await this.cancelRun(run.id, ROUTINE_SUPERSEDED);
       }
@@ -1019,8 +1018,8 @@ export class RoutineManager {
               continue;
             }
             const pendingAt = routine.nextRunAt!;
-            const late = now - pendingAt;
-            const scheduledFor = routine.schedule.type === "interval" && late <= CATCH_UP_MS
+            const late = now - pendingAt, catchUpMs = catchUpMsOf(routine);
+            const scheduledFor = routine.schedule.type === "interval" && late <= catchUpMs
               ? latestIntervalOccurrence(routine.schedule, now) ?? pendingAt
               : pendingAt;
             const overlapping = !runsOnce(routine.schedule) && this.runs.some(
@@ -1031,10 +1030,10 @@ export class RoutineManager {
             if (!overlapping || (routine.overlap === "queue" && !scheduledQueued)) {
               const run = this.newRun(routine, scheduledFor, false, allocations);
               // A reset is a state, not a moment: it still holds however late the computer wakes.
-              if (late > CATCH_UP_MS && routine.schedule.type !== "limit_reset") {
+              if (late > catchUpMs && routine.schedule.type !== "limit_reset") {
                 run.status = "missed";
                 run.finishedAt = now;
-                run.error = "This computer was offline for more than 12 hours after the scheduled time";
+                run.error = missedError(catchUpMs);
               }
               scheduledRuns.push(run);
             } else {

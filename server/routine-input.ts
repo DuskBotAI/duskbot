@@ -1,6 +1,6 @@
 // A routine as a person, a bot or an import asked for it, checked and cleaned before RoutineManager keeps it.
 import { runsOnce } from "../shared/limit-reset.ts";
-import { cleanAttachments, cleanTimeoutMinutes } from "./routine-attachments.ts";
+import { cleanAttachments, cleanCatchUpMinutes, cleanTimeoutMinutes } from "./routine-attachments.ts";
 import { loadChecks } from "./routine-load.ts";
 import { cleanProbe, cleanTiming } from "./routine-quiet.ts";
 import { cleanSchedule } from "./routine-schedules.ts";
@@ -31,6 +31,7 @@ function cleanInput(input: RoutineInput, after: number): CleanRoutine {
   if (runOn !== "maus" && runOn !== "cloud") throw new Error("Choose where this routine runs");
   const attachments = cleanAttachments(input.attachments);
   const timeoutMinutes = cleanTimeoutMinutes(input.timeoutMinutes);
+  const catchUpMinutes = cleanCatchUpMinutes(input.catchUpMinutes);
   if (target === "room-goal" && runOn === "cloud") {
     throw new Error("Room goals can only run on this computer");
   }
@@ -71,6 +72,7 @@ function cleanInput(input: RoutineInput, after: number): CleanRoutine {
     schedule,
     durationMinutes: Math.min(240, Math.max(5, Math.round(Number(input.durationMinutes) || 30))),
     ...(timeoutMinutes === undefined ? {} : { timeoutMinutes }),
+    ...(catchUpMinutes === undefined ? {} : { catchUpMinutes }),
     attachments,
     ...(continuity ? { continuity: true } : {}),
     ...(input.overlap === "queue" ? { overlap: "queue" as const } : {}),

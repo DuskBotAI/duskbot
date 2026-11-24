@@ -229,6 +229,7 @@ class InstallUpdate {
         ...(take.includes("schedule") ? {
           runOn: released.runOn, schedule: released.schedule, durationMinutes: released.durationMinutes,
           ...(timeoutMinutes === undefined ? {} : { timeoutMinutes }),
+          ...(released.catchUpMinutes === undefined ? {} : { catchUpMinutes: released.catchUpMinutes }),
           ...(released.overlap ? { overlap: released.overlap } : {}),
           ...(released.continuity && released.room === undefined ? { continuity: true } : {}),
           ...(released.runOnStartup ? { runOnStartup: true } : {}),

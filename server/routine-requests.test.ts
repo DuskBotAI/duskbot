@@ -720,6 +720,13 @@ describe("RoutineRequestService", () => {
       service.propose({
         botId: "bot-a",
         threadId: "thread-a",
+        proposal: createProposal({ catchUpMinutes: -1 }),
+      }),
+    ).rejects.toThrow("catchUpMinutes must be a whole number from 0 to 10080");
+    await expect(
+      service.propose({
+        botId: "bot-a",
+        threadId: "thread-a",
         proposal: malformedProposal({
           action: "create",
           routine: {

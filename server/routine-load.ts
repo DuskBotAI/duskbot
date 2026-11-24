@@ -6,7 +6,7 @@ import type { RoutineRequestOperation } from "../shared/routine-request.ts";
 import { ROUTINE_CHECKS, type RoutineCheck } from "../shared/routines.ts";
 import { loadProbe, loadTicks, mayMove } from "./routine-quiet.ts";
 import { ROUTINE_PARTS, type PartPair, type RoutinePart } from "./package-parts.ts";
-import { loadAttachments, loadTimeoutMinutes } from "./routine-attachments.ts";
+import { loadAttachments, loadCatchUpMinutes, loadTimeoutMinutes } from "./routine-attachments.ts";
 import { isRoutineHoldCause } from "./routine-holds.ts";
 import { MAX_DATE_MS } from "./routine-intervals.ts";
 import { ROUTINE_NOTES_MAX } from "./routine-execution.ts";
@@ -96,6 +96,7 @@ export function loadRoutine(routine: Routine, now: number): Routine | null {
     groupId: loadGroupId(routine.groupId, target),
     runOn: routine.runOn ?? "maus",
     timeoutMinutes: loadTimeoutMinutes(routine.timeoutMinutes),
+    catchUpMinutes: loadCatchUpMinutes(routine.catchUpMinutes),
     attachments: loadAttachments(routine.attachments),
     sourceThreadId: persistedSourceThreadId.parse(routine.sourceThreadId),
     resultsThreadId: persistedSourceThreadId.parse(routine.resultsThreadId),
@@ -111,7 +112,7 @@ export function loadRoutine(routine: Routine, now: number): Routine | null {
     notes: typeof routine.notes === "string" && routine.notes.trim() ? routine.notes.slice(0, ROUTINE_NOTES_MAX) : undefined,
   };
   delete loaded.failureStreak;
-  return withCheckFields(withoutUndefined(loaded, ["timeoutMinutes", "runOnStartup", "installedPackage", "checkedAt", "checkTrouble", "wakeAt", "heldFor", "notes"]));
+  return withCheckFields(withoutUndefined(loaded, ["timeoutMinutes", "catchUpMinutes", "runOnStartup", "installedPackage", "checkedAt", "checkTrouble", "wakeAt", "heldFor", "notes"]));
 }
 
 export function loadRun(run: RoutineRun): RoutineRun {

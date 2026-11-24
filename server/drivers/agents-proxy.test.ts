@@ -790,7 +790,7 @@ describe("agents-proxy MCP surface", () => {
     const list = await rpc("tools/list");
     const create = list.result.tools.find((t: { name: string }) => t.name === "trigger");
     expect(create.inputSchema.required).toEqual(["action"]);
-    expect(create.inputSchema.properties.action.enum).toEqual(["create", "update", "pause", "resume", "run_now", "email", "note"]);
+    expect(create.inputSchema.properties.action.enum).toEqual(["create", "update", "pause", "resume", "run_now", "email", "note", "fail"]);
     expect(Object.keys(create.inputSchema.properties)).not.toContain("changes");
     expect(create.inputSchema.properties.when.enum).toEqual(["schedule", "app_event", "webhook", "limit_reset"]);
     expect(create.inputSchema.properties.repeat.enum).toEqual(["once", "every_reset"]);

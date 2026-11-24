@@ -188,6 +188,13 @@ export function loadSchedule(value: unknown, after: number): RoutineSchedule | n
   }
 }
 
+/** A new or changed schedule's first time. A once or limit-reset schedule keeps its own time even when it has passed,
+ * so the scheduler can mark that run missed. */
+export function initialOccurrence(schedule: RoutineSchedule, now: number): number | null {
+  if (schedule.type === "once" || schedule.type === "limit_reset") return schedule.at;
+  return nextOccurrence(schedule, now);
+}
+
 export function nextOccurrence(schedule: RoutineSchedule, after: number): number | null {
   if (schedule.type === "once") return schedule.at > after ? schedule.at : null;
   if (schedule.type === "limit_reset") return schedule.at !== null && schedule.at > after ? schedule.at : null;

@@ -10,6 +10,11 @@ export interface RoutineIntervalWindow {
 
 /** The longest catch-up window a routine may set: 7 days. */
 export const MAX_CATCH_UP_MINUTES = 10_080;
+/** A routine's run limit and late-start window, without the ones it does not set. */
+export const runMinutesOf = ({ timeoutMinutes, catchUpMinutes }: { timeoutMinutes?: number | null; catchUpMinutes?: number | null }) => ({
+  ...(timeoutMinutes == null ? {} : { timeoutMinutes }),
+  ...(catchUpMinutes == null ? {} : { catchUpMinutes }),
+});
 
 export type RoutineSchedule =
   | RoutineCronSchedule

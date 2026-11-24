@@ -61,7 +61,9 @@ export function entitlementOf(subscriptions: readonly StoredSubscription[], clou
   return { active: false, until: until > 0 ? until : null, known: true, ...unpaidOf(mine) };
 }
 
-export interface DeleteRequest { requestedAt: number; confirmedAt: number | null; executeAfter: number | null; cancelledAt: number | null }
+/** `by`: "operator" for an operator's deletion, which archives the home first and keeps its snapshot and backups for the
+ *  retention window instead of dropping them */
+export interface DeleteRequest { requestedAt: number; confirmedAt: number | null; executeAfter: number | null; cancelledAt: number | null; by?: "operator" }
 export interface VerdictInput {
   now: number;
   retentionDays: number;
@@ -71,6 +73,9 @@ export interface VerdictInput {
   /** the snapshot the sandbox's last stop saved, or null if it never stopped */
   lastStopAt: number | null;
   ownerRequest: DeleteRequest | null;
+  /** when this service first saw the plan end: a period end on record more than a day older (a stale record) starts the
+   *  clock here instead, so an end or a cancel can never delete data at once */
+  endedSeenAt?: number | null;
   /** the home never finished its first setup: it never held anyone's data, so no final backup is owed */
   neverSetUp?: boolean;
   /** an operator hold (abuse investigation, legal): nothing is deleted while it is set */
@@ -78,7 +83,10 @@ export interface VerdictInput {
 }
 export type Verdict =
   | { delete: false; reason: "subscribed" | "no_billing_record" | "retention" | "no_final_backup" | "hold"; earliestAt: number | null }
-  | { delete: true; reason: "retention_over" | "owner_request"; earliestAt: number };
+  | { delete: true; reason: "retention_over" | "owner_request" | "operator_request"; earliestAt: number };
+
+/** days an ended plan's data is kept: TRIAL_DATA_DAYS for a trial that ended unpaid, else the retention days */
+export const keptDays = (entitlement: Entitlement, retentionDays = DEFAULT_RETENTION_DAYS) => entitlement.unpaid?.trial ? TRIAL_DATA_DAYS : retentionDays;
 
 export function deletionVerdict(input: VerdictInput): Verdict {
   if (!Number.isInteger(input.retentionDays) || input.retentionDays < DEFAULT_RETENTION_DAYS) throw new Error("Retention shorter than the minimum.");
@@ -86,9 +94,11 @@ export function deletionVerdict(input: VerdictInput): Verdict {
   if (input.entitlement.active) return { delete: false, reason: "subscribed", earliestAt: null };
   const request = input.ownerRequest;
   if (request?.confirmedAt && request.cancelledAt === null && request.executeAfter !== null && request.executeAfter <= input.now)
-    return { delete: true, reason: "owner_request", earliestAt: request.executeAfter };
+    return { delete: true, reason: request.by === "operator" ? "operator_request" : "owner_request", earliestAt: request.executeAfter };
   if (input.entitlement.until === null) return { delete: false, reason: "no_billing_record", earliestAt: null };
-  const earliestAt = input.entitlement.until + (input.entitlement.unpaid?.trial ? TRIAL_DATA_DAYS : input.retentionDays) * DAY_MS;
+  const seen = input.endedSeenAt === undefined ? input.entitlement.until : input.endedSeenAt ?? input.now;
+  const from = seen - input.entitlement.until > DAY_MS ? seen : input.entitlement.until;
+  const earliestAt = from + keptDays(input.entitlement, input.retentionDays) * DAY_MS;
   if (input.now < earliestAt) return { delete: false, reason: "retention", earliestAt };
   const backup = input.finalBackup;
   if (input.neverSetUp || input.entitlement.unpaid?.trial) return { delete: true, reason: "retention_over", earliestAt };

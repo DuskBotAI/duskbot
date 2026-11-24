@@ -59,7 +59,8 @@ export interface ManagedCloud {
   confirmDelete(cloud: StoredCloud, token: string): number;
   cancelDelete(cloud: StoredCloud): void;
   /** the operator's deletion of a cloud whose plan ended (test accounts, abuse): skips the retention wait and the owner's
-   *  undo window, nothing else; the deletion itself still takes its final backup first */
+   *  undo window, nothing else. The home is saved as a provider snapshot, read back ready, before its machine is deleted;
+   *  that snapshot and its backups are kept for the retention window (7 days for an unpaid trial, else the retention days) */
   operatorDelete(cloud: StoredCloud, reason: string): void;
   /** its account was deleted: deleted at once (no 7-day undo, nobody is left to undo it), past any paid period, unless held */
   accountDeleted?(cloud: StoredCloud): void;

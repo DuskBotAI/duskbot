@@ -16,7 +16,7 @@ function opsAllowed(header: string | undefined, token: string) {
 const messages: Record<string, string> = { signed_out: "Sign in to continue.", invalid_request: "Invalid request.", not_found: "Not found.", unavailable: "Billing is unavailable.", bad_signature: "Invalid webhook signature.", checkout_open: "A checkout is already open.", csrf: "Refresh the page and try again.", cap: "Cloud limit reached.", rate_limited: "Try again later.", checkout_soon: "Paid plans open soon. Checkout is not live yet.", discount_used: "This account already used its discount.", discount_unavailable: "The discount is only for a monthly plan that renews.", plan_change_unavailable: "That switch can't be made right now. Nothing changed. Try again in a minute.", change_in_progress: "Your last plan switch is still going through. Give it a few seconds.", payment_failed: "The payment didn't go through, so nothing changed. Check your card and try again.", already_on_plan: "You're already on this plan.", price_changed: "The price changed. Check it and confirm again.", not_subscribed: "There is no active plan to change.",
   seats_full: "Every seat on this team is taken. Add a seat first.", forbidden: "You can't do that.",
   invite_invalid: "This invite link is used up, cancelled or expired. Ask for a new one.", invite_other_email: "This invite was sent to another email address. Sign in with that one to join.",
-  already_in_team: "That person is already in a team." };
+  already_in_team: "That person is already in a team.", admin_owned: "This cloud belongs to an admin account. Send allowAdminOwned: true to delete it anyway." };
 export function createBillingRoutes(ctx: BillingContext) {
   const { service, clouds } = ctx;
   return async (req: IncomingMessage, res: ServerResponse, url: URL): Promise<boolean> => {
@@ -72,10 +72,9 @@ export function createBillingRoutes(ctx: BillingContext) {
       if (purge && method === "POST") {
         const managed = clouds.managed, cloud = clouds.get(purge[1]!);
         if (!ctx.opsToken || !opsAllowed(req.headers.authorization, ctx.opsToken) || !managed || !cloud?.managed) throw new BillingError(404, "not_found");
-        const reason = text((await body(req)).reason);
-        if (!/^[a-z_]{3,40}$/.test(reason)) invalid();
-        managed.operatorDelete(cloud, reason);
-        void clouds.reconcile().catch(() => {});
+        const data = await body(req), reason = text(data.reason);
+        if (!/^[a-z_]{3,40}$/.test(reason) || data.allowAdminOwned !== undefined && typeof data.allowAdminOwned !== "boolean") invalid();
+        ctx.operatorDelete(cloud, reason, { allowAdminOwned: data.allowAdminOwned === true });
         json(res, 200, { ok: true }); return true;
       }
       const endTrial = /^\/v1\/billing\/ops\/clouds\/(c[0-9a-f]{24})\/end-trial$/.exec(path);

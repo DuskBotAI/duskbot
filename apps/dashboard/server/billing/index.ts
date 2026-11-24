@@ -56,6 +56,9 @@ export interface BillingOptions {
   teamMail?: (message: TeamMail) => void;
   accountName?: (accountId: string) => string | null;
   accountEmail?: (accountId: string) => string | null;
+  /** admin accounts (DUSK_ADMIN_EMAILS, DUSK_GROWTH_ADMIN_EMAILS by default): an operator's delete refuses their clouds
+   *  unless it says allowAdminOwned */
+  adminEmails?: readonly string[];
   /** every deletion action of a managed cloud and fleet alerts, for the record; never an email */
   alert?: (entry: { at: number; cloudId: string; action: string; actor: string; reason: string; detail?: Record<string, string | number | boolean | null> }) => void;
 }
@@ -158,6 +161,16 @@ export function createBilling(options: BillingOptions) {
   service.destroyDeleted();
   const teams = createTeams({ store, clouds, config, now, mail: options.teamMail, accountName: options.accountName, accountEmail: options.accountEmail });
   const opsToken = env.DUSK_OPS_TOKEN || null;
+  const adminEmails = new Set((options.adminEmails ?? [env.DUSK_ADMIN_EMAILS, env.DUSK_GROWTH_ADMIN_EMAILS].flatMap(list => (list ?? "").split(","))).map(email => email.trim().toLowerCase()).filter(Boolean));
+  /** the operator's deletion of a managed cloud: never an admin's own cloud unless asked for by name, and always through
+   *  the backend's archive-first delete, which keeps the snapshot and backups for the retention window */
+  function operatorDelete(cloud: StoredCloud, reason: string, input: { allowAdminOwned?: boolean } = {}) {
+    if (!clouds.managed || !cloud.managed) throw new BillingError(404, "not_found");
+    const email = options.accountEmail?.(cloud.accountId)?.trim().toLowerCase();
+    if (email && adminEmails.has(email) && input.allowAdminOwned !== true) throw new BillingError(409, "admin_owned");
+    clouds.managed.operatorDelete(cloud, reason);
+    void clouds.reconcile().catch(() => {});
+  }
   if (opsToken !== null && opsToken.length < 32) throw new Error("DUSK_OPS_TOKEN must be at least 32 characters.");
   if (billingProvider === "preview" && !opsToken) throw new Error("DUSK_BILLING_PROVIDER=preview needs DUSK_OPS_TOKEN for plan grants.");
   // a grant is completed by the in-process fake provider, so only where that provider is the one billing runs on
@@ -189,7 +202,7 @@ export function createBilling(options: BillingOptions) {
   const context = { service, teams, clouds, store, config, accounts: options.accounts, now, enabled: billingProvider !== "off", fake: loopback ? fake : null, wakeStats: options.wakeStats ?? (() => ({})), opsToken,
     appRoutes: billingProvider !== "off" || reviewEmail !== null,
     checkoutOpen, endTrials: billingProvider === "preview" || env.DUSK_OPS_END_TRIAL === "1", grants: billingProvider === "preview" ? fake : null, grant,
-    testPurchases: billingProvider === "dodo" && dodoMode === "test", findAccount: options.findAccount ?? (() => null), reviewEmail };
+    testPurchases: billingProvider === "dodo" && dodoMode === "test", findAccount: options.findAccount ?? (() => null), reviewEmail, operatorDelete };
   const routes = createBillingRoutes(context), admin = createAdminRoutes(context);
   return {
     async handle(req: IncomingMessage, res: ServerResponse, target: URL) { return await routes(req, res, target) || await admin.handle(req, res, target); },
@@ -205,6 +218,7 @@ export function createBilling(options: BillingOptions) {
       }
     },
     accountDeleted: service.accountDeleted,
+    operatorDelete,
     /** the account's plans, payments and cloud desktops for its owner's export: no provider ids, keys or sealed secrets */
     exportAccount(accountId: string) {
       const billingState = store.state;
@@ -243,4 +257,5 @@ export type BillingContext = {
   findAccount(email: string): AccountRef | null;
   /** DUSK_REVIEW_EMAIL: the one account POST /v1/billing/ops/review may mark */
   reviewEmail?: string | null;
+  operatorDelete(cloud: StoredCloud, reason: string, input?: { allowAdminOwned?: boolean }): void;
 };

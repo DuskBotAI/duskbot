@@ -502,15 +502,17 @@ it("free starts keep no reserve: a home the provider restarted five times still 
   expect(f.audit.entries(c.id).filter(e => e.action === "cost_ceiling_alert")).toHaveLength(0);
 });
 
-it("the operator deletes an ended plan's cloud at once, through the same final backup and delete, never a paid one", async () => {
+it("the operator deletes an ended plan's cloud at once, never a paid one, and keeps its archive and backups for the retention days", async () => {
   const f = await homeFixture();
   const { c, sub } = await f.paid();
   expect(() => f.service.managed!.operatorDelete(c, "test_account")).toThrow("billing_active");
   sub.status = "ended"; sub.currentPeriodEnd = f.now(); sub.lastEventAt = f.now();
-  await f.settle(c, c => c.status === "stopped");
+  await f.settle(c, c => c.status === "stopped" && c.serverId === null && !!c.managed!.archive);
+  const snapshot = c.managed!.archive!.snapshotId;
   f.service.managed!.operatorDelete(c, "test_account");
   await f.settle(c, c => c.status === "destroyed");
-  expect(f.api.deletes()).toHaveLength(1);
+  expect(f.api.deletes()).toHaveLength(0);
+  expect(f.api.snapshots.get(snapshot)?.status).toBe("ready");
   expect(c.managed!.backups.at(-1)?.verifiedAt ?? null).not.toBeNull();
   expect(() => f.service.managed!.operatorDelete(c, "test_account")).toThrow("unavailable");
 });

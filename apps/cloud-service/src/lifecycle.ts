@@ -16,7 +16,7 @@ import type { ReleaseKey } from "./release-signing.ts";
 import { homeBackupKey, homeVolumeScan, skippedPath, tarWithout, type BackupStore } from "./backups.ts";
 import { STREAM_SKIPPED } from "./home.ts";
 import { volumeLayer } from "./bundle.ts";
-import { DAY_MS, DEFAULT_DELETE_DELAY_DAYS, DEFAULT_RETENTION_DAYS, deletionVerdict, dueNotice, prunableBackups, type Entitlement, type NoticeKind, type Verdict } from "./retention.ts";
+import { DAY_MS, DEFAULT_DELETE_DELAY_DAYS, DEFAULT_RETENTION_DAYS, deletionVerdict, dueNotice, keptDays, prunableBackups, type Entitlement, type NoticeKind, type Verdict } from "./retention.ts";
 import { outageEntry } from "./audit.ts";
 import type { Audit, AuditActor, AuditEntry } from "./audit.ts";
 import { RetryableCloudError } from "../../dashboard/server/clouds/http.ts";
@@ -365,7 +365,7 @@ export function createLifecycle(deps: LifecycleDeps) {
     // a plan that ended with no period end on record: the clock runs from when this service first saw it end
     const entitlement = !given.active && given.until === null && given.known && b.endedAt !== null ? { ...given, until: b.endedAt } : given;
     return deletionVerdict({ now: now(), retentionDays: settings.retentionDays, entitlement, finalBackup: final ? { at: final.snapshotAt, verifiedAt: final.verifiedAt } : null,
-      lastStopAt: b.lastStopAt, ownerRequest: b.deleteRequest, neverSetUp: neverSetUp(c), hold: b.hold || c.suspended !== null && c.suspended !== "Account deleted" });
+      lastStopAt: b.lastStopAt, ownerRequest: b.deleteRequest, endedSeenAt: b.endSeenAt ?? b.endedAt, neverSetUp: neverSetUp(c), hold: b.hold || c.suspended !== null && c.suspended !== "Account deleted" });
   }
 
   /** a backup of the volume, read from the running home */
@@ -690,6 +690,7 @@ export function createLifecycle(deps: LifecycleDeps) {
       const again = verdictFor(c);
       if (!again.delete) { log(c, "delete_refused", "reconciler", again.reason); return; }
       if (again.reason === "retention_over" && !neverSetUp(c) && !deps.entitlement(c).unpaid?.trial && !(await finalBackupOpens(c))) return;
+      if (again.reason === "operator_request") await archiveForOperator(c);
       // recorded before the call, so a lost answer is never read as a lost machine (and rebuilt)
       c.status = "destroying"; b.deletion = { serverId: c.serverId, operationId: null, at: now(), reason: verdict.reason, sent: false }; deps.save(c);
       log(c, "delete_requested", "reconciler", verdict.reason);
@@ -704,7 +705,13 @@ export function createLifecycle(deps: LifecycleDeps) {
       if (op && op.status !== "completed") return;
     }
     if (b.deletion && (await provider.machine(b.deletion.serverId)) !== null) return;
-    if (b.archive) {
+    const operator = verdict.reason === "operator_request";
+    if (operator) {
+      // the operator's deletion keeps the data: every replaced machine saved before it goes, every snapshot kept
+      await retiredStep(c);
+      if (b.retired.some(old => !old.deletion)) return;
+    }
+    if (b.archive && !operator) {
       // the archived home is the data now: the same record check as before a machine's delete
       if (!rereadStored(c)) return;
       const again = verdictFor(c);
@@ -714,7 +721,7 @@ export function createLifecycle(deps: LifecycleDeps) {
       log(c, "snapshot_deleted", "reconciler", verdict.reason, { snapshot: b.archive.snapshotId });
       b.archive = null; deps.save(c);
     }
-    for (const old of b.retired) if (old.snapshotId) {
+    for (const old of b.retired) if (old.snapshotId && !operator) {
       await provider.deleteSnapshot(old.snapshotId);
       log(c, "snapshot_deleted", "reconciler", "retired_with_cloud", { snapshot: old.snapshotId }); old.snapshotId = null;
     }
@@ -723,11 +730,12 @@ export function createLifecycle(deps: LifecycleDeps) {
       old.deletion = { operationId: answer.operationId, at: now() };
       log(c, "delete_requested", "reconciler", "retired_with_cloud", { operation: answer.operationId });
     }
+    if (operator && b.archive) b.archive.serverId = null;
     if (c.workspaceId) deps.removeWorkspace(c.workspaceId);
     c.destroyedOrigin = c.origin ?? c.destroyedOrigin;
     c.status = "destroyed"; c.setupStep = null; c.origin = null; c.serverId = null; c.ipv4 = null;
     b.deletedAt = now();
-    b.backupsDeleteAfter = verdict.reason === "owner_request" ? now() : now() + settings.backupTailMs;
+    b.backupsDeleteAfter = verdict.reason === "owner_request" ? now() : operator ? now() + keptDays(deps.entitlement(c), settings.retentionDays) * DAY_MS : now() + settings.backupTailMs;
     log(c, "deleted", "reconciler", verdict.reason);
     notice(c, "deleted", now());
     deps.save(c);
@@ -735,13 +743,19 @@ export function createLifecycle(deps: LifecycleDeps) {
 
   /** backups outlive the machine for a while, then go through the same record check; a plan stopped for an unpaid charge
    *  already had its days (TRIAL_DATA_DAYS, or the retention days from the first failure), so its backups go with it */
-  function dropBackupsWhenDue(c: StoredCloud) {
-    const b = state(c);
-    if (b.deletedAt === null || b.backupsDeleteAfter === null || !b.backups.length || b.hold) return;
+  async function dropBackupsWhenDue(c: StoredCloud) {
+    const b = state(c), operator = b.deleteRequest?.by === "operator";
+    const snapshots = operator ? [b.archive?.snapshotId, ...b.retired.map(old => old.snapshotId)].filter((id): id is string => !!id) : [];
+    if (b.deletedAt === null || b.backupsDeleteAfter === null || !b.backups.length && !snapshots.length || b.hold) return;
     const entitlement = deps.entitlement(c);
-    if (b.backupsDeleteAfter > now() && !entitlement.unpaid) return;
+    // an operator's deletion took no retention days first, so its copies always get the whole window
+    if (b.backupsDeleteAfter > now() && (operator || !entitlement.unpaid)) return;
     if (!rereadStored(c) || b.hold) return;
     if (deps.entitlement(c).active) { log(c, "delete_refused", "reconciler", "subscribed"); return; }
+    if (operator) {
+      if (b.archive) { await provider.deleteSnapshot(b.archive.snapshotId); log(c, "snapshot_deleted", "reconciler", "operator_request", { snapshot: b.archive.snapshotId }); b.archive = null; deps.save(c); }
+      for (const old of b.retired) if (old.snapshotId) { await provider.deleteSnapshot(old.snapshotId); log(c, "snapshot_deleted", "reconciler", "retired_with_cloud", { snapshot: old.snapshotId }); old.snapshotId = null; deps.save(c); }
+    }
     for (const g of b.backups.slice()) { deps.backups.remove(c.id, g.file); b.backups.splice(b.backups.indexOf(g), 1); }
     syncBytes(c);
     log(c, "backups_deleted", "reconciler", entitlement.unpaid ? (entitlement.unpaid.trial ? "trial_unpaid" : "unpaid") : b.deletion?.reason ?? "retention_over");
@@ -771,6 +785,18 @@ export function createLifecycle(deps: LifecycleDeps) {
     }
   }
   const snapshotName = (serverId: string) => `dusk-${serverId.slice(2)}`;
+
+  /** the home saved whole as a provider snapshot (free) and read back as ready, before an operator's deletion of its
+   *  machine; a save that fails or is held back throws, so the machine is kept and the step retried */
+  async function archiveForOperator(c: StoredCloud): Promise<void> {
+    const b = state(c), serverId = c.serverId!;
+    if (b.archive?.serverId === serverId) return;
+    const snap = await start(c, "wake", () => provider.archive(serverId, snapshotName(serverId)));
+    // null: the provider has no such machine, so there is nothing on it to save or to delete
+    if (!snap) { log(c, "archive_skipped", "reconciler", "machine_gone"); return; }
+    b.archive = { snapshotId: snap.id, at: now(), serverId, from: serverId };
+    log(c, "archived", "reconciler", "operator_request", { snapshot: snap.id }); deps.save(c);
+  }
 
   /** a plan that ended, with its final backup taken: the home saved whole as a provider snapshot (free) and its machine
    *  deleted, so the retention months cost no disk; a new plan in time boots a machine from it */
@@ -813,7 +839,7 @@ export function createLifecycle(deps: LifecycleDeps) {
   /** a plan that ended is paid again: the retention clock, its notices and a pending delete request end */
   function renewed(c: StoredCloud) {
     const b = state(c);
-    b.finalWakes = 0;
+    b.finalWakes = 0; b.endSeenAt = null;
     if (b.endedAt === null) return;
     b.endedAt = null; b.notices = b.notices.filter(n => !["ended", "left_30", "left_7", "left_1"].includes(n.kind));
     log(c, "plan_renewed", "billing", "record"); notice(c, "resumed", null);
@@ -845,9 +871,10 @@ export function createLifecycle(deps: LifecycleDeps) {
   async function reconcileStep(c: StoredCloud): Promise<void> {
     const b = state(c);
     if (c.status === "checkout") return;
-    if (c.status === "destroyed") { dropBackupsWhenDue(c); return; }
+    if (c.status === "destroyed") { await dropBackupsWhenDue(c); return; }
     pruneBackups(c);
     const entitlement = deps.entitlement(c);
+    if (!entitlement.active && entitlement.known !== false && b.endSeenAt == null) { b.endSeenAt = now(); deps.save(c); }
     const verdict = verdictFor(c, entitlement);
     if (verdict.delete || b.deletion) return deleteStep(c, verdict.delete ? verdict : { delete: true, reason: (b.deletion?.reason ?? "retention_over") as "retention_over", earliestAt: now() });
     if (c.status === "provisioning") return provisionStep(c, entitlement.active);
@@ -1165,7 +1192,7 @@ export function createLifecycle(deps: LifecycleDeps) {
       const b = state(c);
       if (c.status === "destroyed" || c.status === "destroying") throw new ManagedCloudError(409, "unavailable");
       if (deps.entitlement(c).active) throw new ManagedCloudError(409, "billing_active");
-      b.deleteRequest = { requestedAt: now(), tokenHash: null, tokenExpiresAt: null, confirmedAt: now(), executeAfter: now(), cancelledAt: null };
+      b.deleteRequest = { requestedAt: now(), tokenHash: null, tokenExpiresAt: null, confirmedAt: now(), executeAfter: now(), cancelledAt: null, by: "operator" };
       log(c, "delete_confirmed", "operator", reason);
       c.nextAttemptAt = 0; deps.save(c);
     },

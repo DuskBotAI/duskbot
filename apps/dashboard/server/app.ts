@@ -348,7 +348,9 @@ export function createDashboardApp(options: DashboardAppOptions) {
       alerts.money(entry, { email, paidBefore, mrr: mrrAtTime(ledgerState(), now()) });
     });
   }
-  const billing = createBilling({ ...(options.analytics?.db ? { aiStash: mongoAiStashStore(options.analytics.db, now) } : {}), accountExists: id => auth.account(id) !== null,
+  const adminEmails = options.admin?.emails ?? parseAdminEmails(process.env.DUSK_ADMIN_EMAILS);
+  const growthEmails = options.admin?.growthEmails ?? parseAdminEmails(process.env.DUSK_GROWTH_ADMIN_EMAILS);
+  const billing = createBilling({ adminEmails: [...adminEmails, ...growthEmails], ...(options.analytics?.db ? { aiStash: mongoAiStashStore(options.analytics.db, now) } : {}), accountExists: id => auth.account(id) !== null,
     findAccount: email => { const found = auth.accountByEmail(email); return found ? { id: found.id, email: found.email } : null; },
     mail: (cloud, letter) => {
       if (!courtesy(emailOf(cloud.accountId))) return;
@@ -402,13 +404,12 @@ export function createDashboardApp(options: DashboardAppOptions) {
       if (!found || found.account.id !== owner.id) throw new AuthError(401, "signed_out");
       return { id: owner.id, signedInAt: found.session.createdAt };
     } });
-  const adminEmails = options.admin?.emails ?? parseAdminEmails(process.env.DUSK_ADMIN_EMAILS);
   const managedUsage = billing.clouds.managed?.usage ? billing.clouds.managed.usage.bind(billing.clouds.managed) : null;
   const infraStore = options.analytics?.infra ?? memoryInfraStore();
   const infra = createInfraCollector({ store: infraStore, clouds: () => billing.clouds.all?.() ?? [], usage: managedUsage ? (c, from) => managedUsage(c, from) : null, now });
   infra.start();
   const bugReportStore = options.bugReports?.store ?? memoryBugReportStore();
-  const admin = createAdmin({ emails: adminEmails, growthEmails: options.admin?.growthEmails ?? parseAdminEmails(process.env.DUSK_GROWTH_ADMIN_EMAILS), auth, billing, workspaces: () => state.workspaces, analytics, usage, bugReports: bugReportStore, infra: { store: infraStore },
+  const admin = createAdmin({ emails: adminEmails, growthEmails, auth, billing, workspaces: () => state.workspaces, analytics, usage, bugReports: bugReportStore, infra: { store: infraStore },
     ops: { answer: () => ops.answer(), collect: () => ops.collect(), accounts: (relays, query) => ops.accounts(relays, query) }, wakeStats: () => slackEdge?.edge.wakeStats() ?? {},
     waitlist: options.analytics?.waitlist ?? null, live: options.admin?.live ?? null, now, fetch: options.fetch, env: options.admin?.env, errors: errorsSeen, readBody, bodyObject, json, relayFixture: options.admin?.opsFixture, readCacheMs: options.admin?.readCacheMs ?? 0, warm: options.admin?.warm ?? null,
     service: { version: options.version ?? null, startedAt, environment: options.admin?.environment ?? (dev ? "development" : "production"), dataDir: options.dataDir,

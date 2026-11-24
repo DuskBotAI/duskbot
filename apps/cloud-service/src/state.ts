@@ -58,7 +58,10 @@ export interface HomeLifecycleState {
   /** the billing record's end of the plan, as first seen: the retention clock */
   endedAt: number | null;
   notices: Array<{ kind: string; at: number }>;
-  deleteRequest: { requestedAt: number; tokenHash: string | null; tokenExpiresAt: number | null; confirmedAt: number | null; executeAfter: number | null; cancelledAt: number | null } | null;
+  /** when this service first read the plan as ended, on any step: the retention clock never starts before it */
+  endSeenAt?: number | null;
+  /** `by: "operator"`: archived first, its snapshot and backups kept for the retention window */
+  deleteRequest: { requestedAt: number; tokenHash: string | null; tokenExpiresAt: number | null; confirmedAt: number | null; executeAfter: number | null; cancelledAt: number | null; by?: "operator" } | null;
   /** the provider's receipt for an accepted delete: never sent twice */
   deletion: { serverId: string; operationId: string | null; at: number; reason: string; sent?: boolean } | null;
   deletedAt: number | null;

@@ -377,7 +377,7 @@ export interface BillingOverview {
  * errors: { error, code } with codes below.
  */
 export const BILLING_ERROR_CODES = ["billing_active", "signed_out", "invalid_request", "not_found", "forbidden", "rate_limited", "already_subscribed", "checkout_open", "cap",
-  "confirmation_required", "price_changed", "not_subscribed", "already_on_plan", "plan_change_unavailable", "change_in_progress", "payment_failed", "seats_full", "invite_invalid", "invite_other_email", "already_in_team", "discount_used", "discount_unavailable", "unavailable", "checkout_soon", "bad_signature", "failed"] as const;
+  "confirmation_required", "price_changed", "not_subscribed", "already_on_plan", "plan_change_unavailable", "change_in_progress", "payment_failed", "seats_full", "invite_invalid", "invite_other_email", "already_in_team", "discount_used", "discount_unavailable", "unavailable", "checkout_soon", "bad_signature", "admin_owned", "failed"] as const;
 export interface DeletionBlocker { kind: "subscription" | "cloud_desktop"; id: string; label: string; status: string }
 export interface DeleteAccountOptions { cancelBilling?: boolean; destroyDesktopsNow?: boolean }
 export type BillingErrorCode = (typeof BILLING_ERROR_CODES)[number];

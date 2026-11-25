@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Privacy lab</title>
+    <link rel="icon" href="/app-icon.svg" />
+    <style>
+      @keyframes privacy-lab-rise { from { transform: translateY(24px); opacity: 0.6; } to { transform: none; opacity: 1; } }
+      @media (prefers-reduced-motion: reduce) { .mobile-sheet { animation-name: dusk-fade-in !important; } }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="./privacy-lab.tsx"></script>
+  </body>
+</html>

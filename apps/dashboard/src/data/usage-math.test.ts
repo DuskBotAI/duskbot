@@ -47,7 +47,7 @@ test("daily allocation preserves turns, tokens and cents in both split modes", (
       for (const event of events) {
         assert.ok(Number.isInteger(event.turns));
         assert.ok(Number.isInteger(event.tokens));
-        assert.equal(event.model, event.bot === "Bot 0" ? "Model A" : "Mixed");
+        assert.equal(event.model, "Mixed");
       }
     }
     assert.deepEqual(month.totals, { turns: 19, tokens: 607, costUsd: 3.11 });
@@ -123,6 +123,8 @@ test("totals sum known costs and preserve null event costs", () => {
 test("seriesBy groups workspace ids, bot names and models with day alignment", () => {
   const first = source([{ date: "2026-11-01", turns: 2, tokens: 20, costUsd: null }], [1]);
   const second = { ...source([{ date: "2026-11-02", turns: 3, tokens: 30, costUsd: null }], [1]), workspaceId: "vps", workspaceName: "My VPS" };
+  first.activity!.byModel = [{ model: "Model A", turns: 2, tokens: 20, costUsd: null }];
+  second.activity!.byModel = [{ model: "Model A", turns: 3, tokens: 30, costUsd: null }];
   const month = usageMonth([first, second], now);
   const workspace = seriesBy(month, "workspace");
   assert.deepEqual(workspace.map((entry) => [entry.key, entry.label]), [["vps", "My VPS"], ["mac", "My Mac"]]);
@@ -165,4 +167,76 @@ test("token split adds up per day and keeps older reports as not split", () => {
   assert.deepEqual(series.find((entry) => entry.key === "cacheRead")!.values.slice(0, 3), [55, 0, 0]);
   assert.equal(series.reduce((sum, entry) => sum + entry.values.reduce((a, b) => a + b, 0), 0), month.totals.tokens);
   assert.deepEqual(seriesBy(usageMonth([source(days.slice(0, 1))], now), "type").map((entry) => entry.key), ["input", "output", "cacheRead", "cacheWrite"]);
+});
+
+test("historical model attribution", async (t) => {
+  const now = new Date(2026, 10, 25, 12).getTime();
+  const totals = { turns: 1, tokens: 1200, costUsd: 0.02 };
+
+  function source(): UsageSource {
+    return {
+      workspaceId: "fixture", workspaceName: "Fixture workspace",
+      bots: [{ id: "bot", name: "Fixture bot", model: "Recorded model" }],
+      activity: {
+        from: "2026-11-01", to: "2026-11-25", timeZone: "Asia/Kolkata",
+        days: [{ date: "2026-11-24", ...totals }],
+        byBot: [{ botId: "bot", botName: "Fixture bot", ...totals }],
+        byModel: [{ model: "Recorded model", ...totals }], totals,
+      },
+    };
+  }
+
+  await t.test("current model changes cannot relabel historical rows, the chart or CSV", () => {
+    const input = source();
+    const before = usageMonth([input], now);
+    input.bots[0]!.model = "New model";
+    const after = usageMonth([input], now);
+
+    assert.deepEqual(after, before);
+    assert.equal(after.events[0]!.model, "Recorded model");
+    assert.deepEqual(after.totals, totals);
+    assert.deepEqual(seriesBy(after, "model"), [{ key: "Recorded model", label: "Recorded model", values: after.days.map((day) => day === "2026-11-24" ? 1200 : 0) }]);
+    assert.equal(eventsCsv(after.events), "Date,Workspace,Bot,Model,Turns,Tokens,Cost (USD)\r\n2026-11-24,Fixture workspace,Fixture bot,Recorded model,1,1200,0.02\r\n");
+  });
+
+  await t.test("recorded model attribution survives an unset model or a removed bot", () => {
+    const input = source();
+    input.bots[0]!.model = null;
+    assert.equal(usageMonth([input], now).events[0]!.model, "Recorded model");
+    input.bots = [];
+    assert.equal(usageMonth([input], now).events[0]!.model, "Recorded model");
+  });
+
+  await t.test("multiple bots use the sole recorded model rather than their current settings", () => {
+    const input = source();
+    input.bots.push({ id: "other", name: "Other bot", model: "Never used" });
+    input.activity!.byBot.push({ botId: "other", botName: "Other bot", ...totals });
+    const combined = { turns: 2, tokens: 2400, costUsd: 0.04 };
+    input.activity!.days[0] = { date: "2026-11-24", ...combined };
+    input.activity!.byModel[0] = { model: "Recorded model", ...combined };
+    input.activity!.totals = combined;
+    const month = usageMonth([input], now);
+    assert.ok(month.events.length > 1);
+    assert.ok(month.events.every((event) => event.model === "Recorded model"));
+    assert.deepEqual(month.totals, combined);
+  });
+
+  await t.test("multiple recorded models do not infer daily attribution from current settings", () => {
+    const input = source();
+    input.activity!.byModel = ["Recorded model", "Earlier model"].map((model) => ({ model, turns: 1, tokens: 600, costUsd: 0.01 }));
+    input.activity!.days[0] = { date: "2026-11-24", ...totals, turns: 2 };
+    input.activity!.byBot[0] = { botId: "bot", botName: "Fixture bot", ...totals, turns: 2 };
+    input.activity!.totals = { ...totals, turns: 2 };
+    const month = usageMonth([input], now);
+    assert.equal(month.events[0]!.model, "Mixed");
+    assert.deepEqual(month.totals, { ...totals, turns: 2 });
+    assert.equal(seriesBy(month, "model")[0]!.label, "Mixed");
+    assert.ok(eventsCsv(month.events).includes(",Mixed,2,1200,0.02\r\n"));
+  });
+
+  await t.test("missing recorded model attribution does not fall back to current settings", () => {
+    const input = source();
+    input.activity!.byModel = [];
+    assert.equal(usageMonth([input], now).events[0]!.model, "Mixed");
+  });
 });

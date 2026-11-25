@@ -86,6 +86,7 @@ export function usageMonth(sources: UsageSource[], now: number, opts?: { split?:
     const { activity } = source;
     if (!activity) continue;
     const bots = activity.byBot;
+    const model = activity.byModel.length === 1 ? activity.byModel[0]!.model : "Mixed";
     if (opts?.split !== "exact" && bots.length > 1) estimated = true;
     const base = bots.some((bot) => bot.tokens > 0) ? bots.map((bot) => bot.tokens) : bots.map(() => 1);
     for (const day of activity.days) {
@@ -95,7 +96,7 @@ export function usageMonth(sources: UsageSource[], now: number, opts?: { split?:
       addSplit(split.totals, kinds);
       const common = { date: day.date, workspaceId: source.workspaceId, workspaceName: source.workspaceName };
       if (!bots.length) {
-        events.push({ ...common, bot: "All bots", model: activity.byModel.length === 1 ? activity.byModel[0]!.model : "Mixed", turns: day.turns, tokens: day.tokens, costUsd: day.costUsd === null ? null : Math.round(day.costUsd * 100) / 100 });
+        events.push({ ...common, bot: "All bots", model, turns: day.turns, tokens: day.tokens, costUsd: day.costUsd === null ? null : Math.round(day.costUsd * 100) / 100 });
         continue;
       }
       const weights = bots.map((bot, i) => base[i]! * (opts?.split === "exact" ? jitter(day.date, bot.botId) : 1));
@@ -104,7 +105,7 @@ export function usageMonth(sources: UsageSource[], now: number, opts?: { split?:
       const cost = day.costUsd === null || !included.some(Boolean) ? null : allocate(Math.round(day.costUsd * 100), weights.map((weight, i) => included[i] ? weight : 0));
       bots.forEach((bot, i) => {
         if (!included[i]) return;
-        events.push({ ...common, bot: bot.botName, model: source.bots.find((item) => item.id === bot.botId)?.model ?? "Mixed", turns: turns[i]!, tokens: tokens[i]!, costUsd: cost === null ? null : cost[i]! / 100 });
+        events.push({ ...common, bot: bot.botName, model, turns: turns[i]!, tokens: tokens[i]!, costUsd: cost === null ? null : cost[i]! / 100 });
       });
     }
   }

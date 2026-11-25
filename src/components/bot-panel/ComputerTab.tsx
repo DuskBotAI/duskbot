@@ -6,6 +6,7 @@ import { macPermissionsBridge } from "@/lib/mac-permissions";
 import { cloudMoveStage, openCloudMove, runsOnHost, type CloudMoveStage, type RunsOnHost } from "@/lib/cloud-move";
 import { cloudPlanView } from "@/lib/cloud-plan";
 import { cn } from "@/lib/cn";
+import { builtInBrowserEnabled } from "@/lib/feature-flags";
 import { writeComputerPanelView, type ComputerPanelView } from "@/lib/computer-panel-view";
 import { t } from "@/lib/i18n";
 import type { Place } from "@/lib/place";
@@ -314,6 +315,8 @@ export function ComputerTab({ bot, derived, cloudFor }: {
 
   return (
     <div data-panel-tabpanel="computer">
+      {!showBrowser && !local && current !== "off" && bot.browser !== false && builtInBrowserEnabled(state.config)
+        && <div className="mb-3 empty:hidden"><LocalBrowserSection bot={bot} onlyWhileOpen /></div>}
       {showBrowser ? <LocalBrowserSection bot={bot} askFirst={askFirst} after={browserAfter} onBrowserClosed={ownScreen ? () => setBrowserTakeover(false) : undefined} /> : <>
         <div ref={setScreenBox}>
           <Suspense fallback={<AsleepScreen bot={bot} off={current === "off"} />}>

@@ -100,11 +100,23 @@ beforeEach(() => {
 afterEach(() => { act(() => root.unmount()); host.remove(); delete document.documentElement.dataset.mobileApp; vi.useRealTimers(); });
 
 const q = <T extends HTMLElement = HTMLElement>(selector: string) => host.querySelector<T>(selector);
-const render = (props: Record<string, unknown> = {}) => act(async () => { root.render(createElement(LocalBrowserSection, { bot: { ...(BOT as object), ...props } as never, after: createElement("p", { "data-cta": "" }, "Keep Nova working") })); });
+const render = (props: Record<string, unknown> = {}, options: { onlyWhileOpen?: boolean } = {}) => act(async () => { root.render(createElement(LocalBrowserSection, { ...options, bot: { ...(BOT as object), ...props } as never, after: createElement("p", { "data-cta": "" }, "Keep Nova working") })); });
 const message = (value: Record<string, unknown>) => act(async () => { f.surface!.onMessage(value); });
 const click = (selector: string) => act(async () => { q(selector)!.click(); });
 
 describe("the compact browser in the Computer tab", () => {
+  it("shows only an open browser when it accompanies a computer screen", async () => {
+    f.open = false;
+    await render({}, { onlyWhileOpen: true });
+    expect(host.textContent).toBe("");
+    f.open = true;
+    await render({}, { onlyWhileOpen: true });
+    expect(q("[data-local-browser-toolbar]")).not.toBeNull();
+    f.open = false;
+    await render({}, { onlyWhileOpen: true });
+    expect(host.textContent).toBe("");
+  });
+
   it("at the panel's width shows only the address row and the page: no tabs, no new tab, no titles", async () => {
     await render();
     await message({ type: "tabs", tabs: TABS });

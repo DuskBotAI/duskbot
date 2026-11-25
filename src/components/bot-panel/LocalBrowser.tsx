@@ -424,9 +424,8 @@ export function LocalBrowserClosed({ bot, pill, starting = false, onStart }: {
 type Override = { kind: "started"; from: MorphFrom | null; startPage: boolean } | { kind: "closed"; confirmed: boolean };
 
 
-/** A bot's browser on this computer in its Computer tab: the live browser while it runs; otherwise the Start browser pill. */
-export function LocalBrowserSection({ bot, after, askFirst = null, onBrowserClosed }: {
-  bot: Bot; after?: ReactNode;
+export function LocalBrowserSection({ bot, after, askFirst = null, onBrowserClosed, onlyWhileOpen = false }: {
+  bot: Bot; after?: ReactNode; onlyWhileOpen?: boolean;
   /** this Mac's permissions the bot needs, asked for when the person starts its browser while any is off */
   askFirst?: MacPermissionsBridge | null;
   onBrowserClosed?: () => void;
@@ -505,6 +504,7 @@ export function LocalBrowserSection({ bot, after, askFirst = null, onBrowserClos
 
   const from = override?.kind === "started" ? override.from : null;
   const wide = usePanelWidth() > panelRest();
+  if (onlyWhileOpen && !live) return null;
   return (
     <>
       {live ? <LocalBrowserLive key={`${bot.id}\n${bot.threadId ?? ""}`} bot={bot} from={from} started={override?.kind === "started" && override.startPage} signIn={signIn} onClosed={ended("closed")} onEnded={ended("ended")} />

@@ -64,6 +64,12 @@ export function shortenedToolNote(provider: string): string {
     + "as this description says. The tool still checks every call against its full schema.)";
 }
 
+function withAlwaysLoadMeta(tool: JsonObject, key: string | undefined): JsonObject {
+  if (!key) return tool;
+  if (isObject(tool._meta) && tool._meta[key] === true) return tool;
+  return { ...tool, _meta: { ...(isObject(tool._meta) ? tool._meta : {}), [key]: true } };
+}
+
 /** A tool list under a provider's profile: each schema keeps a plain object root and fits, or the tool is left out.
  * Every change is one line to `log`; a tool already within the limits is the same object. */
 export function fitToolList(tools: readonly unknown[], profile: ToolSchemaProfile, log: (line: string) => void = () => {}): unknown[] {
@@ -77,13 +83,14 @@ export function fitToolList(tools: readonly unknown[], profile: ToolSchemaProfil
     const fit = fitToolSchema(rooted, profile);
     const name = toolName(tool);
     if (fit.outcome === "kept") {
-      fitted.push(fit.schema === tool.inputSchema ? tool : { ...tool, inputSchema: fit.schema });
+      const next = fit.schema === tool.inputSchema ? tool : { ...tool, inputSchema: fit.schema };
+      fitted.push(withAlwaysLoadMeta(next, profile.alwaysLoadMeta));
       continue;
     }
     if (fit.outcome === "sanitized") {
       const noun = fit.droppedPatterns === 1 ? "pattern" : "patterns";
       log(`removed ${fit.droppedPatterns} unsupported regex ${noun} from tool "${name}"'s parameters for ${profile.provider}`);
-      fitted.push({ ...tool, inputSchema: fit.schema });
+      fitted.push(withAlwaysLoadMeta({ ...tool, inputSchema: fit.schema }, profile.alwaysLoadMeta));
       continue;
     }
     const limit = `${profile.provider}'s ${profile.maxSchemaBytes}-byte limit for one tool`;
@@ -94,11 +101,11 @@ export function fitToolList(tools: readonly unknown[], profile: ToolSchemaProfil
     const what = { trimmed: "shortened the descriptions in", loosened: "left nested fields out of", minimal: "kept only the top-level fields of" }[fit.outcome];
     log(`${what} tool "${name}"'s parameters (${fit.from} to ${fit.bytes} bytes) to fit ${limit}`);
     if (fit.outcome === "trimmed") {
-      fitted.push({ ...tool, inputSchema: fit.schema });
+      fitted.push(withAlwaysLoadMeta({ ...tool, inputSchema: fit.schema }, profile.alwaysLoadMeta));
       continue;
     }
     const description = typeof tool.description === "string" && tool.description.trim() ? `${tool.description.trimEnd()}\n\n` : "";
-    fitted.push({ ...tool, description: description + shortenedToolNote(profile.provider), inputSchema: fit.schema });
+    fitted.push(withAlwaysLoadMeta({ ...tool, description: description + shortenedToolNote(profile.provider), inputSchema: fit.schema }, profile.alwaysLoadMeta));
   }
   return fitted;
 }

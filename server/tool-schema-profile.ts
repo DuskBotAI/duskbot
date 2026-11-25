@@ -14,6 +14,8 @@ export interface ToolSchemaProfile {
   measureInlined?: boolean;
   /** The engine validates `pattern` and `patternProperties` with Go's RE2 regex engine and rejects unsupported Perl syntax. */
   re2Patterns?: boolean;
+  /** Tool `_meta` flag that tells the engine to load every listed tool directly instead of deferring larger schemas. */
+  alwaysLoadMeta?: string;
 }
 
 const PROFILES: Record<ToolSchemaProfileId, ToolSchemaProfile> = {
@@ -22,9 +24,10 @@ const PROFILES: Record<ToolSchemaProfileId, ToolSchemaProfile> = {
   // https://github.com/morluto/rea/issues/3654. Depth 30 is walle's default (https://github.com/MoonshotAI/walle/blob/main/conf.go).
   // Kimi Code inlines every local $ref first (normalizeKimiToolSchema in MoonshotAI/kimi-code packages/kosong).
   moonshot: { id: "moonshot", provider: "Kimi", maxSchemaBytes: 12_000, maxDepth: 30, measureInlined: true },
-  // Antigravity's Go ACP server compiles every MCP tool's JSON Schema regexes with Go's RE2 engine during toolbox
-  // initialization, failing the entire turn when any enabled server uses Perl-only syntax such as lookaheads (`(?=`).
-  antigravity: { id: "antigravity", provider: "Antigravity", re2Patterns: true },
+  // Antigravity CLI 1.5+ compiles every MCP tool's JSON Schema regexes with Go's RE2 engine (failing turns on Perl
+  // lookaheads) and defers MCP tools over ~1.2 KB without exposing `call_mcp_tool` in ACP sessions unless marked with
+  // `_meta: { "antigravity/alwaysLoad": true }` (supported since Antigravity CLI 1.3.3).
+  antigravity: { id: "antigravity", provider: "Antigravity", re2Patterns: true, alwaysLoadMeta: "antigravity/alwaysLoad" },
 };
 
 export const TOOL_SCHEMA_PROFILE_ENV = "DUSK_TOOL_SCHEMA_PROFILE";

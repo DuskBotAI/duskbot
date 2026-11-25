@@ -270,8 +270,10 @@ describe("which turns carry a schema profile", () => {
     expect(toolSchemaProfileFor({ url: "https://openrouter.ai/api/v1", model: "moonshotai/kimi-k2.6" })).toBe(MOONSHOT);
   });
 
-  it("is Antigravity's engine for RE2 regex sanitization", () => {
+  it("is Antigravity's engine for RE2 regex sanitization and always-load metadata", () => {
     expect(toolSchemaProfileFor({ engine: "antigravityAgent" })).toBe(ANTIGRAVITY);
+    expect(ANTIGRAVITY.alwaysLoadMeta).toBe("antigravity/alwaysLoad");
+    expect(MOONSHOT.alwaysLoadMeta).toBeUndefined();
   });
 
   it("is no other engine or endpoint, so their tool lists are unchanged", () => {

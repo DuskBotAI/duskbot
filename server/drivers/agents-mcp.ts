@@ -8,8 +8,10 @@ import { availableTools, catalogProfileFromEnv } from "./agents-catalog.ts";
 import { callTool, capResult, toolCallContextFromEnv } from "./agents-call.ts";
 import { sendToolReceipt } from "./agents-timing.ts";
 import type { Json } from "./agents-client.ts";
+import { fitToolListResult } from "../mcp-tool-schema.ts";
 import { capToolListResult, toolLimitFromEnv } from "../tool-count-limit.ts";
 import { withNextStep } from "../tool-next-step.ts";
+import { toolSchemaProfileFromEnv } from "../tool-schema-profile.ts";
 
 /** Claude Code reads this per tool; false keeps one tool of an always-loaded server behind tool search. */
 const ALWAYS_LOAD_META = "anthropic/alwaysLoad";
@@ -28,6 +30,8 @@ export function agentsToolList(env: NodeJS.ProcessEnv) {
 export function agentsMcp(env: NodeJS.ProcessEnv, stop?: AbortSignal): (msg: Json) => Promise<Json | undefined> {
   const { available, bridge, listed } = agentsToolList(env);
   const limit = toolLimitFromEnv(env);
+  const schemaProfile = toolSchemaProfileFromEnv(env);
+  const log = (line: string) => console.warn(`[agents] ${line}`);
   const context = toolCallContextFromEnv(env, stop);
   const ok = (id: unknown, result: unknown): Json => ({ jsonrpc: "2.0", id, result } as Json);
   const rpcErr = (id: unknown, code: number, message: string): Json => ({ jsonrpc: "2.0", id, error: { code, message } } as Json);
@@ -50,7 +54,7 @@ export function agentsMcp(env: NodeJS.ProcessEnv, stop?: AbortSignal): (msg: Jso
       case "ping":
         return ok(id, {});
       case "tools/list":
-        return ok(id, capToolListResult({ tools: listed }, limit, (line) => console.warn(`[agents] ${line}`)));
+        return ok(id, capToolListResult(fitToolListResult({ tools: listed }, schemaProfile, log), limit, log));
       case "tools/call": {
         const called = { name: params.name as string, arguments: (params.arguments ?? {}) as Json };
         // Security: past the bridge a use_tool call is a direct call: same unknown-tool check, callTool and result bounds.

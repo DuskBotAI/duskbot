@@ -220,8 +220,10 @@ describe("a tool list under a provider's schema profile", () => {
     expect(lines).toHaveLength(1);
   });
 
-  it("strips non-RE2 patterns for Antigravity without altering descriptions or clean tools", () => {
+  it("strips non-RE2 patterns and marks tools always-loaded for Antigravity while preserving existing _meta", () => {
     const lines: string[] = [];
+    const withUiMeta = { ...small, _meta: { ui: { resourceUri: "ui://panel" } } };
+    const alreadyMarked = { ...small, _meta: { "antigravity/alwaysLoad": true } };
     const lookahead = {
       name: "get_repository",
       description: "Fetch a repository.",
@@ -234,10 +236,13 @@ describe("a tool list under a provider's schema profile", () => {
         required: ["owner", "repo"],
       },
     };
-    const fitted = fitToolList([small, lookahead], ANTIGRAVITY, (line) => lines.push(line)) as Array<Record<string, any>>;
-    expect(fitted[0]).toBe(small);
-    expect(fitted[1]!.description).toBe("Fetch a repository.");
-    expect(fitted[1]!.inputSchema).toEqual({
+    const fitted = fitToolList([small, withUiMeta, alreadyMarked, lookahead], ANTIGRAVITY, (line) => lines.push(line)) as Array<Record<string, any>>;
+    expect(fitted[0]).toEqual({ ...small, _meta: { "antigravity/alwaysLoad": true } });
+    expect(fitted[1]).toEqual({ ...small, _meta: { ui: { resourceUri: "ui://panel" }, "antigravity/alwaysLoad": true } });
+    expect(fitted[2]).toBe(alreadyMarked);
+    expect(fitted[3]!.description).toBe("Fetch a repository.");
+    expect(fitted[3]!._meta).toEqual({ "antigravity/alwaysLoad": true });
+    expect(fitted[3]!.inputSchema).toEqual({
       type: "object",
       properties: {
         owner: { type: "string" },

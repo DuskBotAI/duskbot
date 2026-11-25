@@ -382,6 +382,7 @@ describe("remote MCP tool directory", () => {
     expect(repo).toEqual({
       name: "get_repository",
       description: "Fetch a repository.",
+      _meta: { "antigravity/alwaysLoad": true },
       inputSchema: {
         type: "object",
         properties: {

@@ -7,6 +7,7 @@ import { OUTBOUND_HOLD_MS } from "./outbound-hold.ts";
 import { PHONE_RECOVERY } from "./phones/instructions.ts";
 import { PHONE_RECONNECT_WAIT_MS, PHONE_SEND_TIMEOUT_MS } from "./phones/jobs.ts";
 import { harnessMcpRequest } from "./harness-mcp-proxy.ts";
+import { TOOL_SCHEMA_PROFILE_ENV, toolSchemaProfile } from "./tool-schema-profile.ts";
 
 let server: Server;
 let url = "";
@@ -168,6 +169,36 @@ describe("harness MCP capability proxy", () => {
       child.stdin.write(`${JSON.stringify(frame("tools/list"))}\n`);
       await expect(result).resolves.toMatchObject({ result: { tools: [{ name: "agent_browser_snapshot" }] } });
       expect(requests.at(-1)).toMatchObject({ path: "/api/internal/computer/mcp", auth: "Bearer entrypoint-capability" });
+    } finally {
+      child.kill();
+      await new Promise<void>((resolve) => child.once("close", () => resolve()));
+    }
+  });
+
+  it("applies the turn's schema profile to tools/list so Antigravity keeps larger harness tools loaded", async () => {
+    status = 200;
+    payload = { result: { tools: [{ name: "data_show", inputSchema: { type: "object", properties: { id: { type: "string" } } } }] } };
+    await expect(harnessMcpRequest(frame("tools/list"), { ...connection("data"), schemaProfile: toolSchemaProfile("antigravity") })).resolves.toEqual({
+      jsonrpc: "2.0",
+      id: 1,
+      result: { tools: [{ name: "data_show", _meta: { "antigravity/alwaysLoad": true }, inputSchema: { type: "object", properties: { id: { type: "string" } } } }] },
+    });
+
+    const child: ChildProcessWithoutNullStreams = spawn(process.execPath, ["--experimental-strip-types", fileURLToPath(new URL("./harness-mcp-proxy.ts", import.meta.url)), "data"], {
+      env: { DUSK_HARNESS_URL: url, DUSK_MCP_TOKEN_DATA: "entrypoint-capability", [TOOL_SCHEMA_PROFILE_ENV]: "antigravity" }, stdio: ["pipe", "pipe", "pipe"],
+    });
+    let output = "";
+    const result = new Promise<unknown>((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error("Proxy did not respond")), 3_000);
+      child.stdout.on("data", (chunk) => {
+        output += chunk;
+        if (output.includes("\n")) { clearTimeout(timer); resolve(JSON.parse(output.split("\n")[0])); }
+      });
+      child.on("error", reject);
+    });
+    try {
+      child.stdin.write(`${JSON.stringify(frame("tools/list"))}\n`);
+      await expect(result).resolves.toMatchObject({ result: { tools: [{ name: "data_show", _meta: { "antigravity/alwaysLoad": true } }] } });
     } finally {
       child.kill();
       await new Promise<void>((resolve) => child.once("close", () => resolve()));

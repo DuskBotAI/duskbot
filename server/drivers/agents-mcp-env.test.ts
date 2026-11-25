@@ -3,7 +3,8 @@ import { describe, expect, it } from "vitest";
 import { catalogProfileFromEnv } from "./agents-catalog-profile.ts";
 import { BRIDGE_HOT_TOOL_NAMES } from "./agents-bridge.ts";
 import { AGENTS_DEFER_ENV, AGENTS_MCP_ENV } from "./agents-mcp-env.ts";
-import { agentsToolList } from "./agents-mcp.ts";
+import { agentsMcp, agentsToolList } from "./agents-mcp.ts";
+import { TOOL_SCHEMA_PROFILE_ENV } from "../tool-schema-profile.ts";
 
 describe("the agents server's settings", () => {
   it("carry every switch the catalog reads, so a turn reaching the server over HTTP is listed the same tools", () => {
@@ -25,5 +26,15 @@ describe("the agents server's settings", () => {
     for (const name of up) expect(BRIDGE_HOT_TOOL_NAMES.has(name), name).toBe(true);
     expect(up, "a reminder needs no tool search").toContain("trigger");
     expect(meta(deferred.find((tool) => tool.name === "delete_trigger")!), "deleting a routine loads through tool search").toBe(false);
+  });
+
+  it("marks listed tools always-loaded when running under the Antigravity schema profile", async () => {
+    const baseEnv = { DUSK_BOT_ID: "b", DUSK_THREAD_ID: "t", DUSK_MEMORY_ENABLED: "1" };
+    const plain = await agentsMcp(baseEnv)({ jsonrpc: "2.0", id: 1, method: "tools/list" }) as { result: { tools: Array<{ name: string; _meta?: Record<string, unknown> }> } };
+    expect(plain.result.tools.some((tool) => tool._meta?.["antigravity/alwaysLoad"] !== undefined)).toBe(false);
+
+    const agy = await agentsMcp({ ...baseEnv, [TOOL_SCHEMA_PROFILE_ENV]: "antigravity" })({ jsonrpc: "2.0", id: 1, method: "tools/list" }) as { result: { tools: Array<{ name: string; _meta?: Record<string, unknown> }> } };
+    expect(agy.result.tools.length).toBe(plain.result.tools.length);
+    for (const tool of agy.result.tools) expect(tool._meta?.["antigravity/alwaysLoad"], tool.name).toBe(true);
   });
 });

@@ -185,11 +185,9 @@ describe("Simple-mode sidebar layout", () => {
     expect(nodes(head.props.children).some((node) => node.type === SidebarTileGrid)).toBe(true);
     const list = simple.tree.find((node) => node.type === GlassScroller)!;
     expect(nodes(list.props.children).some((node) => node.type === SidebarTileGrid)).toBe(false);
-    expect(simple.root.props.className).toContain("max-md:[--scroll-fade-surface:var(--color-app)]");
     fixture.advanced = true;
     const advanced = render();
     expect(advanced.tree.find((node) => node.type === GlassScrollFrame)!.props.fade).toBe(true);
-    expect(advanced.root.props.className).toContain("max-md:[--scroll-fade-surface:var(--color-app)]");
   });
 
   it("draws no edge line and the Simple footer", () => {

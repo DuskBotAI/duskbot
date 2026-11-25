@@ -14,7 +14,7 @@ export function useChatSwitchMotion(ref: RefObject<HTMLElement | null>, chat: st
     const el = ref.current;
     if (!swap || !el || typeof el.animate !== "function" || motionReduced()) return;
     const run = el.animate(
-      [{ opacity: swap.from, translate: `0 ${swap.y}px`, filter: `blur(${swap.blur}px)` }, { opacity: 1, translate: "0 0", filter: "blur(0px)" }],
+      [{ opacity: swap.from, translate: `0 ${swap.y}px` }, { opacity: 1, translate: "0 0" }],
       { duration: pacedMs(swap.ms), easing: cssCurve(null) },
     );
     return () => run.cancel();

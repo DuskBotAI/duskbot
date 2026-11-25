@@ -410,14 +410,14 @@ export function Dock({ bridge }: { bridge: AmbientBridge }) {
     const easing = `cubic-bezier(${EASE_OUT.join(", ")})`;
     if (!was || !wasShown.current) {
       page.current?.animate?.(
-        reduced ? [{ opacity: 0 }, { opacity: 1 }] : [{ opacity: 0, transform: "translateY(8px)", filter: "blur(4px)" }, { opacity: 1, transform: "none", filter: "blur(0px)" }],
+        reduced ? [{ opacity: 0 }, { opacity: 1 }] : [{ opacity: 0, transform: "translateY(8px)" }, { opacity: 1, transform: "none" }],
         { duration: 200, delay: reduced ? 0 : 90, easing, fill: "backwards" },
       );
       return;
     }
     const dir = shownIds.current.indexOf(cardBot.id) >= shownIds.current.indexOf(was) ? 1 : -1;
     page.current?.animate?.(
-      reduced ? [{ opacity: 0.5 }, { opacity: 1 }] : [{ opacity: 0, transform: `translateY(${dir * 8}px)`, filter: "blur(4px)" }, { opacity: 1, transform: "none", filter: "blur(0px)" }],
+      reduced ? [{ opacity: 0.5 }, { opacity: 1 }] : [{ opacity: 0, transform: `translateY(${dir * 8}px)` }, { opacity: 1, transform: "none" }],
       { duration: reduced ? SWAP_MS : 200, easing },
     );
   }, [cardBot?.id, cardShown, reduced]);

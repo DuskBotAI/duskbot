@@ -65,7 +65,7 @@
   animation: composer-stop-in 260ms var(--composer-glyph-ease);
 }
 @keyframes composer-stop-in {
-  from { opacity: 0; transform: scale(0.4) rotate(-45deg); filter: blur(2px); }
+  from { opacity: 0; transform: scale(0.4) rotate(-45deg); }
 }
 .composer-mic-in {
   animation: composer-mic-in 420ms var(--composer-bounce) 40ms backwards;

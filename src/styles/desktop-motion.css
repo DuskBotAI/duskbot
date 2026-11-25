@@ -1,17 +1,17 @@
 /* The desktop's motion at a pick past A, from the root's data-desktop-motion and --dm-* values. Nothing here applies at
    A, on the phone, or under either reduced-motion setting. */
 
-@keyframes dm-sheet-in { from { opacity: 0; transform: translateY(var(--dm-dialog-y)) scale(var(--dm-dialog-scale)); filter: blur(var(--dm-dialog-blur)); } }
-@keyframes dm-palette-in { from { opacity: 0; transform: translateY(var(--dm-palette-y)) scale(var(--dm-palette-scale)); filter: blur(var(--dm-palette-blur)); } }
-@keyframes dm-swap-in { from { opacity: var(--dm-swap-from); transform: translateY(var(--dm-swap-y)); filter: blur(var(--dm-swap-blur)); } }
+@keyframes dm-sheet-in { from { opacity: 0; transform: translateY(var(--dm-dialog-y)) scale(var(--dm-dialog-scale)); } }
+@keyframes dm-palette-in { from { opacity: 0; transform: translateY(var(--dm-palette-y)) scale(var(--dm-palette-scale)); } }
+@keyframes dm-swap-in { from { opacity: var(--dm-swap-from); transform: translateY(var(--dm-swap-y)); } }
 @keyframes dm-fade-in { from { opacity: 0; } }
 @keyframes dm-fade-out { to { opacity: 0; } }
 
 @media (prefers-reduced-motion: no-preference) {
   :root[data-desktop-motion]:not([data-reduced-motion="true"]) {
     & :is([role="menu"], [role="listbox"], .popover-surface, .menu-surface, [role="dialog"]:not([aria-modal="true"], .ui-modal, .ui-dialog)).animate-pop-in {
-      transition: opacity var(--dm-menu-ms) var(--motion-ease-out, ease-out), transform var(--dm-menu-ms) var(--dm-menu-ease), filter var(--dm-menu-ms) var(--motion-ease-out, ease-out);
-      @starting-style { opacity: 0; transform: translate3d(0, var(--menu-shift, var(--dm-menu-y)), 0) scale(var(--dm-menu-scale)); filter: blur(var(--dm-menu-blur)); }
+      transition: opacity var(--dm-menu-ms) var(--motion-ease-out, ease-out), transform var(--dm-menu-ms) var(--dm-menu-ease);
+      @starting-style { opacity: 0; transform: translate3d(0, var(--menu-shift, var(--dm-menu-y)), 0) scale(var(--dm-menu-scale)); }
     }
     & :is([role="menu"], [role="listbox"], .popover-surface, .menu-surface, [role="dialog"]:not([aria-modal="true"], .ui-modal, .ui-dialog)).animate-pop-out {
       opacity: 0;

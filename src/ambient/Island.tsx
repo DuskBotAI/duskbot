@@ -219,9 +219,9 @@ export function Island({ bridge, embedded = false, forceOpen = false }: IslandPr
               key={wakeKey}
               className="amb-compact-mark"
               data-moment={moment ?? undefined}
-              initial={reduced ? { opacity: 0 } : { opacity: 0, scale: 0.9, y: -8, filter: "blur(3px)" }}
-              animate={{ opacity: 1, scale: 1, y: 0, filter: "blur(0px)" }}
-              exit={reduced ? { opacity: 0, transition: FADE_OUT } : { opacity: 0, scale: 0.9, y: -4, filter: "blur(3px)", transition: FADE_OUT }}
+              initial={reduced ? { opacity: 0 } : { opacity: 0, scale: 0.9, y: -8 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={reduced ? { opacity: 0, transition: FADE_OUT } : { opacity: 0, scale: 0.9, y: -4, transition: FADE_OUT }}
               transition={{ opacity: FADE, filter: FADE, scale: LIVELY, y: LIVELY }}
             >
               <MomentMotion moment={moment} reduced={reduced}>
@@ -240,9 +240,9 @@ export function Island({ bridge, embedded = false, forceOpen = false }: IslandPr
             role="img"
             data-wake={smiling ? undefined : kind ?? undefined}
             aria-label={say(labels, smiling || !kind ? "quiet" : WAKE_LABEL[kind])}
-            initial={reduced ? { opacity: 0 } : { opacity: 0, scale: 0.5, y: 6, rotate: moment === "celebrate" ? -24 : 0, filter: "blur(3px)" }}
-            animate={{ opacity: 1, scale: 1, y: 0, rotate: 0, filter: "blur(0px)" }}
-            exit={reduced ? { opacity: 0, transition: FADE_OUT } : { opacity: 0, scale: 0.96, filter: "blur(4px)", transition: FADE_OUT }}
+            initial={reduced ? { opacity: 0 } : { opacity: 0, scale: 0.5, y: 6, rotate: moment === "celebrate" ? -24 : 0 }}
+            animate={{ opacity: 1, scale: 1, y: 0, rotate: 0 }}
+            exit={reduced ? { opacity: 0, transition: FADE_OUT } : { opacity: 0, scale: 0.96, transition: FADE_OUT }}
             transition={{ opacity: FADE, filter: FADE, scale: LIVELY, y: LIVELY, rotate: LIVELY }}
           >
             {emoji}

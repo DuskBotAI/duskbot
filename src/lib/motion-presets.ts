@@ -160,9 +160,9 @@ function pickedDialogMotion({ dialog: { enter, leave: away, scrimMs } }: Desktop
   const leave = { duration: pacedSeconds(away.ms / 1000), ease };
   return {
     sheet: {
-      initial: { opacity: 0, transform: `translateY(${enter.y}px) scale(${enter.scale})`, filter: `blur(${enter.blur}px)` },
-      animate: { opacity: 1, transform: "translateY(0px) scale(1)", filter: "blur(0px)", transition: { default: arrive, opacity: { duration: pacedSeconds(enter.ms / 1000), ease } } },
-      exit: { opacity: 0, transform: `translateY(${away.y}px) scale(${away.scale})`, filter: "blur(0px)", transition: leave },
+      initial: { opacity: 0, transform: `translateY(${enter.y}px) scale(${enter.scale})` },
+      animate: { opacity: 1, transform: "translateY(0px) scale(1)", transition: { default: arrive, opacity: { duration: pacedSeconds(enter.ms / 1000), ease } } },
+      exit: { opacity: 0, transform: `translateY(${away.y}px) scale(${away.scale})`, transition: leave },
     },
     scrim: {
       initial: { opacity: 0 },
@@ -188,10 +188,10 @@ export function swapMotion(picked: DesktopMotion) {
     initial: { opacity: 0, y: 6 },
     animate: { opacity: 1, y: 0, transition: { duration: BENCHO.dur.base, ease: BENCHO.ease.out } },
   } as const;
-  const { ms, y, blur, from } = picked.swap;
+  const { ms, y, from } = picked.swap;
   return {
-    initial: { opacity: from, y, filter: `blur(${blur}px)` },
-    animate: { opacity: 1, y: 0, filter: "blur(0px)", transition: { duration: pacedSeconds(ms / 1000), ease: pacedOut(BENCHO.ease.out) } },
+    initial: { opacity: from, y },
+    animate: { opacity: 1, y: 0, transition: { duration: pacedSeconds(ms / 1000), ease: pacedOut(BENCHO.ease.out) } },
   } as const;
 }
 

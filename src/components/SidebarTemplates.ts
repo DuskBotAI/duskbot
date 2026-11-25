@@ -15,6 +15,18 @@ export function markTemplatesHandoff(): void {
   handoffAt = Date.now();
 }
 
+let returnAt = 0;
+/** Back from Templates to Connect apps: one window going back a page, so Connect apps takes the dim over in place and
+ * its page slides back in, as a page of Settings does. True once, for the Connect apps that opens next. */
+export function markConnectAppsReturn(): void {
+  returnAt = Date.now();
+}
+export function takeConnectAppsReturn(): boolean {
+  const fresh = Date.now() - returnAt < 1_000;
+  returnAt = 0;
+  return fresh;
+}
+
 /** Opens the bot Templates library (TeamLibraryPanel) the sidebar hosts, with its import feedback. False when no
  * sidebar is mounted to host it. */
 export function openTemplates(fromDialog = false): boolean {

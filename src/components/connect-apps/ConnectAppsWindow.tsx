@@ -33,6 +33,7 @@ import { tokenApp, type TokenAppId } from "../../../shared/app-tokens";
 import type { OnePasswordStatus } from "../../../shared/logins";
 import { CategoryMenu } from "./CategoryMenu";
 import { useDialogExit } from "../dialog-exit";
+import { takeConnectAppsReturn } from "../SidebarTemplates";
 import {
   CATEGORY_LABEL, INLINE_CHIPS, SECTION_SIZE, fromCatalog, grokCategories, inCategory, matchRank, popularity, presentCategories, recommended, searchApps,
   type AppEntry, type Category, type Connection,
@@ -140,6 +141,7 @@ export function ConnectAppsWindow({ page: requested, nonce, onClose, onTemplates
   const [scrolled, setScrolled] = useState(false);
   const dialog = useRef<HTMLDivElement>(null);
   const scrim = useDialogExit<HTMLDivElement>(".ca-dialog");
+  const [returning] = useState(takeConnectAppsReturn);
   const scroller = useRef<HTMLDivElement>(null);
   const input = useRef<HTMLInputElement>(null);
   const pageKey = browsing ? "browse" : `${page.kind}:${"id" in page ? page.id : ""}`;
@@ -657,7 +659,7 @@ export function ConnectAppsWindow({ page: requested, nonce, onClose, onTemplates
           const members = section.ids.flatMap((id) => byId.get(id) ?? []);
           const viewAll = section.viewAll;
           return (
-            <AppsSection key={section.key} id={`ca-section-${section.key}`} title={section.title} note={section.note}
+            <AppsSection key={section.key} id={`ca-section-${section.key}`} title={section.title} note={section.note} hideTitle={section.key === ALL_APPS}
               viewAll={viewAll ? { label: t("apps.viewAll"), onClick: () => go(viewAll) } : undefined}>
               {members.length > WINDOW_FROM
                 ? <WindowedRows items={members} scroller={scroller} render={row} />
@@ -675,9 +677,10 @@ export function ConnectAppsWindow({ page: requested, nonce, onClose, onTemplates
       className="ca-scrim"
       data-connect-apps=""
       data-native-bar={nativeBar ? "" : undefined}
+      data-handoff={returning ? "" : undefined}
       onMouseDown={(event) => event.target === event.currentTarget && onClose()}
     >
-      <div ref={dialog} data-tour="apps-panel" role="dialog" aria-modal="true" aria-label={t("connectApps.title")} tabIndex={-1} className="ca-dialog" onKeyDown={onDialogKey}>
+      <div ref={dialog} data-tour="apps-panel" role="dialog" aria-modal="true" aria-label={t("connectApps.title")} tabIndex={-1} className="ca-dialog" data-wipe-in={returning ? "pop" : undefined} onKeyDown={onDialogKey}>
         <div className="ca-layout" data-fit={page.kind === "detail" ? "" : undefined}>
           {nativeBar && (
             <div aria-hidden className={cn("mobile-edge mobile-sheet-edge pointer-events-none absolute inset-x-0 top-0 z-50 h-[calc(var(--m-safe-top)+10px)] transition-opacity duration-150", scrolled ? "opacity-100" : "opacity-0")} />

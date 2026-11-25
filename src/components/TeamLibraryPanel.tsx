@@ -7,18 +7,22 @@ import { orgCardAction, orgPackagePreview, type OrgLibraryListing, type OrgLibra
 import type { PackageDocument } from "../../shared/package-format";
 import type { Routine } from "@/lib/routines";
 import { api, useStore, type Bot, type Group } from "@/state/store";
-import { ArrowLeft, Check, Compass, ExternalLink, FolderOpen, Github, Loader2, Search, UploadCloud, X } from "../icons";
+import { ArrowLeft, Check, Compass, ExternalLink, FolderOpen, Github, Loader2, Search, UploadCloud } from "../icons";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 import { TEAM_GLYPHS, TeamImportDetails } from "./TeamImportDetails";
-import { ReadyBotGallery } from "./ReadyBotGallery";
+import { ReadyBotCategories, ReadyBotGallery } from "./ReadyBotGallery";
+import type { ReadyBotCategory } from "@/lib/ready-bots";
 import { OrgLibraryTab } from "./TeamLibraryPanelOrg";
 import { MAX_TEAM_BACKUP_BYTES } from "../../shared/team-backup";
 import { takeImportName } from "../../shared/import-name";
 import { friendlyError } from "@/lib/plain-error";
 import { glassPopupTopInset } from "@/lib/glass-popup";
-import { takeTemplatesHandoff } from "./SidebarTemplates";
+import { markConnectAppsReturn, takeTemplatesHandoff } from "./SidebarTemplates";
+import { OverlayScrollbar } from "./GlassScrollFrame";
+import { Icon } from "./Icon";
+import { openConnectApps } from "./connect-apps/open";
 
 export { TeamImportDetails };
 
@@ -66,6 +70,9 @@ async function openExternal(url: string): Promise<void> {
   if (opened) opened.opener = null;
 }
 
+/** Connect apps' window button (.ca-icon-button): 28px round, 66% ink, the hover fill a step up */
+const WINDOW_BUTTON = "absolute top-[10px] z-[4] flex size-7 items-center justify-center rounded-full text-ink/[0.66] transition-[color,background-color] duration-[120ms] ease-[ease] hover:bg-ink/[0.08] hover:text-ink/[0.92] disabled:opacity-50";
+
 export function TeamLibraryPanel({
   onClose,
   onImported,
@@ -107,6 +114,8 @@ export function TeamLibraryPanel({
   const [pendingOrg, setPendingOrg] = useState<OrgLibraryPackage | null>(null);
   const tabChosen = useRef(false);
   const [leaving, setLeaving] = useState(false);
+  const [templatesList, setTemplatesList] = useState<HTMLDivElement | null>(null);
+  const [category, setCategory] = useState<ReadyBotCategory | null>(null);
   const closeRef = useRef(onClose);
   closeRef.current = onClose;
   // a close the person asks for fades out first; adding a bot closes at once, as its chat opens behind
@@ -399,7 +408,7 @@ export function TeamLibraryPanel({
     <div
       className="ui-dialog-scrim templates-scrim fixed inset-0 z-50 flex items-center justify-center"
       // the top clears the macOS traffic lights and the Windows caption buttons, as every pop-up's does
-      style={{ paddingTop: glassPopupTopInset() }}
+      style={{ paddingTop: glassPopupTopInset(), paddingBottom: glassPopupTopInset() }}
       data-leaving={leaving ? "" : undefined}
       data-handoff={handoff ? "" : undefined}
       onMouseDown={(event) => event.target === event.currentTarget && !importing && leave()}
@@ -410,9 +419,20 @@ export function TeamLibraryPanel({
         aria-modal="true"
         aria-labelledby="team-library-title"
         tabIndex={-1}
-        className="templates-sheet flex h-[min(700px,calc(100vh-32px))] w-[min(900px,calc(100vw-32px))] flex-col overflow-hidden rounded-[14px] border border-transparent bg-menu outline-none"
+        data-wipe-in={handoff ? "push" : undefined}
+        className="templates-sheet relative flex h-[min(702px,calc(100vh-32px))] w-[min(900px,calc(100vw-32px))] flex-col overflow-hidden rounded-[14px] border border-transparent bg-menu outline-none"
       >
-        <header className="flex items-start justify-between gap-4 px-6 pb-3 pt-6 sm:px-8 sm:pt-7">
+        {/* the window's own controls, the same as Connect apps' and in the same places: they stay put while the page slides */}
+        {handoff && !pending && (
+          <button type="button" data-window-chrome="" onClick={() => { markConnectAppsReturn(); onClose(); openConnectApps(); }} disabled={importing} aria-label={t("connectApps.title")}
+            className={cn(WINDOW_BUTTON, "start-[10px]")}>
+            <Icon name="chevron-left" size={16} className="rtl:-scale-x-100" />
+          </button>
+        )}
+        <button type="button" data-window-chrome="" onClick={leave} disabled={importing} aria-label={t("templates.close")} className={cn(WINDOW_BUTTON, "end-[10px]")}>
+          <Icon name="close" size={16} />
+        </button>
+        <header className="relative flex items-center justify-between gap-4 px-6 pb-0 pt-6 sm:px-8 sm:pt-[52px]">
           <div className="min-w-0">
             <div className="flex items-center gap-2">
               {pending && (
@@ -429,7 +449,7 @@ export function TeamLibraryPanel({
                   <ArrowLeft size={18} />
                 </button>
               )}
-              <h2 id="team-library-title" className="m-0 truncate pl-2 text-[17px] font-medium leading-6 tracking-[0.01em] text-ink">
+              <h2 id="team-library-title" className={cn("m-0 truncate text-[17px] font-medium leading-6 tracking-[0.01em] text-ink", pending && "pl-2")}>
                 {pending ? pending.name : t("templates.title")}
               </h2>
             </div>
@@ -445,16 +465,72 @@ export function TeamLibraryPanel({
                     : t("templates.readyBots", { count: pending.members.length })}
             </p>}
           </div>
-          <div className="flex shrink-0 items-center gap-1">
-            <button
-              onClick={leave}
-              disabled={importing}
-              className="rounded-lg p-2 text-ink-secondary hover:bg-raised hover:text-ink disabled:opacity-50"
-              aria-label={t("templates.close")}
-            >
-              <X size={21} />
-            </button>
-          </div>
+          {!pending && (
+            <div className="-my-px flex w-fit shrink-0 gap-0.5" role="tablist" aria-label={t("templates.source") }>
+              {orgListing?.organization && (
+                <button
+                  role="tab"
+                  aria-selected={tab === "org"}
+                  onClick={() => {
+                    tabChosen.current = true;
+                    setTab("org");
+                    setError("");
+                  }}
+                  className={cn(
+                    "max-w-[220px] truncate rounded-full px-2.5 py-1 text-[13px] leading-[18px] tracking-[0.015em] transition-[background-color,color] duration-[120ms] ease-[ease]",
+                    tab === "org" ? "bg-ink/6 text-ink" : "text-ink/68 hover:bg-ink/6 hover:text-ink",
+                  )}
+                >
+                  {t("orgLibrary.tab", { name: orgListing.organization.name })}
+                </button>
+              )}
+              <button
+                role="tab"
+                aria-selected={tab === "explore"}
+                onClick={() => {
+                  tabChosen.current = true;
+                  setTab("explore");
+                  setError("");
+                }}
+                className={cn(
+                  "rounded-full px-2.5 py-1 text-[13px] leading-[18px] tracking-[0.015em] transition-[background-color,color] duration-[120ms] ease-[ease]",
+                    tab === "explore" ? "bg-ink/6 text-ink" : "text-ink/68 hover:bg-ink/6 hover:text-ink",
+                )}
+              >
+                {t("templates.explore")}
+              </button>
+              <button
+                role="tab"
+                aria-selected={tab === "import"}
+                onClick={() => {
+                  tabChosen.current = true;
+                  setTab("import");
+                  setError("");
+                }}
+                className={cn(
+                  "rounded-full px-2.5 py-1 text-[13px] leading-[18px] tracking-[0.015em] transition-[background-color,color] duration-[120ms] ease-[ease]",
+                    tab === "import" ? "bg-ink/6 text-ink" : "text-ink/68 hover:bg-ink/6 hover:text-ink",
+                )}
+              >
+                {t("templates.import")}
+              </button>
+              <button
+                role="tab"
+                aria-selected={tab === "scout"}
+                onClick={() => {
+                  tabChosen.current = true;
+                  setTab("scout");
+                  setError("");
+                }}
+                className={cn(
+                  "rounded-full px-2.5 py-1 text-[13px] leading-[18px] tracking-[0.015em] transition-[background-color,color] duration-[120ms] ease-[ease]",
+                    tab === "scout" ? "bg-ink/6 text-ink" : "text-ink/68 hover:bg-ink/6 hover:text-ink",
+                )}
+              >
+                {t("templates.fromFolder")}
+              </button>
+            </div>
+          )}
         </header>
 
         {pending ? (
@@ -505,71 +581,8 @@ export function TeamLibraryPanel({
           </>
         ) : (
           <>
-            <div className="flex flex-col gap-3 px-6 pb-4 pt-5 sm:flex-row sm:items-center sm:justify-between sm:px-8">
-              <div className="flex w-fit gap-0.5" role="tablist" aria-label={t("templates.source") }>
-                {orgListing?.organization && (
-                  <button
-                    role="tab"
-                    aria-selected={tab === "org"}
-                    onClick={() => {
-                      tabChosen.current = true;
-                      setTab("org");
-                      setError("");
-                    }}
-                    className={cn(
-                      "max-w-[220px] truncate rounded-full px-2.5 py-1 text-[13px] leading-[18px] tracking-[0.015em] transition-[background-color,color] duration-[120ms] ease-[ease]",
-                      tab === "org" ? "bg-ink/6 text-ink" : "text-ink/68 hover:bg-ink/6 hover:text-ink",
-                    )}
-                  >
-                    {t("orgLibrary.tab", { name: orgListing.organization.name })}
-                  </button>
-                )}
-                <button
-                  role="tab"
-                  aria-selected={tab === "explore"}
-                  onClick={() => {
-                    tabChosen.current = true;
-                    setTab("explore");
-                    setError("");
-                  }}
-                  className={cn(
-                    "rounded-full px-2.5 py-1 text-[13px] leading-[18px] tracking-[0.015em] transition-[background-color,color] duration-[120ms] ease-[ease]",
-                      tab === "explore" ? "bg-ink/6 text-ink" : "text-ink/68 hover:bg-ink/6 hover:text-ink",
-                  )}
-                >
-                  {t("templates.explore")}
-                </button>
-                <button
-                  role="tab"
-                  aria-selected={tab === "import"}
-                  onClick={() => {
-                    tabChosen.current = true;
-                    setTab("import");
-                    setError("");
-                  }}
-                  className={cn(
-                    "rounded-full px-2.5 py-1 text-[13px] leading-[18px] tracking-[0.015em] transition-[background-color,color] duration-[120ms] ease-[ease]",
-                      tab === "import" ? "bg-ink/6 text-ink" : "text-ink/68 hover:bg-ink/6 hover:text-ink",
-                  )}
-                >
-                  {t("templates.import")}
-                </button>
-                <button
-                  role="tab"
-                  aria-selected={tab === "scout"}
-                  onClick={() => {
-                    tabChosen.current = true;
-                    setTab("scout");
-                    setError("");
-                  }}
-                  className={cn(
-                    "rounded-full px-2.5 py-1 text-[13px] leading-[18px] tracking-[0.015em] transition-[background-color,color] duration-[120ms] ease-[ease]",
-                      tab === "scout" ? "bg-ink/6 text-ink" : "text-ink/68 hover:bg-ink/6 hover:text-ink",
-                  )}
-                >
-                  {t("templates.fromFolder")}
-                </button>
-              </div>
+            <div className="flex flex-col gap-3 px-6 pb-4 pt-5 sm:flex-row sm:items-center sm:justify-between sm:px-8 sm:pb-0 sm:pt-[17px]">
+              {tab === "explore" ? <ReadyBotCategories value={category} onChange={setCategory} /> : <span />}
               {tab === "explore" && (
                 <label className="flex h-8 w-full items-center gap-1.5 rounded-full border border-transparent bg-transparent px-[11px]  sm:w-[280px]">
                   <Search size={14} aria-hidden="true" className="shrink-0 text-ink/56" />
@@ -584,7 +597,8 @@ export function TeamLibraryPanel({
               )}
             </div>
 
-            <div className="min-h-0 flex-1 overflow-y-auto px-6 pb-7 pt-5 sm:px-8">
+            <div className="relative min-h-0 flex-1">
+            <div ref={setTemplatesList} className="scroll-fade-list h-full overflow-y-auto px-6 pb-7 pt-3 sm:px-8">
               {tab === "org" && orgListing?.organization && (
                 <OrgLibraryTab
                   listing={orgListing as OrgLibraryListing & { organization: { id: string; name: string } }}
@@ -597,7 +611,7 @@ export function TeamLibraryPanel({
               )}
               {tab === "explore" && (
                 <div>
-                  <ReadyBotGallery search={search} onDialog={setNestedDialog} onAdded={onClose} />
+                  <ReadyBotGallery search={search} category={category} onDialog={setNestedDialog} onAdded={onClose} />
                 </div>
               )}
 
@@ -809,6 +823,8 @@ export function TeamLibraryPanel({
                   {error && <div role="alert" className="mt-4 text-[13px] text-danger">{error}</div>}
                 </div>
               )}
+            </div>
+            <OverlayScrollbar scroller={templatesList} />
             </div>
           </>
         )}

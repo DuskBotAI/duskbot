@@ -1,5 +1,6 @@
 // @vitest-environment happy-dom
-import { createElement } from "react";
+import { createElement, Fragment, useState } from "react";
+import type { ReadyBotCategory } from "@/lib/ready-bots";
 import { flushSync } from "react-dom";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -16,7 +17,7 @@ vi.mock("@/state/store", () => ({
 vi.mock("@/lib/create-configured-bot", () => ({ createConfiguredBot: made.create }));
 vi.mock("@/lib/new-bot", async (actual) => ({ ...await actual<typeof import("@/lib/new-bot")>(), announceNewBot: vi.fn() }));
 
-const { ReadyBotGallery } = await import("./ReadyBotGallery");
+const { ReadyBotCategories, ReadyBotGallery } = await import("./ReadyBotGallery");
 const { READY_BOTS } = await import("@/lib/ready-bots");
 
 let root: Root;
@@ -24,8 +25,15 @@ let host: HTMLElement;
 const onDialog = vi.fn();
 const onAdded = vi.fn();
 
+// the pills and the gallery as Templates pairs them: the pills hold the category, the gallery shows it
+function Templates({ search }: { search: string }) {
+  const [category, setCategory] = useState<ReadyBotCategory | null>(null);
+  return createElement(Fragment, null,
+    createElement(ReadyBotCategories, { value: category, onChange: setCategory }),
+    createElement(ReadyBotGallery, { search, category, onDialog, onAdded }));
+}
 function render(search = "") {
-  flushSync(() => root.render(createElement(ReadyBotGallery, { search, onDialog, onAdded })));
+  flushSync(() => root.render(createElement(Templates, { search })));
 }
 const cards = () => [...host.querySelectorAll("[data-ready-bot]")].map((card) => card.getAttribute("data-ready-bot"));
 const button = (name: string) => [...host.querySelectorAll("button")].find((candidate) =>

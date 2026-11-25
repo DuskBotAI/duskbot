@@ -72,7 +72,7 @@ export function thumbBox({ scrollTop, scrollHeight, clientHeight }: Pick<HTMLEle
   return { top: THUMB_INSET + ratio * travel, height };
 }
 
-/** Grok's overlay scrollbar: a 5px thumb of 8% ink, 2px off the edge, that fades in while the pointer is over the list
+/** Grok's overlay scrollbar, the one scrollbar of the app: a 6px thumb of 8% ink, 2px off the edge, that fades in while the pointer is over the list
  * (12% under the pointer itself) and out 150ms after it leaves. Dragging it scrolls the list. A touch screen has no
  * pointer to show it for, and gets none. */
 export const OverlayScrollbar = memo(function OverlayScrollbar(props: { scroller: HTMLElement | null; style?: CSSProperties }) {
@@ -143,7 +143,7 @@ const PointerScrollbar = memo(function PointerScrollbar({ scroller, style }: { s
   const shown = hover || dragging;
   return (
     <div ref={track} aria-hidden="true" data-overlay-scrollbar="" data-scrollable={size !== null ? "" : undefined}
-      className="pointer-events-none absolute right-[2px] z-30 w-[5px]" style={{ top: 0, bottom: 0, ...style }}>
+      className="pointer-events-none absolute end-[2px] z-30 w-[6px]" style={{ top: 0, bottom: 0, ...style }}>
       {size !== null && (
         <div
           ref={placeThumb}

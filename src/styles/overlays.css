@@ -299,3 +299,37 @@
 [role="alert"]:is([class*="bg-danger/"], [class*="border-danger"]):not(.ui-notice) .text-danger {
   color: var(--color-ink);
 }
+
+/* Connect apps and Templates are one window: going from one to the other keeps the dim and the frame in place, and the
+   page inside slides as a page of Settings does (in from the right going forward, back from the left going back) */
+.ca-scrim[data-handoff], .ca-scrim[data-handoff] > .ca-dialog { animation: none !important; }
+.templates-sheet[data-wipe-in="push"] > :not([data-window-chrome]) { translate: round(nearest, var(--wipe-x), 1px) 0; animation: page-wipe-push-in calc(200ms * var(--motion-scale, 1)) var(--dusk-ease-out) backwards; }
+/* the page slides in whole pixels: a registered length is animated and the page is placed at it rounded, so its text
+   is never resampled at a fractional offset mid-slide */
+@property --wipe-x { syntax: "<length-percentage>"; inherits: false; initial-value: 0px; }
+@keyframes page-wipe-push-in { from { --wipe-x: calc(100% * var(--dusk-inline-sign, 1)); } }
+@keyframes dusk-wipe-pop-in-fade { from { opacity: 0; --wipe-x: calc(-30% * var(--dusk-inline-sign, 1)); } }
+.ca-dialog[data-wipe-in="pop"] > .ca-layout > :not(.ca-close) { translate: round(nearest, var(--wipe-x), 1px) 0; animation: dusk-wipe-pop-in-fade calc(200ms * var(--motion-scale, 1)) var(--dusk-ease-out) backwards; }
+@media (prefers-reduced-motion: reduce) {
+  :is(.templates-sheet[data-wipe-in], .ca-dialog[data-wipe-in]) > * { animation: overlay-fade-in 160ms ease-out both; }
+}
+:root[data-reduced-motion="true"] :is(.templates-sheet[data-wipe-in], .ca-dialog[data-wipe-in]) > * { animation: overlay-fade-in 160ms ease-out both; }
+/* coming back, the page's slide is the one motion: its list does not fade up a second time */
+.ca-dialog[data-wipe-in="pop"] .ca-sections[data-browse-list] { animation: none; }
+/* the page's list keeps its scroll-linked edge fades while it slides in: the wipe runs beside them, not instead */
+@supports (animation-timeline: scroll()) {
+  :is(.templates-sheet[data-wipe-in="push"], .ca-dialog[data-wipe-in="pop"]) > .scroll-fade-list {
+    animation-name: var(--page-wipe), scroll-fade-top, scroll-fade-bottom;
+    animation-duration: calc(200ms * var(--motion-scale, 1)), auto, auto;
+    animation-timing-function: var(--dusk-ease-out), linear, linear;
+    animation-fill-mode: both;
+    animation-timeline: auto, scroll(self), scroll(self);
+    animation-range: normal, 0 16px, calc(100% - 24px) 100%;
+  }
+  .templates-sheet[data-wipe-in="push"] > .scroll-fade-list { --page-wipe: page-wipe-push-in; }
+  .ca-dialog[data-wipe-in="pop"] > .scroll-fade-list { --page-wipe: dusk-wipe-pop-in-fade; }
+}
+/* centred in an odd viewport a window lands on a half pixel: snapped while still, soft while it slides. Trimming the
+   scrim's far edges by the odd pixel centres it on whole pixels at any window size. */
+[data-connect-apps].ca-scrim { right: mod(100vw - min(900px, 100vw - 34px), 2px); bottom: mod(100vh - min(702px, 100vh - 32px), 2px); }
+.templates-scrim.templates-scrim { right: mod(100vw - min(900px, 100vw - 32px), 2px); bottom: mod(100vh - min(702px, 100vh - 32px), 2px); }

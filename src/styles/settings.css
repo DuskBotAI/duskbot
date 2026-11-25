@@ -720,3 +720,17 @@
 :root .settings-dialog .settings-pane [data-select-pill]:is(:enabled:hover, [aria-expanded="true"]) { background-color: color-mix(in srgb, var(--color-ink) 9%, transparent); }
 :root .settings-dialog .settings-pane [data-select-pill] > svg { transition: rotate 150ms ease-out; }
 :root .settings-dialog .settings-pane [data-select-pill][aria-expanded="true"] > svg { rotate: 180deg; }
+
+/* a fold in a pane (Advanced): its rows open with their height and a fade, as Connect apps' folds do */
+.settings-fold {
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0;
+  transition: grid-template-rows 240ms var(--dusk-ease-out), opacity 180ms var(--dusk-ease-out);
+}
+.settings-fold[data-open] { grid-template-rows: 1fr; opacity: 1; }
+.settings-fold > * { min-height: 0; overflow: clip; overflow-clip-margin: 4px; }
+@media (prefers-reduced-motion: reduce) {
+  .settings-fold { transition: opacity 180ms var(--dusk-ease-out); }
+}
+:root[data-reduced-motion="true"] .settings-fold { transition: opacity 180ms var(--dusk-ease-out); }

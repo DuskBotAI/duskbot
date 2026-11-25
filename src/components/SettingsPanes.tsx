@@ -252,16 +252,19 @@ export function GeneralPane({ has, remoteActive }: { has: Has; remoteActive: boo
 export function AdvancedFold({ open, onToggle, children }: { open: boolean; onToggle: () => void; children: ReactNode }) {
   const id = useId();
   return (
-    <section data-settings-block="advanced-fold" className="flex flex-col gap-1.5">
+    <section data-settings-block="advanced-fold" className="flex flex-col">
       <button type="button" aria-expanded={open} aria-controls={id} onClick={onToggle} data-settings-fold=""
         className="group flex w-full cursor-pointer items-center gap-3 rounded-xl px-2.5 py-2 text-start outline-none hover:bg-ink/[0.035] focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-focus">
         <span className="min-w-0 flex-1">
           <span data-row-title="" className="block text-ink">{t("settings.docs.advanced")}</span>
           <span data-row-hint="" className="block text-ink-secondary">{t("settings.docs.advancedHint")}</span>
         </span>
-        <ChevronRight size={14} aria-hidden="true" className="-me-0.5 shrink-0 text-ink-tertiary transition-[rotate] duration-150 ease-out group-aria-expanded:rotate-90 motion-reduce:transition-none rtl:-scale-x-100" />
+        <ChevronRight size={14} aria-hidden="true" className="-me-0.5 shrink-0 text-ink-tertiary transition-[rotate] duration-240 ease-(--dusk-ease-out) group-aria-expanded:rotate-90 motion-reduce:transition-none rtl:-scale-x-100" />
       </button>
-      <div id={id} hidden={!open} className="flex flex-col gap-6">{children}</div>
+      {/* the rows open as Connect apps' folds do: the height and a fade together, so the pane never jumps */}
+      <div className="settings-fold" data-open={open ? "" : undefined} inert={!open}>
+        <div id={id} className="flex flex-col gap-6 pt-1.5">{children}</div>
+      </div>
     </section>
   );
 }

@@ -488,17 +488,22 @@ export function toolName(name: string, app: string): string {
 
 /** What an app can do: a quiet row with its count, open from the start, then a search, the actions as plain lines with
  * the everyday ones first, its triggers, and a link to every one on Composio's page for it. Folding slides the list. */
+/** How many abilities a long list shows before its search and "Show more"; a list this short has neither. */
+const ABILITIES_SHOWN = 12;
+
 function ToolkitAbilities({ toolkit, name }: { toolkit: SnapshotToolkit; name: string }) {
   // undefined while its names load, so the row opens whole instead of growing
   const [lists, setLists] = useState<ToolkitActions | null | undefined>(undefined);
   const [open, setOpen] = useState(true);
   const [query, setQuery] = useState("");
+  const [whole, setWhole] = useState(false);
   const listId = useId();
   useEffect(() => {
     let alive = true;
     setLists(undefined);
     setOpen(true);
     setQuery("");
+    setWhole(false);
     void loadToolkitActions(toolkit.slug).then((found) => { if (alive) setLists(found); });
     return () => { alive = false; };
   }, [toolkit.slug]);
@@ -512,6 +517,14 @@ function ToolkitAbilities({ toolkit, name }: { toolkit: SnapshotToolkit; name: s
   ].map((group) => ({ ...group, names: group.names.map((one) => toolName(one, keep)).filter((one) => !needle || one.toLowerCase().includes(needle)) }));
   const found = groups.some((group) => group.names.length > 0);
   const listed = (lists?.actions?.length ?? 0) + (lists?.triggers?.length ?? 0);
+  // a long list opens on its first rows and a search; a short one is simply all there
+  let budget = needle || whole ? Infinity : ABILITIES_SHOWN;
+  const shown = groups.map((group) => {
+    const names = group.names.slice(0, Math.max(0, budget));
+    budget -= names.length;
+    return { ...group, names };
+  });
+  const hidden = groups.reduce((sum, group) => sum + group.names.length, 0) - shown.reduce((sum, group) => sum + group.names.length, 0);
   return (
     <section className="ca-card" data-toolkit-group="actions" data-open={open ? "" : undefined}>
       <button type="button" className="ca-card-row ca-abilities-toggle" aria-expanded={open} aria-controls={listId} onClick={() => setOpen(!open)}>
@@ -521,24 +534,30 @@ function ToolkitAbilities({ toolkit, name }: { toolkit: SnapshotToolkit; name: s
       </button>
       <div className="ca-abilities-fold" data-open={open ? "" : undefined} inert={!open}>
         <div id={listId} className="ca-abilities">
-          {listed > 0 && (
+          {listed > ABILITIES_SHOWN && (
             <div className="ca-card-row">
               <input type="search" className="ca-abilities-search" value={query} onChange={(event) => setQuery(event.target.value)}
                 placeholder={t("connectApps.canDo.searchPlaceholder", { name })} aria-label={t("connectApps.canDo.searchPlaceholder", { name })} />
             </div>
           )}
-          {groups.filter((group) => group.names.length > 0).map((group) => (
+          {shown.filter((group) => group.names.length > 0).map((group) => (
             <div key={group.key} data-ability-group={group.key}>
               {group.label && <p className="ca-card-row ca-abilities-label">{group.label}</p>}
-              {group.names.map((one, index) => <div key={`${index}:${one}`} className="ca-card-row" data-ability=""><span>{one}</span></div>)}
+              {group.names.map((one, index) => <div key={`${index}:${one}`} className="ca-card-row" data-ability=""><span data-tip-clipped={one}>{one}</span></div>)}
             </div>
           ))}
           {needle && !found && <p className="ca-card-row ca-abilities-label" role="status">{t("connectApps.noResults", { query: query.trim() })}</p>}
-          <div className="ca-card-row">
-            <a className="ca-link" href={composioPage(toolkit.slug)} target="_blank" rel="noopener noreferrer">
-              {t("connectApps.composioAll", { count: toolkit.tools })}
-            </a>
-          </div>
+          {(hidden > 0 || toolkit.tools > listed) && (
+            <div className="ca-card-row ca-abilities-foot">
+              {hidden > 0 && <button type="button" className="ca-link" onClick={() => setWhole(true)}>{t("connectApps.canDo.showMore", { count: hidden })}</button>}
+              {toolkit.tools > listed && (
+                <a className="ca-link" href={composioPage(toolkit.slug)} target="_blank" rel="noopener noreferrer">
+                  {t("connectApps.composioAll", { count: toolkit.tools })}
+                  <Icon name="arrow-right-up" size={12} />
+                </a>
+              )}
+            </div>
+          )}
         </div>
       </div>
     </section>

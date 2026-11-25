@@ -135,8 +135,8 @@ function collect(start: () => ChildProcess, timeoutMs: number): Promise<ScriptRe
     const child = start();
     const kill = () => { try { if (!windows && child.pid) process.kill(-child.pid, "SIGKILL"); else child.kill("SIGKILL"); } catch { /* already gone */ } };
     const timer = setTimeout(() => { kill(); done({ ok: false, error: `The script ran longer than ${Math.round(timeoutMs / 1000)} seconds.` }); }, timeoutMs);
-    child.stdout!.on("data", (chunk: Buffer) => { if (out.length < SCRIPT_OUTPUT_MAX) out += chunk.toString("utf8"); });
-    child.stderr!.on("data", (chunk: Buffer) => { if (err.length < 2_000) err += chunk.toString("utf8"); });
+    child.stdout!.setEncoding("utf8").on("data", (chunk: string) => { if (out.length < SCRIPT_OUTPUT_MAX) out += chunk; });
+    child.stderr!.setEncoding("utf8").on("data", (chunk: string) => { if (err.length < 2_000) err += chunk; });
     child.on("error", (error) => done({ ok: false, error: `The script could not start: ${error.message}` }));
     child.on("close", (code) => {
       if (code === 0) return done({ ok: true, output: out.slice(0, SCRIPT_OUTPUT_MAX) });

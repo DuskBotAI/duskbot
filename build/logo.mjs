@@ -102,3 +102,58 @@ export const KIT_GLYPH = [
   "...##########...",
   "................",
 ];
+
+/** Closed seam-free SVG / Android VectorDrawable contour path for a `#`/`.` glyph grid (outer loops clockwise, holes
+ * counter-clockwise, so both non-zero and even-odd fills cut out the eyes cleanly). */
+export function glyphPath(glyph, { x = 0, y = 0, scale = 1 } = {}) {
+  const filled = (cx, cy) => cy >= 0 && cy < glyph.length && cx >= 0 && cx < glyph[cy].length && glyph[cy][cx] === "#";
+  const next = new Map();
+  const add = (x1, y1, x2, y2) => {
+    const key = `${x1},${y1}`;
+    const list = next.get(key) ?? [];
+    list.push([x2, y2]);
+    next.set(key, list);
+  };
+  for (let cy = 0; cy < glyph.length; cy++) {
+    for (let cx = 0; cx < glyph[cy].length; cx++) {
+      if (!filled(cx, cy)) continue;
+      if (!filled(cx, cy - 1)) add(cx, cy, cx + 1, cy);
+      if (!filled(cx + 1, cy)) add(cx + 1, cy, cx + 1, cy + 1);
+      if (!filled(cx, cy + 1)) add(cx + 1, cy + 1, cx, cy + 1);
+      if (!filled(cx - 1, cy)) add(cx, cy + 1, cx, cy);
+    }
+  }
+  const n = (v) => String(+(v).toFixed(3));
+  const loops = [];
+  for (const [startKey, edges] of next) {
+    while (edges.length) {
+      const [sx, sy] = startKey.split(",").map(Number);
+      const pts = [[sx, sy]];
+      let [cx, cy] = edges.pop();
+      let dx = cx - sx, dy = cy - sy;
+      while (cx !== sx || cy !== sy) {
+        pts.push([cx, cy]);
+        const list = next.get(`${cx},${cy}`);
+        // At a corner touching diagonally, turn right first so loops stay disjoint.
+        const pick = list.length === 1 ? 0 : list.findIndex(([nx, ny]) => (nx - cx) === -dy && (ny - cy) === dx);
+        const [nx, ny] = list.splice(pick >= 0 ? pick : 0, 1)[0];
+        dx = nx - cx;
+        dy = ny - cy;
+        cx = nx;
+        cy = ny;
+      }
+      const corners = pts.filter((p, i) => {
+        const a = pts[(i - 1 + pts.length) % pts.length];
+        const b = pts[(i + 1) % pts.length];
+        return (p[0] - a[0]) * (b[1] - p[1]) !== (p[1] - a[1]) * (b[0] - p[0]);
+      });
+      let d = `M${n(x + corners[0][0] * scale)},${n(y + corners[0][1] * scale)}`;
+      for (let i = 1; i < corners.length; i++) {
+        const [, py] = corners[i - 1], [qx, qy] = corners[i];
+        d += qy === py ? `H${n(x + qx * scale)}` : `V${n(y + qy * scale)}`;
+      }
+      loops.push(`${d}Z`);
+    }
+  }
+  return loops.join(" ");
+}

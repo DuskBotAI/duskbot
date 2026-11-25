@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 import { crc32, deflateSync } from "node:zlib";
 import { Resvg } from "@resvg/resvg-js";
 
-import { KIT_ONLY, LOGO_SIZE, SCENE, logoTile, svg } from "../../../build/logo.mjs";
+import { KIT_GLYPH, KIT_ONLY, LOGO_SIZE, SCENE, glyphPath, logoTile, svg } from "../../../build/logo.mjs";
 
 const root = fileURLToPath(new URL("../../../", import.meta.url));
 
@@ -86,6 +86,22 @@ const launch = (width, height) => {
   return svg(width, height, `<rect width="${width}" height="${height}" fill="${LIGHT}"/>${logoTile({ size: side, x: (width - side) / 2, y: (height - side) / 2, radius: side * 0.225 })}`);
 };
 write(join(android, "drawable/splash.png"), png(launch(480, 320), 480));
+// Android masks notification small icons by alpha alone: use the white monochrome cat silhouette with cutout eyes,
+// centered inside a 24dp viewport with ~2.7dp horizontal / 3.3dp vertical padding.
+const notificationIcon = [
+  `<vector xmlns:android="http://schemas.android.com/apk/res/android"`,
+  `    android:width="24dp"`,
+  `    android:height="24dp"`,
+  `    android:viewportWidth="18"`,
+  `    android:viewportHeight="18">`,
+  `    <path`,
+  `        android:fillColor="#FFFFFFFF"`,
+  `        android:fillType="evenOdd"`,
+  `        android:pathData="${glyphPath(KIT_GLYPH, { x: 1, y: 0.5 })}" />`,
+  `</vector>`,
+  "",
+].join("\n");
+write(join(android, "drawable/ic_stat_duskbot.xml"), notificationIcon);
 for (const [density, size, short, long] of [["mdpi", 48, 320, 480], ["hdpi", 72, 480, 800], ["xhdpi", 96, 720, 1280], ["xxhdpi", 144, 960, 1600], ["xxxhdpi", 192, 1280, 1920]]) {
   write(join(android, `mipmap-${density}/ic_launcher.png`), png(legacy, size, true));
   write(join(android, `mipmap-${density}/ic_launcher_round.png`), png(round, size, true));

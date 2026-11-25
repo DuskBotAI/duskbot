@@ -232,6 +232,10 @@ function appToolsPrompt(apps: readonly string[]): string {
 
 export const BROWSER_FALLBACK_PROMPT = " When a connected app has no tool for what is needed, or its tool cannot do it, do that step in your browser on the app's own website with the same account instead of refusing; if the site asks to sign in, ask the person to sign in there once.";
 
+export function composioConnectSystemPrompt(browser = false): string {
+  return browser ? `${COMPOSIO_PROMPT.trimEnd().replace(/\.?$/, ".")}${BROWSER_FALLBACK_PROMPT}` : COMPOSIO_PROMPT;
+}
+
 export function composioSystemPrompt(grants: Record<string, ConnectorToolGrant> | undefined, browser = false): string {
   const withFallback = (text: string) => (browser ? `${text.trimEnd().replace(/\.?$/, ".")}${BROWSER_FALLBACK_PROMPT}` : text);
   if (grants === undefined) return withFallback(COMPOSIO_PROMPT + appToolsPrompt(Object.keys(APP_TOOLS_PROMPT)));

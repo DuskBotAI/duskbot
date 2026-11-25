@@ -1,4 +1,5 @@
 import type { DirectoryApp } from "../shared/connector-directory.ts";
+import { isComposioConnectUrl } from "./composio-connect.ts";
 import { mcpServerLabel, remoteMcpAppFor } from "./remote-mcp-label.ts";
 import { customMcpPrompt } from "./system-prompt.ts";
 
@@ -27,7 +28,9 @@ export function mcpServersPrompt({ mounted, configured, off = [], needsSignIn = 
   const apps: Array<{ name: string; app: DirectoryApp }> = [];
   const others: string[] = [];
   for (const name of mounted) {
-    const app = remoteMcpAppFor(urlOf(configured[name]));
+    const url = urlOf(configured[name]);
+    if (isComposioConnectUrl(url)) continue;
+    const app = remoteMcpAppFor(url);
     if (app) apps.push({ name, app });
     else others.push(name);
   }

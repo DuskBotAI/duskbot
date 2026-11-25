@@ -5,23 +5,55 @@
 // sign-in link (docs.composio.dev/toolkits/meta-tools/manage_connections).
 import { McpHttpError, RemoteMcpClient, MAX_REMOTE_MCP_BYTES } from "./mcp-http.ts";
 import { parseStoredMcpServer, type StoredRemoteMcpServer } from "./mcp-registry.ts";
-import type { RemoteMcpSpec } from "./contracts.ts";
+import type { McpServerSpec, RemoteMcpSpec } from "./contracts.ts";
 import { PASS, type RouteHandler } from "./routes/table.ts";
 
 export const COMPOSIO_CONNECT_URL = "https://connect.composio.dev/mcp";
+const COMPOSIO_CONNECT_HOST = new URL(COMPOSIO_CONNECT_URL).host;
 const MANAGE_TOOL = "COMPOSIO_MANAGE_CONNECTIONS";
 const CALL_MS = 30_000;
+
+export function isComposioConnectUrl(url: string | undefined): boolean {
+  if (!url) return false;
+  try {
+    return new URL(url).host === COMPOSIO_CONNECT_HOST;
+  } catch {
+    return false;
+  }
+}
 
 /** Composio Connect, when the person has added it: any server at its address, whatever they named it. */
 export function composioConnectServer(servers: Record<string, unknown> | undefined): { name: string; server: StoredRemoteMcpServer } | null {
   for (const [name, raw] of Object.entries(servers ?? {})) {
     const parsed = parseStoredMcpServer(name, raw);
     if (!parsed.ok || !("url" in parsed.server)) continue;
-    try {
-      if (new URL(parsed.server.url).host === new URL(COMPOSIO_CONNECT_URL).host) return { name, server: parsed.server };
-    } catch { /* not a url */ }
+    if (isComposioConnectUrl(parsed.server.url)) return { name, server: parsed.server };
   }
   return null;
+}
+
+/** Whether Composio Connect is added, turned on, and signed in. */
+export function composioConnectActive(
+  servers: Record<string, unknown> | undefined,
+  signedIn: (name: string, server: StoredRemoteMcpServer) => boolean,
+): boolean {
+  const found = composioConnectServer(servers);
+  return Boolean(found && found.server.enabled && signedIn(found.name, found.server));
+}
+
+/** Whether Composio Connect is among the custom MCP servers mounted for this turn. */
+export function hasComposioConnectMounted(
+  mounted: Readonly<Record<string, unknown>> | undefined,
+  configured: Record<string, unknown> | undefined,
+): boolean {
+  const found = composioConnectServer(configured);
+  return Boolean(found && mounted && Object.hasOwn(mounted, found.name));
+}
+
+/** Drops Composio Connect from a bot's custom MCP servers when Connected apps are turned off for that bot. */
+export function withoutComposioConnect(servers: Record<string, McpServerSpec>): Record<string, McpServerSpec> {
+  const kept = Object.entries(servers).filter(([, spec]) => !("url" in spec && isComposioConnectUrl(spec.url)));
+  return kept.length === Object.keys(servers).length ? servers : Object.fromEntries(kept);
 }
 
 export type AppConnection =

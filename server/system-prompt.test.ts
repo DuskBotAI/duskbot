@@ -16,6 +16,7 @@ import {
   mentionPrompt,
   COMPOSIO_PROMPT,
   BROWSER_FALLBACK_PROMPT,
+  composioConnectSystemPrompt,
   composioSystemPrompt,
   customMcpPrompt,
   CREDENTIAL_PROMPT,
@@ -382,6 +383,13 @@ describe("composioSystemPrompt", () => {
     const prompt = composioSystemPrompt({ gmail: { tools: "*" } });
     expect(prompt.startsWith(" ")).toBe(true);
     expect(prompt.startsWith("  ")).toBe(false);
+  });
+
+  it("gives Composio Connect bots the Composio tool workflow without legacy dotted app-tool names", () => {
+    const prompt = composioConnectSystemPrompt(false);
+    expect(prompt).toBe(COMPOSIO_PROMPT);
+    expect(prompt).not.toContain("gmail.search_emails");
+    expect(composioConnectSystemPrompt(true).endsWith(`.${BROWSER_FALLBACK_PROMPT}`)).toBe(true);
   });
 });
 

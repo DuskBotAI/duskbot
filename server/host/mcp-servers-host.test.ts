@@ -193,6 +193,16 @@ it("counts a URL server as up when it answers, even to refuse its keys, and as d
   }
 });
 
+it("excludes Composio Connect when a bot has Connected apps turned off", () => {
+  const { cfg, host } = setup({ boxed: false, bots: [PAUL] });
+  cfg.mcpServers = {
+    "composio-connect": { type: "http", url: "https://connect.composio.dev/mcp", headers: {}, enabled: true },
+    linear: { type: "http", url: "https://mcp.linear.app/mcp", headers: {}, enabled: true },
+  };
+  expect(Object.keys(host.mounted(PAUL)).sort()).toEqual(["composio-connect", "linear"]);
+  expect(Object.keys(host.mounted({ ...PAUL, composio: false }))).toEqual(["linear"]);
+});
+
 it("a package runner's first check waits for its download; any other program's keeps the short wait", () => {
   for (const command of ["uvx", "npx", "/opt/homebrew/bin/uvx", "npx.cmd"]) expect(startCheckTimeout(command), command).toBe(120_000);
   for (const command of ["node", "python3", "/usr/local/bin/my-server"]) expect(startCheckTimeout(command), command).toBeUndefined();

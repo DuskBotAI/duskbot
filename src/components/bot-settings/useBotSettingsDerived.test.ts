@@ -44,9 +44,11 @@ describe("connected apps in bot settings", () => {
     expect(derive().canUseConnectedApps).toBe(false);
   });
 
-  it("counts connected apps as configured only with the Composio service", () => {
+  it("counts connected apps as configured with either the Composio service or Composio Connect", () => {
     expect(derive().connectedAppsConfigured).toBe(false);
     fixture.config = { composio: { configured: true } };
+    expect(derive().connectedAppsConfigured).toBe(true);
+    fixture.config = { composio: { configured: false, viaConnect: true } };
     expect(derive().connectedAppsConfigured).toBe(true);
   });
 });

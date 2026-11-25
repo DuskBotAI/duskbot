@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { writeFileAtomic } from "../atomic.ts";
 import type { AppConfig } from "../config.ts";
 import { launcherOf } from "../cloud-connections.ts";
+import { withoutComposioConnect } from "../composio-connect.ts";
 import { customMcpServers } from "../config.ts";
 import { readAccountChoices } from "../connector-account-choice.ts";
 import type { McpServerSpec, RemoteMcpSpec, StdioMcpSpec } from "../contracts.ts";
@@ -18,7 +19,7 @@ import { probeMcpServer } from "../mcp-probe.ts";
 import { isRemoteMcpServer, parseStoredMcpServer, type StoredStdioMcpServer } from "../mcp-registry.ts";
 import { canUseMcpServer } from "../../shared/tool-scope.ts";
 
-type Bot = { id: string; name: string; mcpServers?: string[]; toolScope?: unknown };
+type Bot = { id: string; name: string; composio?: boolean; mcpServers?: string[]; toolScope?: unknown };
 
 export interface McpServersHostDeps {
   dataDir: string;
@@ -110,8 +111,10 @@ export async function urlServerAnswers(server: RemoteMcpSpec, timeoutMs: number 
 }
 
 export function createMcpServersHost(deps: McpServersHostDeps) {
-  const configured = (bot: Bot): Record<string, McpServerSpec> =>
-    withChosenAppAccounts(deps.policy(customMcpServers(deps.cfg(), bot.mcpServers, bot.id)), bot.id, readAccountChoices(deps.dataDir));
+  const configured = (bot: Bot): Record<string, McpServerSpec> => {
+    const base = withChosenAppAccounts(deps.policy(customMcpServers(deps.cfg(), bot.mcpServers, bot.id)), bot.id, readAccountChoices(deps.dataDir));
+    return bot.composio === false ? withoutComposioConnect(base) : base;
+  };
   /** None on an AI that starts no servers, and only those its tool selection reaches. */
   const started = (bot: Bot): string[] => (deps.startsServers(bot.id) ? Object.keys(configured(bot)).filter((name) => canUseMcpServer(bot.toolScope, name)) : []);
   const asBot = (botId: string) => {

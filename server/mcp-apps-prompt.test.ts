@@ -36,6 +36,13 @@ describe("mcpServersPrompt", () => {
     expect(mcpServersPrompt({ mounted: [], configured: { todoist } })).toBe("");
   });
 
+  it("omits Composio Connect from the generic custom MCP server sentence", () => {
+    const connect = { type: "http", url: "https://connect.composio.dev/mcp", headers: {} };
+    expect(mcpServersPrompt({ mounted: ["composio-connect"], configured: { "composio-connect": connect } })).toBe("");
+    expect(mcpServersPrompt({ mounted: ["composio-connect", "shop"], configured: { "composio-connect": connect, shop: own } }))
+      .toBe(' The user also added an MCP server for you: "shop". Use their available tools under the engine\'s normal approval rules.');
+  });
+
   it("is empty with no servers", () => {
     expect(mcpServersPrompt({ mounted: [], configured: {} })).toBe("");
   });

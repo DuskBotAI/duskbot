@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { composioCallFailure, composioConnectServer, createComposioConnectRoutes, readAppAccounts, readAppConnection } from "./composio-connect.ts";
+import { composioCallFailure, composioConnectActive, composioConnectServer, createComposioConnectRoutes, hasComposioConnectMounted, isComposioConnectUrl, readAppAccounts, readAppConnection, withoutComposioConnect } from "./composio-connect.ts";
 import { McpHttpError } from "./mcp-http.ts";
 import { PASS } from "./routes/table.ts";
 
@@ -61,6 +61,19 @@ describe("the Composio Connect routes", () => {
   it("finds the server by its address, whatever it is called", () => {
     expect(composioConnectServer({ mine: server, other: { type: "http", url: "https://example.com/mcp", headers: {}, enabled: true } })?.name).toBe("mine");
     expect(composioConnectServer({})).toBeNull();
+    expect(isComposioConnectUrl(server.url)).toBe(true);
+    expect(isComposioConnectUrl("https://example.com/mcp")).toBe(false);
+    expect(isComposioConnectUrl(undefined)).toBe(false);
+  });
+
+  it("reports active, mounted, and filtered state for Composio Connect", () => {
+    const servers = { mine: server, other: { type: "http", url: "https://example.com/mcp", headers: {}, enabled: true } };
+    expect(composioConnectActive(servers, () => true)).toBe(true);
+    expect(composioConnectActive(servers, () => false)).toBe(false);
+    expect(composioConnectActive({ mine: { ...server, enabled: false } }, () => true)).toBe(false);
+    expect(hasComposioConnectMounted({ mine: server }, servers)).toBe(true);
+    expect(hasComposioConnectMounted({ other: servers.other }, servers)).toBe(false);
+    expect(Object.keys(withoutComposioConnect({ mine: { type: "http", url: server.url, headers: {} }, other: { type: "http", url: "https://example.com/mcp", headers: {} } }))).toEqual(["other"]);
   });
 
   it("connects an app through the signed-in server, and asks for the sign-in first", async () => {

@@ -107,7 +107,7 @@ export function InboxPanel() {
   );
   if (phone) {
     return createPortal(
-      <div className="fixed inset-0 z-50 flex flex-col justify-end bg-black/40" onMouseDown={(event) => { if (event.target === event.currentTarget) closeInbox(); }}>
+      <div className="fixed inset-0 z-50 flex flex-col justify-end bg-scrim" onMouseDown={(event) => { if (event.target === event.currentTarget) closeInbox(); }}>
         <section role="dialog" aria-modal="true" aria-label={t("inbox.panel.title")} data-inbox-panel="sheet" onKeyDown={onKeyDown}
           className="flex max-h-[85dvh] min-h-[50dvh] flex-col overflow-hidden rounded-t-2xl border-t border-transparent bg-panel pb-[env(safe-area-inset-bottom)]">
           {body}

@@ -161,10 +161,7 @@
   color: var(--color-ink);
 }
 .ui-dialog-scrim {
-  background: rgb(0 0 0 / 0.5);
-}
-@container style(--code-color-scheme: dark) {
-  .ui-dialog-scrim { background: rgb(0 0 0 / 0.7); }
+  background: var(--color-scrim);
 }
 .ui-dialog-title {
   margin: 0;

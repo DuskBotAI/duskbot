@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import { applyMotionSpeed } from "../lib/motion-speed";
 import { applySkin, THEME_SKINS } from "../lib/skins";
 import { cn } from "../lib/cn";
+import { ChevronRight } from "../icons";
 import {
   CardA, CardE, DesktopChat, DesktopFrame, DesktopSettings, FIFTH_CHAT, FIRST_CHAT, FirstLaunch, Fit, InlineAsk, LoginScreen,
   PhoneChat, PhoneFrame, PhoneSettings, PhoneSheet, type SettingsView,
@@ -163,10 +164,17 @@ const EVERY: Approach = {
 
 const ALL = [...APPROACHES, EVERY];
 const PLAY_MS = 3600;
+const ASK_STEP: Record<string, Record<Device, number>> = {
+  a: { desktop: 1, phone: 1 }, b: { desktop: 0, phone: 0 }, c: { desktop: 2, phone: 0 }, d: { desktop: 2, phone: 0 }, e: { desktop: 1, phone: 1 }, all: { desktop: 1, phone: 1 },
+};
+const askStep = (id: string, device: Device) => ASK_STEP[id]?.[device] ?? 0;
 
 function readParams() {
   const p = new URLSearchParams(location.search);
-  return { approach: p.get("a") ?? "e", device: (p.get("device") === "phone" ? "phone" : "desktop") as Device, step: Number(p.get("step") ?? 0) || 0, eu: p.get("region") === "eu", dark: p.get("theme") === "dark" };
+  const approach = p.get("a") ?? "e";
+  const device: Device = p.get("device") === "phone" ? "phone" : "desktop";
+  const asked = Number(p.get("step"));
+  return { approach, device, step: p.get("step") !== null && Number.isInteger(asked) && asked >= 0 ? asked : askStep(approach, device), eu: p.get("region") === "eu", dark: p.get("theme") === "dark" };
 }
 
 function Pill({ pressed, onClick, children, label }: { pressed?: boolean; onClick: () => void; children: ReactNode; label?: string }) {
@@ -216,8 +224,8 @@ function Lab() {
     return () => removeEventListener("keydown", key);
   }, [next, back]);
 
-  const pick = (id: string) => { setApproachId(id); setStep(0); setPlaying(false); };
-  const pickDevice = (d: Device) => { setDevice(d); setStep(0); setPlaying(false); };
+  const pick = (id: string) => { setApproachId(id); setStep(askStep(id, device)); setPlaying(false); };
+  const pickDevice = (d: Device) => { setDevice(d); setStep(askStep(approach.id, d)); setPlaying(false); };
 
   return (
     <div className="min-h-[100dvh] bg-app px-6 py-8 text-ink">
@@ -259,16 +267,18 @@ function Lab() {
               <Pill onClick={next} label="Next">Next</Pill>
               <Pill pressed={playing} onClick={() => { if (!playing && at >= steps.length - 1) setStep(0); setPlaying((v) => !v); }}>{playing ? "Pause" : "Play"}</Pill>
             </div>
-            <ol aria-label="Steps" className="m-0 mt-4 flex list-none flex-col gap-1 p-0">
+            <p className="m-0 mt-4 text-[13px] text-ink-secondary">Opens on the ask. Click any step to jump there.</p>
+            <ol aria-label="Steps" className="m-0 mt-2 flex list-none flex-col gap-1 p-0">
               {steps.map((s, i) => (
                 <li key={i}>
                   <button type="button" aria-current={i === at ? "step" : undefined} onClick={() => { setStep(i); setPlaying(false); }}
-                    className={cn("flex w-full gap-3 rounded-[12px] px-3 py-2 text-start transition-[background-color] duration-150 ease-[ease] focus-visible:outline-2 focus-visible:outline-focus", i === at ? "bg-ink/[0.07]" : "hover:bg-ink/[0.04]")}>
-                    <span className="w-4 shrink-0 text-[13px] tabular-nums text-ink-tertiary">{i + 1}</span>
-                    <span className="min-w-0">
+                    className={cn("group flex min-h-11 w-full cursor-pointer items-start gap-3 rounded-[12px] px-3 py-2.5 text-start transition-[background-color,color] duration-150 ease-[ease] focus-visible:outline-2 focus-visible:outline-focus", i === at ? "bg-ink text-app" : "bg-ink/[0.045] text-ink hover:bg-ink/[0.09]")}>
+                    <span className={cn("w-4 shrink-0 text-[13px] leading-5 tabular-nums", i === at ? "text-app/70" : "text-ink-tertiary")}>{i + 1}</span>
+                    <span className="min-w-0 flex-1">
                       <span className="block text-[14px] leading-5">{s.title}</span>
-                      {i === at && <span className="mt-0.5 block text-[13px] leading-[18px] text-ink-secondary">{s.note}{eu && s.eu ? ` ${s.eu}` : ""}</span>}
+                      {i === at && <span className="mt-0.5 block text-[13px] leading-[18px] text-app/75">{s.note}{eu && s.eu ? ` ${s.eu}` : ""}</span>}
                     </span>
+                    {i !== at && <ChevronRight size={16} aria-hidden className="mt-0.5 shrink-0 text-ink-tertiary transition-transform duration-150 ease-[ease] group-hover:translate-x-0.5 motion-reduce:transition-none" />}
                   </button>
                 </li>
               ))}

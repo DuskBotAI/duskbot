@@ -89,7 +89,7 @@
     },
     {
       "name": "coordinate_bots",
-      "description": "The one way to hand work on: ask existing dusk bot teammates a question or assign them concrete work. In a room it defaults to this room; use group_id from list_room_targets for a specific room. Outside a room, what you send a teammate from this conversation goes to one standing work thread with them; thread \"new\" opens a fresh one, a thread id picks one you opened. Where work you gave is still open, it goes into that work: it answers the question that work waits on, or reaches the turn running it. Give 1-4 bot_ids, teammate ids as list_bots or your roster prints them; a unique teammate name also resolves: they see only what you send them (give context) and use their own model, tools and permissions. They can consult their own specialists; every result returns here and resumes you automatically, so after sending all assignments END your turn: do not poll or wait, and never call assignment_status in the same turn. consult true asks a question the teammate answers from what it knows, acting on nothing; reply \"none\" is a one-way notice nothing comes back from. Include exact file paths, constraints and what must be verified (done_when). On return, resolve tradeoffs, verify the requested outcome and request concrete corrections with rework true if necessary before giving one final answer. Never target whoever assigned you this work or anyone above it: to ask or report back, end your turn and your reply resumes them. Never thank or approve a finished teammate; its result already returned. Never repeat a refused call unchanged.",
+      "description": "The one way to hand work on: ask existing dusk bot teammates a question or assign them concrete work. In a room it defaults to this room; use group_id from list_room_targets for a specific room. Outside a room, what you send a teammate from this conversation goes to one standing work thread with them; thread \"new\" opens a fresh one, a thread id picks one you opened. Where work you gave is still open, it goes into that work: it answers the question that work waits on, or reaches the turn running it. Give 1-4 bot_ids, teammate ids as list_bots or your roster prints them; a unique teammate name also resolves: they see only what you send them (give context) and use their own model, tools and permissions. They can consult their own specialists; every result returns here and resumes you automatically, so after sending all assignments END your turn: do not poll or wait, and never call assignment_status in the same turn. consult true asks a question the teammate answers from what it knows, acting on nothing; reply \"none\" is a one-way notice nothing comes back from. Include exact file paths, constraints and what must be verified (done_when). On return, resolve tradeoffs, verify the requested outcome and request concrete corrections with rework true if necessary before giving one final answer. Never target whoever assigned you this work or anyone above it: to ask or report back, end your turn and your reply resumes them. Never give work that needs running to a teammate list_bots shows cannot run code. Never thank or approve a finished teammate; its result already returned. Never repeat a refused call unchanged.",
       "inputSchema": {
         "type": "object",
         "additionalProperties": false,
@@ -748,7 +748,7 @@
               },
               "expression": {
                 "type": "string",
-                "description": "Only for cron: five fields, minute hour day-of-month month weekday. Examples: 0 9 1 * * = monthly on day 1 at 09:00; 0 9 L * * = last day of each month; 0 9 * * MON#2 = second Monday of each month. L and # are this scheduler's own; in cron lines you write for other systems use standard five fields. Lists, ranges and steps are supported. No seconds, year, or @ macros. Never substitute daily AI date checks for a calendar rule."
+                "description": "Only for cron: five fields, minute hour day-of-month month weekday. Examples: 0 9 1 * * = monthly on day 1 at 09:00; 0 9 L * * = last day of each month; 0 9 * * MON#2 = second Monday of each month. L and # are this scheduler's own; in cron lines you write for other systems use standard five fields, where a day-of-month and a weekday together match either one (first Monday: 15 2 1-7 * * plus a weekday test in the command). Lists, ranges and steps are supported. No seconds, year, or @ macros. Never substitute daily AI date checks for a calendar rule."
               },
               "timeZone": {
                 "type": "string",
@@ -928,6 +928,16 @@
                   "full"
                 ],
                 "description": "script only: full runs it outside the read-only fence, so it can write files (for \"it needs to write files\"). Always asks the person on a card."
+              },
+              "save_to": {
+                "type": "string",
+                "description": "script only: file in your folder its output is written to (no card needed)."
+              },
+              "save_mode": {
+                "type": "string",
+                "enum": [
+                  "append"
+                ]
               }
             },
             "required": [
@@ -938,6 +948,39 @@
           "clear_check": {
             "type": "boolean",
             "description": "Updates: true removes the check."
+          },
+          "read_from": {
+            "type": "array",
+            "maxItems": 5,
+            "items": {
+              "type": "string"
+            },
+            "description": "Schedules: trigger ids whose latest report each run reads."
+          },
+          "after": {
+            "type": "array",
+            "maxItems": 5,
+            "items": {
+              "type": "string"
+            },
+            "description": "Schedules: trigger ids to run after (chaining): runs when one finishes with news, given its report. schedule optional. Not with check."
+          },
+          "hand_to": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "bot_id": {
+                "type": "string"
+              },
+              "room_id": {
+                "type": "string"
+              }
+            },
+            "description": "Schedules: also send each report to another bot's chat (bot_id) or a room (room_id)."
+          },
+          "clear_chain": {
+            "type": "boolean",
+            "description": "Updates: removes read_from, after, hand_to; giving any replaces all three."
           },
           "app": {
             "type": "string",

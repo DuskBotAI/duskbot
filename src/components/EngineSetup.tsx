@@ -333,7 +333,8 @@ function ManagedEngineSetup({ instance, signInOnly, autoStart = false, onAutoSta
   });
 
   const signIn = () => run("signin", async () => {
-    const { auth } = await api(`/api/instances/${encodeURIComponent(instance.instanceId)}/auth/start`, { method: "POST" });
+    const { auth } = await api(`/api/instances/${encodeURIComponent(instance.instanceId)}/auth/start`, { method: "POST" })
+      .catch(async (cause: unknown) => { await refreshInstances().catch(() => {}); throw cause; });
     if (auth.phase === "succeeded") {
       await refreshInstances();
       await refreshModels(instance.instanceId);

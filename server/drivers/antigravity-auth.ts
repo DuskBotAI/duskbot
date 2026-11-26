@@ -24,7 +24,7 @@ import {
   parseAntigravityAuthorizationUrl,
   type AntigravityAuthorizationUrl,
 } from "./antigravity-oauth.ts";
-import type { AntigravityRuntime } from "./antigravity-runtime.ts";
+import { markAntigravityRuntimeOutdated, type AntigravityRuntime } from "./antigravity-runtime.ts";
 
 export { antigravityLoginResponse };
 
@@ -70,9 +70,13 @@ const OUTDATED_CLI = /unexpected argument "acp|flags? provided but not defined: 
 
 /** The one plain sentence a failed sign-in shows; the CLI's own output goes to the log only. */
 export function antigravitySignInFailure(stderr: string): string {
-  return OUTDATED_CLI.test(stderr)
-    ? "The Antigravity app on this computer is too old for dusk bot. Install the current one, then sign in again."
+  return antigravityCliOutdated(stderr)
+    ? "The Antigravity app on this computer is too old for dusk bot. Try again to install Google's current one."
     : "Antigravity couldn't start Google sign-in. Try again in a moment.";
+}
+
+export function antigravityCliOutdated(stderr: string): boolean {
+  return OUTDATED_CLI.test(stderr);
 }
 
 export class AntigravityAuthController {
@@ -184,6 +188,7 @@ export class AntigravityAuthController {
       } else {
         const detail = exitDetail(code, signal, stderrTail.text);
         console.warn(`antigravity: Google sign-in exited${detail}`);
+        if (antigravityCliOutdated(stderrTail.text)) markAntigravityRuntimeOutdated(runtime);
         const error = new Error(antigravitySignInFailure(stderrTail.text));
         failUrl(error);
         rejectCompleted(error);

@@ -204,6 +204,15 @@ export const ANTIGRAVITY_MIN_ACP_VERSION = "1.5.0";
 const VERSION_PROBE_MS = 60_000;
 const versionProbes = new Map<string, Promise<string | null>>();
 const warnedOld = new Set<string>();
+const refusedAcp = new Set<string>();
+
+/** A CLI dusk bot did not install that turned `agy acp --login` away as an unknown command is skipped from now on,
+ * so the next status read offers the managed install instead of the same failed sign-in. */
+export function markAntigravityRuntimeOutdated(runtime: AntigravityRuntime): void {
+  if (runtime.source === "managed" || refusedAcp.has(runtime.executablePath)) return;
+  refusedAcp.add(runtime.executablePath);
+  console.warn(`antigravity: skipping ${runtime.executablePath} from now on (it does not know acp --login)`);
+}
 
 export function parseAntigravityVersion(output: string): string | null {
   return /^\s*v?(\d+\.\d+\.\d+)\b/u.exec(output)?.[1] ?? null;
@@ -237,10 +246,13 @@ let versionProbe: AntigravityVersionProbe = probeVersion;
 export function setAntigravityVersionProbe(probe: AntigravityVersionProbe | null): void {
   versionProbe = probe ?? probeVersion;
   versionProbes.clear();
+  refusedAcp.clear();
 }
 
-/** A CLI found on PATH that reports a version older than `agy acp` is skipped; one whose version cannot be read is still tried. */
+/** A CLI found on PATH that reports a version older than `agy acp`, or that sign-in found too old, is skipped; one
+ * whose version cannot be read is still tried. */
 async function usableExternal(runtime: AntigravityRuntime, env: NodeJS.ProcessEnv): Promise<AntigravityRuntime | null> {
+  if (refusedAcp.has(runtime.executablePath)) return null;
   const version = await versionProbe(runtime.executablePath, env);
   if (version && compareSemver(version, ANTIGRAVITY_MIN_ACP_VERSION) < 0) {
     if (!warnedOld.has(runtime.executablePath)) {
@@ -264,7 +276,18 @@ export async function resolveAntigravityRuntime(
   if (override && override !== "agy" && override !== "antigravity") {
     for (const candidate of pathCandidates(override, env)) {
       const found = await externalRuntime(candidate, "override");
-      if (found) return found;
+      if (!found) continue;
+      if (!legacyCli) {
+        if (refusedAcp.has(found.executablePath)) {
+          throw new AntigravitySetupError(
+            "The custom Antigravity executable is too old for dusk bot. Clear the custom path or point it at Antigravity 1.5 or newer.",
+          );
+        }
+        return found;
+      }
+      const usable = await usableExternal(found, env);
+      if (usable) return usable;
+      tooOld = true;
     }
     if (!legacyCli) {
       throw new AntigravitySetupError(

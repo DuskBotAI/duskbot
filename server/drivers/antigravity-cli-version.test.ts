@@ -1,6 +1,6 @@
 import { chmodSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { delimiter, join } from "node:path";
+import { delimiter, dirname, join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { removeTempDir } from "../testing/cleanup.ts";
@@ -14,6 +14,8 @@ import { parseAntigravityVersion, resolveAntigravityRuntime, setAntigravityVersi
 const OLD_CLI_STDERR = 'Error: unexpected argument "acp".\nPrompts are read only from -p/--print, -i/--prompt-interactive, or stdin, so this argument would have been ignored.';
 // Antigravity CLI 1.4.12: `acp` exists, `--login` does not.
 const ACP_WITHOUT_LOGIN_STDERR = "Usage: antigravity acp [flags]\n\nError: flags provided but not defined: -login";
+
+const TOO_OLD = "The Antigravity app on this computer is too old for dusk bot. Try again to install Google's current one.";
 
 const scratch: string[] = [];
 const platform = process.platform;
@@ -98,7 +100,7 @@ describe("a failed Antigravity sign-in", () => {
   it("says the CLI is too old in one plain sentence, never its raw output", () => {
     for (const stderr of [OLD_CLI_STDERR, ACP_WITHOUT_LOGIN_STDERR]) {
       const message = antigravitySignInFailure(stderr);
-      expect(message).toBe("The Antigravity app on this computer is too old for dusk bot. Install the current one, then sign in again.");
+      expect(message).toBe(TOO_OLD);
     }
     expect(antigravitySignInFailure("panic: something else")).toBe("Antigravity couldn't start Google sign-in. Try again in a moment.");
   });
@@ -113,13 +115,60 @@ describe("a failed Antigravity sign-in", () => {
     const controller = new AntigravityAuthController();
     try {
       const failure = await controller.start(runtime, profile).then(() => null, (error: Error) => error);
-      expect(failure?.message).toBe("The Antigravity app on this computer is too old for dusk bot. Install the current one, then sign in again.");
+      expect(failure?.message).toBe(TOO_OLD);
       expect(failure?.message).not.toMatch(/unexpected argument|Prompts are read/);
       expect(warn).toHaveBeenCalledWith(expect.stringContaining("unexpected argument"));
     } finally {
       await controller.cancelAndWait();
     }
   }, 30_000);
+
+  it("skips a CLI on PATH whose version could not be read once it turns `acp --login` away, so Try again installs the official runtime", async () => {
+    if (!resolveAntigravityReleaseAsset()) return;
+    const bin = folder();
+    const data = folder();
+    const executable = script(bin, "agy", `process.stderr.write(${JSON.stringify(`${ACP_WITHOUT_LOGIN_STDERR}\n`)}); process.exit(1);`);
+    setAntigravityVersionProbe(async () => null);
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const env = { PATH: [bin, dirname(process.execPath)].join(delimiter) };
+    const runtime = await resolveAntigravityRuntime(undefined, env, data);
+    expect(runtime).toMatchObject({ executablePath: executable, source: "path" });
+    const profile = await prepareAntigravityProfile({ instanceId: "unread-old", runtime, baseDir: data });
+    const controller = new AntigravityAuthController();
+    try {
+      await expect(controller.start(runtime, profile)).rejects.toThrow(TOO_OLD);
+    } finally {
+      await controller.cancelAndWait();
+    }
+    await expect(resolveAntigravityRuntime(undefined, env, data))
+      .rejects.toMatchObject({ name: "AntigravitySetupError", message: expect.stringMatching(/Install official Antigravity/) });
+  }, 30_000);
+
+  it("names the custom path when a custom executable turns `acp --login` away", async () => {
+    const bin = folder();
+    const executable = script(bin, "my-antigravity", `process.stderr.write(${JSON.stringify(`${OLD_CLI_STDERR}\n`)}); process.exit(2);`);
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const runtime = await resolveAntigravityRuntime(executable, { PATH: process.env.PATH }, bin);
+    const profile = await prepareAntigravityProfile({ instanceId: "custom-old", runtime, baseDir: bin });
+    const controller = new AntigravityAuthController();
+    try {
+      await expect(controller.start(runtime, profile)).rejects.toThrow(TOO_OLD);
+    } finally {
+      await controller.cancelAndWait();
+    }
+    await expect(resolveAntigravityRuntime(executable, { PATH: process.env.PATH }, bin))
+      .rejects.toThrow("The custom Antigravity executable is too old for dusk bot. Clear the custom path or point it at Antigravity 1.5 or newer.");
+  }, 30_000);
+
+  it("passes over a saved absolute agy path older than `agy acp` instead of signing in with it", async () => {
+    if (!resolveAntigravityReleaseAsset()) return;
+    const bin = folder();
+    const saved = onPath(bin, "agy");
+    setAntigravityVersionProbe(async () => "1.4.11");
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    await expect(resolveAntigravityRuntime(saved, { PATH: folder() }, folder()))
+      .rejects.toMatchObject({ name: "AntigravitySetupError", message: expect.stringMatching(/Install official Antigravity/) });
+  });
 
   it("says Google didn't accept the code when the CLI fails after a paste", async () => {
     const bin = folder();

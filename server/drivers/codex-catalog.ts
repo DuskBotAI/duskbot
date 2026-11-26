@@ -271,10 +271,12 @@ function providerName(provider: string, known: Map<string, CodexProvider>): stri
   return known.get(provider)?.name || provider;
 }
 
-function niceLabel(model: string, provider: string, known: Map<string, CodexProvider>, named: Map<string, string>): string {
+function niceLabel(model: string, provider: string, known: Map<string, CodexProvider>, named: Map<string, string>, official: ModelCatalog): string {
   const encoded = encodeCodexSelection(provider, model);
   if (named.has(encoded)) return named.get(encoded)!;
   const host = providerName(provider, known);
+  const officialLabel = official.options.find((option) => option.id === model)?.label;
+  if (officialLabel) return `${officialLabel} (${host})`;
   return qualifiedModelLabel(model, host, {
     redundantWhen: () => host === provider,
     decorate: (facet) => ` (${facet})`,
@@ -417,7 +419,11 @@ async function catalogAround(
   );
   for (const row of live.flat()) remember(row.provider, row.model);
 
-  const options = official.options.map((option) => ({ ...option }));
+  // Codex sends every model through the provider its config.toml chooses, so where that provider serves an official model
+  // too, the ChatGPT row is the same model on a sign-in this Codex does not use: only the provider's row is listed.
+  const routed = main.modelProvider && main.modelProvider !== OFFICIAL_CODEX_PROVIDER
+    ? new Set(extras.filter((extra) => extra.provider === main.modelProvider).map((extra) => extra.model)) : new Set<string>();
+  const options = official.options.filter((option) => !routed.has(option.id)).map((option) => ({ ...option }));
   const seen = new Set(options.map((option) => option.id));
   for (const extra of extras) {
     const id = encodeCodexSelection(extra.provider, extra.model);
@@ -425,7 +431,7 @@ async function catalogAround(
     seen.add(id);
     options.push({
       id,
-      label: niceLabel(extra.model, extra.provider, known, named),
+      label: niceLabel(extra.model, extra.provider, known, named, official),
       custom: true,
     });
   }

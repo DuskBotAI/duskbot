@@ -139,13 +139,37 @@ name = "oMLX"
     expect(catalog.default).toBe(local);
     expect(catalog.options).toContainEqual({
       id: local,
-      label: "gpt-5.4 (oMLX)",
+      label: "GPT-5.4 (oMLX)",
       custom: true,
     });
+    // Codex sends gpt-5.4 through oMLX, so the ChatGPT row of the same model is not listed a second time
+    expect(catalog.options.map((option) => option.id)).not.toContain("gpt-5.4");
+    expect(catalog.options.map((option) => option.id)).toContain("gpt-5.5");
     expect(decodeCodexSelection(catalog.default)).toEqual({
       model: "gpt-5.4",
       modelProvider: "omlx",
     });
+  });
+
+  it("lists a model served by the config's own proxy once, under the proxy, and starts on it", async () => {
+    const home = scratchHome({
+      "config.toml": `
+model_provider = "cpa"
+model = "gpt-5.5"
+
+[model_providers.cpa]
+name = "CLIProxyAPI"
+base_url = "http://127.0.0.1:8317/v1"
+`,
+    });
+
+    const catalog = await readCodexModelCatalog({ HOME: home }, async () =>
+      new Response(JSON.stringify({ data: [{ id: "gpt-5.5" }, { id: "gpt-5.4" }] }), { status: 200 }));
+    const labels = catalog.options.map((option) => option.label);
+
+    expect(catalog.default).toBe(encodeCodexSelection("cpa", "gpt-5.5"));
+    expect(labels.filter((label) => /^GPT-5\.[45]( \(|$)/.test(label))).toEqual(["GPT-5.5 (CLIProxyAPI)", "GPT-5.4 (CLIProxyAPI)"]);
+    expect(catalog.options.map((option) => option.id)).toContain("gpt-5.6-sol");
   });
 
   it("honors CODEX_HOME over HOME and merges live /v1/models", async () => {

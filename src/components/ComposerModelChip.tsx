@@ -6,7 +6,9 @@ import { ModelPicker } from "./ModelPicker";
 
 /** The bot's model beside the message box, switched in two taps: the chip, then a model. On a phone the menu is a bottom
  * sheet and the chip keeps only the engine's mark once there is text to send. */
-export function ComposerModelChip({ bot, phone, typing }: { bot: Bot; phone: boolean; typing: boolean }) {
+export function ComposerModelChip({ bot, phone, typing }: { bot: Bot | undefined; phone: boolean; typing: boolean }) {
+  // a room's bots each keep their own model; a desktop connected to a server already has it in the chat's header
+  if (!bot || (!phone && window.duskDesktop?.remoteClient?.active === true)) return null;
   return (
     <ModelPicker
       key={bot.threadId}

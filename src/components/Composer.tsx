@@ -586,9 +586,6 @@ export const Composer = memo(function Composer({
   const { sendHeld, holdSend } = useSendHold(busy, singleRow, `${threadId}|${bot?.id}|${group?.id}`);
   const held = Boolean(sendHeld) && !hasContent && !locked;
   const filled = hasContent || held;
-  // a desktop connected to a server already has the model in the chat's header
-  const modelChip = bot && !group && (singleRow || window.duskDesktop?.remoteClient?.active !== true)
-    ? <ComposerModelChip bot={bot} phone={singleRow} typing={hasContent} /> : null;
   const onCall = useOnCall();
   const media = useLiveMedia();
   const callTarget = group ? undefined : bot?.id;
@@ -1007,12 +1004,10 @@ export const Composer = memo(function Composer({
         <div data-composer-row data-glyph-swap={glyphs.swapped ? "" : undefined} data-glyph-from-held={glyphs.swapped && glyphs.fromHeld ? "" : undefined} style={simpleDock ? slot.vars : undefined} className={cn("flex items-end", simpleDock ? cn("gap-2", stacked && "gap-y-2") : "gap-1", !singleRow && !simpleDock && "@max-[30rem]/composer:flex-wrap", stacked && "flex-wrap")}>
           {pickers.inputs}
           {/* the phone's + is the pill's first control, at its left edge, the size of the others */}
-          {singleRow && !locked && <PhonePlus onAttach={pickers.files} attachChoices={pickers.choices} />}
-          {singleRow && !locked && modelChip}
+          {singleRow && !locked && <><PhonePlus onAttach={pickers.files} attachChoices={pickers.choices} /><ComposerModelChip bot={group ? undefined : bot} phone typing={hasContent} /></>}
           {!locked && !singleRow && (
             <div className={cn("flex items-center gap-1", simpleDock ? "shrink-0" : "flex-wrap")}>
-              {simpleDock && <ComposerPlusMenu onAttach={pickers.files} attachChoices={pickers.choices} />}
-              {simpleDock && modelChip}
+              {simpleDock && <><ComposerPlusMenu onAttach={pickers.files} attachChoices={pickers.choices} /><ComposerModelChip bot={group ? undefined : bot} phone={false} typing={hasContent} /></>}
               {/* a mode's chip shows only while it is on, so a choice made in the + menu or the bot panel stays in view */}
               {goal?.on && <GoalToggle {...goal} compact={simpleDock} />}
               {simpleDock && approvalChoice && profile && bot && approvalModeFor(bot) !== approvalModeFor(profile) && <ApprovalChip choice={approvalChoice} />}

@@ -25,6 +25,7 @@ vi.mock("@/lib/analytics", () => ({ track: vi.fn() }));
 vi.mock("@/lib/use-slash-skills", () => ({ useSlashSkills: () => [] }));
 vi.mock("@/lib/use-owner-or-admin", () => ({ useOwnerOrAdmin: () => false }));
 vi.mock("./CallView", () => ({ CallButton: () => null }));
+vi.mock("./ComposerModelChip", () => ({ ComposerModelChip: () => null }));
 vi.mock("./DesktopCapabilities", async () => {
   const { initialDesktopCapabilities } = await import("@/lib/desktop");
   const capabilities = { ...initialDesktopCapabilities(), dictation: { available: true, engine: "apple-speech", onDevice: true } };

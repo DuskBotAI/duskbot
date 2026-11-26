@@ -31,6 +31,7 @@ vi.mock("@/state/store", async (importOriginal) => {
 vi.mock("@/lib/analytics", () => ({ track: vi.fn() }));
 vi.mock("@/lib/cloud-guest", async (importOriginal) => ({ ...await importOriginal<typeof import("@/lib/cloud-guest")>(), useReactor: () => "user" }));
 vi.mock("@/lib/use-owner-or-admin", () => ({ useOwnerOrAdmin: () => true }));
+vi.mock("./ComposerModelChip", () => ({ ComposerModelChip: () => null }));
 vi.mock("./CallView", () => ({ CallButton: (props: Record<string, unknown>) => {
   fixture.call = props;
   return null;

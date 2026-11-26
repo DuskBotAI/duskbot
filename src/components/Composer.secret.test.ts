@@ -18,6 +18,7 @@ vi.mock("@/state/store", async (importOriginal) => {
 vi.mock("@/lib/analytics", () => ({ track: vi.fn() }));
 vi.mock("@/lib/use-owner-or-admin", () => ({ useOwnerOrAdmin: () => false }));
 vi.mock("./CallView", () => ({ CallButton: () => null }));
+vi.mock("./ComposerModelChip", () => ({ ComposerModelChip: () => null }));
 
 import { Composer } from "./Composer";
 

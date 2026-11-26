@@ -24,6 +24,7 @@ vi.mock("@/lib/use-slash-skills", () => ({
     active ? [{ name: "standup", description: "Writes the weekly standup note." }] : [],
 }));
 vi.mock("./CallView", () => ({ CallButton: () => null }));
+vi.mock("./ComposerModelChip", () => ({ ComposerModelChip: () => null }));
 
 import { Composer } from "./Composer";
 

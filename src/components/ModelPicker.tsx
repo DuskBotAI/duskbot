@@ -7,6 +7,7 @@ import type { ModelVariantOption } from "../../shared/runtime-events";
 import { configuredModelInstances, isCustomOnly, modelsAwaitEngine } from "@/lib/engine-rail";
 import { isAutoFreeModel, isFreeModel, modelName, notConnectedRows, providerName, simpleModelMenu, unansweredReason, variantSuffix, type NotConnectedRow } from "@/lib/simple-model-menu";
 import { modelSelectionForPick, withTypedModels } from "@/lib/model-choices";
+import { shortModelLabel } from "@/lib/model-friendly";
 export { modelSelectionForPick } from "@/lib/model-choices";
 import { pickerPlacement, type PickerPlacement } from "@/lib/picker-placement";
 import type { Typeahead } from "@/lib/menu-keys";
@@ -204,6 +205,8 @@ export function ModelVariantRow({ bot, threadId, updateBotDefault, className, la
 }
 
 export const SIMPLE_POPOVER_WIDTH = 320;
+
+type PresentMenu = (menu: { open: boolean; close: () => void; content: ReactNode }) => ReactNode;
 const MENU_ITSELF = ":scope";
 
 export function ModelPicker({
@@ -215,6 +218,7 @@ export function ModelPicker({
   size = "md",
   asRow,
   withThinking = false,
+  composer,
 }: {
   bot: Bot;
   threadId?: string;
@@ -223,10 +227,14 @@ export function ModelPicker({
   label?: ReactNode;
   size?: "sm" | "md";
   /** A settings row (label left, model right, a chevron) whose menu the caller presents, in a sheet of its own. */
-  asRow?: { className: string; present: (menu: { open: boolean; close: () => void; content: ReactNode }) => ReactNode };
+  asRow?: { className: string; present: PresentMenu };
   /** A contained picker whose place has no thinking control of its own: its menu sets the level too. */
   withThinking?: boolean;
+  /** The chip in the message box: the engine's mark and the model, as quiet as the box's other controls. `iconOnly` keeps
+   * the mark alone; `present` shows the menu in the caller's own sheet (the phone's bottom sheet) instead of a popover. */
+  composer?: { phone?: boolean; iconOnly?: boolean; present?: PresentMenu };
 }) {
+  const present = asRow?.present ?? composer?.present;
   const ownThinking = !contained || withThinking;
   const { state, dispatch: storeDispatch, refreshInstances, refreshModels: refreshInstanceModels } = useStore();
   const [open, setOpen] = useState(false);
@@ -266,7 +274,7 @@ export function ModelPicker({
 
   const floating = typeof document !== "undefined";
   useLayoutEffect(() => {
-    if (!open || asRow) return;
+    if (!open || present) return;
     const place = (event?: Event) => {
       if (event?.type === "scroll" && event.target instanceof Node && menuRef.current?.contains(event.target)) return;
       const anchor = triggerRef.current?.getBoundingClientRect();
@@ -347,7 +355,7 @@ export function ModelPicker({
     else refreshModels(active?.instanceId);
   }, [open, refreshLocalInstances]);
 
-  usePopoverDismiss(open && !asRow, inside, () => close(false));
+  usePopoverDismiss(open && !present, inside, () => close(false));
 
   function close(refocus: boolean) {
     setOpen(false);
@@ -590,7 +598,41 @@ export function ModelPicker({
     title: backup ? `${backupTitle(backup, modelName(shownInstance, answering.model))}${busyLine}` : `${summary}${followLine}${attentionLine}${busyLine}`,
   };
 
-  const trigger = (
+  const shownName = unanswered ?? modelName(shownInstance, answering.model);
+  const shownOption = shownInstance?.models.options.find((option) => option.id === answering.model);
+  // beside the engine's mark the family is said once, as the menu's rows say it
+  const chipName = unanswered ?? (shownInstance && shownOption && !isFreeModel(shownInstance)
+    ? shortModelLabel(shownOption.label, providerName(shownInstance)) : shownName);
+  const composerTrigger = composer && (
+    <button
+      {...triggerProps}
+      data-composer-model=""
+      aria-label={`${t("model.simple.model")}, ${shownName}`}
+      className={cn(
+        "composer-press relative flex min-w-0 shrink items-center rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus",
+        composer.phone
+          // the pill's 32px controls; the hit area reaches 44px like the phone's other taps
+          ? cn("h-8 gap-1 text-ink-secondary before:absolute before:-inset-1.5 aria-expanded:text-ink", composer.iconOnly ? "px-1.5" : "pl-1.5 pr-2")
+          : cn("h-7 gap-1.5 bg-ink/[0.06] text-[12px] leading-4 text-ink/[0.56] inset-ring-[0.5px] inset-ring-ink/[0.08] hover:bg-ink/10 hover:text-ink aria-expanded:bg-ink/10 aria-expanded:text-ink",
+            composer.iconOnly ? "px-[7px]" : "pl-[7px] pr-2"),
+      )}
+    >
+      <span className="relative flex shrink-0">
+        {shownInstance
+          ? <InstanceProviderMark instance={shownInstance} size={composer.phone ? 18 : 14} />
+          : <span className={cn("rounded-full bg-ink/[0.08]", composer.phone ? "size-[18px]" : "size-3.5")} aria-hidden="true" />}
+        {attention && !backup && <span data-model-attention className="absolute -bottom-0.5 -right-0.5 size-1.5 rounded-full bg-warning ring-[1.5px] ring-composer" />}
+      </span>
+      {!composer.iconOnly && (
+        <span data-composer-model-name="" className={cn("min-w-0 truncate", composer.phone ? "max-w-[112px] text-[14px] leading-5" : "max-w-[140px] @max-[30rem]/composer:hidden")}>
+          {chipName}{!unanswered && answering.variant !== undefined ? variantSuffix(shownInstance, answering.model, answering.variant) : ""}
+        </span>
+      )}
+      <ChevronDown size={composer.phone ? 12 : 10} strokeWidth={2} aria-hidden="true" className="shrink-0 opacity-70" />
+    </button>
+  );
+
+  const trigger = composerTrigger || (
     <button
       {...triggerProps}
       className={cn(
@@ -676,7 +718,7 @@ export function ModelPicker({
     />
   );
 
-  const menu = !asRow && motion.shown && (
+  const menu = !present && motion.shown && (
     <div
       ref={menuRef}
       id={menuId}
@@ -704,7 +746,7 @@ export function ModelPicker({
     </div>
   );
 
-  const sheetMenu = asRow?.present({
+  const sheetMenu = present?.({
     open,
     close: () => close(false),
     content: (
@@ -750,7 +792,8 @@ export function ModelPicker({
       {toast && <Toast text={toast.text} tone={toast.tone} onDone={() => setToast(null)} data-notice-toast="model" />}
       {!contained && changedBotModel && !open && ownModelThreads > 0 && (
         <div data-thread-models-notice role="status"
-          className="menu-surface absolute right-0 top-full z-30 mt-1 flex w-max max-w-[min(300px,calc(100vw-2rem))] items-center gap-2 py-1.5 pl-3 pr-1.5 text-[13px] leading-[18px]">
+          className={cn("menu-surface absolute z-30 flex w-max max-w-[min(300px,calc(100vw-2rem))] items-center gap-2 py-1.5 pl-3 pr-1.5 text-[13px] leading-[18px]",
+            composer ? "bottom-full left-0 mb-2" : "right-0 top-full mt-1")}>
           <ThreadModelsLine bot={profile} />
           <button type="button" aria-label={t("common.close")} onClick={() => setChangedBotModel(false)}
             className="flex size-6 shrink-0 items-center justify-center rounded-full text-ink-tertiary hover:bg-ink/[0.06] hover:text-ink">

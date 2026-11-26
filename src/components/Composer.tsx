@@ -74,7 +74,7 @@ import { goalCoordinatorForComposer, openTaskWorking, roomRouteForComposer } fro
 import { composerPlaceholder, pendingQuestion, sendLabels, SIMPLE_COMPOSER, SIMPLE_CONTROL, slotColors } from "./composer-simple"; import { ComposerSendButton, FollowUpKeyHint } from "./ComposerSendButton"; import { Icon } from "./Icon";
 import { PendingApprovalActions, PendingApprovalPanel, pendingApprovals } from "./PendingApproval";
 import { CallButton } from "./CallView";
-import { ApprovalChip, ComposerPlusMenu, GoalToggle } from "./ComposerPlusMenu";
+import { ApprovalChip, ComposerPlusMenu, GoalToggle } from "./ComposerPlusMenu"; import { ComposerModelChip } from "./ComposerModelChip";
 import { PhoneMicGhost, PhonePlus } from "./PhonePlus";
 import { useThreadApproval } from "./thread-approval";
 import { usePillHeight, useSlideOnChange, useStackedField } from "./composer-wrap";
@@ -586,6 +586,9 @@ export const Composer = memo(function Composer({
   const { sendHeld, holdSend } = useSendHold(busy, singleRow, `${threadId}|${bot?.id}|${group?.id}`);
   const held = Boolean(sendHeld) && !hasContent && !locked;
   const filled = hasContent || held;
+  // a desktop connected to a server already has the model in the chat's header
+  const modelChip = bot && !group && (singleRow || window.duskDesktop?.remoteClient?.active !== true)
+    ? <ComposerModelChip bot={bot} phone={singleRow} typing={hasContent} /> : null;
   const onCall = useOnCall();
   const media = useLiveMedia();
   const callTarget = group ? undefined : bot?.id;
@@ -1005,9 +1008,11 @@ export const Composer = memo(function Composer({
           {pickers.inputs}
           {/* the phone's + is the pill's first control, at its left edge, the size of the others */}
           {singleRow && !locked && <PhonePlus onAttach={pickers.files} attachChoices={pickers.choices} />}
+          {singleRow && !locked && modelChip}
           {!locked && !singleRow && (
             <div className={cn("flex items-center gap-1", simpleDock ? "shrink-0" : "flex-wrap")}>
               {simpleDock && <ComposerPlusMenu onAttach={pickers.files} attachChoices={pickers.choices} />}
+              {simpleDock && modelChip}
               {/* a mode's chip shows only while it is on, so a choice made in the + menu or the bot panel stays in view */}
               {goal?.on && <GoalToggle {...goal} compact={simpleDock} />}
               {simpleDock && approvalChoice && profile && bot && approvalModeFor(bot) !== approvalModeFor(profile) && <ApprovalChip choice={approvalChoice} />}

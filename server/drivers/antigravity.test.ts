@@ -42,8 +42,11 @@ import { installAntigravityRuntime, resolveAntigravityRuntime, setAntigravityVer
 import * as antigravityTemp from "./antigravity-temp.ts";
 import { VERIFICATION_TEMP_KEY, antigravityTempDir, sweepAntigravityTemp } from "./antigravity-temp.ts";
 import {
+  ANTIGRAVITY_INELIGIBLE_ACCOUNT,
+  ANTIGRAVITY_INTERNAL_ERROR,
   ANTIGRAVITY_SLASH_COMMANDS,
   AntigravityDriver,
+  antigravityAccountIneligible,
   STATIC_ANTIGRAVITY_MODELS,
   antigravityPermissionMode,
   neutralizeAntigravitySlashCommands,
@@ -1162,6 +1165,108 @@ describe("Antigravity driver over shared ACP", () => {
       ["model", "gemini-3.8-flash-low"],
       ["mode", "auto_edit"],
     ]);
+  });
+
+  it("tells the person when Google won't let the signed-in account use Antigravity", () => {
+    for (const text of [
+      "Internal error: failed to get user's project: INELIGIBLE_ACCOUNT (session/new)",
+      "Internal error: OnboardUser operation failed: UNSUPPORTED_LOCATION (session/prompt)",
+      "Internal error: RESTRICTED_AGE (session/new)",
+      "Please verify your account in your browser to continue: https://accounts.google.com/x",
+      "[Auth Error] Failed to select license g1-pro (Project: p): denied",
+    ]) expect(antigravityAccountIneligible(text)).toBe(true);
+    for (const text of [
+      "Internal error: failed to get user's project: dial tcp: lookup cloudcode-pa.googleapis.com: no such host (session/new)",
+      "Internal error: model not found (session/prompt)",
+    ]) expect(antigravityAccountIneligible(text)).toBe(false);
+  });
+
+  it("ends a turn on an ineligible Google account with one plain sentence naming the fix", async () => {
+    ensureDirs();
+    const fake = fakeRuntime();
+    const instanceId = "antigravity-ineligible";
+    const tokenDirectory = join(antigravityProfileDirectory(instanceId), "antigravity-acp");
+    mkdirSync(tokenDirectory, { recursive: true });
+    writeFileSync(join(tokenDirectory, "antigravity-oauth-token"), JSON.stringify({ token: { access_token: "ok" } }), { mode: 0o600 });
+    const failure = join(fake.directory, "failure.json");
+    writeFileSync(failure, JSON.stringify({ code: -32603, message: "Internal error", data: { details: "failed to get user's project: INELIGIBLE_ACCOUNT" } }));
+    instance = await AntigravityDriver.create({
+      instanceId,
+      displayName: "Antigravity",
+      environment: { FAKE_ACP_AUTH_METHOD: "oauth-personal", FAKE_ACP_MODES: "default", FAKE_ACP_RPC_FAILURE_FILE: failure },
+      enabled: true,
+      config: { cli: fake.executable, fullAuto: false },
+    });
+    recorder = recordEvents(instance.adapter);
+    const { turnId } = await instance.adapter.sendTurn({ threadId: "thread-ineligible", text: "hello", approvalMode: "ask", cwd: fake.directory });
+    const done = await recorder.until((event) => event.type === "turn.completed" && event.turnId === turnId);
+    expect(done).toMatchObject({ ok: false });
+    const error = recorder.events.find((event) => event.type === "runtime.error" && event.turnId === turnId);
+    expect(error).toMatchObject({ message: ANTIGRAVITY_INELIGIBLE_ACCOUNT });
+  });
+
+  describe("an internal error before anything reached the person", () => {
+    const signedIn = (instanceId: string) => {
+      const tokenDirectory = join(antigravityProfileDirectory(instanceId), "antigravity-acp");
+      mkdirSync(tokenDirectory, { recursive: true });
+      writeFileSync(join(tokenDirectory, "antigravity-oauth-token"), JSON.stringify({ token: { access_token: "ok" } }), { mode: 0o600 });
+    };
+    const runTurn = async (instanceId: string, environment: (directory: string) => Record<string, string>) => {
+      ensureDirs();
+      const fake = fakeRuntime();
+      signedIn(instanceId);
+      const requests = join(fake.directory, "requests.jsonl");
+      instance = await AntigravityDriver.create({
+        instanceId,
+        displayName: "Antigravity",
+        environment: { FAKE_ACP_AUTH_METHOD: "oauth-personal", FAKE_ACP_MODES: "default", FAKE_ACP_RPC_APPEND_FILE: requests, ...environment(fake.directory) },
+        enabled: true,
+        config: { cli: fake.executable, fullAuto: false },
+      });
+      recorder = recordEvents(instance.adapter);
+      const { turnId } = await instance.adapter.sendTurn({ threadId: `thread-${instanceId}`, text: "hello", approvalMode: "ask", cwd: fake.directory });
+      const done = await recorder.until((event) => event.type === "turn.completed" && event.turnId === turnId);
+      const prompts = readFileSync(requests, "utf8").split("\n").filter((line) => line.includes('"session/prompt"')).length;
+      return { done, prompts, events: recorder.events.filter((event) => event.turnId === turnId) };
+    };
+    const internal = (directory: string) => {
+      const failure = join(directory, "failure.json");
+      writeFileSync(failure, JSON.stringify({ code: -32603, message: "Internal error" }));
+      return failure;
+    };
+
+    it("runs the turn once more, unseen, when Antigravity answers -32603 once", async () => {
+      const { done, prompts, events } = await runTurn("antigravity-internal-once", (directory) => ({
+        FAKE_ACP_RPC_FAILURE_FILE: internal(directory), FAKE_ACP_FAIL_ONCE: join(directory, "failed-once"),
+      }));
+      expect(done).toMatchObject({ ok: true });
+      expect(prompts).toBe(2);
+      expect(events.filter((event) => event.type === "runtime.error")).toEqual([]);
+      expect(events.filter((event) => event.type === "turn.started")).toHaveLength(1);
+    });
+
+    it("runs the turn once more, unseen, when Antigravity ends a prompt with stop reason error and says nothing", async () => {
+      const { done, prompts, events } = await runTurn("antigravity-stop-error-once", (directory) => ({
+        FAKE_ACP_PROMPT_STOP_REASON: "error", FAKE_ACP_FAIL_ONCE: join(directory, "failed-once"),
+      }));
+      expect(done).toMatchObject({ ok: true });
+      expect(prompts).toBe(2);
+      expect(events.filter((event) => event.type === "runtime.error")).toEqual([]);
+    });
+
+    it("tries only once more, then says so in one plain sentence", async () => {
+      const { done, prompts, events } = await runTurn("antigravity-internal-always", (directory) => ({ FAKE_ACP_RPC_FAILURE_FILE: internal(directory) }));
+      expect(done).toMatchObject({ ok: false });
+      expect(prompts).toBe(2);
+      expect(events.filter((event) => event.type === "runtime.error")).toEqual([expect.objectContaining({ message: ANTIGRAVITY_INTERNAL_ERROR })]);
+    });
+
+    it("says the same plain sentence for a stop reason error that keeps coming back", async () => {
+      const { done, prompts, events } = await runTurn("antigravity-stop-error-always", () => ({ FAKE_ACP_PROMPT_STOP_REASON: "error" }));
+      expect(done).toMatchObject({ ok: false });
+      expect(prompts).toBe(2);
+      expect(events.filter((event) => event.type === "runtime.error")).toEqual([expect.objectContaining({ message: ANTIGRAVITY_INTERNAL_ERROR })]);
+    });
   });
 
   it("never starts a session on a model this account has not offered", async () => {

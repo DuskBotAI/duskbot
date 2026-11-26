@@ -16,7 +16,7 @@ import { acpModelCatalog } from "./model-catalog.ts";
 import { DeviceAuthController, type DeviceSignIn } from "../device-auth.ts";
 import { deletePromptSplitReceipt, promptHalves, readPromptSplitReceipt, splitSessionPrompt, writePromptSplitReceipt } from "../prompt-split.ts";
 import type { PromptSplitReceipt } from "../prompt-split.ts";
-import { closedOrKilled, describeSpawnFailure, execCli, killCliTree, readOnlyBotFolders, spawnCli } from "../../procs.ts";
+import { closedOrKilled, describeSpawnFailure, killCliTree, readOnlyBotFolders, spawnCli } from "../../procs.ts";
 import { runAcpOneShot } from "./background-text.ts";
 import { observeBackground, waitForWake } from "./background-wait.ts";
 import { sanitizeAcpToolMessage } from "./tool-log.ts";
@@ -30,7 +30,7 @@ import { pickSessionModel, SessionModelControls, type AcpModelSelection } from "
 import { acpVariantOption } from "./config-options.ts";
 import { advertisedVariant, coolFreeRung, FREE_POOL_LIMIT, FREE_PROBE_MS, FREE_PROBE_PROMPT, freeFailure, freeLadder, freeOneShot, probeFreeLadder, warmFreeModel, warmFreeRung, type FreeFailure, type FreeRung } from "./free-ladder.ts";
 import { trail } from "../../trail.ts";
-import { versionFromProbe } from "./version-probe.ts"; import { engineHomes } from "../../engine-homes/engine-homes.ts";
+import { probeCliVersion } from "./version-probe.ts"; import { QuietRetries, untouchedTurn } from "./quiet-retry.ts"; import { engineHomes } from "../../engine-homes/engine-homes.ts";
 
 import type {
   DriverCreateInput,
@@ -141,6 +141,11 @@ export interface AcpSupport {
   sessionScopedApproval?: boolean;
   /** The prompt can end while work the agent waits on runs, the agent then waking itself (Antigravity 1.5): the turn waits. */
   backgroundWakes?: boolean;
+  /** A turn the engine fails with JSON-RPC -32603 or a non-standard failing stop reason before any reply, step, tool
+   * or question reached the person runs once more on a new process, unseen; a second failure shows as usual. */
+  retryUntouchedFailureOnce?: boolean;
+  /** Plain words for a failure the shared engine wording does not know; undefined keeps the engine's text. */
+  describeFailure?(message: string): string | undefined;
   /** False when this engine cannot run memory upkeep's one-shot text call cleanly; oneShotFolder holds a one-shot's folder. */
   backgroundText?: false; oneShotFolder?(): Promise<string>;
   /** Mutate the child env in place. `instanceEnvironment` tells a key put there on purpose from one
@@ -363,6 +368,7 @@ export function createAcpDriver(support: AcpSupport): ProviderDriver<AcpConfig> 
       }
       const active = new Map<string, Turn>();
       const sessions = new Map<string, AcpSession>();
+      const quietRetries = new QuietRetries();
       let lastCliVersion: string | undefined;
     // Retain every closing Qwen child until its tree is gone: closing drops the pool entry, not its native writer lease.
       const retiring = new Map<string, Set<ReturnType<typeof spawnCli>>>();
@@ -1252,6 +1258,18 @@ export function createAcpDriver(support: AcpSupport): ProviderDriver<AcpConfig> 
           warmFreeRung({ model: freeModel, ...(variant ? { variant } : {}) });
           trail("free_model.answered", { model: freeModel, variant: variant ?? null, rung: freeTried.length + 1, ms: Date.now() - freeStartedAt });
         };
+        const retriedQuietly = (why: string): boolean => {
+          if (!support.retryUntouchedFailureOnce || !untouchedTurn(current, asks, session.closing) || !quietRetries.take(turnId)) return false;
+          state.settled = true; session.current = null; active.delete(threadId); current.stopQuietWatch?.();
+          if (current.interruptTimer) clearTimeout(current.interruptTimer);
+          if (session.sessionId) session.acp.send({ jsonrpc: "2.0", method: "session/cancel", params: { sessionId: session.sessionId } });
+          closeSession(threadId, "quiet-retry"); acknowledge(); trail("engine.quiet_retry", { engine: DRIVER_KIND, why });
+          void sendTurn({ ...turn, startupRecovery: undefined, sessionReset: undefined }, turnId, freeTried, freeBy, freeRungs).catch((error) => {
+            emit({ ...base(threadId, turnId), type: "runtime.error", message: error instanceof Error ? error.message : String(error) });
+            emit({ ...base(threadId, turnId), type: "turn.completed", ok: false, stopReason: "rpc_error", cost: null });
+          });
+          return true;
+        };
         (async () => {
           let pendingSplitReceipt: { key: string; receipt: PromptSplitReceipt; previous: PromptSplitReceipt | null } | null = null;
           try {
@@ -1601,6 +1619,7 @@ export function createAcpDriver(support: AcpSupport): ProviderDriver<AcpConfig> 
             const settleEnded = () => settle(threadId, session, true, null);
             if (reason === "end_turn") { if (!support.backgroundWakes || state.stopped || !waitForWake(current, (live) => emit({ ...base(threadId, turnId), ...live }), settleEnded)) settleEnded(); }
             else if (reason === "cancelled" || state.stopped) settle(threadId, session, true, "cancelled");
+            else if (reason !== "max_tokens" && reason !== "max_turn_requests" && reason !== "refusal" && retriedQuietly(`stop_${String(reason ?? "none").slice(0, 30)}`)) return;
             else {
               const errorMessage = typeof result?.error === "string" && result.error
                 ? result.error
@@ -1610,7 +1629,7 @@ export function createAcpDriver(support: AcpSupport): ProviderDriver<AcpConfig> 
               emit({
                 ...base(threadId, turnId),
                 type: "runtime.error",
-                message: engineFailureMessage(support.displayName, errorMessage) ?? errorMessage,
+                message: engineFailureMessage(support.displayName, errorMessage) ?? support.describeFailure?.(errorMessage) ?? errorMessage,
               });
               settle(threadId, session, false, reason ?? "failed");
             }
@@ -1694,10 +1713,11 @@ export function createAcpDriver(support: AcpSupport): ProviderDriver<AcpConfig> 
                   stopReason: state.stopped ? "cancelled" : "rpc_error", cost: null });
                 return;
               }
+              if ((e as any)?.code === -32603 && !needsAuth && !accountError && !denied && !approvalUnconfirmed && retriedQuietly("rpc_32603")) return;
               // After the person's Stop, a request the stop cut short is not an error.
               if (!state.stopped) emit({
                 ...base(threadId, turnId), type: "runtime.error",
-                message: (accountError ? support.describeAccountError?.(code, cliTurn.model) : undefined) ?? engineFailureMessage(support.displayName, message) ?? message,
+                message: (accountError ? support.describeAccountError?.(code, cliTurn.model) : undefined) ?? engineFailureMessage(support.displayName, message) ?? support.describeFailure?.(message) ?? message,
                 ...((failureCode(code ?? (e as any)?.data?.errorName) ?? rpcCode((e as any)?.code)) ? { errorCode: failureCode(code ?? (e as any)?.data?.errorName) ?? rpcCode((e as any)?.code) } : {}),
                 ...(needsAuth ? { setup: true } : {}), ...((e as any)?.acpPromptStall === true ? { stalled: true } : {}),
                 ...((e as any)?.acpUsageLimit === true || (code === "quota_or_region_restriction" && LIMIT_WORDS.test(message)) ? { limit: "engine" as const } : {}), // waited out, or the engine gave up: another AI can carry on
@@ -1727,26 +1747,7 @@ export function createAcpDriver(support: AcpSupport): ProviderDriver<AcpConfig> 
       const probeSnapshot = async (): Promise<ProviderSnapshot> => {
         const env = childEnv();
         if (support.snapshot) return support.snapshot(env, config, instanceId);
-        const probe = await new Promise<{ version?: string; reason?: string }>((resolve) => {
-          const timeout = support.versionProbeTimeoutMs ?? 8000;
-          execCli(config.cli, ["--version"], { timeout, env }, (err, stdout, stderr) => {
-            if (err) {
-              const failure = err as NodeJS.ErrnoException & { killed?: boolean };
-              const reason = failure.code === "ENOENT"
-                ? `\`${config.cli}\` isn't installed, or isn't on this app's PATH. Install it for the user running dusk bot or use Set CLI, then check again.`
-                : failure.code === "EACCES" || failure.code === "EPERM"
-                  ? `\`${config.cli}\` isn't executable. Check its file permissions, then check again.`
-                  : failure.killed && failure.code == null
-                    ? `\`${config.cli}\` version check timed out after ${Math.round(timeout / 1000)} seconds. Try again in a moment.`
-                    : `\`${config.cli}\` version check failed. Run it with --version on the server to diagnose the installation, then check again.`;
-              // Do not echo arbitrary CLI output or its environment into Settings.
-              resolve({ reason });
-              return;
-            }
-            const version = versionFromProbe(stdout, stderr);
-            resolve(version ? { version } : { reason: `\`${config.cli}\` returned no version. Check the configured executable with --version, then try again.` });
-          });
-        });
+        const probe = await probeCliVersion(config.cli, env, support.versionProbeTimeoutMs ?? 8000);
         if (!probe.version) return { state: "unavailable", reason: probe.reason };
         return { state: "available", version: probe.version, authenticated: await support.isAuthenticated(env, config, instanceId) };
       };

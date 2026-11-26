@@ -35,6 +35,9 @@
 //   FAKE_ACP_RPC_FAILURE_FILE  JSON-RPC error for session/prompt; once read the process stays poisoned
 //   FAKE_ACP_RPC_FAILURE_METHOD  initialize, session/new or session/prompt (default)
 //   FAKE_ACP_RPC_FAILURE_GATE  hold the error until this file exists
+//   FAKE_ACP_FAIL_ONCE  marker path: the error (or FAKE_ACP_PROMPT_STOP_REASON) happens only while it is missing, and
+//     creates it, so the next process answers normally
+//   FAKE_ACP_PROMPT_STOP_REASON  session/prompt ends at once with this stopReason and says nothing (agy acp 1.5 "error")
 //   FAKE_ACP_RPC_FAILURE_AFTER_OUTPUT  emit text and a tool result before failing
 //   FAKE_ACP_RPC_FAILURE_AFTER_USAGE  emit the scripted usage updates and FAKE_ACP_UPDATES_FILE's before failing
 //   FAKE_ACP_LOAD_ERROR  JSON-RPC error returned by session/load
@@ -582,9 +585,23 @@ function emitSessionReports(): void {
     } catch {}
   }
 }
+function failOnceSpent(): boolean {
+  const marker = process.env.FAKE_ACP_FAIL_ONCE;
+  if (!marker) return false;
+  if (existsSync(marker)) return true;
+  writeFileSync(marker, "1");
+  return false;
+}
+
 function failRpc(msg: { method: string; id: unknown }): boolean {
   if (msg.method !== (process.env.FAKE_ACP_RPC_FAILURE_METHOD ?? "session/prompt")) return false;
+  if (msg.method === "session/prompt" && process.env.FAKE_ACP_PROMPT_STOP_REASON && !rpcFailure && !failOnceSpent()) {
+    recordMethod(`${msg.method}.stop`);
+    out({ jsonrpc: "2.0", id: msg.id, result: { stopReason: process.env.FAKE_ACP_PROMPT_STOP_REASON } });
+    return true;
+  }
   const failureFile = process.env.FAKE_ACP_RPC_FAILURE_FILE;
+  if (!rpcFailure && failureFile && existsSync(failureFile) && process.env.FAKE_ACP_FAIL_ONCE && failOnceSpent()) return false;
   if (failureFile && existsSync(failureFile)) rpcFailure = JSON.parse(readFileSync(failureFile, "utf8"));
   if (!rpcFailure) return false;
   if (msg.method === "session/prompt" && process.env.FAKE_ACP_RPC_FAILURE_AFTER_USAGE === "1") emitSessionReports();

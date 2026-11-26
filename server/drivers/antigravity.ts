@@ -187,6 +187,31 @@ export function neutralizeAntigravitySlashCommands(
   return text.replace(pattern, "$1/ $2");
 }
 
+// Antigravity CLI 1.5.18 reports a Google account its Code Assist backend refuses with these tier reason codes
+// (INELIGIBLE_ACCOUNT, UNSUPPORTED_LOCATION, RESTRICTED_AGE, ...) or its own onboarding failures; a network failure
+// worded the same way is not the account's fault.
+const INELIGIBLE_ACCOUNT = /\b(?:INELIGIBLE_ACCOUNT|UNSUPPORTED_LOCATION|UNKNOWN_LOCATION|RESTRICTED_AGE|RESTRICTED_NETWORK|RESTRICTED_DASHER_USER|NON_USER_ACCOUNT)\b|\bnot (?:currently )?eligible\b|failed to get user's project|OnboardUser operation failed|Failed to select license|verify your account in your browser/iu;
+const NETWORK_CAUSE = /\b(?:dial tcp|i\/o timeout|connection (?:refused|reset)|no such host|ENOTFOUND|ECONNRESET|ETIMEDOUT|TLS handshake|context deadline exceeded)\b/iu;
+
+export const ANTIGRAVITY_INELIGIBLE_ACCOUNT =
+  "Google won't let this account use Antigravity. Sign in at antigravity.google with it to see why, or add another Google account in Settings › Models.";
+
+export function antigravityAccountIneligible(message: string): boolean {
+  return INELIGIBLE_ACCOUNT.test(message) && !NETWORK_CAUSE.test(message);
+}
+
+export const ANTIGRAVITY_LOST_HISTORY = "Antigravity lost this chat's history on its side. Start a new chat to keep going.";
+export const ANTIGRAVITY_INTERNAL_ERROR =
+  "Antigravity hit an internal error and couldn't answer, even after trying again. Send your message again, or switch this bot to another AI if it keeps happening.";
+
+/** Antigravity CLI 1.5 answers a failed turn with JSON-RPC -32603 "Internal error", or ends `session/prompt` with the
+ * non-standard stop reason `error` and nothing said; `trajectory not found` means its own copy of the chat is gone. */
+export function describeAntigravityFailure(message: string): string | undefined {
+  if (/\btrajectory not found\b/iu.test(message)) return ANTIGRAVITY_LOST_HISTORY;
+  if (/^Internal error\b|\(stop reason: error\)/iu.test(message)) return ANTIGRAVITY_INTERNAL_ERROR;
+  return undefined;
+}
+
 const managedAsset = resolveAntigravityReleaseAsset();
 
 const support: AcpSupport = {
@@ -211,6 +236,8 @@ const support: AcpSupport = {
   sessionModelEnv: "AGY_ACP_DEFAULT_MODEL",
   sessionScopedApproval: true,
   backgroundWakes: true,
+  retryUntouchedFailureOnce: true,
+  describeFailure: describeAntigravityFailure,
   resumeMethod: "resume",
   clientFileSystem: true,
   sanitizeToolPayload: true,
@@ -250,9 +277,12 @@ const support: AcpSupport = {
     if (code === -32000 || (code === -32603 && message.startsWith("No browser is available here"))) {
       return "invalid_credentials";
     }
+    if (antigravityAccountIneligible(message)) return "quota_or_region_restriction";
     return undefined;
   },
-  describeAccountError: (code) => (code === "invalid_credentials" ? support.loginNote : undefined),
+  describeAccountError: (code) => code === "invalid_credentials" ? support.loginNote
+    : code === "quota_or_region_restriction" ? ANTIGRAVITY_INELIGIBLE_ACCOUNT
+      : undefined,
   isAuthenticated: async (env, config, instanceId) => {
     try {
       const runtime = await resolveAntigravityRuntime(config.cli, env);

@@ -506,7 +506,10 @@ export function createLifecycle(deps: LifecycleDeps) {
       if (!s || s.state !== "running" || (s.setup !== "done" && s.setup !== null && s.setup !== "failed")) return wait(c, 5_000);
       if (s.setup === "failed") return setupFailed(c);
       const pkg = settings.package;
-      if (pkg && b.installed !== pkg.sha256) {
+      // a machine made from an archive's snapshot is the set-up home already, on the release it last ran (newer than the
+      // setup package as a rule, which its omb-home refuses as older): nothing to install, home updates carry it on
+      if (b.restoreSnapshot) { b.installed = b.update?.guard.current?.sha256 ?? null; deps.save(c); }
+      else if (pkg && b.installed !== pkg.sha256) {
         if (pkg.file) await provider.upload(c.serverId, image.packagePath, readFileSync(pkg.file));
         const done = await provider.run(c.serverId, image.installCommand(pkg.sha256, pkg.url, pkg.signature), 600);
         if (!done.ok || !done.stdout.includes("installed")) throw new RetryableCloudError("Cloud package install failed.");
@@ -1239,6 +1242,7 @@ export function createLifecycle(deps: LifecycleDeps) {
         // a provider outage during a first setup waits it out (30 s doubling to 15 minutes) for up to SETUP_PATIENCE_MS
         if (c.status === "provisioning" && error instanceof RetryableCloudError && now() - (b.setupSince ?? c.provisionedAt ?? c.createdAt) < SETUP_PATIENCE_MS) {
           b.setupRetries = (b.setupRetries ?? 0) + 1; deps.save(c);
+          if (b.setupRetries === 1) console.warn(`managed: cloud ${c.id}: setup step ${c.setupStep} failed (${error.message}); tried again for up to ${SETUP_PATIENCE_MS / HOUR} hours`);
           return now() + Math.min(15 * MINUTE, 30_000 * 2 ** Math.min(b.setupRetries - 1, 5));
         }
         return null;

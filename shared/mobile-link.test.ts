@@ -57,6 +57,8 @@ describe("mobile pairing link adapter", () => {
     expect(link.endsWith("&c=ABCDEFGHJKLM")).toBe(true);
     expect(new URL(link).search).toBe("");
     expect(parseMobilePairingLink(appLinkFromUniversal(link)!)).toMatchObject({ v: 2, credential: "s3cret" });
+    expect(parseMobilePairingLink(link)).toMatchObject({ v: 2, credential: "s3cret" });
+    expect(parseMobilePairingLink(`https://dusk.bot/m/pair?${mobileLinkUrl(payload).split("?")[1]}`)).toBeNull();
     expect(universalPairLink(mobileLinkUrl(payload), null)).not.toContain("c=");
   });
 

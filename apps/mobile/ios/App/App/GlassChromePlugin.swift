@@ -1051,10 +1051,6 @@ final class ChatGlassChrome: NSObject, UITextViewDelegate {
         switch phase {
         case .active:
             mainSheetFreeze = .active
-            pendingState = nil
-            pendingHome = nil
-            pendingTopPill = nil
-            pendingMainTakeover = nil
             if text.isFirstResponder { text.resignFirstResponder() }
             if lift > 0 || keyboardOverlap > 0 { settleKeyboardGone("sheet") }
         case .thawing:
@@ -1100,10 +1096,11 @@ final class ChatGlassChrome: NSObject, UITextViewDelegate {
             if inSheet {
                 if state != nil, let webHost { takeover.attach(to: webHost) }
                 if takeover.view.superview === webHost {
+                    pendingMainTakeover = nil
                     takeover.apply(state)
                     keepOnTop()
+                    return
                 }
-                return
             }
             pendingMainTakeover = .some(state)
             return

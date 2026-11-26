@@ -180,11 +180,17 @@ export function Onboarding({ initial = null, initialSignIn, reason = null, start
       if (typeof text === "string") {
         const scanned = readScanned(text);
         if (scanned?.kind === "store") throw new PairError("store-qr");
-        if (scanned?.kind === "signin" && followSignInService(text, scanned.service, account)) return;
+        if (scanned?.kind === "signin" && followSignInService(text, scanned.service, account)) {
+          if (from === "scan") setStep(home);
+          return;
+        }
         if (scanned?.kind === "signin") { await fromQr(scanned, from); return; }
         if (scanned?.kind === "pair") {
           const carriedFromScan = pairSignIn(text) ?? scanned.payload.signIn ?? null;
-          if (carriedFromScan?.service && followSignInService(text, carriedFromScan.service, account)) return;
+          if (carriedFromScan?.service && followSignInService(text, carriedFromScan.service, account)) {
+            if (from === "scan") setStep(home);
+            return;
+          }
           carriedSignIn.current = carriedFromScan ?? undefined;
         }
         if (scanned?.kind === "account") { await codeSignIn(scanned.code, null, from); return; }

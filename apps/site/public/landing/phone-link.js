@@ -16,15 +16,17 @@
     return;
   }
   const code = (params.get('c') || '').replace(/[^a-z0-9]/gi, '').toUpperCase();
+  const payload = params.get('m') || '';
   let ends = 0;
   try {
-    const m = params.get('m') || '';
-    ends = JSON.parse(atob(m.replace(/-/g, '+').replace(/_/g, '/'))).grant.expiresAt || 0;
+    ends = JSON.parse(atob(payload.replace(/-/g, '+').replace(/_/g, '/'))).grant.expiresAt || 0;
   } catch {}
-  const live = code.length === 12 && (!ends || ends > Date.now());
+  const live = (code.length === 12 || Boolean(payload)) && (!ends || ends > Date.now());
   if (!live) { page.querySelector('[data-pl-none]').hidden = false; return; }
-  value.textContent = code.match(/.{1,4}/g).join(' ');
-  has.hidden = false;
+  if (code.length === 12) {
+    value.textContent = code.match(/.{1,4}/g).join(' ');
+    has.hidden = false;
+  }
   const when = page.querySelector('[data-pl-when]');
   const tick = () => {
     const left = Math.ceil((ends - Date.now()) / 60000);
@@ -33,7 +35,7 @@
     setTimeout(tick, 15000);
   };
   tick();
-  if (params.get('m')) { open.href = `duskbot://pair?m=${params.get('m')}`; open.hidden = false; }
+  if (payload) { open.href = `duskbot://pair?${fragment}`; open.hidden = false; }
   const copy = page.querySelector('[data-pl-copy]');
   copy.addEventListener('click', async () => {
     try { await navigator.clipboard.writeText(code); copy.textContent = 'copied'; } catch { copy.textContent = 'press and hold the code to copy it'; }

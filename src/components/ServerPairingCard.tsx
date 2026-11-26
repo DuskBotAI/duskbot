@@ -5,7 +5,7 @@ import { KeyRound } from "../icons";
 
 import { t } from "@/lib/i18n";
 import { copyText, type CopyFeedback } from "@/lib/copy-text";
-import { api } from "@/state/store";
+import { api, ApiError } from "@/state/store";
 import { isOwnerOrAdmin, readSessionState, type SessionState } from "../lib/session";
 import { lastSeen, minutesLeft } from "../lib/pairing-time";
 import { revealPhonePairing } from "../lib/phone-pairing";
@@ -70,14 +70,17 @@ export function ServerPairingCard({ initialSession = null, cloudHome = false, fo
   const root = useRef<HTMLDivElement>(null);
   const revealed = useRef(0);
   const [computerOpen, setComputerOpen] = useState(false);
+  const [signingOut, setSigningOut] = useState<string | null>(null);
+  const [sessionError, setSessionError] = useState<string | null>(null);
 
   async function loadDevices() {
     try {
       const body = await api("/api/auth/sessions");
       setDevices(Array.isArray(body?.sessions) ? body.sessions : []);
       setCurrent(typeof body?.current === "string" ? body.current : null);
+      setSessionError(null);
     } catch (e) {
-      setError(t("remote.serverPairing.error", { error: friendlyError(e) }));
+      setSessionError(t("remote.serverPairing.error", { error: friendlyError(e) }));
     }
   }
 
@@ -105,9 +108,10 @@ export function ServerPairingCard({ initialSession = null, cloudHome = false, fo
 
   // a phone that just linked shows up in the sign-ins once the flow folds away
   const phoneStepping = phone?.stepping === true;
+  const phoneVersion = phone?.version ?? 0;
   useEffect(() => {
     if (phone && !phoneStepping && canPairDevices(session)) void loadDevices();
-  }, [phoneStepping]);
+  }, [phoneStepping, phoneVersion]);
 
   useEffect(() => {
     if (!offer) return;
@@ -181,12 +185,25 @@ export function ServerPairingCard({ initialSession = null, cloudHome = false, fo
   }
 
   async function signOut(id: string) {
-    setError(null);
+    if (signingOut !== null) return;
+    setSigningOut(id);
+    setSessionError(null);
+    let failed: unknown = null;
     try {
       await api(`/api/auth/sessions/${encodeURIComponent(id)}`, { method: "DELETE" });
-      await loadDevices();
     } catch (e) {
-      setError(t("remote.serverPairing.error", { error: friendlyError(e) }));
+      if (!(e instanceof ApiError && e.status === 404)) failed = e;
+    }
+    try {
+      if (failed) {
+        setSessionError(t("remote.serverPairing.error", { error: friendlyError(failed) }));
+      } else {
+        setDevices((currentDevices) => currentDevices.filter((device) => device.id !== id));
+        await loadDevices();
+        phone?.onSessionChanged?.();
+      }
+    } finally {
+      setSigningOut(null);
     }
   }
 
@@ -268,16 +285,17 @@ export function ServerPairingCard({ initialSession = null, cloudHome = false, fo
           )}
         </RowsCard>
         {elsewhere.connect}
-        {listed.length > 0 && (
+        {(listed.length > 0 || sessionError) && (
           <RowsCard label={t("remote.serverPairing.signedInDevices")} data-settings-block="paired-sessions">
             {listed.map((device) => (
               <ItemRow key={device.id} pixel="globe" title={device.label}
                 hint={`${scopeName(device)} · ${t("remote.serverPairing.seen", { when: lastSeen(device.lastSeenAt, now) })}${device.id === current ? ` · ${t("remote.serverPairing.thisBrowser")}` : ""}`}>
                 {device.id === current ? null : (
-                  <button type="button" onClick={() => void signOut(device.id)} className="ui-button">{t("remote.serverPairing.signOut")}</button>
+                  <button type="button" disabled={signingOut !== null} onClick={() => void signOut(device.id)} className="ui-button">{t("remote.serverPairing.signOut")}</button>
                 )}
               </ItemRow>
             ))}
+            {sessionError ? <NoteRow tone="danger">{sessionError}</NoteRow> : null}
           </RowsCard>
         )}
       </div>
@@ -351,10 +369,11 @@ export function ServerPairingCard({ initialSession = null, cloudHome = false, fo
           <ItemRow key={device.id} pixel="globe" title={device.label}
             hint={`${scopeName(device)} · ${t("remote.serverPairing.seen", { when: lastSeen(device.lastSeenAt, now) })}${device.id === current ? ` · ${t("remote.serverPairing.thisBrowser")}` : ""}`}>
             {device.id === current ? null : (
-              <button type="button" onClick={() => void signOut(device.id)} className="ui-button">{t("remote.serverPairing.signOut")}</button>
+              <button type="button" disabled={signingOut !== null} onClick={() => void signOut(device.id)} className="ui-button">{t("remote.serverPairing.signOut")}</button>
             )}
           </ItemRow>
         ))}
+        {sessionError ? <NoteRow tone="danger">{sessionError}</NoteRow> : null}
       </RowsCard>
     </>);
   }
@@ -399,7 +418,7 @@ export function ServerPairingCard({ initialSession = null, cloudHome = false, fo
                 </span>
               </span>
               {device.id === current ? null : (
-                <button type="button" onClick={() => void signOut(device.id)} className={quiet}>
+                <button type="button" disabled={signingOut !== null} onClick={() => void signOut(device.id)} className={quiet}>
                   {t("remote.serverPairing.signOut")}
                 </button>
               )}
@@ -407,7 +426,8 @@ export function ServerPairingCard({ initialSession = null, cloudHome = false, fo
           ))}
         </ul>
       )}
-      {error ? <p className="mt-3 text-[13px] text-danger">{error}</p> : null}
+      {sessionError ? <p role="alert" className="mt-3 text-[13px] text-danger">{sessionError}</p> : null}
+      {error ? <p role="alert" className="mt-3 text-[13px] text-danger">{error}</p> : null}
     </Card>
     </div>
   );

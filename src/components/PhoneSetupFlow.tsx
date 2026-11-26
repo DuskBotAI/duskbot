@@ -1065,8 +1065,8 @@ export function PhoneSetupFlowView({ controller }: { controller: PhoneSetupContr
       </FlowRow>
       {!c.pairingExpired && c.pairingLink && (
         <div className="flex justify-center px-3.5 pb-3">
-          <div className="rounded-[10px] bg-white p-3 outline outline-[0.5px] -outline-offset-[0.5px] outline-transparent" aria-label={t("phone.code.qrAria")}>
-            <PairingQr value={c.pairingLink} size={160} level="M" bgColor="#ffffff" fgColor="#111111" />
+          <div className="rounded-[10px] bg-white p-4 outline outline-[0.5px] -outline-offset-[0.5px] outline-transparent" aria-label={t("phone.code.qrAria")}>
+            <PairingQr value={c.pairingLink} size={220} level="L" bgColor="#ffffff" fgColor="#000000" shapeRendering="crispEdges" />
           </div>
         </div>
       )}

@@ -143,13 +143,18 @@ public class QrScannerPlugin: CAPPlugin, CAPBridgedPlugin, AVCaptureMetadataOutp
 
     @objc func stopScan(_ call: CAPPluginCall) {
         DispatchQueue.main.async { [weak self] in
-            guard let scanner = self?.fullScreen else { return }
+            let finish = {
+                self?.sessionQueue.async { [weak self] in
+                    self?.stopSession()
+                    call.resolve()
+                }
+            }
+            guard let scanner = self?.fullScreen else {
+                finish()
+                return
+            }
             self?.fullScreen = nil
-            scanner.dismiss(animated: true)
-        }
-        sessionQueue.async { [weak self] in
-            self?.stopSession()
-            call.resolve()
+            scanner.dismiss(animated: true) { finish() }
         }
     }
 
@@ -254,8 +259,9 @@ final class PairScannerViewController: UIViewController, DataScannerViewControll
     var onAction: ((String) -> Void)?
 
     private let overlay: ScanOverlay
+    // VisionKit's .accurate level keeps full camera resolution so dense v2 pairing QRs decode reliably.
     private let scanner = DataScannerViewController(
-        recognizedDataTypes: [.barcode(symbologies: [.qr])], qualityLevel: .balanced, recognizesMultipleItems: false,
+        recognizedDataTypes: [.barcode(symbologies: [.qr])], qualityLevel: .accurate, recognizesMultipleItems: false,
         isHighFrameRateTrackingEnabled: false, isPinchToZoomEnabled: true, isGuidanceEnabled: true, isHighlightingEnabled: true)
     private let dim = CAShapeLayer()
     private let corners = CAShapeLayer()
@@ -385,6 +391,7 @@ final class PairScannerViewController: UIViewController, DataScannerViewControll
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
         let bounds = scanner.overlayContainerView.bounds
+        guard !bounds.isEmpty else { return }
         let side = max(240, min(bounds.width - 56, 360)).rounded()
         box = CGRect(x: (bounds.width - side) / 2, y: bounds.height * 0.44 - side / 2, width: side, height: side)
         let path = UIBezierPath(rect: bounds)
@@ -431,7 +438,7 @@ final class PairScannerViewController: UIViewController, DataScannerViewControll
         guard on != busy else { return }
         busy = on
         busyLabel.text = label
-        if on { spinner.startAnimating(); scanner.stopScanning() } else { spinner.stopAnimating(); try? scanner.startScanning() }
+        if on { spinner.startAnimating(); scanner.stopScanning() } else { seen.removeAll(); spinner.stopAnimating(); try? scanner.startScanning() }
         UIView.animate(withDuration: 0.16) { self.busyView.alpha = on ? 1 : 0 }
     }
 
@@ -454,14 +461,23 @@ final class PairScannerViewController: UIViewController, DataScannerViewControll
         torchButton.accessibilityTraits = torchOn ? [.button, .selected] : .button
     }
 
-    func dataScanner(_ dataScanner: DataScannerViewController, didAdd addedItems: [RecognizedItem], allItems: [RecognizedItem]) {
+    // VisionKit can emit a barcode in didAdd before autofocus decodes payloadStringValue and deliver the string in didUpdate.
+    private func deliver(_ items: [RecognizedItem]) {
         guard !busy else { return }
-        for case .barcode(let code) in addedItems {
-            guard let text = code.payloadStringValue, !seen.contains(text) else { continue }
+        for case .barcode(let code) in items {
+            guard let text = code.payloadStringValue, !text.isEmpty, !seen.contains(text) else { continue }
             seen.insert(text)
             UINotificationFeedbackGenerator().notificationOccurred(.success)
             onCode?(text)
             return
         }
+    }
+
+    func dataScanner(_ dataScanner: DataScannerViewController, didAdd addedItems: [RecognizedItem], allItems: [RecognizedItem]) {
+        deliver(addedItems)
+    }
+
+    func dataScanner(_ dataScanner: DataScannerViewController, didUpdate updatedItems: [RecognizedItem], allItems: [RecognizedItem]) {
+        deliver(updatedItems)
     }
 }

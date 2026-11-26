@@ -5,7 +5,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { setLocale } from "@/lib/i18n";
 import { sessionCheck, sessionEnded } from "@/lib/session-ended";
 import { api } from "@/state/api";
-import type { MobileConnectionRecord } from "../../../shared/mobile-link";
+import { MOBILE_LINK_VERSION, mobileLinkUrl, universalPairLink, type MobileConnectionRecord, type MobileLinkPayload } from "../../../shared/mobile-link";
+import { holdSignInForService } from "../account/environment";
 import { PlatformContext, SecretsLocked, webPlatform, type MobilePlatform } from "../platform";
 import { ConnectionGate, pairedButUnreachable } from "./ConnectionGate";
 import { PairError } from "./pair";
@@ -307,4 +308,25 @@ it("when signed in, opening another place from the unreachable screen shows the 
   expect(host.querySelector("[data-testid=mobile-cloud-picker]")).not.toBeNull();
   expect(host.textContent).toContain("Alice Cloud");
   vi.unstubAllEnvs();
+});
+
+it("restores a held universal pairing QR after a service-switch reload", async () => {
+  const saved = new Map<string, string>();
+  vi.stubGlobal("localStorage", {
+    getItem: (key: string) => saved.get(key) ?? null,
+    setItem: (key: string, value: string) => { saved.set(key, value); },
+    removeItem: (key: string) => { saved.delete(key); },
+  });
+  const linkPayload: MobileLinkPayload = {
+    v: MOBILE_LINK_VERSION,
+    workspace: { name: "Emil PC", environmentId: "env-pc", kind: "mac" },
+    grant: { id: "g-pc", secret: "s3cret", expiresAt: Date.now() + 600_000 },
+    via: [{ kind: "https", url: "https://pc.example.test" }],
+  };
+  const qr = universalPairLink(mobileLinkUrl(linkPayload), "ABCD-EFGH-JKLM", { code: "WXYZQRST", email: "owner@example.test", serviceOrigin: "https://dusk.bot" });
+  holdSignInForService("https://dusk.bot", qr);
+  prefs = new Map();
+  platform = { ...platform, native: true, onAppUrl: () => () => {} };
+  await mount(); await settle();
+  expect(host.querySelector("h1")?.textContent).toBe("Link this phone to Emil PC?");
 });

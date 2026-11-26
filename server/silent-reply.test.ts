@@ -58,6 +58,17 @@ describe("PassStreamGate", () => {
     expect(stripTrailingPass("(pass)")).toBe("(pass)");
   });
 
+  it("gets through a long run of blank lines at once, whether or not a (pass) ends it", () => {
+    const blanks = "\n".repeat(20_000);
+    expect(stripTrailingPass(`Done.${blanks}x`)).toBe(`Done.${blanks}x`);
+    expect(stripTrailingPass(`Done.${blanks}(pass)`)).toBe("Done.");
+    expect(stripTrailingPass("Done.\r\n(pass)")).toBe("Done.");
+    const gate = new PassStreamGate();
+    expect(gate.delta("t1", "Done.")).toBe("Done.");
+    expect(gate.delta("t1", blanks)).toBeNull();
+    expect(gate.delta("t1", "x")).toBe(`${blanks}x`);
+  });
+
   it("withholds a trailing newline-prefixed (pass) during streaming and flushes normal paragraphs", () => {
     const gate = new PassStreamGate();
     expect(gate.delta("t1", "All done.\n\n")).toBe("All done.");

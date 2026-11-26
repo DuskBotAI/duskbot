@@ -21,7 +21,7 @@ const keystore = SecureStorage as unknown as {
 const SECRET_PREFIX = "dusk.";
 /** the prefix every Keychain/Keystore item had under the app's first name */
 const LEGACY_SECRET_PREFIX = "omb.";
-import { BarcodeScanner, BarcodeFormat, GoogleBarcodeScannerModuleInstallState } from "@capacitor-mlkit/barcode-scanning";
+import { BarcodeScanner, BarcodeFormat, GoogleBarcodeScannerModuleInstallState, Resolution } from "@capacitor-mlkit/barcode-scanning";
 import { keychainSecrets } from "@/mobile/keychain";
 import { guardCleartext } from "@/mobile/cleartext";
 import { friendlyError } from "@/lib/plain-error";
@@ -815,10 +815,10 @@ const androidScanner: ScanDriver = {
   request: async () => (await BarcodeScanner.requestPermissions()).camera,
   openSettings: () => BarcodeScanner.openSettings(),
   listen: async (onCode, onError) => [
-    await BarcodeScanner.addListener("barcodesScanned", ({ barcodes }) => onCode(barcodes[0]?.rawValue)),
+    await BarcodeScanner.addListener("barcodesScanned", ({ barcodes }) => onCode(barcodes.find((one) => typeof one?.rawValue === "string" && one.rawValue.length > 0)?.rawValue)),
     await BarcodeScanner.addListener("scanError", ({ message }) => onError(message)),
   ],
-  start: async () => { await BarcodeScanner.startScan({ formats: [BarcodeFormat.QrCode] }); },
+  start: async () => { await BarcodeScanner.startScan({ formats: [BarcodeFormat.QrCode], resolution: Resolution["1920x1080"] }); },
   stop: () => BarcodeScanner.stopScan(),
   torchAvailable: async () => (await BarcodeScanner.isTorchAvailable()).available,
   torch: (on) => (on ? BarcodeScanner.enableTorch() : BarcodeScanner.disableTorch()),
@@ -987,12 +987,13 @@ export async function nativePlatform(): Promise<MobilePlatform> {
     const timer = setTimeout(() => { console.warn(`startup: ${label} did not answer`); resolve(undefined); }, 2000);
     work.then(resolve, () => resolve(undefined)).finally(() => clearTimeout(timer));
   });
-  const [info, launch, chrome, , , glass, menu, pushSetup] = await Promise.all([
+  const [info, launch, chrome, , , , glass, menu, pushSetup] = await Promise.all([
     bounded(App.getInfo(), "app info"),
     bounded(App.getLaunchUrl(), "launch url"),
     bounded(kind === "ios" && Capacitor.isPluginAvailable("DuskChrome") ? DuskChrome.reset().then(() => DuskChrome.info()) : Promise.resolve(undefined), "chrome"),
     bounded(kind === "ios" && Capacitor.isPluginAvailable("DuskControls") ? DuskControls.reset() : Promise.resolve(), "controls"),
     bounded(overlayReady ?? Promise.resolve(), "status bar"),
+    kind === "ios" && Capacitor.isPluginAvailable("QrScanner") ? bounded(QrScanner.stopScan(), "scanner") : undefined,
     kind === "ios" && Capacitor.isPluginAvailable("DuskGlass") ? bounded(DuskGlass.clear().then(() => DuskGlass.supported(), () => DuskGlass.supported()), "glass") : undefined,
     kind === "ios" && Capacitor.isPluginAvailable("DuskMenu") ? bounded(DuskMenu.supported(), "menu") : undefined,
     kind === "android" && Capacitor.isPluginAvailable("DuskPushSetup") ? bounded(DuskPushSetup.configured(), "push setup") : undefined,

@@ -369,10 +369,11 @@ function legacyOrigin(value: string | null): string | undefined {
 /** A scanned QR or opened pairing link: a v2 link first, else an older `duskbot://pair?address=&token=` link from
  * the server pairing card or the companion. Null when it is neither or anything required is malformed. */
 export function parseMobilePairingLink(link: string): MobilePairingPayload | null {
-  const payload = parseMobileLink(link.trim());
+  const app = appLinkFromUniversal(link) ?? link.trim();
+  const payload = parseMobileLink(app);
   if (payload) return pairingFromPayload(payload);
   let url: URL;
-  try { url = new URL(link.trim()); } catch { return null; }
+  try { url = new URL(app); } catch { return null; }
   if (url.protocol !== "duskbot:" || (url.hostname || url.pathname.replace(/^\/+/, "")) !== "pair") return null;
   const q = url.searchParams;
   const credential = q.get("token") ?? "";

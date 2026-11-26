@@ -44,14 +44,44 @@ export function wanted(message: TelegramMessage, chats: readonly string[], keywo
   return !keywords.length || keywords.some((word) => lower(message.text).includes(lower(word)));
 }
 
-export function noteFor(messages: readonly TelegramMessage[], limit = 3_800): string {
-  const lines = messages.map((m) => `[${m.chat}] ${m.from} (${new Date(m.at).toISOString().slice(0, 16).replace("T", " ")} UTC${m.id === undefined ? "" : `, message ${m.id}`}): ${m.text.replace(/\s+/g, " ").trim()}`);
-  let note = `New Telegram messages (${messages.length}), each with all this watch knows of it: chat, sender, time, message id and text:\n`;
-  for (const line of lines) {
-    if (note.length + line.length + 1 > limit) { note += "[more messages were left out]"; break; }
-    note += `${line}\n`;
+function messagePrefix(m: TelegramMessage, part = ""): string {
+  return `[${m.chat}] ${m.from} (${new Date(m.at).toISOString().slice(0, 16).replace("T", " ")} UTC${m.id === undefined ? "" : `, message ${m.id}`}${part ? `, part ${part}` : ""}): `;
+}
+
+function renderNote(lines: readonly string[]): string {
+  return `New Telegram messages (${lines.length}), each with all this watch knows of it: chat, sender, time, message id and text:\n${lines.join("\n")}`;
+}
+
+function* notesFor(updates: readonly Update[], chats: readonly string[], keywords: readonly string[]): Generator<{ text: string; offset?: number }> {
+  const limit = 3_800;
+  let lines: string[] = [], offset: number | undefined;
+  for (const update of updates) {
+    const message = messagesOf([update])[0];
+    if (!message || !wanted(message, chats, keywords)) continue;
+    const text = message.text.replace(/\s+/g, " ").trim();
+    let parts = [messagePrefix(message) + text];
+    if (renderNote(parts).length > limit) {
+      const capacity = limit - renderNote([messagePrefix(message, `${text.length}/${text.length}`)]).length;
+      if (capacity < 2) throw new Error("Telegram message metadata exceeds the notification limit");
+      const chunks: string[] = [];
+      let chunk = "";
+      for (const character of text) {
+        if (chunk.length + character.length > capacity) { chunks.push(chunk); chunk = ""; }
+        chunk += character;
+      }
+      if (chunk) chunks.push(chunk);
+      parts = chunks.map((body, i) => messagePrefix(message, `${i + 1}/${chunks.length}`) + body);
+    }
+    for (const [i, part] of parts.entries()) {
+      if (renderNote([...lines, part]).length > limit) {
+        yield { text: renderNote(lines), offset };
+        lines = []; offset = undefined;
+      }
+      lines.push(part);
+      if (i === parts.length - 1) offset = update.update_id + 1;
+    }
   }
-  return note.trim();
+  if (lines.length) yield { text: renderNote(lines), offset };
 }
 
 /** A GET through HTTPS_PROXY when one is set (the bot box's egress gate), straight out otherwise. */
@@ -157,12 +187,13 @@ async function main(): Promise<void> {
     pause = 1_000;
     const updates = answer.result ?? [];
     if (!updates.length) continue;
-    const fresh = messagesOf(updates).filter((message) => wanted(message, chats, keywords));
-    if (fresh.length) {
-      const sent = await sendJobNote(noteFor(fresh), false);
-      // Not taken (dusk bot restarting, too many at once): the same updates are read again on the next poll.
-      if (!sent.ok) { console.error(`dusk-notify: ${sent.body}`); await new Promise((resolve) => setTimeout(resolve, 15_000)); continue; }
+    let failed = false;
+    for (const note of notesFor(updates, chats, keywords)) {
+      const sent = await sendJobNote(note.text, false);
+      if (!sent.ok) { console.error(`dusk-notify: ${sent.body}`); failed = true; break; }
+      if (note.offset !== undefined) { state.offset = note.offset; save(); }
     }
+    if (failed) { await new Promise((resolve) => setTimeout(resolve, 15_000)); continue; }
     state.offset = updates[updates.length - 1]!.update_id + 1;
     save();
   }

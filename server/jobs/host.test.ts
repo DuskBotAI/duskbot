@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { cpuTimeMs, JOB_MESSAGES, jobTurnRefusal } from "./host.ts";
 import { envNameRefusal } from "./launch.ts";
-import { apiBase, messagesOf, noteFor, wanted } from "./telegram-watch.ts";
+import { apiBase, messagesOf, wanted } from "./telegram-watch.ts";
 import { jobsFixture, PERSON_TURN } from "./testing.ts";
 
 const fixtures: Array<{ close(): Promise<void> }> = [];
@@ -99,14 +99,12 @@ describe("telegram_watch", () => {
     { update_id: 3, channel_post: { date: 1_700_000_120, caption: "new rate card", chat: { id: -12, title: "Deals channel", type: "channel" }, sender_chat: { title: "Deals channel" } } },
     { update_id: 4, message: { date: 1_700_000_180, chat: { id: -10, title: "Brand deals", type: "supergroup" } } },
   ];
-  it("reads group, channel and captioned messages, filters by chat and word, and batches them in one note", () => {
+  it("reads group, channel and captioned messages and filters by chat and word", () => {
     const messages = messagesOf(updates as never);
     expect(messages.map((m) => [m.chat, m.from, m.text])).toEqual([["Brand deals", "Ana", "Acme signed the LOI"], ["Friends", "bo", "lunch?"], ["Deals channel", "Deals channel", "new rate card"]]);
     expect(messages.filter((m) => wanted(m, ["deals"], []))).toHaveLength(2);
     expect(messages.filter((m) => wanted(m, [], ["loi"]))).toHaveLength(1);
     expect(messages.filter((m) => wanted(m, ["-11"], []))).toHaveLength(1);
-    expect(noteFor(messages)).toMatch(/^New Telegram messages \(3\), each with all this watch knows of it: chat, sender, time, message id and text:\n\[Brand deals\] Ana \(2023-11-14 22:13 UTC, message 42\): Acme signed the LOI\n\[Friends\] bo \(2023-11-14 22:14 UTC\): lunch\?/);
-    expect(noteFor(messages, 120)).toContain("[more messages were left out]");
   });
   it("talks to a test Bot API only on loopback, Telegram otherwise", () => {
     expect(apiBase({ DUSK_TELEGRAM_API_URL: "http://127.0.0.1:9123" })).toBe("http://127.0.0.1:9123");

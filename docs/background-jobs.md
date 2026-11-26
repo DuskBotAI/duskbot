@@ -40,7 +40,9 @@ At most 60 notifications an hour and 4,000 characters each.
 
 `server/jobs/telegram-watch.ts`, Node's standard library only: `getMe`, then `getUpdates` long polls (50 s), the offset
 kept in `DUSK_JOB_DIR`, each batch of new messages (groups, channels, captions; filtered by chat title or id and by
-keyword when given) handed over in one notify. It tells the person, once, with `--tell`:
+keyword when given) handed over in bounded notifications. Large batches use multiple notifications; long messages
+use numbered parts. The offset advances past matching messages only after their complete text has been accepted.
+If delivery fails partway through a long message, that message is retried from its first part. It tells the person, once, with `--tell`:
 
 - privacy mode is on (`can_read_all_group_messages` false): the bot sees only commands and @mentions in groups; the fix
   is BotFather → `/setprivacy` → Disable, then remove and re-add the bot (or make it a group admin);

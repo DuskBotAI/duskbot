@@ -10,11 +10,11 @@ import { Icon } from "../Icon";
 import type { BotPatch } from "../bot-settings/useBotSettingsDerived";
 
 /** Grok's inline fields: no frame of their own, a 10% ink wash on hover, a 1px focus border while focused or editing. */
-const nameCls = "max-w-full rounded-lg border border-transparent px-2.5 py-0.5 text-center text-[17px] font-medium leading-6 tracking-[0.01em] text-ink transition-[border-color,background-color] duration-[120ms] ease-[ease] hover:bg-ink/[0.1]";
+export const nameCls = "max-w-full rounded-lg border border-transparent px-2.5 py-0.5 text-center text-[17px] font-medium leading-6 tracking-[0.01em] text-ink transition-[border-color,background-color] duration-[120ms] ease-[ease] hover:bg-ink/[0.1]";
 
 const HOVER_GAZE = { x: -1, y: 1 };
 
-function useInlineEdit(save: (value: string) => void) {
+export function useInlineEdit(save: (value: string) => void) {
   const [draft, setDraft] = useState<string | null>(null);
   const settled = useRef(false);
   const refocus = useRef(false);

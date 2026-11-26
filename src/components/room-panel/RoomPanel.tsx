@@ -20,6 +20,8 @@ import { SheetPush } from "@/mobile/SheetPush";
 import { pageSurfaceCls } from "../bot-panel/pages";
 import { roundButtonCls } from "../bot-panel/rows";
 import { PanelResizeEdge } from "../bot-panel/PanelResizeEdge";
+import { nameCls, useInlineEdit } from "../bot-panel/PanelHero";
+import { cn } from "@/lib/cn";
 import { sidePanelCls } from "../bot-panel/side-panel";
 import { SegmentedTabs } from "../ui/SegmentedTabs";
 import { RoomAdvancedTab } from "./RoomAdvancedTab";
@@ -40,7 +42,15 @@ const DIALOG_TITLE: Record<RoomDialog, LocaleKey> = {
   about: "room.panel.about",
 };
 
+/** The longest room name the sidebar's rename takes. */
+const ROOM_NAME_LIMIT = 100;
+
 function RoomHero({ group, members }: { group: Group; members: Bot[] }) {
+  const { dispatch } = useStore();
+  const name = useInlineEdit((value) => {
+    const next = value.trim();
+    if (next && next !== group.name) dispatch({ type: "patchGroup", groupId: group.id, patch: { name: next } });
+  });
   const working = new Set(roomWorkingIds(group, group.messages.at(-1)));
   return (
     <div className="flex flex-col items-center text-center">
@@ -48,7 +58,33 @@ function RoomHero({ group, members }: { group: Group; members: Bot[] }) {
         <BotFaces members={members} size={members.length > 1 ? 52 : 64} working={working} rest="happy" overlap={16} ground="var(--color-app)" />
       </div>
       <div data-panel-name-row className="mt-4 flex max-w-full flex-col items-center gap-1">
-        <h2 className="max-w-full truncate rounded-lg border border-transparent px-2.5 py-0.5 text-[17px] font-medium leading-6 tracking-[0.01em] text-ink">{group.name}</h2>
+        <h2 className="flex min-w-0 max-w-full justify-center">
+          {name.draft !== null ? (
+            <input
+              autoFocus
+              data-panel-rename-input
+              aria-label={t("botPanel.ui.botSettingsSimpleName")}
+              placeholder={t("botPanel.ui.botSettingsSimpleName")}
+              maxLength={ROOM_NAME_LIMIT}
+              value={name.draft}
+              onChange={(event) => name.setDraft(event.target.value)}
+              onKeyDown={name.onKeyDown}
+              onBlur={name.onBlur}
+              className={cn(nameCls, "min-w-[2ch] border-focus outline-none [field-sizing:content]")}
+            />
+          ) : (
+            <button
+              ref={name.buttonRef}
+              type="button"
+              data-panel-rename
+              title={t("rename.named", { name: group.name })}
+              onClick={() => name.start(group.name)}
+              className={cn(nameCls, "cursor-text truncate focus-visible:border-focus focus-visible:outline-none!")}
+            >
+              {group.name}
+            </button>
+          )}
+        </h2>
         {group.description && (
           <p dir="auto" className="line-clamp-2 max-w-full px-2.5 text-[13px] leading-[18px] tracking-[0.015em] text-ink-secondary">{group.description}</p>
         )}

@@ -111,6 +111,29 @@ const words = (element: Element | null) => element?.textContent?.replace(/[\u{E0
 const modal = (name: string) => [...document.querySelectorAll<HTMLElement>(`[data-panel-modal="${name}"]`)].find((el) => !el.closest("[data-leaving]")) ?? null;
 
 describe("the Room panel's card", () => {
+  it("renames the room from its name under the faces, like a bot's name: Enter saves, Escape keeps the old one", () => {
+    render(room());
+    const name = $<HTMLButtonElement>("[data-room-panel] [data-panel-rename]");
+    expect(name?.textContent).toBe("Desk HQ");
+    click(name);
+    const field = $<HTMLInputElement>("[data-room-panel] [data-panel-rename-input]")!;
+    expect(field.value).toBe("Desk HQ");
+    expect(field.getAttribute("aria-label")).toBe("Name");
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(field, "  Content  ");
+    flushSync(() => field.dispatchEvent(new Event("input", { bubbles: true })));
+    press(field, "Enter");
+    expect(patches()).toEqual([{ type: "patchGroup", groupId: "desk", patch: { name: "Content" } }]);
+    expect(document.activeElement).toBe($("[data-room-panel] [data-panel-rename]"));
+
+    click($("[data-room-panel] [data-panel-rename]"));
+    const again = $<HTMLInputElement>("[data-room-panel] [data-panel-rename-input]")!;
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(again, "Nope");
+    flushSync(() => again.dispatchEvent(new Event("input", { bubbles: true })));
+    press(again, "Escape");
+    expect(patches()).toHaveLength(1);
+    expect($("[data-room-panel] [data-panel-rename-input]")).toBeNull();
+  });
+
   it("shows the room's faces and name, then who responds, the folder, the instructions and the members as plain rows", () => {
     render(room());
     expect($("#room-panel-title")?.textContent).toBe("Desk HQ");

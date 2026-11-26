@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 import {
-  USAGE_DIGEST_KEYS, USAGE_FRUSTRATION_KEYS, USAGE_SESSION_KEYS, SESSION_NOTE_MAX, SUMMARY_MAX, cleanUsageSession, USAGE_RUN_KEYS, USAGE_TURN_KEYS, categorize, cleanUsageDigest, cleanUsageFrustration, cleanUsageReport, cleanUsageTurn, failedToolName, failureReason, scrubSummary, toolSignals,
+  USAGE_DIGEST_KEYS, USAGE_FRUSTRATION_KEYS, USAGE_SESSION_KEYS, SESSION_NOTE_MAX, SUMMARY_MAX, cleanUsageSession, USAGE_RUN_KEYS, USAGE_TURN_KEYS, categorize, cleanUsageDigest, cleanUsageFrustration, cleanUsageReport, cleanUsageTurn, engineFamily, failedToolName, failureReason, scrubSummary, toolSignals,
   type UsageFrustration, type UsageSession,
 } from "../shared/usage-signals.ts";
 import { parseWorkspaceReport } from "../shared/dashboard-protocol.ts";
@@ -76,6 +76,12 @@ describe("what leaves the workspace", () => {
     expect(Object.keys(turn).sort()).toEqual(["apps", "at", "category", "engine", "from", "id", "ms", "outcome", "place", "room", "tools"]);
     expect(turn.apps).toEqual(["gmail"]);
     expect(cleanUsageTurn({ ...turn, engine: "my-secret-instance" }, NOW)).toBeNull();
+  });
+
+  it("counts Antigravity turns as antigravity, not other", () => {
+    expect(engineFamily("antigravityAgent")).toBe("antigravity");
+    expect(cleanUsageTurn({ id: "abcdefgh13", at: NOW, engine: engineFamily("antigravityAgent"), outcome: "failed", ms: 10, tools: [], apps: [], category: "chat", from: "app", place: "desktop", room: false }, NOW))
+      .toMatchObject({ engine: "antigravity" });
   });
 
   it("the report section passes the dashboard parser with nothing but allowed keys", () => {

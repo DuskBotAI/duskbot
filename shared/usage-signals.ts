@@ -5,10 +5,10 @@ import { CURATED_CONNECTOR_SLUGS } from "./connector-curated.ts";
 import { TOOL_NAMESPACE, toolSurfaceKind } from "./tool-surface.ts";
 import { traceToolLook } from "./usage-trace.ts";
 
-export const USAGE_ENGINES = ["claude", "codex", "gemini", "grok", "opencode", "cursor", "kimi", "deepseek", "qwen", "copilot", "api", "other"] as const;
+export const USAGE_ENGINES = ["claude", "codex", "gemini", "antigravity", "grok", "opencode", "cursor", "kimi", "deepseek", "qwen", "copilot", "api", "other"] as const;
 export type UsageEngine = (typeof USAGE_ENGINES)[number];
 const ENGINE_BY_DRIVER: Readonly<Record<string, UsageEngine>> = {
-  claudeAgent: "claude", codex: "codex", geminiAgent: "gemini", grokAgent: "grok", grok: "grok", opencodeGo: "opencode", cursorAgent: "cursor", kimiAgent: "kimi",
+  claudeAgent: "claude", codex: "codex", geminiAgent: "gemini", antigravityAgent: "antigravity", grokAgent: "grok", grok: "grok", opencodeGo: "opencode", cursorAgent: "cursor", kimiAgent: "kimi",
   deepseekAgent: "deepseek", qwenAgent: "qwen", copilotAgent: "copilot", "openai-compat": "api", mistral: "api", cerebras: "api", groq: "api", greenference: "api",
   meta: "api", minimax: "api",
 };

@@ -608,6 +608,9 @@ export class ConnectFlow {
         }
       } catch (cause) {
         if (cause instanceof StageEnded || signal.aborted) throw cause;
+        if (kind === "paste" && ((cause as { status?: number }).status === 404 || (cause as { status?: number }).status === 405)) {
+          return new Promise<void>(() => {});
+        }
         if (wakingError(cause)) continue;
         if (++missed >= LOST_AFTER) throw new StageEnded("lost");
       }

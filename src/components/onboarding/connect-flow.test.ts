@@ -263,6 +263,58 @@ describe("connect flow stages", () => {
     expect(flow.state.stage).toBe("connected");
   });
 
+  it("keeps waiting on a paste-code provider whose auth status endpoint returns 404 (Antigravity)", async () => {
+    let done = false;
+    const antigravity = (authenticated: boolean): ConnectInstance => ({
+      instanceId: "antigravity",
+      driverKind: "antigravityAgent",
+      snapshot: { state: "available", authenticated },
+      authentication: { method: "paste-code" },
+    });
+    const { flow, calls } = harness([
+      [antigravity(false)],
+      () => [antigravity(done)],
+    ], {
+      "POST /api/instances/antigravity/auth/start": () => ({
+        auth: { phase: "waiting", flowId: "ag1", authorizationUrl: "https://accounts.google.com/o/oauth2/auth?x=1" },
+      }),
+      "GET /api/instances/antigravity/auth/status": () => Promise.reject(Object.assign(new Error("Sign-in status is unavailable for this provider."), { status: 404 })),
+      "POST /api/instances/antigravity/auth/complete": () => { done = true; return { ok: true }; },
+      "POST /api/instances/antigravity/auth/cancel": () => ({ ok: true }),
+    });
+    flow.start({ tile: "antigravity", candidates: ["antigravity"] });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(flow.state).toMatchObject({ stage: "waiting", kind: "paste", flowId: "ag1" });
+    await vi.advanceTimersByTimeAsync(POLL_MS * (LOST_AFTER + 5));
+    expect(flow.state).toMatchObject({ stage: "waiting", kind: "paste", flowId: "ag1" });
+    expect(calls.filter((call) => call.startsWith("GET /api/instances/antigravity/auth/status"))).toHaveLength(1);
+    expect(calls).not.toContain("POST /api/instances/antigravity/auth/cancel");
+    flow.submit("4/0A-google-code");
+    await vi.advanceTimersByTimeAsync(0);
+    expect(calls).toContain("POST /api/instances/antigravity/auth/complete");
+    expect(flow.state).toEqual({ stage: "connected", reused: false });
+  });
+
+  it("still times out a paste-code sign-in with no status endpoint when the wait deadline expires", async () => {
+    const antigravity: ConnectInstance = {
+      instanceId: "antigravity",
+      driverKind: "antigravityAgent",
+      snapshot: { state: "available", authenticated: false },
+      authentication: { method: "paste-code" },
+    };
+    const { flow, calls } = harness([[antigravity]], {
+      "POST /api/instances/antigravity/auth/start": () => ({
+        auth: { phase: "waiting", flowId: "ag2", authorizationUrl: "https://accounts.google.com/o/oauth2/auth?x=1" },
+      }),
+      "GET /api/instances/antigravity/auth/status": () => Promise.reject(Object.assign(new Error("Sign-in status is unavailable for this provider."), { status: 404 })),
+      "POST /api/instances/antigravity/auth/cancel": () => ({ ok: true }),
+    });
+    flow.start({ tile: "antigravity", candidates: ["antigravity"] });
+    await vi.advanceTimersByTimeAsync(CONNECT_TIMEOUTS.waiting + POLL_MS);
+    expect(flow.state).toMatchObject({ stage: "failed", at: "waiting", reason: "timeout" });
+    expect(calls).toContain("POST /api/instances/antigravity/auth/cancel");
+  });
+
   it("one at a time: starting another cancels the sign-in under way on the server", async () => {
     const { flow, calls, seen } = harness([[codex({ state: "available", authenticated: false }), { ...codex({ state: "available", authenticated: false }), instanceId: "githubCopilot", driverKind: "copilotAgent" }]], {
       "POST /api/instances/codex/auth/start": () => device,

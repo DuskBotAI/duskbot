@@ -91,3 +91,28 @@ it("resolves display email directly from Antigravity CLI 1.5 antigravity-oauth-t
   expect(fetcher).not.toHaveBeenCalled();
   expect(await antigravityAccount(cliPath, path)).toEqual({ email: "legacy@example.test", method: "login" });
 });
+
+it("reads id_token_email from antigravity-oauth-token even after the access token expires, without network requests", async () => {
+  const cliPath = join(home, "antigravity-oauth-token");
+  const fetcher = vi.fn();
+  vi.stubGlobal("fetch", fetcher);
+
+  await writeFile(cliPath, JSON.stringify({
+    token: { access_token: "expired-access", refresh_token: "cli-refresh", expiry: "2020-01-01T00:00:00Z" },
+    auth_method: "consumer",
+    id_token_email: "stored@example.test",
+  }));
+  expect(await antigravityAccount(cliPath)).toEqual({ email: "stored@example.test", method: "login" });
+  expect(fetcher).not.toHaveBeenCalled();
+
+  await writeFile(cliPath, JSON.stringify({
+    token: { access_token: "expired-access", refresh_token: "cli-refresh", expiry: "2020-01-01T00:00:00Z" },
+    id_token_email: "not an email",
+  }));
+  expect(await antigravityAccount(cliPath)).toBeUndefined();
+  expect(fetcher).not.toHaveBeenCalled();
+
+  await writeFile(cliPath, JSON.stringify({ id_token_email: "stray@example.test" }));
+  expect(await antigravityAccount(cliPath)).toBeUndefined();
+  expect(fetcher).not.toHaveBeenCalled();
+});

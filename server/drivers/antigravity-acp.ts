@@ -74,6 +74,7 @@ const REMOVED_ENVIRONMENT_KEYS = new Set([
   "GEMINI_DIR",
   "GEMINI_HOME",
   "AGY_ACP_FORCE_FILE_STORAGE",
+  "AGY_CLI_FORCE_FILE_TOKEN_STORAGE",
   "AGY_CLI_DISABLE_AUTO_UPDATE",
   "ANTIGRAVITY_HARNESS_PATH",
   "BROWSER",
@@ -234,10 +235,12 @@ export async function prepareAntigravityProfile(input: {
   Object.assign(environment, {
     ...(caBundlePath ? { SSL_CERT_FILE: caBundlePath } : {}),
     // Antigravity CLI 1.5+ stores personal Google sign-ins in a single OS keyring entry shared by
-    // every profile unless it sees SSH_CONNECTION, in which case it stores per-profile files.
+    // every profile unless forced to per-profile files: 1.5.16+ checks AGY_CLI_FORCE_FILE_TOKEN_STORAGE,
+    // while 1.5.13-1.5.15 checked SSH_CONNECTION.
     SSH_CONNECTION: sourceEnv.SSH_CONNECTION || "127.0.0.1 0 127.0.0.1 0",
     GEMINI_HOME: directory,
     AGY_ACP_FORCE_FILE_STORAGE: "1",
+    AGY_CLI_FORCE_FILE_TOKEN_STORAGE: "1",
     AGY_CLI_DISABLE_AUTO_UPDATE: "1",
     BROWSER: browserCommand,
     PYTHONUNBUFFERED: "1",

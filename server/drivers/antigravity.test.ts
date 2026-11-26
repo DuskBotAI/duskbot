@@ -7,6 +7,7 @@ import * as tar from "tar";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { DATA_DIR, ensureDirs } from "../config.ts";
+import { boxEnvironment } from "../bot-box/env.ts";
 import { TurnNotStartedError, type ProviderInstance } from "../contracts.ts";
 import { recordEvents, type EventRecorder } from "../testing/events.ts";
 import { removeTempDir } from "../testing/cleanup.ts";
@@ -777,6 +778,7 @@ describe("official Antigravity runtime", () => {
         ANTIGRAVITY_CONVERSATION_ID: "other-app-conv",
         ANTIGRAVITY_APP_DATA_DIR: "/tmp/other-app",
         AGY_ACCOUNT: "other-account",
+        AGY_CLI_FORCE_FILE_TOKEN_STORAGE: "0",
         JETSKI_PROXY_SOCKET: "/tmp/other-jetski.sock",
       },
     });
@@ -792,6 +794,8 @@ describe("official Antigravity runtime", () => {
     expect(first.environment.AGY_ACCOUNT).toBeUndefined();
     expect(first.environment.JETSKI_PROXY_SOCKET).toBeUndefined();
     expect(first.environment.GEMINI_HOME).toBe(first.directory);
+    expect(first.environment.AGY_CLI_FORCE_FILE_TOKEN_STORAGE).toBe("1");
+    expect(boxEnvironment(first.environment).AGY_CLI_FORCE_FILE_TOKEN_STORAGE).toBe("1");
     expect(first.environment.AGY_CLI_DISABLE_AUTO_UPDATE).toBe("1");
     expect(first.environment.SSH_CONNECTION).toBe("127.0.0.1 0 127.0.0.1 0");
     expect(first.environment.ANTIGRAVITY_HARNESS_PATH).toBeUndefined();
@@ -1016,6 +1020,7 @@ describe("Antigravity driver over shared ACP", () => {
     const dumpState = JSON.parse(readFileSync(dump, "utf8"));
     expect(dumpState.argv).toEqual(antigravityAcpArgs(antigravityProfileDirectory(instanceId)));
     expect(dumpState.env.GEMINI_HOME).toBe(antigravityProfileDirectory(instanceId));
+    expect(dumpState.env.AGY_CLI_FORCE_FILE_TOKEN_STORAGE).toBe("1");
     expect(dumpState.env.AGY_CLI_DISABLE_AUTO_UPDATE).toBe("1");
     expect(dumpState.env.SSH_CONNECTION).toBe("127.0.0.1 0 127.0.0.1 0");
     expect(dumpState.env.GEMINI_API_KEY).toBeUndefined();
@@ -1433,6 +1438,7 @@ describe("Antigravity driver over shared ACP", () => {
   it("treats a legacy 1.4 acp_token.json without antigravity-oauth-token as signed out and clears it after --login", async () => {
     ensureDirs();
     const fake = fakeRuntime();
+    const dump = join(fake.directory, "dump-login.json");
     const instanceId = "antigravity-legacy-upgrade";
     const tokenDirectory = join(antigravityProfileDirectory(instanceId), "antigravity-acp");
     const legacyToken = join(tokenDirectory, "acp_token.json");
@@ -1442,7 +1448,7 @@ describe("Antigravity driver over shared ACP", () => {
     instance = await AntigravityDriver.create({
       instanceId,
       displayName: "Antigravity Upgrade",
-      environment: { FAKE_ACP_AUTH_METHOD: "oauth-personal", FAKE_ACP_MODELS: "gemini-3.8-flash" },
+      environment: { FAKE_ACP_AUTH_METHOD: "oauth-personal", FAKE_ACP_MODELS: "gemini-3.8-flash", FAKE_ACP_DUMP: dump },
       enabled: true,
       config: { cli: fake.executable, fullAuto: false },
     });
@@ -1453,6 +1459,7 @@ describe("Antigravity driver over shared ACP", () => {
     expect((await instance.snapshot()).authenticated).toBe(true);
     expect(existsSync(cliToken)).toBe(true);
     expect(existsSync(legacyToken)).toBe(false);
+    expect(JSON.parse(readFileSync(dump, "utf8")).env.AGY_CLI_FORCE_FILE_TOKEN_STORAGE).toBe("1");
   });
 
   it("stays in default mode on Antigravity CLI 1.5+ sessions that do not advertise yolo or auto_edit", async () => {

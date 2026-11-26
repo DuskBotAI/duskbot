@@ -3,6 +3,11 @@ import { readFile, stat } from "node:fs/promises";
 
 type Identity = { email: string; method: "login" } | undefined;
 const identities = new Map<string, { fingerprint: string; expires: number; result: Promise<Identity> }>();
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+function validEmail(value: unknown): string | undefined {
+  return typeof value === "string" && value.length <= 254 && EMAIL_PATTERN.test(value) ? value : undefined;
+}
 
 export function clearAntigravityAccountCache(...paths: Array<string | undefined>): void {
   for (const path of paths) {
@@ -10,8 +15,8 @@ export function clearAntigravityAccountCache(...paths: Array<string | undefined>
   }
 }
 
-/** The official ACP token files store OAuth credentials, not the account email.
- * Resolve display identity through Google only; never expose or rewrite tokens. */
+/** Read the display email stored by Antigravity CLI 1.5+ (`id_token_email`), or resolve it
+ * through Google for token files that omit it; never expose or rewrite tokens. */
 export async function antigravityAccount(tokenPath: string, fallbackTokenPath?: string): Promise<Identity> {
   const primary = await lookupFromFile(tokenPath);
   if (primary !== undefined || !fallbackTokenPath) return primary;
@@ -31,6 +36,15 @@ async function lookupFromFile(tokenPath: string): Promise<Identity> {
 
     let loader: (() => Promise<Identity>) | null = null;
     const cliToken = parsed.token as Record<string, unknown> | undefined;
+    const hasCliToken = Boolean(
+      cliToken && typeof cliToken === "object"
+      && ((typeof cliToken.access_token === "string" && cliToken.access_token.length > 0)
+        || (typeof cliToken.refresh_token === "string" && cliToken.refresh_token.length > 0)),
+    );
+    if (hasCliToken) {
+      const storedEmail = validEmail(parsed.id_token_email);
+      if (storedEmail) return { email: storedEmail, method: "login" };
+    }
     if (cliToken && typeof cliToken === "object" && typeof cliToken.access_token === "string" && cliToken.access_token.length > 0) {
       const expiry = typeof cliToken.expiry === "string" ? Date.parse(cliToken.expiry) : Number.NaN;
       if (Number.isFinite(expiry) && expiry <= Date.now()) return undefined;
@@ -67,8 +81,9 @@ async function lookupWithAccessToken(accessToken: string, signal = AbortSignal.t
     });
     if (!identity.ok) return undefined;
     const user = await identity.json() as { email?: unknown };
-    if (typeof user.email !== "string" || user.email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(user.email)) return undefined;
-    return { email: user.email, method: "login" };
+    const email = validEmail(user.email);
+    if (!email) return undefined;
+    return { email, method: "login" };
   } catch {
     // Identity lookup failure must not mark a working engine as signed out.
     return undefined;

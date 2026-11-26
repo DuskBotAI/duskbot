@@ -11,6 +11,14 @@ const NOTIFY_ATTEMPTS = 3;
 
 /** Keeps the system from idle-sleeping while letting the display turn off. */
 export const ROUTINE_WAKE_BLOCKER = "prevent-app-suspension";
+/** Used on Windows when the person explicitly opts into Keep PC awake while plugged in. */
+export const ROUTINE_WAKE_DISPLAY_BLOCKER = "prevent-display-sleep";
+
+export function routineWakeBlockerType(decision, platform = process.platform) {
+  if (!decision?.hold) return null;
+  if (platform === "win32" && decision.reason === "plugged-in") return ROUTINE_WAKE_DISPLAY_BLOCKER;
+  return ROUTINE_WAKE_BLOCKER;
+}
 
 /**
  * `enabled`: hold the hour before a run is due. `pluggedIn`: hold whenever a routine is enabled on this computer
@@ -77,6 +85,7 @@ export function rememberRoutineWake(userData, patch) {
  */
 export function createRoutineWakeHold(deps) {
   let blockerId = null;
+  let blockerType = null;
   let timer = null;
   let last = { hold: false, reason: "idle", at: null };
   let status = null;
@@ -84,12 +93,17 @@ export function createRoutineWakeHold(deps) {
   let listening = false;
 
   const apply = (decision) => {
-    if (decision.hold && blockerId === null) {
-      blockerId = deps.blocker.start(ROUTINE_WAKE_BLOCKER);
+    const nextType = routineWakeBlockerType(decision, deps.platform);
+    if (nextType !== null && (blockerId === null || blockerType !== nextType)) {
+      const previousId = blockerId;
+      blockerId = deps.blocker.start(nextType);
+      blockerType = nextType;
+      if (previousId !== null && deps.blocker.isStarted(previousId)) deps.blocker.stop(previousId);
       deps.log?.(`routine wake: holding this computer awake (${decision.reason}${decision.at ? ` at ${new Date(decision.at).toISOString()}` : ""})`);
-    } else if (!decision.hold && blockerId !== null) {
+    } else if (nextType === null && blockerId !== null) {
       if (deps.blocker.isStarted(blockerId)) deps.blocker.stop(blockerId);
       blockerId = null;
+      blockerType = null;
       deps.log?.(`routine wake: released (${decision.reason})`);
     }
     last = decision;

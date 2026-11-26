@@ -36,9 +36,13 @@ const settingsFile = () => path.join(app.getPath("userData"), "companion-setting
 function companionSettings() {
   try {
     const parsed = JSON.parse(fs.readFileSync(settingsFile(), "utf8"));
-    return { enabled: parsed?.enabled === true, keepAwake: parsed?.keepAwake === true };
+    return {
+      enabled: parsed?.enabled === true,
+      keepAwake: parsed?.keepAwake === true,
+      keepScreenOn: parsed?.keepScreenOn === true,
+    };
   } catch {
-    return { enabled: false, keepAwake: false };
+    return { enabled: false, keepAwake: false, keepScreenOn: false };
   }
 }
 
@@ -49,6 +53,10 @@ export function companionEnabledAtRest() {
 
 export function companionKeepAwakeAtRest() {
   return companionSettings().keepAwake;
+}
+
+export function companionKeepScreenOnAtRest() {
+  return companionSettings().keepScreenOn;
 }
 
 function rememberCompanionSettings(patch) {
@@ -74,6 +82,10 @@ export function rememberCompanionEnabled(enabled) {
 
 export function rememberCompanionKeepAwake(keepAwake) {
   rememberCompanionSettings({ keepAwake });
+}
+
+export function rememberCompanionKeepScreenOn(keepScreenOn) {
+  rememberCompanionSettings({ keepScreenOn });
 }
 
 async function control(method, urlPath, body, { timeoutMs = 4_000 } = {}) {
@@ -295,11 +307,12 @@ export function setCompanionHostedUrl(endpoint) {
 }
 
 export async function companionState() {
-  const keepAwake = companionKeepAwakeAtRest();
+  const { keepAwake, keepScreenOn } = companionSettings();
   if (!proc) {
     const state = {
       enabled: false,
       keepAwake,
+      keepScreenOn,
       port: ports.companion,
       devices: [],
       connectedDeviceIds: [],
@@ -310,11 +323,12 @@ export async function companionState() {
   }
   try {
     const state = await control("GET", "/state");
-    return { enabled: true, keepAwake, ...state };
+    return { enabled: true, keepAwake, keepScreenOn, ...state };
   } catch {
     return {
       enabled: true,
       keepAwake,
+      keepScreenOn,
       port: ports.companion,
       devices: [],
       connectedDeviceIds: [],
@@ -332,6 +346,7 @@ export async function companionRefreshTailscale() {
     return {
       enabled: true,
       keepAwake: companionKeepAwakeAtRest(),
+      keepScreenOn: companionKeepScreenOnAtRest(),
       ...state,
     };
   } catch {
@@ -359,6 +374,7 @@ export async function companionPairing(open, expectedToken) {
     return {
       enabled: true,
       keepAwake: companionKeepAwakeAtRest(),
+      keepScreenOn: companionKeepScreenOnAtRest(),
       ...state,
     };
   } catch {

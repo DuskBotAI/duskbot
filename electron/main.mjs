@@ -531,12 +531,14 @@ import {
   companionState,
   rememberCompanionEnabled,
   rememberCompanionKeepAwake,
+  rememberCompanionKeepScreenOn,
   setCompanionHostedUrl,
   setCompanionLifecycleListener,
   startCompanion,
   stopCompanion,
 } from "./companion.mjs";
 import { autoStartCompanion } from "./companion-autostart.mjs";
+import { createCompanionWakeHold } from "./companion-wake.mjs";
 import { createRoutineWakeHold, rememberRoutineWake, routineWakePatch, routineWakeSettings } from "./routine-wake.mjs";
 import { CREDENTIAL_PATCH, credentialSaveError } from "./credential-patch.mjs";
 import { createCappedLog } from "./capped-log.mjs";
@@ -565,17 +567,12 @@ const accountErrors = createAccountErrors({ origin: cloudTarget(process.env).ori
 accountErrors.watch(app, process, { ending: () => appEnding() });
 ipcMain.handle("error-reports:send", localOrHome("error-reports:send", (_event, report) => accountErrors.send(report)));
 
-let companionPowerBlocker = null;
-
-function syncCompanionKeepAwake(companionEnabled, keepAwake) {
-  const shouldBlock = companionEnabled && keepAwake;
-  if (shouldBlock && companionPowerBlocker === null) {
-    companionPowerBlocker = powerSaveBlocker.start("prevent-app-suspension");
-  } else if (!shouldBlock && companionPowerBlocker !== null) {
-    if (powerSaveBlocker.isStarted(companionPowerBlocker)) powerSaveBlocker.stop(companionPowerBlocker);
-    companionPowerBlocker = null;
-  }
-}
+const companionWake = createCompanionWakeHold({
+  blocker: powerSaveBlocker, powerMonitor,
+  isOnBattery: () => { try { return powerMonitor.isOnBatteryPower(); } catch { return false; } },
+  log: (line) => slog(line),
+});
+const syncCompanionKeepAwake = (companionEnabled, keepAwake, keepScreenOn = false) => companionWake.sync(companionEnabled, keepAwake, keepScreenOn);
 
 const routineWake = createRoutineWakeHold({
   fetchStatus: () => (serverReady
@@ -676,7 +673,7 @@ function publicManagedCompanionState() {
 }
 
 function decorateDesktopCompanionState(state) {
-  syncCompanionKeepAwake(state.enabled && !state.error, state.keepAwake === true);
+  syncCompanionKeepAwake(state.enabled && !state.error, state.keepAwake === true, state.keepScreenOn === true);
   return { ...state, managedConnection: publicManagedCompanionState() };
 }
 
@@ -2798,6 +2795,7 @@ ipcMain.handle("companion:keep-awake", localOnly("companion:keep-awake", async (
   rememberCompanionKeepAwake(Boolean(enabled));
   return desktopCompanionState();
 }));
+ipcMain.handle("companion:keep-screen-on", localOnly("companion:keep-screen-on", async (_event, enabled) => { rememberCompanionKeepScreenOn(Boolean(enabled)); return desktopCompanionState(); }));
 ipcMain.handle("routines:wake-state", localOnly("routines:wake-state", () => routineWake.poll()));
 ipcMain.handle("routines:keep-awake", localOnly("routines:keep-awake", async (_event, patch) => {
   rememberRoutineWake(app.getPath("userData"), routineWakePatch(patch));
@@ -3756,7 +3754,7 @@ app.on("before-quit", (e) => {
   // Cancel a scheduled recovery before yielding.
   const browsersQuit = process.platform === "win32" ? browsersFlush.flush() : Promise.resolve(true);
   const stoppingServer = browsersQuit.then(() => Promise.all([serverSupervisor.shutdown(), devServer?.stop() ?? true])).then((all) => all.every(Boolean));
-  syncCompanionKeepAwake(false, false);
+  companionWake.stop();
   routineWake.stop();
   try {
     desktopCompanionRelay?.close?.();

@@ -75,6 +75,7 @@ export interface PhoneDevice {
 export interface CompanionState {
   enabled: boolean;
   keepAwake: boolean;
+  keepScreenOn?: boolean;
   port: number;
   devices: PhoneDevice[];
   connectedDeviceIds?: string[];
@@ -97,6 +98,7 @@ export type CompanionBridge = {
   start: () => Promise<CompanionState>;
   stop: () => Promise<CompanionState>;
   keepAwake: (enabled: boolean) => Promise<CompanionState>;
+  keepScreenOn?: (enabled: boolean) => Promise<CompanionState>;
   refreshTailscale: () => Promise<CompanionState>;
   pairing: (open: boolean, expectedToken?: string) => Promise<CompanionState>;
   cloudDesktop: (deviceId: string, allowed: boolean) => Promise<CompanionState>;

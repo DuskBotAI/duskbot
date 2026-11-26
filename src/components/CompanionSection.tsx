@@ -208,6 +208,16 @@ export function CompanionSection({ profileEmail = "", focusRequest = 0 }: { prof
               onClick={() => void c.act((companion) => companion.keepAwake(!state.keepAwake))}
             />
           </SettingRow>
+          {typeof window !== "undefined" && window.duskDesktop?.platform === "win32" && Boolean(companionBridge()?.keepScreenOn) && (
+            <SettingRow title={t("remote.keepScreenOn")} subtitle={t("remote.keepScreenOnHint")}>
+              <Switch
+                checked={state.keepScreenOn === true}
+                aria-label={t("remote.keepScreenOnAria")}
+                disabled={c.busy || !state.enabled || !state.keepAwake}
+                onClick={() => void c.act((companion) => companion.keepScreenOn!(!(state.keepScreenOn === true)))}
+              />
+            </SettingRow>
+          )}
           <SettingRow title={t("settings.w6.phone.tailscale")} subtitle={<span aria-live="polite">{tailscaleStatus.title}</span>}>
             {tailscaleStatus.kind === "ready" ? (
               <button

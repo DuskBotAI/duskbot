@@ -107,6 +107,44 @@ test("one assertion is taken while a hold is warranted and released when it is n
   assert.deepEqual(calls.at(-1), ["stop", 3]);
 });
 
+test("on Windows, Keep PC awake while plugged in upgrades the hold to prevent-display-sleep", async () => {
+  const calls = [];
+  let nextId = 1;
+  const started = new Set();
+  const blocker = {
+    start(type) { const id = nextId++; started.add(id); calls.push(["start", type, id]); return id; },
+    stop(id) { started.delete(id); calls.push(["stop", id]); },
+    isStarted: (id) => started.has(id),
+  };
+  let pluggedIn = false;
+  let onBattery = false;
+  const hold = createRoutineWakeHold({
+    fetchStatus: async () => ({ hold: true, reason: "due", at: 42, routines: 1 }),
+    isOnBattery: () => onBattery,
+    blocker,
+    platform: "win32",
+    settings: () => ({ keepAwake: true, pluggedIn }),
+    log() {},
+    pollMs: 60_000,
+  });
+
+  await hold.poll();
+  assert.deepEqual(calls, [["start", "prevent-app-suspension", 1]]);
+
+  pluggedIn = true;
+  await hold.poll();
+  assert.deepEqual(calls, [
+    ["start", "prevent-app-suspension", 1],
+    ["start", "prevent-display-sleep", 2],
+    ["stop", 1],
+  ]);
+
+  onBattery = true;
+  await hold.poll();
+  assert.equal(hold.holding(), false);
+  assert.deepEqual(calls.at(-1), ["stop", 2]);
+});
+
 test("plugged in, the hold follows the power source and the routines; a sleep with a routine here is remembered", async () => {
   const started = new Set();
   let nextId = 1;

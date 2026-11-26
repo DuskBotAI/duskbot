@@ -9,8 +9,14 @@ export const ONLINE_POLL_MS = 2_000;
 export const ONLINE_WAIT_MS = 120_000;
 const NOTIFY_ATTEMPTS = 3;
 
-/** Keeps the system from idle-sleeping while letting the display turn off. */
+/** Keeps the system from idle-sleeping while letting the display turn off on macOS/Linux. */
 export const ROUTINE_WAKE_BLOCKER = "prevent-app-suspension";
+/** On Windows AC power, prevents Modern Standby (S0) entry when the display idles off. */
+export const ROUTINE_WAKE_WINDOWS_BLOCKER = "prevent-display-sleep";
+
+export function routineWakeBlockerType(platform = process.platform) {
+  return platform === "win32" ? ROUTINE_WAKE_WINDOWS_BLOCKER : ROUTINE_WAKE_BLOCKER;
+}
 
 /**
  * `enabled`: hold the hour before a run is due. `pluggedIn`: hold whenever a routine is enabled on this computer
@@ -83,9 +89,11 @@ export function createRoutineWakeHold(deps) {
   let sleptAt = null;
   let listening = false;
 
+  const blockerType = routineWakeBlockerType(deps.platform);
+
   const apply = (decision) => {
     if (decision.hold && blockerId === null) {
-      blockerId = deps.blocker.start(ROUTINE_WAKE_BLOCKER);
+      blockerId = deps.blocker.start(blockerType);
       deps.log?.(`routine wake: holding this computer awake (${decision.reason}${decision.at ? ` at ${new Date(decision.at).toISOString()}` : ""})`);
     } else if (!decision.hold && blockerId !== null) {
       if (deps.blocker.isStarted(blockerId)) deps.blocker.stop(blockerId);

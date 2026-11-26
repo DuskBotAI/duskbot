@@ -74,6 +74,7 @@ test("one assertion is taken while a hold is warranted and released when it is n
     fetchStatus: async () => status,
     isOnBattery: () => onBattery,
     blocker,
+    platform: "darwin",
     settings: () => ({ keepAwake }),
     log() {},
     pollMs: 60_000,
@@ -105,6 +106,32 @@ test("one assertion is taken while a hold is warranted and released when it is n
   hold.stop();
   assert.equal(hold.holding(), false);
   assert.deepEqual(calls.at(-1), ["stop", 3]);
+});
+
+test("on Windows AC power, routine wake uses prevent-display-sleep to avoid Modern Standby entry", async () => {
+  const calls = [];
+  const started = new Set();
+  const blocker = {
+    start(type) { started.add(1); calls.push(["start", type, 1]); return 1; },
+    stop(id) { started.delete(id); calls.push(["stop", id]); },
+    isStarted: (id) => started.has(id),
+  };
+  let onBattery = false;
+  const hold = createRoutineWakeHold({
+    fetchStatus: async () => ({ hold: false, routines: 1 }),
+    isOnBattery: () => onBattery,
+    blocker,
+    platform: "win32",
+    settings: () => ({ keepAwake: true, pluggedIn: true }),
+    log() {},
+    pollMs: 60_000,
+  });
+  await hold.poll();
+  assert.deepEqual(calls, [["start", "prevent-display-sleep", 1]]);
+  onBattery = true;
+  await hold.poll();
+  assert.equal(hold.holding(), false);
+  assert.deepEqual(calls.at(-1), ["stop", 1]);
 });
 
 test("plugged in, the hold follows the power source and the routines; a sleep with a routine here is remembered", async () => {

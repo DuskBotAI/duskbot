@@ -3206,24 +3206,27 @@ function cleanLine() {
   if (typeof place === "string" && place) return { kind: "clean", place };
   return { kind: "clean", ...(accountRing.waiting().some(row => row.id === oneHome.journal()?.cloud?.account) ? { saved: true } : {}) };
 }
+async function workspaceMenuRows(from, kindIcon) {
+  await cloudOffersReady();
+  return workspaceMenuTemplate(environmentsState, {
+    onSwitch: (id) => void workspaceMenuAction(() => switchEnvironment(id)),
+    onConnect: () => void workspaceMenuAction(openWorkspaceSettings),
+    onForget: (id) => void workspaceMenuAction(() => forgetEnvironment(id)),
+    ...(serverCanMove(environmentsState.activeId) ? { onCloudMove: (id) => void askServerCloudMove(id).catch(error => slog(`cloud move menu: ${error?.message ?? error}`)) } : {}),
+    ...cloudMenuOptions(from === "howto" ? "app_howto" : "app_menu"),
+    kindIcon,
+    // with My Cloud home, this computer stays one tap away: once its bots moved it opens fresh (its own first bot), never the frozen copy that refuses every send
+    onLocal: () => void workspaceMenuAction(() => (oneHome.offer()?.stay(), cleanWorkspace.marker().frozen ? workspaceSwitch.around(() => homeWindow.openHere()) : activeEnvironment(environmentsState) ? switchEnvironment(LOCAL_ID) : workspaceSwitch.around(() => (homePlaces.remember(null), persistEnvironments(withActive(environmentsState, LOCAL_ID), "chosen"), navigateMainWindow(rendererOrigin()))))),
+    localShown: Boolean(mainWindow && !mainWindow.isDestroyed() && senderIsLocal({ sender: mainWindow.webContents })),
+    ...(await placesMenuOptions({ homeOrigin: homeWindow.cloudOrigin(), cloud: cloudHomeEntry(), home: oneHome.away() || ownHome?.away() === true, platform: process.platform, port: SERVER_PORT })),
+  });
+}
 let workspaceMenuOpen = false;
 ipcMain.handle("workspaces:menu", workspaceOnly(async (_event, from) => {
   if (workspaceMenuOpen) return;
   workspaceMenuOpen = true;
   try {
-    await cloudOffersReady();
-    const template = workspaceMenuTemplate(environmentsState, {
-      onSwitch: (id) => void workspaceMenuAction(() => switchEnvironment(id)),
-      onConnect: () => void workspaceMenuAction(openWorkspaceSettings),
-      onForget: (id) => void workspaceMenuAction(() => forgetEnvironment(id)),
-      ...(serverCanMove(environmentsState.activeId) ? { onCloudMove: (id) => void askServerCloudMove(id).catch(error => slog(`cloud move menu: ${error?.message ?? error}`)) } : {}),
-      ...cloudMenuOptions(from === "howto" ? "app_howto" : "app_menu"),
-      kindIcon: placeKindIcon,
-      // with My Cloud home, this computer stays one tap away: once its bots moved it opens fresh (its own first bot), never the frozen copy that refuses every send
-      onLocal: () => void workspaceMenuAction(() => (oneHome.offer()?.stay(), cleanWorkspace.marker().frozen ? workspaceSwitch.around(() => homeWindow.openHere()) : activeEnvironment(environmentsState) ? switchEnvironment(LOCAL_ID) : workspaceSwitch.around(() => (homePlaces.remember(null), persistEnvironments(withActive(environmentsState, LOCAL_ID), "chosen"), navigateMainWindow(rendererOrigin()))))),
-      localShown: Boolean(mainWindow && !mainWindow.isDestroyed() && senderIsLocal({ sender: mainWindow.webContents })),
-      ...(await placesMenuOptions({ homeOrigin: homeWindow.cloudOrigin(), cloud: cloudHomeEntry(), home: oneHome.away() || ownHome?.away() === true, platform: process.platform, port: SERVER_PORT })),
-    });
+    const template = await workspaceMenuRows(from, placeKindIcon);
     if (!template.length) return;
     // dev runs only (the smoke walkthrough): a native popup can't be clicked headless, so the named row is chosen instead
     const pick = !app.isPackaged ? process.env.DUSK_SMOKE_MENU_PICK : "";
@@ -3233,6 +3236,19 @@ ipcMain.handle("workspaces:menu", workspaceOnly(async (_event, from) => {
   } finally {
     workspaceMenuOpen = false;
   }
+}));
+// Security: only this app's own page draws the list of places itself. It gets each row's words and kind, never a
+// destination or callback, and can run only a row main handed it for the menu now open; a cloud page keeps the native menu.
+let pageMenuPicks = new Map();
+ipcMain.handle("workspaces:menu-rows", localWorkspaceOnly("workspaces:menu-rows", async (_event, from) => {
+  const template = await workspaceMenuRows(from === "howto" ? "howto" : undefined, (kind) => kind);
+  pageMenuPicks = new Map(template.filter((row) => row.id && row.click).map((row) => [row.id, row.click]));
+  return template.map(({ id, type, label, sublabel, checked, enabled, icon }) => ({ id, type, label, sublabel, checked, enabled, kind: icon }));
+}));
+ipcMain.handle("workspaces:menu-pick", localWorkspaceOnly("workspaces:menu-pick", (_event, id) => {
+  const pick = typeof id === "string" ? pageMenuPicks.get(id) : undefined;
+  pageMenuPicks = new Map();
+  pick?.();
 }));
 
 ipcMain.handle("desktop:capabilities", async (event) =>

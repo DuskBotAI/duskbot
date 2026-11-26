@@ -171,6 +171,11 @@ const bridge = {
   workspaces: {
     state: () => ipcRenderer.invoke("workspaces:state"),
     menu: (options) => ipcRenderer.invoke("workspaces:menu", ...(options?.from === "howto" ? ["howto"] : [])),
+    // this app's own page draws the same list as its own menu: the rows' words and kinds, and a pick by row id
+    ...(isLocalPage ? {
+      menuRows: (options) => ipcRenderer.invoke("workspaces:menu-rows", ...(options?.from === "howto" ? ["howto"] : [])),
+      menuPick: (id) => ipcRenderer.invoke("workspaces:menu-pick", String(id)),
+    } : {}),
     line: () => ipcRenderer.invoke("workspaces:line"),
     places: () => ipcRenderer.invoke("workspaces:places"),
     open: (id) => isLocalPage || navigator.userActivation?.isActive === true

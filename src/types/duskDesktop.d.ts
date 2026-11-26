@@ -1,6 +1,17 @@
 // The narrow bridge the Electron preload exposes. Absent in the browser.
 
 declare global {
+  /** One row of the list of places as main serves it: a separator, a choice (`radio`, `checked` on the place on screen)
+   * or an action; `enabled: false` is a line to read, not to pick. */
+  interface WorkspaceMenuRow {
+    id?: string;
+    type?: "radio" | "separator";
+    label?: string;
+    sublabel?: string;
+    checked?: boolean;
+    enabled?: boolean;
+    kind?: "computer" | "cloud" | "server";
+  }
   type CompanyBackupEntry = Omit<import("../../electron/company-backups.mjs").CompanyBackupMetadata, "status"> & { status: "creating" | "uploading" | "completing" | "ready" | "cleanup" };
   interface CompanyBackupScheduleState {
     enabled: boolean;
@@ -251,6 +262,10 @@ const __APP_VERSION__: string;
         state: () => Promise<{ local: boolean; name: string; origin?: string; color?: string; home?: boolean; role?: string; localPath?: string }>;
         /** The native server menu; resolves when it closes. `from: "howto"`: the Show me how tip opened it. */
         menu: (options?: { from?: "howto" }) => Promise<void>;
+        /** The same list as rows for this app's own page to draw as its own menu (absent on any other page): words and
+         * the kind of place only. `menuPick` runs a row of the list last served; nothing else. */
+        menuRows?: (options?: { from?: "howto" }) => Promise<WorkspaceMenuRow[]>;
+        menuPick?: (id: string) => Promise<void>;
         /** One plain line for the next page, served once: a team this person is no longer in. */
         line?: () => Promise<{ kind: "left"; name: string } | null>;
         /** The rail's circles, for this app's page and a hosted Cloud's only (empty elsewhere, and with fewer than two

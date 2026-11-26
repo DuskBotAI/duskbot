@@ -73,7 +73,7 @@ export function AiStep({ tested, cloud = false, computerAis = [], onNext }: { te
         )}
         {!goes && !free && <button type="button" data-funnel-later="" onClick={() => onNext("later")} className={QUIET}>{t("funnel.ai.later")}</button>}
       </>}>
-      <AiCards tested={tested} onMore={() => setMore(true)} suggested={used} staysHere={staysHere} foundFirst />
+      <AiCards tested={tested} onMore={() => setMore(true)} suggested={used} staysHere={staysHere} foundRow />
 
       {tested?.state === "failed" && (
         <div role="alert" data-ai-silent="" className="mt-5 flex flex-col items-center gap-2 text-[13px] leading-5 text-ink">

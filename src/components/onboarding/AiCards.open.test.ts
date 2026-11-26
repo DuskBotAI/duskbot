@@ -67,3 +67,15 @@ it("on the first run, the AIs already connected when the grid opens lead it, tin
   await act(async () => { root.render(createElement(AiCards, { tested: null })); });
   expect(order(), "everywhere else the grid keeps its fixed order").toEqual(["chatgpt", "claude", "openrouter"]);
 });
+
+it("laid out in two parts, the AIs already connected sit in their own row on top and the rest under Connect more", async () => {
+  const sub = (instanceId: string, driverKind: string, ready: boolean) => ({ instanceId, driverKind, displayName: instanceId, access: "subscription",
+    snapshot: { state: "available", authenticated: ready }, authentication: { method: "browser-pkce" }, models: { default: "m", options: [] } }) as unknown as InstanceInfo;
+  f.instances = [sub("chatgpt", "codex", false), sub("claude", "claudeAgent", true), openrouter];
+  await act(async () => { root.render(createElement(AiCards, { tested: null, foundRow: true })); });
+  const group = (name: string) => [...document.body.querySelector(`[data-ai-cards-group=${name}]`)!.parentElement!.querySelectorAll<HTMLElement>("[data-funnel-ai]")].map((tile) => tile.dataset.funnelAi);
+  expect(document.body.querySelector("[data-ai-cards-group=found]")?.textContent).toBe("On your computer");
+  expect(group("found")).toEqual(["claude"]);
+  expect(document.body.querySelector("[data-ai-cards-group=more]")?.textContent).toBe("Connect more");
+  expect(group("more")).toEqual(["chatgpt", "openrouter"]);
+});

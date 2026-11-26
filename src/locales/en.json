@@ -3442,6 +3442,7 @@
   "funnel.ai.free": "Start with the free model",
   "funnel.ai.later": "Set up later",
   "funnel.ai.connectTitle": "Connect your AI",
+  "funnel.ai.connectMore": "Connect more",
   "funnel.ai.connectSub": "Tap one you already use and sign in on its own site. Your password stays with them.",
   "funnel.ai.connectSubFound": "Found on this computer and connected: {ais}. Add another if you like.",
   "funnel.ai.freeUntil": "Your bots use the free model until you connect one.",

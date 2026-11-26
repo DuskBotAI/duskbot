@@ -138,7 +138,7 @@ export function connectedAiCards(instances: readonly InstanceInfo[]): AiTileId[]
 /** The grid of popular AIs and, under it, the pressed one's way in. `onMore`: the small link to every other provider and
  * API keys (the model directory). Nothing runs until a card is pressed. `onConnected`: called once when the AI pressed
  * here becomes connected. */
-export function AiCards({ onMore, className, onConnected, onManage, suggested = [], staysHere = [], foundFirst = false }: { tested: WelcomeAiNow | null; onMore?: () => void; className?: string;
+export function AiCards({ onMore, className, onConnected, onManage, suggested = [], staysHere = [], foundFirst = false, foundRow = false }: { tested: WelcomeAiNow | null; onMore?: () => void; className?: string;
   onConnected?: (tile: AiTileId) => void;
   /** makes a connected card a button that opens its AI's accounts */
   onManage?: (instance: InstanceInfo) => void;
@@ -147,7 +147,10 @@ export function AiCards({ onMore, className, onConnected, onManage, suggested = 
   /** connected cards whose sign-in stays on this computer when the person's dusk cloud is made */
   staysHere?: readonly AiTileId[];
   /** the first run: the cards already connected when the grid opened lead it, tinted (the order holds while it is open) */
-  foundFirst?: boolean }) {
+  foundFirst?: boolean;
+  /** the first run, laid out in two parts: the cards already connected when the grid opened as a row on top, then the
+   * rest under Connect more */
+  foundRow?: boolean }) {
   const { state, refreshInstances } = useStore();
   const [picked, setPicked] = useState<AiTileId | null>(null);
   const flow = useConnectFlow();
@@ -184,14 +187,19 @@ export function AiCards({ onMore, className, onConnected, onManage, suggested = 
 
   return (
     <div data-ai-cards="" className={cn("@container flex w-full flex-col items-center", className)}>
-      <div role="list" aria-label={t("funnel.ai.title")} className="grid w-full grid-cols-2 gap-2.5 @min-[400px]:grid-cols-4">
-        {ordered.map((tile) => (
-          <AiCard key={tile.id} tile={tile} connected={shown.has(tile.id)} arrived={!firstShown.has(tile.id)} picked={picked === tile.id}
-            found={foundFirst && firstShown.has(tile.id)}
-            suggested={suggested.includes(tile.id)} staysHere={staysHere.includes(tile.id)} onPick={() => pick(tile)}
-            onManage={onManage && (() => onManage(tile.instance))} />
-        ))}
-      </div>
+      {(foundRow ? [ordered.filter((tile) => firstShown.has(tile.id)), ordered.filter((tile) => !firstShown.has(tile.id))] : [ordered]).map((group, index, groups) => group.length > 0 && (
+        <div key={index} className={cn("flex w-full flex-col", index > 0 && "mt-6")}>
+          {groups.length > 1 && <p data-ai-cards-group={index === 0 ? "found" : "more"} className="mb-2.5 text-start text-[13px] leading-[18px] text-ink-tertiary">{t(index === 0 ? "funnel.ai.onComputer" : "funnel.ai.connectMore")}</p>}
+          <div role="list" aria-label={groups.length > 1 ? t(index === 0 ? "funnel.ai.onComputer" : "funnel.ai.connectMore") : t("funnel.ai.title")} className="grid w-full grid-cols-2 gap-2.5 @min-[400px]:grid-cols-4">
+            {group.map((tile) => (
+              <AiCard key={tile.id} tile={tile} connected={shown.has(tile.id)} arrived={!firstShown.has(tile.id)} picked={picked === tile.id}
+                found={(foundFirst || foundRow) && firstShown.has(tile.id)}
+                suggested={suggested.includes(tile.id)} staysHere={staysHere.includes(tile.id)} onPick={() => pick(tile)}
+                onManage={onManage && (() => onManage(tile.instance))} />
+            ))}
+          </div>
+        </div>
+      ))}
       <Reveal className="pt-5">
         {chosen && (
           <StageSwap stage={chosen.id}>

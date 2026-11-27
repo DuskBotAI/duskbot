@@ -79,18 +79,13 @@ window.duskBuild = async () => {
   return 'mac-arm64';
 };
 
-// plus and pro start free while the account service runs a trial (DUSK_TRIAL_DAYS). the pill is built into the page; this keeps it true to the live trial
+// plus and pro start free while the account service runs a trial (DUSK_TRIAL_DAYS). the buttons are built with it; this keeps them true to the live trial
 {
   const buys = [...document.querySelectorAll('.plan a[href*="/signup?plan="]')];
   if (buys.length) fetch('/api/public/config').then((r) => (r.ok ? r.json() : null)).then((config) => {
     if (!config?.plans) return;
     const days = config.plans.find((plan) => plan.trialDays)?.trialDays;
-    const on = Number.isInteger(days) && days >= 1;
-    for (const a of buys) {
-      const pill = a.closest('.plan')?.querySelector('.trial-pill');
-      if (!on) { pill?.remove(); continue; }
-      a.textContent = 'start free trial';
-      if (pill) pill.textContent = `${days} ${days === 1 ? 'day' : 'days'} free`;
-    }
+    const text = Number.isInteger(days) && days >= 1 ? `start ${days}-day free trial` : 'get started';
+    for (const a of buys) a.textContent = text;
   }).catch(() => {});
 }

@@ -17,9 +17,10 @@ const state = vi.hoisted(() => ({
   update: vi.fn(async (_name: string) => {}),
   tracked: [] as unknown[][],
   query0: "",
+  trialDays: undefined as number | undefined,
 }));
 vi.mock("../data/cloud", () => ({
-  useCloud: () => ({ account: { profile: { name: state.profileName, onboarded: false } }, catalog: { ...fixtureCatalog, checkoutOpen: true }, billing: null, clouds: [],
+  useCloud: () => ({ account: { profile: { name: state.profileName, onboarded: false } }, catalog: { ...fixtureCatalog, checkoutOpen: true, ...(state.trialDays ? { trialDays: state.trialDays } : {}) }, billing: null, clouds: [],
     checkout: state.checkout, updateProfile: state.update, finishOnboarding: state.finish }),
 }));
 vi.mock("../data/session", () => ({ useSession: () => ({ account: { id: "a", email: "sam@qa.dusk.test", ...(state.signInName !== undefined ? { name: state.signInName } : {}) }, setAccount: () => {}, toast: () => {} }) }));
@@ -32,7 +33,7 @@ vi.mock("../lib/downloads", async (actual) => ({ ...(await actual<typeof import(
 vi.mock("../ui/Digits", () => ({ StretchPill: () => null }));
 
 const roots: Root[] = [];
-afterEach(async () => { for (const root of roots.splice(0)) await act(async () => root.unmount()); document.body.innerHTML = ""; state.moved = []; state.query = "step=plan"; state.os = "windows"; state.profileName = "Sam"; state.signInName = undefined; state.tracked = []; sessionStorage.clear(); vi.clearAllMocks(); vi.useRealTimers(); });
+afterEach(async () => { for (const root of roots.splice(0)) await act(async () => root.unmount()); document.body.innerHTML = ""; state.moved = []; state.query = "step=plan"; state.os = "windows"; state.profileName = "Sam"; state.signInName = undefined; state.trialDays = undefined; state.tracked = []; sessionStorage.clear(); vi.clearAllMocks(); vi.useRealTimers(); });
 
 async function open() {
   const { Onboarding } = await import("./Onboarding");
@@ -119,6 +120,31 @@ test("back to the name step after it was skipped shows it, so the plan step's ba
   const host = await open();
   expect(host.querySelector("#onb-name")).not.toBeNull();
   expect(state.tracked).toEqual([["name", false, false]]);
+});
+
+const picked = (host: HTMLElement) => host.querySelector('[role="radio"][aria-checked="true"]')?.textContent ?? "";
+
+test("the plan step opens on pro", async () => {
+  state.query = "step=plan";
+  const host = await open();
+  expect(picked(host)).toContain("pro");
+});
+
+test("with a trial running, the cloud button says it, and without one it names the price", async () => {
+  state.trialDays = 3;
+  const trial = await open();
+  expect(press(trial, "start 3-day free trial")).toBeDefined();
+  expect(press(trial, "continue to checkout")).toBeUndefined();
+  document.body.innerHTML = "";
+  state.trialDays = undefined;
+  const plain = await open();
+  expect(press(plain, "continue to checkout, $50/mo")).toBeDefined();
+});
+
+test("a plan picked on the site still wins over the pro default", async () => {
+  state.query = "step=plan&plan=plus";
+  const host = await open();
+  expect(picked(host)).toContain("plus");
 });
 
 test("a sign-in name the profile does not hold yet is saved before the step is skipped", async () => {

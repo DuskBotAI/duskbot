@@ -215,9 +215,8 @@
       <img class="plan-art" src="/art/p-meadow.webp" alt="" width="800" height="354" loading="lazy">
       <h3>plus</h3>
       <p class="why">your bots keep working with the laptop shut.</p>
-      {{#trialDays}}<p class="trial-pill">{{trial-days}} days free</p>{{/trialDays}}
       <p class="plan-price"><span class="amt">$<span data-m="20" data-y="200">20</span></span><span class="per" data-m="a month" data-y="a year. two months free.">a month</span></p>
-      <a class="btn light" href="{{app /signup?plan=plus}}" data-mk-press data-dusk-value="plus">get started</a>
+      <a class="btn light" href="{{app /signup?plan=plus}}" data-mk-press data-dusk-value="plus">{{#trialDays}}start {{trial-days}}-day free trial{{/trialDays}}{{^trialDays}}get started{{/trialDays}}</a>
       <ul class="has">
         <li>{{i check}}everything in free</li>
         <li>{{i check}}your bots keep working with your laptop shut</li>
@@ -232,9 +231,8 @@
       <img class="plan-art" src="/art/p-peaks.webp" alt="" width="800" height="354" loading="lazy">
       <h3>pro</h3>
       <p class="why">for heavy workloads, and for work.</p>
-      {{#trialDays}}<p class="trial-pill">{{trial-days}} days free</p>{{/trialDays}}
       <p class="plan-price"><span class="amt">$<span data-m="50" data-y="500">50</span></span><span class="per" data-m="a month" data-y="a year. two months free.">a month</span></p>
-      <a class="btn light" href="{{app /signup?plan=pro}}" data-mk-press data-dusk-value="pro">get started</a>
+      <a class="btn light" href="{{app /signup?plan=pro}}" data-mk-press data-dusk-value="pro">{{#trialDays}}start {{trial-days}}-day free trial{{/trialDays}}{{^trialDays}}get started{{/trialDays}}</a>
       <ul class="has">
         <li>{{i check}}everything in plus</li>
         <li>{{i check}}always available, priority wake</li>

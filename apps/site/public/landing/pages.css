@@ -435,9 +435,6 @@ body:has(.p-doc) .bar { max-width: 1440px; padding-left: 32px; padding-right: 32
 .inner .plan h2 { margin-top: 24px; margin-bottom: 0; font-size: 26px; letter-spacing: -0.03em; font-weight: 500; line-height: 1.2; }
 .why { margin-top: 6px; margin-bottom: 0; min-height: 3.1em; color: var(--text); }
 .plan-price { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 10px; margin-top: 14px; margin-bottom: 0; }
-.trial-pill { align-self: flex-start; margin-top: 14px; margin-bottom: 0; padding: 2px 8px; border-radius: 999px; background: var(--t-sky); color: #0b5ea8; font: 500 11.5px/1.5 var(--mono); }
-.trial-pill + .plan-price { margin-top: 10px; }
-.plans:has(.trial-pill) .has-cat .plan-price { margin-top: 45px; }
 .amt { font-size: 56px; line-height: 1; letter-spacing: -0.05em; font-weight: 500; font-variant-numeric: tabular-nums; }
 .per { font-size: 14.5px; color: var(--ink-2); font-weight: 500; }
 .plan .btn { margin-top: 24px; }

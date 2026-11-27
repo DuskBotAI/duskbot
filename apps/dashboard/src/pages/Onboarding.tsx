@@ -190,7 +190,7 @@ export function Onboarding() {
   const guess = account?.profile.name || me?.name || me?.email.split("@")[0] || "";
   const [name, setName] = useState<string | null>(null);
   const [home, setHome] = useState<Home>("cloud");
-  const [plan, setPlan] = useState<PaidPlan>(intent?.plan ?? "starter");
+  const [plan, setPlan] = useState<PaidPlan>(intent?.plan ?? "pro");
   const [interval, setInterval] = useState<BillingInterval>(intent?.interval ?? "month");
   const [busy, setBusy] = useState<"name" | "cloud" | "free" | "done" | null>(null);
   const [error, setError] = useState<string | null>(null);

@@ -47,7 +47,10 @@ describe("voice routes", () => {
     const { answers } = await call("GET", "/api/tts/voices?q=calm");
     expect(answers).toHaveLength(1);
     expect(answers[0]![0]).toBe(200);
-    expect((answers[0]![1] as { voices: unknown[] }).voices).toEqual([]);
+    const voices = (answers[0]![1] as { voices: Array<{ id: string }> }).voices;
+    // a Mac lists its own built-in voices (the built-in voice is the default); no provider adds any
+    if (process.platform === "darwin") expect(voices.every((voice) => !voice.id.includes(":"))).toBe(true);
+    else expect(voices).toEqual([]);
   });
 });
 

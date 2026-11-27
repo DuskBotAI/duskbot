@@ -56,8 +56,6 @@
   "cloudAdd.start",
   "cloudAdd.state",
   "cloudPlan",
-  "cloudPlan.cancel",
-  "cloudPlan.keep",
   "cloudPlan.manage",
   "cloudPlan.noticeSeen",
   "cloudPlan.openPage",

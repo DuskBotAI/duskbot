@@ -104,7 +104,8 @@ mac:
       arch: [arm64, x64]
     - target: zip
       arch: [arm64, x64]
-  icon: build/icon.icns
+  # an Icon Composer document, compiled by Xcode 26+ actool; its .icns fallback serves macOS 15 and earlier
+  icon: build/icon.icon
   category: public.app-category.productivity
   hardenedRuntime: true
   gatekeeperAssess: false
@@ -147,6 +148,7 @@ mac:
 
 dmg:
   sign: true
+  icon: build/icon.icns
   # the mounted volume's name in the Finder sidebar and the install window's title bar
   title: dusk bot
   # ${arch} is load-bearing: without it the x64 dmg silently overwrites

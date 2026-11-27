@@ -141,6 +141,12 @@ jobs:
           node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - name: Select Xcode 26 (electron-builder compiles build/icon.icon with its actool)
+        run: |
+          xcode=$(ls -d /Applications/Xcode_26*.app | sort -V | tail -1)
+          test -n "$xcode" || { echo "::error::no Xcode 26 on this runner"; exit 1; }
+          sudo xcode-select -s "$xcode"
+          xcrun actool --version
       - name: Clean generated output
         run: rm -rf dist dist-server dist-native release
 

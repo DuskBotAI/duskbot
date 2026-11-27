@@ -3406,7 +3406,8 @@ app.whenReady().then(async () => {
     // in development the page is Vite's, which proxies /api to the server child that holds this same token
     uiPort: () => (app.isPackaged || desktopRemoteAccess ? null : Number(new URL(DEV_URL).port) || null) });
   if (app.isPackaged) for (const scheme of ["duskbot", LEGACY.protocol]) app.setAsDefaultProtocolClient(scheme);
-  if (process.platform === "darwin") app.dock.setIcon(APP_ICON);
+  // a packaged app keeps its bundle icon in the Dock, which macOS 26+ redraws for the dark, tinted and clear icon styles
+  if (process.platform === "darwin" && !app.isPackaged) app.dock.setIcon(APP_ICON);
   // An orphaned third-party key with no clear handler left: drop it rather than keep it at rest.
   if (secureCredentials && Object.hasOwn(secureCredentials, "assemblyAiApiKey") && !credentialFile.unavailable()) {
     try {

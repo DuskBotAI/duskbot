@@ -5,7 +5,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Resvg } from "@resvg/resvg-js";
 
-import { KIT_GLYPH, logoTile, svg } from "../build/logo.mjs";
+import { KIT_GLYPH, KIT_ONLY, LOGO_SIZE, logoTile, SCENE, SCENE_DARK, svg } from "../build/logo.mjs";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
 
@@ -34,6 +34,45 @@ for (const base of [16, 32, 64, 128, 256, 512]) {
 }
 execFileSync("iconutil", ["-c", "icns", iconset, "-o", join(root, "build/icon.icns")]);
 console.log("build/icon.icns");
+
+// an Icon Composer document (macOS 26+): the system masks the full-bleed layers into its own squircle and draws the dark,
+// tinted and clear appearances from them; build/icon.icns stays as the icon on older macOS and on the dmg volume
+// one path per colour: actool anti-aliases each shape on its own, so separate rects leave hairline seams between rows
+function layer(grid) {
+  const cell = 1024 / LOGO_SIZE;
+  const at = (n) => +(n * cell).toFixed(3);
+  const paths = new Map();
+  grid.forEach((row, y) => {
+    for (let x = 0; x < row.length; ) {
+      const c = row[x];
+      let end = x + 1;
+      while (end < row.length && row[end] === c) end++;
+      if (c) paths.set(c, `${paths.get(c) ?? ""}M${at(x)} ${at(y)}H${at(end)}V${at(y + 1)}H${at(x)}Z`);
+      x = end;
+    }
+  });
+  return `${svg(1024, 1024, [...paths].map(([c, d]) => `<path fill="${c}" d="${d}"/>`).join(""))}\n`;
+}
+write("build/icon.icon/Assets/scene.svg", layer(SCENE));
+write("build/icon.icon/Assets/scene-dark.svg", layer(SCENE_DARK));
+write("build/icon.icon/Assets/kit.svg", layer(KIT_ONLY));
+const group = (name, images, shadow) => ({
+  layers: [{ glass: false, "image-name-specializations": images, name }],
+  name,
+  shadow: { kind: shadow, opacity: 0.5 },
+  specular: false,
+  translucency: { enabled: false, value: 0.5 },
+});
+const srgb = (hex) => `srgb:${[1, 3, 5].map((i) => (parseInt(hex.slice(i, i + 2), 16) / 255).toFixed(5)).join(",")},1.00000`;
+write("build/icon.icon/icon.json", `${JSON.stringify({
+  fill: { solid: srgb(SCENE[0][0]) },
+  "fill-specializations": [{ appearance: "dark", value: { solid: srgb(SCENE_DARK[0][0]) } }],
+  groups: [
+    group("Kit", [{ value: "kit.svg" }], "neutral"),
+    group("Scene", [{ value: "scene.svg" }, { appearance: "dark", value: "scene-dark.svg" }], "none"),
+  ],
+  "supported-platforms": { squares: ["macOS"] },
+}, null, 2)}\n`);
 
 // png-in-ico: a 6 byte header, a 16 byte entry per image, then the pngs; 256 is written as 0
 function ico(images) {

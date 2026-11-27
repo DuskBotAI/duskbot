@@ -94,9 +94,3 @@
 :root.panel-widening::view-transition-old(root),
 :root.panel-widening::view-transition-new(root) { animation: none; }
 @keyframes browser-fade-out { to { opacity: 0; } }
-
-/* the browser taking the window: the bot's avatar and tabs step aside and the page fills the height, so there is room to use it */
-:root[data-panel-full] #bot-panel [data-panel-head] > * { display: none; }
-:root[data-panel-full] [data-local-browser][data-wide] [data-local-browser-page] { aspect-ratio: auto; height: calc(100dvh - 222px); min-height: 280px; }
-:root[data-panel-full] main:has(~ [data-panel-slot]) { visibility: hidden; }
-:root[data-panel-full] [data-local-browser][data-wide]:has([data-local-browser-held-line]) [data-local-browser-page] { height: calc(100dvh - 262px); }

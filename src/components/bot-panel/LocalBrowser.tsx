@@ -325,7 +325,7 @@ export function LocalBrowserLive({ bot, from, started = false, signIn = null, on
     if (fixture) { send({ type: "tabClose", tabId: tab.tabId }); return; }
     if (send({ type: "tabClose", tabId: tab.tabId })) setClosingTabs((hidden) => new Set(hidden).add(tab.tabId));
   };
-  const toggleWide = () => setPanelWide(!wide, "full");
+  const toggleWide = () => setPanelWide(!wide);
   const closeBrowser = () => {
     if (fixture) { latest.current.onClosed(); return; }
     setClosing(true);
@@ -452,7 +452,7 @@ export function LocalBrowserSection({ bot, after, askFirst = null, onBrowserClos
     consumedSignIn.current = requestedSignIn.requestId;
     setOverride({ kind: "started", from: null, startPage: false });
     setSignIn({ url: requestedSignIn.url, site: requestedSignIn.site, nonce: requestedSignIn.requestId });
-    if (!phoneApp()) setPanelWide(true, "full");
+    if (!phoneApp()) setPanelWide(true);
     dispatch?.({ type: "signInFocusConsumed", requestId: requestedSignIn.requestId });
   }, [requestedSignIn, dispatch]);
   // the server's answer catching up: a started browser it reports open, a closed one it reports closed

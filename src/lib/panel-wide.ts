@@ -24,7 +24,6 @@ function storedRest(): number {
 /** The width the person dragged the panel's edge to, which it comes back to after the browser in it widens it. */
 let rest = storedRest();
 let width = rest;
-let full = false;
 if (rest !== PANEL_NARROW && typeof document !== "undefined") document.documentElement.style.setProperty("--side-panel-w", `${rest}px`);
 const listeners = new Set<() => void>();
 
@@ -83,7 +82,6 @@ function sharedRoom(): number {
 }
 
 function apply(next: number): void {
-  document.documentElement.toggleAttribute("data-panel-full", full && next > rest);
   if (next === width) return;
   width = next;
   document.documentElement.style.setProperty("--side-panel-w", `${next}px`);
@@ -91,22 +89,16 @@ function apply(next: number): void {
 }
 
 function onResize(): void {
-  if (width > rest) apply(full ? fullWidth() : wideWidth(sharedRoom()));
+  if (width > rest) apply(wideWidth(sharedRoom()));
   else apply(Math.min(rest, panelRestMax()));
 }
 if (typeof window !== "undefined" && typeof window.addEventListener === "function") window.addEventListener("resize", onResize);
 
-/** The whole room the chat and panel share: the panel takes it over and the chat goes under it. */
-function fullWidth(): number {
-  return Math.max(PANEL_NARROW, Math.round(sharedRoom()));
-}
-
-/** Widens the panel beside the chat, or brings it back; `reach` "full" takes the chat's room as well. The chat and panel move as one spring through a view transition,
+/** Widens the panel beside the chat, or brings it back. The chat and panel move as one spring through a view transition,
  * snapshots only, so the live page never lays out mid-motion; with less motion it simply changes. */
-export function setPanelWide(on: boolean, reach: "split" | "full" = "split"): void {
-  full = on && reach === "full";
-  const next = on ? (full ? fullWidth() : Math.max(rest, wideWidth(sharedRoom()))) : rest;
-  if (next === width) { apply(next); return; }
+export function setPanelWide(on: boolean): void {
+  const next = on ? Math.max(rest, wideWidth(sharedRoom())) : rest;
+  if (next === width) return;
   const root = document.documentElement;
   if (reducedMotion() || typeof document.startViewTransition !== "function") { apply(next); return; }
   root.classList.add("panel-widening");

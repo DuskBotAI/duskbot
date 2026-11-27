@@ -169,6 +169,10 @@ export const SettingsSheet: ComponentType<SheetPageProps<"settings">> = ({ sheet
   const shownPage = nativePush ? (page ?? lastPage.current) : page;
   const pop = useCallback(() => setPage(null), []);
   const stack = useMemo(() => ({ back: pop }), [pop]);
+  const stepsBackOnBack = !nativePush && page !== null;
+  useEffect(() => {
+    if (stepsBackOnBack) return closesOnBack(pop);
+  }, [stepsBackOnBack, pop]);
   const pageProps = { open: true, onClose: pop, onOpenSheet, onOpenChat };
   const removeTarget = shownPage && typeof shownPage === "object" && shownPage.kind === "removePlace" ? shownPage.place : null;
   const removeCopy = removeTarget ? removePlaceCopy(removeTarget) : null;

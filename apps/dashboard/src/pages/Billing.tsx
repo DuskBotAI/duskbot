@@ -22,7 +22,7 @@ import { SectionHead } from "../ui/table";
 import { AnimatePresence, EASE_OUT, m } from "../ui/motion";
 import { Digits } from "../ui/Digits";
 import { CancelFlow, CONTACT } from "./cancel-flow";
-import { BUSY, CHECKOUT_PLAN_KEY, IntervalToggle, LicenseSheet, OfferLine, offerAction, PlanSheet, planName, planSelection, priceText, sharedRegions, switchedToast, useInterval, Working, type PaidPlan } from "./plan-sheet";
+import { BUSY, CHECKOUT_PLAN_KEY, IntervalToggle, LicenseSheet, OfferLine, offerAction, PlanSheet, planName, planSelection, priceText, sharedRegions, switchedToast, teamSelection, useInterval, Working, type PaidPlan } from "./plan-sheet";
 import { CHECKOUT_SOON, checkoutDone, trialAction } from "./cloud-offer";
 import { PaymentNotice } from "./payment-notice";
 import { members, quiet } from "./plan-billing";
@@ -30,8 +30,8 @@ import { members, quiet } from "./plan-billing";
 export { IntervalToggle, useInterval };
 
 export type Tier = "free" | PaidPlan | "team";
-/** the cards the plans page shows: free next to the cloud plans until someone is on one, then team in its place */
-export const tiersFor = (onCloud: boolean): Tier[] => (onCloud ? ["starter", "pro", "team"] : ["free", "starter", "pro"]);
+/** the cards the plans page shows: the cloud plans, dedicated team included, for anyone */
+export const tiersFor = (): Tier[] => ["starter", "pro", "team"];
 
 /** three rows, the machine first; every number comes from the catalog */
 export function points(id: Exclude<Tier, "free">, catalog: PlanCatalog): string[] {
@@ -172,18 +172,19 @@ function useDirectPlan(catalog: PlanCatalog | null, interval: BillingInterval) {
   const [busy, setBusy] = useState<Tier | null>(null);
   const [error, setError] = useState<{ id: Tier; text: string } | null>(null);
   const [charge, setCharge] = useState<{ id: Tier; key: string; offer: ChangeOffer } | null>(null);
-  const selectionFor = (id: Exclude<Tier, "free">): Selection | null => {
+  const selectionFor = (id: Exclude<Tier, "free">, per: BillingInterval = interval): Selection | null => {
     if (!catalog) return null;
     if (id === "team") {
       const team = bundleOf(catalog, "team");
-      return owned && team ? { license: "team", members: Math.max(team.members, owned.members), desktop: team.desktop, size: null, region: owned.region, interval: owned.interval } : null;
+      if (!owned) return teamSelection(catalog, per);
+      return team ? { license: "team", members: Math.max(team.members, owned.members), desktop: team.desktop, size: null, region: owned.region, interval: owned.interval } : null;
     }
     const regions = sharedRegions(catalog);
     const region = owned && owned.desktop !== "none" && regions.some((r) => r.id === owned.region) ? owned.region : regions[0]?.id;
-    return planSelection(catalog, id, { interval, region, work: Boolean(owned && owned.license !== "personal"), keep: owned });
+    return planSelection(catalog, id, { interval: per, region, work: Boolean(owned && owned.license !== "personal"), keep: owned });
   };
-  const choose = async (id: Exclude<Tier, "free">) => {
-    const sel = selectionFor(id);
+  const choose = async (id: Exclude<Tier, "free">, per?: BillingInterval) => {
+    const sel = selectionFor(id, per);
     if (!catalog || !sel || busy) return;
     const key = JSON.stringify(sel);
     const shown = charge?.id === id && charge.key === key ? charge.offer : null;
@@ -195,7 +196,7 @@ function useDirectPlan(catalog: PlanCatalog | null, interval: BillingInterval) {
         setCharge(null);
         toast(switchedToast(shown, bundleOf(catalog, id)?.name ?? id));
       } else {
-        track({ name: "plan_chosen", props: { plan: id, period: interval } });
+        track({ name: "plan_chosen", props: { plan: id, period: sel.interval } });
         if (catalog.checkoutOpen === false) { setError({ id, text: CHECKOUT_SOON }); return; }
         try { sessionStorage.setItem(CHECKOUT_PLAN_KEY, id); } catch {}
         if (await checkout({ source: "dash_billing", kind: "plan", selection: sel, bundle: null })) { toast(checkoutDone(catalog)); navigate("/cloud"); }
@@ -267,8 +268,7 @@ export function BillingPage() {
     if (!catalog || billing === null || !want) return;
     const intent = planIntent(new URLSearchParams({ plan: want }));
     navigate("/billing", { replace: true });
-    if (intent) { if (period && !owned) setIv(period); setPlanSheet(intent.plan); }
-    else if (want === "team") setLicenseSheet({ license: "team", members: licenseOf(catalog, "team")?.includedMembers ?? 2 });
+    if (intent) { if (period && !owned) setIv(period); if (intent.plan === "team") void direct.choose("team", period ?? undefined); else setPlanSheet(intent.plan); }
   }, [catalog, billing, want]);
 
   if (error && (!catalog || !billing)) return <div><PageHeader title="plans" /><LoadError error={error} retry={refresh} /></div>;
@@ -291,9 +291,8 @@ export function BillingPage() {
     if (waiting && waiting.bundle === id) return <PlanCard key={id} id={id} i={i} catalog={catalog} interval={interval} current={false} action={`yours from ${shortDate(waiting.at)}`} onChoose={null} disabled />;
     // a running plan switches to team itself, its cloud resized in place
     if (id === "team" && !current(id) && (movable || owned)) return <PlanCard key={id} id={id} i={i} catalog={catalog} interval={interval} current={false} action={direct.label(id, `switch to ${name}`)} onChoose={() => void direct.choose("team")} disabled={direct.busy !== null} busy={direct.busy === id} note={direct.note(id)} />;
-    if (id === "team" && !current(id)) return <PlanCard key={id} id={id} i={i} catalog={catalog} interval={interval} current={false} action="talk to us" href={`${CONTACT}?subject=${encodeURIComponent("move to team")}`} onChoose={null} disabled={false} />;
     const label = current(id) ? "your plan" : !owned && trialAction(catalog) || `${onCloud ? "switch to" : "get"} ${name}`;
-    return <PlanCard key={id} id={id} i={i} catalog={catalog} interval={interval} current={current(id)} action={current(id) ? label : direct.label(id, label)} onChoose={id === "team" ? null : () => void direct.choose(id)} disabled={current(id) || direct.busy !== null} busy={direct.busy === id} note={current(id) ? null : direct.note(id)} trial={!current(id) && !owned ? catalog.trialDays : undefined} />;
+    return <PlanCard key={id} id={id} i={i} catalog={catalog} interval={interval} current={current(id)} action={current(id) ? label : direct.label(id, label)} onChoose={() => void direct.choose(id)} disabled={current(id) || direct.busy !== null} busy={direct.busy === id} note={current(id) ? null : direct.note(id)} trial={!current(id) && !owned ? catalog.trialDays : undefined} />;
   };
 
   return (
@@ -302,7 +301,7 @@ export function BillingPage() {
       {fromApp() && back !== "failed" && (paid || returned) && <OpenApp />}
       {back && !paid && <CheckoutBack back={back} onCheck={refresh} onRetry={retry} />}
       <div className="grid gap-3 lg:grid-cols-3">
-        {tiersFor(onCloud).map(card)}
+        {tiersFor().map(card)}
       </div>
       <p className="mt-3 text-13 text-ink-4">{interval === "year" ? "billed yearly, two months free." : "billed monthly."} personal use is free.{free ? ` work use is free until ${longDate(free)}.` : ""} need a custom size? <a href={`${CONTACT}?subject=${encodeURIComponent("a custom size")}`} className="text-link">talk to us</a>.</p>
 

@@ -52,8 +52,7 @@ const pick = async (label: string) => {
 
 test("the plan page shows free until someone is on a cloud plan, then plus, pro and team", async () => {
   const { tiersFor } = await import("./Billing");
-  expect(tiersFor(false)).toEqual(["free", "starter", "pro"]);
-  expect(tiersFor(true)).toEqual(["starter", "pro", "team"]);
+  expect(tiersFor()).toEqual(["starter", "pro", "team"]);
 });
 
 const text = () => document.body.textContent ?? "";

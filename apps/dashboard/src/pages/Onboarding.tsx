@@ -19,7 +19,7 @@ import type { SceneHandle, SceneMood } from "../ui/Scene";
 import { points } from "./Billing";
 import { CHECKOUT_SOON, trialAction } from "./cloud-offer";
 import { track, trackOnboardingStep } from "../lib/analytics";
-import { per, planSelection, type PaidPlan } from "./plan-sheet";
+import { per, planSelection, teamSelection, type PaidPlan } from "./plan-sheet";
 import { fromApp } from "../lib/from-app";
 import { APP_LANDING_PATH, type WebsiteHome } from "../../../../shared/account-api";
 
@@ -191,7 +191,7 @@ export function Onboarding() {
   const guess = account?.profile.name || me?.name || me?.email.split("@")[0] || "";
   const [name, setName] = useState<string | null>(null);
   const [home, setHome] = useState<Home>("cloud");
-  const [plan, setPlan] = useState<PaidPlan>(intent?.plan ?? "pro");
+  const [plan, setPlan] = useState<PaidPlan | "team">(intent?.plan ?? "pro");
   const [interval, setInterval] = useState<BillingInterval>(intent?.interval ?? "month");
   const [busy, setBusy] = useState<"name" | "cloud" | "free" | "done" | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -228,7 +228,7 @@ export function Onboarding() {
     trackOnboardingStep(step, inApp, step === "name" && skipping);
   }, [step, inApp, account === null]);
   useEffect(() => { setError(null); scene.current?.react("perk"); }, [step]);
-  useEffect(() => { if (step === "plan") setInterval("month"); }, [step]);
+  useEffect(() => { if (step === "plan") { setInterval("month"); setPlan((p) => (p === "team" ? "pro" : p)); } }, [step]);
   // each history entry names its step, so back and forward move between steps and a refresh stays put
   useEffect(() => { if (asked !== step && !leaving.current) navigate(here, { replace: true }); }, [asked, step, here]);
 
@@ -260,7 +260,8 @@ export function Onboarding() {
     if (early) { try { await finishOnboarding("cloud"); } catch { /* the plans page still works; the next visit asks again */ } }
     sessionStorage.removeItem(SAVED);
     sessionStorage.setItem(CHECKOUT_OPENED, "1");
-    const ok = await checkout({ source: "dash_onboarding", kind: "plan", selection: planSelection(catalog, plan, { interval, work: false }), bundle: null });
+    const selection = plan === "team" ? teamSelection(catalog, interval) : planSelection(catalog, plan, { interval, work: false });
+    const ok = selection ? await checkout({ source: "dash_onboarding", kind: "plan", selection, bundle: null }) : false;
     if (!ok) { setError("checkout didn't open. try again."); setBusy(null); setOpened(true); return; }
     // the live page is on its way to the payment page; fixtures pay at once
     if (FIXTURE) { toast("paid. your dusk cloud is being set up."); leaving.current = true; navigate("/billing", { replace: true }); }
@@ -324,7 +325,7 @@ export function Onboarding() {
         <div key="plan" className="step-in">
           <h1 className="t-title">where should your bots live?</h1>
           <p className="mb-6 mt-3 text-16 text-ink-2">on dusk cloud they keep working, even when your computer is off.</p>
-          {catalog ? <PlanStep catalog={catalog} home={home} setHome={(h) => { setHome(h); setError(null); }} plan={plan} setPlan={(p) => { setPlan(p); setError(null); }} /> : <div className="flex flex-col gap-2" aria-busy="true"><Skeleton className="h-[300px] !rounded-[22px]" /><Skeleton className="h-[72px] !rounded-[18px]" /></div>}
+          {catalog ? <PlanStep catalog={catalog} home={home} setHome={(h) => { setHome(h); setError(null); }} plan={plan === "team" ? "pro" : plan} setPlan={(p) => { setPlan(p); setError(null); }} /> : <div className="flex flex-col gap-2" aria-busy="true"><Skeleton className="h-[300px] !rounded-[22px]" /><Skeleton className="h-[72px] !rounded-[18px]" /></div>}
           {error && <p role="alert" className="mt-3 text-14 text-bad">{error}</p>}
           <Button variant="primary" className={cx("mt-5", big)} onClick={() => void choose(home)} disabled={busy !== null || !catalog}>{busy === "cloud" ? <Busy>opening checkout</Busy> : busy === "done" ? <Busy>opening</Busy> : home === "free" ? "continue with free" : trialAction(catalog) ?? (price ? `continue to checkout, ${price.amount}${price.unit}` : "continue to checkout")}</Button>
           <div className="mt-2 flex items-center justify-between">{back("name")}</div>

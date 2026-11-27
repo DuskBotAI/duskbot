@@ -112,6 +112,13 @@ export function planSelection(catalog: PlanCatalog, plan: PaidPlan, opts: { inte
   return { license, members: keepLicense?.members ?? 1, desktop: b.desktop, size: null, region: opts.region ?? catalog.regions[0]?.id ?? "", interval: opts.interval };
 }
 
+/** the dedicated team bundle for someone with no plan yet: its included seats, its machine, the first shared region */
+export function teamSelection(catalog: PlanCatalog, interval: BillingInterval, region?: string): Selection | null {
+  const b = bundleOf(catalog, "team");
+  if (!b) return null;
+  return { license: "team", members: licenseOf(catalog, "team")?.includedMembers ?? b.members, desktop: b.desktop, size: null, region: region ?? sharedRegions(catalog)[0]?.id ?? catalog.regions[0]?.id ?? "", interval };
+}
+
 /** one place to buy plus or pro: the plan, the billing period, the region and an optional work license */
 export function PlanSheet({ start, source, work = false, onClose }: { source: CheckoutSource; start: PaidPlan; work?: boolean; onClose(): void }) {
   const { catalog, billing, checkout } = useCloud();

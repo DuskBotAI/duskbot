@@ -11,13 +11,13 @@ export const fixtureCatalog: PlanCatalog = {
     { id: "team", name: "team", monthly: 30, includedMembers: 2, perExtraMember: 20, maxMembers: 50, work: true, blurb: "For a team, 2 seats included" },
   ],
   desktops: [
-    { id: "shared-s", name: "plus", monthly: 20, vcpu: 2, ramGb: 4, diskGb: 20, placement: "shared", botComputers: 2, priority: false, sizable: false, blurb: "Always available, wakes on its own in under a minute" },
+    { id: "shared-s", name: "plus", monthly: 20, vcpu: 2, ramGb: 4, diskGb: 20, placement: "shared", botComputers: 2, priority: false, sizable: false, blurb: "Always available, wakes up in seconds" },
     { id: "shared-m", name: "pro", monthly: 38, vcpu: 4, ramGb: 8, diskGb: 60, placement: "shared", botComputers: 5, priority: true, sizable: false, blurb: "Always available, priority wake" },
     { id: "dedicated", name: "dedicated", monthly: 89, vcpu: 8, ramGb: 16, diskGb: 160, placement: "dedicated", botComputers: null, priority: true, sizable: true, blurb: "A whole machine of your own" },
   ],
   bundles: [
     { id: "free", name: "free", monthly: 0, license: "personal", members: 1, desktop: "none", blurb: "Your bots, on your computer", features: ["Your bots, on your computer", "Personal use", "No subscription"] },
-    { id: "starter", name: "plus", monthly: 20, license: "personal", members: 1, desktop: "shared-s", blurb: "dusk cloud, always available", features: ["your bots work in dusk cloud", "2 vcpu, 4 gb ram, 20 gb disk", "always available, wakes on its own in under a minute"] },
+    { id: "starter", name: "plus", monthly: 20, license: "personal", members: 1, desktop: "shared-s", blurb: "dusk cloud, always available", features: ["your bots work in dusk cloud", "2 vcpu, 4 gb ram, 20 gb disk", "always available, wakes up in seconds"] },
     { id: "pro", name: "pro", monthly: 50, license: "starter", members: 1, desktop: "shared-m", recommended: true, blurb: "A bigger machine, priority wake and a work license", features: ["4 vcpu, 8 gb ram, 60 gb disk", "always available, priority wake", "work license for one person"] },
     { id: "team", name: "team", monthly: 119, license: "team", members: 2, desktop: "dedicated", blurb: "A dedicated machine and a team license", features: ["dedicated 8 vcpu, 16 gb ram, 160 gb disk", "always available, priority wake", "team license, 2 seats"] },
   ],

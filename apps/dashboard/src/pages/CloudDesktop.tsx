@@ -99,7 +99,7 @@ function Size({ cloud, catalog }: { cloud: CloudDesktop; catalog: PlanCatalog })
   const includes = [
     specLine(cloud),
     cloud.placement === "shared" ? "its own sandbox on our machines" : "a whole machine of its own",
-    current?.priority ? "always available, priority wake" : "always available, wakes on its own in under a minute",
+    current?.priority ? "always available, priority wake" : "always available, wakes up in seconds",
   ];
   return (
     <Card aria-labelledby="size-title" className="flex flex-col">

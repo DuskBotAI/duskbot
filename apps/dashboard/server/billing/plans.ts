@@ -79,7 +79,7 @@ export const BILLING_CONFIG: BillingConfig = {
   // free $0, plus $20 (a cloud machine), pro $50 (a bigger one and a work license for one person), team $119; the starter id sells as Plus
   bundles: [
     { id: "free", label: "Free", cart: { license: { kind: "none" }, desktop: { kind: "none" } }, highlights: ["your bots, on your computer", "personal use", "no subscription"] },
-    { id: "starter", label: "Plus", cart: { license: { kind: "none" }, desktop: { kind: "shared_s", region: "fsn1" } }, highlights: ["your bots work in dusk cloud", "2 vcpu, 4 gb ram, 20 gb disk", "always available, wakes on its own in under a minute"] },
+    { id: "starter", label: "Plus", cart: { license: { kind: "none" }, desktop: { kind: "shared_s", region: "fsn1" } }, highlights: ["your bots work in dusk cloud", "2 vcpu, 4 gb ram, 20 gb disk", "always available, wakes up in seconds"] },
     { id: "pro", label: "Pro", cart: { license: { kind: "solo" }, desktop: { kind: "shared_m", region: "fsn1" } }, highlights: ["4 vcpu, 8 gb ram, 60 gb disk", "always available, priority wake", "work license for one person"] },
     { id: "team", label: "Team", cart: { license: { kind: "team", members: 2 }, desktop: { kind: "dedicated", region: "fsn1", spec: { vcpu: 8, ramGb: 16, diskGb: 160 } } }, highlights: ["dedicated 8 vcpu, 16 gb ram, 160 gb disk", "always available, priority wake", "team license, 2 seats"] },
   ],

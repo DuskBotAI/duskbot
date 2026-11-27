@@ -10,8 +10,8 @@ on your own computer, your bots stop when it sleeps. dusk cloud gives them a com
 
 ## why it's the one we recommend
 
-- **always available.** it sleeps when idle and wakes on its own in under a minute, so routines run on time. no "missed while asleep".
-- **nothing to look after.** no server, no updates, no keeping a laptop open. daily backups included.
+- **always available.** it sleeps when idle and wakes up in seconds, so routines run on time. no "missed while asleep".
+- **nothing to look after.** no server, no updates, no keeping a laptop open. free ai models included.
 - **a real browser for every bot.** bots get their own desktop to sign in to sites and click through, and you can watch.
 - **your phone just works.** pair it with the cloud and it answers even when your computer is off.
 - **private to you.** your cloud has its own storage that no one else can reach, and your ai sign-in stays yours. plus and pro each run in a sandbox of their own; a team plan gets a whole machine.
@@ -22,7 +22,7 @@ on your own computer, your bots stop when it sleeps. dusk cloud gives them a com
 | --- | --- | --- | --- |
 | **price** | $20 a month, or $200 a year | $50 a month, or $500 a year | $119 a month, or $1,190 a year |
 | **cloud computer** | 2 vcpu, 4 gb ram, 20 gb disk | 4 vcpu, 8 gb ram, 60 gb disk | dedicated: 8 vcpu, 16 gb ram, 160 gb disk |
-| **wake** | always available, wakes on its own in under a minute | always available, priority wake | always available, priority wake |
+| **wake** | always available, wakes up in seconds | always available, priority wake | always available, priority wake |
 | **license** | no work license | work license for one person | team license, 2 seats ($20 a month per extra member) |
 
 ai usage is not part of the bill. your bots use the ai you sign in with, on your plan with them. current prices are always on [the pricing page](/pricing).

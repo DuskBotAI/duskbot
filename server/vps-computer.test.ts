@@ -1,6 +1,7 @@
 import { DOCKER_NAMES } from "../electron/legacy-names.mjs";
 import { independentScreenTarget } from "./shared-desktop-screens.ts";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { gateDockerHost } from "./vps-docker-transport.ts";
 import { EventEmitter } from "node:events";
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -777,6 +778,14 @@ esac
     expect(connection.args.slice(-2)).toEqual(["production-vps", vpsContainerName(BOT_ID)]);
     expect(connection.env).toEqual({ ELECTRON_RUN_AS_NODE: "1" });
     expect(vpsComputerMcp(CONFIG, BOT_ID, CONTAINER_ID).args.slice(-2)).toEqual(["production-vps", CONTAINER_ID]);
+  });
+
+  it("hands a local VPS's docker mode and gate socket to the computer proxy", () => {
+    vi.stubEnv("DUSK_VPS_DOCKER", "local");
+    vi.stubEnv("DOCKER_HOST", "unix:///run/duskbot-docker/docker.sock");
+    try {
+      expect(vpsComputerMcp(CONFIG, BOT_ID).env).toEqual({ ELECTRON_RUN_AS_NODE: "1", DUSK_VPS_DOCKER: "local", DOCKER_HOST: gateDockerHost("unix:///run/duskbot-docker/docker.sock") });
+    } finally { vi.unstubAllEnvs(); }
     expect(vpsContainerMcpArgs("production-vps", vpsContainerName(BOT_ID))).toEqual([
       "-H",
       "ssh://production-vps",

@@ -1368,7 +1368,13 @@ export function vpsComputerMcp(cfg: AppConfig, botId: string, containerRef?: str
   return {
     command: process.execPath,
     args: [SPAWNED_PROXIES.vpsContainerMcp, alias, containerRef ?? vpsContainerName(botId), ...(screen ? [JSON.stringify(screen.target)] : [])],
-    env: { ELECTRON_RUN_AS_NODE: "1" },
+    // the proxy gets a minimal env: a local VPS (DUSK_VPS_DOCKER=local) must also tell it where the docker gate is,
+    // or it falls back to ssh to an alias that only exists on the desktop
+    env: {
+      ELECTRON_RUN_AS_NODE: "1",
+      ...(process.env.DUSK_VPS_DOCKER ? { DUSK_VPS_DOCKER: process.env.DUSK_VPS_DOCKER } : {}),
+      ...(process.env.DOCKER_HOST ? { DOCKER_HOST: gateDockerHost(process.env.DOCKER_HOST) } : {}),
+    },
   };
 }
 

@@ -15,8 +15,6 @@ export interface CreateCheckoutInput {
   returnUrl: string;
   /** a free trial before the first charge (dodo subscription_data.trial_period_days) */
   trialDays?: number;
-  /** a promo campaign is running: dodo's discount-code box stays on the page; without it the box is hidden (feature_flags.allow_discount_code) */
-  promoActive?: boolean;
   /** local quote for the fake provider; never sent to dodo */
   billing?: { interval: "month" | "year" | null; amountCents: number; currency: string };
 }

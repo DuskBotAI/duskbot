@@ -93,7 +93,6 @@ export function createDodoProvider(options: DodoProviderOptions): BillingProvide
       const body = (named: boolean) => ({ product_cart: input.cart.map(line => ({ product_id: line.productId, quantity: line.quantity,
         ...(line.addons.length ? { addons: line.addons.map(addon => ({ addon_id: addon.addonId, quantity: addon.quantity })) } : {}) })),
         customer: input.customerId ? { customer_id: input.customerId } : { email: input.email, ...(named && name ? { name } : {}) }, return_url: input.returnUrl, metadata: { checkoutId: input.checkoutId, accountId: input.accountId },
-        ...(input.promoActive ? {} : { feature_flags: { allow_discount_code: false } }),
         ...(input.trialDays ? { subscription_data: { trial_period_days: input.trialDays } } : {}) });
       // the name only saves typing: a checkout dodo refuses with it is asked once more without it
       const open = () => json("/checkouts", body(true)).catch((error: unknown) => {

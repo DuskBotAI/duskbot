@@ -36,13 +36,11 @@ describe("dodo HTTP provider fixture", () => {
   it("sends checkout auth, metadata and line items", async () => {
     reply = { session_id: "session", checkout_url: "https://test.checkout.dodopayments.com/session/session" };
     expect(await provider().createCheckout(input)).toEqual({ sessionId: "session", url: (reply as { checkout_url: string }).checkout_url });
-    expect(requests[0]).toEqual({ method: "POST", url: "/checkouts", auth: `Bearer ${apiKey}`, body: { product_cart: [{ product_id: "solo", quantity: 1, addons: [{ addon_id: "desktop", quantity: 1 }] }], customer: { email: "owner@example.com", name: "Owner" }, return_url: input.returnUrl, metadata: { checkoutId: "chk_1", accountId: "a1" }, feature_flags: { allow_discount_code: false } } });
+    expect(requests[0]).toEqual({ method: "POST", url: "/checkouts", auth: `Bearer ${apiKey}`, body: { product_cart: [{ product_id: "solo", quantity: 1, addons: [{ addon_id: "desktop", quantity: 1 }] }], customer: { email: "owner@example.com", name: "Owner" }, return_url: input.returnUrl, metadata: { checkoutId: "chk_1", accountId: "a1" } } });
     await provider().createCheckout({ ...input, customerId: "cus_1" });
     expect(requests[1].body).toMatchObject({ customer: { customer_id: "cus_1" } });
     await provider().createCheckout({ ...input, trialDays: 3 });
     expect(requests[2].body).toMatchObject({ subscription_data: { trial_period_days: 3 } });
-    await provider().createCheckout({ ...input, promoActive: true });
-    expect(requests[3].body).not.toHaveProperty("feature_flags");
   });
   it("fills the checkout's name from the email, and a refused name never stops the checkout", async () => {
     expect(checkoutName(null, "jane.doe+promo@example.com")).toBe("Jane Doe");

@@ -15,6 +15,30 @@ const settle = async () => { for (let i = 0; i < 10; i++) await Promise.resolve(
 afterEach(() => { initialState.bots = []; vi.clearAllTimers(); vi.useRealTimers(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
 describe("outbox", () => {
+  it("keeps saved sends when another send arrives before the outbox has loaded", async () => {
+    const { prefs, values } = memoryPrefs();
+    values.set("k", JSON.stringify([{ ...send("a"), tries: 1 }]));
+    let finishRead!: () => void;
+    const reading = new Promise<void>((resolve) => { finishRead = resolve; });
+    const delayedPrefs = { ...prefs, get: async (key: string) => {
+      const saved = await prefs.get(key);
+      await reading;
+      return saved;
+    } };
+
+    const outbox = createOutbox(delayedPrefs, "k", () => 2_000);
+    outbox.hold(send("b"));
+    finishRead();
+    await outbox.ready;
+    await settle();
+
+    expect(outbox.pending().map(({ sendId }) => sendId)).toEqual(["a", "b"]);
+    expect(JSON.parse(values.get("k") ?? "[]").map((one: OutboxSend) => one.sendId)).toEqual(["a", "b"]);
+    const restarted = createOutbox(prefs, "k", () => 3_000);
+    await restarted.ready;
+    expect(restarted.pending().map(({ sendId }) => sendId)).toEqual(["a", "b"]);
+  });
+
   it("keeps an unsent message across a restart and sends it again with the same sendId, oldest first, one at a time", async () => {
     const { prefs } = memoryPrefs();
     const first = createOutbox(prefs, "k", () => 2_000);

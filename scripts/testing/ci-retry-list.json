@@ -49,6 +49,27 @@
       "owner": "milind-soni",
       "reason": "Failed 11 times since Oct 26 in browser driver S4 (ubuntu-latest), on the host and in the container; five of the six logged failures are one stall of about 50 s in which navigate through tab-new get no picture. Not reproduced in 72 runs on ubuntu-latest on Oct 29. Each attempt starts its own Chrome.",
       "since": "2026-10-29"
+    },
+    {
+      "file": "server/chat-commands.e2e.test.ts",
+      "test": "New chat from /new in the app says so too; the bot's fresh session setting starts its context over silently",
+      "owner": "siddharth",
+      "reason": "Failed once in the 0.2.33 release CI (run 45993068105, ubuntu shard 5 or parallel-threads, a different test each attempt); passes locally on a quiet machine.",
+      "since": "2026-11-27"
+    },
+    {
+      "file": "server/skill-commands.e2e.test.ts",
+      "test": "calls a skill mid-message from what a person typed, never from a webhook, another bot, an app or a bot's own shell",
+      "owner": "siddharth",
+      "reason": "Failed once in the 0.2.33 release CI (run 45993068105, ubuntu shard 5 or parallel-threads, a different test each attempt); passes locally on a quiet machine.",
+      "since": "2026-11-27"
+    },
+    {
+      "file": "server/post-to-room.test.ts",
+      "test": "limits counted per turn on a bearer that outlives the turn > stops a turn at its third room post, and the next turn may post again",
+      "owner": "siddharth",
+      "reason": "Failed once in the 0.2.33 release CI (run 45993068105, ubuntu shard 5 or parallel-threads, a different test each attempt); passes locally on a quiet machine.",
+      "since": "2026-11-27"
     }
   ]
 }

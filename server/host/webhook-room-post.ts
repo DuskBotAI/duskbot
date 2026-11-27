@@ -37,7 +37,7 @@ export interface RoomPostDeps {
   saveImage(bytes: Buffer, mime: string): { path: string; mime: string };
   /** Undo a staged save so a failed delivery leaves no orphaned bytes. */
   removeStaged(path: string): void;
-  appendRoomPost(trigger: WebhookTrigger, botId: string, room: RoomPostRoom, content: RoomPostContent): void;
+  appendRoomPost(trigger: WebhookTrigger, botId: string, room: RoomPostRoom, content: RoomPostContent, deliveryId?: string): void;
 }
 
 export interface RoomPostResult {
@@ -124,6 +124,7 @@ export async function postWebhookToRoom(
   deps: RoomPostDeps,
   trigger: WebhookTrigger,
   raw: unknown,
+  deliveryId?: string,
 ): Promise<RoomPostResult> {
   const payload = parseRoomPostPayload(raw, deps.limits);
   const groupId = String(trigger.groupId ?? "").trim();
@@ -146,7 +147,7 @@ export async function postWebhookToRoom(
     deps.appendRoomPost(trigger, trigger.botId, room, {
       text: payload.text,
       ...(attachments.length ? { attachments } : {}),
-    });
+    }, deliveryId);
   } catch (error) {
     for (const attachment of attachments) deps.removeStaged(attachment.path);
     throw error;

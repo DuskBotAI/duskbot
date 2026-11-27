@@ -2,6 +2,9 @@ import { mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
+import { commandReceipt, runCommand } from "./commands.ts";
+import { DATA_DIR } from "./config.ts";
+import { appendMessage, closeMessageDb, readThread } from "./message-db.ts";
 import { RoutineManager } from "./routines.ts";
 import { WebhookManager } from "./webhooks.ts";
 
@@ -21,7 +24,44 @@ function harness() {
   };
   return { dir, options, manager: new RoutineManager(options), advance: (ms: number) => { now += ms; } };
 }
-afterEach(() => { vi.restoreAllMocks(); for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true }); });
+afterEach(() => { vi.restoreAllMocks(); closeMessageDb(); for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true }); });
+
+it.each(["chat", "room"] as const)("recovers a committed %s webhook post when the webhook receipt could not be saved", async (destination) => {
+  closeMessageDb();
+  rmSync(DATA_DIR, { recursive: true, force: true });
+  mkdirSync(DATA_DIR, { recursive: true });
+  const dir = mkdtempSync(join(tmpdir(), "dusk-webhook-post-commit-"));
+  dirs.push(dir);
+  const file = join(dir, "webhooks.json");
+  const commit = (endpointId: string, deliveryId: string) => runCommand({ kind: "webhook.post", key: `${endpointId}:${deliveryId}` }, () => {
+    appendMessage("fixture-thread", { id: "fixture-message", at: Date.now(), role: "bot", kind: "text", text: "once", webhookPost: true });
+    return true;
+  });
+  const options = {
+    file,
+    botState: () => "ready" as const,
+    enqueue: () => ({ id: "unused" }),
+    resolvePostThread: () => "fixture-thread",
+    roomMember: () => ({ ok: true as const }),
+    post: (_botId: string, _threadId: string, _text: string, endpointId: string, deliveryId: string) => { commit(endpointId, deliveryId); },
+    roomPost: async (trigger: { endpointId: string }, _payload: unknown, deliveryId: string) => {
+      commit(trigger.endpointId, deliveryId);
+      return { posted: true as const, attachments: 0, threadId: "fixture-thread" };
+    },
+    findPost: (endpointId: string, deliveryId: string) => commandReceipt("webhook.post", `${endpointId}:${deliveryId}`) !== null,
+  };
+  const manager = new WebhookManager(options);
+  const { webhook, secret } = manager.create({ name: "Fixture", prompt: "", botId: "fixture-bot", delivery: "post",
+    ...(destination === "room" ? { groupId: "fixture-room" } : {}) });
+  vi.spyOn(manager as unknown as { save(): void }, "save").mockImplementation(() => { throw new Error("receipt write failed"); });
+  const event = { deliveryId: "fixture-delivery", payload: { text: "once" } };
+  await expect(async () => manager.receive(webhook.endpointId, secret, event)).rejects.toThrow("receipt write failed");
+  closeMessageDb();
+
+  const restarted = new WebhookManager(options);
+  expect(await restarted.receive(webhook.endpointId, secret, event)).toMatchObject({ duplicate: true, deliveryId: event.deliveryId });
+  expect(readThread("fixture-thread", "/nonexistent").messages.map((message) => message.text)).toEqual(["once"]);
+});
 
 it("recovers the canonical job when saving the ingress receipt failed, even with a full queue", () => {
   const h = harness();

@@ -257,7 +257,7 @@ describe("createWebhookRoomPost", () => {
   it("appends one bot-authored webhook line with the voice note and the image, both stored", async () => {
     try {
       const h = host(chatterbox, mp3);
-      const result = await h.roomPost({ ...trigger, groupId: "room-1" } as WebhookTrigger, { text: "Deploy done", voiceNote: "deploy done", images: [image] });
+      const result = await h.roomPost({ ...trigger, groupId: "room-1" } as WebhookTrigger, { text: "Deploy done", voiceNote: "deploy done", images: [image] }, "fixture-delivery");
       expect(result).toEqual({ posted: true, attachments: 2, threadId: "room-1-thread" });
       expect(h.appended).toHaveLength(1);
       expect(h.appended[0]).toMatchObject({
@@ -277,7 +277,7 @@ describe("createWebhookRoomPost", () => {
         await new Promise<void>((resolve) => setTimeout(resolve, 30));
         return new Response(new Uint8Array([0xff, 0xf1, 0xa0]), { status: 200, headers: { "content-type": "audio/mpeg" } });
       }) as typeof fetch);
-      const delivery = h.roomPost({ ...trigger, groupId: "room-1" } as WebhookTrigger, { text: "Deploy done", voiceNote: "deploy done", images: [image] });
+      const delivery = h.roomPost({ ...trigger, groupId: "room-1" } as WebhookTrigger, { text: "Deploy done", voiceNote: "deploy done", images: [image] }, "fixture-delivery");
       // The bot leaves the room while the voice note is still being synthesized.
       await new Promise((resolve) => setTimeout(resolve, 10));
       h.group.memberIds = ["someone-else"];
@@ -293,7 +293,7 @@ describe("createWebhookRoomPost", () => {
   it("answers 409 with the owner's next step when no voice is set up, and stores nothing", async () => {
     try {
       const h = host({ tts: { provider: "chatterbox", voice: "voice-1" } }, mp3);
-      await expect(h.roomPost({ ...trigger, groupId: "room-1" } as WebhookTrigger, { text: "Deploy done", voiceNote: "deploy done", images: [image] }))
+      await expect(h.roomPost({ ...trigger, groupId: "room-1" } as WebhookTrigger, { text: "Deploy done", voiceNote: "deploy done", images: [image] }, "fixture-delivery"))
         .rejects.toMatchObject({ status: 409, message: expect.stringMatching(/^The voice note could not be made: Add the address of your Chatterbox server/) });
       expect(h.appended).toEqual([]);
       expect(stored()).toEqual([]);
@@ -305,7 +305,7 @@ describe("createWebhookRoomPost", () => {
   it("never passes a voice provider's own 401 through as the webhook's", async () => {
     try {
       const h = host(chatterbox, (async () => new Response("bad key", { status: 401 })) as typeof fetch);
-      const failure = await h.roomPost({ ...trigger, groupId: "room-1" } as WebhookTrigger, { text: "Deploy done", voiceNote: "deploy done" })
+      const failure = await h.roomPost({ ...trigger, groupId: "room-1" } as WebhookTrigger, { text: "Deploy done", voiceNote: "deploy done" }, "fixture-delivery")
         .catch((error: { status?: number; message: string }) => error);
       expect(failure).toMatchObject({ status: 502, message: expect.stringMatching(/^The voice note could not be made: /) });
       expect(h.appended).toEqual([]);

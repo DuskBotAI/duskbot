@@ -90,7 +90,7 @@ beforeAll(async () => {
   gateway = await startFakeHttpMcp({ tools: [{ name: "lookup_order", inputSchema: { type: "object", properties: {} } }], callResult: () => ({ content: [{ type: "text", text: "ok" }] }) });
   broker = await startBrokerFake();
   fx = await launchCloudSendFixture({ onePasswordToken: `ops_fake-team-${randomBytes(8).toString("hex")}`, broker, team: { id: "team-acme-3", name: "Acme", engine: ENGINE,
-    env: { DUSK_BOT_BOX: "0", DUSK_TEST_WAIT_CLOCK: CLOCK, NODE_OPTIONS: `--import=${new URL("./testing/wait-clock-hooks.mjs", import.meta.url).href}`, FIXTURE_ADMIN_STAND_IN: `http://127.0.0.1:${(adminServer.address() as AddressInfo).port}` } } });
+    env: { DUSK_BOT_SHARING: "on", DUSK_BOT_BOX: "0", DUSK_TEST_WAIT_CLOCK: CLOCK, NODE_OPTIONS: `--import=${new URL("./testing/wait-clock-hooks.mjs", import.meta.url).href}`, FIXTURE_ADMIN_STAND_IN: `http://127.0.0.1:${(adminServer.address() as AddressInfo).port}` } } });
   team = fx.team!;
   ada = (await team.pair(ADA)).token!;
   mira = (await team.pair(MIRA)).token!;

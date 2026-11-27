@@ -2,6 +2,7 @@ import { useCallback, useState, type ReactNode } from "react";
 import { Share } from "../../icons";
 
 import { t } from "@/lib/i18n";
+import { BOT_SHARING_ENABLED } from "../../../shared/bot-sharing";
 import { useStore, type Bot } from "@/state/store";
 import { Toast } from "../ui/Toast";
 import { saveAccess } from "./access";
@@ -20,7 +21,7 @@ export function ShareBotButton({ bot, className, headerMenu, iconSize = 16 }: { 
   const [open, setOpen] = useState(false);
   const [change, setChange] = useState<AccessChange | null>(null);
   const settled = useCallback(() => setChange(null), []);
-  if (!teamName) return null;
+  if (!teamName || !BOT_SHARING_ENABLED) return null;
   return (
     <>
       <button type="button" data-panel-share data-share-bot-button aria-label={t("botAccess.share")} title={t("botAccess.share")}

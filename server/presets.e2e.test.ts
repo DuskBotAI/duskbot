@@ -13,7 +13,7 @@ const PNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwA
 const skill = (name: string) => `---\nname: ${name}\ndescription: ${name} steps.\n---\n\n# ${name}\n`;
 
 it("shares New bot defaults as a preset, imports it, and creates bots from file and organization presets", async () => {
-  const fixture = await launchVerificationServer();
+  const fixture = await launchVerificationServer({ ...process.env, DUSK_BOT_SHARING: "on" });
   console.log(JSON.stringify({ fixture: fixture.info }));
   const url = fixture.info.url;
   const call = async (method: string, path: string, body?: unknown) => {
@@ -117,7 +117,7 @@ it("shares New bot defaults as a preset, imports it, and creates bots from file 
 it("offers an organization library's presets in New bot until the publisher withdraws the release", async () => {
   const sha = (value: string) => createHash("sha256").update(value).digest("hex");
   const key = randomBytes(32).toString("hex");
-  const fixture = await launchVerificationServer({ ...process.env, DUSK_TEST_ORG_LIBRARY_KEY: key });
+  const fixture = await launchVerificationServer({ ...process.env, DUSK_BOT_SHARING: "on", DUSK_TEST_ORG_LIBRARY_KEY: key });
   console.log(JSON.stringify({ fixture: fixture.info }));
   const call = async (method: string, path: string, body?: unknown, headers: Record<string, string> = {}) => {
     const response = await fetch(`${fixture.info.url}${path}`, {

@@ -384,3 +384,19 @@ describe("PATCH /api/bots/:id mainThreadChoice", () => {
     expect(store.bot(bot.id)?.mainThreadChoice).toBeUndefined();
   });
 });
+
+describe("PATCH /api/bots/:id visibility with bot sharing off", () => {
+  it("refuses to show a bot to more people, and still lets it be narrowed", async () => {
+    const { store, bot, patch } = fixture();
+    store.patchBot(bot.id, { visibility: "admins" });
+
+    const opened = await patch(bot.id, { visibility: "everyone" });
+    expect(opened.status).toBe(403);
+    expect(opened.body.code).toBe("bot_sharing_off");
+    expect((await patch(bot.id, { visibility: { people: ["bob@acme.test"] } })).status).toBe(403);
+    expect(store.bot(bot.id)!.visibility).toBe("admins");
+
+    store.patchBot(bot.id, { visibility: "everyone" });
+    expect((await patch(bot.id, { visibility: "admins" })).status).toBe(200);
+  });
+});

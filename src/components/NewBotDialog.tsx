@@ -23,6 +23,7 @@ import { BotEditorContext } from "./bot-settings/BotEditorContext";
 import { inputCls } from "./bot-settings/field";
 import { RoutineForm } from "./routines/RoutineForm";
 import { SharePresetDialog } from "./SharePresetDialog";
+import { BOT_SHARING_ENABLED } from "../../shared/bot-sharing";
 import { Select } from "./Select";
 import { rowButtonCls } from "./ui/GrokDialog";
 import { SIMPLE_BUTTONS, SettingRow, SettingsRows } from "./SettingsPrimitives";
@@ -215,8 +216,8 @@ export function DefaultBotSettings() {
   const [sharing, setSharing] = useState(false);
   return <>
     <NavRow data-settings-open="bot-defaults" title={t("newBot.defaults")} value={t("newBot.edit")} onClick={() => setOpen(true)} />
-    <NavRow data-settings-open="share-preset" drill={false} title={t("newBot.sharePreset")} onClick={() => setSharing(true)} />
+    {BOT_SHARING_ENABLED && <NavRow data-settings-open="share-preset" drill={false} title={t("newBot.sharePreset")} onClick={() => setSharing(true)} />}
     {open && <BotDefaultsDialog onClose={() => setOpen(false)} />}
-    {sharing && <SharePresetDialog onClose={() => setSharing(false)} />}
+    {sharing && BOT_SHARING_ENABLED && <SharePresetDialog onClose={() => setSharing(false)} />}
   </>;
 }

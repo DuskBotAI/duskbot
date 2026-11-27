@@ -43,7 +43,7 @@ const lines = async (token: string, threadId: string) => ((await team.as(token, 
 const refusedLine = (rows: Array<{ text: string }>) => rows.filter((row) => row.text.includes(REFUSED));
 
 beforeAll(async () => {
-  fx = await launchCloudSendFixture({ onePasswordToken: `ops_fake-team-${randomBytes(8).toString("hex")}`, team: { id: "team-acme-1", name: "Acme", engine: ENGINE } });
+  fx = await launchCloudSendFixture({ onePasswordToken: `ops_fake-team-${randomBytes(8).toString("hex")}`, team: { id: "team-acme-1", name: "Acme", engine: ENGINE, env: { DUSK_BOT_SHARING: "on" } } });
   team = fx.team!;
   owner = (await team.pair(OWNER)).token!;
   member = (await team.pair(MEMBER)).token!;

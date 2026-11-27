@@ -4,6 +4,8 @@
 // "who sees it" checks stay true.
 import type { BotAccess } from "../../shared/bot-access.ts";
 import { sameAccess, visibilityFromAccess } from "../../shared/bot-access.ts";
+import { BOT_SHARING_OFF_ERROR, widensAccess } from "../../shared/bot-sharing.ts";
+import { botSharingOn } from "../bot-sharing.ts";
 import { botOwner } from "../../shared/bot-owner.ts";
 import type { WireBot } from "../../shared/wire.ts";
 import { accessOf, parseBotAccess, sameAudience } from "../bot-visibility.ts";
@@ -75,6 +77,7 @@ export function createBotAccessRoutes(deps: BotAccessRouteDeps): RouteHandler {
     const settled = settledAccess(current, parsed.access, (email) => people.has(email));
     if (!settled.ok) return json(res, 400, { error: settled.error });
     const before = accessOf(current);
+    if (!botSharingOn() && widensAccess(before, settled.access)) return json(res, 403, { error: BOT_SHARING_OFF_ERROR, code: "bot_sharing_off" });
     const updated = writeAccess(deps, current, settled.access);
     if (updated && !sameAccess(before, settled.access)) {
       deps.record?.(auth, { category: "visibility", action: "access.update", target: { kind: "bot", id: updated.id, name: updated.name }, before: { access: before }, after: { access: settled.access } });

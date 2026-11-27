@@ -47,6 +47,8 @@ vi.mock("./UsageSection", () => ({ UsageSection: marker("usage") }));
 vi.mock("./McpServersPanel", () => ({ McpServersPanel: marker("mcp") }));
 vi.mock("./SkillsSection", () => ({ SkillsSection: marker("skills") }));
 vi.mock("./LoginsSettings", () => ({ LoginsSettings: marker("logins"), VaultNewItem: () => null }));
+const sharing = vi.hoisted(() => ({ on: false }));
+vi.mock("../../shared/bot-sharing", async (importOriginal) => ({ ...await importOriginal<typeof import("../../shared/bot-sharing")>(), get BOT_SHARING_ENABLED() { return sharing.on; } }));
 vi.mock("./bot-access/AccessOverview", () => ({ AccessOverview: marker("botAccess") }));
 vi.mock("./WorkspaceBackupSettings", () => ({ WorkspaceBackupSettings: marker("backups") }));
 vi.mock("./CompanyBackupSettings", () => ({ CompanyBackupSettings: () => null }));
@@ -54,6 +56,7 @@ vi.mock("./ImportSettings", () => ({ ImportSettings: marker("import") }));
 vi.mock("./RoomTurnTimeoutSettings", () => ({ RoomTurnTimeoutSettings: () => null }));
 
 beforeEach(() => {
+  sharing.on = false;
   vi.clearAllMocks();
   fixture.section = "general";
   fixture.config = { features: { browser: false }, browserEngine: { kind: "bundled", installable: true }, composio: { mode: "self" } };
@@ -212,11 +215,13 @@ describe("Settings, drawn as Grok Bot's", () => {
     expect(paired).not.toContain("data-panel-page");
   });
 
-  it("gives a team's admins Bot access on Permissions, and hides the pane when it would be empty", () => {
+  it("gives a team's admins Bot access on Permissions once bot sharing is on, and hides the pane when it would be empty", () => {
     expect(markers(open("botAccess"))).not.toContain("botAccess");
     expect(panes(open("general"))).not.toContain("permissions");
     fixture.config = { ...fixture.config, team: { name: "Acme" } };
     fixture.ownerOrAdmin = true;
+    expect(markers(open("botAccess"))).not.toContain("botAccess");
+    sharing.on = true;
     expect(open("permissions")).toContain('data-panel-page="botAccess"');
     expect(markers(open("botAccess"))).toContain("botAccess");
     expect(panes(open("general"))).toContain("permissions");

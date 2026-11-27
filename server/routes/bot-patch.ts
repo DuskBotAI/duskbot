@@ -9,7 +9,9 @@ import { validateBotCwd } from "../bot-cwd.ts";
 import { parseCompactAt, parseFreshSession } from "../fresh-session.ts";
 import { parseBotProfilePatch } from "../bot-profile.ts";
 import { accessFromVisibility } from "../../shared/bot-access.ts";
-import { parseVisibility } from "../bot-visibility.ts";
+import { BOT_SHARING_OFF_ERROR, widensAccess } from "../../shared/bot-sharing.ts";
+import { accessOf, parseVisibility } from "../bot-visibility.ts";
+import { botSharingOn } from "../bot-sharing.ts";
 import type { BrowserLive } from "../browser-live.ts";
 import type { BrowserRuntime } from "../browser-runtime.ts";
 import type { CacheKeepWarm } from "../cache-keepwarm.ts";
@@ -582,6 +584,9 @@ export function createBotPatchRoutes(deps: BotPatchRouteDeps): RouteHandler {
       if (Object.hasOwn(body, "visibility")) {
         const parsed = parseVisibility(body.visibility);
         if (!parsed.ok) return json(res, 400, { error: parsed.error });
+        if (existingBot && !botSharingOn() && widensAccess(accessOf(existingBot), accessFromVisibility(parsed.visibility))) {
+          return json(res, 403, { error: BOT_SHARING_OFF_ERROR, code: "bot_sharing_off" });
+        }
         patch.visibility = parsed.visibility;
         if (deps.team) patch.access = accessFromVisibility(parsed.visibility);
       }

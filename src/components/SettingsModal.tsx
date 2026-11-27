@@ -35,6 +35,7 @@ import type { LocaleKey } from "@/locales";
 import { VaultNewItem } from "./LoginsSettings";
 import { VoiceInputSettings } from "./VoiceInputSettings";
 import { BotsPane, chooseBotsScope, scopeOf, targetPage } from "./SettingsBots";
+import { BOT_SHARING_ENABLED } from "../../shared/bot-sharing";
 import "../styles/settings.css";
 
 
@@ -126,7 +127,7 @@ export function SettingsModal() {
     cloudAccount: Boolean(window.duskDesktop?.cloudAccount || (window.duskDesktop?.cloudPlan && cloudHome)),
     people: !window.duskDesktop && !cloudHome,
     activity: !window.duskDesktop && ownerOrAdmin === true,
-    botAccess: Boolean(state.config?.team) && ownerOrAdmin === true,
+    botAccess: BOT_SHARING_ENABLED && Boolean(state.config?.team) && ownerOrAdmin === true,
     permissions: false,
   };
   offered.permissions = offered.botAccess || offered.activity;

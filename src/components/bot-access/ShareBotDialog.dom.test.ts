@@ -19,6 +19,8 @@ vi.mock("@/state/store", async (importOriginal) => ({
   useStore: () => ({ state: { config: server.team ? { team: { id: "team-acme", name: "Acme" } } : {} }, dispatch: vi.fn() }),
 }));
 
+vi.mock("../../../shared/bot-sharing", async (importOriginal) => ({ ...await importOriginal<typeof import("../../../shared/bot-sharing")>(), BOT_SHARING_ENABLED: true }));
+
 const { setTeamPeople } = await import("@/state/team-people");
 const { ShareBotButton } = await import("./ShareBotButton");
 

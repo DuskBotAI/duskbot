@@ -15,6 +15,7 @@ import { saveAccess } from "../bot-access/access";
 import { UndoToast, useTeamName } from "../bot-access/ShareBotButton";
 import { ShareBotDialog, type AccessChange } from "../bot-access/ShareBotDialog";
 import { roundButtonCls } from "./rows";
+import { BOT_SHARING_ENABLED } from "../../../shared/bot-sharing";
 
 const GAP = 4;
 
@@ -84,9 +85,9 @@ function ShareMenu({ bot }: { bot: Bot }) {
     const trailing = items.find((item) => item.key === key)?.trailing;
     return trailing ? <span className="contents">{trailing}</span> : null;
   };
-  const share: Entry[] = [
+  const shareRows: Array<Entry | null> = [
     team
-      ? { key: "people", title: t("botPanel.share.people"), hint: t("botPanel.share.peopleHint", { name: bot.name }), detail: t("botPanel.share.peopleHint", { name: bot.name }), tile: <IconTile name="people" />, onSelect: () => setSharing(true) }
+      ? BOT_SHARING_ENABLED ? { key: "people", title: t("botPanel.share.people"), hint: t("botPanel.share.peopleHint", { name: bot.name }), detail: t("botPanel.share.peopleHint", { name: bot.name }), tile: <IconTile name="people" />, onSelect: () => setSharing(true) } : null
       : {
           key: "duplicate",
           title: t("botPanel.share.copy"),
@@ -112,6 +113,7 @@ function ShareMenu({ bot }: { bot: Bot }) {
       onSelect: item.onSelect,
     })),
   ];
+  const share = shareRows.filter((entry): entry is Entry => entry !== null);
   const more: Entry[] = items.filter((item) => item.key in MORE_ICON).map((item) => {
     const usageText = item.key === "usage" ? trailingText("usage") : undefined;
     return {
@@ -261,7 +263,7 @@ function ShareMenu({ bot }: { bot: Bot }) {
         document.body,
       )}
       {phoneApp() ? (
-        team && (
+        team && BOT_SHARING_ENABLED && (
           <SheetPush
             open={sharing}
             onClose={() => setSharing(false)}
@@ -272,7 +274,7 @@ function ShareMenu({ bot }: { bot: Bot }) {
           </SheetPush>
         )
       ) : (
-        sharing && team && <ShareBotDialog bot={bot} teamName={team} onClose={() => setSharing(false)} onChanged={setChange} />
+        sharing && team && BOT_SHARING_ENABLED && <ShareBotDialog bot={bot} teamName={team} onClose={() => setSharing(false)} onChanged={setChange} />
       )}
       {change && <UndoToast key={`${change.text}:${JSON.stringify(change.after)}`} text={change.text}
         onUndo={() => saveAccess(bot.id, change.before)} onDone={settled} />}

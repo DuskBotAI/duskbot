@@ -181,7 +181,7 @@ export function verificationServerEnvironment(parentEnv: NodeJS.ProcessEnv, data
   // One log line per browser call and preview frame.
   if (parentEnv.DUSK_BROWSER_TIMING === "1") childEnv.DUSK_BROWSER_TIMING = "1";
   // Warm summaries' minutes as seconds (server/warm-summary.ts), and the switch that turns them off.
-  for (const key of ["DUSK_WARM_SUMMARY_TIME_SCALE", "DUSK_WARM_SUMMARY", "DUSK_CODEX_WARM", "DUSK_QUOTA_SWITCH", "DUSK_IDLE_COMPACT_HOURS", "DUSK_IDLE_SWEEP_MS", "DUSK_IDLE_COMPACT_MIN_TOKENS"]) if (parentEnv[key]) childEnv[key] = parentEnv[key];
+  for (const key of ["DUSK_WARM_SUMMARY_TIME_SCALE", "DUSK_WARM_SUMMARY", "DUSK_CODEX_WARM", "DUSK_QUOTA_SWITCH", "DUSK_IDLE_COMPACT_HOURS", "DUSK_IDLE_SWEEP_MS", "DUSK_IDLE_COMPACT_MIN_TOKENS", "DUSK_BOT_SHARING"]) if (parentEnv[key]) childEnv[key] = parentEnv[key];
   // OpenAI-compatible chat engines' retry waits, scaled down so a fixture provider's rate limit fails in milliseconds.
   if (/^0?\.\d+$/.test(parentEnv.FAKE_CHAT_RETRY_SCALE ?? "")) childEnv.FAKE_CHAT_RETRY_SCALE = parentEnv.FAKE_CHAT_RETRY_SCALE;
   // The built-in voice's downloaded models, so a fixture with a throwaway home does not fetch them again.

@@ -1,7 +1,9 @@
 import { z } from "zod";
 import { MAX_TEAM_BACKUP_BYTES } from "../../shared/team-backup.ts";
 import type { BotVisibility, WireBot, WireGroup } from "../../shared/wire.ts";
+import { BOT_SHARING_OFF_ERROR } from "../../shared/bot-sharing.ts";
 import { validateBotCwd } from "../bot-cwd.ts";
+import { botSharingOn } from "../bot-sharing.ts";
 import { fetchBotDirectory, matchDirectoryBots, type MatchedDirectoryBot } from "../bot-directory.ts";
 import { isBotPackage, packageSummary, parsePackageDocument, renderBotPackageMarkdown, type PackageDocument } from "../bot-package.ts";
 import { parseVisibility } from "../bot-visibility.ts";
@@ -65,6 +67,7 @@ export function createTeamRoutes(deps: TeamRouteDeps): RouteHandler {
       if (!body || typeof body !== "object" || Array.isArray(body)) return json(res, 400, { error: "Send what to export as a JSON object" });
       const profileName = deps.authorName(auth);
       if (body.format === "package" && body.version === 2 && body.kind === "library") {
+        if (!botSharingOn()) return json(res, 403, { error: BOT_SHARING_OFF_ERROR, code: "bot_sharing_off" });
         const optional = (value: unknown) => (typeof value === "string" ? value : undefined);
         const built = defaultsPresetFor(body, body.includeMemory === true);
         try {

@@ -20,6 +20,7 @@ import { SidebarPopoverMenu, type SidebarMenuItem } from "./SidebarPopoverMenu";
 import { openBotSettings } from "./bot-panel/panel-link";
 import { ShareBotButton, useTeamName } from "./bot-access/ShareBotButton";
 import { UsageBars } from "./EngineUsage";
+import { BOT_SHARING_ENABLED } from "../../shared/bot-sharing";
 
 /** One item list for the chat's ⋯ menu wherever it sits. The Simple bot panel draws the same items as rows, and its
  * Share button holds the two that export. */
@@ -146,7 +147,8 @@ export const EXPORT_ITEMS = ["copy", "download"];
 /** The bot panel's round Share button: on a team who has access, with copying or downloading this conversation under
  * the ⋯ of its header; anywhere else a menu of those two. */
 export function ChatShareMenu({ bot, className }: { bot: Bot; className: string }): JSX.Element {
-  return useTeamName() ? <ShareBotButton bot={bot} className={className} headerMenu={<ExportMore key={bot.threadId} bot={bot} />} />
+  const team = useTeamName();
+  return team && BOT_SHARING_ENABLED ? <ShareBotButton bot={bot} className={className} headerMenu={<ExportMore key={bot.threadId} bot={bot} />} />
     : <ShareMenu key={bot.threadId} bot={bot} className={className} />;
 }
 

@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useRef, useState } from "react";
+import { Fragment, lazy, Suspense, useEffect, useRef, useState } from "react";
 import { phoneApp, storeApp } from "@/lib/store-app";
 import { macPermissionsBridge } from "@/lib/mac-permissions";
 
@@ -15,12 +15,13 @@ import { placeHasIssue } from "@/lib/place-view";
 import { useStore, type Bot } from "@/state/store";
 import { useDesktopCapabilities } from "../DesktopCapabilities";
 import { LocalComputerAutoWarning } from "../LocalComputerAutoWarning";
-import { usePlaceViews } from "../PlaceChip";
+import { PLACE_DESCRIPTION, usePlaceViews } from "../PlaceChip";
+import { placeGlyph } from "../PlaceIcon";
 import type { BotPatch, useBotSettingsDerived } from "../bot-settings/useBotSettingsDerived";
 import type { SimplePageId } from "./page-registry";
 import type { InlineReport } from "../ComputerPanel";
 import { deviceWord } from "../vps-link/parts";
-import { Card, NoteRow, RadioRow } from "./rows";
+import { Card, NavRow, NoteRow, RadioRow, RowIcon } from "./rows";
 import { CloudHopScene } from "../CloudMoveScene";
 import { mdPrimaryCls } from "../ui/GrokDialog";
 import { CloudDesktopListRow, useCloudDesktop, type CloudDesktopRow } from "./CloudDesktop";
@@ -42,11 +43,6 @@ interface PlaceOption {
 }
 
 const PANEL_PLACE_LABEL = { cloud: "botPanel.place.cloud", vm: "botPanel.place.vm", browser: "botPanel.place.browser" } as const;
-
-const EXTRA_PLACE_LABEL: Record<Exclude<PlaceChoice, "auto" | "local" | "cloud" | "browser">, () => string> = {
-  vm: () => t("botPanel.place.vm"),
-  off: () => t("botPanel.place.off"),
-};
 
 export function useOpenComputer(bot: Pick<Bot, "id">) {
   const { dispatch } = useStore();
@@ -75,13 +71,14 @@ export function usePlaceChoices(bot: Bot) {
     ...(placeViews.local.policy ? [choice("local")] : []),
     ...(placeViews.browser.policy || current === "browser" ? [choice("browser")] : []),
     ...(placeViews.cloud.policy ? [choice("cloud")] : []),
-    ...(current === "vm" || current === "off" ? [{ value: current, label: EXTRA_PLACE_LABEL[current](), disabled: true }] : []),
+    ...(placeViews.vm.policy || current === "vm" ? [choice("vm")] : []),
+    ...(current === "off" ? [{ value: current, label: t("botPanel.place.off"), disabled: true }] : []),
   ];
   const liveSurface = bot.tasks?.find((task) => task.threadId === bot.threadId)?.surface;
   const usingNow = liveSurface && liveSurface !== current ? placeLabel(liveSurface) : null;
   const currentLabel = options.find((option) => option.value === current)?.label
-    ?? (current === "auto" || current === "vm" || current === "off" ? undefined : placeLabel(current));
-  return { options, current, currentLabel, usingNow };
+    ?? (current === "auto" || current === "off" ? undefined : placeLabel(current));
+  return { options, current, currentLabel, usingNow, liveSurface };
 }
 
 /** Choosing where a bot works, as the panel and its dialog both do: a place it cannot use, or Off, is never chosen; this
@@ -95,7 +92,7 @@ export function usePlacePicker(bot: Bot, derived: Derived) {
   const cloudDesktop = useCloudDesktop();
   const { patch, approvalMode } = derived;
   const choosePlace = (value: PlaceChoice) => {
-    if (value === current || value === "vm" || value === "off") return;
+    if (value === current || value === "off") return;
     if (value === "local" && approvalMode === "auto") {
       setLocalAutoWarning({ botId: bot.id, patch: { computer: "local", acknowledgeLocalAuto: true } });
       return;
@@ -120,23 +117,30 @@ export function usePlacePicker(bot: Bot, derived: Derived) {
   return { ...choices, choosePlace, warning, cloudDesktop };
 }
 
+const placeDetail = (choice: PlaceChoice) =>
+  choice === "auto" ? t("place.autoDetail") : choice === "off" ? undefined : t(PLACE_DESCRIPTION[choice]);
+
 export function WherePage({ bot, derived }: { bot: Bot; derived: Derived }) {
   const { options, current, usingNow, choosePlace, warning, cloudDesktop } = usePlacePicker(bot, derived);
 
   return (
     <>
       <Card>
-        <div role="radiogroup" aria-label={t("botPanel.ui.computerSimpleWhereWorks", { name: bot.name })} className="flex flex-col divide-y divide-ink/[0.05]">
-          {options.map((option) => (
-            <RadioRow
-              key={option.value}
-              data-panel-choice={option.value}
-              title={option.label}
-              hint={option.hint}
-              checked={current === option.value}
-              disabled={option.disabled}
-              onClick={() => choosePlace(option.value)}
-            />
+        <div role="radiogroup" aria-label={t("botPanel.ui.computerSimpleWhereWorks", { name: bot.name })} className="flex flex-col">
+          {options.map((option, index) => (
+            <Fragment key={option.value}>
+              {index > 0 && <div aria-hidden="true" className="mx-2 h-px shrink-0 bg-ink/[0.05]" />}
+              <RadioRow
+                data-panel-choice={option.value}
+                leading={<RowIcon icon={placeGlyph(option.value)} />}
+                title={option.label}
+                hint={option.hint ?? placeDetail(option.value)}
+                wrapHint
+                checked={current === option.value}
+                disabled={option.disabled}
+                onClick={() => choosePlace(option.value)}
+              />
+            </Fragment>
           ))}
         </div>
       </Card>
@@ -271,7 +275,7 @@ export function CloudCtaCard({ bot, group, stage, cloudDesktop }: { bot: Bot; gr
 export { hasDuskCloud } from "@/lib/cloud-move";
 
 /** One small disclosure for what a person rarely needs: the computer's own words for a problem, and its settings. */
-export function ComputerTab({ bot, derived, cloudFor }: {
+export function ComputerTab({ bot, derived, onOpen, cloudFor }: {
   bot: Bot; derived: Derived; onOpen: (page: SimplePageId) => void;
   /** the bots the cloud card speaks for: this bot alone by default, a group chat's bots on one member, none on the rest */
   cloudFor?: readonly Bot[];
@@ -279,7 +283,7 @@ export function ComputerTab({ bot, derived, cloudFor }: {
   const { state } = useStore();
   const { capabilities } = useDesktopCapabilities();
   const picker = usePlacePicker(bot, derived);
-  const { current, warning, cloudDesktop } = picker;
+  const { current, currentLabel, liveSurface, warning, cloudDesktop } = picker;
   const otherServer = useOtherServerName();
   const [screenBox, setScreenBox] = useState<HTMLElement | null>(null);
   const onScreen = useOnScreen(screenBox, phoneApp() ? PHONE_LEAVE_MS : 0);
@@ -297,7 +301,7 @@ export function ComputerTab({ bot, derived, cloudFor }: {
   const detail = report?.detail ?? null;
   // a bot leads with its browser on this computer, and on a server when its computer is that browser; the dusk cloud card follows it
   const cloudOffer = local && cloudBots.length > 0 && !storeApp() && <CloudCtaCard bot={cloudBots[0]!} group={cloudBots} stage={stage} cloudDesktop={cloudDesktop} />;
-  const ownScreen = current === "vm" || (!local && current !== "browser");
+  const ownScreen = current === "vm" || liveSurface === "vm" || (!local && current !== "browser");
   const signInBrowser = state.signInFocus?.botId === bot.id && !state.signInFocus.consumed && state.signInFocus.place === "browser";
   const helpBrowser = state.computerControl[bot.id]?.help?.place === "browser";
   const [browserTakeover, setBrowserTakeover] = useState(signInBrowser);
@@ -330,6 +334,10 @@ export function ComputerTab({ bot, derived, cloudFor }: {
         {toCloud && <CloudDesktopCta bots={cloudBots} stage={stage} label={cloudLabel} />}
         {cloudOffer}
       </>}
+      <div className="mt-3">
+        <NavRow data-panel-page="where" icon={placeGlyph(current)} title={t("botPanel.ui.computerSimpleWhereWorks", { name: bot.name })}
+          value={currentLabel ?? t("computer.simple.dest.letItChoose")} onClick={() => onOpen("where")} />
+      </div>
       {cloudDesktop && stage === "manage" && <Card><CloudDesktopListRow cloudDesktop={cloudDesktop} /></Card>}
       {warning}
     </div>

@@ -107,11 +107,11 @@ export function PanelEmpty({ children, art, title, ...rest }: { children: ReactN
   );
 }
 
-export function RowText({ title, hint, tone, titleId, hintId }: { title: ReactNode; hint?: ReactNode; tone?: "danger" | "warn"; titleId?: string; hintId?: string }) {
+export function RowText({ title, hint, tone, titleId, hintId, wrapHint = false }: { title: ReactNode; hint?: ReactNode; tone?: "danger" | "warn"; titleId?: string; hintId?: string; wrapHint?: boolean }) {
   return (
     <div className="min-w-0 flex-1">
       <div id={titleId} data-row-title="" className={cn(titleCls, tone === "danger" && "text-danger", tone === "warn" && "text-warning")}>{title}</div>
-      {hint && <div id={hintId} data-row-hint="" className={cn(hintCls, "truncate")}>{hint}</div>}
+      {hint && <div id={hintId} data-row-hint="" className={cn(hintCls, wrapHint ? "text-pretty" : "truncate")}>{hint}</div>}
     </div>
   );
 }

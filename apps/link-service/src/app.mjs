@@ -986,7 +986,8 @@ export function createLinkService({ base, dataDir = null, scriptPath, uninstallP
   }
 
   async function handle(req, res) {
-    const url = new URL(req.url ?? "/", "http://link.invalid");
+    let url;
+    try { url = new URL(req.url ?? "/", "http://link.invalid"); } catch { return fail(res, 400, "bad request"); }
     const path = fromLegacyPath(url.pathname);
     const method = req.method ?? "GET";
     let parts;

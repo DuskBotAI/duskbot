@@ -186,7 +186,7 @@ export function CloudCancelSheet({ renewal, actions, offers = {}, onClose }: { r
   const list = (lines: string[]) => <ul className="mt-3 flex list-disc flex-col gap-1.5 ps-5 text-[13px] leading-relaxed text-ink-secondary">{lines.map(line => <li key={line}>{line}</li>)}</ul>;
   const box = "mt-1.5 w-full rounded-lg border border-transparent bg-inset px-3 py-2 text-[14px] text-ink outline-none focus-visible:outline-2 focus-visible:outline-focus disabled:opacity-60";
   return createPortal(
-    <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/55 p-4" onMouseDown={event => { if (event.target === event.currentTarget) close(); }}>
+    <div className="fixed inset-0 z-[80] flex items-center justify-center bg-scrim p-4" onMouseDown={event => { if (event.target === event.currentTarget) close(); }}>
       <div ref={dialog} role="dialog" aria-modal="true" aria-labelledby="cloud-cancel-title" aria-busy={busy} tabIndex={-1} data-cloud-cancel-sheet={state.step}
         data-cloud-cancel-offer={state.step === "offer" ? offer?.offer : undefined}
         className="flex max-h-[90vh] w-full max-w-[480px] flex-col overflow-hidden rounded-2xl border border-transparent bg-panel text-ink shadow-2xl outline-none"

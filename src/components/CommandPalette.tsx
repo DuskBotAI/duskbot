@@ -282,7 +282,7 @@ export function CommandPalette({ onOpenChange }: { onOpenChange?: (open: boolean
 
   return (
     <div ref={exits.wrap} className="fixed inset-0 z-50" onKeyDown={onKeyDown}>
-      <div aria-hidden className="palette-scrim absolute inset-0 bg-black/50" onMouseDown={() => setOpen(false)} />
+      <div aria-hidden className="palette-scrim absolute inset-0 bg-scrim" onMouseDown={() => setOpen(false)} />
       {/* opened often, so it opens and closes raw, as grok's does */}
       <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
       <div

@@ -127,8 +127,8 @@ function CreateBotForm({ section, onClose }: { section?: string; onClose: () => 
   }, [onClose]);
 
   return (
-    <ModalLayer><div {...played.layer} className="fixed inset-0 z-[60]">
-      <ScrimMotion {...played.scrim} aria-hidden className="absolute inset-0 bg-black/50" onMouseDown={leave} />
+    <ModalLayer><div {...played.layer} className="fixed inset-0 z-[60] grid place-items-center">
+      <ScrimMotion {...played.scrim} aria-hidden className="absolute inset-0 bg-scrim" onMouseDown={leave} />
       <SheetMotion
         {...played.sheet}
         ref={dialog}
@@ -136,7 +136,7 @@ function CreateBotForm({ section, onClose }: { section?: string; onClose: () => 
         aria-modal="true"
         aria-labelledby={titleId}
         data-create-bot-dialog
-        className="absolute left-1/2 top-1/2 flex max-h-[calc(100vh-32px)] w-[min(440px,calc(100vw-32px))] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-[14px] border border-transparent bg-menu text-[13px] text-ink"
+        className="relative flex max-h-[calc(100vh-32px)] w-[min(440px,calc(100vw-32px))] flex-col overflow-hidden rounded-[14px] border border-transparent bg-menu text-[13px] text-ink"
       >
         <button
           type="button"

@@ -35,10 +35,7 @@
 .settings-backdrop {
   position: absolute;
   inset: 0;
-  background: rgb(0 0 0 / 0.5);
-}
-@container style(--code-color-scheme: dark) {
-  .settings-backdrop { background: rgb(0 0 0 / 0.7); }
+  background: var(--color-scrim);
 }
 
 /* centred by the scrim, not by a transform, so a dialog opened from a pane can still sit fixed over the window */

@@ -242,7 +242,7 @@ export function SkillReviewDialog({
       aria-labelledby="skill-review-title"
       data-phone-modal-layer={phone ? "" : undefined}
       style={phone ? { paddingTop: "max(var(--m-safe-top, 0px), 16px)", paddingBottom: "max(var(--m-safe-bottom, 0px), 16px)" } : undefined}
-      className="fixed inset-0 z-[90] flex items-center justify-center bg-black/45 p-6"
+      className="fixed inset-0 z-[90] flex items-center justify-center bg-scrim p-6"
     >
       <div className="flex max-h-[min(760px,90vh)] w-full max-w-2xl flex-col rounded-2xl bg-card p-5 shadow-2xl">
         <div id="skill-review-title" className="text-[16px] font-semibold text-ink">
@@ -643,7 +643,7 @@ export function SkillsSection({ bot }: { bot: Bot }) {
           role="dialog"
           aria-modal="true"
           aria-labelledby="skill-view-title"
-          className="fixed inset-0 z-[90] flex items-center justify-center bg-black/45 p-6"
+          className="fixed inset-0 z-[90] flex items-center justify-center bg-scrim p-6"
         >
           <div className="flex max-h-[min(760px,90vh)] w-full max-w-2xl flex-col rounded-2xl bg-card p-5 shadow-2xl">
             <div className="flex items-center justify-between gap-3">

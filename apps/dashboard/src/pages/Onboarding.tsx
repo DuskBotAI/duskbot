@@ -29,6 +29,7 @@ type Home = "cloud" | "free";
 
 const SAVED = "dusk-onboarding-step";
 const NAME_SKIPPED = "dusk-onboarding-name-skipped";
+const CHECKOUT_OPENED = "dusk-onboarding-checkout-opened";
 /** the end of the first steps for someone the desktop app sent: the way back to it */
 const APP_DONE = `${APP_LANDING_PATH}?set=1`;
 const isStep = (v: string | null): v is Step => (STEPS as readonly string[]).includes(v ?? "");
@@ -207,8 +208,12 @@ export function Onboarding() {
   const [inApp] = useState(fromApp);
   const total = inApp ? STEPS.length - 1 : STEPS.length;
   const ended = useRef(false);
-  const direct = Boolean(intent) && !bought;
-  const skipping = step === "name" && !skippedOnce && account !== null && /\p{L}/u.test(given) && (!direct || catalog !== null);
+  const [opened, setOpened] = useState(() => sessionStorage.getItem(CHECKOUT_OPENED) !== null);
+  // a plan picked on the site goes from sign-in straight to checkout, the name comes after; once it was opened and
+  // not paid (back from the payment page, or it failed) the steps run as usual with that plan chosen
+  const autoPay = Boolean(intent) && !bought && !inApp && !opened;
+  const paying = useRef(false);
+  const skipping = step === "name" && !skippedOnce && account !== null && /\p{L}/u.test(given) && !autoPay;
 
   const search = query.toString();
   const address = (to: Step) => {
@@ -234,6 +239,7 @@ export function Onboarding() {
     try { await finishOnboarding(home); }
     catch { setError("that didn't save. try again."); setBusy(null); return; }
     sessionStorage.removeItem(SAVED);
+    sessionStorage.removeItem(CHECKOUT_OPENED);
     leaving.current = true;
     navigate(to, { replace: true });
   };
@@ -243,39 +249,44 @@ export function Onboarding() {
     ended.current = true;
     void finish(bought ? "/billing" : APP_DONE, bought ? "cloud" : "free");
   }, [inApp, step]);
-  const choose = async (where: "cloud" | "free") => {
+  const choose = async (where: "cloud" | "free", early = true) => {
     // from the app: it carries on with this computer, so the browser's part ends here
     if (where === "free") { if (inApp) await finish(APP_DONE, "free"); else go("app"); return; }
     if (!catalog) return;
     track({ name: "plan_chosen", props: { plan, period: interval } });
-    if (catalog.checkoutOpen === false) { setError(CHECKOUT_SOON); return; }
+    if (catalog.checkoutOpen === false) { setError(CHECKOUT_SOON); setOpened(true); return; }
     setBusy("cloud"); setError(null);
-    // checkout comes back to the plans page, so the first run is over once the payment page opens
-    try { await finishOnboarding("cloud"); } catch { /* the plans page still works; the next visit asks again */ }
+    // paid before the name, the first run goes on after checkout; picked on the plan step, it is over once the payment page opens
+    if (early) { try { await finishOnboarding("cloud"); } catch { /* the plans page still works; the next visit asks again */ } }
     sessionStorage.removeItem(SAVED);
+    sessionStorage.setItem(CHECKOUT_OPENED, "1");
     const ok = await checkout({ source: "dash_onboarding", kind: "plan", selection: planSelection(catalog, plan, { interval, work: false }), bundle: null });
-    if (!ok) { setError("checkout didn't open. try again."); setBusy(null); return; }
+    if (!ok) { setError("checkout didn't open. try again."); setBusy(null); setOpened(true); return; }
     // the live page is on its way to the payment page; fixtures pay at once
     if (FIXTURE) { toast("paid. your dusk cloud is being set up."); leaving.current = true; navigate("/billing", { replace: true }); }
   };
   const signOut = () => {
     sessionStorage.removeItem(SAVED);
     sessionStorage.removeItem(NAME_SKIPPED);
+    sessionStorage.removeItem(CHECKOUT_OPENED);
     leaving.current = true;
     void api.signOut().finally(() => setAccount(null));
   };
-  // a plan picked on the site goes from the name straight to checkout
   const saveName = async (auto = false) => {
     const next = (auto ? given : shownName).trim();
     if (!next) { setError("a name, any name."); return; }
     setBusy("name"); setError(null);
     try { if (next !== (account?.profile.name ?? "")) await updateProfile(next); }
     catch (e) { setError(auto ? null : (e as Error).message); setBusy(null); return; }
-    if (direct && catalog) { await choose("cloud"); return; }
     setBusy(null);
     if (bought && inApp) { await finish("/billing", "cloud"); return; }
     go(bought ? "app" : "plan", auto);
   };
+  useEffect(() => {
+    if (!autoPay || step !== "name" || account === null || !catalog || paying.current) return;
+    paying.current = true;
+    void choose("cloud", false);
+  }, [autoPay, step, account === null, catalog === null]);
   useEffect(() => {
     if (!skipping || autoSaved.current) return;
     autoSaved.current = true;
@@ -299,25 +310,15 @@ export function Onboarding() {
       aside={<button type="button" onClick={signOut} disabled={busy !== null} className="text-link -me-2 h-11 rounded-full px-2 text-14 disabled:opacity-50">sign out</button>}
     >
       <Rail at={Math.min(at, total - 1)} total={total} />
-      {step === "name" && skipping ? (
+      {step === "name" && (skipping || autoPay) ? (
         <div key="name-skip" className="min-h-[200px]" aria-busy="true" />
       ) : step === "name" ? (
         <form key="name" className="step-in" onSubmit={(e) => { e.preventDefault(); void saveName(); }} noValidate>
           <h1 className="t-title">what's your name?</h1>
-          <p className="mt-3 text-16 text-ink-2">{direct ? "then checkout, and your dusk cloud starts setting up." : "two quick things and you're in."}</p>
+          <p className="mt-3 text-16 text-ink-2">{bought ? "your dusk cloud is setting up." : "two quick things and you're in."}</p>
           <input id="onb-name" aria-label="your name" placeholder="your name" autoComplete="given-name" maxLength={60} value={shownName} onChange={(e) => { setName(e.target.value); setError(null); }} onFocus={() => setFocused(true)} onBlur={() => setFocused(false)} className="field mt-7 !h-12" aria-invalid={Boolean(error)} aria-describedby={error ? "onb-error" : undefined} />
-          {direct && (
-            <div className="mt-4 flex items-center gap-3 rounded-[16px] bg-card p-2 pe-4">
-              <img src={meadow} alt="" width={800} height={354} className="h-12 w-16 shrink-0 rounded-[10px] object-cover object-bottom" draggable={false} />
-              <span className="min-w-0 flex-1">
-                <span className="block text-14 font-medium text-ink">dusk cloud, {chosen?.name.toLowerCase() ?? "plus"}</span>
-                <span className="num block text-13 text-ink-3">{price ? `${price.amount}${price.unit}, cancel any time` : <Skeleton className="h-4 w-28" />}</span>
-              </span>
-              <button type="button" onClick={() => go("plan")} className="text-link h-11 shrink-0 rounded-full px-1 text-14">change</button>
-            </div>
-          )}
           {error && <p id="onb-error" role="alert" className="mt-2.5 text-14 text-bad">{error}</p>}
-          <Button type="submit" variant="primary" className={cx("mt-3", big)} disabled={busy !== null || (direct && !catalog)}>{busy ? <Busy>{direct ? "opening checkout" : "saving"}</Busy> : direct ? trialAction(catalog) ?? "continue to checkout" : "continue"}</Button>
+          <Button type="submit" variant="primary" className={cx("mt-3", big)} disabled={busy !== null}>{busy ? <Busy>saving</Busy> : "continue"}</Button>
         </form>
       ) : step === "plan" ? (
         <div key="plan" className="step-in">
@@ -326,7 +327,7 @@ export function Onboarding() {
           {catalog ? <PlanStep catalog={catalog} home={home} setHome={(h) => { setHome(h); setError(null); }} plan={plan} setPlan={(p) => { setPlan(p); setError(null); }} /> : <div className="flex flex-col gap-2" aria-busy="true"><Skeleton className="h-[300px] !rounded-[22px]" /><Skeleton className="h-[72px] !rounded-[18px]" /></div>}
           {error && <p role="alert" className="mt-3 text-14 text-bad">{error}</p>}
           <Button variant="primary" className={cx("mt-5", big)} onClick={() => void choose(home)} disabled={busy !== null || !catalog}>{busy === "cloud" ? <Busy>opening checkout</Busy> : busy === "done" ? <Busy>opening</Busy> : home === "free" ? "continue with free" : trialAction(catalog) ?? (price ? `continue to checkout, ${price.amount}${price.unit}` : "continue to checkout")}</Button>
-          <div className="mt-2 flex items-center justify-between">{back("name")}{home === "cloud" && <span className="text-14 text-ink-3">cancel any time</span>}</div>
+          <div className="mt-2 flex items-center justify-between">{back("name")}</div>
         </div>
       ) : inApp ? (
         <div key="app" className="min-h-[200px]" aria-busy="true" />

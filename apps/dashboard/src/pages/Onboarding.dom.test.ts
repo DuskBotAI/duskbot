@@ -18,9 +18,10 @@ const state = vi.hoisted(() => ({
   tracked: [] as unknown[][],
   query0: "",
   trialDays: undefined as number | undefined,
+  billing: null as unknown,
 }));
 vi.mock("../data/cloud", () => ({
-  useCloud: () => ({ account: { profile: { name: state.profileName, onboarded: false } }, catalog: { ...fixtureCatalog, checkoutOpen: true, ...(state.trialDays ? { trialDays: state.trialDays } : {}) }, billing: null, clouds: [],
+  useCloud: () => ({ account: { profile: { name: state.profileName, onboarded: false } }, catalog: { ...fixtureCatalog, checkoutOpen: true, ...(state.trialDays ? { trialDays: state.trialDays } : {}) }, billing: state.billing, clouds: [],
     checkout: state.checkout, updateProfile: state.update, finishOnboarding: state.finish }),
 }));
 vi.mock("../data/session", () => ({ useSession: () => ({ account: { id: "a", email: "sam@qa.dusk.test", ...(state.signInName !== undefined ? { name: state.signInName } : {}) }, setAccount: () => {}, toast: () => {} }) }));
@@ -33,7 +34,7 @@ vi.mock("../lib/downloads", async (actual) => ({ ...(await actual<typeof import(
 vi.mock("../ui/Digits", () => ({ StretchPill: () => null }));
 
 const roots: Root[] = [];
-afterEach(async () => { for (const root of roots.splice(0)) await act(async () => root.unmount()); document.body.innerHTML = ""; state.moved = []; state.query = "step=plan"; state.os = "windows"; state.profileName = "Sam"; state.signInName = undefined; state.trialDays = undefined; state.tracked = []; sessionStorage.clear(); vi.clearAllMocks(); vi.useRealTimers(); });
+afterEach(async () => { for (const root of roots.splice(0)) await act(async () => root.unmount()); document.body.innerHTML = ""; state.moved = []; state.query = "step=plan"; state.os = "windows"; state.profileName = "Sam"; state.signInName = undefined; state.trialDays = undefined; state.billing = null; state.tracked = []; sessionStorage.clear(); vi.clearAllMocks(); vi.useRealTimers(); });
 
 async function open() {
   const { Onboarding } = await import("./Onboarding");
@@ -104,6 +105,40 @@ test("a plan picked on the site goes from a sign-in name straight to checkout", 
   state.query = "step=name&plan=plus"; state.profileName = "Ada";
   await open();
   expect(state.checkout).toHaveBeenCalledOnce();
+});
+
+test("a plan picked on the site goes from sign-in to checkout with no name step and no summary", async () => {
+  state.query = "step=name&plan=plus"; state.profileName = "";
+  const host = await open();
+  expect(state.checkout).toHaveBeenCalledOnce();
+  expect(host.querySelector("#onb-name")).toBeNull();
+  expect(host.textContent).not.toContain("cancel any time");
+  expect(state.finish).not.toHaveBeenCalled();
+});
+
+test("back from checkout, the name is asked, saved, and the first run goes on to the app step", async () => {
+  state.query = "step=name"; state.profileName = ""; state.billing = { subscription: { status: "active" } };
+  const host = await open();
+  const input = host.querySelector<HTMLInputElement>("#onb-name")!;
+  expect(input).not.toBeNull();
+  await act(async () => { Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, "Ada"); input.dispatchEvent(new Event("input", { bubbles: true })); });
+  await act(async () => press(host, "continue").click());
+  expect(state.update).toHaveBeenCalledWith("Ada");
+  expect(state.moved.at(-1)).toContain("step=app");
+});
+
+test("a sign-in name is kept when checkout is paid first, and the name step is skipped after it", async () => {
+  state.query = "step=name"; state.profileName = "Ada"; state.billing = { subscription: { status: "active" } };
+  await open();
+  expect(state.moved.at(-1)).toContain("step=app");
+});
+
+test("back from an abandoned checkout the steps run as usual with the plan still chosen", async () => {
+  sessionStorage.setItem("dusk-onboarding-checkout-opened", "1");
+  state.query = "step=name&plan=plus"; state.profileName = "";
+  const host = await open();
+  expect(state.checkout).not.toHaveBeenCalled();
+  expect(host.querySelector("#onb-name")).not.toBeNull();
 });
 
 test("with no name from the sign-in the name step stays, and shows as reached", async () => {

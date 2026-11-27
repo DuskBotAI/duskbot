@@ -29,9 +29,17 @@ const raw = (path) => new Promise((resolve, reject) => {
 });
 
 describe("a path that is not a URL", () => {
-  it("answers 400 and logs nothing", async () => {
-    const answer = await raw("//[");
-    expect(answer).toMatch(/^HTTP\/1\.1 400 /);
-    expect(log).not.toHaveBeenCalledWith(expect.stringContaining("Invalid URL"));
+  for (const path of ["//[", "http://[bad", "//[::1"]) {
+    it(`answers 400 to ${path} and logs nothing`, async () => {
+      log.mockClear();
+      const answer = await raw(path);
+      expect(answer).toMatch(/^HTTP\/1\.1 400 /);
+      expect(answer).toContain('"error":"bad request"');
+      expect(log).not.toHaveBeenCalled();
+    });
+  }
+
+  it("still answers a normal path", async () => {
+    expect(await raw("/healthz")).toMatch(/^HTTP\/1\.1 200 /);
   });
 });

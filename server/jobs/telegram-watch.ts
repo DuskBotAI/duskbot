@@ -64,9 +64,15 @@ export function notesFor(updates: readonly Update[], chats: readonly string[], k
         pieces.push({ line: `${label}): ${text}`, done: last ? update.update_id + 1 : null });
         continue;
       }
-      const parts = Math.ceil(text.length / room);
-      for (let part = 0; part < parts; part++) {
-        pieces.push({ line: `${label}, part ${part + 1} of ${parts}): ${text.slice(part * room, (part + 1) * room)}`, done: last && part === parts - 1 ? update.update_id + 1 : null });
+      const chunks: string[] = [];
+      let chunk = "";
+      for (const character of text) {
+        if (chunk && chunk.length + character.length > room) { chunks.push(chunk); chunk = ""; }
+        chunk += character;
+      }
+      if (chunk) chunks.push(chunk);
+      for (const [part, chunk] of chunks.entries()) {
+        pieces.push({ line: `${label}, part ${part + 1} of ${chunks.length}): ${chunk}`, done: last && part === chunks.length - 1 ? update.update_id + 1 : null });
       }
     }
   }

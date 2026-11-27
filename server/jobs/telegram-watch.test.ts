@@ -35,12 +35,25 @@ describe("telegram_watch notes", () => {
     expect(notes.map((note) => note.offset)).toEqual([0, 102]);
     expect(bodies(notes.map((note) => note.text))).toBe(text);
   });
+
+  it.each(["🙂".repeat(2_048), "a" + "🙂".repeat(2_047)])("keeps Unicode characters whole at either split boundary: %#", (text) => {
+    const notes = notesFor([update(101, text)], [], []);
+    expect(notes.length).toBeGreaterThan(1);
+    for (const note of notes) {
+      expect(note.text.length).toBeLessThanOrEqual(3_800);
+      expect(note.text).not.toMatch(/[\uD800-\uDFFF]/u);
+    }
+    expect(bodies(notes.map((note) => note.text))).toBe(text);
+    expect(notes.slice(0, -1).every((note) => note.offset === 0)).toBe(true);
+    expect(notes.at(-1)!.offset).toBe(102);
+  });
 });
 
 async function notifier(answer: () => number) {
   const notes: string[] = [];
   let asked = 0;
   const server: Server = createServer((req, res) => {
+    req.setEncoding("utf8");
     let body = "";
     req.on("data", (chunk) => { body += chunk; });
     req.on("end", () => { asked++; const status = answer(); if (status < 300) notes.push((JSON.parse(body) as { text: string }).text); res.writeHead(status).end("{}"); });
@@ -68,6 +81,20 @@ const offsetIn = (dir: string) => { try { return (JSON.parse(readFileSync(join(d
 const polledFrom = (fake: FakeTelegram) => fake.calls.filter((call) => call.method === "getUpdates").map((call) => Number(call.params.offset ?? 0));
 
 describe.skipIf(process.platform === "win32")("telegram_watch process", () => {
+  it.each(["🙂".repeat(2_048), "a" + "🙂".repeat(2_047)])("forwards individually valid Unicode parts through the notify endpoint: %#", async (text) => {
+    const fake = await telegram(), notify = await notifier(() => 200);
+    const dir = mkdtempSync(join(tmpdir(), "tg-watch-")); open.push(() => rmSync(dir, { recursive: true, force: true }));
+    fake.message({ from: { id: 5, first_name: "Ana" }, chat: { id: -10, type: "supergroup", title: "Deals" }, text });
+    watch(fake, notify.url, dir);
+    await expect.poll(() => offsetIn(dir), { timeout: 15_000 }).toBe(2);
+    expect(notify.notes.length).toBeGreaterThan(1);
+    for (const note of notify.notes) {
+      expect(note.length).toBeLessThanOrEqual(3_800);
+      expect(note).not.toMatch(/[\uD800-\uDFFF]/u);
+    }
+    expect(bodies(notify.notes)).toBe(text);
+  });
+
   it("forwards three long messages and a 4,096-character one whole before it polls past them", async () => {
     const fake = await telegram(), notify = await notifier(() => 200);
     const dir = mkdtempSync(join(tmpdir(), "tg-watch-")); open.push(() => rmSync(dir, { recursive: true, force: true }));

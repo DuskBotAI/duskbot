@@ -28,6 +28,7 @@ vi.mock("../PlaceChip", () => ({
     local: { policy: false, reachable: false, view: { line: "" } },
     browser: { policy: true, reachable: true, view: { line: "" } },
     cloud: { policy: true, reachable: true, view: { line: "" } },
+    vm: { policy: false, reachable: false, view: { line: "" } },
   }),
 }));
 vi.mock("@/lib/other-server", () => ({

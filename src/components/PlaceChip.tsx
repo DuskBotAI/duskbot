@@ -79,7 +79,7 @@ export function usePlaceMenuItem({ bot, task, disabled = false, onPin }: {
         return {
           key: `place:${place}`,
           label: t(placeLabelKey(place)),
-          note: !policy ? t("place.unavailable") : placeHasIssue(view) ? view.short : t(DESCRIPTION[place]),
+          note: !policy ? t("place.unavailable") : placeHasIssue(view) ? view.short : t(PLACE_DESCRIPTION[place]),
           icon: <PlaceIcon place={place} size={16} aria-hidden="true" />,
           active: pin === place,
           trailing: pin === place ? check : undefined,
@@ -91,7 +91,7 @@ export function usePlaceMenuItem({ bot, task, disabled = false, onPin }: {
   };
 }
 
-const DESCRIPTION: Record<Place, "computer.dest.cloudDesc" | "computer.dest.vmDesc" | "computer.dest.localDesc" | "computer.dest.browserDesc"> = {
+export const PLACE_DESCRIPTION: Record<Place, "computer.dest.cloudDesc" | "computer.dest.vmDesc" | "computer.dest.localDesc" | "computer.dest.browserDesc"> = {
   cloud: "computer.dest.cloudDesc", vm: "computer.dest.vmDesc", local: "computer.dest.localDesc", browser: "computer.dest.browserDesc",
 };
 
@@ -171,7 +171,7 @@ export function PlaceChip({ bot, task, live, disabled = false, onPin }: {
             {PLACES.filter((place) => placeOffered(place, state.config)).map((place) => {
               const selected = pin === place;
               const { view, reachable, policy } = places[place];
-              const detail = !policy ? t("place.unavailable") : placeHasIssue(view) ? view.short : t(DESCRIPTION[place]);
+              const detail = !policy ? t("place.unavailable") : placeHasIssue(view) ? view.short : t(PLACE_DESCRIPTION[place]);
               return (
                 <button
                   key={place}

@@ -280,6 +280,8 @@ describe("the compact browser in the Computer tab", () => {
     await click("[data-local-browser-action=expand]");
     expect(q("[data-local-browser-action=expand]")!.getAttribute("aria-pressed")).toBe("true");
     expect(document.documentElement.style.getPropertyValue("--side-panel-w")).not.toBe("320px");
+    expect(document.documentElement.hasAttribute("data-panel-full")).toBe(true);
+    expect(q("[data-local-browser-surface]")!.hasAttribute("inert")).toBe(false);
     let panelSaw: boolean | null = null;
     const panel = (event: KeyboardEvent) => { panelSaw = event.defaultPrevented; };
     window.addEventListener("keydown", panel);
@@ -288,6 +290,7 @@ describe("the compact browser in the Computer tab", () => {
     expect(panelSaw).not.toBe(false);
     expect(q("[data-local-browser-action=expand]")!.getAttribute("aria-pressed")).toBe("false");
     expect(document.documentElement.style.getPropertyValue("--side-panel-w")).toBe("320px");
+    expect(document.documentElement.hasAttribute("data-panel-full")).toBe(false);
   });
 
   it("asks for this Mac's missing permissions before starting, then opens the browser once all are on", async () => {

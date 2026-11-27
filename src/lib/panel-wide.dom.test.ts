@@ -26,3 +26,20 @@ describe("the bot panel's width", () => {
     expect(panelWidth()).toBe("780px");
   });
 });
+
+describe("the browser taking the whole room", () => {
+  it("opens the panel across the chat's room too, follows the window, and gives it back", async () => {
+    const { setPanelWide, panelWide } = await import("./panel-wide");
+    room(1200);
+    resizePanel(320);
+    setPanelWide(true, "full");
+    expect(panelWidth()).toBe("1200px");
+    expect(document.documentElement.hasAttribute("data-panel-full")).toBe(true);
+    room(900);
+    window.dispatchEvent(new Event("resize"));
+    expect(panelWidth()).toBe("900px");
+    setPanelWide(false);
+    expect(panelWide()).toBe(false);
+    expect(document.documentElement.hasAttribute("data-panel-full")).toBe(false);
+  });
+});

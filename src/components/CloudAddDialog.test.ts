@@ -162,14 +162,14 @@ describe("each screen of the sheet says one thing and offers one next step", () 
     const card = (plans: unknown[], tier: string) => text(renderToStaticMarkup(createElement(ChooseScreen, { offer: parseCloudOffer({ plans, recommended: tier })!, now: NOW, busy: false,
       signedOut: false, notice: null, onStart: vi.fn(), onSignIn: vi.fn() })).match(new RegExp(`<label data-plan="${tier}"[\\s\\S]*?</label>`))![0]);
     const now = [wire("starter", "Plus", 2000, { ...plus, sleeps: true }), wire("team", "Team", 11900, { ...team, seats: 50, includedSeats: 2, extraSeatCents: 2000 })];
-    inOrder(shown(now, "team"), ["Plus", "Your bots keep working with the laptop shut", "$20", "a month", "2 vCPU, 4 GB RAM", "20 GB disk", "Wakes in seconds", "No work license",
+    inOrder(shown(now, "team"), ["Plus", "Your bots keep working with the laptop shut", "$20", "a month", "2 vCPU, 4 GB RAM", "20 GB disk", "Wakes on its own in under a minute", "No work license",
       "Team", "A dedicated machine for your team", "$119", "a month", "Dedicated 8 vCPU, 16 GB RAM", "160 GB disk, grows to 200 GB", "Priority wake",
       "2 seats, more at $20/month each, up to 50", "Get Team for $119/month"]);
     expect(card(now, "starter")).not.toContain("Priority wake");
     expect(shown([wire("starter", "Plus", 2000, plus), wire("team", "Team", 11900, { ...team, seats: 50, includedSeats: 3, extraSeatCents: 2500 })], "team"),
       "the seats are the Admin's").toContain("3 seats, more at $25/month each, up to 50");
     const old = [wire("starter", "Plus", 2000, plus), wire("pro", "Pro", 5000, { cpus: 4, memoryMb: 8192, diskGb: 60, maxDiskGb: 60 }), wire("team", "Team", 11900, team)];
-    expect(card(old, "starter"), "an older Admin: Plus still wakes in seconds").toContain("Wakes in seconds");
+    expect(card(old, "starter"), "an older Admin: Plus still wakes on its own in under a minute").toContain("Wakes on its own in under a minute");
     expect(card(old, "starter")).not.toContain("Priority wake");
     expect(card(old, "pro")).toContain("Priority wake");
     inOrder(card(old, "team"), ["Dedicated 8 vCPU, 16 GB RAM", "Priority wake", "2 seats, more at $20/month each, up to 50"]);

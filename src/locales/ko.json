@@ -386,7 +386,7 @@
   "cloudBuy.benefit.move": "봇, 채팅, 메모리가 1분 정도면 옮겨져요.",
   "cloudBuy.choose": "요금제 선택",
   "cloudBuy.perMonth": "/월",
-  "cloudBuy.sleeps": "언제든 사용 가능, 몇 초면 깨어나요",
+  "cloudBuy.sleeps": "언제든 사용 가능, 1분 안에 스스로 깨어나요",
   "cloudBuy.card.get": "{plan} 시작하기",
   "cloudBuy.card.current": "현재 요금제",
   "cloudBuy.card.trial.one": "1일 무료, 이후 월 {price}(해당 시 세금 별도). 그때까지는 요금이 청구되지 않아요. 언제든 취소할 수 있어요.",

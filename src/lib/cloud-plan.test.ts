@@ -153,7 +153,7 @@ describe("what is for sale, as the Admin says", () => {
     const team: CloudOfferPlan = { tier: "team", label: "Team", amount: 11900, allowances: { ...allowances(4, 60), memoryMb: 8192, seats: 2, snapshotDays: 14 } };
     const cards = planCards({ plans: [SLEEPS, { ...PLANS[1]!, allowances: { ...PLANS[1]!.allowances!, snapshotDays: 14 } }, team], recommended: "pro" });
     expect(cards.map(card => card.points.map(point => point.text))).toEqual([
-      ["Keeps working while this computer is off, wakes in seconds", "2 vCPU, 2 GB RAM, 10 GB disk", "Daily backups, kept 7 days", "Routines run on time, day and night",
+      ["Keeps working while this computer is off, wakes on its own in under a minute", "2 vCPU, 2 GB RAM, 10 GB disk", "Daily backups, kept 7 days", "Routines run on time, day and night",
         "Reach your bots from any of your computers"],
       ["Always available, priority wake", "4 vCPU, 4 GB RAM, 40 GB disk that grows to 50 GB", "A work license for one person", "Daily backups, kept 14 days", "Routines run on time, day and night"],
       ["Always available, priority wake", "Dedicated 4 vCPU, 8 GB RAM, 60 GB disk", "Team license for up to 2 people", "Daily backups, kept 14 days", "Routines run on time, day and night"],
@@ -194,7 +194,7 @@ describe("what is for sale, as the Admin says", () => {
     // Another catalog's numbers show as such; an older Admin without swap or backup days leaves them unsaid, and a plan it says sleeps says so.
     expect(planCardRows({ cpus: 8, memoryMb: 8192, diskGb: 10, maxDiskGb: 10, computers: 4, computerHours: 500, voiceCharacters: 90_000 }).map(row => row.text)).toEqual([
       "Always available, priority wake", "8 vCPU · 8 GB RAM", "10 GB disk"]);
-    expect(planCardRows(SLEEPS.allowances!)[0]!.text).toBe("Always available, wakes in seconds");
+    expect(planCardRows(SLEEPS.allowances!)[0]!.text).toBe("Always available, wakes on its own in under a minute");
     // a plan reads by its machine: never a count of bots or desktops, hours, a usage allowance or "shared"
     expect(JSON.stringify(cards)).not.toMatch(/a day|credit|Everything in|desktop|hours|at once|shared|24\/7|always on|unlimited/i);
   });
@@ -213,7 +213,7 @@ describe("what is for sale, as the Admin says", () => {
     const asleep = (plan: typeof pro) => ({ ...plan, allowances: { ...plan.allowances, sleeps: true as const } });
     const one = cardRows(planCards({ plans: [asleep(starter), pro, max], recommended: "pro" }));
     expect(one.map(card => card.shown[0]!.text), "one plan sleeps: every card says how it runs")
-      .toEqual(["Always available, wakes in seconds", "Always available, priority wake", "Always available, priority wake"]);
+      .toEqual(["Always available, wakes on its own in under a minute", "Always available, priority wake", "Always available, priority wake"]);
     expect(one.map(card => keys(card.details))).toEqual(Array(3).fill(["backups"]));
     const all = cardRows(planCards({ plans: [starter, pro, max].map(asleep), recommended: "pro" }));
     expect(all.map(card => keys(card.shown)), "every plan sleeps: nothing sets them apart there").toEqual(Array(3).fill(["machine", "storage"]));

@@ -5,6 +5,7 @@ import { EMAIL_INSTRUCTIONS } from "./email/instructions.ts";
 import { PHONE_INSTRUCTIONS, PHONE_RECOVERY } from "./phones/instructions.ts";
 import { HARNESS_PROXY_TIMEOUT_MS, HARNESS_PROXY_TIMEOUTS_MS } from "./harness-budget.ts";
 import { fitToolListResult } from "./mcp-tool-schema.ts";
+import { capToolListResultByBytes } from "./tool-byte-budget.ts";
 import { capToolListResult } from "./tool-count-limit.ts";
 import type { ToolSchemaProfile } from "./tool-schema-profile.ts";
 
@@ -65,7 +66,7 @@ async function boundedJson(response: Response, name: string): Promise<unknown> {
 
 export async function harnessMcpRequest(
   frame: unknown,
-  connection: { url: string; token: string; kind: HarnessMcpKind; toolLimit?: number; schemaProfile?: ToolSchemaProfile; stop?: AbortSignal },
+  connection: { url: string; token: string; kind: HarnessMcpKind; toolLimit?: number; toolByteBudget?: number; schemaProfile?: ToolSchemaProfile; stop?: AbortSignal },
 ): Promise<unknown | undefined> {
   if (!frame || typeof frame !== "object" || Array.isArray(frame)) return failure(null, null, "Invalid request.", -32600);
   const message = frame as { id?: RpcId; jsonrpc?: unknown; method?: unknown; params?: unknown };
@@ -100,7 +101,7 @@ export async function harnessMcpRequest(
     }
     const log = (line: string) => console.warn(`[${connection.kind}] ${line}`);
     const result = message.method === "tools/list"
-      ? capToolListResult(fitToolListResult(payload.result, connection.schemaProfile, log), connection.toolLimit, log) : payload.result;
+      ? capToolListResult(capToolListResultByBytes(fitToolListResult(payload.result, connection.schemaProfile, log), connection.toolByteBudget, log), connection.toolLimit, log) : payload.result;
     return { jsonrpc: "2.0", id, result };
   } catch (error) {
     return failure(id, message.method, unansweredText(error, name, HARNESS_PROXY_TIMEOUTS_MS[connection.kind] ?? HARNESS_PROXY_TIMEOUT_MS) + RECOVERY[connection.kind]);

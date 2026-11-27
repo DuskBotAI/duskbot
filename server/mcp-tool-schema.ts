@@ -1,5 +1,6 @@
 // Strict providers (OpenAI, xAI, Bedrock, Kimi…) refuse a tool schema whose root is not a plain `type: "object"`, failing
 // the whole turn; cua-driver 0.22.1 ships such a root on browser_prepare. Servers still validate calls against their own.
+import { capToolListResultByBytes } from "./tool-byte-budget.ts";
 import { fitToolSchema, type ToolSchemaProfile } from "./tool-schema-profile.ts";
 
 type JsonObject = Record<string, unknown>;
@@ -117,7 +118,7 @@ export function fitToolListResult(result: unknown, profile: ToolSchemaProfile | 
 }
 
 /** Every listed schema gets a plain object root; under a profile each is also fitted to it. */
-export function createToolListNormalizer(profile?: ToolSchemaProfile, log?: (line: string) => void): {
+export function createToolListNormalizer(profile?: ToolSchemaProfile, log?: (line: string) => void, maxListBytes?: number): {
   observeRequest: (line: string) => void;
   rewriteResponse: (line: string) => string;
 } {
@@ -155,7 +156,9 @@ export function createToolListNormalizer(profile?: ToolSchemaProfile, log?: (lin
         return inputSchema === tool.inputSchema ? tool : { ...tool, inputSchema };
       });
       const changed = tools.length !== listed.length || tools.some((tool, index) => tool !== listed[index]);
-      return changed ? JSON.stringify({ ...frame, result: { ...frame.result, tools } }) : line;
+      const baseResult = changed ? { ...frame.result, tools } : frame.result;
+      const finalResult = capToolListResultByBytes(baseResult, maxListBytes, log);
+      return finalResult !== frame.result ? JSON.stringify({ ...frame, result: finalResult }) : line;
     },
   };
 }

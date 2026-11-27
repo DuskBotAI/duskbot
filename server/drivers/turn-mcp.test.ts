@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { SendTurnInput } from "../contracts.ts";
 import { SPAWNED_PROXIES } from "../proxy-paths.ts";
 import { AGENTS_ENV_HEADER } from "../routes/own-mcp-http-path.ts";
+import { ANTIGRAVITY_EAGER_BYTE_BUDGET, TOOL_BYTE_BUDGET_ENV } from "../tool-byte-budget.ts";
 import { TOOL_LIMIT_ENV, TOOL_LIMIT_HEADER } from "../tool-count-limit.ts";
 import { TOOL_SCHEMA_PROFILE_ENV } from "../tool-schema-profile.ts";
 import { agentsToolList } from "./agents-mcp.ts";
@@ -112,6 +113,9 @@ describe("the MCP servers a Kimi Code turn gets", () => {
     const servers = acpMcpServers(withRemote(), { engine: "antigravityAgent" });
     expect(servers.map((server) => server.name)).toEqual(["agents", "browser", "data", "notes", "docs"]);
     for (const server of servers) expect([server.name, env(server)[TOOL_SCHEMA_PROFILE_ENV]]).toEqual([server.name, "antigravity"]);
+    const totalBudget = servers.reduce((sum, server) => sum + Number(env(server)[TOOL_BYTE_BUDGET_ENV] ?? 0), 0);
+    expect(totalBudget).toBe(ANTIGRAVITY_EAGER_BYTE_BUDGET);
+    expect(Number(env(servers[0]!)[TOOL_BYTE_BUDGET_ENV])).toBeGreaterThan(Number(env(servers[3]!)[TOOL_BYTE_BUDGET_ENV]));
     expect((servers[3] as { args: string[] }).args).toEqual([SPAWNED_PROXIES.mcpGate]);
     expect((servers[4] as { args: string[] }).args).toEqual([SPAWNED_PROXIES.mcpRemote]);
   });
@@ -120,6 +124,7 @@ describe("the MCP servers a Kimi Code turn gets", () => {
     for (const engine of [undefined, "opencodeGo", "grokAgent", "qwenAgent"]) {
       const servers = acpMcpServers(withRemote(), { engine });
       expect(servers.some((server) => TOOL_SCHEMA_PROFILE_ENV in env(server))).toBe(false);
+      expect(servers.some((server) => TOOL_BYTE_BUDGET_ENV in env(server))).toBe(false);
       expect(servers.find((server) => server.name === "notes")).toEqual({ name: "notes", command: "npx", args: ["-y", "notes-mcp"], env: [{ name: "NOTES_KEY", value: "k" }] });
     }
   });

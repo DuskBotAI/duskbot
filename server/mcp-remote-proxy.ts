@@ -33,6 +33,7 @@ import { APP_ONLY_REFUSAL, AppObserver, REMOTE_MCP_APPS_ENV, UI_EXTENSION, model
 import { lenientToolValidator, schemaProblems } from "./mcp-schema-validator.ts";
 import { fitToolListResult } from "./mcp-tool-schema.ts";
 import { toolSchemaProfileFromEnv } from "./tool-schema-profile.ts";
+import { capToolListResultByBytes, toolByteBudgetFromEnv } from "./tool-byte-budget.ts";
 import { capToolListResult, toolLimitFromEnv } from "./tool-count-limit.ts";
 import { APP_EXTENSION_KEY } from "../shared/app.ts";
 
@@ -115,6 +116,7 @@ const HANDSHAKE = observer?.mount.extension ? { extensions: { [APP_EXTENSION_KEY
 const appOnly = new Set<string>();
 const SCHEMA_PROFILE = toolSchemaProfileFromEnv(process.env);
 const TOOL_LIMIT = toolLimitFromEnv(process.env);
+const TOOL_BYTE_BUDGET = toolByteBudgetFromEnv(process.env);
 const logFit = (line: string) => { process.stderr.write(`mcp-remote-proxy: ${line}\n`); };
 
 const REMOTE_ERROR_CHARS = 1_000;
@@ -342,7 +344,7 @@ async function handle(message: Json): Promise<void> {
   try {
     const result = directory ? await directed(message, signal) : await upstream(message.method, message.params, signal);
     if (message.method === "initialize") initialized = true;
-    send({ jsonrpc: "2.0", id: message.id, result: message.method === "tools/list" ? capToolListResult(fitToolListResult(result, SCHEMA_PROFILE, logFit), TOOL_LIMIT, logFit) : result });
+    send({ jsonrpc: "2.0", id: message.id, result: message.method === "tools/list" ? capToolListResult(capToolListResultByBytes(fitToolListResult(result, SCHEMA_PROFILE, logFit), TOOL_BYTE_BUDGET, logFit), TOOL_LIMIT, logFit) : result });
   } catch (failure) {
     // Transport failures may carry URLs or header values: never relayed.
     if (failure instanceof Refusal) error(message.id, failure.code, failure.message);

@@ -16,6 +16,7 @@ import { fitToolList } from "./mcp-tool-schema.ts";
 import { DEFAULT_RESULT_BUDGET, type HeldResult, trimResultText, trimStructured } from "./mcp-trim.ts";
 import { killCliTree } from "./procs.ts";
 import { toolSchemaProfileFromEnv } from "./tool-schema-profile.ts";
+import { capToolListResultByBytes, toolByteBudgetFromEnv } from "./tool-byte-budget.ts";
 import { capToolListResult, toolLimitFromEnv } from "./tool-count-limit.ts";
 import { withNextStepResult } from "./tool-next-step.ts";
 
@@ -48,6 +49,7 @@ const SPILL_MAX_AGE_MS = 24 * 60 * 60_000;
 const SPILL_HINT = gateEnv.DUSK_GATE_SPILL_HINT === "1";
 const DIRECTORY = gateEnv.DUSK_GATE_DIRECTORY === "1";
 const SCHEMA_PROFILE = toolSchemaProfileFromEnv(process.env);
+const TOOL_BYTE_BUDGET = toolByteBudgetFromEnv(process.env);
 const TOOL_LIMIT = toolLimitFromEnv(process.env);
 
 function fail(message: string): never {
@@ -383,8 +385,11 @@ createInterface({ input: child.stdout }).on("line", (line) => {
   if (BUDGET > 0 && request?.kind === "list" && message.error === undefined && isRecord(result) && Array.isArray(result.tools) && result.nextCursor === undefined) {
     result.tools = [...result.tools.filter((tool: unknown) => !isRecord(tool) || tool.name !== QUERY_TOOL_NAME), QUERY_TOOL];
   }
-  if (TOOL_LIMIT !== undefined && request?.kind === "list" && message.error === undefined && isRecord(result)) {
-    message.result = capToolListResult(result, TOOL_LIMIT, (note) => process.stderr.write(`mcp-gate(${NAME}): ${note}\n`));
+  if (TOOL_BYTE_BUDGET !== undefined && request?.kind === "list" && message.error === undefined && isRecord(result)) {
+    message.result = capToolListResultByBytes(result, TOOL_BYTE_BUDGET, (note) => process.stderr.write(`mcp-gate(${NAME}): ${note}\n`));
+  }
+  if (TOOL_LIMIT !== undefined && request?.kind === "list" && message.error === undefined && isRecord(message.result)) {
+    message.result = capToolListResult(message.result, TOOL_LIMIT, (note) => process.stderr.write(`mcp-gate(${NAME}): ${note}\n`));
   }
   if (request?.kind === "call" && observer && message.error === undefined) observer.returned(request.params, result);
   if (request?.kind === "call" && request.trim && isRecord(result)) {

@@ -29,6 +29,12 @@ describe("mountsHostShell", () => {
       expect(mountsHostShell({ ...own, ...change })).toBe(false);
     }
   });
+  it("keeps a duskbot serve server's unsandboxed shell from routines, webhooks and messengers, and from a server others sign in to", () => {
+    const own = { ...desktopTurn, desktopApp: false, selfHosted: true, platform: "linux" as const };
+    expect(mountsHostShell({ ...own, watched: false })).toBe(false);
+    expect(mountsHostShell({ ...own, shared: true })).toBe(false);
+    expect(mountsHostShell({ ...own, shared: false })).toBe(true);
+  });
   it("lends a local model the shell only from this machine, off Windows and on a turn a person is behind", () => {
     const local = { ...desktopTurn, model: "loopback" as const };
     expect(mountsHostShell(local)).toBe(true);

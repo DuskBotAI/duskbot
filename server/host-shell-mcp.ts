@@ -239,8 +239,12 @@ export function mountsHostShell(input: {
   platform: NodeJS.Platform;
   /** A person's own request or its continuation: not a routine, webhook, Bot API call or a teammate's hand-off. */
   watched: boolean;
+  /** The server lets people other than its owner in (a sign-in allow list or a team). */
+  shared?: boolean;
 }): boolean {
-  const lent = !input.engineHasShell && (input.desktopApp || input.cloudHome || input.selfHosted === true) && input.worksOn !== "off"
+  // security: a self-hosted server's shell is unsandboxed and runs as the server's user, so only its owner's own turns get it
+  const selfHosted = input.selfHosted === true && input.watched && input.shared !== true;
+  const lent = !input.engineHasShell && (input.desktopApp || input.cloudHome || selfHosted) && input.worksOn !== "off"
     && !input.remoteComputer && !input.thisComputerRefused && !input.guest && !input.testRun;
   if (input.model === "hosted") return lent;
   // a local model gets it only from this machine, off Windows (the safety floor is inert there) and with a person behind the turn

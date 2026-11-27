@@ -666,7 +666,8 @@ test("sign-out durably forgets personal Cloud and revokes only its credential; o
 test("failed durable sign-out blocks reconnect until cleanup succeeds", async t => {
   const f = await fixture(t); await f.connect(); f.failWrite = true;
   assert.equal((await f.client.signOut()).message, "signout-storage-failed");
-  await assert.rejects(f.client.begin(), /Sign out/); assert.equal(f.client.state().entitlement, undefined);
+  assert.equal((await f.client.begin()).message, "signout-storage-failed", "no new sign-in over a record that can't be removed");
+  assert.deepEqual(await f.client.emailStart("person@example.test"), { outcome: "storage" }); assert.equal(f.client.state().entitlement, undefined);
   f.failWrite = false; await f.client.signOut(); assert.equal(f.saved, null);
 });
 
@@ -749,7 +750,8 @@ test("a locked keychain never removes the saved Cloud sign-in: it is read again,
   lock.locked = true;
   assert.deepEqual(await f.client.start(), { status: "unavailable", message: "restore-failed" });
   assert.equal(f.delay, 15_000);
-  await assert.rejects(f.client.begin(), /Sign out/);
+  assert.equal((await f.client.begin()).message, "restore-failed", "a locked keychain stays its own state, never a sign-in over it");
+  assert.deepEqual(await f.client.emailStart("person@example.test"), { outcome: "storage" });
   for (const delay of [30_000, 60_000, 60_000]) { f.tick(); await until(() => f.timer); assert.equal(f.delay, delay); }
   assert.ok((await stat(file)).isFile(), "a locked sign-in is never removed");
   assert.equal(f.states.filter(state => state.message === "restore-failed").length, 1, "said once, not on every try");

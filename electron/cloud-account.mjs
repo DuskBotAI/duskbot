@@ -471,7 +471,8 @@ export function createCloudAccountClient({ store, openBrowser, platform, deviceN
     // page's URL: the website's sign-in reads a plan in the URL as a plan pick and goes to billing, so the person never
     // approved this app and it never signed in
     account = cleanAccountIntent(account) ?? (intent ? cleanAccountIntent({ kind: "upgrade", plan: intent.plan === "starter" ? "plus" : intent.plan, source: intent.source }) : null);
-    if (closed || restoring || clearing || grant || issued || cleanupNeeded) throw new Error("Sign out before starting another Cloud connection.");
+    if (await clearStale() === "storage") return state();
+    if (signInBlocked()) throw new Error("Sign out before starting another Cloud connection.");
     const stamp = reset();
     opened = intent ? { plan: intent.plan, source: intent.source, startedAt: now(), signIn: true } : null;
     // the packaged app owns duskbot://, so the browser comes back here signed in: no code to compare, no page to approve
@@ -534,8 +535,33 @@ export function createCloudAccountClient({ store, openBrowser, platform, deviceN
     return { opened: true, fallback: true };
   }
   const signInBlocked = () => closed || restoring || clearing || grant || issued || cleanupNeeded;
+  /** A sign-in asked for while this one holds only leftovers (an unfinished sign-out, a keychain that was locked at launch, a
+   * browser sign-in nobody finished): they are cleared or read again and the new sign-in goes on. A real sign-in (grant, or an
+   * issued token being stored) is never touched, and a record that still can't be read or removed is "storage". */
+  async function clearStale() {
+    if (closed) return "blocked";
+    if (clearing) await clearing.catch(() => {});
+    if (closed || restoring || grant || issued) return "blocked";
+    if (cleanupNeeded) {
+      if (cleanup) {
+        const stale = cleanup;
+        if (!(await store.write(null).then(() => true, () => false))) return "storage";
+        void revoke(stale).catch(() => {});
+        cleanup = null; cleanupNeeded = false; failures = 0;
+      } else {
+        let saved;
+        try { saved = await store.read(); } catch { return "storage"; }
+        if (saved) { await start(); return grant ? "blocked" : "storage"; }
+        cleanupNeeded = false; failures = 0; stopTimer();
+        publish({ status: "signed-out" });
+      }
+    }
+    if (pending) { opened = null; reset(); publish({ status: "signed-out" }); }
+    return "ready";
+  }
   /** Sends the 8-digit code to `email`. Nothing is signed in yet; the answer says what the sheet shows next. */
   async function emailStart(email, { recover = false } = {}) {
+    if (await clearStale() === "storage") return { outcome: "storage" };
     if (signInBlocked() || value.status === "connecting") throw new Error("Sign out before starting another Cloud connection.");
     const address = cleanEmail(email), app = signInIdentity({ deviceName, platform, appVersion });
     if (!address) return { outcome: "invalid-email" };

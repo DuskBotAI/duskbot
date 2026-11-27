@@ -77,6 +77,24 @@ test("the email, the code and the Admin's answers are read strictly", () => {
     Object.assign(new Error("x"), { status: 403, opaque: true })].map(verifyFailure), ["wrong-code", "expired", "sso", "two-factor", "signup-closed", "device-limit", "rate-limited", "failed"]);
 });
 
+test("a sign-out that never finished is finished by the next sign-in, which then goes on", async t => {
+  const f = await fixture(t);
+  await f.client.emailStart("person@example.test"); await f.client.emailVerify(CODE);
+  f.failWrite = true;
+  assert.equal((await f.client.signOut()).message, "signout-storage-failed");
+  assert.deepEqual(await f.client.emailStart("person@example.test"), { outcome: "storage" }, "its own answer while the record can't be removed");
+  f.failWrite = false;
+  assert.equal((await f.client.emailStart("person@example.test")).outcome, "sent");
+  assert.equal(f.saved, null);
+});
+
+test("a browser sign-in nobody finished does not stop an emailed code", async t => {
+  const f = await fixture(t);
+  assert.equal((await f.client.begin()).status, "connecting");
+  assert.equal((await f.client.emailStart("person@example.test")).outcome, "sent");
+  assert.equal(f.client.state().status, "signed-out");
+});
+
 test("happy path: the code is sent, the right code signs this computer in with the token stored like the browser sign-in's", async t => {
   const f = await fixture(t);
   const sent = await f.client.emailStart(" Person@Example.TEST ");

@@ -29,6 +29,18 @@ export function windowPlaceName(place: WorkspaceState, team: string | undefined)
   return place.name;
 }
 
+export function windowPlaceMark(place: WorkspaceState, team: string | undefined, color?: unknown): {
+  kind: "computer" | "cloud" | "team";
+  name: string;
+  color: unknown;
+} {
+  return {
+    kind: place.local ? "computer" : place.role ? "team" : "cloud",
+    name: windowPlaceName(place, team),
+    color: color ?? place.color ?? null,
+  };
+}
+
 /** The middle of the window frame's top bar: the place on screen, its mark as the rail draws it and its name, quiet. It
  * stays part of the bar's drag region. */
 export function WindowPlaceTitle() {
@@ -36,9 +48,9 @@ export function WindowPlaceTitle() {
   const look = usePlaceLook();
   const { state } = useStore();
   if (!place) return <span aria-hidden="true" />;
-  const name = windowPlaceName(place, state.config?.team?.name);
+  const mark = windowPlaceMark(place, state.config?.team?.name, look?.color);
   return <div data-window-place className="flex min-w-0 items-center justify-center gap-1.5 px-2 text-[12px] font-medium text-ink-secondary">
-    <PlaceMark place={{ kind: place.local ? "computer" : place.role ? "team" : "cloud", name, color: look?.color ?? place.color ?? null }} size={16} />
-    <span className="min-w-0 truncate">{name}</span>
+    <PlaceMark place={mark} size={16} />
+    <span className="min-w-0 truncate">{mark.name}</span>
   </div>;
 }

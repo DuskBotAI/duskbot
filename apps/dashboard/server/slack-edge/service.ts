@@ -101,6 +101,7 @@ export function createSlackEdge(options: SlackEdgeOptions) {
     const plain = JSON.stringify(payload);
     if (Buffer.byteLength(plain) > SLACK_EDGE_LIMITS.eventBytes) { reg.dropped++; store.changed(); return; }
     const sealed = sealForDesktop(reg.publicKey, botId, plain);
+    const previousEvents = state.events.slice(), previousDropped = reg.dropped;
     state.events.push({ id: id("sev"), cloudId, botId, eventId, receivedAt: now(), sealed, wake: kind === "wake" });
     let mine = eventsOf(cloudId), bytes = mine.reduce((n, e) => n + e.sealed.length, 0);
     while (mine.length > SLACK_EDGE_LIMITS.events || bytes > SLACK_EDGE_LIMITS.sealedBytes) {
@@ -108,7 +109,8 @@ export function createSlackEdge(options: SlackEdgeOptions) {
       state.events.splice(state.events.indexOf(oldest), 1);
       bytes -= oldest.sealed.length; mine = mine.slice(1); reg.dropped++;
     }
-    store.commit();
+    try { store.commit(); }
+    catch (error) { state.events = previousEvents; reg.dropped = previousDropped; throw error; }
     if (kind === "wake") wake(reg, cloud);
   }
 
@@ -126,7 +128,7 @@ export function createSlackEdge(options: SlackEdgeOptions) {
       let appToken: string;
       try { appToken = options.sealer.unseal(bot.sealedToken); } catch { bot.sealedToken = null; bot.error = "token unreadable"; continue; }
       const cloudId = reg.cloudId, botId = bot.botId;
-      const socket = options.socket({ appToken, onEvent: payload => { try { receive(cloudId, botId, payload); } catch { log("an event could not be kept."); } },
+      const socket = options.socket({ appToken, onEvent: payload => { try { receive(cloudId, botId, payload); } catch (error) { log("an event could not be kept."); throw error; } },
         onState: (value, error) => { if (value === "error") { bot.error = error ?? "socket error"; store.changed(); } } });
       sockets.set(botId, socket);
     }

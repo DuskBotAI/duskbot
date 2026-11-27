@@ -8,9 +8,6 @@
         <a class="btn dark" href="{{dl mac-arm64}}" data-dl-go download><span class="dl-os">{{os apple}}</span><span data-dl-label>download for mac</span></a>
         <a class="btn light" href="#all">all downloads</a>
       </div>
-{{#macNotarized}}
-      <p class="dl-trust" data-dl-mac>signed and notarized by apple.</p>
-{{/macNotarized}}
       <p class="dl-note" data-dl-note>apple silicon · version {{version}}</p>
       <div class="code dl-install" data-dl-mac><pre><code>curl -fsSL https://dusk.bot/install-mac | sh</code></pre><button class="copy" type="button" data-copy aria-label="copy the install command">copy</button></div>
       <div class="dl-phone" data-dl-phone hidden>

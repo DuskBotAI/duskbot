@@ -366,10 +366,9 @@ body:has(.p-doc) .bar { max-width: 1440px; padding-left: 32px; padding-right: 32
 .dl-main .btn .os { width: 18px; height: 18px; }
 .dl-note { margin: 16px 0 0; font-size: 15.5px; color: var(--ink-2); font-weight: 500; }
 .dl-main > .code { margin: 18px 0 20px; }
-.dl-trust { margin: 14px 0 0; font-size: 15.5px; color: var(--ink-2); font-weight: 500; }
 .dl-main > .dl-install { max-width: 500px; margin: 18px 0 0; border-radius: 999px; }
 .dl-install pre { padding: 12px 90px 12px 22px; }
-.dl-trust[hidden], .dl-install[hidden] { display: none; }
+.dl-install[hidden] { display: none; }
 .dl-cta[hidden], .dl-note[hidden], .dl-phone[hidden], .dl-phone [hidden] { display: none; }
 .dl-phone .dl-note { margin-bottom: 18px; }
 .dl-mail-row { display: flex; gap: 10px; max-width: 520px; }

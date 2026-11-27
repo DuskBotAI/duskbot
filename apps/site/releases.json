@@ -1,7 +1,7 @@
 {
   "released": true,
   "version": "0.2.33",
-  "date": "2026-11-28",
+  "date": "2026-11-27",
   "base": "https://github.com/DuskBotAI/duskbot-releases/releases/latest/download/",
   "files": {
     "mac-arm64": "DuskBot.dmg",

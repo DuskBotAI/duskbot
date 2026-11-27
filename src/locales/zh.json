@@ -394,7 +394,7 @@
   "cloudBuy.benefit.move": "你的机器人、聊天和记忆大约一分钟就能迁移过去。",
   "cloudBuy.choose": "选择方案",
   "cloudBuy.perMonth": "/月",
-  "cloudBuy.sleeps": "随时可用，一分钟内自动唤醒",
+  "cloudBuy.sleeps": "随时可用，几秒内唤醒",
   "cloudBuy.card.get": "选择 {plan}",
   "cloudBuy.card.current": "你的方案",
   "cloudBuy.card.trial.one": "免费 1 天，之后每月 {price}，另加适用税费。在那之前不会收费。可随时取消。",

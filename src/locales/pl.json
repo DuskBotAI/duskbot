@@ -359,7 +359,7 @@
   "cloudBuy.benefit.move": "Twoje boty, czaty i pamięć przenoszą się w ciągu około minuty.",
   "cloudBuy.choose": "Wybierz plan",
   "cloudBuy.perMonth": "/miesiąc",
-  "cloudBuy.sleeps": "Zawsze dostępna, budzi się sama w mniej niż minutę",
+  "cloudBuy.sleeps": "Zawsze dostępna, budzi się w kilka sekund",
   "cloudBuy.card.get": "Wybierz {plan}",
   "cloudBuy.card.current": "Twój plan",
   "cloudBuy.card.trial.one": "Bezpłatnie przez 1 dzień, potem {price}/miesiąc + podatek, jeśli dotyczy. Do tego czasu nic nie pobieramy. Anulujesz w każdej chwili.",

@@ -359,7 +359,7 @@
   "cloudBuy.benefit.move": "ボット、チャット、メモリーが約1分で移行されます。",
   "cloudBuy.choose": "プランを選択",
   "cloudBuy.perMonth": "/月",
-  "cloudBuy.sleeps": "いつでも使え、1分以内に自動で復帰します",
+  "cloudBuy.sleeps": "いつでも使え、数秒で復帰します",
   "cloudBuy.card.get": "{plan}を始める",
   "cloudBuy.card.current": "ご利用中のプラン",
   "cloudBuy.card.trial.one": "1日間無料、その後は月額{price} + 税（該当する場合）。それまでは請求されません。いつでもキャンセルできます。",

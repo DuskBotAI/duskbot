@@ -358,7 +358,7 @@
   "cloudBuy.benefit.move": "Bot, chat e memoria arrivano in circa un minuto.",
   "cloudBuy.choose": "Scegli il piano",
   "cloudBuy.perMonth": "/mese",
-  "cloudBuy.sleeps": "Sempre disponibile, si sveglia da sola in meno di un minuto",
+  "cloudBuy.sleeps": "Sempre disponibile, si sveglia in pochi secondi",
   "cloudBuy.card.get": "Attiva {plan}",
   "cloudBuy.card.current": "Il tuo piano",
   "cloudBuy.card.trial.one": "Gratis per 1 giorno, poi {price}/mese + tasse se applicabili. Nessun addebito fino ad allora. Annulli quando vuoi.",

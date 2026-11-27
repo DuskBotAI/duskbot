@@ -26,7 +26,7 @@ function firstPick(cards: readonly CloudPlanCard[]): string | null {
 
 const gb = (mb: number) => new Intl.NumberFormat(activeLocale(), { maximumFractionDigits: 1 }).format(Math.round(mb / 102.4) / 10);
 /** A plan's four lines, every number from the Admin's allowances: machine, disk, how it wakes, who may use it.
- * `oldAdmin`: an Admin that says nothing of sleeping or seats, so Plus wakes on its own in under a minute and Team's seats are its catalog's. */
+ * `oldAdmin`: an Admin that says nothing of sleeping or seats, so Plus wakes in seconds and Team's seats are its catalog's. */
 function specs(plan: CloudOfferPlan | undefined, oldAdmin: boolean): Array<{ key: string; text: string; quiet?: true }> {
   const a = plan?.allowances;
   if (!plan || !a) return [];

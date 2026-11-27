@@ -7,6 +7,7 @@ export interface SlackSocketDeps {
   appToken: () => string | null;
   api: SlackApi;
   onEvent: (payload: Record<string, unknown>, meta: { envelopeId: string; type: string; retryAttempt: number }) => void | Promise<void>;
+  ackAfterEvent?: boolean;
   onState: (state: SlackSocketState, error?: string) => void;
   WebSocketImpl?: typeof WebSocket;
   random?: () => number;
@@ -167,15 +168,27 @@ export function createSlackSocket(deps: SlackSocketDeps): { start(): void; stop(
         catch { log("Slack sent an invalid socket message."); return; }
         if (typeof frame.envelope_id === "string") {
           const id = frame.envelope_id;
-          try { ws.send(JSON.stringify({ envelope_id: id }), (error) => { if (error) fail(); }); }
-          catch { fail(); return; }
+          const acknowledge = () => {
+            if (!live()) return;
+            try { ws.send(JSON.stringify({ envelope_id: id }), (error) => { if (error) fail(); }); }
+            catch { fail(); }
+          };
+          const remember = () => {
+            seen.add(id);
+            if (seen.size > 500) seen.delete(seen.values().next().value!);
+          };
+          if (!deps.ackAfterEvent || frame.type !== "events_api" || seen.has(id)) acknowledge();
           if (!live() || seen.has(id)) return;
-          seen.add(id);
-          if (seen.size > 500) seen.delete(seen.values().next().value!);
+          if (!deps.ackAfterEvent || frame.type !== "events_api") remember();
           if (frame.type !== "events_api") return;
           const payload = record.safeParse(frame.payload);
-          if (!payload.success) { log("Slack sent an invalid socket message."); return; }
-          void deliver(payload.data, id, typeof frame.retry_attempt === "number" ? frame.retry_attempt : 0);
+          if (!payload.success) { log("Slack sent an invalid socket message."); if (deps.ackAfterEvent) acknowledge(); return; }
+          const attempt = typeof frame.retry_attempt === "number" ? frame.retry_attempt : 0;
+          if (deps.ackAfterEvent) {
+            void Promise.resolve().then(() => deps.onEvent(payload.data, { envelopeId: id, type: "events_api", retryAttempt: attempt }))
+              .then(() => { if (live()) { remember(); acknowledge(); } })
+              .catch(() => log("Slack event handling failed."));
+          } else void deliver(payload.data, id, attempt);
         } else if (frame.type === "hello") {
           if (status === "online") return;
           stable = setTimer(() => { if (live()) backoff = base; }, 60_000);

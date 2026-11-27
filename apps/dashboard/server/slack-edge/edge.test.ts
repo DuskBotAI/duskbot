@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -99,6 +99,31 @@ it("holds a sleeping desktop's Slack connection, seals a DM to the desktop, wake
   // one wake is not enough to print a number on a pricing card
   const catalog = await (await fetch(`${origin}/v1/billing/catalog`)).json() as Record<string, unknown>;
   expect(catalog.wake).toBeUndefined();
+});
+
+it("does not acknowledge an event when the edge cannot commit it", async () => {
+  const warning = vi.spyOn(console, "warn").mockImplementation(() => {});
+  cleanup.push(() => warning.mockRestore());
+  const { fake, appId, dir, billing, account, cloud, handover, edge } = await fixture();
+  handover.start();
+  await vi.waitFor(() => expect(edge.view(cloud).available).toBe(true));
+  edge.setEnabled(cloud, true);
+  await handover.sync();
+  await billing.clouds.power(account.id, cloud.id, "off");
+  edge.tick();
+  await fake.socket.waitForConnection(appId);
+  mkdirSync(join(dir, "slack-edge.json.tmp"));
+  const message = { type: "message", channel_type: "im", channel: "D0DM", user: "U0PERSON", text: "fixture message", ts: "101.1" };
+  const eventId = fake.socket.event(appId, message, { eventId: "EvFailure" });
+  await vi.waitFor(() => expect(warning).toHaveBeenCalledWith("slack edge: an event could not be kept."));
+  expect(fake.socket.acks.some(ack => ack.envelopeId === eventId)).toBe(false);
+  const stored = JSON.parse(readFileSync(join(dir, "slack-edge.json"), "utf8")) as { events: unknown[] };
+  expect(stored.events).toHaveLength(0);
+  expect(edge.view(cloud).buffered).toBe(0);
+  rmSync(join(dir, "slack-edge.json.tmp"), { recursive: true });
+  fake.socket.event(appId, message, { envelopeId: eventId, eventId: "EvFailure", retryAttempt: 1 });
+  await fake.socket.waitForAck(eventId);
+  expect((JSON.parse(readFileSync(join(dir, "slack-edge.json"), "utf8")) as { events: unknown[] }).events).toHaveLength(1);
 });
 
 it("turning it off drops the tokens and holds nothing; signed routes refuse strangers", async () => {

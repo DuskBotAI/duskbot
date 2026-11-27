@@ -46,10 +46,10 @@ export function SidebarFooter({ owner = null, archived }: { owner?: string | nul
       <SpotView className="mb-1.5" state={spot} cta={cta} />
       <div className="flex items-center gap-1.5" onPointerLeave={() => setAppsEngaged(false)}>
         {apps.connected ? <>
-          <div className="me-auto min-w-0 ps-2"><SidebarProfileMenu simple={account} named nameHidden={appsEngaged} /></div>
+          <div className="me-auto min-w-0"><SidebarProfileMenu simple={account} named nameHidden={appsEngaged} /></div>
           <ConnectAppsButton circle apps={apps} engaged={appsEngaged} onEngage={setAppsEngaged} />
         </> : <>
-          <div className="shrink-0 ps-2"><SidebarProfileMenu simple={account} /></div>
+          <div className="shrink-0"><SidebarProfileMenu simple={account} /></div>
           <ConnectAppsButton circle={false} apps={apps} />
         </>}
       </div>

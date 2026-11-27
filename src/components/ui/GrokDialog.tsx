@@ -53,7 +53,8 @@ export const fieldLabelCls = "text-[11px] leading-4 tracking-[0.01em] text-ink/6
 export const formSheetCls = "relative flex max-h-[calc(100dvh-32px)] w-full flex-col overflow-hidden rounded-[14px] border border-transparent bg-menu text-[13px] font-[425] leading-[18px] text-ink outline-none focus-visible:outline-none!";
 export const formHeaderCls = "flex shrink-0 items-start gap-2 py-3 pl-4 pr-3";
 export const formTitleCls = "m-0 min-w-0 flex-1 truncate text-[14px] font-semibold leading-5 tracking-[0.01em] text-ink";
-export const formCloseCls = "flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-[6px] text-ink/68 transition-[color,background-color] duration-[120ms] ease-[ease] hover:bg-ink/6 hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-focus";
+/** Settings' close on every kit dialog: a 32px round target with an 11% ink hover, pulled in 4px so a 24px row holds it. */
+export const formCloseCls = "-m-1 flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-full text-ink/68 transition-[color,background-color] duration-[120ms] ease-[ease] hover:bg-ink/[0.11] hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-focus";
 export const formBodyCls = "min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-1.5 pt-1 [scrollbar-width:thin]";
 export const formFooterCls = "flex shrink-0 items-center justify-end gap-2 px-4 pb-4 pt-2.5";
 

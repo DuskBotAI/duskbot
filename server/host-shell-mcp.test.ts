@@ -95,6 +95,28 @@ describe("hostShellLaunch", () => {
 
 describe("run_command", () => {
   const cwd = mkdtempSync(join(tmpdir(), "host-shell-"));
+  it.each([
+    { text: "ASCII control", split: true },
+    { text: "你好🙂 café", split: false },
+    { text: "你好🙂 café", split: true },
+  ])("preserves stdout and stderr from a real process: $text, split=$split", async ({ text, split }) => {
+    const script = `
+      const text = ${JSON.stringify(text)}, split = ${split};
+      for (const stream of [process.stdout, process.stderr]) {
+        const bytes = Buffer.from(text, "utf8");
+        if (!split) { await new Promise(done => stream.write(bytes, done)); continue; }
+        for (const byte of bytes) {
+          await new Promise(done => stream.write(Buffer.from([byte]), done));
+          await new Promise(done => setTimeout(done, 25));
+        }
+      }
+    `;
+    const result = await runProcess(process.execPath, ["--input-type=module", "-e", script], {
+      cwd, env: { PATH: process.env.PATH, HOME: cwd }, timeoutMs: 10_000,
+    });
+    expect(result).toEqual({ code: 0, stdout: text, stderr: text, timedOut: false });
+  });
+
   it.skipIf(process.platform === "win32")("runs in the working folder and reports exit code and output", async () => {
     const ok = await runCommand({ command: "pwd; echo out; echo err 1>&2" }, { cwd });
     expect(ok.isError).toBeUndefined();

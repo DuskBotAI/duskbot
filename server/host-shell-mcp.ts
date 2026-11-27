@@ -119,10 +119,12 @@ export const runProcess: Runner = (file, args, { cwd, env, timeoutMs }) => new P
   const posix = process.platform !== "win32";
   const child = spawn(file, args, { cwd, env, stdio: ["ignore", "pipe", "pipe"], detached: posix, windowsHide: true });
   let stdout = "", stderr = "", timedOut = false;
-  const take = (into: "out" | "err") => (chunk: Buffer) => {
-    if (into === "out") { if (stdout.length <= OUTPUT_LIMIT) stdout += chunk.toString("utf8"); }
-    else if (stderr.length <= OUTPUT_LIMIT) stderr += chunk.toString("utf8");
+  const take = (into: "out" | "err") => (chunk: string) => {
+    if (into === "out") { if (stdout.length <= OUTPUT_LIMIT) stdout += chunk; }
+    else if (stderr.length <= OUTPUT_LIMIT) stderr += chunk;
   };
+  child.stdout.setEncoding("utf8");
+  child.stderr.setEncoding("utf8");
   child.stdout.on("data", take("out"));
   child.stderr.on("data", take("err"));
   const stop = () => {

@@ -140,7 +140,7 @@ it("New chat from /new in the app says so too; the bot's fresh session setting s
     await patch({ freshSession: { idleHours: 1 } });
     await f.send(thread, "And the weather?");
     expect(String(f.turns().at(-1).prompt.message.content)).not.toContain("A fresh session starts here");
-    expect((await f.messages(thread)).filter((m) => m.kind === "compaction")).toHaveLength(1);
+    expect((await f.messages(thread)).filter((m) => m.kind === "compaction" && m.compaction?.fresh)).toHaveLength(1);
 
     await patch({ freshSession: null, compactAt: null });
     const cleared = (await f.api("/api/bots?messages=0")).bots.find((b: any) => b.id === f.bot.id);

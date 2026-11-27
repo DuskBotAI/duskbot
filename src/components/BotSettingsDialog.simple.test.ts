@@ -901,10 +901,11 @@ describe("the Where it works page", () => {
     .map((node) => [node.props["data-panel-choice"], node.props.title, Boolean(node.props.disabled), node.props.checked]);
   const choose = (rendered: Rendered, value: string) => click(find(rendered, "data-panel-choice", value));
 
-  it("offers Let it choose, this computer, the bot's browser and the Cloud desktop, with the chosen one checked", () => {
+  it("offers Let it choose, this computer, the bot's browser, the Cloud desktop and Private desktop, with the chosen one checked", () => {
     // The tests run on no platform in particular, so it reads This computer; a Mac says This Mac and Windows This PC.
     expect(choices(where(makeBot()))).toEqual([
-      ["auto", "Let it choose", false, true], ["local", "This computer", false, false], ["browser", "Browser", false, false], ["cloud", "Cloud desktop", false, false],
+      ["auto", "Let it choose", false, true], ["local", "This computer", false, false], ["browser", "Browser", false, false],
+      ["cloud", "Cloud desktop", false, false], ["vm", "Private desktop", false, false],
     ]);
     expect(where(makeBot()).html).toContain('role="radiogroup"');
   });
@@ -917,6 +918,8 @@ describe("the Where it works page", () => {
     expect(patch).toHaveBeenLastCalledWith({ computer: "local" });
     choose(rendered, "browser");
     expect(patch).toHaveBeenLastCalledWith({ computer: "browser", browser: true });
+    choose(rendered, "vm");
+    expect(patch).toHaveBeenLastCalledWith({ computer: "vm" });
     choose(where(makeBot({ computer: "cloud" })), "auto");
     expect(patch).toHaveBeenLastCalledWith({ computer: null });
     patch.mockReset();
@@ -924,12 +927,25 @@ describe("the Where it works page", () => {
     expect(patch).not.toHaveBeenCalled();
   });
 
-  it.each([["vm", "Private desktop"], ["off", "Off"]] as const)("shows a bot kept on %s as a last, checked choice it cannot pick again", (place, label) => {
-    const rendered = where(makeBot({ computer: place }));
-    expect(choices(rendered).at(-1)).toEqual([place, label, true, true]);
-    choose(rendered, place);
+  it("shows a bot kept on Off as a last, checked choice it cannot pick again", () => {
+    const rendered = where(makeBot({ computer: "off" }));
+    expect(choices(rendered).at(-1)).toEqual(["off", "Off", true, true]);
+    choose(rendered, "off");
     expect(patch).not.toHaveBeenCalled();
     choose(rendered, "auto");
+    expect(patch).toHaveBeenLastCalledWith({ computer: null });
+  });
+
+  it("lets a person pick Private desktop, and keeps it checked when already chosen", () => {
+    const rendered = where(makeBot());
+    choose(rendered, "vm");
+    expect(patch).toHaveBeenLastCalledWith({ computer: "vm" });
+    patch.mockReset();
+    const kept = where(makeBot({ computer: "vm" }));
+    expect(find(kept, "data-panel-choice", "vm").props).toMatchObject({ checked: true, disabled: false });
+    choose(kept, "vm");
+    expect(patch).not.toHaveBeenCalled();
+    choose(kept, "auto");
     expect(patch).toHaveBeenLastCalledWith({ computer: null });
   });
 
@@ -937,11 +953,13 @@ describe("the Where it works page", () => {
     fixture.places.cloud = [true, false, "not ready"];
     expect(find(where(makeBot()), "data-panel-choice", "cloud").props).toMatchObject({ disabled: true, hint: "not ready." });
     fixture.places.cloud = [false, false, "Not offered"];
-    expect(choices(where(makeBot())).map(([value]) => value)).toEqual(["auto", "local", "browser"]);
+    expect(choices(where(makeBot())).map(([value]) => value)).toEqual(["auto", "local", "browser", "vm"]);
     fixture.places.local = [false, false, "Not offered"];
     fixture.places.browser = [false, false, "Not offered"];
+    fixture.places.vm = [false, false, "Not offered"];
     expect(choices(where(makeBot())).map(([value]) => value)).toEqual(["auto"]);
     expect(choices(where(makeBot({ computer: "browser" }))).map(([value, , disabled]) => [value, disabled])).toEqual([["auto", false], ["browser", true]]);
+    expect(choices(where(makeBot({ computer: "vm" }))).map(([value, , disabled]) => [value, disabled])).toEqual([["auto", false], ["vm", true]]);
   });
 
   it("names the browser My Chrome when the bot's profile is the person's own Chrome", () => {

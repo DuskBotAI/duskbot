@@ -43,8 +43,7 @@ interface PlaceOption {
 
 const PANEL_PLACE_LABEL = { cloud: "botPanel.place.cloud", vm: "botPanel.place.vm", browser: "botPanel.place.browser" } as const;
 
-const EXTRA_PLACE_LABEL: Record<Exclude<PlaceChoice, "auto" | "local" | "cloud" | "browser">, () => string> = {
-  vm: () => t("botPanel.place.vm"),
+const EXTRA_PLACE_LABEL: Record<"off", () => string> = {
   off: () => t("botPanel.place.off"),
 };
 
@@ -75,7 +74,8 @@ export function usePlaceChoices(bot: Bot) {
     ...(placeViews.local.policy ? [choice("local")] : []),
     ...(placeViews.browser.policy || current === "browser" ? [choice("browser")] : []),
     ...(placeViews.cloud.policy ? [choice("cloud")] : []),
-    ...(current === "vm" || current === "off" ? [{ value: current, label: EXTRA_PLACE_LABEL[current](), disabled: true }] : []),
+    ...(placeViews.vm.policy || current === "vm" ? [choice("vm")] : []),
+    ...(current === "off" ? [{ value: "off" as const, label: EXTRA_PLACE_LABEL.off(), disabled: true }] : []),
   ];
   const liveSurface = bot.tasks?.find((task) => task.threadId === bot.threadId)?.surface;
   const usingNow = liveSurface && liveSurface !== current ? placeLabel(liveSurface) : null;
@@ -95,7 +95,7 @@ export function usePlacePicker(bot: Bot, derived: Derived) {
   const cloudDesktop = useCloudDesktop();
   const { patch, approvalMode } = derived;
   const choosePlace = (value: PlaceChoice) => {
-    if (value === current || value === "vm" || value === "off") return;
+    if (value === current || value === "off") return;
     if (value === "local" && approvalMode === "auto") {
       setLocalAutoWarning({ botId: bot.id, patch: { computer: "local", acknowledgeLocalAuto: true } });
       return;

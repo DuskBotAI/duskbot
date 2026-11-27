@@ -66,7 +66,7 @@ export function ReadyBotGallery({ search, onDialog, onAdded }: {
   const visible = READY_BOTS.filter((bot) => (!category || bot.category === category) && matchesReadyBot(bot, search));
   if (search.trim() && visible.length === 0) return null;
   return <section className="mb-8" aria-labelledby="ready-bots-title">
-    <div className="flex flex-wrap items-baseline justify-between gap-2 pb-1.5 pl-3 pr-1 pt-2">
+    <div className="flex flex-wrap items-baseline justify-between gap-2 pb-1.5 pl-2.5 pr-1">
       <h3 id="ready-bots-title" className="m-0 text-[12px] font-normal leading-4 text-ink/56">{t("readyBots.title")}</h3>
     </div>
     <div className="mb-2 mt-1 flex flex-wrap gap-2" role="group" aria-label={t("readyBots.categories")}>

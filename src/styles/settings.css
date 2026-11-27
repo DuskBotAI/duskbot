@@ -663,6 +663,7 @@
     min-height: 56px;
     padding: env(safe-area-inset-top) 16px 0 8px;
   }
+  .templates-sheet .settings-pane-header { min-height: 0; padding: calc(env(safe-area-inset-top) + 14px) 52px 0 34px; }
   .settings-pane-header [data-settings-back] { width: 44px; height: 44px; margin: 0; border-radius: 9999px; color: var(--color-ink); }
   .settings-pane { padding: 8px 16px calc(32px + env(safe-area-inset-bottom)); }
   :root .settings-dialog .settings-pane,

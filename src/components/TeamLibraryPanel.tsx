@@ -500,7 +500,7 @@ export function TeamLibraryPanel({
           </>
         ) : (
           <>
-            <div className="flex flex-col gap-3 px-6 pb-4 pt-5 sm:flex-row sm:items-center sm:justify-between sm:px-8">
+            <div className="flex flex-col gap-3 px-6 pb-3 pt-2 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex w-fit gap-0.5" role="tablist" aria-label={t("templates.source") }>
                 {orgListing?.organization && (
                   <button
@@ -579,7 +579,7 @@ export function TeamLibraryPanel({
               )}
             </div>
 
-            <div className="min-h-0 flex-1 overflow-y-auto px-6 pb-7 pt-5 sm:px-8">
+            <div className="min-h-0 flex-1 overflow-y-auto px-6 pb-7 pt-3">
               {tab === "org" && orgListing?.organization && (
                 <OrgLibraryTab
                   listing={orgListing as OrgLibraryListing & { organization: { id: string; name: string } }}

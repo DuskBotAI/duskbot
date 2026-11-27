@@ -19,6 +19,10 @@ vi.mock("@/state/store", async (importOriginal) => ({
 }));
 
 const { ShareBotButton } = await import("./ShareBotButton");
+const { ShareBotDialog } = await import("./ShareBotDialog");
+const { hasSharedPeople } = await import("./access");
+const { setTeamPeople } = await import("@/state/team-people");
+const { ChatShareMenu } = await import("../ChatMoreMenu");
 const { DefaultBotSettings } = await import("../NewBotDialog");
 const { settingsCommands } = await import("../palette-commands");
 
@@ -69,5 +73,37 @@ describe("with bot sharing off", () => {
     const commands = settingsCommands();
     expect(commands.filter((command) => /share|sharing/i.test(command.name))).toEqual([]);
     expect(commands.some((command) => command.id === "setting-people")).toBe(true);
+  });
+});
+
+describe("taking people off a bot that is already shared", () => {
+  const ADA = { email: "ada@acme.test", name: "Ada", role: "admin" };
+  const BOB = { email: "bob@acme.test", name: "Bob", role: "member" };
+  const shared: Bot = { ...payroll, createdBy: ADA.email, access: { everyone: "none", people: { [BOB.email]: "chat" } } };
+  const dialog = (bot: Bot) => draw(createElement(ShareBotDialog, { bot, teamName: "Acme", onClose: () => {}, onChanged: () => {} }));
+  beforeEach(() => setTeamPeople({ people: [{ ...ADA, you: true }, BOB], me: { ...ADA, you: true }, admin: true, needsYou: [] }));
+
+  it("keeps the dialog to removing, with no field to add anyone and no way to open the bot to everyone", () => {
+    dialog(shared);
+    expect(document.querySelector("[data-share-person='bob@acme.test']")).not.toBeNull();
+    expect(document.querySelector('input[role="combobox"]')).toBeNull();
+    expect(document.querySelector("[data-share-general]")).toBeNull();
+  });
+
+  it("offers only narrowing on a bot everyone in the team uses", () => {
+    dialog({ ...shared, access: { everyone: "chat", people: {} } });
+    expect(document.querySelector('input[role="combobox"]')).toBeNull();
+    expect(document.querySelector("[data-share-general='chat']")).not.toBeNull();
+  });
+
+  it("keeps the Bot access pane on only while someone is still added to a bot", () => {
+    expect(hasSharedPeople([payroll])).toBe(false);
+    expect(hasSharedPeople([shared])).toBe(true);
+    expect(hasSharedPeople([{ ...shared, hidden: true }])).toBe(false);
+  });
+
+  it("draws no Share button in the panel for a team bot", () => {
+    draw(createElement(ChatShareMenu, { bot: shared, className: "" }));
+    expect(host.innerHTML).toBe("");
   });
 });

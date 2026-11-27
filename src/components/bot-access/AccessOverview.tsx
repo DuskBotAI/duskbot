@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { ChevronLeft, Search } from "../../icons";
 
 import { sharedLevel, type BotAccess } from "../../../shared/bot-access";
+import { BOT_SHARING_ENABLED } from "../../../shared/bot-sharing";
 import { botOwner } from "../../../shared/bot-owner";
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
@@ -108,7 +109,7 @@ export function AccessOverview() {
       {error && <RowsCard><NoteRow tone="danger">{error}</NoteRow></RowsCard>}
       {sharing && <ShareBotDialog bot={sharing} teamName={teamName} onClose={() => setSharingId(null)}
         onChanged={(next) => setChange({ botId: sharing.id, ...next })} />}
-      {change && <UndoToast key={`${change.botId}:${change.text}:${JSON.stringify(change.after)}`} text={change.text}
+      {change && BOT_SHARING_ENABLED && <UndoToast key={`${change.botId}:${change.text}:${JSON.stringify(change.after)}`} text={change.text}
         onUndo={() => saveAccess(change.botId, change.before)} onDone={settled} />}
     </div>
   );

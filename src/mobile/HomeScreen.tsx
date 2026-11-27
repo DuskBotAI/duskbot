@@ -33,7 +33,6 @@ import { EmptyState } from "./Illustration";
 import { useOffline } from "./network";
 import type { OpenSheet } from "./sheets";
 import { homeFolders, useCollapsedFolders } from "./home-folders";
-import { BOT_SHARING_ENABLED } from "../../shared/bot-sharing";
 
 /** The row stays pressed while its chat builds offscreen, so the hand sees the tap land; cleared when the chat arrives. */
 function holdPressed(el: HTMLElement) {
@@ -173,7 +172,7 @@ export function HomeScreen({ onOpenChat, onOpenSheet }: { onOpenChat: (id: strin
         : { key: "unread", label: t("sidebar.grok.markUnread"), icon: <BellDot size={18} />, onSelect: () => dispatch({ type: "markUnread", botId: bot.id }) });
     }
     list.push({ key: "profile", label: t("mobile.home.openProfile"), icon: <UserRound size={18} />, onSelect: () => onOpenSheet({ kind: "profile", id: entry.id }) });
-    if (BOT_SHARING_ENABLED && platform.share) {
+    if (platform.share) {
       list.push({ key: "desktop", label: t("mobile.home.openOnDesktop"), icon: <MonitorSmartphone size={18} />, onSelect: () => { void platform.share?.({ title: entry.kind === "bot" ? entry.bot.name : entry.group.name, url: desktopLink }); } });
     }
     return list;

@@ -148,7 +148,8 @@ export const EXPORT_ITEMS = ["copy", "download"];
  * the ⋯ of its header; anywhere else a menu of those two. */
 export function ChatShareMenu({ bot, className }: { bot: Bot; className: string }): JSX.Element {
   const team = useTeamName();
-  return team && BOT_SHARING_ENABLED ? <ShareBotButton bot={bot} className={className} headerMenu={<ExportMore key={bot.threadId} bot={bot} />} />
+  if (team && !BOT_SHARING_ENABLED) return <></>;
+  return team ? <ShareBotButton bot={bot} className={className} headerMenu={<ExportMore key={bot.threadId} bot={bot} />} />
     : <ShareMenu key={bot.threadId} bot={bot} className={className} />;
 }
 

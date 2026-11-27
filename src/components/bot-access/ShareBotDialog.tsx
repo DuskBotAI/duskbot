@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { Lock, Users, X } from "../../icons";
 
 import type { BotAccess, BotAccessLevel, GrantedLevel } from "../../../shared/bot-access";
+import { BOT_SHARING_ENABLED } from "../../../shared/bot-sharing";
 import { botOwner } from "../../../shared/bot-owner";
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
@@ -40,6 +41,9 @@ export function ShareBotDialog({ bot, teamName, onClose, onChanged, headerMenu, 
   const access = accessOfBot(bot);
   const owner = team ? ownerOf(bot, team) : null;
   const editable = canShare(bot);
+  // with sharing off a person can be taken off or the bot narrowed, never added or opened up
+  const adding = editable && BOT_SHARING_ENABLED;
+  const showGeneral = editable && (BOT_SHARING_ENABLED || access.everyone !== "none");
   const handsOver = mayChangeOwner(bot, team);
   const phone = phoneApp();
 
@@ -126,7 +130,7 @@ export function ShareBotDialog({ bot, teamName, onClose, onChanged, headerMenu, 
           </div>
         ) : (
           <>
-            {editable && team && (
+            {adding && team && (
               <div className="relative z-10 rounded-[26px] bg-(--m-ios-card,var(--color-menu)) px-3 py-1.5">
                 <AddPerson team={team} access={access} owner={botOwner(bot)} disabled={busy}
                   onAdd={(person, level) => void apply(withPerson(access, person.email, level), t("botAccess.toast.addedPlain", { name: person.name }))} />
@@ -139,7 +143,7 @@ export function ShareBotDialog({ bot, teamName, onClose, onChanged, headerMenu, 
               </div>
               <p className="px-4 text-[13px] leading-[18px] text-ink-secondary">{t("botAccess.admins")}</p>
             </section>
-            {editable && (
+            {showGeneral && (
               <section className="flex flex-col gap-2">
                 <h3 className="px-4 text-[13px] font-semibold text-ink-secondary">{t("botAccess.general")}</h3>
                 <div className="rounded-[26px] bg-(--m-ios-card,var(--color-menu)) px-4 py-3">
@@ -158,7 +162,7 @@ export function ShareBotDialog({ bot, teamName, onClose, onChanged, headerMenu, 
   }
 
   const portalRoot = phone ? (document.querySelector?.(".dusk-mobile") ?? document.body) : document.body;
-  const general = editable && (
+  const general = showGeneral && (
     <SettingsGroup label={t("botAccess.general")}>
       <div className={cn(SIMPLE_CARD, "px-2 py-1.5")}>
         <GeneralAccess access={access} teamName={teamName} disabled={busy}
@@ -201,7 +205,7 @@ export function ShareBotDialog({ bot, teamName, onClose, onChanged, headerMenu, 
               <h2 id="share-bot-title" className="settings-pane-title min-w-0 truncate">{t("botAccess.title", { bot: bot.name })}</h2>
               {headerMenu}
             </header>
-            {editable && team && (
+            {adding && team && (
               <div className="relative z-10 shrink-0 px-6 pb-1 pt-2">
                 <AddPerson team={team} access={access} owner={botOwner(bot)} disabled={busy}
                   onAdd={(person, level) => void apply(withPerson(access, person.email, level), t("botAccess.toast.addedPlain", { name: person.name }))} />
@@ -296,7 +300,7 @@ function GeneralAccess({ access, teamName, disabled, onChange }: {
           <QuietMenu label={t("botAccess.general")} shown={everyone ? all : only} align="start" className="font-medium text-ink"
             items={[
               choiceItem("none", only, !everyone, () => { if (everyone) onChange("none"); }, { disabled }),
-              choiceItem("everyone", all, everyone, () => { if (!everyone) onChange("chat"); }, { disabled }),
+              choiceItem("everyone", all, everyone, () => { if (!everyone) onChange("chat"); }, { disabled: disabled || (!everyone && !BOT_SHARING_ENABLED) }),
             ]} />
         </div>
         <p className="text-[13px] leading-[18px] tracking-[0.015em] text-ink-secondary">{hint}</p>

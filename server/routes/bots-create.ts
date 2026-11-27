@@ -1,4 +1,7 @@
+import { accessFromVisibility } from "../../shared/bot-access.ts";
+import { BOT_SHARING_OFF_ERROR, widensAccess } from "../../shared/bot-sharing.ts";
 import type { WireBot } from "../../shared/wire.ts";
+import { botSharingOn } from "../bot-sharing.ts";
 import type { BotLimit } from "../host/starter-bot-limit.ts";
 import { freshLook } from "../bot-look.ts";
 import { takeImportName } from "../../shared/import-name.ts";
@@ -172,6 +175,10 @@ export function createBotCreateRoutes(deps: BotCreateRouteDeps): RouteHandler {
       // Apply the audience before creation can announce the bot to members.
       const created = body.visibility === undefined ? null : parseVisibility(body.visibility);
       if (created && !created.ok) return json(res, 400, { error: created.error });
+      // a bot moving in from another computer keeps the audience it had; only a new bot asked to be shared is refused
+      if (created?.ok && !kept.id && !botSharingOn() && widensAccess({ everyone: "none", people: {} }, accessFromVisibility(created.visibility))) {
+        return json(res, 403, { error: BOT_SHARING_OFF_ERROR, code: "bot_sharing_off" });
+      }
       // Checked again beside the synchronous write: an await above let another request take the same id.
       if (kept.id && "error" in keptBotIds(kept, store)) return json(res, 409, { error: "a bot with this id already exists here" });
       // A bot moved in from another computer keeps its own look; a new one named no look starts in a fresh one.

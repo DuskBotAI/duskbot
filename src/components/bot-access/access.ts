@@ -1,3 +1,4 @@
+import { botOwner } from "../../../shared/bot-owner";
 import { accessFromVisibility, type BotAccess, type BotAccessLevel, type GrantedLevel } from "../../../shared/bot-access";
 import { api, type Bot } from "@/state/store";
 import type { TeamPeople, TeamPerson } from "@/state/team-people";
@@ -41,3 +42,7 @@ export async function saveAccess(botId: string, access: BotAccess): Promise<Bot>
   const answer = await api<{ bot: Bot }>(`/api/bots/${botId}/access`, { method: "PUT", body: JSON.stringify(access) });
   return answer.bot;
 }
+
+/** Whether any of these bots is shared with someone beyond its owner: what keeps the removal-only Bot access pane on. */
+export const hasSharedPeople = (bots: ReadonlyArray<Pick<Bot, "access" | "visibility" | "hidden" | "defaultBot" | "reportsTo" | "createdBy">>): boolean =>
+  bots.some((bot) => !bot.hidden && !bot.defaultBot?.person && Object.keys(accessOfBot(bot).people).some((entry) => entry !== botOwner(bot)));

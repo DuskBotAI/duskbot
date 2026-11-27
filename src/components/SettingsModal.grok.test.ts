@@ -14,13 +14,14 @@ const fixture = vi.hoisted(() => ({
   ownerOrAdmin: null as boolean | null,
   sounds: true,
   advancedMode: false,
+  bots: [] as unknown[],
 }));
 
 vi.mock("./DesktopCapabilities", () => ({ useDesktopCapabilities: () => ({ capabilities: {} }) }));
 vi.mock("@/state/store", async (importOriginal) => ({
   ...await importOriginal<typeof import("@/state/store")>(),
   api: vi.fn(async () => ({})),
-  useStore: () => ({ state: { appSettingsSection: fixture.section, instances: [], bots: [], config: fixture.config }, dispatch: fixture.dispatch }),
+  useStore: () => ({ state: { appSettingsSection: fixture.section, instances: [], bots: fixture.bots, config: fixture.config }, dispatch: fixture.dispatch }),
 }));
 vi.mock("@/lib/analytics", () => ({ analyticsEnabled: () => false, setAnalyticsEnabled: vi.fn() }));
 vi.mock("@/lib/use-owner-or-admin", () => ({ useOwnerOrAdmin: () => fixture.ownerOrAdmin }));
@@ -57,6 +58,7 @@ vi.mock("./RoomTurnTimeoutSettings", () => ({ RoomTurnTimeoutSettings: () => nul
 
 beforeEach(() => {
   sharing.on = false;
+  fixture.bots = [];
   vi.clearAllMocks();
   fixture.section = "general";
   fixture.config = { features: { browser: false }, browserEngine: { kind: "bundled", installable: true }, composio: { mode: "self" } };
@@ -221,6 +223,10 @@ describe("Settings, drawn as Grok Bot's", () => {
     fixture.config = { ...fixture.config, team: { name: "Acme" } };
     fixture.ownerOrAdmin = true;
     expect(markers(open("botAccess"))).not.toContain("botAccess");
+    // with sharing off the pane stays only while a bot is still shared with someone, so they can be taken off
+    fixture.bots = [{ id: "payroll", name: "Payroll", access: { everyone: "none", people: { "bob@acme.test": "chat" } } }];
+    expect(markers(open("botAccess"))).toContain("botAccess");
+    fixture.bots = [];
     sharing.on = true;
     expect(open("permissions")).toContain('data-panel-page="botAccess"');
     expect(markers(open("botAccess"))).toContain("botAccess");

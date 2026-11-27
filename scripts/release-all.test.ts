@@ -52,6 +52,11 @@ describe("the release tool's decisions", () => {
     const pending = [cloud("c1", "0.2.26", { trial: "pending" }), cloud("c2", "0.2.25")];
     expect(judge(fleetOf({ canary: pending }), { ...base, now: 31 * MIN }).verdict).toBe("wait");
     expect(judge(fleetOf({ canary: pending }), { ...base, now: 121 * MIN }).verdict).toBe("timeout");
+    // a canary still on the version before's trial installs nothing new until it settles: the wait says why
+    const onTrial = [cloud("c1", "0.2.25", { trial: "passed" })];
+    expect(judge(fleetOf({ canary: onTrial }), { ...base, canary: ["c1"], now: 31 * MIN })).toEqual({ verdict: "wait",
+      why: "no canary cloud is through its self-test yet; c1 is still on its 0.2.25 update trial, and takes 0.2.26 only once that settles (2 runs or 24 h after its install)" });
+    expect(judge(fleetOf({ canary: onTrial }), { ...base, canary: ["c1"], now: 121 * MIN }).why).toMatch(/^no canary cloud took 0\.2\.26; c1 is still on its 0\.2\.25 update trial/);
   });
 
   it("reads errors from one or two installs against a version before that sent none as those installs, not a spread", () => {

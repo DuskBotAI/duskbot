@@ -83,7 +83,10 @@ export function judge(fleet: Pick<FleetAnswer, "desktops" | "clouds">, o: { vers
   const through = fleet.clouds.canary.filter(c => c.version === o.version && c.trial !== "pending").length;
   const waited = o.now - o.startedAt;
   if (waited < o.watchMs) return { verdict: "wait", why: `watching (${Math.round(waited / 60_000)} of ${Math.round(o.watchMs / 60_000)} minutes)` };
-  if (o.canary.length && through === 0) return waited < o.maxWaitMs ? { verdict: "wait", why: "no canary cloud is through its self-test yet" } : { verdict: "timeout", why: `no canary cloud took ${o.version}` };
+  // a home installs nothing new while the version before is on trial (home-update.ts): say so, the wait is then up to a day
+  const held = fleet.clouds.canary.filter(c => c.version !== o.version && c.trial !== null);
+  const heldWhy = held.length ? `; ${held.map(c => `${c.id} is still on its ${c.version} update trial`).join(", ")}, and takes ${o.version} only once that settles (2 runs or 24 h after its install)` : "";
+  if (o.canary.length && through === 0) return waited < o.maxWaitMs ? { verdict: "wait", why: `no canary cloud is through its self-test yet${heldWhy}` } : { verdict: "timeout", why: `no canary cloud took ${o.version}${heldWhy}` };
   return { verdict: "healthy", why: `${through} canary cloud(s) on ${o.version}, desktops ${mine ? `${mine.installs} installs, ${mine.errors} errors` : "not seen yet"}` };
 }
 

@@ -1,7 +1,7 @@
 import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { WEBHOOK_KEY_FILE, WebhookManager, type WebhookManagerOptions } from "./webhooks.ts";
 
@@ -85,6 +85,7 @@ function create(manager: WebhookManager) {
 }
 
 afterEach(() => {
+  vi.restoreAllMocks();
   for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true });
 });
 
@@ -238,6 +239,29 @@ describe("WebhookManager", () => {
     expect(h.manager.list()[0]).toMatchObject({ delivery: "post", deliveryCount: 1, resultsThreadId: "post-thread-1" });
     expect(h.manager.receive(webhook.endpointId, secret, { payload: { text: "again" }, deliveryId: "evt-post-1" })).toMatchObject({ duplicate: true });
     expect(h.posted).toHaveLength(1);
+  });
+
+  it("does not repost a chat delivery after its message committed but the webhook receipt failed to save", () => {
+    const h = harness();
+    const posts: string[] = [];
+    const committed = new Set<string>();
+    const options = {
+      ...h.options,
+      post: (_botId: string, _threadId: string, text: string) => {
+        posts.push(text);
+        committed.add("fixture-delivery");
+      },
+      findPost: (_endpointId: string, deliveryId: string) => committed.has(deliveryId),
+    };
+    const manager = new WebhookManager(options);
+    const { webhook, secret } = manager.create({ name: "Brief", prompt: "", botId: "maus-1", delivery: "post" });
+    vi.spyOn(manager as unknown as { save(): void }, "save").mockImplementation(() => { throw new Error("receipt write failed"); });
+    const event = { payload: { text: "once" }, deliveryId: "fixture-delivery" };
+    expect(() => manager.receive(webhook.endpointId, secret, event)).toThrow("receipt write failed");
+
+    const restarted = new WebhookManager(options);
+    expect(restarted.receive(webhook.endpointId, secret, event)).toMatchObject({ duplicate: true });
+    expect(posts).toEqual(["once"]);
   });
 
   it("rejects a post delivery instead of running a task when the server has no post sink", () => {

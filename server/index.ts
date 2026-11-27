@@ -10566,13 +10566,13 @@ const webhooks = new WebhookManager({
   emit: (event) => { broadcast(event); if (event.kind === "webhook.deleted") webhookGone(event.webhookId); }, routinePrompt: (id) => { const routine = routines?.listRoutines().find((one) => one.id === id); return routine ? { name: routine.name, prompt: routine.prompt } : null; },
   botState: unattendedDispatchState,
   enqueue: (input) => routines!.enqueueWebhook(input),
-  findRun: (webhookId, deliveryId) => routines!.webhookRunReceipt(webhookId, deliveryId),
+  findRun: (webhookId, deliveryId) => routines!.webhookRunReceipt(webhookId, deliveryId), findPost: (endpointId, deliveryId) => commandReceipt("webhook.post", `${endpointId}:${deliveryId}`) !== null,
   cancelQueued: (webhookId, message) => routines!.cancelQueuedWebhook(webhookId, message),
   pendingRuns: (webhookId) => routines!.activeWebhookRunCount(webhookId),
   // delivery:"post" lands in a dedicated "Updates" task, never bot.threadId, the bot's live selection.
-  post: (botId, threadId, text) => {
+  post: (botId, threadId, text, endpointId, deliveryId) => {
     if (!store.bot(botId)) return;
-    store.appendMessage(threadId, { role: "bot", kind: "text", text, webhookPost: true });
+    store.appendMessage(threadId, { role: "bot", kind: "text", text, webhookPost: true }, { kind: "webhook.post", key: `${endpointId}:${deliveryId}` });
     store.patchTask(botId, threadId, { unread: true });
   },
   resolvePostThread: (trigger, forceNew) => {

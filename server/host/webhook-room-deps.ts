@@ -44,7 +44,7 @@ export function createWebhookRoomPost(deps: WebhookRoomDeps): Pick<WebhookManage
   };
   return {
     roomMember: verdict,
-    roomPost: (trigger, payload) => postWebhookToRoom({
+    roomPost: (trigger, payload, deliveryId) => postWebhookToRoom({
       limits: { maxTextChars: 20_000, maxVoiceChars: 1_000, maxImages: 4, maxImageBytes: IMAGE_MAX_BYTES },
       room: (groupId) => {
         const group = store.group(groupId);
@@ -65,7 +65,7 @@ export function createWebhookRoomPost(deps: WebhookRoomDeps): Pick<WebhookManage
       saveAudio,
       saveImage,
       removeStaged: deleteAttachment,
-      appendRoomPost: (_trigger, botId, room, content) => {
+      appendRoomPost: (trigger, botId, room, content, postDeliveryId) => {
         const bot = botRoom(botId);
         const group = store.group(room.id);
         if (!bot) fail(404, "The assigned MAUS no longer exists");
@@ -82,9 +82,9 @@ export function createWebhookRoomPost(deps: WebhookRoomDeps): Pick<WebhookManage
             ? { attachments: content.attachments.map((attachment) =>
                 attachment.kind === "audio" && attachment.text ? { ...attachment, text: redactSecretsInText(attachment.text) } : attachment) }
             : {}),
-        });
+        }, postDeliveryId ? { kind: "webhook.post", key: `${trigger.endpointId}:${postDeliveryId}` } : undefined);
         store.patchGroup(group.id, { unread: true });
       },
-    }, trigger, payload),
+    }, trigger, payload, deliveryId),
   };
 }

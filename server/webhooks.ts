@@ -73,14 +73,15 @@ export interface WebhookManagerOptions {
   cancelQueued?: (webhookId: string, message: string) => void;
   pendingRuns?: (webhookId: string) => number;
   /** delivery:"post" sink: lands in the trigger's own stable thread, never a caller-supplied one. */
-  post?: (botId: string, threadId: string, text: string) => void;
+  post?: (botId: string, threadId: string, text: string, endpointId: string, deliveryId: string) => void;
   /** Absent, every post delivery fails with 503 rather than falling back to an ambient thread
    *  (https://github.com/goatedgrokbotalternative/duskbot/issues/2071). */
   resolvePostThread?: (trigger: WebhookTrigger, forceNew: boolean) => string | undefined;
   /** delivery:"post" with a groupId: the room sink. Absent, a room delivery fails with 503
    *  rather than downgrading to a thread post. */
-  roomPost?: (trigger: WebhookTrigger, payload: JsonValue) => Promise<{ posted: true; attachments: number; threadId: string }>;
+  roomPost?: (trigger: WebhookTrigger, payload: JsonValue, deliveryId: string) => Promise<{ posted: true; attachments: number; threadId: string }>;
   findRun?: (webhookId: string, deliveryId: string) => { id: string } | null;
+  findPost?: (endpointId: string, deliveryId: string) => boolean;
   /** A routine's instructions now, for a webhook that runs it; null once that routine is gone. */
   routinePrompt?: (routineId: string) => { name: string; prompt: string } | null;
   /** membership + section rules for a (bot, room) pair; runs on create, on patch, and again per delivery. */
@@ -676,7 +677,8 @@ export class WebhookManager {
     if (requestedDeliveryId) {
       const key = `${trigger.endpointId}:${requestedDeliveryId}`;
       const committed = this.options.findRun?.(trigger.id, requestedDeliveryId);
-      const duplicate = committed ? { runId: committed.id } : this.deliveries.find((delivery) => delivery.key === key);
+      const posted = trigger.delivery === "post" && this.options.findPost?.(trigger.endpointId, requestedDeliveryId);
+      const duplicate = committed ? { runId: committed.id } : posted ? { runId: "post" } : this.deliveries.find((delivery) => delivery.key === key);
       if (duplicate) {
         this.appendAttempt(trigger, event, {
           outcome: "duplicate",
@@ -722,7 +724,7 @@ export class WebhookManager {
     const { deliveryId } = admitted;
     if (!this.options.roomPost) fail(503, "This server cannot post webhook messages to rooms");
     const key = `${trigger.endpointId}:${deliveryId}`;
-    const posting = this.options.roomPost(publicTrigger(trigger), event.payload);
+    const posting = this.options.roomPost(publicTrigger(trigger), event.payload, deliveryId);
     this.roomInFlight.set(key, posting);
     let outcome: Awaited<typeof posting>;
     try {
@@ -790,7 +792,7 @@ export class WebhookManager {
       const raw = event.payload as { text?: unknown } | null;
       const text =
         raw && typeof raw === "object" && typeof raw.text === "string" && raw.text.trim() ? raw.text : serializePayload(event.payload);
-      this.options.post(trigger.botId, threadId, text.slice(0, 20000));
+      this.options.post(trigger.botId, threadId, text.slice(0, 20000), trigger.endpointId, deliveryId);
       this.deliveries.push({ key: `${trigger.endpointId}:${deliveryId}`, runId: "post", at: now });
       if (this.deliveries.length > MAX_DELIVERIES) this.deliveries.splice(0, this.deliveries.length - MAX_DELIVERIES);
       trigger.lastReceivedAt = now;

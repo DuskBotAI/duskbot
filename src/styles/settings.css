@@ -239,9 +239,9 @@
 /* Grok's scroll area: a 6px thumb, hidden at rest, shown while the pane scrolls or the thumb is held */
 .settings-scrollbar {
   position: absolute;
-  top: 1px;
-  bottom: 5px;
-  inset-inline-end: 1px;
+  top: 6px;
+  bottom: 6px;
+  inset-inline-end: 2px;
   z-index: 10;
   width: 6px;
   pointer-events: none;
@@ -258,6 +258,8 @@
   transition: opacity 0.15s ease, background-color 0.15s ease;
 }
 .settings-scrollbar[data-scrolling] > div,
+.settings-scroll:hover ~ .settings-scrollbar > div,
+.settings-scrollbar > div:hover,
 .settings-scrollbar > div:active { opacity: 1; }
 .settings-scrollbar > div:hover,
 .settings-scrollbar > div:active { background: color-mix(in srgb, var(--color-ink) 12%, transparent); }

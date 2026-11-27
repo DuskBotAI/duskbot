@@ -1928,6 +1928,37 @@ body {
   padding-top: var(--glass-top, 0px);
   padding-bottom: calc(var(--glass-bottom, 0px) + var(--glass-bottom-reach, 0px));
 }
+/* A scrolling list fades its own content out at an edge only while more of it lies past that edge, on an eased curve
+   so a row is clear again within a few pixels: rows and their hover and selected fills melt into whatever is behind
+   the list, with no band of colour laid over them. Put `scroll-fade-list` on the element that scrolls. */
+@property --fade-top { syntax: "<length>"; inherits: false; initial-value: 0px; }
+@property --fade-bottom { syntax: "<length>"; inherits: false; initial-value: 0px; }
+:is(.scroll-fade-list, .settings-scroll, .settings-nav, .ca-scroll) {
+  /* a list under a sticky header sets --fade-top-max: 0px, its header's own edge marks the top instead */
+  --fade-top-shown: min(var(--fade-top), var(--fade-top-max, 100vh));
+  mask-image:
+    linear-gradient(to bottom, transparent, rgb(0 0 0 / 0.35) calc(var(--fade-top-shown) * 0.4), rgb(0 0 0 / 0.8) calc(var(--fade-top-shown) * 0.75), #000 var(--fade-top-shown),
+      #000 calc(100% - var(--fade-bottom)), rgb(0 0 0 / 0.8) calc(100% - var(--fade-bottom) * 0.75), rgb(0 0 0 / 0.35) calc(100% - var(--fade-bottom) * 0.4), transparent);
+  transition: --fade-top 150ms ease-out, --fade-bottom 150ms ease-out;
+}
+:is([data-scroll-fade="start"], [data-scroll-fade="both"]) > .scroll-fade-list { --fade-top: 16px; }
+:is([data-scroll-fade="end"], [data-scroll-fade="both"]) > .scroll-fade-list { --fade-bottom: 24px; }
+@media (prefers-reduced-motion: reduce) {
+  :is(.scroll-fade-list, .settings-scroll, .settings-nav, .ca-scroll) { transition: none; }
+}
+/* Where the engine runs animations on the scroll position (Chromium 115+), the edges follow the scroll itself: no
+   script listens, any scroller gets them from the class alone, and an edge grows with the first 16px or last 24px of
+   scrolling instead of switching on. A list that does not overflow has no timeline, so it keeps clean edges. */
+@keyframes scroll-fade-top { from { --fade-top: 0px; } to { --fade-top: 16px; } }
+@keyframes scroll-fade-bottom { from { --fade-bottom: 24px; } to { --fade-bottom: 0px; } }
+@supports (animation-timeline: scroll()) {
+  :is(.scroll-fade-list, .settings-scroll, .settings-nav, .ca-scroll) {
+    transition: none;
+    animation: scroll-fade-top linear both, scroll-fade-bottom linear both;
+    animation-timeline: scroll(self), scroll(self);
+    animation-range: 0 16px, calc(100% - 24px) 100%;
+  }
+}
 /* The transcript and its composer share one centered column with a fixed cap. The transcript sits
    inside the scroller's px-5; the dock spans the pane and holds the composer's own px-5, so it adds
    that padding to the same cap and the composer's edges meet the transcript's. */

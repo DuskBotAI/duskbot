@@ -105,22 +105,28 @@ describe("the scroll fade", () => {
     expect(target.fade()).toBeNull();
   });
 
-  it("stacks the bars around the list and draws a 24px band of the surface colour at each edge, shown only by its own edge", () => {
+  it("stacks the bars around the list and fades the list's own rows at an edge, only while more lies past it", () => {
     const html = frameHtml(true);
     expect(html).toMatch(/^<div data-glass-frame="" class="relative min-h-0 flex flex-col">/);
     expect(html).toContain('<div data-glass-bar="top" class="relative z-10 shrink-0">head</div>');
     expect(html).toContain('<div data-glass-bar="bottom" class="relative z-10 shrink-0">foot</div>');
     expect(html).not.toContain("glass-bar ");
     expect(html).not.toContain("glass-scroller");
-    const band = (edge: string) => new RegExp(`data-scroll-fade-edge="${edge}" class="([^"]*)"`).exec(html)![1]!;
-    for (const edge of ["top", "bottom"]) {
-      expect(band(edge)).toMatch(/^pointer-events-none absolute inset-x-0 z-10 h-6 bg-\[var\(--scroll-fade-surface,var\(--color-panel\)\)\] opacity-0 transition-opacity duration-150 ease-out /);
-      expect(band(edge)).not.toMatch(/blur|backdrop|shadow/);
-    }
-    expect(band("top")).toContain("top-0 [mask-image:linear-gradient(to_bottom,black,transparent)]");
-    expect(band("top").match(/scroll-fade=(\w+)/g)).toEqual(["scroll-fade=start", "scroll-fade=both"]);
-    expect(band("bottom")).toContain("bottom-0 [mask-image:linear-gradient(to_top,black,transparent)]");
-    expect(band("bottom").match(/scroll-fade=(\w+)/g)).toEqual(["scroll-fade=end", "scroll-fade=both"]);
+    expect(html).toContain('<div data-scroll-fade-frame="" class="relative min-h-0 flex-1"><div class="scroll-fade-list h-full overflow-y-auto">');
+    // no band of colour over the rows: a selected or hovered row would show it as a tinted, smeared strip
+    expect(html).not.toContain("data-scroll-fade-edge");
+    const css = readFileSync("src/styles.css", "utf8");
+    const faded = ":is(.scroll-fade-list, .settings-scroll, .settings-nav, .ca-scroll)";
+    const rule = css.slice(css.indexOf(`\n${faded} {`)).split("}")[0]!;
+    expect(rule).toContain("mask-image:");
+    expect(rule).not.toMatch(/blur|backdrop|shadow/);
+    // where the engine has scroll timelines, the edges follow the scroll position with no script
+    const driven = css.slice(css.indexOf("@supports (animation-timeline: scroll())")).split("}")[0]!;
+    expect(driven).toContain(`${faded} {`);
+    expect(driven).toContain("animation-timeline: scroll(self), scroll(self);");
+    expect(driven).toContain("animation-range: 0 16px, calc(100% - 24px) 100%;");
+    expect(css).toContain(':is([data-scroll-fade="start"], [data-scroll-fade="both"]) > .scroll-fade-list { --fade-top: 16px; }');
+    expect(css).toContain(':is([data-scroll-fade="end"], [data-scroll-fade="both"]) > .scroll-fade-list { --fade-bottom: 24px; }');
   });
 
   it("keeps the floating glass bars when the frame does not fade", () => {

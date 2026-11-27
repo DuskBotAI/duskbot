@@ -20,13 +20,27 @@ const CATEGORY_KEYS: Record<ReadyBotCategory, LocaleKey> = {
   design: "readyBots.category.design", sales: "readyBots.category.sales", personal: "readyBots.category.personal",
 };
 
-export function ReadyBotGallery({ search, onDialog, onAdded }: {
+/** The category pills, drawn where Templates puts them (beside its search); the gallery under them shows that category. */
+export function ReadyBotCategories({ value, onChange }: { value: ReadyBotCategory | null; onChange: (next: ReadyBotCategory | null) => void }) {
+  return (
+    <div className="flex flex-wrap gap-2" role="group" aria-label={t("readyBots.categories")}>
+      {[null, ...READY_BOT_CATEGORIES].map((one) => <button key={one ?? "all"} type="button" aria-pressed={value === one}
+        onClick={() => onChange(one)}
+        className={cn("inline-flex h-7 items-center rounded-full px-2.5 text-[13px] leading-[18px] tracking-[0.015em] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-focus",
+          value === one ? "bg-ink text-app hover:bg-[color-mix(in_srgb,var(--color-ink)_88.5%,var(--color-menu))]" : "bg-ink/6 text-ink hover:bg-ink/10")}>
+        {one ? t(CATEGORY_KEYS[one]) : t("readyBots.all")}
+      </button>)}
+    </div>
+  );
+}
+
+export function ReadyBotGallery({ search, category, onDialog, onAdded }: {
   search: string;
+  category: ReadyBotCategory | null;
   /** A confirm is open over Templates, so Templates must leave its keys alone. */
   onDialog: (open: boolean) => void;
   onAdded: (bot: Bot) => void;
 }) {
-  const [category, setCategory] = useState<ReadyBotCategory | null>(null);
   const { state, dispatch } = useStore();
   const [confirming, setConfirming] = useState<string | null>(null);
   const [making, setMaking] = useState<string | null>(null);
@@ -65,18 +79,7 @@ export function ReadyBotGallery({ search, onDialog, onAdded }: {
   };
   const visible = READY_BOTS.filter((bot) => (!category || bot.category === category) && matchesReadyBot(bot, search));
   if (search.trim() && visible.length === 0) return null;
-  return <section className="mb-8" aria-labelledby="ready-bots-title">
-    <div className="flex flex-wrap items-baseline justify-between gap-2 pb-1.5 pl-3 pr-1 pt-2">
-      <h3 id="ready-bots-title" className="m-0 text-[12px] font-normal leading-4 text-ink/56">{t("readyBots.title")}</h3>
-    </div>
-    <div className="mb-2 mt-1 flex flex-wrap gap-2" role="group" aria-label={t("readyBots.categories")}>
-      {[null, ...READY_BOT_CATEGORIES].map((value) => <button key={value ?? "all"} type="button" aria-pressed={category === value}
-        onClick={() => setCategory(value)}
-        className={cn("inline-flex h-7 items-center rounded-full px-2.5 text-[13px] leading-[18px] tracking-[0.015em] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-focus",
-          category === value ? "bg-ink text-app hover:bg-[color-mix(in_srgb,var(--color-ink)_88.5%,var(--color-menu))]" : "bg-ink/6 text-ink hover:bg-ink/10")}>
-        {value ? t(CATEGORY_KEYS[value]) : t("readyBots.all")}
-      </button>)}
-    </div>
+  return <section className="mb-8" aria-label={t("readyBots.title")}>
     <div className="-mx-3 grid grid-cols-1 md:grid-cols-2">
       {visible.map((bot) => <article key={bot.id} data-ready-bot={bot.id} title={bot.description} className="flex min-w-0 items-center gap-3 rounded-[16px] p-3 hover:bg-ink/[0.035]">
         <MausAvatar color={bot.look.color} bodyId={bot.look.mascotBody} size={32} animated={false} label={bot.name} />

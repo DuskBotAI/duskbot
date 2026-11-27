@@ -1,13 +1,18 @@
 {
   "v": 1,
-  "version": "0.2.31",
-  "sha256sums": "622ae4e044832b5e94e76eed94d32dd1672a48e8800cf3240a84310e3a236ab1",
-  "signature": "r1.rel-2026-11.eyJ2IjoxLCJraW5kIjoiZGVza3RvcCIsIm5hbWUiOiJkdXNrIGJvdCIsInZlcnNpb24iOiIwLjIuMzEiLCJzaGEyNTYiOiI2MjJhZTRlMDQ0ODMyYjVlOTRlNzZlZWQ5NGQzMmRkMTY3MmE0OGU4ODAwY2YzMjQwYTg0MzEwZTNhMjM2YWIxIiwic2lnbmVkQXQiOjE3OTU2Mjk1NzQxMzV9.F1QHpYo3_U7rmM02WeQQto9m8kPcpLleHyUn2Yci1MQvlz0SxEPgk_VPEnn9cpu3mC6hP5Qngv1eNW9QRF3KCA",
+  "version": "0.2.32",
+  "sha256sums": "9386360094a353097eb09f130d6979939743f3887202579da71937c76d058b8d",
+  "signature": "r1.rel-2026-11.eyJ2IjoxLCJraW5kIjoiZGVza3RvcCIsIm5hbWUiOiJkdXNrIGJvdCIsInZlcnNpb24iOiIwLjIuMzIiLCJzaGEyNTYiOiI5Mzg2MzYwMDk0YTM1MzA5N2ViMDlmMTMwZDY5Nzk5Mzk3NDNmMzg4NzIwMjU3OWRhNzE5MzdjNzZkMDU4YjhkIiwic2lnbmVkQXQiOjE3OTU3NzExNzQ1MDN9.lx4lV0551Mvbkrz2sst6ovNy0gws2mQIgkSh1lwkOdNLqq8fVV6XW5f85RKn7Q06bOhaUA8fdJZdTsTyjxXkCA",
+  "docker": "ghcr.io/duskbotai/duskbot:v0.2.32",
   "android": {
-    "version": "1.2.12",
-    "code": 13,
-    "url": "https://github.com/DuskBotAI/duskbot-releases/releases/download/v0.2.31/DuskBot.apk",
-    "sha256": "27972fc3076b6f82f766151bc2cec582484d9552037b819494c3ed73b6f90b2e"
+    "version": "1.2.13",
+    "code": 14,
+    "url": "https://github.com/DuskBotAI/duskbot-releases/releases/download/v0.2.32/DuskBot.apk",
+    "sha256": "7ebb922f2963ab7d5a6640a42bebeb269e60bfe804d1253f925e73b2d6fab065"
   },
-  "docker": "ghcr.io/duskbotai/duskbot:v0.2.31"
+  "cli": {
+    "version": "0.2.32",
+    "url": "https://github.com/DuskBotAI/duskbot-releases/releases/download/v0.2.32/duskbot-0.2.32.tgz",
+    "sha256": "e01e15a30baee169820bbe159f85e17b6998f861431a07f4b510f2dba298c611"
+  }
 }

@@ -210,7 +210,7 @@ export function createPushRelay({ env = process.env, now = Date.now, fetch: fetc
     const { botName, ...data } = message;
     const response = await fetchImpl(`${env.DUSK_FCM_HOST ?? "https://fcm.googleapis.com"}/v1/projects/${encodeURIComponent(fcm.projectId)}/messages:send`, {
       method: "POST", headers: { authorization: `Bearer ${access}`, "content-type": "application/json" },
-      body: JSON.stringify({ message: { token, notification: { title: botName, body: "New message" }, data, android: { collapse_key: message.threadId, priority: "high" } } }),
+      body: JSON.stringify({ message: { token, notification: { title: botName, body: "New message" }, data, android: { collapse_key: message.threadId, priority: "high", notification: { channel_id: "messages", tag: message.threadId } } } }),
       signal: AbortSignal.timeout(10_000),
     });
     if (response.status === 200) return "sent";

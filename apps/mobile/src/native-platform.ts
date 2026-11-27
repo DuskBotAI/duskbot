@@ -26,6 +26,7 @@ import { keychainSecrets } from "@/mobile/keychain";
 import { guardCleartext } from "@/mobile/cleartext";
 import { friendlyError } from "@/lib/plain-error";
 import { handleBack, type AppleCredential, type BackGestureEvent, type BarConfig, type CameraPermission, type CameraScanner, type DeliveredNotification, type MobileChrome, type MobilePlatform, type OrientationBridge, type ScanOverlay, type SystemMenuAction, type TurnActivityBridge } from "@/mobile/platform";
+import { androidDeliveredKey, mapAndroidDelivered } from "@/mobile/connection/seen-notifications";
 import type { ControlPlace, SystemControl } from "@/lib/system-control";
 import type { SystemAlertOptions, SystemAlertOutcome, SystemDialogs, SystemFormOptions, SystemFormResult } from "@/lib/system-dialog";
 import type { NativeAction } from "@/mobile/phone-actions";
@@ -654,17 +655,10 @@ async function groundHex(): Promise<string> {
   return cssHex(getComputedStyle(root).getPropertyValue("--color-app")) ?? "";
 }
 
-/** Android's delivered pushes: FCM's data block is flat (server/mobile/push.ts messageData). */
+/** Android's delivered pushes: FCM's data block is flat, with native tag fallback for background pushes. */
 async function androidDelivered(): Promise<DeliveredNotification[]> {
   const { notifications } = await PushNotifications.getDeliveredNotifications();
-  return notifications.map((one) => {
-    const data = (one.data ?? {}) as Record<string, unknown>;
-    return {
-      id: one.id,
-      ...(typeof data.threadId === "string" ? { threadId: data.threadId } : {}),
-      ...(typeof data.id === "string" ? { notificationId: data.id } : {}),
-    };
-  });
+  return mapAndroidDelivered(notifications);
 }
 
 function turnActivityBridge(): TurnActivityBridge {
@@ -1290,9 +1284,9 @@ export async function nativePlatform(): Promise<MobilePlatform> {
       try {
         if (notificationsOn) return await DuskNotifications.remove({ ids: [...ids] });
         if (kind !== "android") return;
-        // Android cancels by id and tag, so the delivered entries go back whole
+        // Android cancels by id and tag, so key by both and pass the matching delivered entries back whole
         const { notifications } = await PushNotifications.getDeliveredNotifications();
-        const gone = notifications.filter((one) => ids.includes(one.id));
+        const gone = notifications.filter((one) => ids.includes(androidDeliveredKey(one)));
         if (gone.length) await PushNotifications.removeDeliveredNotifications({ notifications: gone });
       } catch {}
     },

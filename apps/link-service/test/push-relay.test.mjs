@@ -56,7 +56,7 @@ describe("push relay", () => {
     expect(sent.url).toBe("https://fcm.example/v1/projects/fixture-project/messages:send");
     expect(JSON.parse(sent.body).message).toEqual({
       token: "fixture-token", notification: { title: "Nova", body: "New message" },
-      data: { id: "n1", kind: "mention", botId: "b1", threadId: "t1" }, android: { collapse_key: "t1", priority: "high" },
+      data: { id: "n1", kind: "mention", botId: "b1", threadId: "t1" }, android: { collapse_key: "t1", priority: "high", notification: { channel_id: "messages", tag: "t1" } },
     });
     expect(sent.body).not.toContain("should not travel");
     fcmStatus = 404;

@@ -247,7 +247,7 @@ export function createPushSender(env: NodeJS.ProcessEnv = process.env, deps: {
       method: "POST", headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
       body: JSON.stringify({ message: {
         token: target.token, notification: { title: message.botName, body: "New message" }, data: messageData(message),
-        android: { collapse_key: message.threadId, priority: "high", notification: { channel_id: "messages" } },
+        android: { collapse_key: message.threadId, priority: "high", notification: { channel_id: "messages", tag: message.threadId } },
       } }),
       signal: AbortSignal.timeout(10_000),
     });

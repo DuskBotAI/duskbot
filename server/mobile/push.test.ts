@@ -271,7 +271,7 @@ describe("FCM push", () => {
     expect(body.includes("body text")).toBe(false);
     expect(JSON.parse(body)).toEqual({ message: {
       token: target.token, notification: { title: "Maus", body: "New message" }, data,
-      android: { collapse_key: "thread-1", priority: "high", notification: { channel_id: "messages" } },
+      android: { collapse_key: "thread-1", priority: "high", notification: { channel_id: "messages", tag: "thread-1" } },
     } });
     expect(Object.values(JSON.parse(body).message.data).every((value) => typeof value === "string")).toBe(true);
   });

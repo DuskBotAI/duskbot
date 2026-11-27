@@ -605,8 +605,9 @@ test("My Cloud's page, once it is home, hears this app's own update and may rest
   const preload = readFileSync(new URL("./preload.cjs", import.meta.url), "utf8");
   assert.match(/const HOME_PAGE = \[([^\]]*)\]/.exec(preload)?.[1] ?? "", /"appUpdate"/, "the home page's bridge has appUpdate");
   for (const channel of ["state", "restart", "download", "open", "move", "seen"]) {
-    assert.match(main, new RegExp(`ipcMain\\.handle\\("app-update:${channel}", localOrHome\\("app-update:${channel}",`), channel);
+    assert.match(main, new RegExp(`ipcMain\\.handle\\("app-update:${channel}", localOrAppPage\\("app-update:${channel}",`), channel);
   }
   const tell = /const tellAppUpdate = (.*)$/m.exec(main)?.[1] ?? "";
-  assert.match(tell, /senderIsLocal\(page\) \|\| homeWindow\.homePage\(page\)/, "a ready update is pushed to the home page too");
+  assert.match(tell, /senderIsLocal\(page\) \|\| appUpdatePage\(page\)/, "a ready update is pushed to the home page too");
+  assert.match(main, /const appUpdatePage = event => homeWindow\.homePage\(event\) \|\|/, "My Cloud's home is one of the pages that may");
 });

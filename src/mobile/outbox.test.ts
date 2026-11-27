@@ -37,6 +37,28 @@ describe("outbox", () => {
     expect(await prefs.get("k")).toBeNull();
   });
 
+  it("keeps a saved send when another is held before the outbox finishes loading", async () => {
+    const values = new Map<string, string>([["k", JSON.stringify([{ ...send("a"), tries: 1 }])]]);
+    let resumeRead!: () => void;
+    const readGate = new Promise<void>((resolve) => { resumeRead = resolve; });
+    const prefs = {
+      get: async (key: string) => { const snapshot = values.get(key) ?? null; await readGate; return snapshot; },
+      set: async (key: string, value: string) => { values.set(key, value); },
+      remove: async (key: string) => { values.delete(key); },
+    };
+    const first = createOutbox(prefs, "k", () => 2_000);
+    first.hold(send("b"));
+    resumeRead();
+    await first.ready;
+    await settle();
+    expect(first.pending().map((one) => one.sendId)).toEqual(["a", "b"]);
+    expect(JSON.parse(values.get("k")!).map((one: { sendId: string }) => one.sendId)).toEqual(["a", "b"]);
+
+    const second = createOutbox(prefs, "k", () => 3_000);
+    await second.ready;
+    expect(second.pending().map((one) => one.sendId)).toEqual(["a", "b"]);
+  });
+
   it("stops at a send that is lost again and picks up on the next flush", async () => {
     const { prefs } = memoryPrefs();
     const outbox = createOutbox(prefs, "k", () => 2_000);

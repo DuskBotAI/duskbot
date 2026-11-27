@@ -47,10 +47,13 @@ export function createOutbox(prefs: OutboxPrefs, key: string, now: () => number 
   const loaded = (async () => {
     try {
       const saved: unknown = JSON.parse(await prefs.get(key) ?? "[]");
+      const held = entries.length;
       const known = new Set(entries.map((entry) => entry.sendId));
       // sends held before the saved list was read stay, after the older ones
       const older = Array.isArray(saved) ? saved.filter(valid).filter((entry) => fresh(entry) && !known.has(entry.sendId)) : [];
       entries = [...older, ...entries];
+      // a hold during load may have written only the new sends; rewrite the combined list
+      if (held && older.length) persist();
     } catch {}
   })();
 

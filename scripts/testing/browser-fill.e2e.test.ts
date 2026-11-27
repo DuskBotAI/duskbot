@@ -146,13 +146,15 @@ describe("an agent-browser page a person watches in a narrow panel", () => {
     expect(jpegSize(Buffer.from(image!.data!, "base64"))).toEqual({ width: 1280, height: 2400 });
 
     // The bot's call holds the browser: the person's resize lands only after it.
-    const waited = call("wait_ms", { ms: 1_500 }).then(() => Date.now());
+    const waited = call("eval", { script: "new Promise(resolve => setTimeout(() => resolve('done'), 1500))" })
+      .then((result) => ({ result, at: Date.now() }));
     await sleep(300);
     expect(await live.action({ viewerId, botId: "bot-e2e", owner: "local-owner", body: { type: "resize", width: 900, height: 700 } })).toEqual({ ok: true });
     const ended = await waited;
+    expect(ended.result.isError).not.toBe(true);
     await until(size, same([1280, 996]));
     const resized = applied.find((entry) => entry.size.height === 996)!;
-    expect(resized.at).toBeGreaterThanOrEqual(ended - 50);
+    expect(resized.at).toBeGreaterThanOrEqual(ended.at - 50);
 
     view.destroy();
     await sleep(200);

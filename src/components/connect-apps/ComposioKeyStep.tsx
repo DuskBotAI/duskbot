@@ -98,17 +98,25 @@ export function ComposioKeyStep({ slug, name, connectors, primary }: { slug: str
       ) },
   ];
 
+  const row = (!ownKey && primary) || line;
+  // the second way sits beside the sign-in button, and under the key's steps once they show
+  const other = !connected && (
+    <button type="button" className="ca-link ca-connect-alt" onClick={() => { setOwnKey(!ownKey); setProblem(null); }}>
+      {t(ownKey ? "connectApps.guide.useSignIn" : "connectApps.via.useKey")}
+    </button>
+  );
   return (
     <section className="ca-connect" data-connect="" data-composio-key="" data-mode={ownKey ? "key" : "sign-in"} aria-labelledby="ca-key-title">
       <h3 id="ca-key-title" className="ca-connect-title">{t("connectApps.via.title", { name })}</h3>
       {ownKey
         ? <StepGuide label={t("tokenApps.guide", { name })} steps={keySteps} finished={null} />
         : <p className="ca-connect-note">{t("connectApps.via.why", { name })}</p>}
-      {((!ownKey && primary) || line) && (
+      {row && (
         <div className="ca-connect-row">
           {!ownKey && primary && <PrimaryButton primary={primary} />}
           {!ownKey && primary?.onCancel && (primary.busy || primary.waiting) && <CancelLink onCancel={primary.onCancel} />}
           {line && <ConnectStatus line={line} marker="data-via-line" />}
+          {!ownKey && other}
         </div>
       )}
       {problem && (
@@ -117,11 +125,7 @@ export function ComposioKeyStep({ slug, name, connectors, primary }: { slug: str
           <span>{t(problem)}</span>
         </p>
       )}
-      {!connected && (
-        <button type="button" className="ca-link ca-connect-alt" onClick={() => { setOwnKey(!ownKey); setProblem(null); }}>
-          {t(ownKey ? "connectApps.guide.useSignIn" : "connectApps.via.useKey")}
-        </button>
-      )}
+      {(ownKey || !row) && other}
     </section>
   );
 }

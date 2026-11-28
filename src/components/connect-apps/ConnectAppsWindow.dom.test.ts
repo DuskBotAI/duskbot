@@ -293,14 +293,36 @@ describe("the Connect Apps window", () => {
     expect(fold.inert, "folded: out of the tab order while it slides shut").toBe(true);
     await act(async () => { toggle.click(); });
     expect(fold.inert).toBe(false);
-    expect(page.querySelector<HTMLAnchorElement>('[data-toolkit-group="actions"] a')?.href).toBe("https://docs.composio.dev/toolkits/attio");
-    const search = page.querySelector<HTMLInputElement>('[data-toolkit-group="actions"] input[type=search]')!;
-    await act(async () => {
-      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(search, "find");
-      search.dispatchEvent(new Event("input", { bubbles: true }));
-    });
-    expect(abilities(), "the search narrows the list").toEqual(["Find person"]);
+    expect(page.querySelector<HTMLAnchorElement>('[data-toolkit-group="actions"] a')?.href, "Composio lists more than these two").toBe("https://docs.composio.dev/toolkits/attio");
+    expect(page.querySelector('[data-toolkit-group="actions"] input[type=search]'), "two abilities need no search").toBeNull();
     expect(page.textContent, "no category or sign-in facts, they are noise").not.toContain("Your account, API key");
+  });
+
+  it("opens a long list of abilities on its first twelve with a search and Show more, and a complete one with no Composio link", async () => {
+    const saved = fixture.actions.attio;
+    fixture.actions.attio = { actions: Array.from({ length: 16 }, (_, index) => `Find thing ${index + 1}`) };
+    try {
+      await act(async () => { dialog().querySelector<HTMLButtonElement>('[data-app-row="attio"] .ca-row-open')!.click(); });
+      await flush();
+      const page = dialog().querySelector("[data-app-page]")!;
+      const abilities = () => [...page.querySelectorAll("[data-ability]")].map((row) => row.textContent);
+      expect(abilities()).toHaveLength(12);
+      const search = page.querySelector<HTMLInputElement>('[data-toolkit-group="actions"] input[type=search]')!;
+      await act(async () => {
+        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(search, "thing 1");
+        search.dispatchEvent(new Event("input", { bubbles: true }));
+      });
+      expect(abilities(), "a search looks through every one, not only the first twelve").toEqual(["Find thing 1", "Find thing 10", "Find thing 11", "Find thing 12", "Find thing 13", "Find thing 14", "Find thing 15", "Find thing 16"]);
+      await act(async () => {
+        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(search, "");
+        search.dispatchEvent(new Event("input", { bubbles: true }));
+      });
+      const more = [...page.querySelectorAll<HTMLButtonElement>('[data-toolkit-group="actions"] button.ca-link')].find((button) => button.textContent === "Show 4 more")!;
+      await act(async () => { more.click(); });
+      expect(abilities()).toHaveLength(16);
+    } finally {
+      fixture.actions.attio = saved;
+    }
   });
 
   it("sends an app Composio has no managed sign-in for to Composio to set up, then Check again connects it", async () => {

@@ -7777,6 +7777,7 @@
   "connectApps.canDo": "What {name} can do",
   "connectApps.canDo.searchPlaceholder": "Search what {name} can do",
   "connectApps.composioAll": "See all {count} on Composio",
+  "connectApps.canDo.showMore": "Show {count} more",
   "connectApps.composioSetup": "{name} is set up on Composio: click create auth config there, pick {name}, then check again.",
   "connectApps.composioSetupKey": "{name} is set up on Composio: click create auth config there, pick {name}, add that project's key in settings, then check again.",
   "connectApps.openComposio": "Open Composio",

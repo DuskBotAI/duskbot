@@ -1,6 +1,6 @@
 import { SERVER_LEASE_NAME } from "../electron/legacy-names.mjs";
 import { createCipheriv, createHash, randomBytes, scryptSync } from "node:crypto";
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
@@ -121,6 +121,9 @@ describe("encrypted full workspace backups", () => {
     expect(omittedFromWorkspaceBackup("bots.json.last-good")).toBe(true);
     expect(omittedFromWorkspaceBackup("groups.json.unreadable-1799999999999")).toBe(true);
     expect(omittedFromWorkspaceBackup("config.json.unreadable-1799999999999")).toBe(true);
+    expect(omittedFromWorkspaceBackup("models")).toBe(true);
+    expect(omittedFromWorkspaceBackup("models/embed.gguf.part")).toBe(true);
+    expect(omittedFromWorkspaceBackup("Sessions.json.open")).toBe(true);
     expect(omittedFromWorkspaceBackup("bots.json")).toBe(false);
   });
 
@@ -801,6 +804,214 @@ describe("encrypted full workspace backups", () => {
     expect(applyPendingWorkspaceRestore(target)).toMatchObject({ restored: false, rolledBack: true, id: staged.id });
     expect(readJson(join(target, "bots.json"))).toEqual([{ id: "original" }]);
     expect(applyPendingWorkspaceRestore(target)).toEqual({ restored: false });
+  });
+
+  it("omits models during export while restoring older archives with models or mixed-case session locks cleanly", async () => {
+    const source = directory();
+    mkdirSync(join(source, "models"));
+    writeFileSync(join(source, "models", "embed.gguf"), "model-bytes");
+    writeFileSync(join(source, "models", "embed.gguf.part"), "partial-download");
+    writeFileSync(join(source, "note.txt"), "kept");
+    const exported = await createWorkspaceBackup(source, { password: PASSWORD });
+    const stagingTarget = directory();
+    const probe = await stageWorkspaceBackup(stagingTarget, exported.path, { password: PASSWORD });
+    expect(existsSync(join(stagingTarget, ".backups", probe.id, "staged", "data", "models"))).toBe(false);
+
+    const base = readJson(join(stagingTarget, ".backups", probe.id, "staged", "manifest.json"));
+    const file = (path: string, content: string) => ({ path, type: "file", size: Buffer.byteLength(content), mode: 0o600, sha256: createHash("sha256").update(content).digest("hex") });
+    const botsJson = JSON.stringify([{ id: "from-old" }]);
+    const modelBytes = "old-archive-model";
+    const lockText = "stale-lock\n";
+    const manifest = {
+      ...base,
+      entries: [
+        file("bots.json", botsJson),
+        { path: "models", type: "directory", size: 0, mode: 0o700 },
+        file("models/embed.gguf", modelBytes),
+        file("Sessions.json.open", lockText),
+      ],
+      summary: {
+        ...base.summary,
+        directories: 1,
+        files: 3,
+        bots: 1,
+        bytes: Buffer.byteLength(botsJson) + Buffer.byteLength(modelBytes) + Buffer.byteLength(lockText),
+      },
+    };
+    const oldArchive = encryptedPayload(source, Buffer.concat([
+      tarEntry("manifest.json", "File", JSON.stringify(manifest)),
+      tarEntry("data", "Directory"),
+      tarEntry("data/bots.json", "File", botsJson),
+      tarEntry("data/models", "Directory"),
+      tarEntry("data/models/embed.gguf", "File", modelBytes),
+      tarEntry("data/Sessions.json.open", "File", lockText),
+      Buffer.alloc(1024),
+    ]));
+
+    const target = directory();
+    mkdirSync(join(target, "models"));
+    writeFileSync(join(target, "models", "keep.gguf"), "destination-model");
+    writeFileSync(join(target, "sessions.json.open"), "open\n");
+    const staged = await stageWorkspaceBackup(target, oldArchive, { password: PASSWORD });
+    commitPendingWorkspaceRestore(target, staged.id);
+    expect(applyPendingWorkspaceRestore(target)).toMatchObject({ restored: true, id: staged.id });
+    expect(readJson(join(target, "bots.json"))).toEqual([{ id: "from-old" }]);
+    expect(readFileSync(join(target, "models", "keep.gguf"), "utf8")).toBe("destination-model");
+    expect(existsSync(join(target, "models", "embed.gguf"))).toBe(false);
+    expect(existsSync(join(target, ".backups", `safety-${staged.id}`, "data", "models"))).toBe(false);
+    expect(readFileSync(join(target, "sessions.json.open"), "utf8")).toBe("open\n");
+  });
+
+  it("allows settled committed and rolled-back journals regardless of legacy paths and later restores", async () => {
+    const source1 = directory();
+    json(join(source1, "bots.json"), [{ id: "first" }]);
+    const exported1 = await createWorkspaceBackup(source1, { password: PASSWORD });
+    const target = directory();
+    json(join(target, "bots.json"), [{ id: "original" }]);
+    const staged1 = await stageWorkspaceBackup(target, exported1.path, { password: PASSWORD });
+    commitPendingWorkspaceRestore(target, staged1.id);
+    expect(applyPendingWorkspaceRestore(target)).toMatchObject({ restored: true, id: staged1.id });
+
+    const root = join(target, ".backups");
+    json(join(root, "restore-journal.json"), { id: staged1.id, phase: "committed" });
+    expect(applyPendingWorkspaceRestore(target)).toEqual({ restored: false });
+
+    json(join(root, "restore-journal.json"), {
+      id: staged1.id,
+      phase: "committed",
+      existing: ["models", "../legacy"],
+      incoming: ["connected-apps-installation.json"],
+    });
+    expect(applyPendingWorkspaceRestore(target)).toEqual({ restored: false });
+    expect(readJson(join(target, "bots.json"))).toEqual([{ id: "first" }]);
+
+    const source2 = directory();
+    json(join(source2, "bots.json"), [{ id: "second" }]);
+    const exported2 = await createWorkspaceBackup(source2, { password: PASSWORD });
+    const staged2 = await stageWorkspaceBackup(target, exported2.path, { password: PASSWORD });
+    commitPendingWorkspaceRestore(target, staged2.id);
+    expect(applyPendingWorkspaceRestore(target)).toMatchObject({ restored: true, id: staged2.id });
+    expect(readJson(join(target, "bots.json"))).toEqual([{ id: "second" }]);
+
+    const target2 = directory();
+    json(join(target2, "bots.json"), [{ id: "before-rollback" }]);
+    const staged3 = await stageWorkspaceBackup(target2, exported2.path, { password: PASSWORD });
+    json(join(target2, ".backups", "restore-journal.json"), {
+      id: staged3.id,
+      phase: "rolled-back",
+      existing: ["bots.json", "models"],
+      incoming: ["bots.json", "run-marker.json"],
+    });
+    expect(applyPendingWorkspaceRestore(target2)).toEqual({ restored: false });
+    commitPendingWorkspaceRestore(target2, staged3.id);
+    expect(applyPendingWorkspaceRestore(target2)).toMatchObject({ restored: true, id: staged3.id });
+    expect(readJson(join(target2, "bots.json"))).toEqual([{ id: "second" }]);
+  });
+
+  it("finishes an interrupted committed restore from a valid receipt, rebuilds damaged receipts, and fails closed on unsafe receipt targets", async () => {
+    const source = directory();
+    json(join(source, "bots.json"), [{ id: "restored" }]);
+    const exported = await createWorkspaceBackup(source, { password: PASSWORD });
+    const target = directory();
+    json(join(target, "bots.json"), [{ id: "original" }]);
+    const staged = await stageWorkspaceBackup(target, exported.path, { password: PASSWORD });
+    commitPendingWorkspaceRestore(target, staged.id);
+    expect(applyPendingWorkspaceRestore(target)).toMatchObject({ restored: true, id: staged.id });
+
+    const root = join(target, ".backups");
+    const validReceipt = readJson(join(root, "last-restore.json"));
+    const { pathsRewritten: _omitted, ...withoutRewritten } = validReceipt;
+    json(join(root, "restore-journal.json"), { id: staged.id, phase: "committed" });
+
+    for (const brokenReceipt of [
+      "{broken",
+      JSON.stringify({ restored: true, id: staged.id }),
+      JSON.stringify({ ...validReceipt, safetyCopyPath: join(root, "wrong-safety") }),
+      JSON.stringify(withoutRewritten),
+      JSON.stringify({ ...validReceipt, summary: {} }),
+      JSON.stringify({ ...validReceipt, clientState: { untrusted: "nope" } }),
+    ]) {
+      writeFileSync(join(root, "last-restore.json"), brokenReceipt);
+      json(join(root, "pending-restore.json"), { id: staged.id });
+      const rebuilt = applyPendingWorkspaceRestore(target);
+      expect(rebuilt).toMatchObject({ restored: true, id: staged.id, safetyCopyPath: join(root, `safety-${staged.id}`) });
+      expect(rebuilt.summary?.bots).toBe(1);
+      expect(existsSync(join(root, "pending-restore.json"))).toBe(false);
+    }
+
+    rmSync(join(root, "last-restore.json"), { force: true });
+    mkdirSync(join(root, "last-restore.json"));
+    json(join(root, "pending-restore.json"), { id: staged.id });
+    expect(() => applyPendingWorkspaceRestore(target)).toThrow();
+    expect(statSync(join(root, "last-restore.json")).isDirectory()).toBe(true);
+    expect(existsSync(join(root, "pending-restore.json"))).toBe(true);
+    rmSync(join(root, "last-restore.json"), { recursive: true, force: true });
+
+    if (process.platform !== "win32") {
+      const targetJson = join(target, "outside.json");
+      json(targetJson, validReceipt);
+      symlinkSync(targetJson, join(root, "last-restore.json"));
+      expect(() => applyPendingWorkspaceRestore(target)).toThrow();
+      expect(lstatSync(join(root, "last-restore.json")).isSymbolicLink()).toBe(true);
+      rmSync(join(root, "last-restore.json"), { force: true });
+    }
+
+    // Complete receipts skip manifest re-validation even if an upgrade later excludes a previously staged path.
+    json(join(root, "last-restore.json"), validReceipt);
+    const manifestPath = join(root, staged.id, "staged", "manifest.json");
+    const manifest = readJson(manifestPath);
+    manifest.entries.push({ path: "Providers", type: "file", size: 6, mode: 0o600, sha256: "a".repeat(64) });
+    json(manifestPath, manifest);
+    json(join(root, "pending-restore.json"), { id: staged.id });
+    expect(applyPendingWorkspaceRestore(target)).toMatchObject({ restored: true, id: staged.id });
+    expect(existsSync(join(root, "pending-restore.json"))).toBe(false);
+  });
+
+  it("recovers an interrupted applying swap carrying models or mixed-case paths and rejects invalid applying paths", async () => {
+    const source = directory();
+    json(join(source, "bots.json"), [{ id: "incoming" }]);
+    const exported = await createWorkspaceBackup(source, { password: PASSWORD });
+
+    const target1 = directory();
+    json(join(target1, "bots.json"), [{ id: "original" }]);
+    mkdirSync(join(target1, "models"));
+    writeFileSync(join(target1, "models", "keep.gguf"), "original-model");
+    const staged1 = await stageWorkspaceBackup(target1, exported.path, { password: PASSWORD });
+    commitPendingWorkspaceRestore(target1, staged1.id);
+    const root1 = join(target1, ".backups");
+    const apply1 = join(root1, staged1.id, "apply", "data");
+    const saved1 = join(root1, `safety-${staged1.id}`, "data");
+    mkdirSync(saved1, { recursive: true });
+    mkdirSync(apply1, { recursive: true });
+    json(join(root1, "restore-journal.json"), { id: staged1.id, phase: "applying", existing: ["bots.json", "models"], incoming: ["bots.json"] });
+    renameSync(join(target1, "models"), join(saved1, "models"));
+    renameSync(join(target1, "bots.json"), join(saved1, "bots.json"));
+    renameSync(join(apply1, "bots.json"), join(target1, "bots.json"));
+    expect(applyPendingWorkspaceRestore(target1)).toMatchObject({ restored: false, rolledBack: true, id: staged1.id });
+    expect(readJson(join(target1, "bots.json"))).toEqual([{ id: "original" }]);
+    expect(readFileSync(join(target1, "models", "keep.gguf"), "utf8")).toBe("original-model");
+
+    const target2 = directory();
+    json(join(target2, "Bots.json"), [{ id: "original" }]);
+    const staged2 = await stageWorkspaceBackup(target2, exported.path, { password: PASSWORD });
+    const root2 = join(target2, ".backups");
+    mkdirSync(join(root2, `safety-${staged2.id}`, "data"), { recursive: true });
+    mkdirSync(join(root2, staged2.id, "apply", "data"), { recursive: true });
+    json(join(root2, "restore-journal.json"), { id: staged2.id, phase: "applying", existing: ["Bots.json"], incoming: ["bots.json"] });
+    expect(applyPendingWorkspaceRestore(target2)).toMatchObject({ restored: false, rolledBack: true, id: staged2.id });
+    expect(readJson(join(target2, "Bots.json"))).toEqual([{ id: "original" }]);
+    expect(existsSync(join(root2, staged2.id, "apply", "data", "bots.json"))).toBe(false);
+
+    for (const bad of [
+      { existing: "not-an-array", incoming: ["bots.json"] },
+      { existing: ["../escape"], incoming: ["bots.json"] },
+      { existing: ["Sessions.json.open"], incoming: ["bots.json"] },
+      { existing: ["Providers"], incoming: ["bots.json"] },
+      { existing: ["bots.json"], incoming: ["bots.json", "Bots.json"] },
+    ]) {
+      json(join(root2, "restore-journal.json"), { id: staged2.id, phase: "applying", ...bad });
+      expect(() => applyPendingWorkspaceRestore(target2)).toThrow(/recovery paths/);
+    }
   });
 
   it("detects staged-file tampering before committing or replacing original data", async () => {

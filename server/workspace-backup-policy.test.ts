@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ephemeralWorkspaceTokenPath, excludedWorkspaceAuthPath, liveDataEnginePath, portableWorkspaceConfig, redownloadedOrgLibraryPath, restoredWorkspaceConfig } from "./workspace-backup-policy.ts";
+import { ephemeralWorkspaceTokenPath, excludedWorkspaceAuthPath, liveDataEnginePath, portableWorkspaceConfig, redownloadedModelPath, redownloadedOrgLibraryPath, restoredWorkspaceConfig } from "./workspace-backup-policy.ts";
 
 describe("workspace backup data boundary", () => {
   it("exports ordinary settings only and retains destination connection sections unchanged", () => {
@@ -87,8 +87,13 @@ describe("workspace backup data boundary", () => {
   });
 
   it("never exports the per-turn hook token directory, and only that directory", () => {
-    for (const path of ["hook-tokens", "hook-tokens/0123456789abcdef01234567.token", "sessions.json.open"]) expect(ephemeralWorkspaceTokenPath(path)).toBe(true);
+    for (const path of ["hook-tokens", "hook-tokens/0123456789abcdef01234567.token", "Hook-Tokens/0123456789abcdef01234567.token", "sessions.json.open", "Sessions.json.open"]) expect(ephemeralWorkspaceTokenPath(path)).toBe(true);
     for (const path of ["hook-tokens.md", "workspaces/bot/hook-tokens/notes.md", "attachments/api.token", "sessions.json.opened", "workspaces/bot/sessions.json.open"]) expect(ephemeralWorkspaceTokenPath(path)).toBe(false);
+  });
+
+  it("leaves out only downloaded embedding models fetched again on startup", () => {
+    for (const path of ["models", "models/embed.gguf", "Models/embed.gguf.part"]) expect(redownloadedModelPath(path)).toBe(true);
+    for (const path of ["models.json", "workspaces/bot/models/file.bin", "attachments/models/a.gguf"]) expect(redownloadedModelPath(path)).toBe(false);
   });
 
   it("leaves out only the Organization library files Electron main downloads again", () => {

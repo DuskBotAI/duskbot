@@ -427,9 +427,9 @@ body:has(.p-doc) .bar { max-width: 1440px; padding-left: 32px; padding-right: 32
 .seg-ind { display: none; position: absolute; inset: 0; z-index: -1; background: #fff; transition: clip-path var(--dur-spring) var(--ease-spring); }
 .seg.is-on .seg-ind { display: block; }
 .phead .seg { margin-top: 30px; }
-.plans { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--gut); margin-top: 0; }
+.plans { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--gut); margin-top: 56px; }
 .plan { position: relative; display: flex; flex-direction: column; padding: 10px 10px 30px; border-radius: var(--r-xl); background: var(--wash); }
-.plan > :not(.plan-art) { margin-left: 20px; margin-right: 20px; }
+.plan > :not(.plan-art):not(.cat) { margin-left: 20px; margin-right: 20px; }
 .plan-art { width: 100%; height: 132px; object-fit: cover; border-radius: var(--r-l); }
 .inner .plan h2 { margin-top: 24px; margin-bottom: 0; font-size: 26px; letter-spacing: -0.03em; font-weight: 500; line-height: 1.2; }
 .why { margin-top: 6px; margin-bottom: 0; min-height: 3.1em; color: var(--text); }
@@ -443,6 +443,8 @@ body:has(.p-doc) .bar { max-width: 1440px; padding-left: 32px; padding-right: 32
 .has li { display: flex; gap: 10px; }
 .has .i { margin-top: 1px; }
 .has .no { color: var(--ink-3); font-weight: 500; }
+.cat { position: absolute; left: 26px; bottom: calc(100% - 11px); z-index: 2; width: 104px; margin: 0; }
+.cat img { width: 100%; cursor: pointer; scale: -1 1; transition: transform 0.4s var(--pop); }
 .zz { position: absolute; left: 70%; top: -6%; font: 600 15px/1 var(--pixel); color: var(--ink-3); opacity: 0; animation: zz 3.6s ease-out infinite; }
 .zz:nth-of-type(2) { animation-delay: 1.2s; font-size: 12px; } .zz:nth-of-type(3) { animation-delay: 2.4s; font-size: 18px; }
 @keyframes zz { 10% { opacity: 1; } 100% { opacity: 0; translate: -16px -30px; } }
@@ -592,6 +594,7 @@ body:has(.p-doc) .bar { max-width: 1440px; padding-left: 32px; padding-right: 32
   .go:hover .i { translate: 3px 0; }
   .docs-index section:hover .obj, .facts > div:hover .obj, .box:hover .obj, .doc-top .obj:hover { rotate: -6deg; translate: 0 -3px; }
   .after li:hover .n { animation: ring 0.4s ease-in-out; }
+  .cat:hover img { transform: scale(1.06) rotate(-2deg); }
   .seg button:hover { color: var(--ink); }
   .swatches button:hover { rotate: -3deg; }
   .copy:hover { background: #ededea; }
@@ -614,6 +617,7 @@ body:has(.p-doc) .bar { max-width: 1440px; padding-left: 32px; padding-right: 32
   .head.split, .faq, .two { grid-template-columns: minmax(0, 1fr); gap: 24px; }
   .head.split > p { justify-self: start; }
   .plans { grid-template-columns: 1fr; max-width: 480px; margin-left: auto; margin-right: auto; }
+  .plan.has-cat { margin-top: 64px; }
   .why { min-height: 0; }
   .facts, .cols, .boxes, .after, .type-rows { grid-template-columns: minmax(0, 1fr); }
   .facts, .cols { gap: 36px; }
@@ -693,6 +697,7 @@ body:has(.p-doc) .bar { max-width: 1440px; padding-left: 32px; padding-right: 32
   .swatches { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .blurb p { padding-right: 0; padding-top: 34px; }
   .zz { display: none; }
+  .plan.has-cat { margin-top: 96px; }
   .prose h2 { font-size: 25px; margin-top: 44px; }
   .prose > ol > li { padding-left: 46px; }
   .rows-plain li, .rows-plain.labeled li { grid-template-columns: 1fr; }

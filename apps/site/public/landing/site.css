@@ -36,7 +36,7 @@ a:focus-visible, button:focus-visible, summary:focus-visible { outline: none; ba
 .brand::before, .bar nav a.cta::before { content: ""; position: absolute; inset: -8px 0; }
 .brand img { width: 28px; height: 28px; }
 /* the pixel bots get clicked a lot; that never selects them (site.js stops a double click selecting the words beside one) */
-svg.bot, .sb[data-px] { -webkit-user-select: none; user-select: none; }
+svg.bot, .sb[data-px], .cat img { -webkit-user-select: none; user-select: none; }
 .bar nav { display: flex; align-items: center; gap: 4px; }
 .bar nav a { color: var(--ink); text-decoration: none; font-size: 15px; padding: 8px 12px; border-radius: 999px; font-weight: 500; }
 .bar nav a[aria-current="page"], .bar nav a.is-here { color: var(--ink); background: var(--wash); }

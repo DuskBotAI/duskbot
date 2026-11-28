@@ -71,8 +71,8 @@ test("the email, the code and the Admin's answers are read strictly", () => {
     assert.equal(parseSignInStart(bad), null, JSON.stringify(bad));
   }
   const admin = (status, code) => Object.assign(new Error("x"), { status, code });
-  assert.deepEqual([admin(403, "sso"), admin(429, "rate_limited"), admin(404, "unsupported"), Object.assign(new Error("x"), { status: 404, opaque: true }), admin(400, "invalid_request"), admin(503, "x"), new TypeError("fetch failed")].map(startFailure),
-    ["sso", "rate-limited", "browser", "browser", "invalid-email", "failed", "failed"]);
+  assert.deepEqual([admin(403, "sso"), admin(429, "rate_limited"), admin(404, "unsupported"), Object.assign(new Error("x"), { status: 404, opaque: true }), admin(400, "invalid_request"), admin(400, "email_undeliverable"), admin(503, "x"), new TypeError("fetch failed")].map(startFailure),
+    ["sso", "rate-limited", "browser", "browser", "invalid-email", "invalid-email", "failed", "failed"]);
   assert.deepEqual([admin(400, "invalid_code"), admin(410, "expired"), admin(403, "sso"), admin(403, "two_factor"), admin(403, "signup_closed"), admin(403, "device_limit"), admin(429, "rate_limited"),
     Object.assign(new Error("x"), { status: 403, opaque: true })].map(verifyFailure), ["wrong-code", "expired", "sso", "two-factor", "signup-closed", "device-limit", "rate-limited", "failed"]);
 });

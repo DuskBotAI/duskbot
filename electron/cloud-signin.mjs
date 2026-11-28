@@ -8,13 +8,20 @@ const ATTEMPT = /^[A-Za-z0-9_-]{43}$/;
 const APP_VERSION = /^[0-9A-Za-z][0-9A-Za-z.+-]{0,39}$/;
 // oxlint-disable-next-line no-control-regex
 const CONTROL = /[\x00-\x1f\x7f]/;
-const EMAIL = /^[^\s@]{1,64}@[^\s@.]+(?:\.[^\s@.]+)+$/;
+const INVISIBLE = /[\u00ad\u180e\u200b-\u200f\u202a-\u202e\u2060-\u2064\ufeff]/g;
+const ATOM = "[a-z0-9!#$%&'*+/=?^_`{|}~-]+";
+const LOCAL = new RegExp(`^${ATOM}(?:\\.${ATOM})*$`);
+const LABEL = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
+const TLD = /^(?:[a-z]{2,63}|xn--[a-z0-9-]{1,59})$/;
 
 /** An address the Admin's own check would take, lower-cased; anything else is no address. */
 export function cleanEmail(value) {
-  if (typeof value !== "string") return null;
-  const email = value.trim().toLowerCase();
-  return email.length <= 254 && !CONTROL.test(email) && EMAIL.test(email) ? email : null;
+  if (typeof value !== "string" || value.length > 512) return null;
+  const email = value.normalize("NFKC").replace(INVISIBLE, "").trim().toLowerCase();
+  if (email.length > 254) return null;
+  const at = email.lastIndexOf("@"), local = email.slice(0, at), domain = email.slice(at + 1), labels = domain.split(".");
+  if (at < 1 || local.length > 64 || !LOCAL.test(local) || labels.length < 2) return null;
+  return labels.every(label => LABEL.test(label)) && TLD.test(labels.at(-1)) ? email : null;
 }
 
 /** Eight digits, as typed or pasted with spaces or a dash; anything else is no code. */
@@ -49,7 +56,7 @@ export function startFailure(error) {
   if (said(error, 403, "sso")) return "sso";
   if (said(error, 429)) return "rate-limited";
   if (noEmailRoute(error)) return "browser";
-  if (said(error, 400, "invalid_request")) return "invalid-email";
+  if (said(error, 400, "invalid_request") || said(error, 400, "invalid_email") || said(error, 400, "email_undeliverable")) return "invalid-email";
   return "failed";
 }
 

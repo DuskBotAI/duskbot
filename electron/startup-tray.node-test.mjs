@@ -259,3 +259,27 @@ test("the macOS tray icon is a template image, elsewhere the logo", () => {
   assert.equal(mac.template, true);
   assert.equal(trayIcon(nativeImage, "res", "win32").file, "res/tray-icon.png");
 });
+
+test("hold pauses the stuck timer across reloads and keeps update waits out of the load-time median", async () => {
+  const ran = [];
+  class Said extends Window {
+    constructor(options) { super(options); this.webContents.executeJavaScript = async (code) => { ran.push(code); }; }
+  }
+  const loads = [];
+  let clock = 1_000;
+  const { splash } = fixture({ BrowserWindow: Said, now: () => clock, onLoaded: ms => loads.push(ms) });
+  await splash.ready;
+  splash.hold(true);
+  splash.status("Finishing update to 1.1.0\u2026");
+  splash.window.webContents.emit("did-finish-load");
+  assert.ok(ran.includes("window.card?.hold(true)"));
+  assert.equal(ran.filter(code => code === "window.card?.hold(true)").length, 2);
+  clock = 65_000;
+  splash.status(null);
+  splash.hold(false);
+  assert.ok(ran.includes("window.card?.say(null)"));
+  assert.ok(ran.includes("window.card?.hold(false)"));
+  clock = 68_500;
+  splash.progress("loaded");
+  assert.deepEqual(loads, [3_500]);
+});

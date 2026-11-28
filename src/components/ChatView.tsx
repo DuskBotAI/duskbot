@@ -1,5 +1,6 @@
 import { createContext, memo, startTransition, use, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type Dispatch, type RefObject } from "react";
 import { usePhoneLayout } from "@/lib/use-media-query";
+import { HEAD_LAYOUT, useSettledHead } from "@/hooks/use-settled-head";
 import { phoneApp } from "@/lib/store-app";
 import { ThreadLinkContext } from "@/components/ThreadLinkMenu";
 import { ChevronRight, Copy, Monitor, RefreshCw, Square, Webhook } from "../icons";
@@ -1009,6 +1010,7 @@ export function ChatView({ bot: profile }: { bot: Bot }) {
   const composerDockRef = useRef<HTMLDivElement>(null);
   const composerDock = useComposerDockPad(composerDockRef, () => scrollRef.current);
   const phone = usePhoneLayout();
+  const { headRef, identityRef, narrowHead } = useSettledHead(phone);
   const phoneMenu = phone && !remoteClient;
   const simpleHead = !remoteClient;
   const canWrite = useCanWriteIn(bot.threadId, bot.yourAccess);
@@ -1261,6 +1263,7 @@ export function ChatView({ bot: profile }: { bot: Bot }) {
       {/* z-[25]: above the room set-up card (z-20), below the CallOverlay (z-30). */}
       <GlassBar edge="top" fade={!remoteClient} className="z-[25]">
       <div
+        ref={headRef}
         {...headerDragProps}
         className={cn(
           // A container query never matches the container itself, so the row that wraps is the child below.
@@ -1268,8 +1271,8 @@ export function ChatView({ bot: profile }: { bot: Bot }) {
           simpleHead ? "px-5 pt-2.5 pb-2.5 max-md:pl-[var(--narrow-lead,3.5rem)] max-md:pr-3" : "px-5 py-3 pl-11 md:pl-5 max-md:pl-[var(--narrow-lead,3.5rem)] max-md:pr-3",
         )}
       >
-        <div data-chathead-row className={cn("flex items-center justify-between", phone ? "gap-2" : "@max-[30rem]/chathead:flex-wrap @max-[30rem]/chathead:gap-y-1 @min-[30rem]/chathead:grid @min-[30rem]/chathead:grid-cols-[minmax(0,1fr)_minmax(0,auto)_minmax(max-content,1fr)]")}>
-        <div data-chathead-identity className={cn("flex min-w-0 items-center gap-2", phone ? "flex-1" : "@max-[30rem]/chathead:basis-full @min-[30rem]/chathead:col-start-2 @min-[30rem]/chathead:justify-self-center", simpleHead && phone && "justify-center")} style={headerNoDragStyle}>
+        <div data-chathead-row className={cn("flex items-center justify-between", phone ? "gap-2" : HEAD_LAYOUT[narrowHead ? "narrow" : "wide"].row)}>
+        <div ref={identityRef} data-chathead-identity className={cn("flex min-w-0 items-center gap-2", phone ? "flex-1" : HEAD_LAYOUT[narrowHead ? "narrow" : "wide"].identity, simpleHead && phone && "justify-center")} style={headerNoDragStyle}>
           {simpleHead ? (
             <ChatHeadPill
               bot={bot}
@@ -1310,7 +1313,7 @@ export function ChatView({ bot: profile }: { bot: Bot }) {
         </div>
         <div
           data-chathead-controls
-          className={cn("flex shrink-0 items-center gap-2", !phone && "@max-[30rem]/chathead:ml-auto @max-[30rem]/chathead:flex-wrap @max-[30rem]/chathead:justify-end @min-[30rem]/chathead:col-start-3 @min-[30rem]/chathead:justify-self-end")}
+          className={cn("flex shrink-0 items-center gap-2", !phone && HEAD_LAYOUT[narrowHead ? "narrow" : "wide"].controls)}
         >
           {!simpleHead && (bot.busy || bot.waitingForTeammates) && !stopCut && (
             <button

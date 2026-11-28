@@ -323,7 +323,7 @@ describe("the working line swapping words", () => {
     expect(host.textContent).not.toMatch(/·\s*\d+\s*(s|m)\b/);
   });
 
-  it("keeps the old and the new words mounted in one cell while they crossfade with a blur, then drops the old", () => {
+  it("keeps the old and the new words mounted in one cell while they crossfade, with no blur, then drops the old", () => {
     reduce(false);
     swap();
     const [out, into] = words().map((word) => word.parentElement!);
@@ -334,8 +334,8 @@ describe("the working line swapping words", () => {
     for (const word of [out!, into!]) expect(word.className).toContain("[grid-area:1/1]");
     const fadeOut = runs.find((run) => run.el === out)!;
     const fadeIn = runs.find((run) => run.el === into)!;
-    expect(fadeOut.keyframes).toEqual([{ opacity: 1, filter: "blur(0px)" }, { opacity: 0, filter: "blur(4px)" }]);
-    expect(fadeIn.keyframes).toEqual([{ opacity: 0, filter: "blur(4px)" }, { opacity: 1, filter: "blur(0px)" }]);
+    expect(fadeOut.keyframes).toEqual([{ opacity: 1 }, { opacity: 0 }]);
+    expect(fadeIn.keyframes).toEqual([{ opacity: 0 }, { opacity: 1 }]);
     for (const run of [fadeOut, fadeIn]) expect(run.options).toMatchObject({ duration: 880, easing: "cubic-bezier(0.22, 1, 0.36, 1)" });
     expect(into!.classList, "no rise on a swap").not.toContain("turn-label-in");
     act(() => fadeOut.onfinish!());

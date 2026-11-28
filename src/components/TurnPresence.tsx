@@ -165,9 +165,8 @@ function StepPhrase({ step, hover }: { step: StepWords; hover?: string }) {
     // whole words while the width eases, so no ellipsis slides along them
     for (const word of [out, into]) word.style.width = "max-content";
     const timing = { duration: WORD_SWAP.duration, easing: WORD_SWAP.easing };
-    const blur = (px: number) => `blur(${px}px)`;
-    const fade = out.animate([{ opacity: 1, filter: blur(0) }, { opacity: 0, filter: blur(WORD_SWAP.blurPx) }], { ...timing, fill: "forwards" });
-    into.animate([{ opacity: 0, filter: blur(WORD_SWAP.blurPx) }, { opacity: 1, filter: blur(0) }], { ...timing, fill: "backwards" });
+    const fade = out.animate([{ opacity: 1 }, { opacity: 0 }], { ...timing, fill: "forwards" });
+    into.animate([{ opacity: 0 }, { opacity: 1 }], { ...timing, fill: "backwards" });
     const width = Math.abs(from - to) >= 1 ? box.animate([{ width: `${from}px` }, { width: `${to}px` }], { ...timing, fill: "forwards" }) : null;
     fade.onfinish = () => setLeaving(null);
     return () => {

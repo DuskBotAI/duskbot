@@ -923,7 +923,6 @@
   "teamShare.skip.notes_too_large": "lớn hơn giới hạn ghi chú ban đầu",
   "teamShare.skip.skill_changed": "đã thay đổi sau khi được xem xét",
   "teamShare.skip.skill_conflict": "hai bot có hai kỹ năng khác nhau nhưng cùng tên này",
-  "teamShare.skip.bot_skill_limit": "một bot chỉ có thể chia sẻ tối đa 30 kỹ năng (kỹ năng đang bật được ưu tiên trước)",
   "teamShare.field.soul": "Hướng dẫn thường trực",
   "teamShare.field.notes": "Ghi chú ban đầu",
   "teamShare.field.brief": "Hướng dẫn dùng chung",

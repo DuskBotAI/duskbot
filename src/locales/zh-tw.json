@@ -851,7 +851,6 @@
   "teamShare.skip.notes_too_large": "超過初始筆記的大小上限",
   "teamShare.skip.skill_changed": "審核後又有變更",
   "teamShare.skip.skill_conflict": "有兩個機器人具有同名但內容不同的技能",
-  "teamShare.skip.bot_skill_limit": "每個機器人最多可分享 30 個技能（已開啟的技能優先）",
   "teamShare.field.soul": "常駐指示",
   "teamShare.field.notes": "初始筆記",
   "teamShare.field.brief": "共用指示",

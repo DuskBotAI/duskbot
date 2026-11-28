@@ -1279,7 +1279,6 @@
   "teamShare.skip.notes_too_large": "przekracza limit notatek startowych",
   "teamShare.skip.skill_changed": "zmieniono po przeglądzie",
   "teamShare.skip.skill_conflict": "dwa boty mają różne umiejętności o tej samej nazwie",
-  "teamShare.skip.bot_skill_limit": "bot może udostępnić maksymalnie 30 umiejętności (najpierw włączone umiejętności)",
   "teamShare.field.soul": "Stałe instrukcje",
   "teamShare.field.notes": "Notatki startowe",
   "teamShare.field.brief": "Wspólne instrukcje",

@@ -8,7 +8,7 @@ const SKILL_NAME = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 export const SKILL_NAME_MAX = 64;
 export const DESCRIPTION_MAX = 1024;
 /** One SKILL.md may be at most this large; the spec recommends <5k tokens. */
-export const SKILL_FILE_MAX_BYTES = 256 * 1024;
+export const SKILL_FILE_MAX_BYTES = 1024 * 1024;
 
 export function isSkillName(name: string): boolean {
   return name.length >= 1 && name.length <= SKILL_NAME_MAX && SKILL_NAME.test(name);

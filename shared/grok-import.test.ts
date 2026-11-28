@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { GROK_EXPORT_FORMAT, GROK_EXPORT_PROMPT, GROK_NOTES_FILE, GrokImportError, grokMovePlan, mergeGrokBots, parseGrokExport, type GrokBot } from "./grok-import.ts";
-import { parsePackageDocument } from "./package-format.ts";
+import { AGENT_MAX_SKILLS, parsePackageDocument } from "./package-format.ts";
 
 const TOKEN = "sk-abcdefghijklmnopqrstuvwx";
 /** The shape a real Bot wrote: role, memories, facts, skills, a live and a paused routine, event routines, apps. */
@@ -283,11 +283,11 @@ describe("what comes over", () => {
     expect(plan({ name: "Empty", instructions: "Just chat." })).toMatchObject({ skills: [], routines: 0, notes: 0, memories: 0, apps: 0 });
     const busy = plan({
       name: "Busy",
-      skills: Array.from({ length: 35 }, (_, i) => ({ name: `Skill ${i}`, instructions: `Do ${i}.` })),
+      skills: Array.from({ length: AGENT_MAX_SKILLS + 5 }, (_, i) => ({ name: `Skill ${i}`, instructions: `Do ${i}.` })),
       routines: Array.from({ length: 60 }, (_, i) => ({ name: `Routine ${i}`, instruction: `Do ${i}.`, schedule_cron: "0 9 * * *" })),
       apps: Array.from({ length: 25 }, (_, i) => ({ name: `Server ${i}`, mcp_url: `https://s${i}.example.com/mcp` })),
     });
-    expect(busy.skills).toHaveLength(30);
+    expect(busy.skills).toHaveLength(AGENT_MAX_SKILLS);
     expect(busy.document.package.routines).toHaveLength(50);
     expect(busy.routines).toBe(50);
     expect(busy.document.package.connections).toHaveLength(20);

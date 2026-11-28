@@ -55,7 +55,7 @@ describe("skill choices", () => {
 
   it("reads the team's skills from an answer and from a refusal alike", () => {
     expect(skillChoicesFrom({ choices: { skills: names } })).toEqual(names);
-    expect(skillChoicesFrom({ error: "Morgan has more than 30 skills.", choices: { skills: ["a"] } })).toEqual(["a"]);
+    expect(skillChoicesFrom({ error: "Morgan has more than 100 skills.", choices: { skills: ["a"] } })).toEqual(["a"]);
     for (const nothing of [undefined, null, {}, { choices: {} }, { choices: { skills: [1] } }, { choices: { skills: "all" } }]) {
       expect(skillChoicesFrom(nothing)).toBeNull();
     }
@@ -109,10 +109,10 @@ describe("the dialog's state", () => {
 
   it("drops the counts on a refusal (no Save) but keeps every skill box", () => {
     const counted = shareAnswered(SHARE_VIEW_START, answer(["a", "b"]), true);
-    const refusal = Object.assign(new Error("Morgan has more than 30 skills. Choose fewer skills and try again."),
-      { body: { error: "Morgan has more than 30 skills.", choices: { skills: ["a", "b", "c"] } } });
+    const refusal = Object.assign(new Error("Morgan has more than 100 skills. Choose fewer skills and try again."),
+      { body: { error: "Morgan has more than 100 skills.", choices: { skills: ["a", "b", "c"] } } });
     expect(shareRefused(counted, refusal)).toEqual({ preview: null, available: ["a", "b", "c"], included: [],
-      error: "Morgan has more than 30 skills. Choose fewer skills and try again." });
+      error: "Morgan has more than 100 skills. Choose fewer skills and try again." });
     expect(shareRefused(counted, new Error("offline"))).toEqual({ preview: null, available: ["a", "b"], included: [], error: "offline" });
     expect(shareRefused(SHARE_VIEW_START, "down")).toEqual({ ...SHARE_VIEW_START, error: "down" });
   });
@@ -167,8 +167,8 @@ describe("part names", () => {
     expect(describeSkip({ part: "connections[local]", reason: "stdio_server" }, document)).toBe("local · Connection (runs a command on this computer, so it is not shared)");
     expect(describeSkip({ part: "agents[scout].appearance.avatar", reason: "something_new" }, document)).toBe("Scout · Picture (something_new)");
     expect(describeSkip({ part: "agents[scout].skills[step-31]", reason: "bot_skill_limit" }, document))
-      .toBe("Scout · Skill · step-31 (a bot can share at most 30 skills (switched-on skills go first))");
+      .toBe("Scout · Skill · step-31 (a bot can share at most 100 skills (switched-on skills go first))");
     expect(describeSkip({ part: "skills[pricing]", reason: "skill_conflict" }, document)).toBe("pricing · Skill (two bots have different skills with this name)");
-    expect(describeSkip({ part: "skills[extra]", reason: "team_skill_limit" }, document)).toBe("extra · Skill (a section can share at most 60 skills)");
+    expect(describeSkip({ part: "skills[extra]", reason: "team_skill_limit" }, document)).toBe("extra · Skill (a section can share at most 128 skills)");
   });
 });

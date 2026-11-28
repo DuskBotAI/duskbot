@@ -19,7 +19,7 @@ export const PACKAGE_FORMAT = "openmaus.package";
 export const PACKAGE_VERSION = 2;
 /** Canonical UTF-8 bytes of the whole document. */
 export const PACKAGE_MAX_BYTES = 4 * 1024 * 1024;
-export const PACKAGE_MAX_SKILLS = 60, AGENT_MAX_SKILLS = 30, PACKAGE_MAX_PRESETS = 20, PACKAGE_MAX_CONNECTIONS = 20;
+export const PACKAGE_MAX_SKILLS = 128, AGENT_MAX_SKILLS = 100, PACKAGE_MAX_PRESETS = 20, PACKAGE_MAX_CONNECTIONS = 20;
 /** Decoded picture bytes. */
 export const AVATAR_MAX_BYTES = 64 * 1024;
 export const SEED_FILE_MAX_BYTES = 256 * 1024, SEED_MAX_FILES = 100, SEED_MAX_BYTES = 1024 * 1024;

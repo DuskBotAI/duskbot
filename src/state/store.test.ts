@@ -48,7 +48,7 @@ describe("api refusals", () => {
   afterEach(() => { vi.unstubAllGlobals(); });
 
   it("keep the refusal's body for callers that read more than the sentence", async () => {
-    const refusal = { error: "Morgan has more than 30 skills. Choose fewer skills and try again.", choices: { skills: ["a", "b"] } };
+    const refusal = { error: "Morgan has more than 100 skills. Choose fewer skills and try again.", choices: { skills: ["a", "b"] } };
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify(refusal), { status: 400 })));
     const error = await api("/api/teams/export", { method: "POST", body: "{}" }).catch((cause: unknown) => cause);
     expect(error).toBeInstanceOf(ApiError);

@@ -1701,8 +1701,6 @@
   "teamShare.skip.notes_too_large": "supera el límite de las notas iniciales",
   "teamShare.skip.skill_changed": "cambió después de revisarse",
   "teamShare.skip.skill_conflict": "dos bots tienen habilidades distintas con este nombre",
-  "teamShare.skip.bot_skill_limit": "un bot puede compartir como máximo 30 habilidades (primero las activadas)",
-  "teamShare.skip.team_skill_limit": "una sección puede compartir como máximo 60 habilidades",
   "teamShare.field.soul": "Instrucciones permanentes",
   "teamShare.field.notes": "Notas iniciales",
   "teamShare.field.brief": "Instrucciones compartidas",

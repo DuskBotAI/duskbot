@@ -79,9 +79,9 @@ if (typeof window !== "undefined") {
 const REMOTE_SAFE = new Set(["platform", "cloudMac", "app", "getCapabilities", "onCapabilitiesChanged", "applySkin", "setUnreadCount", "permStatus", "workspaces", "rail", "cloudAdd", "cloudPlan", "cloudSendPage", "accountSheet", "desktopNotices", "desktopNotifications", "desktopAnalytics", "desktopLanguage", "windowControls", "onOpenAppSettings", "windowFrame", "sealTrust", "linkDirect", "onSlackOAuth", "ambient", "desktopBots", "requireUserPresence", "vpsCloudMove", "trail"]);
 /** My Cloud's own page once it is the person's home (main checks the sender again): it is this app's page then. */
 const HOME_PAGE = ["home", "appUpdate", "onChatLink", "onPackageInstall", "exportDiagnostics", "openLogsFolder", "openAtLogin", "productEvents"];
-/** Any place the person chose, open as this window's server (home too): its calls listen through this computer's speech,
- * and its Settings shows this app's own update beside the server's. */
-const PLACE_PAGE = ["appUpdate", "callActive", "speechStart", "speechStop", "speechFinish", "onSpeechTranscript", "onSpeechEnd", "onSpeechLevel"];
+/** Any place the person chose, open as this window's server (home too): its calls listen through this computer's speech
+ * and speech services, and its Settings shows this app's own update beside the server's. */
+const PLACE_PAGE = ["appUpdate", "callActive", "speechStart", "speechStop", "speechFinish", "onSpeechTranscript", "onSpeechEnd", "onSpeechLevel", "voiceInput"];
 function homePage() {
   try { return ipcRenderer.sendSync("home:page") === true; } catch { return false; }
 }
@@ -369,8 +369,8 @@ const bridge = {
     ipcRenderer.on("speech:level", handler);
     return () => ipcRenderer.removeListener("speech:level", handler);
   },
-  // This computer's page only (never in REMOTE_SAFE, and main refuses any other): a speech service set up in Settings >
-  // Voice. Main holds the keys; only whether one is saved comes back.
+  // This computer's page, or a place the person chose (PLACE_PAGE; main refuses any other): a speech service set up in
+  // Settings > Voice. Main holds the keys; only whether one is saved comes back.
   voiceInput: {
     keys: {
       status: () => ipcRenderer.invoke("voice-input:keys:status"),

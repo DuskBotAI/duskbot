@@ -20,11 +20,15 @@ function contents() {
   return page;
 }
 
-function harness({ credentials = {}, fetch = async () => ok({ text: "" }), ...rest } = {}) {
+function harness({ credentials = {}, fetch = async () => ok({ text: "" }), placePage = () => false, ...rest } = {}) {
   const h = { handlers: new Map(), listeners: new Map(), guards: [], credentials, writes: 0, log: [] };
   h.voice = installVoiceInput({
     ipcMain: { handle: (channel, handler) => h.handlers.set(channel, handler), on: (channel, handler) => h.listeners.set(channel, handler) },
-    localOnly: (channel, handler) => { h.guards.push(channel); return handler; },
+    localOnly: (channel, handler) => {
+      h.guards.push(channel);
+      return (...args) => handler(...args);
+    },
+    placePage,
     readCredentials: () => structuredClone(h.credentials),
     updateCredentials: async (derive) => { h.writes += 1; h.credentials = await derive(structuredClone(h.credentials)); return h.credentials; },
     log: line => h.log.push(line),
@@ -40,10 +44,27 @@ function harness({ credentials = {}, fetch = async () => ok({ text: "" }), ...re
 const loud = ms => new Int16Array(Math.round(ms * 16)).fill(8_000);
 const quiet = ms => new Int16Array(Math.round(ms * 16));
 
-test("every channel is behind the local-page guard", () => {
-  const h = harness();
-  assert.deepEqual(new Set(h.guards), new Set(["voice-input:keys:status", "voice-input:keys:set", "voice-input:keys:clear", "voice-input:find-whisper",
-    "voice-input:start", "voice-input:finish", "voice-input:stop", "voice-input:audio"]));
+const VOICE_CHANNELS = ["voice-input:keys:status", "voice-input:keys:set", "voice-input:keys:clear", "voice-input:find-whisper",
+  "voice-input:start", "voice-input:finish", "voice-input:stop", "voice-input:audio"];
+
+test("every channel answers this computer's page or a place the person chose, and nowhere else", async () => {
+  const local = harness();
+  assert.equal((await local.invoke("voice-input:keys:status")).openai, false);
+  assert.deepEqual(local.guards, ["voice-input:keys:status"]);
+  local.audio("x", new ArrayBuffer(0));
+  assert.ok(local.guards.includes("voice-input:audio"));
+
+  const place = harness({
+    placePage: () => true,
+    credentials: { [VOICE_KEYS_CREDENTIAL_KEY]: { openai: "sk-secret" } },
+  });
+  assert.equal((await place.invoke("voice-input:keys:status")).openai, true);
+  const { id } = await place.invoke("voice-input:start", { provider: "openai" });
+  assert.equal(place.voice.active(), 1);
+  await place.invoke("voice-input:stop", id);
+  assert.equal(place.voice.active(), 0);
+  assert.deepEqual(place.guards, []);
+  assert.deepEqual(new Set(VOICE_CHANNELS).size, VOICE_CHANNELS.length);
 });
 
 test("keys: saved in the credential document, status is booleans only, clear removes them", async () => {

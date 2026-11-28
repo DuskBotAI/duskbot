@@ -350,17 +350,19 @@ export function createRealtimeSession({ key, model, language, onText, onError, f
 }
 
 /**
- * The voice-input IPC for this computer's own page. `readCredentials()` returns the decrypted credential document;
- * `updateCredentials(derive)` is main.mjs's serialized writer (updateSecureCredentialDocument).
+ * The voice-input IPC for this computer's page and for a place the person chose. `placePage(event)` matches talk's
+ * speech gate. `readCredentials()` returns the decrypted credential document; `updateCredentials(derive)` is
+ * main.mjs's serialized writer (updateSecureCredentialDocument).
  */
 export function installVoiceInput({
-  ipcMain, localOnly, readCredentials, updateCredentials, log = () => {},
+  ipcMain, localOnly, placePage = () => false, readCredentials, updateCredentials, log = () => {},
   fetch = globalThis.fetch, WebSocket = globalThis.WebSocket, spawn = nodeSpawn, tmpdir = nodeTmpdir,
   findWhisper = () => findWhisperCpp(), checkWhisperCpp = checkWhisper, maxMs = SESSION_MAX_MS, maxBytes = SESSION_MAX_BYTES,
 }) {
   const sessions = new Map();
   const bySender = new Map();
   const watched = new WeakSet();
+  const localOrPlace = (channel, handler) => (event, ...args) => (placePage(event) ? handler : localOnly(channel, handler))(event, ...args);
 
   const send = (contents, channel, payload) => {
     try {
@@ -411,13 +413,13 @@ export function installVoiceInput({
     return session && session.contents === event.sender ? session : null;
   };
 
-  ipcMain.handle("voice-input:keys:status", localOnly("voice-input:keys:status", () => voiceKeyStatus(readCredentials())));
-  ipcMain.handle("voice-input:keys:set", localOnly("voice-input:keys:set", async (_event, provider, key) => {
+  ipcMain.handle("voice-input:keys:status", localOrPlace("voice-input:keys:status", () => voiceKeyStatus(readCredentials())));
+  ipcMain.handle("voice-input:keys:set", localOrPlace("voice-input:keys:set", async (_event, provider, key) => {
     const which = keyProvider(provider);
     const value = cleanKey(key);
     await updateCredentials((credentials) => ({ ...credentials, [VOICE_KEYS_CREDENTIAL_KEY]: { ...readVoiceKeys(credentials), [which]: value } }));
   }));
-  ipcMain.handle("voice-input:keys:clear", localOnly("voice-input:keys:clear", async (_event, provider) => {
+  ipcMain.handle("voice-input:keys:clear", localOrPlace("voice-input:keys:clear", async (_event, provider) => {
     const which = keyProvider(provider);
     await updateCredentials((credentials) => {
       const keys = readVoiceKeys(credentials);
@@ -428,9 +430,9 @@ export function installVoiceInput({
       return next;
     });
   }));
-  ipcMain.handle("voice-input:find-whisper", localOnly("voice-input:find-whisper", () => findWhisper()));
+  ipcMain.handle("voice-input:find-whisper", localOrPlace("voice-input:find-whisper", () => findWhisper()));
 
-  ipcMain.handle("voice-input:start", localOnly("voice-input:start", async (event, raw) => {
+  ipcMain.handle("voice-input:start", localOrPlace("voice-input:start", async (event, raw) => {
     const options = sessionOptions(raw);
     const contents = event.sender;
     drop(sessions.get(bySender.get(contents)));
@@ -476,16 +478,16 @@ export function installVoiceInput({
     return { id };
   }));
 
-  ipcMain.handle("voice-input:finish", localOnly("voice-input:finish", async (event, id) => {
+  ipcMain.handle("voice-input:finish", localOrPlace("voice-input:finish", async (event, id) => {
     const session = owned(event, id);
     if (session) await finishSession(session);
   }));
-  ipcMain.handle("voice-input:stop", localOnly("voice-input:stop", (event, id) => {
+  ipcMain.handle("voice-input:stop", localOrPlace("voice-input:stop", (event, id) => {
     drop(owned(event, id));
   }));
 
   // a throw inside an ipcMain.on listener reaches no caller, so refusals here are quiet
-  const audio = localOnly("voice-input:audio", (event, id, pcm) => {
+  const audio = localOrPlace("voice-input:audio", (event, id, pcm) => {
     const session = owned(event, id);
     if (!session || session.finishing) return;
     const samples = pcmOf(pcm);

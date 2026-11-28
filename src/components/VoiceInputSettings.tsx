@@ -54,11 +54,12 @@ export function engineOptions(device: VoiceDevice, current: Engine): Array<{ val
 export function engineNote(engine: ResolvedEngine, prefs: Pick<VoicePrefs, "engine">, device: VoiceDevice): string | null {
   if (device.kind === "browser") return engine.kind === "none" ? t("settings.voice.noRecognizer") : t("settings.voice.browserNote");
   if (engine.kind === "none") return t("settings.voice.noRecognizer");
+  // a bare remote page has no speech services: say so even when the menu already shows the built-in one
+  if (device.kind === "desktop" && !device.providers) return t("settings.voice.remoteNote");
   if (engine.kind !== "system" || prefs.engine === "system" || !engine.fellBack) return null;
   // a service without its key says nothing here: the key field under the engine is what to do about it
   if (engine.fellBack === "not-set-up") return null;
-  const service = VOICE_PROVIDER_INFO[prefs.engine].name;
-  return device.kind === "desktop" && !device.providers ? t("settings.voice.remoteNote") : t("settings.voice.notHere", { service });
+  return t("settings.voice.notHere", { service: VOICE_PROVIDER_INFO[prefs.engine].name });
 }
 
 /** The AI connections that can write a one-off line: available, able to write in the background, not blocked by policy. */

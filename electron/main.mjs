@@ -2768,7 +2768,8 @@ ipcMain.handle("desktop:relaunch", localOnly("desktop:relaunch", (event) => {
 const talk = installTalk({ ipcMain, localOnly, placePage: event => homeWindow.homePage(event) || Boolean(activePageOrigin(event)), BrowserWindow, appleSpeech: nativeActions.appleSpeech,
   speech: { start: startSpeech, stop: stopSpeech, finish: finishSpeech, busy: speechBusy }, packaged: app.isPackaged, devUrl: DEV_URL, nativeImage, iconPath: APP_ICON, openLink: queueChatLink, reveal: revealForLink, log: slog });
 // voice input through a speech service set up in Settings > Voice; the keys stay in credentials.bin
-installVoiceInput({ ipcMain, localOnly, readCredentials: () => secureCredentialState?.read() ?? secureCredentials,
+installVoiceInput({ ipcMain, localOnly, placePage: event => homeWindow.homePage(event) || Boolean(activePageOrigin(event)),
+  readCredentials: () => secureCredentialState?.read() ?? secureCredentials,
   updateCredentials: derive => updateSecureCredentialDocument(derive), log: slog });
 // the notch island and the bot dock (ambient-main.mjs), fed by the app page's own summary of its bots
 const ambientSurfaces = installAmbient({ ipcMain, BrowserWindow, page: () => mainWindow?.webContents ?? null, origin: confirmedRendererOrigin, file: jsonFile(path.join(app.getPath("userData"), "ambient-prefs.json")),

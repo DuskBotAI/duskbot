@@ -62,6 +62,15 @@ describe("account mail", () => {
     const offline = await brevoMailer({ apiKey: "fixture-key", from: "mail@example.test", fetch: vi.fn<typeof fetch>().mockRejectedValue(new TypeError("fetch failed")) }).send(codeMessage("fixture@example.test", "01234567")).catch(e => e);
     expect(offline).toMatchObject({ status: null, reason: "no answer (TypeError)" });
   });
+  it("names the field resend refused, and nothing else from its message", async () => {
+    const message = "Invalid `to` field. The email address needs to follow the `email@example.com` or `Name <email@example.com>` format.";
+    const request = vi.fn<typeof fetch>().mockResolvedValue(Response.json({ statusCode: 422, name: "validation_error", message }, { status: 422 }));
+    const error = await resendMailer({ apiKey: "fixture-key", from: "mail@example.test", fetch: request }).send(codeMessage("fixture@example.test", "01234567")).catch(e => e);
+    expect(error).toMatchObject({ status: 422, reason: "http 422 validation_error on to" });
+    const echoed = vi.fn<typeof fetch>().mockResolvedValue(Response.json({ name: "validation_error", message: "`fixture@example.test` is not valid" }, { status: 422 }));
+    expect(await resendMailer({ apiKey: "fixture-key", from: "mail@example.test", fetch: echoed }).send(codeMessage("fixture@example.test", "01234567")).catch(e => e))
+      .toMatchObject({ reason: "http 422 validation_error" });
+  });
   it.each([400, 401, 429, 500])("hides Brevo failure details for status %s", async status => {
     const request = vi.fn<typeof fetch>().mockResolvedValue(new Response("sensitive provider details", { status }));
     await expect(brevoMailer({ apiKey: "fixture-key", from: "mail@example.test", fetch: request }).send(codeMessage("fixture@example.test", "01234567"))).rejects.toThrow("Email delivery failed.");

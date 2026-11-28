@@ -1054,4 +1054,17 @@ describe("local account service", () => {
     expect(JSON.stringify(warn.mock.calls)).not.toContain("private provider details");
     warn.mockRestore();
   });
+
+  it("turns away an address no provider would take before sending, and cleans what a paste adds", async () => {
+    const sent: string[] = [];
+    restart({ mailer: { async send(message) { sent.push(message.to); } } });
+    for (const bad of ["person@example.c", "a..b@example.test", "dé@example.test", "person@example.test,", "a(b)@example.test"]) {
+      const response = await call("/v1/auth/start", { email: bad });
+      expect(response.status, bad).toBe(400);
+      expect(await response.json()).toMatchObject({ code: "invalid_email" });
+    }
+    expect(sent).toEqual([]);
+    expect((await call("/v1/auth/start", { email: "﻿Per​son@Example.TEST" })).status).toBe(200);
+    expect(sent).toEqual(["person@example.test"]);
+  });
 });

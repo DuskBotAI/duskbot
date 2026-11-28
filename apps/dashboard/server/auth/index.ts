@@ -1,6 +1,7 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes, randomInt, timingSafeEqual } from "node:crypto";
 import { accountIntentPath, cleanAccountIntent, type AccountIntent } from "../../../../shared/account-api.ts";
+import { cleanEmail } from "../../../../shared/email-address.ts";
 import { ACCOUNT_ROUTES as R, cleanPhoneSignInCode, PHONE_SIGN_IN_CODE_LENGTH, PHONE_SIGN_IN_TTL_MS, APP_AUTH_REDIRECT, APP_LANDING_PATH, CSRF_COOKIE, WEBSITE_HOMES, CSRF_HEADER, EMAIL_CODE_DIGITS, EMAIL_CODE_TRIES, EMAIL_CODE_TTL_SECONDS, EMAIL_RESEND_SECONDS, HANDOFF_PAGES, HANDOFF_PLANS, NOTIFICATION_DEFAULTS, OAUTH_PROVIDERS, SESSION_COOKIE } from "../../../../shared/account-api.ts";
 import type { AccountAnswer, AccountErrorCode, AccountView, AppGrant, NotificationPrefs, AppSessionIdentity, HandoffAnswer, OAuthErrorCode, OAuthProvider, PhoneSignInGrant, WebHandoffAnswer, WebsiteHome, WebsiteSetup } from "../../../../shared/account-api.ts";
 import { generatePairingCode, PAIRING_CODE_ALPHABET } from "../../../../server/sessions.ts";
@@ -83,11 +84,7 @@ const hash = (value: string) => createHash("sha256").update(value).digest("hex")
 const opaque = (value: unknown): value is string => typeof value === "string" && /^[A-Za-z0-9_-]{43}$/.test(value);
 const controls = (value: string) => [...value].some(char => char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127);
 const label = (value: unknown, max: number): value is string => typeof value === "string" && value.trim().length > 0 && value.trim().length <= max && !controls(value);
-export function cleanEmail(value: unknown): string | null {
-  if (typeof value !== "string") return null;
-  const email = value.trim().toLowerCase();
-  return email.length <= 254 && !controls(email) && /^[^\s@]{1,64}@[^\s@.]+(?:\.[^\s@.]+)+$/.test(email) ? email : null;
-}
+export { cleanEmail };
 export function isAppCorsRoute(path: string) {
   return path.startsWith("/api/cloud/app/sign-in/") || [R.appSession, R.appAvatar, R.enrollGrant, R.webHandoff, R.appToken, R.appDeleteAccount].some(route => route === path);
 }

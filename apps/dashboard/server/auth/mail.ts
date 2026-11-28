@@ -11,11 +11,16 @@ export class MailDeliveryError extends Error {
   readonly reason: string;
   constructor(status: number | null, reason: string) { super("Email delivery failed."); this.status = status; this.reason = reason; }
 }
-// the provider's error name or code, never its message (which can echo the address or the key's name)
+// the provider's error name or code and, from resend's message, only the field it names ("Invalid `to` field."), never the
+// rest of the message (which can echo the address or the key's name)
 async function failure(response: Response): Promise<MailDeliveryError> {
-  let code = "";
-  try { const body = await response.json() as { name?: unknown; code?: unknown }; code = String(body?.name ?? body?.code ?? "").replace(/[^a-z0-9_.-]/gi, "").slice(0, 40); } catch { /* not json */ }
-  return new MailDeliveryError(response.status, `http ${response.status}${code ? ` ${code}` : ""}`);
+  let code = "", field = "";
+  try {
+    const body = await response.json() as { name?: unknown; code?: unknown; message?: unknown };
+    code = String(body?.name ?? body?.code ?? "").replace(/[^a-z0-9_.-]/gi, "").slice(0, 40);
+    field = typeof body?.message === "string" ? /`([a-z_]{1,20})`/i.exec(body.message)?.[1] ?? "" : "";
+  } catch { /* not json */ }
+  return new MailDeliveryError(response.status, `http ${response.status}${code ? ` ${code}` : ""}${field ? ` on ${field}` : ""}`);
 }
 const noAnswer = (error: unknown) => error instanceof MailDeliveryError ? error : new MailDeliveryError(null, `no answer (${error instanceof Error ? error.name : "error"})`);
 

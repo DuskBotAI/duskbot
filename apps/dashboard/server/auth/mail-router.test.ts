@@ -69,10 +69,22 @@ describe("mail router", () => {
     expect(t.log.mock.calls[0]![0]).toMatch(/^mail: resend failed \((http \d+|no answer \(TimeoutError\))\), so "<code> is your dusk bot code" went through brevo$/);
   });
 
-  it("does not retry a message resend calls invalid (422) elsewhere", async () => {
-    const t = setup({ resendFails: () => new MailDeliveryError(422, "http 422 validation_error") });
-    await expect(t.router.send(code())).rejects.toThrow("Email delivery failed.");
-    expect(t.brevo).toHaveLength(0);
+  it.each([400, 422])("sends a code resend refuses with %s through brevo, which checks a message its own way", async status => {
+    const t = setup({ resendFails: () => new MailDeliveryError(status, `http ${status} validation_error on to`) });
+    await t.router.send(code());
+    expect(t.brevo).toHaveLength(1);
+    expect((await t.counts()).resend!.lastError).toEqual({ at: AT, reason: `http ${status} validation_error on to` });
+    expect(t.log).toHaveBeenCalledWith(`mail: resend failed (http ${status} validation_error on to), so "<code> is your dusk bot code" went through brevo`);
+  });
+
+  it("answers with the refusal when brevo refuses too, or is full, so a bad address still reads as one", async () => {
+    const both = setup({ resendFails: () => new MailDeliveryError(422, "http 422 validation_error on to"), brevoFails: () => new MailDeliveryError(400, "http 400 invalid_parameter") });
+    await expect(both.router.send(code())).rejects.toMatchObject({ status: 400, reason: "http 400 invalid_parameter" });
+    expect(both.log).toHaveBeenCalledWith('mail: resend failed (http 422 validation_error on to), and brevo failed too for "<code> is your dusk bot code"');
+    const full = setup({ resendFails: () => new MailDeliveryError(422, "http 422 validation_error on to"), caps: { brevo: { daily: 1, monthly: 10_000 } } });
+    await full.router.send(notice());
+    await expect(full.router.send(code())).rejects.toMatchObject({ status: 422 });
+    expect(full.log).toHaveBeenCalledWith('mail: resend failed (http 422 validation_error on to), and brevo is at its cap for "<code> is your dusk bot code"');
   });
 
   it("fails when both providers are at their caps", async () => {

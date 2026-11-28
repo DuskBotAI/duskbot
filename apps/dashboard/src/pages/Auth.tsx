@@ -7,6 +7,7 @@ import { appPath, Link, navigate, useLocation } from "../lib/router";
 import { planIntent, planQuery, SITE_NAME, SITE_URL, siteUrl } from "../lib/site";
 import { ProviderMark, PROVIDER_NAME } from "../ui/BrandMarks";
 import { APP_LANDING_PATH } from "../../../../shared/account-api.ts";
+import { cleanEmail } from "../../../../shared/email-address.ts";
 import { SplitFrame } from "../ui/Frame";
 import { Button, cx } from "../ui/kit";
 import { Mascot, useReducedMotion } from "../ui/Mascot";
@@ -27,7 +28,6 @@ const REASON: Record<string, string> = {
 const OAUTH: IdentityProvider[] = ["google", "apple"];
 const SUPPORT = "hello@dusk.bot";
 const LINK_ATTEMPT = /^[A-Za-z0-9_-]{43}$/;
-const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const SLOW_MS = 5000;
 const PARTY_MS = 1100;
 
@@ -192,8 +192,8 @@ export function AuthScreen({ mode, note, forApp = false }: { mode: Mode; note?: 
   };
 
   const send = async (recover = recovering, again = false) => {
-    const address = email.trim();
-    if (!EMAIL.test(address)) { fail(new ApiError("", 400, "invalid_email")); (recover ? document.getElementById("recover-email") : emailRef.current)?.focus(); return; }
+    const address = cleanEmail(email);
+    if (!address) { fail(new ApiError("", 400, "invalid_email")); (recover ? document.getElementById("recover-email") : emailRef.current)?.focus(); return; }
     // the same address again before a new code may go out: the one already sent still works
     if (!again && attempt && address === sentTo && Date.now() < resendAt && recover === recovering) { setError(null); toCode(); return; }
     setBusy("email"); setError(null);

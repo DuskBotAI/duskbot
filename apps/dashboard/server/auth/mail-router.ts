@@ -90,10 +90,9 @@ export async function mongoMailUsage(db: Db): Promise<MailUsageStore> {
   };
 }
 
-/** resend's failures that another provider can fix: no answer, rate or quota limits (429), its outages (5xx) and a key it
- *  refuses (401, 403). a 400 or 422 is the message itself and would fail anywhere */
-export const worthAnotherTry = (error: unknown) =>
-  error instanceof MailDeliveryError && (error.status === null || error.status === 429 || error.status >= 500 || error.status === 401 || error.status === 403);
+/** any refusal of resend's is worth brevo's try: no answer, limits (429), outages (5xx), a refused key (401, 403), and a
+ *  400 or 422 too, since the two providers check a message differently */
+export const worthAnotherTry = (error: unknown) => error instanceof MailDeliveryError;
 
 export interface RoutedMailer extends Mailer {
   /** this service's counts against each provider's caps, for admin ops */
@@ -127,18 +126,23 @@ export function createMailRouter(options: {
     // harness addresses (@qa.dusk.test, qa*@dusk.bot) never reach a provider, whatever sends to them
     if (isTestAddress(message.to)) return;
     const day = dayOf(now()), [first, second] = order.filter(configured);
-    let why: string;
+    let why: string, refused: MailDeliveryError | null = null;
     try {
       if (await attempt(first!, message, day) === "sent") return;
       why = `${first} is at its cap`;
       if (!second) throw new MailDeliveryError(null, `${first} at its cap`);
     } catch (error) {
       if (!second || !fallbackOnError || !worthAnotherTry(error)) throw error instanceof MailDeliveryError ? error : new MailDeliveryError(null, "failed");
-      why = `${first} failed (${(error as MailDeliveryError).reason})`;
+      refused = error as MailDeliveryError;
+      why = `${first} failed (${refused.reason})`;
     }
     await quiet(options.usage.fallback(first!, day), undefined);
-    log(`mail: ${why}, so "${message.subject.replace(/\d{6,}/g, "<code>")}" went through ${second}`);
-    if (await attempt(second, message, day) === "capped") throw new MailDeliveryError(null, `${first} and ${second} at their caps`);
+    const subject = message.subject.replace(/\d{6,}/g, "<code>");
+    const outcome = await attempt(second, message, day).catch((error: unknown) => { log(`mail: ${why}, and ${second} failed too for "${subject}"`); throw error; });
+    if (outcome === "sent") { log(`mail: ${why}, so "${subject}" went through ${second}`); return; }
+    log(`mail: ${why}, and ${second} is at its cap for "${subject}"`);
+    // the first refusal says more than the second one's cap: a rejected address still answers as one
+    throw refused ?? new MailDeliveryError(null, `${first} and ${second} at their caps`);
   }
 
   return {

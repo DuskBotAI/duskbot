@@ -785,7 +785,7 @@ esac
     vi.stubEnv("DOCKER_HOST", "unix:///run/duskbot-docker/docker.sock");
     try {
       expect(vpsComputerMcp(CONFIG, BOT_ID).env).toEqual({ ELECTRON_RUN_AS_NODE: "1", DUSK_VPS_DOCKER: "local", DOCKER_HOST: gateDockerHost("unix:///run/duskbot-docker/docker.sock") });
-    } finally { vi.unstubAllEnvs(); }
+    } finally { vi.unstubAllEnvs(); vi.stubEnv("DUSK_VPS_DESKTOP", "cua"); }
     expect(vpsContainerMcpArgs("production-vps", vpsContainerName(BOT_ID))).toEqual([
       "-H",
       "ssh://production-vps",

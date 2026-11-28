@@ -6,7 +6,7 @@ import { join } from "node:path";
 import test from "node:test";
 
 import { createAppUpdater, DESKTOP_MANIFEST_URL, mirrorUrl, setupIn, setupSources, sumsUrl, zipUrl } from "./app-update.mjs";
-import { nsisInstaller, setupArgs, TRIED, windowsPlace } from "./app-update-windows.mjs";
+import { isPidAlive, nsisInstaller, packagedResourcesReady, setupArgs, TRIED, waitForWindowsInstall, windowsPlace } from "./app-update-windows.mjs";
 
 const { privateKey } = generateKeyPairSync("ed25519");
 const keys = [{ kid: "test-desk", x: createPublicKey(privateKey).export({ format: "jwk" }).x }];
@@ -154,4 +154,196 @@ test("only an NSIS install it can write updates itself; the portable zip is poin
   assert.deepEqual(w.updater.state().manual, { version: "1.1.0", url: mirrorUrl("1.1.0", SETUP) });
   assert.equal(w.failures.at(-1).reason, "portable");
   done(w);
+});
+
+test("nsisInstaller records the spawned installer pid and timestamp in installing.json", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "dusk-nsis-pid-"));
+  const file = join(dir, SETUP);
+  writeFileSync(file, "setup bytes");
+  const installer = nsisInstaller({
+    dir,
+    current: "1.0.0",
+    quit: () => {},
+    now: () => 1_700_000_000_000,
+    spawn: () => ({ pid: 42424, on() {}, unref() {} }),
+  });
+  await installer.prepare(file, "1.1.0");
+  assert.equal(installer.quitting(), true);
+  assert.deepEqual(JSON.parse(readFileSync(join(dir, TRIED), "utf8")), {
+    version: "1.1.0",
+    pid: 42424,
+    startedAt: 1_700_000_000_000,
+  });
+  assert.equal(installer.failed("1.1.0"), true);
+  rmSync(dir, { recursive: true, force: true });
+});
+
+test("isPidAlive handles ESRCH, EPERM, invalid values, and current process pid", () => {
+  assert.equal(isPidAlive(0), false);
+  assert.equal(isPidAlive(-5), false);
+  assert.equal(isPidAlive(process.pid), false);
+  assert.equal(isPidAlive(99999, () => {}), true);
+  assert.equal(isPidAlive(99999, () => { throw Object.assign(new Error("denied"), { code: "EPERM" }); }), true);
+  assert.equal(isPidAlive(99999, () => { throw Object.assign(new Error("gone"), { code: "ESRCH" }); }), false);
+});
+
+test("waitForWindowsInstall continues immediately when resources exist and no installer is running", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "dusk-win-wait-"));
+  const res = join(dir, "resources");
+  const present = new Set([
+    join(res, "server", "desktop-entry.mjs"),
+    join(res, "server", "index.js"),
+    join(res, "ui", "index.html"),
+  ]);
+  assert.equal(packagedResourcesReady(res, (p) => present.has(p)), true);
+  const waitedOn = [];
+  const result = await waitForWindowsInstall({
+    dir,
+    resourcesPath: res,
+    current: "1.1.0",
+    exists: (p) => present.has(p),
+    onWaiting: (v) => waitedOn.push(v),
+  });
+  assert.deepEqual(result, { action: "continue", waited: false, complete: true });
+  assert.deepEqual(waitedOn, []);
+  rmSync(dir, { recursive: true, force: true });
+});
+
+test("waitForWindowsInstall waits for tracked NSIS installer and unpacked server/ui resources", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "dusk-win-wait-"));
+  const res = join(dir, "resources");
+  let clock = 10_000;
+  writeFileSync(join(dir, TRIED), JSON.stringify({ version: "1.1.0", pid: 7777, startedAt: clock }));
+  const present = new Set();
+  let pidAlive = true;
+  let ticks = 0;
+  const waitedOn = [];
+  const result = await waitForWindowsInstall({
+    dir,
+    resourcesPath: res,
+    current: "1.1.0",
+    exists: (p) => present.has(p),
+    alive: (pid) => pid === 7777 && pidAlive,
+    now: () => clock,
+    onWaiting: (v) => waitedOn.push(v),
+    sleep: async (ms) => {
+      clock += ms;
+      ticks += 1;
+      if (ticks === 1) {
+        present.add(join(res, "server", "desktop-entry.mjs"));
+        present.add(join(res, "server", "index.js"));
+      }
+      if (ticks === 2) {
+        present.add(join(res, "ui", "index.html"));
+      }
+      if (ticks === 3) {
+        pidAlive = false;
+      }
+    },
+    pollMs: 100,
+  });
+  assert.deepEqual(result, { action: "continue", waited: true, complete: true });
+  assert.deepEqual(waitedOn, ["1.1.0"]);
+  assert.equal(ticks, 3);
+  rmSync(dir, { recursive: true, force: true });
+});
+
+test("waitForWindowsInstall also waits when upgrading from a version without pid in installing.json", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "dusk-win-wait-"));
+  const res = join(dir, "resources");
+  let clock = 5_000;
+  writeFileSync(join(dir, TRIED), JSON.stringify({ version: "1.1.0" }));
+  const present = new Set();
+  let ticks = 0;
+  const waitedOn = [];
+  const result = await waitForWindowsInstall({
+    dir,
+    resourcesPath: res,
+    current: "1.1.0",
+    exists: (p) => present.has(p),
+    now: () => clock,
+    onWaiting: (v) => waitedOn.push(v),
+    sleep: async (ms) => {
+      clock += ms;
+      ticks += 1;
+      if (ticks === 2) {
+        present.add(join(res, "server", "desktop-entry.mjs"));
+        present.add(join(res, "server", "index.js"));
+        present.add(join(res, "ui", "index.html"));
+      }
+    },
+    pollMs: 100,
+  });
+  assert.deepEqual(result, { action: "continue", waited: true, complete: true });
+  assert.deepEqual(waitedOn, ["1.1.0"]);
+  assert.equal(ticks, 2);
+  rmSync(dir, { recursive: true, force: true });
+});
+
+test("waitForWindowsInstall asks an older binary to quit when a newer version's installer is actively running", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "dusk-win-wait-"));
+  const res = join(dir, "resources");
+  const clock = 20_000;
+  writeFileSync(join(dir, TRIED), JSON.stringify({ version: "1.2.0", pid: 8888, startedAt: clock - 5_000 }));
+  const result = await waitForWindowsInstall({
+    dir,
+    resourcesPath: res,
+    current: "1.1.0",
+    exists: () => true,
+    alive: (pid) => pid === 8888,
+    now: () => clock,
+  });
+  assert.deepEqual(result, { action: "quit", version: "1.2.0", waited: false, complete: false });
+  rmSync(dir, { recursive: true, force: true });
+});
+
+test("waitForWindowsInstall ignores stale pid records and stops after timeout or quit", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "dusk-win-wait-"));
+  const res = join(dir, "resources");
+  let clock = 10_000_000;
+  writeFileSync(join(dir, TRIED), JSON.stringify({ version: "1.2.0", pid: 8888, startedAt: 1_000 }));
+  const stale = await waitForWindowsInstall({
+    dir,
+    resourcesPath: res,
+    current: "1.1.0",
+    exists: () => true,
+    alive: () => true,
+    now: () => clock,
+  });
+  assert.deepEqual(stale, { action: "continue", waited: false, complete: true });
+
+  let quitting = false;
+  let polls = 0;
+  const aborted = await waitForWindowsInstall({
+    dir,
+    resourcesPath: res,
+    current: "1.1.0",
+    exists: () => false,
+    alive: () => false,
+    isQuitting: () => quitting,
+    now: () => clock,
+    sleep: async (ms) => {
+      clock += ms;
+      polls += 1;
+      quitting = true;
+    },
+    pollMs: 100,
+    untrackedWaitMs: 5_000,
+  });
+  assert.deepEqual(aborted, { action: "continue", waited: true, complete: false });
+  assert.equal(polls, 1);
+
+  const timedOut = await waitForWindowsInstall({
+    dir,
+    resourcesPath: res,
+    current: "1.1.0",
+    exists: () => false,
+    alive: () => false,
+    now: () => clock,
+    sleep: async (ms) => { clock += ms; },
+    pollMs: 100,
+    untrackedWaitMs: 250,
+  });
+  assert.deepEqual(timedOut, { action: "continue", waited: true, complete: false });
+  rmSync(dir, { recursive: true, force: true });
 });

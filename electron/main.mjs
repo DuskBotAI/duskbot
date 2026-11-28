@@ -97,7 +97,7 @@ import {
 import capabilitiesModule from "./capabilities.cjs";
 import environmentsModule from "./environments.cjs";
 import localOriginModule from "./local-origin.cjs";
-import { aboutPanelOptions, buildApplicationMenu } from "./menu.mjs"; import { installDesktopBots } from "./desktop-bots.mjs"; import { installReloadKeys } from "./reload-keys.mjs"; import { startDesktopErrorReporting } from "./desktop-errors.mjs"; import { createUpdateNotice } from "./update-notice.mjs"; import { createAppUpdater, developerIdSigned, macBundleId, quietNow, squirrelBytes, squirrelInstaller, justUpdated, updatePlace, setupIn, setupSources, DOWNLOAD_PAGE } from "./app-update.mjs"; import { nsisInstaller, windowsPlace, TRIED } from "./app-update-windows.mjs"; import { appImageUpdates, swappedVersion } from "./app-update-linux.mjs"; import { createAppImageMenuEntry, installAppImageMenuEntry } from "./appimage-menu-entry.mjs"; import { quietSignals } from "./update-when-quiet-main.mjs"; import { createDemoUpdater, demoUpdateFlag } from "./app-update-demo.mjs";
+import { aboutPanelOptions, buildApplicationMenu } from "./menu.mjs"; import { installDesktopBots } from "./desktop-bots.mjs"; import { installReloadKeys } from "./reload-keys.mjs"; import { startDesktopErrorReporting } from "./desktop-errors.mjs"; import { createUpdateNotice } from "./update-notice.mjs"; import { createAppUpdater, developerIdSigned, macBundleId, quietNow, squirrelBytes, squirrelInstaller, justUpdated, updatePlace, setupIn, setupSources, DOWNLOAD_PAGE } from "./app-update.mjs"; import { nsisInstaller, TRIED, waitForWindowsInstall, windowsPlace } from "./app-update-windows.mjs"; import { appImageUpdates, swappedVersion } from "./app-update-linux.mjs"; import { createAppImageMenuEntry, installAppImageMenuEntry } from "./appimage-menu-entry.mjs"; import { quietSignals } from "./update-when-quiet-main.mjs"; import { createDemoUpdater, demoUpdateFlag } from "./app-update-demo.mjs";
 import { acquireDataDirLease } from "./data-dir-lease.mjs";
 import { offerMoveToApplications } from "./move-to-applications.mjs";
 import { switchLocalEnvironment } from "./environment-switch.mjs";
@@ -3356,6 +3356,35 @@ app.whenReady().then(async () => {
     onLoaded: rememberStartupLoad,
   });
   // the splash is a data: page and paints on its own, so nothing waits for it
+  void startupScreen?.ready.then(() => startupTrace.mark("splash"));
+  if (process.platform === "win32" && app.isPackaged) {
+    const installWait = await waitForWindowsInstall({
+      dir: path.join(app.getPath("userData"), "app-update"),
+      resourcesPath: process.resourcesPath,
+      current: app.getVersion(),
+      isQuitting: () => desktopShutdownStarted,
+      onWaiting: (version) => {
+        startupScreen?.hold(true);
+        startupScreen?.status(version ? `Finishing update to ${version}\u2026` : "Finishing update\u2026");
+      },
+      log: slog,
+    });
+    if (installWait.action === "quit") {
+      if (Notification.isSupported()) {
+        new Notification({
+          title: "Updating dusk bot",
+          body: `Finishing the update to ${installWait.version}. dusk bot will open once it's ready.`,
+        }).show();
+      }
+      app.quit();
+      return;
+    }
+    if (installWait.waited) {
+      startupScreen?.status(null);
+      startupScreen?.hold(false);
+    }
+    if (desktopShutdownStarted) return;
+  }
   const credentialsLoading = evictStartupCacheOnce({
     userData: app.getPath("userData"),
     currentVersion: app.getVersion(),
@@ -3363,7 +3392,6 @@ app.whenReady().then(async () => {
     log: slog,
   }).then(() => credentialFile.load());
   credentialsLoading.catch(() => {});
-  void startupScreen?.ready.then(() => startupTrace.mark("splash"));
   secureCredentials = await credentialsLoading;
   if (desktopShutdownStarted) return;
   session.defaultSession.on("will-download", (_event, item) => {

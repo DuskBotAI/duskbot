@@ -192,7 +192,7 @@ const pageScript = ({ crew, ghost, shadow, track, expectedMs }) => `(() => {
   const ease = v => 1 - (1 - v) ** 3, snap = v => Math.round(v / S) * S;
   const slot = k => W / 2 + (k - (CREW.length - 1) / 2) * 78 - 32;
   const t0 = performance.now();
-  let mood = 'idle', value = 0, cheerAt = 0, pinned = false, over = false, loadedAt = null, ready = false, waitShown = -1, frame = 0, timer = 0;
+  let mood = 'idle', value = 0, cheerAt = 0, pinned = false, holding = false, over = false, loadedAt = null, ready = false, waitShown = -1, frame = 0, timer = 0;
   const arrivals = CREW.map(() => null);
   const draw = now => {
     g.clearRect(0, 0, W, H);
@@ -286,7 +286,11 @@ const pageScript = ({ crew, ghost, shadow, track, expectedMs }) => `(() => {
     body.classList.remove('stuck'); body.classList.add(kind);
     mood = kind; write(text); wake();
   };
-  const stuck = setTimeout(() => trouble('stuck', 'This is taking longer than usual'), ${STUCK_AFTER_MS});
+  let stuck = setTimeout(() => trouble('stuck', 'This is taking longer than usual'), ${STUCK_AFTER_MS});
+  const armStuck = () => {
+    clearTimeout(stuck);
+    if (!over && !ready && !holding) stuck = setTimeout(() => trouble('stuck', 'This is taking longer than usual'), ${STUCK_AFTER_MS});
+  };
   document.addEventListener('click', event => {
     const button = event.target.closest?.('[data-act]');
     if (!button) return;
@@ -296,7 +300,8 @@ const pageScript = ({ crew, ghost, shadow, track, expectedMs }) => `(() => {
   still.addEventListener?.('change', wake);
   const loaded = () => { if (loadedAt === null) { loadedAt = performance.now() - t0; pace(); } };
   window.card = {
-    say: text => { pinned = true; if (!over) write(text); },
+    say: text => { pinned = text !== null; if (!over && text !== null) write(text); },
+    hold: on => { holding = Boolean(on); armStuck(); },
     // only the last mark (the page loaded) changes the plan; the earlier ones land together and would rush the crew
     step: n => { if (!over && n >= total) loaded(); },
     fail: why => { clearTimeout(stuck); trouble('failed', "Couldn't start", why || ''); },
@@ -382,9 +387,10 @@ export function createStartupScreen({
   // The splash stays until the main window replaces it: as the only window, destroying it would quit the app.
   splash.webContents.once("render-process-gone", resolveReady);
   const page = (code) => disposed || splash.isDestroyed() ? Promise.resolve() : splash.webContents.executeJavaScript(code).catch(() => {});
-  let said = null, failure = null, step = 1;
+  let said = null, failure = null, holding = false, step = 1;
   const tell = () => {
     if (step > 1) void page(`window.card?.step(${step})`);
+    if (holding) void page("window.card?.hold(true)");
     if (said !== null) void page(`window.card?.say(${JSON.stringify(said)})`);
     if (failure !== null) void page(`window.card?.fail(${JSON.stringify(failure)})`);
   };
@@ -438,8 +444,19 @@ export function createStartupScreen({
     fallback = setTimeout(reveal, 10_000);
     fallback.unref?.();
   };
-  /** The line under the name, in place of the rotating ones. */
-  const status = (text) => { said = String(text); tell(); };
+  /** The line under the name, in place of the rotating ones. Passing null returns to the normal lines. */
+  const status = (text) => {
+    said = text === null || text === undefined ? null : String(text);
+    void page(`window.card?.say(${JSON.stringify(said)})`);
+  };
+  /** Pauses the stuck-startup fallback timer during an expected wait (such as a Windows installer finishing). */
+  const hold = (on) => {
+    const next = Boolean(on);
+    if (holding === next) return;
+    holding = next;
+    if (!next && shown) shownAt = now();
+    void page(`window.card?.hold(${next})`);
+  };
   /** A startup trace mark was reached: the bar and line move to its step. Marks without a step are ignored. */
   const progress = (mark) => {
     const at = STEPS.findIndex(([name]) => name === mark) + 1;
@@ -454,5 +471,5 @@ export function createStartupScreen({
     showSplash();
     tell();
   };
-  return { ready, attach, dispose, status, progress, fail, window: splash };
+  return { ready, attach, dispose, status, hold, progress, fail, window: splash };
 }

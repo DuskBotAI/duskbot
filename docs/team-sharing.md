@@ -13,11 +13,11 @@ the department name), or from **Templates → Share**.
   64 KB; the dialog stops adding pictures after about 2 MB of them).
 - **Skills.** All skills on the team's bots by default, or the ones you tick.
   Only the `SKILL.md` text travels, never scripts or other files. A file
-  holds at most 30 skills per bot and 60 per team, and one skill per name.
+  holds at most 100 skills per bot and 128 per team, and one skill per name.
   When you have not chosen, the dialog puts in what fits (switched-on skills
   first) and lists the rest under **Left out**, including a name two bots
   hold with different content. The skill boxes then start ticked on what
-  went in, less any skill a bot had to leave out over its 30 (even when
+  went in, less any skill a bot had to leave out over its 100 (even when
   another bot's copy went in), so unticking any box is always a choice that
   fits. When you tick more than fits, it says why and keeps every skill box
   so you can change the choice.

@@ -1725,8 +1725,6 @@
   "teamShare.skip.notes_too_large": "Ist größer als das Limit für Startnotizen",
   "teamShare.skip.skill_changed": "Wurde nach der Prüfung geändert",
   "teamShare.skip.skill_conflict": "Zwei Bots haben unterschiedliche Skills mit diesem Namen",
-  "teamShare.skip.bot_skill_limit": "Ein Bot kann höchstens 30 Skills teilen (eingeschaltete Skills zuerst)",
-  "teamShare.skip.team_skill_limit": "Ein Bereich kann höchstens 60 Skills teilen",
   "teamShare.field.soul": "Dauerhafte Anweisungen",
   "teamShare.field.notes": "Startnotizen",
   "teamShare.field.brief": "Gemeinsame Anweisungen",

@@ -923,7 +923,6 @@
   "teamShare.skip.notes_too_large": "başlangıç notları sınırından daha büyük",
   "teamShare.skip.skill_changed": "incelendikten sonra değiştirildi",
   "teamShare.skip.skill_conflict": "iki bot bu ada sahip farklı becerilere sahip",
-  "teamShare.skip.bot_skill_limit": "bir bot en fazla 30 beceri paylaşabilir (açık olan beceriler önce gelir)",
   "teamShare.field.soul": "Kalıcı talimatlar",
   "teamShare.field.notes": "Başlangıç notları",
   "teamShare.field.brief": "Paylaşılan talimatlar",

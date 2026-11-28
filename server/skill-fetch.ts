@@ -1,7 +1,10 @@
 import { z } from "zod";
 
+import { AGENT_MAX_SKILLS } from "../shared/package-format.ts";
+import { SKILL_FILE_MAX_BYTES } from "../shared/skill-md.ts";
+
 const MAX_FILES = 30;
-const MAX_FILE_BYTES = 256 * 1024;
+const MAX_FILE_BYTES = SKILL_FILE_MAX_BYTES;
 const API = "https://api.github.com";
 class ImportLimitError extends Error {}
 
@@ -130,7 +133,9 @@ async function fetchText(url: string, fetcher: typeof fetch): Promise<string> {
   const response = await fetcher(url, { headers: { "user-agent": "DuskBot-skills" }, redirect: "error" });
   if (!response.ok) throw new Error(`download failed (${response.status})`);
   const text = await response.text();
-  if (Buffer.byteLength(text, "utf8") > MAX_FILE_BYTES) throw new Error("file is larger than the 256KB import cap");
+  if (Buffer.byteLength(text, "utf8") > MAX_FILE_BYTES) {
+    throw new Error(`file is larger than the ${MAX_FILE_BYTES / 1024}KB import cap`);
+  }
   return text;
 }
 
@@ -140,7 +145,7 @@ async function listDir(target: Target, path: string, fetcher: typeof fetch): Pro
   return fetchListing(url, fetcher);
 }
 
-export const MAX_SKILLS_PER_IMPORT = 30;
+export const MAX_SKILLS_PER_IMPORT = AGENT_MAX_SKILLS;
 const MAX_FOLDERS_WALKED = 24;
 const MAX_CHILDREN_PER_FOLDER = 60;
 

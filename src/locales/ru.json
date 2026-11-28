@@ -1285,7 +1285,6 @@
   "teamShare.skip.notes_too_large": "превышает лимит начальных заметок",
   "teamShare.skip.skill_changed": "изменён после проверки",
   "teamShare.skip.skill_conflict": "у двух ботов есть разные навыки с таким названием",
-  "teamShare.skip.bot_skill_limit": "бот может передать не более 30 навыков (сначала идут включённые)",
   "teamShare.field.soul": "Постоянные инструкции",
   "teamShare.field.notes": "Начальные заметки",
   "teamShare.field.brief": "Общие инструкции",

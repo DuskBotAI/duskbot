@@ -152,8 +152,11 @@ describe("the menu motion in overlays.css", () => {
     }
   });
 
-  it("never holds an anchored surface still", () => {
-    expect(css).not.toMatch(/\.animate-pop-in, \.animate-pop-out\)\s*\{\s*animation:\s*none/);
+  // a running keyframe wins over a transition on the same property: left on, the utilities' general pop plays instead
+  it("moves every anchored surface on its own transitions, with the general pop keyframe off", () => {
+    expect(rule(`${anchored}:is(.animate-pop-in, .animate-pop-out)`)).toMatch(/^\s*animation:\s*none;\s*$/);
+    expect(rule(`${anchored}.animate-pop-in`)).toMatch(/transition:\s*opacity/);
+    expect(rule(`${anchored}.animate-pop-out`)).toMatch(/transition:\s*opacity/);
     expect(MENU_MOTION_MS).toBeGreaterThanOrEqual(80);
   });
 

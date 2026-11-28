@@ -42,7 +42,11 @@
 
 /* anchored surfaces: a menu, listbox or popover grows out of its trigger; a non-modal dialog is a popover. They move on
    transitions from a starting style, not keyframes: opened again while it closes, a menu turns back from where it is
-   instead of starting over from nothing */
+   instead of starting over from nothing. A running keyframe wins over a transition on the same property, so the
+   utilities' general pop is switched off here. */
+:is([role="menu"], [role="listbox"], .popover-surface, .menu-surface, [role="dialog"]:not([aria-modal="true"], .ui-modal, .ui-dialog)):is(.animate-pop-in, .animate-pop-out) {
+  animation: none;
+}
 :is([role="menu"], [role="listbox"], .popover-surface, .menu-surface, [role="dialog"]:not([aria-modal="true"], .ui-modal, .ui-dialog)).animate-pop-in {
   transition: opacity calc(120ms * var(--motion-scale, 1)) var(--motion-ease-out, var(--ease-menu-in)), transform calc(120ms * var(--motion-scale, 1)) var(--motion-ease-out, var(--ease-menu-in));
 }

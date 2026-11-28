@@ -37,6 +37,34 @@ describe("outbox", () => {
     expect(await prefs.get("k")).toBeNull();
   });
 
+  it.each([
+    { releaseBeforeLoad: false, expected: ["a", "b"] },
+    { releaseBeforeLoad: true, expected: ["a"] },
+  ])("keeps saved sends when a new send arrives during load (released before load: $releaseBeforeLoad)", async ({ releaseBeforeLoad, expected }) => {
+    const { prefs, values } = memoryPrefs();
+    values.set("k", JSON.stringify([{ ...send("a"), tries: 1 }]));
+    let finishRead!: () => void;
+    const reading = new Promise<void>((resolve) => { finishRead = resolve; });
+    const delayedPrefs = { ...prefs, get: async (key: string) => {
+      const saved = await prefs.get(key);
+      await reading;
+      return saved;
+    } };
+
+    const outbox = createOutbox(delayedPrefs, "k", () => 2_000);
+    outbox.hold(send("b"));
+    if (releaseBeforeLoad) outbox.release("b");
+    finishRead();
+    await outbox.ready;
+    await settle();
+
+    expect(outbox.pending().map(({ sendId }) => sendId)).toEqual(expected);
+    expect(JSON.parse(values.get("k") ?? "[]").map((one: OutboxSend) => one.sendId)).toEqual(expected);
+    const restarted = createOutbox(prefs, "k", () => 3_000);
+    await restarted.ready;
+    expect(restarted.pending().map(({ sendId }) => sendId)).toEqual(expected);
+  });
+
   it("stops at a send that is lost again and picks up on the next flush", async () => {
     const { prefs } = memoryPrefs();
     const outbox = createOutbox(prefs, "k", () => 2_000);

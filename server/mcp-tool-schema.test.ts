@@ -254,4 +254,53 @@ describe("a tool list under a provider's schema profile", () => {
       'removed 1 unsupported regex pattern from tool "get_repository"\'s parameters for Antigravity',
     ]);
   });
+
+  it("compacts verbose descriptions and parameter schemas under Antigravity while leaving Moonshot untouched", () => {
+    const verbose = {
+      name: "COMPOSIO_SEARCH_TOOLS",
+      description: "Discover connected app tools across Gmail, Slack, Calendar, and Notion. ".repeat(6),
+      inputSchema: {
+        $schema: "https://json-schema.org/draft/2020-12/schema",
+        title: "SearchToolsInput",
+        type: "object",
+        properties: {
+          queries: {
+            type: "array",
+            description: "List of search queries describing what you want to do in connected apps.",
+            items: {
+              type: "object",
+              description: "One search query.",
+              properties: {
+                use_case: { type: "string", description: "What to accomplish.", examples: ["read recent emails"] },
+              },
+              required: ["use_case"],
+            },
+          },
+        },
+        required: ["queries"],
+      },
+    };
+
+    const [agyTool] = fitToolList([verbose], ANTIGRAVITY) as Array<Record<string, any>>;
+    expect(agyTool!._meta).toEqual({ "antigravity/alwaysLoad": true });
+    expect(agyTool!.description.length).toBeLessThanOrEqual(120);
+    expect(agyTool!.description.endsWith("…")).toBe(true);
+    expect(agyTool!.inputSchema).toEqual({
+      type: "object",
+      properties: {
+        queries: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: { use_case: { type: "string" } },
+            required: ["use_case"],
+          },
+        },
+      },
+      required: ["queries"],
+    });
+
+    const [moonshotTool] = fitToolList([verbose], MOONSHOT) as Array<Record<string, any>>;
+    expect(moonshotTool).toBe(verbose);
+  });
 });

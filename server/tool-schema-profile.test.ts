@@ -5,7 +5,7 @@ import { DATA_TOOLS } from "./data/tools.ts";
 import bridgedAgents from "./drivers/agents-catalog-goldens/bridged.tools-list.json" with { type: "json" };
 import fullAgents from "./drivers/agents-catalog-goldens/full.tools-list.json" with { type: "json" };
 import { createPageSchema, wideSchema } from "./testing/oversized-tool-schema.ts";
-import { fitToolSchema, isRe2Compatible, schemaBytes, toolSchemaProfile, toolSchemaProfileFor, type ToolSchemaProfile } from "./tool-schema-profile.ts";
+import { compactToolDescription, compactToolSchema, fitToolSchema, isRe2Compatible, schemaBytes, toolSchemaProfile, toolSchemaProfileFor, type ToolSchemaProfile } from "./tool-schema-profile.ts";
 
 type Json = Record<string, unknown>;
 const MOONSHOT = toolSchemaProfile("moonshot")!;
@@ -299,5 +299,72 @@ describe("dusk bot's own tools", () => {
     for (const profile of profiles) {
       for (const tool of tools) expect([tool.name, fitToolSchema(tool.inputSchema as Json, profile).outcome]).toEqual([tool.name, "kept"]);
     }
+  });
+
+  it("shrinks built-in tool schemas materially under Antigravity compaction while keeping every parameter name", () => {
+    const rawBytes = fullAgents.tools.reduce((sum, tool) => sum + schemaBytes(tool.inputSchema), 0);
+    const compactBytes = fullAgents.tools.reduce((sum, tool) => sum + schemaBytes(compactToolSchema(tool.inputSchema as Json, ANTIGRAVITY.compact!)), 0);
+    expect(compactBytes).toBeLessThan(rawBytes * 0.6);
+    for (const tool of fullAgents.tools) {
+      const before = tool.inputSchema as { properties?: Record<string, unknown>; required?: unknown };
+      const after = compactToolSchema(tool.inputSchema as Json, ANTIGRAVITY.compact!) as { properties?: Record<string, unknown>; required?: unknown };
+      expect(Object.keys(after.properties ?? {})).toEqual(Object.keys(before.properties ?? {}));
+      expect(after.required).toEqual(before.required);
+    }
+  });
+});
+
+describe("Antigravity schema and description compaction", () => {
+  it("strips schema annotations and parameter descriptions without removing properties named description or title", () => {
+    const schema = {
+      $schema: "https://json-schema.org/draft/2020-12/schema",
+      title: "CreateIssueInput",
+      type: "object",
+      "x-vendor": "ignored",
+      properties: {
+        title: { type: "string", title: "Title", description: "Issue title.", examples: ["Bug report"] },
+        description: { type: "string", description: "Detailed markdown body.", minLength: 1 },
+        priority: { type: "string", enum: ["low", "high"], description: "Priority level." },
+        nested: {
+          type: "object",
+          description: "Nested payload.",
+          properties: { tag: { type: "string", pattern: "^[a-z]+$", description: "Tag slug." } },
+          required: ["tag"],
+        },
+      },
+      required: ["title", "description"],
+    };
+    expect(compactToolSchema(schema, ANTIGRAVITY.compact!)).toEqual({
+      type: "object",
+      properties: {
+        title: { type: "string" },
+        description: { type: "string", minLength: 1 },
+        priority: { type: "string", enum: ["low", "high"] },
+        nested: {
+          type: "object",
+          properties: { tag: { type: "string", pattern: "^[a-z]+$" } },
+          required: ["tag"],
+        },
+      },
+      required: ["title", "description"],
+    });
+  });
+
+  it("returns an already-compact schema as the same reference", () => {
+    const clean = { type: "object", properties: { query: { type: "string" } }, required: ["query"] };
+    expect(compactToolSchema(clean, ANTIGRAVITY.compact!)).toBe(clean);
+  });
+
+  it("flattens and word-wraps long tool descriptions to maxChars without splitting surrogate pairs", () => {
+    expect(compactToolDescription("Fetch a repository.", 120)).toBe("Fetch a repository.");
+    expect(compactToolDescription("   ", 120)).toBeUndefined();
+    expect(compactToolDescription("Line one.\n\n  Line two.  ", 120)).toBe("Line one. Line two.");
+    const long = "Search connected tools across Gmail, Slack, Calendar, and Notion using natural language queries and return matching schemas with examples.";
+    const cut = compactToolDescription(long, 80)!;
+    expect(cut.length).toBeLessThanOrEqual(80);
+    expect(cut.endsWith("…")).toBe(true);
+    expect(cut).not.toMatch(/\s…$/);
+    const withEmoji = `${"a".repeat(10)}😀tail`;
+    expect(compactToolDescription(withEmoji, 12)).toBe(`${"a".repeat(10)}…`);
   });
 });

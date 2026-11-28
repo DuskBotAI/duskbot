@@ -4,6 +4,12 @@ type Json = Record<string, unknown>;
 
 export type ToolSchemaProfileId = "moonshot" | "antigravity";
 
+export interface ToolCompaction {
+  maxDescriptionChars: number;
+  stripAnnotations?: boolean;
+  stripSchemaDescriptions?: boolean;
+}
+
 export interface ToolSchemaProfile {
   id: ToolSchemaProfileId;
   /** The provider as the person knows it, for log lines and the note a shortened tool carries. */
@@ -16,6 +22,8 @@ export interface ToolSchemaProfile {
   re2Patterns?: boolean;
   /** Tool `_meta` flag that tells the engine to load every listed tool directly instead of deferring larger schemas. */
   alwaysLoadMeta?: string;
+  /** Shrinks verbose descriptions and non-constraining schema prose to fit an engine's shared eager tool budget. */
+  compact?: ToolCompaction;
 }
 
 const PROFILES: Record<ToolSchemaProfileId, ToolSchemaProfile> = {
@@ -25,9 +33,16 @@ const PROFILES: Record<ToolSchemaProfileId, ToolSchemaProfile> = {
   // Kimi Code inlines every local $ref first (normalizeKimiToolSchema in MoonshotAI/kimi-code packages/kosong).
   moonshot: { id: "moonshot", provider: "Kimi", maxSchemaBytes: 12_000, maxDepth: 30, measureInlined: true },
   // Antigravity CLI 1.5+ compiles every MCP tool's JSON Schema regexes with Go's RE2 engine (failing turns on Perl
-  // lookaheads) and defers MCP tools over ~1.2 KB without exposing `call_mcp_tool` in ACP sessions unless marked with
-  // `_meta: { "antigravity/alwaysLoad": true }` (supported since Antigravity CLI 1.3.3).
-  antigravity: { id: "antigravity", provider: "Antigravity", re2Patterns: true, alwaysLoadMeta: "antigravity/alwaysLoad" },
+  // lookaheads), defers MCP tools over ~1.2 KB without exposing `call_mcp_tool` in ACP sessions unless marked with
+  // `_meta: { "antigravity/alwaysLoad": true }` (since 1.3.3), and enforces a 20,000-token global eager MCP budget
+  // (~58 KB) that silently evicts the largest tools first when exceeded.
+  antigravity: {
+    id: "antigravity",
+    provider: "Antigravity",
+    re2Patterns: true,
+    alwaysLoadMeta: "antigravity/alwaysLoad",
+    compact: { maxDescriptionChars: 120, stripAnnotations: true, stripSchemaDescriptions: true },
+  },
 };
 
 export const TOOL_SCHEMA_PROFILE_ENV = "DUSK_TOOL_SCHEMA_PROFILE";
@@ -395,6 +410,46 @@ function shortenDescriptions(schema: Json, fromDepth: number, chars: number): vo
     if (description) node.description = description;
     else delete node.description;
   });
+}
+
+function needsSchemaCompaction(schema: Json, compact: ToolCompaction): boolean {
+  let found = false;
+  walk(schema, 0, (node) => {
+    if (found) return;
+    for (const key of Object.keys(node)) {
+      if (compact.stripAnnotations && (ANNOTATIONS.has(key) || key.startsWith("x-"))) {
+        found = true;
+        return;
+      }
+      if (compact.stripSchemaDescriptions && key === "description" && typeof node[key] === "string") {
+        found = true;
+        return;
+      }
+    }
+  });
+  return found;
+}
+
+/** Strips non-constraining schema annotations and parameter prose while keeping every parameter name, type, enum, required list, and pattern. */
+export function compactToolSchema(schema: Json, compact: ToolCompaction): Json {
+  if (!needsSchemaCompaction(schema, compact)) return schema;
+  const working = structuredClone(schema);
+  if (compact.stripAnnotations) stripAnnotations(working);
+  if (compact.stripSchemaDescriptions) shortenDescriptions(working, 0, 0);
+  return working;
+}
+
+/** Single-line tool description bounded to `maxChars` at a word boundary, or undefined when blank. */
+export function compactToolDescription(description: unknown, maxChars: number): string | undefined {
+  if (typeof description !== "string" || maxChars <= 0) return undefined;
+  const flat = description.replace(/\s+/g, " ").trim();
+  if (!flat) return undefined;
+  if (flat.length <= maxChars) return flat;
+  let head = flat.slice(0, maxChars - 1);
+  const last = head.charCodeAt(head.length - 1);
+  if (last >= 0xd800 && last <= 0xdbff) head = head.slice(0, -1);
+  const cut = head.replace(/\s+\S*$/, "");
+  return `${cut || head}…`;
 }
 
 const JSON_TYPES = ["string", "number", "integer", "boolean", "object", "array", "null"];

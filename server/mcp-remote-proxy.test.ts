@@ -394,6 +394,32 @@ describe("remote MCP tool directory", () => {
     });
   });
 
+  it("compacts verbose remote tool descriptions and schema prose under the antigravity profile", async () => {
+    const tools = [{
+      name: "search_tools",
+      description: "Search connected app tools across integrations.\n\n".repeat(6),
+      inputSchema: {
+        title: "SearchInput",
+        type: "object",
+        properties: {
+          query: { type: "string", description: "Natural language task description.", examples: ["list emails"] },
+        },
+        required: ["query"],
+      },
+    }];
+    fake = await startFakeHttpMcp({ tools });
+    start(mcpStdioServer(spec(fake.url))!, { ...process.env, [TOOL_SCHEMA_PROFILE_ENV]: "antigravity" });
+    await initialize();
+    const [tool] = (await request("tools/list")).result.tools;
+    expect(tool._meta).toEqual({ "antigravity/alwaysLoad": true });
+    expect(tool.description.length).toBeLessThanOrEqual(120);
+    expect(tool.inputSchema).toEqual({
+      type: "object",
+      properties: { query: { type: "string" } },
+      required: ["query"],
+    });
+  });
+
   it("lists no more of a remote server's tools than its share of the model's tool limit", async () => {
     const tools = ["a", "b", "c"].map((name) => ({ name, inputSchema: { type: "object" } }));
     fake = await startFakeHttpMcp({ tools });

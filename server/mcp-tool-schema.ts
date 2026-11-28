@@ -1,6 +1,6 @@
 // Strict providers (OpenAI, xAI, Bedrock, Kimi…) refuse a tool schema whose root is not a plain `type: "object"`, failing
 // the whole turn; cua-driver 0.22.1 ships such a root on browser_prepare. Servers still validate calls against their own.
-import { fitToolSchema, type ToolSchemaProfile } from "./tool-schema-profile.ts";
+import { compactToolDescription, compactToolSchema, fitToolSchema, type ToolSchemaProfile } from "./tool-schema-profile.ts";
 
 type JsonObject = Record<string, unknown>;
 
@@ -64,6 +64,22 @@ export function shortenedToolNote(provider: string): string {
     + "as this description says. The tool still checks every call against its full schema.)";
 }
 
+function compactedTool(tool: JsonObject, profile: ToolSchemaProfile): JsonObject {
+  const compact = profile.compact;
+  if (!compact) return tool;
+  const nextSchema = isObject(tool.inputSchema) ? compactToolSchema(tool.inputSchema, compact) : tool.inputSchema;
+  const hasDesc = typeof tool.description === "string";
+  const nextDesc = hasDesc ? compactToolDescription(tool.description, compact.maxDescriptionChars) : undefined;
+  const descChanged = hasDesc && nextDesc !== tool.description;
+  if (nextSchema === tool.inputSchema && !descChanged) return tool;
+  const next: JsonObject = { ...tool, inputSchema: nextSchema };
+  if (descChanged) {
+    if (nextDesc !== undefined) next.description = nextDesc;
+    else delete next.description;
+  }
+  return next;
+}
+
 function withAlwaysLoadMeta(tool: JsonObject, key: string | undefined): JsonObject {
   if (!key) return tool;
   if (isObject(tool._meta) && tool._meta[key] === true) return tool;
@@ -73,6 +89,7 @@ function withAlwaysLoadMeta(tool: JsonObject, key: string | undefined): JsonObje
 /** A tool list under a provider's profile: each schema keeps a plain object root and fits, or the tool is left out.
  * Every change is one line to `log`; a tool already within the limits is the same object. */
 export function fitToolList(tools: readonly unknown[], profile: ToolSchemaProfile, log: (line: string) => void = () => {}): unknown[] {
+  const finalize = (next: JsonObject): JsonObject => withAlwaysLoadMeta(compactedTool(next, profile), profile.alwaysLoadMeta);
   const fitted: unknown[] = [];
   for (const tool of tools) {
     if (!isObject(tool)) {
@@ -84,13 +101,13 @@ export function fitToolList(tools: readonly unknown[], profile: ToolSchemaProfil
     const name = toolName(tool);
     if (fit.outcome === "kept") {
       const next = fit.schema === tool.inputSchema ? tool : { ...tool, inputSchema: fit.schema };
-      fitted.push(withAlwaysLoadMeta(next, profile.alwaysLoadMeta));
+      fitted.push(finalize(next));
       continue;
     }
     if (fit.outcome === "sanitized") {
       const noun = fit.droppedPatterns === 1 ? "pattern" : "patterns";
       log(`removed ${fit.droppedPatterns} unsupported regex ${noun} from tool "${name}"'s parameters for ${profile.provider}`);
-      fitted.push(withAlwaysLoadMeta({ ...tool, inputSchema: fit.schema }, profile.alwaysLoadMeta));
+      fitted.push(finalize({ ...tool, inputSchema: fit.schema }));
       continue;
     }
     const limit = `${profile.provider}'s ${profile.maxSchemaBytes}-byte limit for one tool`;
@@ -101,11 +118,11 @@ export function fitToolList(tools: readonly unknown[], profile: ToolSchemaProfil
     const what = { trimmed: "shortened the descriptions in", loosened: "left nested fields out of", minimal: "kept only the top-level fields of" }[fit.outcome];
     log(`${what} tool "${name}"'s parameters (${fit.from} to ${fit.bytes} bytes) to fit ${limit}`);
     if (fit.outcome === "trimmed") {
-      fitted.push(withAlwaysLoadMeta({ ...tool, inputSchema: fit.schema }, profile.alwaysLoadMeta));
+      fitted.push(finalize({ ...tool, inputSchema: fit.schema }));
       continue;
     }
     const description = typeof tool.description === "string" && tool.description.trim() ? `${tool.description.trimEnd()}\n\n` : "";
-    fitted.push(withAlwaysLoadMeta({ ...tool, description: description + shortenedToolNote(profile.provider), inputSchema: fit.schema }, profile.alwaysLoadMeta));
+    fitted.push(finalize({ ...tool, description: description + shortenedToolNote(profile.provider), inputSchema: fit.schema }));
   }
   return fitted;
 }

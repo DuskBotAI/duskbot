@@ -33,7 +33,7 @@ interface ContainerFixture {
   labels?: Record<string, string>;
 }
 
-function inventoryRunner(initial: ContainerFixture[]) {
+function inventoryRunner(initial: ContainerFixture[], docker: "legacy" | "modern" = "modern") {
   let containers = [...initial];
   let removeFailure: Error | null = null;
   const calls: string[][] = [];
@@ -61,10 +61,28 @@ function inventoryRunner(initial: ContainerFixture[]) {
         stderr: "",
       };
     }
-    if (command[0] === "stop" || command[0] === "kill") return { stdout: `${command.at(-1)}\n`, stderr: "" };
+    if (command[0] === "inspect" && command[1] === "--format") {
+      const ref = command.at(-1);
+      const container = containers.find((candidate) => candidate.id === ref || candidate.name === ref);
+      if (!container) throw new Error(`Error: No such object: ${ref}`);
+      return { stdout: `${container.running ?? true} 4242 sha256:${"a".repeat(64)}`, stderr: "" };
+    }
+    if (command[0] === "stop" || command[0] === "kill") {
+      const ref = command.at(-1);
+      const container = containers.find((candidate) => candidate.id === ref || candidate.name === ref);
+      if (!container) throw new Error(`Error response from daemon: No such container: ${ref}`);
+      container.running = false;
+      container.state = "exited";
+      return { stdout: `${ref}\n`, stderr: "" };
+    }
     if (command[0] === "rm") {
       if (removeFailure) throw removeFailure;
       const ref = command[2];
+      if (!containers.some((container) => container.name === ref || container.id === ref)) {
+        const stderr = `Error response from daemon: No such container: ${ref}`;
+        if (docker === "legacy") throw new Error(stderr);
+        return { stdout: "", stderr };
+      }
       containers = containers.filter((container) => container.name !== ref && container.id !== ref);
       return { stdout: `${ref}\n`, stderr: "" };
     }
@@ -75,6 +93,9 @@ function inventoryRunner(initial: ContainerFixture[]) {
     runner,
     failRemove(error: Error) {
       removeFailure = error;
+    },
+    addContainer(container: ContainerFixture) {
+      containers.push(container);
     },
   };
 }
@@ -312,6 +333,124 @@ describe("managed VPS inventory", () => {
       name,
     });
     expect(fake.calls.at(-1)).toEqual(["rm", "-f", "d".repeat(64)]);
+  });
+
+  it.each(["container", "object"])("accepts legacy Docker reporting no such %s without escalation", async (kind) => {
+    const name = vpsContainerName(OWNER.botId);
+    const id = "c".repeat(64);
+    const fake = inventoryRunner([{ id, name }]);
+    const runner: VpsCommandRunner = async (args, options) => {
+      const result = await fake.runner(args, options);
+      if (args[2] === "rm") throw new Error(`Error: No such ${kind}: ${id}`);
+      return result;
+    };
+
+    await expect(removeManagedVpsComputer(CONFIG, [OWNER], name, name, runner)).resolves.toEqual({ removed: true, name });
+    expect(fake.calls.filter((call) => ["rm", "stop", "kill", "run"].includes(call[0]!))).toEqual([["rm", "-f", id]]);
+    expect((await listManagedVpsComputers(CONFIG, [OWNER], fake.runner)).instances).toEqual([]);
+  });
+
+  it.each([
+    { docker: "legacy", replacement: false }, { docker: "legacy", replacement: true },
+    { docker: "modern", replacement: false }, { docker: "modern", replacement: true },
+  ] as const)("accepts a timed-out removal that already finished ($docker Docker, replacement: $replacement)", async ({ docker, replacement }) => {
+    const name = vpsContainerName(OWNER.botId);
+    const id = "c".repeat(64);
+    const replacementId = "d".repeat(64);
+    const fake = inventoryRunner([{ id, name }], docker);
+    let timedOut = false;
+    const runner: VpsCommandRunner = async (args, options) => {
+      const result = await fake.runner(args, options);
+      if (args[2] === "rm" && !timedOut) {
+        timedOut = true;
+        if (replacement) fake.addContainer({ id: replacementId, name });
+        throw new Error("Docker-over-SSH command timed out");
+      }
+      return result;
+    };
+
+    await expect(removeManagedVpsComputer(CONFIG, [OWNER], name, name, runner)).resolves.toEqual({ removed: true, name });
+    expect(fake.calls.filter((call) => ["rm", "stop", "kill", "run"].includes(call[0]!))).toEqual([
+      ["rm", "-f", id], ["stop", "--time", "10", id], ["rm", "-f", id],
+    ]);
+    expect(fake.calls.some((call) => call.includes(replacementId))).toBe(false);
+    const after = await listManagedVpsComputers(CONFIG, [OWNER], fake.runner);
+    expect(after.instances.map((instance) => instance.name)).toEqual(replacement ? [name] : []);
+  });
+
+  it("retries the original container after a failed removal and successful stop", async () => {
+    const name = vpsContainerName(OWNER.botId);
+    const id = "c".repeat(64);
+    const fake = inventoryRunner([{ id, name }]);
+    let timedOut = false;
+    const runner: VpsCommandRunner = async (args, options) => {
+      if (args[2] === "rm" && !timedOut) {
+        timedOut = true;
+        fake.calls.push(args.slice(2));
+        throw new Error("Docker-over-SSH command timed out");
+      }
+      return fake.runner(args, options);
+    };
+
+    await expect(removeManagedVpsComputer(CONFIG, [OWNER], name, name, runner)).resolves.toEqual({ removed: true, name });
+    expect(fake.calls.filter((call) => ["rm", "stop", "kill", "run"].includes(call[0]!))).toEqual([
+      ["rm", "-f", id], ["stop", "--time", "10", id], ["rm", "-f", id],
+    ]);
+    expect((await listManagedVpsComputers(CONFIG, [OWNER], fake.runner)).instances).toEqual([]);
+  });
+
+  it.each([
+    "permission denied while trying to connect to the Docker daemon socket",
+    "Cannot connect to the Docker daemon",
+    "Docker-over-SSH command timed out",
+  ])("does not report removal success for %s", async (message) => {
+    const name = vpsContainerName(OWNER.botId);
+    const fake = inventoryRunner([{ id: "c".repeat(64), name }]);
+    fake.failRemove(new Error(message));
+
+    await expect(removeManagedVpsComputer(CONFIG, [OWNER], name, name, fake.runner)).rejects.toMatchObject({
+      status: 502, message: expect.stringContaining(message),
+    });
+    expect((await listManagedVpsComputers(CONFIG, [OWNER], fake.runner)).instances).toHaveLength(1);
+  });
+
+  it.each([
+    `Error: No such container: ${"d".repeat(64)}`,
+    `permission denied: No such container: ${"c".repeat(64)}`,
+    `Error: No such object: ${"c".repeat(12)}`,
+    `Error: No such container: ${"c".repeat(64)}\npermission denied`,
+    `Error: No such image: ${"c".repeat(64)}`,
+  ])("does not accept an unconfirmed absence: %s", async (message) => {
+    const name = vpsContainerName(OWNER.botId);
+    const fake = inventoryRunner([{ id: "c".repeat(64), name }]);
+    fake.failRemove(new Error(message));
+
+    await expect(removeManagedVpsComputer(CONFIG, [OWNER], name, name, fake.runner)).rejects.toMatchObject({
+      status: 502, message: expect.stringContaining(message.replace(/\s+/g, " ")),
+    });
+    expect((await listManagedVpsComputers(CONFIG, [OWNER], fake.runner)).instances).toHaveLength(1);
+  });
+
+  it("does not mistake a missing reaper image for a removed container", async () => {
+    const name = vpsContainerName(OWNER.botId);
+    const id = "c".repeat(64);
+    const image = `sha256:${"a".repeat(64)}`;
+    const fake = inventoryRunner([{ id, name }]);
+    const runner: VpsCommandRunner = async (args, options) => {
+      if (["rm", "stop", "kill", "run"].includes(args[2]!)) {
+        fake.calls.push(args.slice(2));
+        if (args[2] === "run") throw new Error(`Error: No such image: ${image}`);
+        throw new Error("Docker-over-SSH command timed out");
+      }
+      return fake.runner(args, options);
+    };
+
+    await expect(removeManagedVpsComputer(CONFIG, [OWNER], name, name, runner)).rejects.toMatchObject({
+      status: 502, message: expect.stringContaining("No such image"),
+    });
+    expect(fake.calls.some((call) => call[0] === "inspect" && call[1] === "--format")).toBe(true);
+    expect(fake.calls.some((call) => call[0] === "run" && call.includes(image))).toBe(true);
+    expect((await listManagedVpsComputers(CONFIG, [OWNER], fake.runner)).instances).toHaveLength(1);
   });
 
   it("surfaces provider removal failures and never reports success", async () => {

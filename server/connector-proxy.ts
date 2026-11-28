@@ -20,6 +20,7 @@ import { withNextStepFrame } from "./tool-next-step.ts";
 import { AUTH_CONFIG_ID } from "../shared/connector-availability.ts";
 import { fitToolListResult } from "./mcp-tool-schema.ts";
 import { toolSchemaProfileFromEnv } from "./tool-schema-profile.ts";
+import { capToolListResultByBytes, toolByteBudgetFromEnv } from "./tool-byte-budget.ts";
 import { capToolListResult, toolLimitFromEnv } from "./tool-count-limit.ts";
 
 type Json = Record<string, unknown>;
@@ -33,6 +34,7 @@ const ALLOWED_TOOLS = parseConnectorAllowedToolsEnv(process.env[CONNECTOR_ALLOWE
 const SERVICE_SLUGS = parseConnectorServiceSlugsEnv(process.env[CONNECTOR_SERVICE_SLUGS_ENV]);
 const SCHEMA_PROFILE = toolSchemaProfileFromEnv(process.env);
 const TOOL_LIMIT = toolLimitFromEnv(process.env);
+const TOOL_BYTE_BUDGET = toolByteBudgetFromEnv(process.env);
 const APP_TOOLS = parseAppToolsEnv(process.env[APP_TOOLS_ENV]);
 const CHOSEN_ACCOUNTS = parseConnectorAccountsEnv(process.env[CONNECTOR_ACCOUNTS_ENV]);
 const APP_TOOL_NAMES = process.env[APP_TOOL_NAMES_ENV] === "dotted" ? "dotted" : "plain";
@@ -253,9 +255,9 @@ function withArgumentNotes(name: string, response: Json, changed: readonly strin
 }
 
 function fittedList(frame: Json): Json {
-  if ((!SCHEMA_PROFILE && TOOL_LIMIT === undefined) || !("result" in frame)) return frame;
+  if ((!SCHEMA_PROFILE && TOOL_LIMIT === undefined && TOOL_BYTE_BUDGET === undefined) || !("result" in frame)) return frame;
   const log = (line: string) => process.stderr.write(`connector-proxy: ${line}\n`);
-  return { ...frame, result: capToolListResult(fitToolListResult(frame.result, SCHEMA_PROFILE, log), TOOL_LIMIT, log) };
+  return { ...frame, result: capToolListResult(capToolListResultByBytes(fitToolListResult(frame.result, SCHEMA_PROFILE, log), TOOL_BYTE_BUDGET, log), TOOL_LIMIT, log) };
 }
 
 async function handle(received: Json): Promise<void> {

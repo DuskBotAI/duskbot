@@ -6,6 +6,7 @@ import { augmentedPath, resolveCliSpawn } from "./env-path.ts";
 import { textOnlyErrorResultLine } from "./mcp-error-result.ts";
 import { withNextStepLine } from "./tool-next-step.ts";
 import { createToolListNormalizer } from "./mcp-tool-schema.ts";
+import { toolByteBudgetFromEnv } from "./tool-byte-budget.ts";
 import { toolSchemaProfileFromEnv } from "./tool-schema-profile.ts";
 import { ComputerPurchaseWatch } from "./computer-purchase.ts";
 
@@ -350,7 +351,7 @@ export function runMcpBridge(options: BridgeOptions): void {
     : null;
 
   const answer = (line: string) => { process.stdout.write(line + "\n"); };
-  const toolLists = createToolListNormalizer(toolSchemaProfileFromEnv(), (line) => process.stderr.write(`${options.label}: ${line}\n`));
+  const toolLists = createToolListNormalizer(toolSchemaProfileFromEnv(), (line) => process.stderr.write(`${options.label}: ${line}\n`), toolByteBudgetFromEnv());
   // Injected responses must never land inside one of the child's half-written frames.
   const rewrite = options.rewriteResponse ?? ((line: string) => line);
   const purchases = client ? new ComputerPurchaseWatch() : null;

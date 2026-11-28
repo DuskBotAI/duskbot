@@ -9,6 +9,7 @@ import { callTool, capResult, toolCallContextFromEnv } from "./agents-call.ts";
 import { sendToolReceipt } from "./agents-timing.ts";
 import type { Json } from "./agents-client.ts";
 import { fitToolListResult } from "../mcp-tool-schema.ts";
+import { capToolListResultByBytes, toolByteBudgetFromEnv } from "../tool-byte-budget.ts";
 import { capToolListResult, toolLimitFromEnv } from "../tool-count-limit.ts";
 import { withNextStep } from "../tool-next-step.ts";
 import { toolSchemaProfileFromEnv } from "../tool-schema-profile.ts";
@@ -30,6 +31,10 @@ export function agentsToolList(env: NodeJS.ProcessEnv) {
 export function agentsMcp(env: NodeJS.ProcessEnv, stop?: AbortSignal): (msg: Json) => Promise<Json | undefined> {
   const { available, bridge, listed } = agentsToolList(env);
   const limit = toolLimitFromEnv(env);
+  const byteBudget = toolByteBudgetFromEnv(env);
+  const prioritized = byteBudget === undefined || bridge
+    ? listed
+    : [...listed.filter((tool) => BRIDGE_HOT_TOOL_NAMES.has(tool.name)), ...listed.filter((tool) => !BRIDGE_HOT_TOOL_NAMES.has(tool.name))];
   const schemaProfile = toolSchemaProfileFromEnv(env);
   const log = (line: string) => console.warn(`[agents] ${line}`);
   const context = toolCallContextFromEnv(env, stop);
@@ -54,7 +59,7 @@ export function agentsMcp(env: NodeJS.ProcessEnv, stop?: AbortSignal): (msg: Jso
       case "ping":
         return ok(id, {});
       case "tools/list":
-        return ok(id, capToolListResult(fitToolListResult({ tools: listed }, schemaProfile, log), limit, log));
+        return ok(id, capToolListResult(capToolListResultByBytes(fitToolListResult({ tools: prioritized }, schemaProfile, log), byteBudget, log), limit, log));
       case "tools/call": {
         const called = { name: params.name as string, arguments: (params.arguments ?? {}) as Json };
         // Security: past the bridge a use_tool call is a direct call: same unknown-tool check, callTool and result bounds.

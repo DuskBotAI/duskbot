@@ -9,6 +9,7 @@ import { TOOL_SCHEMA_PROFILE_ENV, toolSchemaProfileFor, type ToolSchemaProfileId
 import { AGENTS_MCP_ENV } from "./agents-mcp-env.ts";
 import { OWN_APPS_SERVER } from "../../shared/own-apps.ts";
 import { shareToolBudget, TOOL_LIMIT_ENV, TOOL_LIMIT_HEADER } from "../tool-count-limit.ts";
+import { ANTIGRAVITY_EAGER_BYTE_BUDGET, shareToolByteBudget, TOOL_BYTE_BUDGET_ENV, type ByteBudgetServer } from "../tool-byte-budget.ts";
 import { agentsToolList } from "./agents-mcp.ts";
 
 export interface TurnStdioMcpServer {
@@ -57,7 +58,31 @@ export function turnStdioMcpServers(turn: SendTurnInput, options: { schemaProfil
     if (!gated) throw new Error("Tool selection requires an MCP gate.");
     return profiled({ name: server.name, command: gated.command, args: gated.args, env: gated.env });
   });
-  return toolBudget === undefined ? fitted : withToolShares(fitted, turn, toolBudget);
+  const budgeted = schemaProfile === "antigravity" ? withByteBudgets(fitted, turn, ANTIGRAVITY_EAGER_BYTE_BUDGET) : fitted;
+  return toolBudget === undefined ? budgeted : withToolShares(budgeted, turn, toolBudget);
+}
+
+const BYTE_BUDGET_CEILINGS: Record<string, { tier: ByteBudgetServer["tier"]; ceiling: number }> = {
+  agents: { tier: "primary", ceiling: 15_000 },
+  composio: { tier: "primary", ceiling: 10_000 },
+  [OWN_APPS_SERVER]: { tier: "primary", ceiling: 10_000 },
+  browser: { tier: "primary", ceiling: 9_000 },
+  data: { tier: "primary", ceiling: 4_500 },
+  email: { tier: "primary", ceiling: 4_500 },
+  device: { tier: "primary", ceiling: 4_500 },
+  computer: { tier: "core", ceiling: 10_000 },
+};
+
+function withByteBudgets(servers: TurnStdioMcpServer[], turn: SendTurnInput, budget: number): TurnStdioMcpServer[] {
+  const shares = shareToolByteBudget(servers.map((server) => {
+    const known = BYTE_BUDGET_CEILINGS[server.name];
+    const builtin = known && (server.name === "agents" || server.name === "composio" || server.name === OWN_APPS_SERVER || isCoreServer(server.name, turn));
+    return builtin ? { name: server.name, tier: known.tier, ceiling: known.ceiling } : { name: server.name, tier: "custom" as const };
+  }), budget);
+  return servers.map((server) => {
+    const share = shares.get(server.name);
+    return share === undefined ? server : { ...server, env: { ...server.env, [TOOL_BYTE_BUDGET_ENV]: String(share) } };
+  });
 }
 
 /** dusk bot's proxies and gates that cap their list at DUSK_TOOL_LIMIT. */

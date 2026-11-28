@@ -482,7 +482,7 @@ export const Transcript = memo(function Transcript({
       {rows.map(({ item, prev, first, newDay, divider: own, slot }, i) => {
         const place = places[i]!;
         const run = exchanges.runAt.get(i);
-        const collapsed = run !== undefined && !exchanges.isOpen(run);
+        const collapsed = run !== undefined && !exchanges.bodyShown(run);
         if (run && i !== run.start && collapsed) return null;
         let lead: ReactNode = null;
         if (run && i === run.start) {
@@ -490,7 +490,7 @@ export const Transcript = memo(function Transcript({
             <>
               {run.items.map((_, offset) => rows[run.start + offset]!.divider).find(Boolean)}
               {newDay && <DaySeparator at={first.at} today={today} prev={prev} next={first} />}
-              <PeerExchangeLine summary={run.summary} bots={state.bots} expanded={!collapsed} onToggle={() => exchanges.toggle(run)} />
+              <PeerExchangeLine summary={run.summary} bots={state.bots} expanded={exchanges.isOpen(run)} onToggle={() => exchanges.toggle(run)} />
             </>
           );
           if (collapsed) return <div key={run.id} className="contents" data-mid={first.id}>{lead}</div>;

@@ -73,7 +73,7 @@ import { ModelDirectory } from "./models/ModelDirectory";
 import { AiCards } from "./onboarding/AiCards";
 import { reportsUsage, useEngineLimits } from "@/lib/limit-resets";
 import {
-  BotOrderRow, ExperimentalFeaturesRow, FollowUpRow, LanguageRow, QuickUpdatesRow, SendKeyRow, SidebarFeedbackRow, SuggestionsRow, TalkingStyleRow,
+  BotOrderRow, ExperimentalFeaturesRow, FollowUpRow, LanguageRow, PeerRepliesRow, QuickUpdatesRow, SendKeyRow, SidebarFeedbackRow, SuggestionsRow, TalkingStyleRow,
 } from "./AppSettingsRows";
 
 export type Has = (id: AppSettingsSection) => boolean;
@@ -219,6 +219,7 @@ export function GeneralPane({ has, remoteActive }: { has: Has; remoteActive: boo
           <TalkingStyleRow />
           <LanguageRow simple />
           <BotOrderRow />
+          <PeerRepliesRow />
           <AmbientRows />
         </SettingsRows>
       </SettingsGroup>

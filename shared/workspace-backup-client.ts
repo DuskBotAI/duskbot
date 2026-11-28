@@ -8,6 +8,7 @@ export const WORKSPACE_BACKUP_CLIENT_KEYS = [
   "dusk-skin",
   "dusk-show-threads",
   "dusk-show-run-card",
+  "dusk-show-peer-replies",
   "dusk-send-key",
   "dusk-color-user-bubbles",
   "dusk-chat-width",

@@ -3,7 +3,8 @@ import { openPlaceAction, placeHasIssue } from "@/lib/place-view";
 import { useStore, type Bot } from "@/state/store";
 import { usePlaceViews } from "../../PlaceChip";
 import type { useBotSettingsDerived } from "../../bot-settings/useBotSettingsDerived";
-import { Card, CheckRow, NavRow, SheetPane } from "../../ListRows";
+import { Card, CheckRow, NavRow, RowIcon, SheetPane } from "../../ListRows";
+import { placeGlyph } from "../../PlaceIcon";
 import type { PlaceActionId } from "../../../../shared/place-view";
 import { CloudDesktopListRow } from "../CloudDesktop";
 import { usePlacePicker, type PlaceChoice } from "../ComputerTab";
@@ -12,7 +13,7 @@ const PLACE_LINE: Partial<Record<PlaceChoice, (name: string) => string>> = {
   auto: (name) => `${name} picks the right place for each task`,
   local: () => "Your apps, files and screen, right here",
   cloud: () => "A desktop in the cloud that runs while yours sleeps",
-  vm: () => "An isolated desktop on this machine",
+  vm: () => t("computer.dest.vmDesc"),
 };
 
 // steps choosing the cloud row carries out by itself
@@ -30,7 +31,7 @@ export function WhereModal({ bot, derived, onClose }: {
   const cloud = usePlaceViews(bot).cloud;
   const title = t("botPanel.ui.computerSimpleWhereWorks", { name: bot.name });
   const editable = bot.yourAccess !== "view";
-  const rows = options.filter((option) => option.value === "local" || option.value === "cloud" || option.value === "vm" || option.value === current);
+  const rows = options.filter((option) => option.value === "local" || option.value === "vm" || option.value === "cloud" || option.value === current);
   const setup = cloud.policy && (!cloud.reachable || placeHasIssue(cloud.view)) && cloud.view.action && !ON_CHOOSE.has(cloud.view.action.id)
     ? cloud.view.action : null;
 
@@ -44,6 +45,7 @@ export function WhereModal({ bot, derived, onClose }: {
               key={option.value}
               role="radio"
               data-panel-choice={option.value}
+              leading={<RowIcon icon={placeGlyph(option.value)} />}
               title={option.label}
               hint={option.hint ?? PLACE_LINE[option.value]?.(bot.name)}
               checked={current === option.value}

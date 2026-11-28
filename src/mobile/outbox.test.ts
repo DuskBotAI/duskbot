@@ -37,26 +37,32 @@ describe("outbox", () => {
     expect(await prefs.get("k")).toBeNull();
   });
 
-  it("keeps a saved send when another is held before the outbox finishes loading", async () => {
-    const values = new Map<string, string>([["k", JSON.stringify([{ ...send("a"), tries: 1 }])]]);
-    let resumeRead!: () => void;
-    const readGate = new Promise<void>((resolve) => { resumeRead = resolve; });
-    const prefs = {
-      get: async (key: string) => { const snapshot = values.get(key) ?? null; await readGate; return snapshot; },
-      set: async (key: string, value: string) => { values.set(key, value); },
-      remove: async (key: string) => { values.delete(key); },
-    };
-    const first = createOutbox(prefs, "k", () => 2_000);
-    first.hold(send("b"));
-    resumeRead();
-    await first.ready;
-    await settle();
-    expect(first.pending().map((one) => one.sendId)).toEqual(["a", "b"]);
-    expect(JSON.parse(values.get("k")!).map((one: { sendId: string }) => one.sendId)).toEqual(["a", "b"]);
+  it.each([
+    { releaseBeforeLoad: false, expected: ["a", "b"] },
+    { releaseBeforeLoad: true, expected: ["a"] },
+  ])("keeps saved sends when a new send arrives during load (released before load: $releaseBeforeLoad)", async ({ releaseBeforeLoad, expected }) => {
+    const { prefs, values } = memoryPrefs();
+    values.set("k", JSON.stringify([{ ...send("a"), tries: 1 }]));
+    let finishRead!: () => void;
+    const reading = new Promise<void>((resolve) => { finishRead = resolve; });
+    const delayedPrefs = { ...prefs, get: async (key: string) => {
+      const saved = await prefs.get(key);
+      await reading;
+      return saved;
+    } };
 
-    const second = createOutbox(prefs, "k", () => 3_000);
-    await second.ready;
-    expect(second.pending().map((one) => one.sendId)).toEqual(["a", "b"]);
+    const outbox = createOutbox(delayedPrefs, "k", () => 2_000);
+    outbox.hold(send("b"));
+    if (releaseBeforeLoad) outbox.release("b");
+    finishRead();
+    await outbox.ready;
+    await settle();
+
+    expect(outbox.pending().map(({ sendId }) => sendId)).toEqual(expected);
+    expect(JSON.parse(values.get("k") ?? "[]").map((one: OutboxSend) => one.sendId)).toEqual(expected);
+    const restarted = createOutbox(prefs, "k", () => 3_000);
+    await restarted.ready;
+    expect(restarted.pending().map(({ sendId }) => sendId)).toEqual(expected);
   });
 
   it("stops at a send that is lost again and picks up on the next flush", async () => {

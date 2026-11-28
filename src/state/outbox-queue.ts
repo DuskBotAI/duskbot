@@ -41,19 +41,20 @@ export function createOutbox(prefs: OutboxPrefs, key: string, now: () => number 
 
   const fresh = (entry: Entry) => now() - entry.at < OUTBOX_MAX_AGE_MS;
   function persist() {
-    const text = JSON.stringify(entries);
-    writing = writing.then(() => (entries.length ? prefs.set(key, text) : prefs.remove(key))).catch(() => {});
+    // wait for the saved list before any write so a hold/release during load cannot replace it
+    writing = writing.then(async () => {
+      await loaded;
+      if (entries.length) await prefs.set(key, JSON.stringify(entries));
+      else await prefs.remove(key);
+    }).catch(() => {});
   }
   const loaded = (async () => {
     try {
       const saved: unknown = JSON.parse(await prefs.get(key) ?? "[]");
-      const held = entries.length;
       const known = new Set(entries.map((entry) => entry.sendId));
       // sends held before the saved list was read stay, after the older ones
       const older = Array.isArray(saved) ? saved.filter(valid).filter((entry) => fresh(entry) && !known.has(entry.sendId)) : [];
       entries = [...older, ...entries];
-      // a hold during load may have written only the new sends; rewrite the combined list
-      if (held && older.length) persist();
     } catch {}
   })();
 

@@ -20,7 +20,7 @@ it("draws an item's second line (where it connects) and third line (a note) unde
   expect(html).toMatch(/Connect your phone<\/span><span[^>]*>to your Cloud \(always on\)<\/span>/);
   expect(html).toMatch(/to this computer<\/span><span[^>]*>Your Cloud shows here once it is ready\.<\/span>/);
   expect(html.indexOf("to your Cloud (always on)")).toBeLessThan(html.indexOf("to this computer"));
-  expect(html).toContain('<span class="flex-1 truncate">Settings</span>');
+  expect(html).toContain('<span data-tip-clipped="Settings" class="flex-1 truncate">Settings</span>');
 });
 
 it("draws an item's attention dot on the item itself, in its tone", () => {
@@ -45,7 +45,7 @@ it("lets a sentence wrap instead of cutting it short, with its icon on the first
   expect(html).toContain('<span class="break-words">Everything from this computer is here: 4 bots and 148 chats.</span>');
   expect(html).toContain('<span class="flex-1 min-w-0 break-words">Everything from this computer is here: 4 bots, 2 skills and 148 chats.</span>');
   expect(html).toMatch(/self-start[^"]*">!<\/span>/);
-  expect(html).toContain('<span class="flex-1 truncate">Settings</span>');
+  expect(html).toContain('<span data-tip-clipped="Settings" class="flex-1 truncate">Settings</span>');
 });
 
 it("puts what a one-line row leaves out in its tooltip, drawn the same as every other row", () => {
@@ -59,5 +59,5 @@ it("puts what a one-line row leaves out in its tooltip, drawn the same as every 
   const look = (key: string) => row(key).match(/ class="([^"]*)"/)?.[1];
   expect(look("settings")).toMatch(/\bitems-center\b/);
   expect(look("cloud-move")).toBe(look("settings"));
-  expect(row("cloud-move")).toContain('<span class="flex-1 truncate">Try moving to dusk cloud again</span>');
+  expect(row("cloud-move")).toContain('<span data-tip-clipped="Try moving to dusk cloud again" class="flex-1 truncate">Try moving to dusk cloud again</span>');
 });

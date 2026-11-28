@@ -15,13 +15,15 @@ const TOOLTIP_EXIT_MS = TOOLTIP.exit;
 const GAP = 8;
 const EDGE = 8;
 const TOOLTIP_ID = "app-title-tooltip";
+const TRIGGERS = "[title], [data-tip-title], [data-tip-clipped]";
 
 interface Tip { el: HTMLElement; text: string; instant: boolean; ending?: boolean }
 
 /**
  * Draws every native `title` as Grok's tooltip instead of the system one. While a trigger is hovered or focused its
  * title moves to `data-tip-title` (so the system tooltip stays away) and comes back when it closes; an icon-only
- * control keeps its name through a temporary aria-label. Mounted once beside the app.
+ * control keeps its name through a temporary aria-label. A `data-tip-clipped` text shows only while the element's own
+ * text is cut short, so a truncated label always has a way to its full text. Mounted once beside the app.
  */
 export function TitleTooltips() {
   const [tip, setTip] = useState<Tip | null>(null);
@@ -35,6 +37,12 @@ export function TitleTooltips() {
     let poll = 0;
     let cooled = 0;
     const strip = (el: HTMLElement): string | null => {
+      const clipped = el.dataset.tipClipped;
+      if (clipped != null) {
+        if (!clipped.trim()) return null;
+        el.dataset.tipTitle = clipped;
+        return clipped;
+      }
       const title = el.getAttribute("title");
       if (title == null) return el.dataset.tipTitle ?? null;
       if (!title.trim()) return null;
@@ -49,7 +57,7 @@ export function TitleTooltips() {
     const restore = (el: HTMLElement) => {
       const title = el.dataset.tipTitle;
       if (title == null) return;
-      if (!el.hasAttribute("title")) el.setAttribute("title", title);
+      if (!el.hasAttribute("title") && el.dataset.tipClipped == null) el.setAttribute("title", title);
       if ("tipLabel" in el.dataset) { el.removeAttribute("aria-label"); delete el.dataset.tipLabel; }
       if (el.getAttribute("aria-describedby") === TOOLTIP_ID) el.removeAttribute("aria-describedby");
       delete el.dataset.tipTitle;
@@ -106,8 +114,12 @@ export function TitleTooltips() {
       if (warm || keyboard) { show(el, true); return; }
       pending = { el, timer: window.setTimeout(() => { pending = null; show(el, false); }, TOOLTIP_DELAY_MS) };
     };
-    const trigger = (target: EventTarget | null): HTMLElement | null =>
-      target instanceof Element ? target.closest<HTMLElement>("[title], [data-tip-title]") : null;
+    // a label that fits passes the hover on to a titled control around it
+    const trigger = (target: EventTarget | null): HTMLElement | null => {
+      let el = target instanceof Element ? target.closest<HTMLElement>(TRIGGERS) : null;
+      while (el && el.dataset.tipClipped != null && el.scrollWidth <= el.clientWidth) el = el.parentElement?.closest<HTMLElement>(TRIGGERS) ?? null;
+      return el;
+    };
 
     const onOver = (event: PointerEvent) => {
       if (event.pointerType !== "mouse") return;

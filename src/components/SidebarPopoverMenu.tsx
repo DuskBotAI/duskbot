@@ -166,12 +166,12 @@ function MenuRows({
             )}
             {item.subtitle || item.note ? (
               <span className="flex min-w-0 flex-1 flex-col">
-                <span className={cn(item.wrap ? "break-words" : "truncate", item.large && "font-medium leading-[18px]")}>{item.label}{item.labelNote && <span className="font-normal text-ink-secondary"> · {item.labelNote}</span>}</span>
-                {item.subtitle && <span className="truncate text-[12px] font-normal leading-4 text-ink-secondary">{item.subtitle}</span>}
+                <span data-tip-clipped={item.wrap ? undefined : item.labelNote ? `${item.label} · ${item.labelNote}` : item.label} className={cn(item.wrap ? "break-words" : "truncate", item.large && "font-medium leading-[18px]")}>{item.label}{item.labelNote && <span className="font-normal text-ink-secondary"> · {item.labelNote}</span>}</span>
+                {item.subtitle && <span data-tip-clipped={item.subtitle} className="truncate text-[12px] font-normal leading-4 text-ink-secondary">{item.subtitle}</span>}
                 {item.note && <span className="text-[12px] font-normal leading-snug text-ink-tertiary">{item.note}</span>}
               </span>
             ) : (
-              <span className={cn("flex-1", item.wrap ? "min-w-0 break-words" : "truncate", grok && GROK_LABEL)}>{item.label}</span>
+              <span data-tip-clipped={item.wrap ? undefined : item.label} className={cn("flex-1", item.wrap ? "min-w-0 break-words" : "truncate", grok && GROK_LABEL)}>{item.label}</span>
             )}
             {item.value && <span className="shrink-0 text-[13px] font-normal leading-[18px] tabular-nums text-ink-secondary">{item.value}</span>}
             {item.trailing}

@@ -422,7 +422,8 @@ const __APP_VERSION__: string;
       /** Input loudness from 0 to 1 while the native helper listens. Absent in older builds of the shell. */
       onSpeechLevel?(cb: (level: number) => void): () => void;
       /** Voice input through a speech-to-text service the person set up in Settings > Voice (electron/voice-input-main.mjs).
-       * Keys stay in this computer's credential store; the page sends audio and hears words. Absent in older builds. */
+       * On this computer's page and on a place the person chose. Keys stay in this computer's credential store; the page
+       * sends audio and hears words. Absent in older builds. */
       voiceInput?: VoiceInputBridge;
       /** Absolute path of a dropped File ("" when the drag carried no
        * file on disk). Absent in older builds of the shell. */

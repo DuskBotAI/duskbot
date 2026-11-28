@@ -71,7 +71,7 @@ export function currentVoiceDevice(): VoiceDevice {
     const capabilities = desktopCapabilitiesNow();
     const os = desktop.platform === "darwin" ? "mac" : desktop.platform === "win32" ? "windows" : "linux";
     const system = capabilities.dictation.available ? DESKTOP_SYSTEM[capabilities.dictation.engine] ?? null : null;
-    return { kind: "desktop", os, system, providers: Boolean(desktop.voiceInput) && !capabilities.remote };
+    return { kind: "desktop", os, system, providers: Boolean(desktop.voiceInput) };
   }
   // Electron's own Web Speech needs Google keys it does not ship, so only a real browser offers it
   return { kind: "browser", system: webRecognition() ? "web-speech" : null, providers: false };

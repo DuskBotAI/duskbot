@@ -103,8 +103,9 @@ test("main tells the talk wiring when home changes and which skin the app painte
 test("the talk bridge keys stay off unknown pages; any place the person chose listens and reports its call", () => {
   const list = name => preload.match(new RegExp(`const ${name} = (?:new Set\\()?\\[([^\\]]*)\\]`))[1];
   assert.doesNotMatch(list("REMOTE_SAFE"), /talkShortcut|callActive/);
-  for (const key of ["callActive", "speechStart", "speechStop", "speechFinish", "onSpeechTranscript", "onSpeechEnd", "onSpeechLevel"]) assert.match(list("PLACE_PAGE"), new RegExp(`"${key}"`));
+  for (const key of ["callActive", "speechStart", "speechStop", "speechFinish", "onSpeechTranscript", "onSpeechEnd", "onSpeechLevel", "voiceInput"]) assert.match(list("PLACE_PAGE"), new RegExp(`"${key}"`));
   assert.doesNotMatch(list("REMOTE_SAFE"), /speech/i);
+  assert.doesNotMatch(list("REMOTE_SAFE"), /voiceInput/);
   assert.doesNotMatch(list("PLACE_PAGE"), /talkShortcut/);
   assert.doesNotMatch(list("HOME_PAGE"), /talkShortcut/);
   assert.match(preload, /const onPlacePage = !isLocalPage && \(onHomePage \|\| placePage\(\)\);/);
@@ -114,6 +115,7 @@ test("main lets the home page and the window's chosen server listen, and says so
   assert.match(main, /homeSpeech: homeWindow\.homePage\(event\), placeSpeech: Boolean\(activePageOrigin\(event\)\),/);
   assert.match(main, /const kind = isLocal \? "local" : homeWindow\.homePage\(page\) \? "home" : activePageOrigin\(page\) \? "place" : "remote";/);
   assert.match(main, /build\(true, kind === "home", kind === "place"\)/);
+  assert.match(main, /installVoiceInput\(\{ ipcMain, localOnly, placePage: event => homeWindow\.homePage\(event\) \|\| Boolean\(activePageOrigin\(event\)\),/);
 });
 
 test("every microphone channel answers only this computer's page or a place the person chose", () => {

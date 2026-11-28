@@ -324,7 +324,7 @@ export function CommandPalette({ onOpenChange }: { onOpenChange?: (open: boolean
             id={listId}
             role="listbox"
             aria-label={t("palette.results")}
-            className="min-h-0 flex-1 overflow-y-auto [mask-image:linear-gradient(transparent_0px,black_0px,black_calc(100%-24px),transparent_100%)]"
+            className="scroll-fade-list min-h-0 flex-1 overflow-y-auto"
           >
             <div ref={exits.list} className={cn("flex flex-col gap-0.5 p-2", (glideMs > 0 || rowsMs > 0) && "relative isolate")}>
               {entries.map((entry, index) => {

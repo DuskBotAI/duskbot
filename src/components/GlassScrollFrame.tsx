@@ -33,8 +33,11 @@ export function scrollFadeOf({ scrollTop, scrollHeight, clientHeight }: Pick<HTM
 }
 
 export function watchScrollFade(list: HTMLElement, frame: HTMLElement): () => void {
+  let shown: ScrollFade | null | undefined;
   const update = () => {
     const fade = scrollFadeOf(list);
+    if (fade === shown) return;
+    shown = fade;
     if (fade) frame.setAttribute("data-scroll-fade", fade);
     else frame.removeAttribute("data-scroll-fade");
   };
@@ -162,11 +165,10 @@ const PointerScrollbar = memo(function PointerScrollbar({ scroller, style }: { s
   );
 });
 
-const FADE_BAND = "pointer-events-none absolute inset-x-0 z-10 h-6 bg-[var(--scroll-fade-surface,var(--color-panel))] opacity-0 transition-opacity duration-150 ease-out";
 const GLASS_SCROLLBAR_STYLE: CSSProperties = { top: "var(--glass-top, 0px)", bottom: "var(--glass-bottom, 0px)" };
 
-/** `fade` stacks the bars above and below the scroller instead of floating them over it as glass, and marks
- * the list's edges with a band of the surface colour that shows only while more of the list lies past that edge. */
+/** `fade` stacks the bars above and below the scroller instead of floating them over it as glass, and fades
+ * the list's own rows out at an edge only while more of it lies past that edge (`.scroll-fade-list`). */
 export function GlassScrollFrame({ className, children, fade = false, ...rest }: HTMLAttributes<HTMLDivElement> & { children: ReactNode; fade?: boolean }) {
   const ref = useRef<HTMLDivElement>(null);
   const [scroller, setScroller] = useState<HTMLElement | null>(null);
@@ -244,14 +246,10 @@ export function GlassScroller({ className, children, ...rest }: HTMLAttributes<H
     );
   }
   return (
-    <div ref={frame} data-scroll-fade-frame="" className="group/fade relative min-h-0 flex-1">
-      <div ref={list} className={cn("h-full overflow-y-auto", className)} {...rest}>
+    <div ref={frame} data-scroll-fade-frame="" className="relative min-h-0 flex-1">
+      <div ref={list} className={cn("scroll-fade-list h-full overflow-y-auto", className)} {...rest}>
         <div>{children}</div>
       </div>
-      <div aria-hidden="true" data-scroll-fade-edge="top"
-        className={cn(FADE_BAND, "top-0 [mask-image:linear-gradient(to_bottom,black,transparent)] group-data-[scroll-fade=start]/fade:opacity-100 group-data-[scroll-fade=both]/fade:opacity-100")} />
-      <div aria-hidden="true" data-scroll-fade-edge="bottom"
-        className={cn(FADE_BAND, "bottom-0 [mask-image:linear-gradient(to_top,black,transparent)] group-data-[scroll-fade=end]/fade:opacity-100 group-data-[scroll-fade=both]/fade:opacity-100")} />
       <OverlayScrollbar scroller={scroller} />
     </div>
   );

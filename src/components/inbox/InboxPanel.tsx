@@ -85,7 +85,7 @@ export function InboxPanel() {
         ) : (
           <>
             <h2 className="border-b border-transparent px-3.5 py-2.5 text-[13px] font-medium text-ink">{t("inbox.panel.title")}</h2>
-            <div className="min-h-0 flex-1 overflow-y-auto">
+            <div className="scroll-fade-list min-h-0 flex-1 overflow-y-auto">
               <label className="m-2.5 flex h-8 items-center gap-2 rounded-lg border border-transparent bg-transparent px-2.5 ">
                 <Search size={14} aria-hidden="true" className="shrink-0 text-ink-tertiary" />
                 <input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t("inbox.search")} aria-label={t("inbox.search")}

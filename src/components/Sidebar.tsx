@@ -1078,7 +1078,7 @@ export function Sidebar({ open, onClose, collapseToIcons = false }: {
       }}
       style={{ ...drawer.props?.style, ["--sidebar-width" as string]: `${sizing.width}px` } as MotionStyle}
       className={cn(
-        "relative flex h-full shrink-0 flex-col border-r-[0.5px] border-transparent bg-panel max-md:[--scroll-fade-surface:var(--color-app)]",
+        "relative flex h-full shrink-0 flex-col border-r-[0.5px] border-transparent bg-panel",
         sizing.resizing && !sizing.snapping ? "transition-none" : "transition-[width] duration-[calc(500ms*var(--motion-scale,1))] ease-(--dusk-spring-soft) motion-reduce:transition-none",
         rail ? "w-[80px]" : "w-[288px] md:w-[var(--sidebar-width)]",
         "md:max-w-[calc(100vw-320px)]",
@@ -1089,7 +1089,7 @@ export function Sidebar({ open, onClose, collapseToIcons = false }: {
         !phone && !open && "max-md:-translate-x-full",
       )}
     >
-      <GlassScrollFrame className={cn("flex-1", simpleDesk && "[&_[data-scroll-fade-edge=bottom]]:h-12")} fade>
+      <GlassScrollFrame className="flex-1" fade>
       <GlassBar edge="top">
       <div
         data-sidebar-top-row={corner ? "corner" : true}

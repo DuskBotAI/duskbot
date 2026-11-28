@@ -1017,9 +1017,17 @@ export async function removeManagedVpsComputer(
     try {
       // The immutable ID, not the name: a same-name replacement must not receive this removal.
       const docker: DockerCall = (args, timeoutMs) => runner(vpsDockerArgs(alias, args), { timeoutMs });
-      await docker(["rm", "-f", containerId], 60_000).catch(async () => {
+      const removeContainer = async () => {
+        try { await docker(["rm", "-f", containerId], 60_000); }
+        catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          const missing = /^(?:Error(?: response from daemon)?:\s*)?No such (?:object|container):\s*([a-f0-9]{64})$/i.exec(message.trim());
+          if (missing?.[1]?.toLowerCase() !== containerId.toLowerCase()) throw error;
+        }
+      };
+      await removeContainer().catch(async () => {
         await forceStopContainer(docker, containerId);
-        await docker(["rm", "-f", containerId], 60_000);
+        await removeContainer();
       });
     } catch (error) {
       invalidateVpsStatus(key);

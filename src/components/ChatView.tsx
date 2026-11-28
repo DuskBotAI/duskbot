@@ -883,7 +883,7 @@ const MessagesList = memo(function MessagesList({
         const prev = previous && (previous.kind === "message" ? previous.message : previous.messages.at(-1));
         const first = item.kind === "message" ? item.message : item.messages[0];
         const run = exchanges.runAt.get(i);
-        const collapsed = run !== undefined && !exchanges.isOpen(run);
+        const collapsed = run !== undefined && !exchanges.bodyShown(run);
         if (run && i !== run.start && collapsed) return null;
         const leads = run !== undefined && i === run.start;
         const newDay = needsStamp(prev, first);
@@ -892,7 +892,7 @@ const MessagesList = memo(function MessagesList({
           <>
             {divider}
             {newDay && <DaySeparator at={first.at} today={today} prev={prev} next={first} />}
-            <PeerExchangeLine summary={run.summary} bots={bots} expanded={!collapsed} onToggle={() => exchanges.toggle(run)} />
+            <PeerExchangeLine summary={run.summary} bots={bots} expanded={exchanges.isOpen(run)} onToggle={() => exchanges.toggle(run)} />
           </>
         );
         if (lead && collapsed) return <div key={run.id} className="contents" data-mid={first.id}>{lead}</div>;

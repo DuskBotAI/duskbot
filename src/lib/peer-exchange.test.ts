@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Message } from "@/state/store";
-import { exchangeEntries, exchangeHidden, exchangeOpenByDefault, exchangeRuns, exchangeSummary } from "./peer-exchange";
+import { exchangeBodyShown, exchangeEntries, exchangeHidden, exchangeOpenByDefault, exchangeRuns, exchangeSummary, type ExchangeSummary } from "./peer-exchange";
 
 const msg = (id: string, fields: Partial<Message>): Message => ({ id, role: "bot", kind: "text", at: 1, ...fields } as Message);
 const ghosty = { id: "ghosty", name: "Ghosty" };
@@ -110,5 +110,33 @@ describe("exchangeRuns", () => {
       { kind: "single", direction: "inbound", peer: { id: "dusk", name: "dusk bot", color: "blue" } },
       { kind: "single", direction: "outbound", as: "reply", peer: { id: "dusk", name: "dusk bot", color: "blue" } },
     ]);
+  });
+});
+
+describe("exchangeBodyShown", () => {
+  const peer = { id: "ghosty", name: "Ghosty" };
+  const answer: ExchangeSummary = { kind: "single", direction: "inbound", as: "answer", peer };
+  const reply: ExchangeSummary = { kind: "single", direction: "outbound", as: "reply", peer };
+  const thread: ExchangeSummary = { kind: "thread", count: 3, peers: [peer] };
+  const ask: ExchangeSummary = { kind: "single", direction: "inbound", peer };
+
+  it("draws an open run's rows while bot-to-bot replies show, and never a closed run's", () => {
+    for (const summary of [answer, reply, thread, ask]) {
+      expect(exchangeBodyShown(summary, true, true)).toBe(true);
+      expect(exchangeBodyShown(summary, false, true)).toBe(false);
+      expect(exchangeBodyShown(summary, false, false)).toBe(false);
+    }
+  });
+
+  it("folds the rows of every run that draws a line once they are switched off, open or not", () => {
+    for (const summary of [answer, reply, thread]) {
+      expect(exchangeHidden(summary)).toBe(false);
+      expect(exchangeBodyShown(summary, true, false)).toBe(false);
+    }
+  });
+
+  it("keeps the rows of a run that draws no line, so switching off never leaves a gap with no line", () => {
+    expect(exchangeHidden(ask)).toBe(true);
+    expect(exchangeBodyShown(ask, true, false)).toBe(true);
   });
 });

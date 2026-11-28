@@ -4677,6 +4677,8 @@
   "settings.botOrder.hint": "A bot with a new message moves to the top. Pinned bots stay first.",
   "settings.botOrder.recent": "Recent activity",
   "settings.botOrder.custom": "Your order",
+  "settings.peerReplies.title": "Show bot-to-bot replies",
+  "settings.peerReplies.hint": "When off, a chat keeps the line saying a bot replied and folds the reply itself. Nothing is deleted.",
   "settings.sidebarFeedback.title": "Show feedback button in sidebar",
   "settings.sidebarFeedback.hint": "You can still give feedback from your account menu.",
   "engines.found.title": "Found on this computer",

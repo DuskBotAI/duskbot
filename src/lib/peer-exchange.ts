@@ -127,6 +127,10 @@ export function exchangeSummary(all: readonly PeerEntry[]): ExchangeSummary | nu
  * of its own ask shows inline under its line. */
 export const exchangeHidden = (summary: ExchangeSummary): boolean =>
   summary.kind === "single" && ((summary.direction === "inbound" && summary.as !== "answer") || summary.as === "ask");
+/** Whether a run's rows draw under its line. With bot-to-bot replies switched off, a run that draws a line keeps the
+ * line and its rows stay folded; a run that draws no line shows its rows as before, so nothing leaves without a trace. */
+export const exchangeBodyShown = (summary: ExchangeSummary, open: boolean, showPeerReplies: boolean): boolean =>
+  open && (showPeerReplies || exchangeHidden(summary));
 export const exchangeOpenByDefault = (summary: ExchangeSummary): boolean => summary.kind === "single" && summary.as === "answer";
 
 export interface ExchangeRun<T> { id: string; start: number; end: number; items: T[]; entries: PeerEntry[]; summary: ExchangeSummary }

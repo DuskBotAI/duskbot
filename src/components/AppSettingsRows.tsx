@@ -17,6 +17,7 @@ import { friendlyError } from "@/lib/plain-error";
 import {
   parseSidebarBotOrder, setSidebarBotOrder, setSidebarFeedbackHidden, useSidebarBotOrder, useSidebarFeedbackHidden,
 } from "@/lib/sidebar-preferences";
+import { setShowPeerReplies, useShowPeerReplies } from "@/lib/peer-replies-preference";
 
 export function NewBotEffortRow() {
   const { state, dispatch } = useStore();
@@ -234,6 +235,16 @@ export function SidebarFeedbackRow() {
         aria-label={title}
         onClick={() => setSidebarFeedbackHidden(!hidden)}
       />
+    </SettingRow>
+  );
+}
+
+export function PeerRepliesRow() {
+  const shown = useShowPeerReplies();
+  const title = t("settings.peerReplies.title");
+  return (
+    <SettingRow icon="team" title={title} subtitle={t("settings.peerReplies.hint")}>
+      <Switch checked={shown} aria-label={title} data-settings-switch="peer-replies" onClick={() => setShowPeerReplies(!shown)} />
     </SettingRow>
   );
 }

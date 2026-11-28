@@ -52,6 +52,7 @@ async function start() {
       ...(process.env.PATH ? { PATH: process.env.PATH } : {}),
       ...(process.env.SystemRoot ? { SystemRoot: process.env.SystemRoot } : {}),
       HOME: home, USERPROFILE: home, DUSK_PORT: String(PORT), DUSK_WEBHOOK_PORT: String(PORT + 1),
+      DUSK_BOT_SHARING: "on",
     },
     stdio: ["ignore", "pipe", "pipe"],
   });

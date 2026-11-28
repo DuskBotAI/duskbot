@@ -3,7 +3,7 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const fixture = vi.hoisted(() => ({ api: vi.fn(), admin: true as boolean | null, config: null as { cloudHome?: boolean } | null }));
+const fixture = vi.hoisted(() => ({ api: vi.fn(), admin: true as boolean | null, config: null as { cloudHome?: boolean; team?: { name: string } } | null }));
 vi.mock("@/state/store", async (importOriginal) => ({
   ...await importOriginal<typeof import("@/state/store")>(),
   api: fixture.api,
@@ -236,5 +236,58 @@ describe("Settings → Logins with My Cloud", () => {
     await render();
     expect(document.body.textContent).not.toContain("come along when you move your bots here");
     expect(document.body.querySelector("[data-also-cloud]")).toBeNull();
+  });
+});
+
+describe("Settings → Vault place", () => {
+  afterEach(() => { delete (window as { duskDesktop?: unknown }).duskDesktop; });
+
+  it("shows this computer and the per-place notice even when the vault is empty", async () => {
+    (window as { duskDesktop?: unknown }).duskDesktop = { workspaces: { state: vi.fn().mockResolvedValue({ local: true, name: "This computer" }) } };
+    fixture.api.mockResolvedValueOnce({ logins: [], onePassword: OFF });
+    await render();
+    const banner = document.body.querySelector("[data-vault-place]")!;
+    expect(banner).not.toBeNull();
+    expect(banner.textContent).toContain("This computer");
+    expect(banner.textContent).toContain("Items stay here and aren't copied between places.");
+  });
+
+  it("shows the paired remote server name when open on a remote place", async () => {
+    (window as { duskDesktop?: unknown }).duskDesktop = { workspaces: { state: vi.fn().mockResolvedValue({ local: false, name: "Ubuntu VPS" }) } };
+    fixture.api.mockResolvedValueOnce({ logins: [], onePassword: OFF });
+    await render();
+    const banner = document.body.querySelector("[data-vault-place]")!;
+    expect(banner.textContent).toContain("Ubuntu VPS");
+    expect(banner.textContent).toContain("Items stay here and aren't copied between places.");
+  });
+
+  it("shows My cloud on a cloud home", async () => {
+    (window as { duskDesktop?: unknown }).duskDesktop = { workspaces: { state: vi.fn().mockResolvedValue({ local: false, home: true, name: "My cloud" }) } };
+    fixture.api.mockResolvedValueOnce({ logins: [SHARED_LOGIN], onePassword: OFF });
+    await render();
+    expect(document.body.querySelector("[data-vault-place]")!.textContent).toContain("My cloud");
+  });
+
+  it("shows the team name on a team cloud home", async () => {
+    (window as { duskDesktop?: unknown }).duskDesktop = { workspaces: { state: vi.fn().mockResolvedValue({ local: false, home: true, name: "My cloud" }) } };
+    fixture.config = { cloudHome: true, team: { name: "Acme" } };
+    fixture.api.mockResolvedValueOnce({ logins: [SHARED_LOGIN], onePassword: OFF });
+    await render();
+    expect(document.body.querySelector("[data-vault-place]")!.textContent).toContain("Acme");
+  });
+
+  it("falls back to My cloud from config when the desktop bridge is absent", async () => {
+    fixture.config = { cloudHome: true };
+    fixture.api.mockResolvedValueOnce({ logins: [SHARED_LOGIN], onePassword: OFF });
+    await render();
+    const banner = document.body.querySelector("[data-vault-place]")!;
+    expect(banner.textContent).toContain("My cloud");
+    expect(banner.textContent).toContain("Items stay here and aren't copied between places.");
+  });
+
+  it("hides the place line when neither desktop workspaces nor cloud config identifies the place", async () => {
+    fixture.api.mockResolvedValueOnce({ logins: [SHARED_LOGIN], onePassword: OFF });
+    await render();
+    expect(document.body.querySelector("[data-vault-place]")).toBeNull();
   });
 });

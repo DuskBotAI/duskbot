@@ -8,8 +8,10 @@ import { t } from "@/lib/i18n";
 import { addLogin, changeLogin, connectOnePassword, deleteLogin, disconnectOnePassword, grantVault, listLogins, refreshOnePassword } from "@/lib/logins";
 import { relativeTime } from "@/lib/memory";
 import { useOwnerOrAdmin } from "@/lib/use-owner-or-admin";
-import { useStore } from "@/state/store";
+import { usePlaceLook } from "@/lib/place-look";
+import { useStore, type ConfigStatus } from "@/state/store";
 import { LoginBotPicker, LoginForm } from "./LoginForm";
+import { PlaceMark } from "./PlaceMark";
 import { SavedSecretDialog, useSavedSecrets } from "./SavedSecretsSettings";
 import type { SavedSecretSummary } from "../../shared/saved-secrets";
 import { ItemRow, NavRow, NoteRow, SwitchRow } from "./ListRows";
@@ -17,6 +19,7 @@ import { Card, SettingsGroup, SettingsRows, SIMPLE_CARD } from "./SettingsPrimit
 import { DialogPane, GrokDialog, mdPrimaryCls, mdSecondaryCls, textFieldCls } from "./ui/GrokDialog";
 import { cn } from "@/lib/cn";
 import { Icon } from "./Icon";
+import { useWindowPlace, windowPlaceMark } from "./WindowPlaceTitle";
 import { siteIconUrl } from "@/lib/site-icon";
 import { friendlyError } from "@/lib/plain-error";
 
@@ -127,9 +130,22 @@ function SiteTile({ site }: { site: string }) {
   );
 }
 
+function vaultPlaceOf(
+  place: ReturnType<typeof useWindowPlace>,
+  config: Pick<ConfigStatus, "cloudHome" | "team"> | null | undefined,
+  color?: unknown,
+): ReturnType<typeof windowPlaceMark> | null {
+  if (place) return windowPlaceMark(place, config?.team?.name, color);
+  if (config?.team?.name) return { kind: "team", name: config.team.name, color: color ?? null };
+  if (config?.cloudHome) return { kind: "cloud", name: t("cloudSetup.myCloud"), color: color ?? null };
+  return null;
+}
+
 export function LoginsSettings() {
   const { state } = useStore();
   const ownerOrAdmin = useOwnerOrAdmin();
+  const windowPlace = useWindowPlace();
+  const placeLook = usePlaceLook();
   const bots = state.bots.map((bot) => ({ id: bot.id, name: bot.name }));
   const [logins, setLogins] = useState<LoginSummary[] | null>(null);
   const [onePassword, setOnePassword] = useState<OnePasswordStatus>({ connected: false });
@@ -225,10 +241,21 @@ export function LoginsSettings() {
     secret.lastUsedAt ? t("settings.logins.used", { when: relativeTime(secret.lastUsedAt) }) : t("settings.logins.neverUsed")].join(" · ");
   // nothing until the list is in: a frame that fills a moment later reads as "empty" first
   if (!ready) return null;
+  const vaultPlace = vaultPlaceOf(windowPlace, state.config, placeLook?.color);
 
   return (
     <>
       <section data-settings-block="logins" aria-label={t("settings.section.logins")} className="flex scroll-mt-4 flex-col gap-4">
+        {vaultPlace && (
+          <p data-vault-place="" className="flex items-start gap-1.5 px-2.5 text-[12px] leading-4 text-ink-secondary">
+            <PlaceMark place={vaultPlace} size={16} />
+            <span className="min-w-0">
+              <span className="font-medium text-ink" dir="auto">{vaultPlace.name}</span>
+              {" · "}
+              {t("settings.vault.placeOnly")}
+            </span>
+          </p>
+        )}
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div role="tablist" aria-label={t("settings.section.logins")} className="flex items-center gap-1">
             {tabs.map((entry) => (

@@ -7905,6 +7905,7 @@
   "settings.vault.search": "Search vault",
   "settings.vault.noMatch": "Nothing matches your search.",
   "settings.vault.footnote": "Bots never see your passwords or saved secrets: {app} types them in or hands them to its tools, so the values never reach the AI. Bots can see a login's site and username.",
+  "settings.vault.placeOnly": "Items stay here and aren't copied between places.",
   "settings.hint.desktops": "The computers your bots can use, here or in the cloud",
   "settings.hint.profiles": "Saved browser sign-ins your bots can reuse",
   "settings.elsewhere.intro": "Use your bots from your phone or another computer.",

@@ -15,7 +15,7 @@ import { Worker } from "node:worker_threads";
 import { writeFileAtomic } from "./atomic.ts";
 import { WORKSPACE_BACKUP_CLIENT_KEYS } from "../shared/workspace-backup-client.ts";
 import { INSTRUCTION_FILE, restorePaths, validRelative } from "./workspace-backup-paths.ts";
-import { ephemeralWorkspaceTokenPath, excludedWorkspaceAuthPath, liveDataEnginePath, managedTaskSkillLink, portableWorkspaceConfig, redownloadedOrgLibraryPath, restoredWorkspaceConfig } from "./workspace-backup-policy.ts";
+import { ephemeralWorkspaceTokenPath, excludedWorkspaceAuthPath, liveDataEnginePath, managedTaskSkillLink, portableWorkspaceConfig, redownloadedModelPath, redownloadedOrgLibraryPath, restoredWorkspaceConfig } from "./workspace-backup-policy.ts";
 import { omittedAsTeamPrivate, stripTeamPrivate, TEAM_PRIVATE_NOTE, teamPrivateAttachments, teamPrivateThreads, withoutTeamPrivate } from "./workspace-backup-team-private.ts";
 import type { WorkspaceBackupClientState, WorkspaceBackupPrivateMetadata, WorkspaceBackupSummary, WorkspaceLeftBehind } from "../shared/workspace-backup.ts";
 import { isSafetyCopy } from "./registry-file.ts";
@@ -47,9 +47,6 @@ const EXCLUDED = new Set([
   // A Team Cloud's engine homes (engine-homes/layout.ts): CLI login homes, each audience's own transcripts and the held
   // folder, which no admin reads.
   "engine-homes",
-  // The memory-recall embedding model (memory-embed.ts): a checked download fetched again when missing, written through a
-  // .part file that a running download renames under the backup's feet.
-  "models",
   WAITS_FILE,
 ]);
 const EXCLUSION_NOTES = [
@@ -68,12 +65,13 @@ interface Manifest extends WorkspaceBackupPrivateMetadata {
   sourceDataDir: string;
   entries: Entry[];
 }
-interface RestoreJournal {
+interface ApplyingRestoreJournal {
   id: string;
-  phase: "applying" | "committed" | "rolled-back";
+  phase: "applying";
   existing: string[];
   incoming: string[];
 }
+type RestoreJournal = ApplyingRestoreJournal | { id: string; phase: "committed" | "rolled-back" };
 export interface CreateWorkspaceBackupOptions {
   password: string;
   clientState?: WorkspaceBackupClientState;
@@ -108,7 +106,7 @@ function preserved(name: string): boolean {
 const SNAPSHOT_DATABASES: Record<string, string> = { "messages.db": "messages-snapshot.db", "runtime.db": "runtime-snapshot.db" };
 const LIVE_DATABASE_SIDECARS = new Set(Object.keys(SNAPSHOT_DATABASES).flatMap((name) => [`${name}-wal`, `${name}-shm`]));
 function keptInPlace(name: string): boolean {
-  return preserved(name) || name.toLowerCase() === "sessions.json.open";
+  return preserved(name) || name.toLowerCase() === "sessions.json.open" || redownloadedModelPath(name);
 }
 function folder(path: string): void {
   mkdirSync(path, { recursive: true, mode: 0o700 });
@@ -345,7 +343,7 @@ export async function createWorkspaceBackupSnapshot(dataDir: string, options: Cr
       for (const name of readdirSync(directory).sort()) {
         if (!prefix && excluded(name)) continue;
         const path = prefix ? `${prefix}/${name}` : name;
-        if (excludedWorkspaceAuthPath(path) || ephemeralWorkspaceTokenPath(path) || redownloadedOrgLibraryPath(path) || liveDataEnginePath(path)) continue;
+        if (excludedWorkspaceAuthPath(path) || ephemeralWorkspaceTokenPath(path) || redownloadedOrgLibraryPath(path) || redownloadedModelPath(path) || liveDataEnginePath(path)) continue;
         if (privacy && omittedAsTeamPrivate(path, privacy)) continue;
         // Reject noncanonical spellings: a case-sensitive host must not export auth paths active on Windows/Mac.
         if (forbiddenArchivePath(path)) throw new Error("A workspace filename conflicts with a protected authentication or runtime path.");
@@ -453,26 +451,35 @@ export async function createWorkspaceBackupSnapshot(dataDir: string, options: Cr
   } finally { key.fill(0); }
 }
 
+const SUMMARY_KEYS = new Set(["format", "version", "id", "createdAt", "appVersion", "files", "directories", "bytes", "bots", "groups", "threads", "messages", "exclusions", "warnings"]);
+const SUMMARY_COUNTS = ["files", "directories", "bytes", "bots", "groups", "threads", "messages"] as const;
+const CLIENT_KEYS = new Set<string>(WORKSPACE_BACKUP_CLIENT_KEYS);
+function validSummaryHeader(value: unknown): value is Record<string, unknown> {
+  return record(value) && withCurrentFormat(value).format === "dusk.workspace-backup" && value.version === 1
+    && typeof value.id === "string" && ID.test(value.id) && typeof value.createdAt === "string"
+    && Number.isFinite(Date.parse(value.createdAt)) && typeof value.appVersion === "string"
+    && Object.keys(value).every((key) => SUMMARY_KEYS.has(key));
+}
+function validSummaryStats(value: Record<string, unknown>): boolean {
+  return SUMMARY_COUNTS.every((key) => Number.isSafeInteger(value[key]) && (value[key] as number) >= 0)
+    && (["exclusions", "warnings"] as const).every((key) => Array.isArray(value[key]) && value[key].every((item) => typeof item === "string"));
+}
+const validBackupSummary = (value: unknown): value is WorkspaceBackupSummary => validSummaryHeader(value) && validSummaryStats(value);
+function validClientState(value: unknown): value is WorkspaceBackupClientState {
+  return record(value) && Object.values(value).every((item) => typeof item === "string")
+    && Object.keys(value).every((key) => CLIENT_KEYS.has(key))
+    && Buffer.byteLength(JSON.stringify(value)) <= 2 * 1024 ** 2;
+}
 function validateManifest(value: unknown): Manifest {
-  if (!record(value) || !record(value.summary) || withCurrentFormat(value.summary).format !== "dusk.workspace-backup" || value.summary.version !== 1 ||
-    typeof value.summary.id !== "string" || !ID.test(value.summary.id) || typeof value.summary.createdAt !== "string" ||
-    !Number.isFinite(Date.parse(value.summary.createdAt)) || typeof value.summary.appVersion !== "string" ||
-    typeof value.sourceDataDir !== "string" || !(posix.isAbsolute(value.sourceDataDir) || win32.isAbsolute(value.sourceDataDir)) ||
+  if (!record(value) || !validSummaryHeader(value.summary) || typeof value.sourceDataDir !== "string" || !(posix.isAbsolute(value.sourceDataDir) || win32.isAbsolute(value.sourceDataDir)) ||
     value.sourceDataDir.length > 4096 || value.sourceDataDir.includes("\0") ||
     value.sourceDataDir === posix.parse(value.sourceDataDir).root || value.sourceDataDir === win32.parse(value.sourceDataDir).root ||
     value.sourceDataDir.replaceAll("\\", "/").split("/").some((part) => part === "." || part === "..") ||
     Object.keys(value).some((key) => !["summary", "sourceDataDir", "clientState", "entries"].includes(key)) ||
-    Object.keys(value.summary).some((key) => !["format", "version", "id", "createdAt", "appVersion", "files", "directories", "bytes", "bots", "groups", "threads", "messages", "exclusions", "warnings"].includes(key)) || !record(value.clientState) ||
-    !Object.values(value.clientState).every((item) => typeof item === "string") || !Array.isArray(value.entries) ||
-    value.entries.length > MAX_WORKSPACE_BACKUP_FILES) throw new Error("Invalid or unsupported workspace backup metadata.");
-  if (Object.keys(value.clientState).some((key) => !WORKSPACE_BACKUP_CLIENT_KEYS.includes(key as typeof WORKSPACE_BACKUP_CLIENT_KEYS[number])) ||
-    Buffer.byteLength(JSON.stringify(value.clientState)) > 2 * 1024 ** 2) throw new Error("Invalid or oversized workspace client preferences.");
-  for (const key of ["files", "directories", "bytes", "bots", "groups", "threads", "messages"] as const) {
-    if (!Number.isSafeInteger(value.summary[key]) || (value.summary[key] as number) < 0) throw new Error("Invalid workspace backup summary.");
-  }
-  for (const key of ["exclusions", "warnings"] as const) {
-    if (!Array.isArray(value.summary[key]) || !value.summary[key].every((item) => typeof item === "string")) throw new Error("Invalid workspace backup summary.");
-  }
+    !record(value.clientState) || !Object.values(value.clientState).every((item) => typeof item === "string") ||
+    !Array.isArray(value.entries) || value.entries.length > MAX_WORKSPACE_BACKUP_FILES) throw new Error("Invalid or unsupported workspace backup metadata.");
+  if (!validClientState(value.clientState)) throw new Error("Invalid or oversized workspace client preferences.");
+  if (!validSummaryStats(value.summary)) throw new Error("Invalid workspace backup summary.");
   const names = new Map<string, string>();
   let bytes = 0;
   let files = 0;
@@ -667,22 +674,29 @@ export function readPendingWorkspaceRestoreMetadata(dataDir: string): (Workspace
   return readStagedWorkspaceBackup(dataDir, pending.id);
 }
 
+const CASE_INSENSITIVE_FS = process.platform === "darwin" || process.platform === "win32";
+function validApplyingJournalNames(value: unknown, foldCase: boolean): value is string[] {
+  return Array.isArray(value)
+    && value.every((name) => typeof name === "string" && validRelative(name) && !name.includes("/") && !preserved(name) && name.toLowerCase() !== "sessions.json.open")
+    && new Set(foldCase ? value.map((name) => name.toLowerCase()) : value).size === value.length;
+}
 function readJournal(path: string): RestoreJournal {
   const raw = privateJson(path);
-  if (!record(raw) || typeof raw.id !== "string" || !ID.test(raw.id) || !["applying", "committed", "rolled-back"].includes(String(raw.phase))) throw new Error("Invalid restore recovery journal. Original data was preserved; recovery needs attention.");
-  for (const key of ["existing", "incoming"] as const) {
-    if (!Array.isArray(raw[key]) || !raw[key].every((name) => typeof name === "string" && validRelative(name) && !name.includes("/") && !preserved(name)) || new Set(raw[key]).size !== raw[key].length) throw new Error("Invalid restore recovery paths.");
-  }
-  return raw as unknown as RestoreJournal;
+  if (!record(raw) || typeof raw.id !== "string" || !ID.test(raw.id) || (raw.phase !== "applying" && raw.phase !== "committed" && raw.phase !== "rolled-back")) throw new Error("Invalid restore recovery journal. Original data was preserved; recovery needs attention.");
+  if (raw.phase !== "applying") return { id: raw.id, phase: raw.phase };
+  if (!validApplyingJournalNames(raw.existing, CASE_INSENSITIVE_FS) || !validApplyingJournalNames(raw.incoming, true)) throw new Error("Invalid restore recovery paths.");
+  return { id: raw.id, phase: "applying", existing: raw.existing, incoming: raw.incoming };
 }
-function rollback(dataDir: string, journal: RestoreJournal): void {
+function rollback(dataDir: string, journal: ApplyingRestoreJournal): void {
   const stage = join(jobPath(dataDir, journal.id), "apply", "data");
   const saved = join(backupRoot(dataDir), `safety-${journal.id}`, "data");
+  const existingByName = new Map(journal.existing.map((name) => [CASE_INSENSITIVE_FS ? name.toLowerCase() : name, name]));
   // Existence on both sides resolves a crash between rename and journal I/O; new data is moved back, never deleted.
   for (const name of journal.incoming) {
     const live = join(dataDir, name);
     const staged = join(stage, name);
-    const originalMoved = !journal.existing.includes(name) || entryExists(join(saved, name));
+    const matchedExisting = existingByName.get(CASE_INSENSITIVE_FS ? name.toLowerCase() : name);
+    const originalMoved = !matchedExisting || entryExists(join(saved, matchedExisting));
     if (originalMoved && !entryExists(staged) && entryExists(live)) renameSync(live, staged);
   }
   for (const name of journal.existing) {
@@ -708,7 +722,7 @@ function prepareRestore(dataDir: string, id: string, manifest: Manifest): string
   const prepared = join(job, "apply", "data");
   if (existsSync(join(job, "apply"))) rmSync(join(job, "apply"), { recursive: true, force: true });
   folder(prepared);
-  const installed = manifest.entries.filter((entry) => !ephemeralWorkspaceTokenPath(entry.path));
+  const installed = manifest.entries.filter((entry) => !ephemeralWorkspaceTokenPath(entry.path) && !redownloadedModelPath(entry.path));
   for (const entry of installed.filter((entry) => entry.type === "directory")) folder(join(prepared, entry.path));
   for (const entry of installed) {
     const destination = join(prepared, entry.path);
@@ -891,6 +905,14 @@ function finishRestore(dataDir: string, id: string, consumePending = true): Last
   return result;
 }
 
+function isDamagedReceiptError(error: unknown): boolean {
+  return error instanceof SyntaxError || (error instanceof Error && error.message === "Invalid workspace restore receipt.");
+}
+function isCompleteRestoreReceipt(last: LastWorkspaceRestore | null, id: string, root: string): last is LastWorkspaceRestore {
+  return last !== null && last.id === id && last.safetyCopyPath === join(root, `safety-${id}`)
+    && last.pathsRewritten === true && validBackupSummary(last.summary) && validClientState(last.clientState);
+}
+
 /** Call after the data-directory lease, before anything reads app state; the old tree stays under .backups/safety-ID. */
 export function applyPendingWorkspaceRestore(dataDir: string): WorkspaceRestoreResult {
   const root = backupRoot(dataDir);
@@ -907,6 +929,13 @@ export function applyPendingWorkspaceRestore(dataDir: string): WorkspaceRestoreR
     if (previous.phase === "committed" && existsSync(pendingFile)) {
       const pending = privateJson(pendingFile);
       if (record(pending) && pending.id === previous.id) {
+        let last: LastWorkspaceRestore | null = null;
+        try { last = readLastWorkspaceRestore(dataDir); }
+        catch (error) { if (!isDamagedReceiptError(error)) throw error; }
+        if (isCompleteRestoreReceipt(last, previous.id, root)) {
+          rmSync(pendingFile, { force: true });
+          return last;
+        }
         return finishRestore(dataDir, previous.id);
       }
     }
@@ -919,22 +948,23 @@ export function applyPendingWorkspaceRestore(dataDir: string): WorkspaceRestoreR
   const safetyCopyPath = join(root, `safety-${pending.id}`);
   if (existsSync(safetyCopyPath)) throw new Error("A safety copy already exists for this restore. Original files have not been changed.");
   folder(join(safetyCopyPath, "data"));
-  const journal: RestoreJournal = {
+  const journal: ApplyingRestoreJournal = {
     id: pending.id, phase: "applying",
     existing: readdirSync(dataDir).filter((name) => !keptInPlace(name)).sort(),
     incoming: readdirSync(prepared).sort(),
   };
   // Names are checked before any move is recorded; a restored root never traverses an archive-controlled directory.
   for (const name of [...journal.existing, ...journal.incoming]) {
-    if (!validRelative(name) || name.includes("/") || preserved(name)) throw new Error("Unsafe workspace restore target.");
+    if (!validRelative(name) || name.includes("/") || keptInPlace(name)) throw new Error("Unsafe workspace restore target.");
   }
   writeJson(join(safetyCopyPath, "manifest.json"), { id: pending.id, createdAt: new Date().toISOString(), originalEntries: journal.existing });
   if (existsSync(join(root, "last-restore.json"))) writeJson(join(safetyCopyPath, "previous-restore.json"), privateJson(join(root, "last-restore.json")));
   writeJson(journalFile, journal);
+  let result: LastWorkspaceRestore;
   try {
     for (const name of journal.existing) renameSync(join(dataDir, name), join(safetyCopyPath, "data", name));
     for (const name of journal.incoming) if (entryExists(join(prepared, name))) renameSync(join(prepared, name), join(dataDir, name));
-    finishRestore(dataDir, pending.id, false);
+    result = finishRestore(dataDir, pending.id, false);
     writeJson(journalFile, { ...journal, phase: "committed" });
   } catch (error) {
     rollback(dataDir, journal);
@@ -942,7 +972,8 @@ export function applyPendingWorkspaceRestore(dataDir: string): WorkspaceRestoreR
     rmSync(pendingFile, { force: true });
     throw new Error("The workspace restore failed and the previous workspace was recovered.", { cause: error });
   }
-  return finishRestore(dataDir, pending.id);
+  rmSync(pendingFile, { force: true });
+  return result;
 }
 
 export function removeWorkspaceBackupJob(dataDir: string, id: string): void {
@@ -960,5 +991,5 @@ export function removeWorkspaceBackupJob(dataDir: string, id: string): void {
 }
 
 export function omittedFromWorkspaceBackup(path: string): boolean {
-  return excluded(path.split("/")[0]) || excludedWorkspaceAuthPath(path) || ephemeralWorkspaceTokenPath(path) || redownloadedOrgLibraryPath(path) || liveDataEnginePath(path);
+  return excluded(path.split("/")[0]) || excludedWorkspaceAuthPath(path) || ephemeralWorkspaceTokenPath(path) || redownloadedOrgLibraryPath(path) || redownloadedModelPath(path) || liveDataEnginePath(path);
 }

@@ -59,8 +59,12 @@ export function redownloadedOrgLibraryPath(path: string): boolean {
   return /^org-library\/(?:catalog\.json(?:\.[0-9a-f-]{36}\.tmp)?$|blobs(?:\/|$))/.test(path);
 }
 
+export function redownloadedModelPath(path: string): boolean {
+  return /^models(?:\/|$)/i.test(path);
+}
+
 export function ephemeralWorkspaceTokenPath(path: string): boolean {
-  return /^(?:hook-tokens(?:\/|$)|sessions\.json\.open$)/.test(path);
+  return /^(?:hook-tokens(?:\/|$)|sessions\.json\.open$)/i.test(path);
 }
 
 /** Not a consistent snapshot while the engine holds it open (unflushed WAL), and reloadable from its sources. */

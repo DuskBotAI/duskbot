@@ -135,6 +135,7 @@ const { AdvancedTab } = await import("./bot-panel/AdvancedTab");
 const { SettingsPage } = await import("./bot-panel/SettingsPage");
 const { LibraryPage, LibrarySection, libraryEmptyLine } = await import("./bot-panel/LibraryTab");
 const { CloudCtaCard, ComputerTab, WherePage, cloudCtaStep, hasDuskCloud } = await import("./bot-panel/ComputerTab");
+const { WhereModal } = await import("./bot-panel/modals/WhereModal");
 const { PageBody, AppsPage, RoutinesPage, MemoryPage, SkillsPage, FolderPage, BrowserPage } = await import("./bot-panel/pages");
 const { BrowserLogins } = await import("./bot-panel/browser-logins");
 const { PAGES, sectionTarget } = await import("./bot-panel/page-registry");
@@ -696,7 +697,7 @@ describe("the Computer tab", () => {
     expect(rendered.html).toContain(">Computer is asleep<");
     expect(rendered.html).toContain("Scout&#x27;s screen");
     expect(rendered.html).not.toContain('animate-spin');
-    for (const gone of ["where", "browser"]) expect(has(rendered, "data-panel-page", gone), gone).toBe(false);
+    expect(has(rendered, "data-panel-page", "browser")).toBe(false);
     expect(switches(rendered.html)).toBe(0);
   });
 
@@ -813,6 +814,24 @@ describe("the Computer tab", () => {
     expect(has(rendered, "data-local-browser-first")).toBe(false);
   });
 
+  it("has a Where it works row naming the bot's place, which opens the Where it works sheet", () => {
+    const rendered = computer(makeBot());
+    const row = find(rendered, "data-panel-page", "where");
+    expect(row.props).toMatchObject({ title: "Where Scout works", value: "Let it choose" });
+    click(row);
+    expect(onOpen).toHaveBeenCalledWith("where");
+    expect(find(computer(makeBot({ computer: "vm" })), "data-panel-page", "where").props.value).toBe("Private desktop");
+  });
+
+  it("on this computer follows an Auto bot's conversation onto the Private desktop and shows its screen", () => {
+    fixture.otherServer = null;
+    const onDesktop = computer(makeBot({ tasks: [{ threadId: "thread-scout", title: "Main", surface: "vm", surfaceAuto: true }] as Bot["tasks"] }));
+    expect(onDesktop.nodes.find((node) => node.props.inline === true)?.props.bot).toMatchObject({ id: "scout" });
+    expect(onDesktop.html).toContain(">Scout&#x27;s screen<");
+    const inBrowser = computer(makeBot({ tasks: [{ threadId: "thread-scout", title: "Main", surface: "browser", surfaceAuto: true }] as Bot["tasks"] }));
+    expect(inBrowser.nodes.some((node) => node.props.inline === true)).toBe(false);
+  });
+
   it("in a group chat is one card for all of its bots, in the group's words", () => {
     fixture.otherServer = null;
     const group = [cloudBot(), { ...cloudBot(), id: "nova", name: "Nova" }];
@@ -901,10 +920,11 @@ describe("the Where it works page", () => {
     .map((node) => [node.props["data-panel-choice"], node.props.title, Boolean(node.props.disabled), node.props.checked]);
   const choose = (rendered: Rendered, value: string) => click(find(rendered, "data-panel-choice", value));
 
-  it("offers Let it choose, this computer, the bot's browser and the Cloud desktop, with the chosen one checked", () => {
+  it("offers Let it choose, this computer, the bot's browser, the Cloud desktop and the Private desktop, with the chosen one checked", () => {
     // The tests run on no platform in particular, so it reads This computer; a Mac says This Mac and Windows This PC.
     expect(choices(where(makeBot()))).toEqual([
       ["auto", "Let it choose", false, true], ["local", "This computer", false, false], ["browser", "Browser", false, false], ["cloud", "Cloud desktop", false, false],
+      ["vm", "Private desktop", false, false],
     ]);
     expect(where(makeBot()).html).toContain('role="radiogroup"');
   });
@@ -917,6 +937,8 @@ describe("the Where it works page", () => {
     expect(patch).toHaveBeenLastCalledWith({ computer: "local" });
     choose(rendered, "browser");
     expect(patch).toHaveBeenLastCalledWith({ computer: "browser", browser: true });
+    choose(rendered, "vm");
+    expect(patch).toHaveBeenLastCalledWith({ computer: "vm" });
     choose(where(makeBot({ computer: "cloud" })), "auto");
     expect(patch).toHaveBeenLastCalledWith({ computer: null });
     patch.mockReset();
@@ -924,10 +946,10 @@ describe("the Where it works page", () => {
     expect(patch).not.toHaveBeenCalled();
   });
 
-  it.each([["vm", "Private desktop"], ["off", "Off"]] as const)("shows a bot kept on %s as a last, checked choice it cannot pick again", (place, label) => {
-    const rendered = where(makeBot({ computer: place }));
-    expect(choices(rendered).at(-1)).toEqual([place, label, true, true]);
-    choose(rendered, place);
+  it("shows a bot kept Off as a last, checked choice it cannot pick again", () => {
+    const rendered = where(makeBot({ computer: "off" }));
+    expect(choices(rendered).at(-1)).toEqual(["off", "Off", true, true]);
+    choose(rendered, "off");
     expect(patch).not.toHaveBeenCalled();
     choose(rendered, "auto");
     expect(patch).toHaveBeenLastCalledWith({ computer: null });
@@ -937,11 +959,20 @@ describe("the Where it works page", () => {
     fixture.places.cloud = [true, false, "not ready"];
     expect(find(where(makeBot()), "data-panel-choice", "cloud").props).toMatchObject({ disabled: true, hint: "not ready." });
     fixture.places.cloud = [false, false, "Not offered"];
-    expect(choices(where(makeBot())).map(([value]) => value)).toEqual(["auto", "local", "browser"]);
+    expect(choices(where(makeBot())).map(([value]) => value)).toEqual(["auto", "local", "browser", "vm"]);
     fixture.places.local = [false, false, "Not offered"];
     fixture.places.browser = [false, false, "Not offered"];
+    fixture.places.vm = [false, false, "Not offered"];
     expect(choices(where(makeBot())).map(([value]) => value)).toEqual(["auto"]);
     expect(choices(where(makeBot({ computer: "browser" }))).map(([value, , disabled]) => [value, disabled])).toEqual([["auto", false], ["browser", true]]);
+  });
+
+  it("holds the Private desktop with the reason when the bot's model cannot use it, and keeps a bot already on it checked when it is not offered", () => {
+    fixture.places.vm = [true, false, "Not with this model"];
+    expect(find(where(makeBot()), "data-panel-choice", "vm").props).toMatchObject({ disabled: true, hint: "Not with this model." });
+    fixture.places.vm = [false, false, "Not offered"];
+    expect(choices(where(makeBot())).map(([value]) => value)).not.toContain("vm");
+    expect(choices(where(makeBot({ computer: "vm" }))).at(-1)).toEqual(["vm", "Private desktop", true, true]);
   });
 
   it("names the browser My Chrome when the bot's profile is the person's own Chrome", () => {
@@ -964,6 +995,23 @@ describe("the Where it works page", () => {
     expect(warning.props.open).toBe(true);
     (warning.props.onConfirm as () => void)();
     expect(fixture.dispatch).toHaveBeenLastCalledWith({ type: "updateBot", botId: "scout", patch: { computer: "local", acknowledgeLocalAuto: true } });
+  });
+});
+
+
+describe("the Where it works sheet", () => {
+  const sheet = (bot: Bot) => capture(() => WhereModal({ bot, derived: derived(), onClose }));
+  const rows = (rendered: Rendered) => rendered.nodes.filter((node) => node.props["data-panel-choice"] !== undefined)
+    .map((node) => [node.props["data-panel-choice"], node.props.title, node.props.checked]);
+
+  it("lists the chosen place, this computer, the Cloud desktop and the Private desktop, and saves the Private desktop through the bot patch", () => {
+    expect(rows(sheet(makeBot()))).toEqual([
+      ["auto", "Let it choose", true], ["local", "This computer", false], ["cloud", "Cloud desktop", false], ["vm", "Private desktop", false],
+    ]);
+    expect(find(sheet(makeBot()), "data-panel-choice", "vm").props.hint).toBe("Isolated local desktop");
+    click(find(sheet(makeBot()), "data-panel-choice", "vm"));
+    expect(patch).toHaveBeenLastCalledWith({ computer: "vm" });
+    expect(find(sheet(makeBot({ computer: "vm" })), "data-panel-choice", "vm").props.checked).toBe(true);
   });
 });
 
